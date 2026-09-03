@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { TestRealm as Realm } from '../test-realm';
 import { throwDOMException } from '../../../src/shared/dom-exception';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/binding';

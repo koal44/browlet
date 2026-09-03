@@ -1,10 +1,14 @@
 import {
+  createIteratorResultObject, getMethod, installPromiseReactions, isObject,
+} from '../javascript/index';
+import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 import {
   createPromiseValue, type IDLPromise,
 } from './promise-value';
+import { defineDataProperty } from './property';
 
 export function createAsyncSequenceValue(
   object: object,
@@ -184,8 +188,7 @@ function createAsyncFromSyncIterator(
   sync: IteratorRecord,
   realm: WebIDLRealmHost,
 ): IteratorRecord {
-  const iterator = createRealmObject(
-    realm,
+  const iterator = realm.createOrdinaryObject(
     realm.intrinsics.iteration.asyncIteratorPrototype,
   );
   const next = realm.createFunction(
@@ -224,7 +227,7 @@ function adaptSyncIteratorResult(
       : getMethod(sync.iterator, 'return', realm);
     if (!method) {
       return createResolvedPromise(
-        createIteratorResult(realm, argumentsList[0], true),
+        createIteratorResultObject(realm, argumentsList[0], true),
         realm,
       );
     }
@@ -239,7 +242,7 @@ function adaptSyncIteratorResult(
       realm,
     );
     return reactToPromise(valuePromise, realm, (value) =>
-      createIteratorResult(realm, value, done));
+      createIteratorResultObject(realm, value, done));
   } catch (exception) {
     return createRejectedPromise(exception, realm);
   }
@@ -265,10 +268,11 @@ function reactToPromise(
     (_thisArgument, [reason]) => { result.reject(reason); },
     { length: 1, name: '' },
   );
-  Reflect.apply(
-    realm.intrinsics.promise.then,
+  installPromiseReactions(
+    realm,
     promise.promise,
-    [onFulfilled, onRejected],
+    onFulfilled,
+    onRejected,
   );
   return result;
 }
@@ -289,58 +293,4 @@ function createRejectedPromise(
   const promise = createPromiseValue(idlType.any, realm);
   promise.reject(reason);
   return promise;
-}
-
-function getMethod(
-  object: object,
-  key: PropertyKey,
-  realm: WebIDLRealmHost,
-): JavaScriptMethod | undefined {
-  const method = Reflect.get(object, key) as unknown;
-  if (method === undefined || method === null) return;
-  if (typeof method !== 'function') {
-    throw new realm.intrinsics.typeError(`${String(key)} is not callable`);
-  }
-  return method as JavaScriptMethod;
-}
-
-function createIteratorResult(
-  realm: WebIDLRealmHost,
-  value: unknown,
-  done: boolean,
-): object {
-  const result = createRealmObject(realm, realm.intrinsics.objectPrototype);
-  defineDataProperty(result, 'value', value);
-  defineDataProperty(result, 'done', done);
-  return result;
-}
-
-function createRealmObject(
-  realm: WebIDLRealmHost,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function defineDataProperty(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    value,
-    writable: true,
-  });
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
 }

@@ -1,3 +1,6 @@
+import {
+  createIteratorResultObject, installPromiseReactions, isObject,
+} from '../javascript/index';
 import type { AssembledInterface } from './assembly';
 import { endOfIteration } from './async-sequence';
 import {
@@ -14,6 +17,7 @@ import { missingArgument } from './overload';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
 } from './promise-value';
+import { defineDataProperty, defineMethod } from './property';
 import { getTypeWithApplicableExtendedAttributes } from './types';
 
 export class AsynchronousIterableBinding {
@@ -90,8 +94,7 @@ export class AsynchronousIterableBinding {
           interface_,
           securityIdentifier,
         );
-        const iterator = createRealmObject(
-          this.#context,
+        const iterator = this.#context.realm.createOrdinaryObject(
           this.#getIteratorPrototypeObject(interface_, declaration),
         );
         const state: DefaultAsyncIterator = {
@@ -121,8 +124,7 @@ export class AsynchronousIterableBinding {
     declaration: AsyncIterableMember,
   ): object {
     return this.#getIteratorPrototype(interface_, () => {
-      const prototype = createRealmObject(
-        this.#context,
+      const prototype = this.#context.realm.createOrdinaryObject(
         this.#context.realm.intrinsics.iteration.asyncIteratorPrototype,
       );
       defineDataProperty(
@@ -195,7 +197,7 @@ export class AsynchronousIterableBinding {
     );
     return this.#react(
       ongoing,
-      () => createIteratorResult(this.#context, value, true),
+      () => createIteratorResultObject(this.#context.realm, value, true),
     ).promise;
   }
 
@@ -205,7 +207,7 @@ export class AsynchronousIterableBinding {
   ): IDLPromise {
     if (state.finished) {
       return this.#resolvedPromise(
-        createIteratorResult(this.#context, undefined, true),
+        createIteratorResultObject(this.#context.realm, undefined, true),
       );
     }
 
@@ -227,10 +229,14 @@ export class AsynchronousIterableBinding {
         state.ongoing = null;
         if (next === endOfIteration) {
           state.finished = true;
-          return createIteratorResult(this.#context, undefined, true);
+          return createIteratorResultObject(
+            this.#context.realm,
+            undefined,
+            true,
+          );
         }
-        return createIteratorResult(
-          this.#context,
+        return createIteratorResultObject(
+          this.#context.realm,
           this.#convertResult(next, declaration, state.kind),
           false,
         );
@@ -294,10 +300,11 @@ export class AsynchronousIterableBinding {
       },
       { length: 0, name: '' },
     );
-    Reflect.apply(
-      this.#context.realm.intrinsics.promise.then,
+    installPromiseReactions(
+      this.#context.realm,
       ongoing.promise,
-      [onSettled, onSettled],
+      onSettled,
+      onSettled,
     );
     state.ongoing = afterOngoing;
     return afterOngoing;
@@ -333,10 +340,11 @@ export class AsynchronousIterableBinding {
       },
       { length: 1, name: '' },
     );
-    Reflect.apply(
-      this.#context.realm.intrinsics.promise.then,
+    installPromiseReactions(
+      this.#context.realm,
       promise.promise,
-      [onFulfilled, onRejected],
+      onFulfilled,
+      onRejected,
     );
     return result;
   }
@@ -486,61 +494,3 @@ type IterationKind = 'key' | 'key+value' | 'value';
 type JavaScriptFunction = ReturnType<
   ConversionContext['realm']['createFunction']
 >;
-
-function createIteratorResult(
-  context: ConversionContext,
-  value: unknown,
-  done: boolean,
-): object {
-  const result = createRealmObject(
-    context,
-    context.realm.intrinsics.objectPrototype,
-  );
-  defineDataProperty(result, 'value', value);
-  defineDataProperty(result, 'done', done);
-  return result;
-}
-
-function createRealmObject(
-  context: ConversionContext,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(context.realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function defineMethod(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-  enumerable: boolean,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable,
-    value,
-    writable: true,
-  });
-}
-
-function defineDataProperty(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    value,
-    writable: true,
-  });
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}

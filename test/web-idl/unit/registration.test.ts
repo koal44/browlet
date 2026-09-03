@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { TestRealm as Realm } from '../test-realm';
 import {
   arg, atArg, bind, bindingContext, contextValue, createBindings, ctor,
   defineCapability, defineInterface, idlType, impl, invokeWith, namedGetter, op,

@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../../src/browlet/html/parser/parse';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { createBrowletDocument } from '../../browlet-document';
 
 describe('tree scope', () => {
   it('orders header stylesheets before tree-ordered stylesheets', () => {
@@ -124,7 +122,7 @@ function createTreeScope(): {
   document: Document;
   scope: TreeScope;
 } {
-  const document = createDocumentImpl('');
+  const document = createBrowletDocument();
   const snapshot = new Snapshot(document);
   const cascade = new CascadeEngine({ snapshot });
   return { document, scope: new TreeScope(document, cascade) };
@@ -162,7 +160,3 @@ type StyleSheetOptions = {
   ownerNode?: Element | null;
   title?: string;
 };
-
-function createDocumentImpl(source: string): Document {
-  return parseHTMLDocument(source);
-}

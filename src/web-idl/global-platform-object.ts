@@ -1,3 +1,6 @@
+import {
+  isDataDescriptor, ordinarySetWithOwnDescriptor,
+} from '../javascript/index';
 import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToJavaScript, type ConversionContext,
@@ -8,7 +11,6 @@ import {
 import type {
   ImplementationRegistry, NamedPropertySteps,
 } from './registry';
-import { ordinarySetWithOwnDescriptor } from './platform-object';
 import { getUnannotatedType } from './types';
 
 // The Web IDL object kind is shared across realms and binding instances.
@@ -46,7 +48,7 @@ export class GlobalPlatformObjectBinding {
       );
     }
 
-    const target = createRealmObject(this.#context, prototype);
+    const target = this.#context.realm.createOrdinaryObject(prototype);
     Reflect.defineProperty(target, Symbol.toStringTag, {
       configurable: true,
       enumerable: false,
@@ -99,7 +101,7 @@ export class GlobalPlatformObjectBinding {
 
   createPrototypeObject(prototype: object): object {
     return this.#withPrototypeBehavior(
-      createRealmObject(this.#context, prototype),
+      this.#context.realm.createOrdinaryObject(prototype),
     );
   }
 
@@ -252,20 +254,4 @@ function isNamedOperation(
   if (!key) return false;
   const type = getUnannotatedType(key.type, definitions);
   return type.kind === 'simple' && type.name === 'DOMString';
-}
-
-function createRealmObject(
-  context: ConversionContext,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(context.realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function isDataDescriptor(descriptor: PropertyDescriptor): boolean {
-  return Object.hasOwn(descriptor, 'value') ||
-    Object.hasOwn(descriptor, 'writable');
 }

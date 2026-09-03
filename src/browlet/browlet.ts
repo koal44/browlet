@@ -3,6 +3,7 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
+import { nodeRuntime } from '../javascript/index';
 import {
   browletBindings, getRelevantRealm,
 } from './bindings';
@@ -22,9 +23,7 @@ import {
 import type { Realm } from './scripting/realm';
 import { WindowImpl } from './browsing/window/window';
 import { UserAgent } from './user-agent';
-import {
-  performNodeMicrotaskCheckpoint, requestNodeEventLoopTurn,
-} from './scripting/event-loop';
+import { requestNodeEventLoopTurn } from './integration/scripting';
 import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 
@@ -38,7 +37,7 @@ export class Browlet {
     this.#route = config.route;
     this.#userAgent = new UserAgent(
       {
-        performMicrotaskCheckpoint: performNodeMicrotaskCheckpoint,
+        performMicrotaskCheckpoint: nodeRuntime.performMicrotaskCheckpoint,
         requestEventLoopTurn: requestNodeEventLoopTurn,
         unsafeSharedCurrentTime,
       },

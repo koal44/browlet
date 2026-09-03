@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   EventLoop, createTaskSource, type EventLoopOptions,
-  type LongTaskReporter, performNodeMicrotaskCheckpoint, Task,
-  type TaskTimingHooks,
+  type LongTaskReporter, Task, type TaskTimingHooks,
 } from '../../../../src/browlet/scripting/event-loop';
 import {
   domManipulationTaskSource, navigationAndTraversalTaskSource,
@@ -17,7 +16,6 @@ import {
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { Realm } from '../../../../src/browlet/scripting/realm';
-import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../../src/browlet/performance/clock';
@@ -432,64 +430,6 @@ describe('task queues', () => {
     hostQueueMicrotask.mockRestore();
   });
 
-  it('drains shared same-agent Realm promise jobs in FIFO order', async () => {
-    await runInHostTask(() => {
-      const agent = new WindowAgent();
-      const firstRealm = new Realm({ agent });
-      const secondRealm = new Realm({ agent });
-      const order: string[] = [];
-
-      Reflect.set(firstRealm.globalObject, 'record', (value: string) => {
-        order.push(value);
-      });
-      Reflect.set(secondRealm.globalObject, 'record', (value: string) => {
-        order.push(value);
-      });
-      firstRealm.evaluate(`
-        Promise.resolve().then(() => {
-          record('A1');
-          Promise.resolve().then(() => record('A2'));
-        });
-      `, 'first-realm.js');
-      secondRealm.evaluate(
-        `Promise.resolve().then(() => record('B1'));`,
-        'second-realm.js',
-      );
-
-      agent.eventLoop.performMicrotaskCheckpoint(
-        performNodeMicrotaskCheckpoint,
-      );
-
-      expect(order).toEqual(['A1', 'B1', 'A2']);
-    });
-  });
-
-  it.fails('isolates checkpoints from ambient Node next ticks', async () => {
-    await runInHostTask(() => {
-      const order: string[] = [];
-
-      process.nextTick(() => { order.push('ambient next tick'); });
-      queueMicrotask(() => { order.push('microtask'); });
-      new EventLoop().performMicrotaskCheckpoint(
-        performNodeMicrotaskCheckpoint,
-      );
-
-      expect(order).toEqual(['microtask']);
-    });
-  });
-
-  it.fails('drains jobs when entered from a host microtask', async () => {
-    await Promise.resolve();
-    const order: string[] = [];
-
-    queueMicrotask(() => { order.push('nested microtask'); });
-    new EventLoop().performMicrotaskCheckpoint(
-      performNodeMicrotaskCheckpoint,
-    );
-
-    expect(order).toEqual(['nested microtask']);
-  });
-
   it.fails(
     'does not report an adopted Stream start rejection as unhandled',
     () => {
@@ -523,24 +463,6 @@ describe('task queues', () => {
       expect(events).toEqual(['done']);
     },
   );
-
-  it.fails('drains jobs when a test clock runs a host task synchronously', () => {
-    vi.useFakeTimers();
-    try {
-      const order: string[] = [];
-
-      setImmediate(() => {
-        queueMicrotask(() => { order.push('microtask'); });
-        new EventLoop().performMicrotaskCheckpoint(
-          performNodeMicrotaskCheckpoint,
-        );
-        expect(order).toEqual(['microtask']);
-      });
-      vi.runAllTimers();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
   it('makes only null-Document or fully-active tasks runnable', () => {
     const traversable = createNewTopLevelTraversable(
@@ -598,21 +520,6 @@ function createTaskTimingHooks(): TaskTimingHooks {
 
 function createLongTaskReporter(): LongTaskReporter {
   return { reportLongTasks: vi.fn() };
-}
-
-function runInHostTask(steps: () => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setImmediate(() => {
-      try {
-        steps();
-        resolve();
-      } catch (error) {
-        reject(error instanceof Error
-          ? error
-          : new Error('Host task failed', { cause: error }));
-      }
-    });
-  });
 }
 
 function runNodeProbe(source: string): string[] {

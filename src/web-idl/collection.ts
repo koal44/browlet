@@ -1,3 +1,6 @@
+import {
+  createIteratorResultObject, isObject,
+} from '../javascript/index';
 import type { AssembledInterface } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
@@ -5,6 +8,7 @@ import {
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
 } from './declaration/index';
+import { defineDataProperty, defineMethod } from './property';
 
 export class CollectionBinding {
   readonly #context: ConversionContext;
@@ -544,7 +548,7 @@ export class CollectionBinding {
     next: JavaScriptFunction,
     nativeNext: unknown,
   ): object {
-    const target = createRealmObject(this.#context, prototype);
+    const target = this.#context.realm.createOrdinaryObject(prototype);
     return new Proxy(target, {
       get(target_, property, receiver): unknown {
         const value: unknown = Reflect.get(target_, property, receiver);
@@ -564,7 +568,11 @@ export class CollectionBinding {
     if (!record) this.#throwTypeError('Illegal invocation');
     const result = record.iterator.next();
     if (result.done) {
-      return createIteratorResult(this.#context, undefined, true);
+      return createIteratorResultObject(
+        this.#context.realm,
+        undefined,
+        true,
+      );
     }
 
     const [idlKey, idlValue] = result.value;
@@ -578,8 +586,8 @@ export class CollectionBinding {
       record.declaration.value,
       this.#context,
     );
-    return createIteratorResult(
-      this.#context,
+    return createIteratorResultObject(
+      this.#context.realm,
       record.kind === 'key'
         ? key
         : record.kind === 'value'
@@ -595,7 +603,11 @@ export class CollectionBinding {
     if (!record) this.#throwTypeError('Illegal invocation');
     const result = record.iterator.next();
     if (result.done) {
-      return createIteratorResult(this.#context, undefined, true);
+      return createIteratorResultObject(
+        this.#context.realm,
+        undefined,
+        true,
+      );
     }
 
     const value = convertToJavaScript(
@@ -603,8 +615,8 @@ export class CollectionBinding {
       record.declaration.value,
       this.#context,
     );
-    return createIteratorResult(
-      this.#context,
+    return createIteratorResultObject(
+      this.#context.realm,
       record.kind === 'value'
         ? value
         : createRealmArray(this.#context, [value, value]),
@@ -680,20 +692,6 @@ function hasRegularOperation(
     member.static !== true);
 }
 
-function createIteratorResult(
-  context: ConversionContext,
-  value: unknown,
-  done: boolean,
-): object {
-  const result = createRealmObject(
-    context,
-    context.realm.intrinsics.objectPrototype,
-  );
-  defineDataProperty(result, 'value', value);
-  defineDataProperty(result, 'done', done);
-  return result;
-}
-
 function createRealmArray(
   context: ConversionContext,
   values: unknown[],
@@ -706,43 +704,4 @@ function createRealmArray(
     defineDataProperty(result, String(index), value);
   });
   return result;
-}
-
-function createRealmObject(
-  context: ConversionContext,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(context.realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function defineMethod(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-  enumerable: boolean,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable,
-    value,
-    writable: true,
-  });
-}
-
-function defineDataProperty(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-): void {
-  defineMethod(target, key, value, true);
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
 }

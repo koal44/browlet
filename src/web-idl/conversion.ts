@@ -1,4 +1,8 @@
 import { toScalarValueString } from '../infra/index';
+import {
+  getMethod, hasMapData, hasStringData, isObject,
+  toBigInt, toNumber, toPrimitive, toString, type JavaScriptMethod,
+} from '../javascript/index';
 import type {
   AssembledDictionary, AssembledInterface, DefinitionAssembly,
 } from './assembly';
@@ -27,6 +31,7 @@ import type {
 import {
   convertJavaScriptValueToPromise, convertPromiseToJavaScript,
 } from './promise-value';
+import { defineDataProperty } from './property';
 import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
   includesUndefined,
@@ -69,7 +74,7 @@ export function createSequenceFromIterable(
     throwTypeError(context, 'Iterator method did not return an object');
   }
 
-  const nextMethod = getMethod(iterator, 'next', context);
+  const nextMethod = getMethod(iterator, 'next', context.realm);
   if (!nextMethod) throwTypeError(context, 'Iterator has no next method');
 
   const sequence: IDLSequenceValue = [];
@@ -110,19 +115,6 @@ export function createFrozenArrayFromIterable(
     elementType,
     context,
   );
-}
-
-export function getMethod(
-  value: object,
-  key: PropertyKey,
-  context: ConversionContext,
-): JavaScriptMethod | undefined {
-  const method = Reflect.get(value, key) as unknown;
-  if (method === undefined || method === null) return;
-  if (typeof method !== 'function') {
-    throwTypeError(context, `${String(key)} is not callable`);
-  }
-  return method as JavaScriptMethod;
 }
 
 export function isPlatformObject(
@@ -209,10 +201,6 @@ export function createDictionaryValue(
   return new Map(entries);
 }
 
-export type JavaScriptMethod = (
-  ...argumentsList: unknown[]
-) => unknown;
-
 function convertJavaScriptValue(
   value: unknown,
   type: WebIDLType,
@@ -265,7 +253,7 @@ function convertJavaScriptValue(
       if (!isObject(value)) {
         throwTypeError(context, 'A sequence value must be an object');
       }
-      const method = getMethod(value, Symbol.iterator, context);
+      const method = getMethod(value, Symbol.iterator, context.realm);
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createSequenceFromIterable(
         value,
@@ -280,7 +268,7 @@ function convertJavaScriptValue(
       if (!isObject(value)) {
         throwTypeError(context, 'A frozen array value must be an object');
       }
-      const method = getMethod(value, Symbol.iterator, context);
+      const method = getMethod(value, Symbol.iterator, context.realm);
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createFrozenArrayFromIterable(
         value,
@@ -405,24 +393,24 @@ function convertJavaScriptValueToSimpleType(
     case 'unrestricted float':
       return convertToFloat(value, true, context);
     case 'double': {
-      const number = toNumber(value, context);
+      const number = toNumber(value, context.realm);
       if (!Number.isFinite(number)) {
         throwTypeError(context, 'Value is not a finite double');
       }
       return number;
     }
     case 'unrestricted double':
-      return toNumber(value, context);
+      return toNumber(value, context.realm);
     case 'bigint':
-      return toBigInt(value, context);
+      return toBigInt(value, context.realm);
     case 'DOMString':
       if (
         value === null &&
         hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
       ) return '';
-      return toString(value, context);
+      return toString(value, context.realm);
     case 'ByteString': {
-      const string = toString(value, context);
+      const string = toString(value, context.realm);
       for (let i = 0; i < string.length; i++) {
         if (string.charCodeAt(i) > 255) {
           throwTypeError(context, 'Value is not a ByteString');
@@ -435,7 +423,7 @@ function convertJavaScriptValueToSimpleType(
         value === null &&
         hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
       ) return toScalarValueString('');
-      return toScalarValueString(toString(value, context));
+      return toScalarValueString(toString(value, context.realm));
     case 'object':
       if (!isObject(value)) {
         throwTypeError(context, 'Value is not an object');
@@ -470,7 +458,7 @@ function convertJavaScriptValueToReference(
   const definition = context.definitions.getDefinition(name);
   switch (definition?.kind) {
     case 'enumeration': {
-      const string = toString(value, context);
+      const string = toString(value, context.realm);
       if (!definition.values.includes(string)) {
         throwTypeError(context, `${string} is not a value of ${name}`);
       }
@@ -628,7 +616,9 @@ function convertDictionaryToJavaScript(
     throw new Error(`IDL dictionary ${dictionary.definition.name} is not a map`);
   }
 
-  const result = createOrdinaryObject(context);
+  const result = context.realm.createOrdinaryObject(
+    context.realm.intrinsics.objectPrototype,
+  );
   for (const member of dictionary.members) {
     if (!value.has(member.name)) continue;
     const memberType = getTypeWithApplicableExtendedAttributes(
@@ -676,7 +666,9 @@ function convertRecordToJavaScript(
 ): object {
   if (!isMap(value)) throw new Error('IDL record is not a map');
 
-  const result = createOrdinaryObject(context);
+  const result = context.realm.createOrdinaryObject(
+    context.realm.intrinsics.objectPrototype,
+  );
   for (const [key, entryValue] of value) {
     const jsKey = convertToJavaScript(key, keyType, context);
     const jsValue = convertToJavaScript(entryValue, valueType, context);
@@ -761,10 +753,14 @@ function convertJavaScriptValueToUnion(
     const asyncSequence = types.find((candidate) =>
       candidate.type.kind === 'async-sequence');
     if (asyncSequence && !(
-      isStringObject(value) && types.some((candidate) =>
+      hasStringData(value) && types.some((candidate) =>
         isStringType(candidate, context.definitions))
     )) {
-      const asyncMethod = getMethod(value, Symbol.asyncIterator, context);
+      const asyncMethod = getMethod(
+        value,
+        Symbol.asyncIterator,
+        context.realm,
+      );
       if (asyncMethod && asyncSequence.type.kind === 'async-sequence') {
         return createAsyncSequenceValue(
           value,
@@ -773,7 +769,7 @@ function convertJavaScriptValueToUnion(
           'async',
         );
       }
-      const syncMethod = getMethod(value, Symbol.iterator, context);
+      const syncMethod = getMethod(value, Symbol.iterator, context.realm);
       if (syncMethod && asyncSequence.type.kind === 'async-sequence') {
         return createAsyncSequenceValue(
           value,
@@ -786,7 +782,7 @@ function convertJavaScriptValueToUnion(
 
     const sequence = types.find((candidate) => candidate.type.kind === 'sequence');
     if (sequence && sequence.type.kind === 'sequence') {
-      const method = getMethod(value, Symbol.iterator, context);
+      const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
         return createSequenceFromIterable(
           value,
@@ -800,7 +796,7 @@ function convertJavaScriptValueToUnion(
     const frozenArray = types.find((candidate) =>
       candidate.type.kind === 'frozen-array');
     if (frozenArray) {
-      const method = getMethod(value, Symbol.iterator, context);
+      const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
         return convertResolvedJavaScriptValue(
           value,
@@ -844,7 +840,7 @@ function convertJavaScriptValueToUnion(
   const numeric = types.find(isNumericType);
   const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
   if (numeric && bigint) {
-    const primitive = toPrimitive(value, 'number', context);
+    const primitive = toPrimitive(value, context.realm, 'number');
     return typeof primitive === 'bigint'
       ? primitive
       : convertResolvedJavaScriptValue(primitive, numeric, context);
@@ -853,7 +849,7 @@ function convertJavaScriptValueToUnion(
 
   const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
   if (boolean) return Boolean(value);
-  if (bigint) return toBigInt(value, context);
+  if (bigint) return toBigInt(value, context.realm);
   return throwTypeError(context, 'Value cannot be converted to the union type');
 }
 
@@ -1008,7 +1004,7 @@ function convertToInteger(
   extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,
 ): number {
-  let number = toNumber(value, context);
+  let number = toNumber(value, context.realm);
   if (Object.is(number, -0)) number = 0;
 
   const lowerBound = bitLength === 64
@@ -1046,7 +1042,7 @@ function convertToFloat(
   unrestricted: boolean,
   context: ConversionContext,
 ): number {
-  const number = toNumber(value, context);
+  const number = toNumber(value, context.realm);
   if (!unrestricted && !Number.isFinite(number)) {
     throwTypeError(context, 'Value is not a finite float');
   }
@@ -1055,69 +1051,6 @@ function convertToFloat(
     throwTypeError(context, 'Value is outside the float range');
   }
   return rounded;
-}
-
-function toNumber(value: unknown, context: ConversionContext): number {
-  return toNumberFromPrimitive(toPrimitive(value, 'number', context), context);
-}
-
-function toNumberFromPrimitive(
-  value: Primitive,
-  context: ConversionContext,
-): number {
-  if (typeof value === 'bigint' || typeof value === 'symbol') {
-    return throwTypeError(context, 'Value cannot be converted to a number');
-  }
-  return context.realm.intrinsics.number(value);
-}
-
-function toBigInt(value: unknown, context: ConversionContext): bigint {
-  const primitive = toPrimitive(value, 'number', context);
-  if (
-    typeof primitive === 'bigint' ||
-    typeof primitive === 'boolean' ||
-    typeof primitive === 'string'
-  ) return context.realm.intrinsics.bigInt(primitive);
-  return throwTypeError(context, 'Value cannot be converted to a bigint');
-}
-
-function toString(value: unknown, context: ConversionContext): string {
-  const primitive = toPrimitive(value, 'string', context);
-  if (typeof primitive === 'symbol') {
-    return throwTypeError(context, 'A symbol cannot be converted to a string');
-  }
-  return context.realm.intrinsics.string(primitive);
-}
-
-function toPrimitive(
-  value: unknown,
-  hint: 'number' | 'string',
-  context: ConversionContext,
-): Primitive {
-  if (!isObject(value)) return value as Primitive;
-
-  const exotic = Reflect.get(value, Symbol.toPrimitive) as unknown;
-  if (exotic !== undefined && exotic !== null) {
-    if (typeof exotic !== 'function') {
-      return throwTypeError(context, 'Symbol.toPrimitive is not callable');
-    }
-    const result = Reflect.apply(exotic, value, [hint]) as unknown;
-    if (isObject(result)) {
-      return throwTypeError(context, 'Symbol.toPrimitive returned an object');
-    }
-    return result as Primitive;
-  }
-
-  const methods = hint === 'string'
-    ? ['toString', 'valueOf']
-    : ['valueOf', 'toString'];
-  for (const name of methods) {
-    const method = Reflect.get(value, name) as unknown;
-    if (typeof method !== 'function') continue;
-    const result = Reflect.apply(method, value, []) as unknown;
-    if (!isObject(result)) return result as Primitive;
-  }
-  return throwTypeError(context, 'Object cannot be converted to a primitive');
 }
 
 function resolveRuntimeType(
@@ -1257,49 +1190,8 @@ function getCallbackRealm(
     context.realm.callbacks.getAssociatedRealm(value);
 }
 
-function createOrdinaryObject(context: ConversionContext): object {
-  return Reflect.construct(context.realm.intrinsics.object, []);
-}
-
-function defineDataProperty(
-  object: object,
-  key: PropertyKey,
-  value: unknown,
-): void {
-  const created = Reflect.defineProperty(object, key, {
-    configurable: true,
-    enumerable: true,
-    value,
-    writable: true,
-  });
-  if (!created) throw new Error(`Could not create property ${String(key)}`);
-}
-
-function isStringObject(value: object): boolean {
-  try {
-    Reflect.apply(
-      Reflect.get(String.prototype, 'valueOf') as JavaScriptMethod,
-      value,
-      [],
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function isMap(value: unknown): value is Map<string, unknown> {
-  if (!isObject(value)) return false;
-  try {
-    Reflect.apply(
-      Reflect.get(Map.prototype, 'has') as JavaScriptMethod,
-      value,
-      [mapBrandKey],
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  return isObject(value) && hasMapData(value);
 }
 
 function parseBigInteger(value: string): bigint {
@@ -1358,8 +1250,6 @@ type RuntimeType = {
 
 type RuntimeBaseType = Exclude<WebIDLType, AnnotatedType<WebIDLType>>;
 
-type Primitive = bigint | boolean | null | number | string | symbol | undefined;
-
 const integerTypes: Partial<Record<
   SimpleTypeName,
   { bitLength: number; signed: boolean; }
@@ -1390,11 +1280,3 @@ const bufferTypeNames = new Set<SimpleTypeName>([
   'Uint8ClampedArray', 'BigInt64Array', 'BigUint64Array', 'Float16Array',
   'Float32Array', 'Float64Array',
 ]);
-
-const mapBrandKey = Symbol('Web IDL map brand check');
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}

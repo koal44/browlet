@@ -167,10 +167,10 @@ broader or orthogonal identity boundary:
 
 Browlet's own evidence is intentionally kept executable. Two `Browlet`
 instances create separate UserAgents, browsing-context groups, Window agents,
-and Realms inside the same Node/V8 runtime. This is a Browlet embedding
-invariant, not a claim that web author code can synchronously exchange objects
-between isolated browser agent clusters. The
-[binding contract](../test/web-idl/unit/binding.contract.test.ts),
+and Realms inside the same isolate-scoped `NodeRuntime`. This is a Browlet
+embedding invariant, not a claim that web author code can synchronously
+exchange objects between isolated browser agent clusters. The
+[Browlet DOM binding](../test/browlet/unit/dom-binding.test.ts),
 [registration](../test/web-idl/unit/registration.test.ts), and
 [File API](../test/browlet/unit/file-api.test.ts) tests require:
 
@@ -194,7 +194,13 @@ duplicated it. Browlet therefore keeps:
 - execution and the event loop on `Agent`;
 - Realm-specific interface objects and prototypes on `RealmBindings`; and
 - stable implementation/platform associations and origin tracking on the main
-  `BindingWorld` owned by the Node/V8 composition root.
+  `BindingWorld` owned by the Browlet composition root.
+
+The lower [`javascript/`](./javascript/README.md) project separately keeps the
+Node/V8 object-to-realm associations which Node cannot expose. `NodeRuntime`
+owns those isolate-scoped engine facts; `BindingWorld` owns Web IDL
+implementation/platform identity. Neither map is Agent- or AgentCluster-owned,
+and their different keys and responsibilities are not a reason to merge them.
 
 Reopen the number of binding worlds only when Browlet gains a concrete isolated
 world, a separate runtime/VM, or another embedding boundary which intentionally

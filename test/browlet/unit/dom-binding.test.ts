@@ -35,6 +35,72 @@ describe('Browlet DOM binding', () => {
     expect(Reflect.get(window, 'self')).toBe('replacement');
   });
 
+  it('applies the assembled Event interface contract', () => {
+    const browlet = createBrowlet();
+    const Event_ = getGlobal<typeof Event>(browlet, 'Event');
+    const EventTarget_ = getGlobal<typeof EventTarget>(browlet, 'EventTarget');
+    const RealmTypeError = getGlobal<typeof TypeError>(browlet, 'TypeError');
+    const reads: string[] = [];
+    const init = Object.defineProperties({}, {
+      composed: { get: () => { reads.push('composed'); return 1; } },
+      cancelable: { get: () => { reads.push('cancelable'); return 1; } },
+      bubbles: { get: () => { reads.push('bubbles'); return 1; } },
+    }) as EventInit;
+
+    const event = new Event_('ready', init);
+    const converted = new Event_(12 as unknown as string);
+    const trusted = Object.getOwnPropertyDescriptor(event, 'isTrusted');
+
+    expect(Event_.name).toBe('Event');
+    expect(Event_.length).toBe(1);
+    expect(EventTarget_.prototype.addEventListener.name)
+      .toBe('addEventListener');
+    expect(EventTarget_.prototype.addEventListener.length).toBe(2);
+    expect(reads).toEqual(['bubbles', 'cancelable', 'composed']);
+    expect([event.bubbles, event.cancelable, event.composed])
+      .toEqual([true, true, true]);
+    expect(converted.type).toBe('12');
+    expect(() => {
+      new Event_(Symbol('type') as unknown as string);
+    }).toThrow(RealmTypeError);
+    expect(() => {
+      new Event_('ready', 1 as unknown as EventInit);
+    }).toThrow(RealmTypeError);
+    expect(trusted).toMatchObject({
+      configurable: false,
+      enumerable: true,
+    });
+    expect(typeof trusted?.get).toBe('function');
+    expect(trusted?.set === undefined).toBe(true);
+    expect(Object.hasOwn(Event_.prototype, 'isTrusted')).toBe(false);
+  });
+
+  it('accepts EventTarget implementations across Browlet realms', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const FirstEventTarget = getGlobal<typeof EventTarget>(
+      first,
+      'EventTarget',
+    );
+    const SecondEventTarget = getGlobal<typeof EventTarget>(
+      second,
+      'EventTarget',
+    );
+    const FirstTypeError = getGlobal<typeof TypeError>(first, 'TypeError');
+    const foreignTarget = new SecondEventTarget();
+
+    expect(() => {
+      FirstEventTarget.prototype.addEventListener.call(
+        foreignTarget,
+        'ready',
+        null,
+      );
+    }).not.toThrow();
+    expect(() => {
+      FirstEventTarget.prototype.addEventListener.call({}, 'ready', null);
+    }).toThrow(FirstTypeError);
+  });
+
   it.fails('reports Window unforgeable descriptors through WindowProxy', () => {
     const descriptor = Object.getOwnPropertyDescriptor(
       createBrowlet().window,
@@ -439,6 +505,10 @@ describe('Browlet DOM binding', () => {
 
 function createBrowlet(): Browlet {
   return new Browlet({ route: () => '' });
+}
+
+function getGlobal<T>(browlet: Browlet, name: string): T {
+  return Reflect.get(browlet.window, name) as T;
 }
 
 function getConstructor(

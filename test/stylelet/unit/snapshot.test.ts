@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../src/browlet/html/parser/parse';
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { Snapshot } from '../../../src/stylelet/snapshot';
+import { createBrowletDocument } from '../browlet-document';
 
 describe('style snapshot', () => {
   it('normalizes document and element host capabilities', () => {
-    const document = createDocumentImpl(
+    const document = createBrowletDocument(
       '<main id="target" class="one two"></main>',
     );
     const target = document.getElementById('target')!;
@@ -26,7 +24,7 @@ describe('style snapshot', () => {
   });
 
   it('owns reusable compiled-selector and regex caches', () => {
-    const document = createDocumentImpl('<main></main>');
+    const document = createBrowletDocument('<main></main>');
     const snapshot = new Snapshot(document);
     const selector = {};
     const compiled = () => true;
@@ -42,13 +40,9 @@ describe('style snapshot', () => {
   });
 
   it('is created and retained by the public Stylelet API', () => {
-    const document = createDocumentImpl('<main></main>');
+    const document = createBrowletDocument('<main></main>');
     const stylelet = new Stylelet(document);
 
     expect(stylelet.snapshot.document).toBe(document);
   });
 });
-
-function createDocumentImpl(source: string): Document {
-  return parseHTMLDocument(source);
-}

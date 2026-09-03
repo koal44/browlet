@@ -5,9 +5,8 @@ import {
 } from '../../../file/index';
 import type { CapabilityRegistration } from '../../../web-idl/capability';
 import { windowIDL } from '../../browsing/window/window';
-import {
-  createTaskSource, runInParallel,
-} from '../../scripting/event-loop';
+import { createTaskSource } from '../../scripting/event-loop';
+import { runInParallel } from '../scripting';
 import { queueGlobalTask } from '../../scripting/tasks';
 import { blobSerializableCapabilities } from './structured-data/blob';
 import { fileSerializableCapabilities } from './structured-data/file';

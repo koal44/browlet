@@ -4,16 +4,17 @@
 
 - `agents.ts`: the agent/agent-cluster concepts currently required by Window
   realms (HTML §8.1.2).
-- `realm.ts` and `environment.ts`: realm execution and environment settings
-  counterparts (HTML §8.1.3).
+- `realm.ts` and `environment.ts`: the HTML Realm policy and environment
+  settings counterparts (HTML §8.1.3), layered on the engine substrate in
+  [`../../javascript/`](../../javascript/README.md).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
   queues, deterministic task turns, currently-running-task state, task timing
   hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,
-  Browlet-controlled script entries from §8.1.4.4, coalesced host wake-ups,
-  and the explicit Node operations that request a later turn and bridge a V8
-  checkpoint.
+  Browlet-controlled script entries from §8.1.4.4 and coalesced host wake-ups.
+  Browlet integration supplies the Node turn request, and the lower JavaScript
+  runtime supplies the injected V8-checkpoint operation.
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
   event loop.
@@ -61,13 +62,14 @@ hybrid.
 - Default `vm.Context`s share Node's microtask queue, but `node:vm` has no
   public synchronous checkpoint. Until an explicit shareable queue reaches the
   supported Node baseline, keep a feature-detected `process._tickCallback()`
-  bridge isolated in the Node scheduler host. It is a deprecated private hook
-  that drains Node's ambient queue rather than a Browlet-owned queue: unrelated
-  host or dependency promise jobs, work from another Browlet instance in the
-  same isolate, next-tick callbacks, and promise-rejection machinery can run
-  during the checkpoint. It is therefore only a provisional compatibility
-  bridge for a controlled single-scheduler host, not an isolation boundary or
-  the definition of Browlet's checkpoint semantics. Preserve cross-realm FIFO
+  bridge isolated in the JavaScript runtime's Node backend. It is a deprecated
+  private hook that drains Node's ambient queue rather than a Browlet-owned
+  queue: unrelated host or dependency promise jobs, work from another Browlet
+  instance in the same isolate, next-tick callbacks, and promise-rejection
+  machinery can run during the checkpoint. It is therefore only a provisional
+  compatibility bridge for a controlled single-scheduler host, not an
+  isolation boundary or the definition of Browlet's checkpoint semantics.
+  Preserve cross-realm FIFO
   and contamination-limit tests around the bridge. The private hook also
   cannot force a nested drain while V8 is already performing a microtask
   checkpoint, so the Browlet scheduler must enter task turns from a Node task
@@ -251,8 +253,9 @@ without queue suppression and event-loop teardown is not worker shutdown.
    task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
    boundary through a required hook. It is not a blocking `while (true)`.
 4. The checkpoint's reentrancy guard is `EventLoop` state, while the
-   feature-detected `_tickCallback()` bridge is an explicit Node operation in
-   `event-loop.ts`. The HTML checkpoint receives that operation without
+   feature-detected `_tickCallback()` bridge is an explicit `NodeRuntime`
+   operation in [`../../javascript/node-runtime.ts`](../../javascript/node-runtime.ts).
+   The HTML checkpoint receives that operation without
    knowing its mechanism. Cross-realm FIFO behavior is covered; the
    ambient-queue contamination limit remains a runtime constraint rather than
    behavior Browlet can isolate or normalize.

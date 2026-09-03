@@ -102,6 +102,10 @@ export function throwDOMException(
   throw createDOMException(name, message);
 }
 
+export function throwDataCloneError(): never {
+  return throwDOMException(domExceptionName.dataClone);
+}
+
 export function createDOMException(
   name: DOMExceptionName,
   message = '',

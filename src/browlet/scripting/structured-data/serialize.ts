@@ -1,22 +1,21 @@
-import { types as nodeTypes } from 'node:util';
-
-import { domExceptionName, throwDOMException } from '../../../shared/dom-exception';
+import * as JavaScript from '../../../javascript/index';
+import { throwDataCloneError } from '../../../shared/dom-exception';
 import {
   getBufferSourceByteLength,
   getBufferSourceByteOffset, getBufferSourceCopy,
-  getBufferSourceMaxByteLength, getBufferSourceUnderlyingBuffer,
-  getBufferSourceViewLengths, getBufferTypeName, isBufferSourceDetached,
-  isBufferSourceViewOutOfBounds,
+  getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../web-idl/buffer-source';
 import type {
   WebIDLRealmHost,
 } from '../../../web-idl/index';
 import type { StructuredDataEnvironment } from './environment';
 import {
-  createStructuredDataRecord, type ArrayBufferSerializedRecord,
+  createStructuredDataRecord, isSerializedErrorName,
+  type ArrayBufferSerializedRecord,
+  type ArrayBufferViewSerializedRecord,
   type ErrorSerializedRecord, type MapSerializedRecord,
   type ObjectSerializedRecord, type PlatformObjectSerializedRecord,
-  type SerializedErrorName, type SerializedRecord,
+  type SerializedRecord,
   type SetSerializedRecord, type SharedArrayBufferSerializedRecord,
   type StructuredSerializeMemory,
 } from './records';
@@ -54,47 +53,48 @@ export function structuredSerializeInternal(
   if (typeof value === 'symbol') return throwDataCloneError();
 
   const platformObject = environment.context.resolvePlatformObject(value);
-  if (!platformObject && nodeTypes.isProxy(value)) {
+  if (!platformObject && JavaScript.isProxyObject(value)) {
     return throwDataCloneError();
   }
   let serialized: SerializedRecord;
   let deep = false;
 
-  if (nodeTypes.isBooleanObject(value)) {
+  if (JavaScript.hasBooleanData(value)) {
     serialized = {
       type: 'Boolean',
-      value: Reflect.apply(booleanValueOf, value, []),
+      value: JavaScript.getBooleanData(value),
     };
-  } else if (nodeTypes.isNumberObject(value)) {
+  } else if (JavaScript.hasNumberData(value)) {
     serialized = {
       type: 'Number',
-      value: Reflect.apply(numberValueOf, value, []),
+      value: JavaScript.getNumberData(value),
     };
-  } else if (nodeTypes.isBigIntObject(value)) {
+  } else if (JavaScript.hasBigIntData(value)) {
     serialized = {
       type: 'BigInt',
-      value: Reflect.apply(bigIntValueOf, value, []),
+      value: JavaScript.getBigIntData(value),
     };
-  } else if (nodeTypes.isStringObject(value)) {
+  } else if (JavaScript.hasStringData(value)) {
     serialized = {
       type: 'String',
-      value: Reflect.apply(stringValueOf, value, []),
+      value: JavaScript.getStringData(value),
     };
-  } else if (nodeTypes.isSymbolObject(value)) {
+  } else if (JavaScript.hasSymbolData(value)) {
     return throwDataCloneError();
-  } else if (nodeTypes.isDate(value)) {
+  } else if (JavaScript.hasDateValue(value)) {
     serialized = {
       type: 'Date',
-      value: Reflect.apply(dateValueOf, value, []),
+      value: JavaScript.getDateValue(value),
     };
-  } else if (nodeTypes.isRegExp(value)) {
+  } else if (JavaScript.hasRegExpMatcher(value)) {
+    const { flags, source } = JavaScript.getRegExpData(value);
     serialized = {
       type: 'RegExp',
-      source: Reflect.apply(regExpSource, value, []) as string,
-      flags: getRegExpFlags(value),
+      source,
+      flags,
     };
   } else {
-    const bufferType = getBufferTypeName(value);
+    const bufferType = JavaScript.getBufferTypeName(value);
     if (bufferType === 'ArrayBuffer' || bufferType === 'SharedArrayBuffer') {
       serialized = serializeBuffer(
         value,
@@ -103,7 +103,7 @@ export function structuredSerializeInternal(
         environment,
       );
     } else if (bufferType !== undefined) {
-      if (isBufferSourceViewOutOfBounds(value)) {
+      if (JavaScript.isArrayBufferViewOutOfBounds(value)) {
         return throwDataCloneError();
       }
       const bufferSerialized = structuredSerializeInternal(
@@ -121,15 +121,16 @@ export function structuredSerializeInternal(
         constructor: bufferType,
         buffer: bufferSerialized,
         byteOffset: getBufferSourceByteOffset(value),
-        ...getBufferSourceViewLengths(value),
+        ...serializeArrayBufferViewLengths(value, bufferType),
       };
-    } else if (nodeTypes.isMap(value)) {
+    } else if (JavaScript.hasMapData(value)) {
       serialized = { type: 'Map', entries: [] };
       deep = true;
-    } else if (nodeTypes.isSet(value)) {
+    } else if (JavaScript.hasSetData(value)) {
       serialized = { type: 'Set', entries: [] };
       deep = true;
-    } else if (nodeTypes.isNativeError(value) && !platformObject) {
+    } else if (JavaScript.hasErrorData(value) &&
+      !platformObject) {
       serialized = serializeError(value, environment.realm);
       deep = true;
     } else if (platformObject) {
@@ -157,7 +158,7 @@ export function structuredSerializeInternal(
     } else if (typeof value === 'function') {
       return throwDataCloneError();
     } else if (hasUnsupportedInternalSlots(value) ||
-      nativeCloneRejectsPropertylessObject(value)) {
+      JavaScript.nativeCloneRejectsPropertylessObject(value)) {
       return throwDataCloneError();
     } else {
       serialized = { type: 'Object', properties: [] };
@@ -203,6 +204,24 @@ export function structuredSerializeInternal(
   return serialized;
 }
 
+/** HTML §2.7.3, ArrayBufferView [[ByteLength]] and [[ArrayLength]]. */
+function serializeArrayBufferViewLengths(
+  value: object,
+  type: JavaScript.JavaScriptBufferViewName,
+): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
+  if (JavaScript.isLengthTrackingResizableArrayBufferView(value)) {
+    return type === 'DataView'
+      ? { byteLength: 'auto' }
+      : { arrayLength: 'auto', byteLength: 'auto' };
+  }
+  return type === 'DataView'
+    ? { byteLength: getBufferSourceByteLength(value) }
+    : {
+      arrayLength: JavaScript.getTypedArrayLength(value),
+      byteLength: getBufferSourceByteLength(value),
+    };
+}
+
 /** HTML §2.7.3, ArrayBuffer and SharedArrayBuffer branches. */
 function serializeBuffer(
   value: object,
@@ -211,7 +230,7 @@ function serializeBuffer(
   environment: StructuredSerializationEnvironment,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
   const byteLength = getBufferSourceByteLength(value);
-  const maxByteLength = getBufferSourceMaxByteLength(value);
+  const maxByteLength = JavaScript.getArrayBufferMaxByteLength(value);
 
   if (type === 'SharedArrayBuffer') {
     if (!environment.realm.crossOriginIsolated || forStorage) {
@@ -253,7 +272,7 @@ function serializeMapData(
   environment: StructuredSerializationEnvironment,
   memory: StructuredSerializeMemory,
 ): void {
-  const copiedEntries = copyMapEntries(value);
+  const copiedEntries = JavaScript.copyMapData(value);
   for (const [key, entryValue] of copiedEntries) {
     serialized.entries.push({
       key: structuredSerializeInternal(key, forStorage, environment, memory),
@@ -275,7 +294,7 @@ function serializeSetData(
   environment: StructuredSerializationEnvironment,
   memory: StructuredSerializeMemory,
 ): void {
-  const copiedEntries = copySetEntries(value);
+  const copiedEntries = JavaScript.copySetData(value);
   for (const entry of copiedEntries) {
     serialized.entries.push(structuredSerializeInternal(
       entry,
@@ -357,14 +376,15 @@ function serializeError(
   realm: WebIDLRealmHost,
 ): ErrorSerializedRecord {
   const candidateName = Reflect.get(value, 'name', value) as unknown;
-  const name = serializedErrorNames.has(candidateName as SerializedErrorName)
-    ? candidateName as SerializedErrorName
+  const name = isSerializedErrorName(candidateName)
+    ? candidateName
     : 'Error';
   const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
   const message = messageDescriptor && 'value' in messageDescriptor
-    ? toString(messageDescriptor.value, realm)
+    ? JavaScript.toString(messageDescriptor.value, realm)
     : undefined;
-  const stack = getErrorStack(value, realm);
+  const stackValue = JavaScript.readErrorStack(value, realm);
+  const stack = typeof stackValue === 'string' ? stackValue : '';
   return { type: 'Error', name, message, stack };
 }
 
@@ -386,105 +406,20 @@ function serializeErrorCause(
   );
 }
 
-function getErrorStack(value: object, realm: WebIDLRealmHost): string {
-  const descriptor = Reflect.getOwnPropertyDescriptor(value, 'stack');
-  if (!descriptor) return '';
-  if ('value' in descriptor) {
-    return typeof descriptor.value === 'string' ? descriptor.value : '';
-  }
-  const getter = realm.intrinsics.errorStack;
-  if (getter && descriptor.get === getter) {
-    const stack = Reflect.apply(getter, value, []);
-    return typeof stack === 'string' ? stack : '';
-  }
-  return '';
-}
-
-function copyMapEntries(value: object): Array<[unknown, unknown]> {
-  const iterator = Reflect.apply(mapEntries, value, []) as object;
-  const copied: Array<[unknown, unknown]> = [];
-  while (true) {
-    const result = Reflect.apply(mapIteratorNext, iterator, []);
-    if (result.done) return copied;
-    copied.push([result.value[0], result.value[1]]);
-  }
-}
-
-function copySetEntries(value: object): unknown[] {
-  const iterator = Reflect.apply(setValues, value, []) as object;
-  const copied: unknown[] = [];
-  while (true) {
-    const result = Reflect.apply(setIteratorNext, iterator, []);
-    if (result.done) return copied;
-    copied.push(result.value);
-  }
-}
-
-function getRegExpFlags(value: object): string {
-  // RegExp.prototype.flags performs observable property Gets. Applying the
-  // captured accessors reads the RegExp internal slots without author hooks.
-  let result = '';
-  for (const [getter, flag] of regExpFlagAccessors) {
-    if (getter && Reflect.apply(getter, value, []) === true) result += flag;
-  }
-  return result;
-}
-
 function hasUnsupportedInternalSlots(value: object): boolean {
-  return nodeTypes.isArgumentsObject(value) ||
-    nodeTypes.isCryptoKey(value) ||
-    nodeTypes.isExternal(value) ||
-    nodeTypes.isGeneratorObject(value) ||
-    nodeTypes.isKeyObject(value) ||
-    nodeTypes.isMapIterator(value) ||
-    nodeTypes.isModuleNamespaceObject(value) ||
-    nodeTypes.isPromise(value) ||
-    nodeTypes.isSetIterator(value) ||
-    nodeTypes.isWeakMap(value) ||
-    nodeTypes.isWeakSet(value) ||
-    hasWeakRefSlots(value) ||
-    hasFinalizationRegistrySlots(value);
-}
-
-function nativeCloneRejectsPropertylessObject(value: object): boolean {
-  // Node does not expose predicates for Array or String Iterator internal
-  // slots. A propertyless native-clone probe distinguishes the real branded
-  // objects from prototype impostors without advancing an iterator or
-  // traversing an author-controlled property graph.
-  if (Object.keys(value).length !== 0) return false;
-
-  try {
-    nativeStructuredClone(value);
-    return false;
-  } catch (error) {
-    if (isNativeDataCloneError(error)) return true;
-    throw error;
-  }
-}
-
-function isNativeDataCloneError(value: unknown): boolean {
-  return typeof value === 'object' && value !== null &&
-    Reflect.get(value, 'name') === 'DataCloneError';
-}
-
-function hasWeakRefSlots(value: object): boolean {
-  if (!weakRefDeref) return false;
-  try {
-    Reflect.apply(weakRefDeref, value, []);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function hasFinalizationRegistrySlots(value: object): boolean {
-  if (!finalizationRegistryUnregister) return false;
-  try {
-    Reflect.apply(finalizationRegistryUnregister, value, [brandProbe]);
-    return true;
-  } catch {
-    return false;
-  }
+  return JavaScript.isArgumentsObject(value) ||
+    JavaScript.isCryptoKeyObject(value) ||
+    JavaScript.isExternalObject(value) ||
+    JavaScript.isGeneratorObject(value) ||
+    JavaScript.isKeyObject(value) ||
+    JavaScript.isMapIteratorObject(value) ||
+    JavaScript.isModuleNamespaceObject(value) ||
+    JavaScript.isPromiseObject(value) ||
+    JavaScript.isSetIteratorObject(value) ||
+    JavaScript.isWeakMapObject(value) ||
+    JavaScript.isWeakSetObject(value) ||
+    JavaScript.isWeakRefObject(value) ||
+    JavaScript.isFinalizationRegistryObject(value);
 }
 
 function isBufferSerializedRecord(
@@ -503,104 +438,3 @@ function isPrimitive(
     typeof value === 'boolean' || typeof value === 'number' ||
     typeof value === 'bigint' || typeof value === 'string';
 }
-
-function throwDataCloneError(): never {
-  return throwDOMException(domExceptionName.dataClone);
-}
-
-function toString(value: unknown, realm: WebIDLRealmHost): string {
-  if (typeof value === 'symbol') {
-    throw new realm.intrinsics.typeError(
-      'Cannot convert a Symbol value to a string',
-    );
-  }
-  return Reflect.apply(realm.intrinsics.string, undefined, [value]);
-}
-
-function getAccessor(
-  object: object,
-  key: PropertyKey,
-): (this: object) => unknown {
-  const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
-  if (typeof descriptor?.get !== 'function') {
-    throw new Error(`Missing intrinsic accessor ${String(key)}`);
-  }
-  return descriptor.get;
-}
-
-function getOptionalAccessor(
-  object: object,
-  key: PropertyKey,
-): ((this: object) => unknown) | undefined {
-  const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
-  return typeof descriptor?.get === 'function' ? descriptor.get : undefined;
-}
-
-const booleanValueOf = Reflect.get(
-  Boolean.prototype,
-  'valueOf',
-);
-const numberValueOf = Reflect.get(
-  Number.prototype,
-  'valueOf',
-);
-const bigIntValueOf = Reflect.get(
-  BigInt.prototype,
-  'valueOf',
-);
-const stringValueOf = Reflect.get(
-  String.prototype,
-  'valueOf',
-);
-const dateValueOf = Reflect.get(
-  Date.prototype,
-  'getTime',
-);
-const regExpSource = getAccessor(RegExp.prototype, 'source');
-const regExpFlagAccessors = [
-  [getOptionalAccessor(RegExp.prototype, 'hasIndices'), 'd'],
-  [getOptionalAccessor(RegExp.prototype, 'global'), 'g'],
-  [getOptionalAccessor(RegExp.prototype, 'ignoreCase'), 'i'],
-  [getOptionalAccessor(RegExp.prototype, 'multiline'), 'm'],
-  [getOptionalAccessor(RegExp.prototype, 'dotAll'), 's'],
-  [getOptionalAccessor(RegExp.prototype, 'unicode'), 'u'],
-  [getOptionalAccessor(RegExp.prototype, 'unicodeSets'), 'v'],
-  [getOptionalAccessor(RegExp.prototype, 'sticky'), 'y'],
-] as const;
-
-const mapEntries = Reflect.get(
-  Map.prototype,
-  'entries',
-) as (this: object) => MapIterator<[unknown, unknown]>;
-const mapIteratorNext = Reflect.get(
-  Reflect.getPrototypeOf(new Map().entries())!,
-  'next',
-) as (this: object) => IteratorResult<[unknown, unknown]>;
-const setValues = Reflect.get(
-  Set.prototype,
-  'values',
-) as (this: object) => SetIterator<unknown>;
-const setIteratorNext = Reflect.get(
-  Reflect.getPrototypeOf(new Set().values())!,
-  'next',
-) as (this: object) => IteratorResult<unknown>;
-
-const weakRefDeref = typeof WeakRef === 'undefined'
-  ? undefined
-  : Reflect.get(
-    WeakRef.prototype,
-    'deref',
-  ) as (this: object) => object | undefined;
-const finalizationRegistryUnregister = typeof FinalizationRegistry === 'undefined'
-  ? undefined
-  : Reflect.get(
-    FinalizationRegistry.prototype,
-    'unregister',
-  );
-const brandProbe = {};
-const nativeStructuredClone = globalThis.structuredClone;
-
-const serializedErrorNames = new Set<SerializedErrorName>([
-  'Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError',
-  'TypeError', 'URIError',
-]);

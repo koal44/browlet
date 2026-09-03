@@ -1,3 +1,4 @@
+import { isObject } from '../javascript/index';
 import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
 } from './declaration/index';
@@ -74,9 +75,7 @@ type CallbackValueRecord = {
 };
 
 function isCallbackValue(value: unknown): value is CallbackValue {
-  return (typeof value === 'object' && value !== null ||
-    typeof value === 'function') &&
-    callbackValueBrand in value;
+  return isObject(value) && callbackValueBrand in value;
 }
 
 const callbackValueBrand: unique symbol = Symbol('Web IDL callback value');

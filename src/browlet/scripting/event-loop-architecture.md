@@ -226,8 +226,9 @@ post-checkpoint phases.
 **Unavailable primitive:** Node exposes no supported synchronous operation for
 draining the shared V8 microtask queue.
 
-**Accommodation:** The Node scheduler supplies
-`performNodeMicrotaskCheckpoint()` through `EventLoopOptions`. That one
+**Accommodation:** The isolate-scoped
+[`nodeRuntime`](../../javascript/node-runtime.ts) supplies its
+`performMicrotaskCheckpoint` operation through `EventLoopOptions`. That one
 provider feature-detects and invokes the private `process._tickCallback()`;
 the HTML checkpoint knows only the injected operation.
 
@@ -240,19 +241,23 @@ handled, then emit `PromiseRejectionHandledWarning` later. Do not install a
 process-wide `async_hooks` heuristic, suppress rejection events, or change Web
 IDL promise conversion to hide this artifact.
 
-**Affected code and tests:** The private hook is isolated at the bottom of
-[`event-loop.ts`](./event-loop.ts). Cross-realm draining and the ambient,
-nested, fake-clock, and adopted-rejection limitations are recorded in
+**Affected code and tests:** The private hook is isolated in
+[`node-runtime.ts`](../../javascript/node-runtime.ts). The HTML policy which
+invokes the injected operation remains in [`event-loop.ts`](./event-loop.ts).
+Cross-realm draining and the ambient, nested, and fake-clock limitations are
+recorded in
+[`node-runtime.test.ts`](../../../test/javascript/unit/node-runtime.test.ts).
+The parser/Streams adopted-rejection integration remains in
 [`tasks.test.ts`](../../../test/browlet/unit/scripting/tasks.test.ts). HTML
 §13.2.6.4 separately requires a conditional, explicit pre-script checkpoint
 before its conditional wait for style sheets and script readiness. The current
 parser conflates those boundaries; its replacement belongs to the
 [parser script-runner plan](../html/parser/roadmap.md), not to this Node bridge.
 
-**Replacement condition:** Replace only the injected Node checkpoint provider
-when a supported synchronous operation becomes available. Delete
-`performNodeMicrotaskCheckpoint()`, `getTickCallback()`, and their cached
-private function together. Preserve HTML's checkpoint algorithm and its
+**Replacement condition:** Replace only `NodeRuntime`'s injected checkpoint
+operation when a supported synchronous operation becomes available. Delete
+its `_tickCallback()` lookup and cached private function together. Preserve
+HTML's checkpoint algorithm and its
 reentrancy guard. Faithful §8.1.6.2 integration may separately remove the
 execution-context accommodation above.
 

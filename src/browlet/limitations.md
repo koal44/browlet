@@ -14,7 +14,7 @@ carry the Window platform-object brand.
 
 Node's VM creates an inaccessible global proxy for every context and cannot
 reuse Browlet's WindowProxy as the context's actual global-this. As an
-accommodation, the Node adapter keeps that VM global private, points its
+accommodation, `NodeRealm` keeps that VM global private, points its
 `globalThis` property at the modeled WindowProxy, and inherits free global
 names through it.
 
@@ -30,9 +30,10 @@ expected-failure test records that mismatch.
 Replace the private VM global, inheritance bridge, and proxy-invariant
 compromises together only when Node exposes a compatible global-proxy API or
 Browlet uses a direct V8 embedder. The Window/WindowProxy identity and
-cross-navigation lifecycle tests remain the required contract. The boundary is
-implemented in [`realm.ts`](./scripting/realm.ts); the observable mismatches
-are recorded in
+cross-navigation lifecycle tests remain the required contract. The engine
+bridge is implemented in [`node-realm.ts`](../javascript/node-realm.ts), below
+Web IDL; Browlet's [`realm.ts`](./scripting/realm.ts) retains the HTML global
+and task associations. The observable mismatches are recorded in
 [`document-lifecycle.test.ts`](../../test/browlet/unit/browsing/document-lifecycle.test.ts)
 and [`dom-binding.test.ts`](../../test/browlet/unit/dom-binding.test.ts).
 
@@ -53,7 +54,7 @@ microtask FIFO order by using its ambient queue, but Browlet cannot isolate the
 queue per HTML event loop. Unrelated host work and work from another Browlet
 instance in the same isolate can therefore interleave.
 
-The `node-v8-checkpoint` accommodation uses private
+The JavaScript runtime's `node-v8-checkpoint` accommodation uses private
 `process._tickCallback()` because Node exposes no supported synchronous V8
 checkpoint operation. Besides draining the ambient queue, that function runs
 next-tick and promise-rejection machinery. A nested call made while V8 is
@@ -62,8 +63,10 @@ rejection before its adoption job runs. Focused expected-failure tests preserve
 the ambient, nested, fake-clock, and rejection-reporting mismatches.
 
 These are Node integration limitations, not changes to HTML's checkpoint
-algorithm or permission to alter Web IDL promise conversion. Their affected
-code and removal conditions are recorded in
+algorithm or permission to alter Web IDL promise conversion. The private drain
+operation lives in [`node-runtime.ts`](../javascript/node-runtime.ts), while
+the HTML checkpoint guard and post-checkpoint work remain in Browlet. Their
+affected code and removal conditions are recorded in
 [the event-loop architecture](./scripting/event-loop-architecture.md#runtime-accommodations).
 
 ## Bounded cross-document navigation

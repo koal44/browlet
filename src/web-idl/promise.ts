@@ -1,3 +1,4 @@
+import { installPromiseReactions } from '../javascript/index';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
@@ -111,7 +112,12 @@ export function reactToPromise(
     { length: 1, name: '' },
   );
 
-  performPromiseThen(promise, onFulfilled, onRejected);
+  installPromiseReactions(
+    promise.realm,
+    promise.promise,
+    onFulfilled,
+    onRejected,
+  );
   return resultPromise;
 }
 
@@ -174,7 +180,12 @@ export function waitForAll(
       },
       { length: 1, name: '' },
     );
-    performPromiseThen(promise, onFulfilled, onRejected);
+    installPromiseReactions(
+      promise.realm,
+      promise.promise,
+      onFulfilled,
+      onRejected,
+    );
   });
 }
 
@@ -200,7 +211,12 @@ export function markPromiseAsHandled(promise: IDLPromise): void {
     () => undefined,
     { length: 1, name: '' },
   );
-  performPromiseThen(promise, undefined, onRejected);
+  installPromiseReactions(
+    promise.realm,
+    promise.promise,
+    undefined,
+    onRejected,
+  );
 }
 
 export type PromiseReactionSteps = {
@@ -248,20 +264,3 @@ function isUndefinedType(
   const resolved = getUnannotatedType(type, context.definitions);
   return resolved.kind === 'simple' && resolved.name === 'undefined';
 }
-
-function performPromiseThen(
-  promise: IDLPromise,
-  onFulfilled: PromiseReaction | undefined,
-  onRejected: PromiseReaction | undefined,
-): void {
-  // JavaScript does not expose PerformPromiseThen without a result
-  // capability. This call has the same reaction behavior, but also creates an
-  // unreachable derived promise and can observe an overridden constructor.
-  Reflect.apply(
-    promise.realm.intrinsics.promise.then,
-    promise.promise,
-    [onFulfilled, onRejected],
-  );
-}
-
-type PromiseReaction = (...argumentsList: unknown[]) => unknown;

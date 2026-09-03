@@ -1,7 +1,7 @@
-import { domExceptionName, throwDOMException } from '../../../shared/dom-exception';
+import * as JavaScript from '../../../javascript/index';
+import { throwDataCloneError } from '../../../shared/dom-exception';
 import {
-  getBufferSourceByteLength, getBufferSourceMaxByteLength,
-  getBufferTypeName, isBufferSourceDetached, transferArrayBuffer,
+  getBufferSourceByteLength, isBufferSourceDetached, transferArrayBuffer,
 } from '../../../web-idl/buffer-source';
 import type { StructuredDataEnvironment } from './environment';
 import {
@@ -76,8 +76,8 @@ function prepareTransfer(
   value: unknown,
   environment: StructuredDataEnvironment,
 ): PreparedTransfer {
-  if (!isObject(value)) return throwDataCloneError();
-  const bufferType = getBufferTypeName(value);
+  if (!JavaScript.isObject(value)) return throwDataCloneError();
+  const bufferType = JavaScript.getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
   };
@@ -110,7 +110,9 @@ function performTransfer(
   if (prepared.kind === 'ArrayBuffer') {
     if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
     const byteLength = getBufferSourceByteLength(prepared.value);
-    const maxByteLength = getBufferSourceMaxByteLength(prepared.value);
+    const maxByteLength = JavaScript.getArrayBufferMaxByteLength(
+      prepared.value,
+    );
     return {
       type: maxByteLength === undefined
         ? 'ArrayBuffer'
@@ -167,7 +169,7 @@ function receiveTransfer(
   const value = transferArrayBuffer(dataHolder.buffer, environment.realm);
   if (
     getBufferSourceByteLength(value) !== dataHolder.byteLength ||
-    getBufferSourceMaxByteLength(value) !== dataHolder.maxByteLength
+    JavaScript.getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
     throw new Error('Received ArrayBuffer does not match its data holder');
   }
@@ -189,13 +191,3 @@ type PreparedPlatformTransfer = {
   placeholder: TransferPlaceholderSerializedRecord;
   steps: TransferableSteps;
 };
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}
-
-function throwDataCloneError(): never {
-  return throwDOMException(domExceptionName.dataClone);
-}

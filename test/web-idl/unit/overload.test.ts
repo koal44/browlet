@@ -4,7 +4,7 @@ import {
   defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
   type OperationMember,
 } from '../../../src/web-idl/declaration/index';
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { TestRealm as Realm } from '../test-realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/binding';
 import type { HostDefinedInterface } from '../../../src/web-idl/conversion';
