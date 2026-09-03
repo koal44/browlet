@@ -1,3 +1,4 @@
+import { isObject } from '../javascript/index';
 import { getDOMExceptionRequest } from '../shared/dom-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
@@ -414,8 +415,7 @@ export class RealmBinding {
     const initial = this.#getInitialObjects(assembled.definition);
     if (initial.namespaceObject) return initial.namespaceObject;
 
-    const object = createRealmObject(
-      this.realm,
+    const object = this.realm.createOrdinaryObject(
       this.realm.intrinsics.objectPrototype,
     );
     initial.namespaceObject = object;
@@ -469,7 +469,7 @@ export class RealmBinding {
           : this.realm.intrinsics.objectPrototype;
     const prototype = this.#hasImmutableGlobalPrototype(assembled)
       ? this.#globalPlatformObjects.createPrototypeObject(parentPrototype)
-      : createRealmObject(this.realm, parentPrototype);
+      : this.realm.createOrdinaryObject(parentPrototype);
     initial.interfacePrototypeObject = prototype;
 
     this.#defineUnscopables(prototype, assembled);
@@ -542,10 +542,7 @@ export class RealmBinding {
 
     const implementation = createImplementation
       ? createImplementation()
-      : createRealmObject(
-        this.realm,
-        prototype,
-      );
+      : this.realm.createOrdinaryObject(prototype);
     if (Reflect.getPrototypeOf(implementation) !== prototype) {
       throw new Error(
         `Implementation object for ${assembled.definition.name} has the wrong prototype`,
@@ -629,7 +626,7 @@ export class RealmBinding {
       .getPlatformObjectAllocationSteps(primaryInterface);
     const backingObject = allocatePlatformObject
       ? allocatePlatformObject(prototype)
-      : createRealmObject(this.realm, prototype);
+      : this.realm.createOrdinaryObject(prototype);
     if (Reflect.getPrototypeOf(backingObject) !== prototype) {
       throw new Error(
         `Platform object for ${primaryInterface.definition.name} has the wrong prototype`,
@@ -1358,8 +1355,7 @@ export class RealmBinding {
     interface_: AssembledInterface,
     object: object,
   ): object {
-    const result = createRealmObject(
-      this.realm,
+    const result = this.realm.createOrdinaryObject(
       this.realm.intrinsics.objectPrototype,
     );
 
@@ -1466,7 +1462,7 @@ export class RealmBinding {
     const initial = this.#getInitialObjects(interface_.definition);
     if (initial.unforgeablesObject) return initial.unforgeablesObject;
 
-    const object = createRealmObject(this.realm, null);
+    const object = this.realm.createOrdinaryObject(null);
     initial.unforgeablesObject = object;
     this.#defineAttributes(object, interface_, 'unforgeable');
     this.#defineOperations(object, interface_, 'unforgeable');
@@ -1538,7 +1534,7 @@ export class RealmBinding {
     }
     if (names.size === 0) return;
 
-    const unscopables = createRealmObject(this.realm, null);
+    const unscopables = this.realm.createOrdinaryObject(null);
     for (const name of names) {
       defineProperty(unscopables, name, {
         configurable: true,
@@ -1932,17 +1928,6 @@ function orderInterfacesByInheritance(
   return ordered;
 }
 
-function createRealmObject(
-  realm: WebIDLRealmHost,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
 function defineProperty(
   target: object,
   key: PropertyKey,
@@ -1959,11 +1944,5 @@ function missingImplementation(
 ): Error {
   return new Error(
     `Web IDL ${definition.definition.name} ${member} has no implementation steps`,
-  );
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
   );
 }

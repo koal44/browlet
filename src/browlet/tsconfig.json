@@ -11,6 +11,7 @@
   "include": ["./**/*.ts"],
   "references": [
     { "path": "../infra" },
+    { "path": "../javascript" },
     { "path": "../encoding" },
     { "path": "../web-idl/declaration" },
     { "path": "../web-idl" },

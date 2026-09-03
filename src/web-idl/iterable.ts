@@ -1,3 +1,6 @@
+import {
+  createIteratorResultObject, isObject,
+} from '../javascript/index';
 import type { AssembledInterface } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
@@ -5,6 +8,7 @@ import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import { reference, type IterableMember } from './declaration/index';
+import { defineDataProperty, defineMethod } from './property';
 import type { ImplementationRegistry } from './registry';
 
 export type ValuePair<Key = unknown, Value = unknown> = {
@@ -113,8 +117,7 @@ export class SynchronousIterableBinding {
           interface_,
           securityIdentifier,
         );
-        const iterator = createRealmObject(
-          this.#context,
+        const iterator = this.#context.realm.createOrdinaryObject(
           this.#getIteratorPrototypeObject(interface_, iterable),
         );
         this.#iterators.set(iterator, {
@@ -188,8 +191,7 @@ export class SynchronousIterableBinding {
     iterable: IterableMember,
   ): object {
     return this.#getIteratorPrototype(interface_, () => {
-      const prototype = createRealmObject(
-        this.#context,
+      const prototype = this.#context.realm.createOrdinaryObject(
         this.#context.realm.intrinsics.iteration.iteratorPrototype,
       );
       const next = this.#context.realm.createFunction(
@@ -231,13 +233,17 @@ export class SynchronousIterableBinding {
       iterable,
     );
     if (iterator.index >= pairs.length) {
-      return createIteratorResult(this.#context, undefined, true);
+      return createIteratorResultObject(
+        this.#context.realm,
+        undefined,
+        true,
+      );
     }
 
     const pair = pairs[iterator.index]!;
     iterator.index++;
-    return createIteratorResult(
-      this.#context,
+    return createIteratorResultObject(
+      this.#context.realm,
       this.#convertPairResult(pair, iterable, iterator.kind),
       false,
     );
@@ -320,61 +326,3 @@ type JavaScriptFunction = ReturnType<
 >;
 
 const functionType = reference('Function');
-
-function createIteratorResult(
-  context: ConversionContext,
-  value: unknown,
-  done: boolean,
-): object {
-  const result = createRealmObject(
-    context,
-    context.realm.intrinsics.objectPrototype,
-  );
-  defineDataProperty(result, 'value', value);
-  defineDataProperty(result, 'done', done);
-  return result;
-}
-
-function createRealmObject(
-  context: ConversionContext,
-  prototype: object | null,
-): object {
-  const object = Reflect.construct(context.realm.intrinsics.object, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function defineMethod(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-  enumerable: boolean,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable,
-    value,
-    writable: true,
-  });
-}
-
-function defineDataProperty(
-  target: object,
-  key: PropertyKey,
-  value: unknown,
-): void {
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    value,
-    writable: true,
-  });
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}

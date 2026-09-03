@@ -1,3 +1,4 @@
+import { isObject } from '../javascript/index';
 import type { ObservableArrayHandle } from '../shared/observable-array';
 import type { AssembledInterface } from './assembly';
 import type { AttributeMember } from './declaration/index';
@@ -187,59 +188,3 @@ export type PlatformObjectRecord = {
   realm: WebIDLRealmHost;
   setEntries?: Set<unknown>;
 };
-
-export function ordinarySetWithOwnDescriptor(
-  target: object,
-  property: PropertyKey,
-  value: unknown,
-  receiver: unknown,
-  ownDescriptor: PropertyDescriptor | undefined,
-): boolean {
-  if (!ownDescriptor) {
-    const parent = Reflect.getPrototypeOf(target);
-    if (parent) return Reflect.set(parent, property, value, receiver);
-    ownDescriptor = {
-      configurable: true,
-      enumerable: true,
-      value: undefined,
-      writable: true,
-    };
-  }
-
-  if (isDataDescriptor(ownDescriptor)) {
-    if (!ownDescriptor.writable || !isObject(receiver)) return false;
-    const existing = Reflect.getOwnPropertyDescriptor(receiver, property);
-    if (existing) {
-      if (isAccessorDescriptor(existing) || existing.writable === false) {
-        return false;
-      }
-      return Reflect.defineProperty(receiver, property, { value });
-    }
-    return Reflect.defineProperty(receiver, property, {
-      configurable: true,
-      enumerable: true,
-      value,
-      writable: true,
-    });
-  }
-
-  if (!ownDescriptor.set) return false;
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- the descriptor's receiver is supplied explicitly
-  Reflect.apply(ownDescriptor.set, receiver, [value]);
-  return true;
-}
-
-function isDataDescriptor(descriptor: PropertyDescriptor): boolean {
-  return Object.hasOwn(descriptor, 'value') ||
-    Object.hasOwn(descriptor, 'writable');
-}
-
-function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
-  return Object.hasOwn(descriptor, 'get') || Object.hasOwn(descriptor, 'set');
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}

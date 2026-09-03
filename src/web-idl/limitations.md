@@ -7,7 +7,8 @@ machinery or Web IDL feature is implemented.
 ## Host and ECMAScript internal slots
 
 - **Associated realms — `node-v8-object-realms` accommodation:** ECMAScript
-  does not expose an object's `[[Realm]]`. Browlet maintains a shared weak
+  does not expose an object's `[[Realm]]`. The lower JavaScript runtime
+  maintains an isolate-scoped weak
   association for globals, intrinsics, created functions, and evaluated
   objects, then falls back to the active evaluation realm for unknown objects.
   HTML's environment-settings layer owns callback context and controlled
@@ -15,8 +16,9 @@ machinery or Web IDL feature is implemented.
   Replace the associations and fallback together if a future runtime API or
   direct V8 embedding exposes that slot; borrowed-operation and callback realm
   tests must continue to determine the result. The accommodation lives in
-  [`realm.ts`](../browlet/scripting/realm.ts), with integrated realm behavior
-  covered by [`file-api.test.ts`](../../test/browlet/unit/file-api.test.ts) and
+  [`node-runtime.ts`](../javascript/node-runtime.ts), below Web IDL; integrated
+  realm behavior is covered by
+  [`file-api.test.ts`](../../test/browlet/unit/file-api.test.ts) and
   callback conversion covered by
   [`callback.test.ts`](../../test/web-idl/unit/callback.test.ts).
 - **Callback lifecycle — `node-v8-execution-contexts` accommodation:** Browlet
@@ -49,10 +51,10 @@ machinery or Web IDL feature is implemented.
   SharedArrayBuffers cannot shrink back after an equivalent probe. An
   ambiguous fixed-at-end or auto-length shared view therefore remains fixed
   when structured data reconstructs it.
-- **Detached view byte length:** Web IDL reads a buffer view's internal
-  `[[ByteLength]]`, while JavaScript's public view accessors return zero or
-  throw after detachment. The original length cannot be recovered for an
-  arbitrary incoming detached view without a native host capability.
+- **Detached view byte length:** Web IDL and HTML require a buffer view's
+  internal `[[ByteLength]]`, while JavaScript's public view accessors return
+  zero or throw after detachment. The original length cannot be recovered for
+  an arbitrary incoming detached view without a native host capability.
 - **Transferability predicate:** JavaScript provides no non-destructive way to
   inspect `[[ArrayBufferDetachKey]]`. The binding can authoritatively perform a
   transfer, but cannot expose the Web IDL "is transferable" predicate for an
@@ -61,11 +63,13 @@ machinery or Web IDL feature is implemented.
 
 ## Promises
 
-- **Promise reactions:** JavaScript exposes `Promise.prototype.then`, not
-  `PerformPromiseThen` with a caller-supplied or omitted capability. Reactions
-  therefore create unreachable derived promises in a few internal algorithms.
-  They can also consult an author-overridden `constructor` or `@@species`,
-  whereas `PerformPromiseThen` would not.
+- **Promise reactions:** The JavaScript runtime's
+  `installPromiseReactions()` operation uses `Promise.prototype.then` because
+  JavaScript does not expose `PerformPromiseThen`. It approximates that
+  operation's no-result-capability form, so every use creates an unreachable
+  derived promise and can consult an author-overridden `constructor` or
+  `@@species`. Web IDL separately settles its typed result capability where
+  required.
 - **Handled flag:** JavaScript does not expose `[[PromiseIsHandled]]` directly.
   Attaching a rejection reaction marks the original promise handled while also
   creating one unreachable fulfilled promise and sharing the same observable

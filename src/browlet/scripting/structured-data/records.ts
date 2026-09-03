@@ -102,14 +102,13 @@ export type ErrorSerializedRecord = {
   cause?: SerializedRecord;
 };
 
-export type SerializedErrorName =
-  | 'Error'
-  | 'EvalError'
-  | 'RangeError'
-  | 'ReferenceError'
-  | 'SyntaxError'
-  | 'TypeError'
-  | 'URIError';
+export type SerializedErrorName = typeof serializedErrorNames[number];
+
+export function isSerializedErrorName(
+  value: unknown,
+): value is SerializedErrorName {
+  return serializedErrorNames.some((name) => name === value);
+}
 
 export type ArraySerializedRecord = {
   type: 'Array';
@@ -166,3 +165,8 @@ export type StructuredDeserializeWithTransferResult = {
   deserialized: unknown;
   transferredValues: unknown[];
 };
+
+const serializedErrorNames = [
+  'Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError',
+  'TypeError', 'URIError',
+] as const;

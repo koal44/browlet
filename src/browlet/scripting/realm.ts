@@ -1,6 +1,4 @@
-import {
-  constants, createContext, runInContext, type Context,
-} from 'node:vm';
+import { NodeRealm, nodeRuntime } from '../../javascript/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
@@ -14,9 +12,8 @@ import {
 } from '../performance/high-resolution-time';
 
 /*
- * HTML owns the Realm's agent, global-object, global-this, and host-defined
- * associations. This concrete Realm also supplies Browlet's narrow Web IDL
- * host capabilities; the private Node VM context is only its execution backend.
+ * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
+ * task associations. NodeRealm supplies the lower JavaScript execution backend.
  */
 export function createRealm(
   agent: Agent,
@@ -43,196 +40,23 @@ export function createRealm(
   return { realm };
 }
 
-export class Realm implements WebIDLRealmHost {
+export class Realm extends NodeRealm implements WebIDLRealmHost {
   readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
   readonly globalNames: ReadonlySet<string>;
   readonly isGlobalPrototypeChainMutable: boolean;
-  readonly intrinsics: WebIDLRealmHost['intrinsics'];
   readonly secureContext: boolean;
-  readonly #callableFunctionFactory: RealmFunctionFactory;
-  readonly #context: Context;
-  readonly #constructibleFunctionFactory: RealmFunctionFactory;
-  #globalObject: object;
-  #globalThis: object;
   #hostDefined: EnvironmentSettingsObject | null = null;
-  readonly #hostGlobal: RealmGlobal;
-  /*
-   * ACCOMMODATION(node-v8-object-realms): ECMAScript does not expose [[Realm]]
-   * for arbitrary objects, so retain associations for objects Browlet sees.
-   */
-  static #evaluatingRealm: Realm | undefined;
-  static #objectRealms = new WeakMap<object, Realm>();
 
   constructor(options: RealmOptions = {}) {
+    super();
     this.agent = options.agent ?? new WindowAgent();
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
       options.isGlobalPrototypeChainMutable ?? false;
     this.secureContext = options.secureContext ?? false;
-    this.#context = createContext(constants.DONT_CONTEXTIFY);
-    this.#hostGlobal = runInContext('this', this.#context) as RealmGlobal;
-    this.#globalObject = this.#hostGlobal;
-    this.#globalThis = this.#hostGlobal;
-    const Function_ = Reflect.get(
-      this.#hostGlobal,
-      'Function',
-    ) as FunctionConstructor;
-    const ArrayBuffer_ = Reflect.get(
-      this.#hostGlobal,
-      'ArrayBuffer',
-    ) as ArrayBufferConstructor;
-    const Boolean_ = Reflect.get(
-      this.#hostGlobal,
-      'Boolean',
-    ) as BooleanConstructor;
-    const Date_ = Reflect.get(this.#hostGlobal, 'Date') as DateConstructor;
-    const Error_ = Reflect.get(this.#hostGlobal, 'Error') as ErrorConstructor;
-    const errorStack = Reflect.getOwnPropertyDescriptor(
-      Reflect.construct(Error_, []),
-      'stack',
-    )?.get;
-    const EvalError_ = Reflect.get(
-      this.#hostGlobal,
-      'EvalError',
-    ) as EvalErrorConstructor;
-    const Array_ = Reflect.get(this.#hostGlobal, 'Array') as ArrayConstructor;
-    const Object_ = Reflect.get(this.#hostGlobal, 'Object') as ObjectConstructor;
-    const Promise_ = Reflect.get(this.#hostGlobal, 'Promise') as PromiseConstructor;
-    const ReferenceError_ = Reflect.get(
-      this.#hostGlobal,
-      'ReferenceError',
-    ) as ReferenceErrorConstructor;
-    const RegExp_ = Reflect.get(
-      this.#hostGlobal,
-      'RegExp',
-    ) as RegExpConstructor;
-    const Map_ = Reflect.get(this.#hostGlobal, 'Map') as MapConstructor;
-    const Set_ = Reflect.get(this.#hostGlobal, 'Set') as SetConstructor;
-    const SyntaxError_ = Reflect.get(
-      this.#hostGlobal,
-      'SyntaxError',
-    ) as SyntaxErrorConstructor;
-    const URIError_ = Reflect.get(
-      this.#hostGlobal,
-      'URIError',
-    ) as URIErrorConstructor;
-    const arrayPrototype = Array_.prototype;
-    const arrayValues = Reflect.get(
-      arrayPrototype,
-      'values',
-    ) as WebIDLRealmHost['intrinsics']['iteration']['arrayValues'];
-    const arrayIterator = Reflect.apply(
-      arrayValues,
-      Reflect.construct(Array_, []),
-      [],
-    ) as object;
-    const arrayIteratorPrototype = Reflect.getPrototypeOf(arrayIterator);
-    const iteratorPrototype = arrayIteratorPrototype &&
-      Reflect.getPrototypeOf(arrayIteratorPrototype);
-    if (!iteratorPrototype) {
-      throw new Error('Could not obtain the realm Iterator prototype');
-    }
-    const asyncIterator = runInContext(
-      '(async function* () {})()',
-      this.#context,
-    ) as object;
-    const asyncGeneratorFunctionPrototype = Reflect.getPrototypeOf(
-      asyncIterator,
-    );
-    const asyncGeneratorPrototype = asyncGeneratorFunctionPrototype &&
-      Reflect.getPrototypeOf(asyncGeneratorFunctionPrototype);
-    const asyncIteratorPrototype = asyncGeneratorPrototype &&
-      Reflect.getPrototypeOf(asyncGeneratorPrototype);
-    if (!asyncIteratorPrototype) {
-      throw new Error('Could not obtain the realm AsyncIterator prototype');
-    }
-    const mapIteratorPrototype = Reflect.getPrototypeOf(Reflect.apply(
-      Reflect.get(Map_.prototype, 'entries') as CallableFunction,
-      Reflect.construct(Map_, []),
-      [],
-    ) as object);
-    const setIteratorPrototype = Reflect.getPrototypeOf(Reflect.apply(
-      Reflect.get(Set_.prototype, 'values') as CallableFunction,
-      Reflect.construct(Set_, []),
-      [],
-    ) as object);
-    if (!mapIteratorPrototype || !setIteratorPrototype) {
-      throw new Error('Could not obtain the realm collection iterator prototypes');
-    }
-
-    this.intrinsics = {
-      array: Array_,
-      bigInt: Reflect.get(this.#hostGlobal, 'BigInt') as BigIntConstructor,
-      boolean: Boolean_,
-      bufferSource: {
-        arrayBuffer: ArrayBuffer_,
-        arrayBufferTransfer: Reflect.get(
-          ArrayBuffer_.prototype,
-          'transfer',
-        ) as WebIDLRealmHost['intrinsics']['bufferSource']['arrayBufferTransfer'],
-        cloneSharedArrayBuffer: (buffer) => structuredClone(buffer),
-        sharedArrayBuffer: Reflect.get(
-          this.#hostGlobal,
-          'SharedArrayBuffer',
-        ) as SharedArrayBufferConstructor | undefined,
-        views: Object.fromEntries(bufferViewTypeNames.flatMap((name) => {
-          const constructor: unknown = Reflect.get(this.#hostGlobal, name);
-          return typeof constructor === 'function'
-            ? [[name, constructor]]
-            : [];
-        })),
-      },
-      date: Date_,
-      error: Error_,
-      errorPrototype: Error_.prototype,
-      errorStack,
-      evalError: EvalError_,
-      function: Function_,
-      functionPrototype: Function_.prototype,
-      iteration: {
-        arrayEntries: Reflect.get(
-          arrayPrototype,
-          'entries',
-        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayEntries'],
-        arrayForEach: Reflect.get(
-          arrayPrototype,
-          'forEach',
-        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayForEach'],
-        arrayKeys: Reflect.get(
-          arrayPrototype,
-          'keys',
-        ),
-        arrayValues,
-        asyncIteratorPrototype,
-        iteratorPrototype,
-        mapIteratorPrototype,
-        setIteratorPrototype,
-      },
-      map: Map_,
-      number: Reflect.get(this.#hostGlobal, 'Number') as NumberConstructor,
-      object: Object_,
-      objectPrototype: Object_.prototype,
-      promise: {
-        constructor: Promise_,
-        reject: Reflect.get(Promise_, 'reject') as WebIDLRealmHost[
-          'intrinsics'
-        ]['promise']['reject'],
-        then: Reflect.get(Promise_.prototype, 'then') as WebIDLRealmHost[
-          'intrinsics'
-        ]['promise']['then'],
-      },
-      rangeError: Reflect.get(this.#hostGlobal, 'RangeError') as typeof RangeError,
-      referenceError: ReferenceError_,
-      regExp: RegExp_,
-      set: Set_,
-      string: Reflect.get(this.#hostGlobal, 'String') as StringConstructor,
-      syntaxError: SyntaxError_,
-      typeError: Reflect.get(this.#hostGlobal, 'TypeError') as typeof TypeError,
-      uriError: URIError_,
-    };
     this.callbacks = {
       /* Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3. */
       captureContext: () => {
@@ -255,7 +79,7 @@ export class Realm implements WebIDLRealmHost {
         }
       },
       getAssociatedRealm: (value) =>
-        Realm.#getAssociatedRealm(value) ?? this,
+        Realm.getAssociatedRealm(value) ?? this,
       prepareToRunCallback: (context) => {
         const settings = this.#getCallbackSettings(context);
         if (settings !== null) {
@@ -274,61 +98,18 @@ export class Realm implements WebIDLRealmHost {
         console.error(exception);
       },
     };
-    this.#callableFunctionFactory = runInContext(
-      callableFunctionFactorySource,
-      this.#context,
-    ) as RealmFunctionFactory;
-    this.#constructibleFunctionFactory = runInContext(
-      constructibleFunctionFactorySource,
-      this.#context,
-    ) as RealmFunctionFactory;
-    Realm.#objectRealms.set(this.#hostGlobal, this);
-    Realm.#objectRealms.set(this.intrinsics.functionPrototype, this);
-    Realm.#objectRealms.set(this.intrinsics.objectPrototype, this);
-    Realm.#objectRealms.set(
-      this.intrinsics.iteration.asyncIteratorPrototype,
-      this,
-    );
-  }
-
-  get global(): object {
-    return this.#globalObject;
-  }
-
-  get globalObject(): object {
-    return this.#globalObject;
-  }
-
-  get globalThis(): object {
-    return this.#globalThis;
   }
 
   get hostDefined(): EnvironmentSettingsObject | null {
     return this.#hostDefined;
   }
 
-  evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    const evaluate = (): unknown => {
-      const previous = Realm.#evaluatingRealm;
-      Realm.#evaluatingRealm = this;
-      try {
-        const result = runInContext(source, this.#context, {
-          displayErrors: false,
-          filename,
-          lineOffset,
-        }) as unknown;
-        if (isObject(result)) Realm.#objectRealms.set(result, this);
-        return result;
-      } finally {
-        Realm.#evaluatingRealm = previous;
-      }
-    };
-
+  override evaluate(source: string, filename: string, lineOffset = 0): unknown {
     const settings = this.#hostDefined;
-    if (settings === null) return evaluate();
+    if (settings === null) return super.evaluate(source, filename, lineOffset);
     return settings.responsibleEventLoop.runScriptEvaluation(
       settings,
-      evaluate,
+      () => super.evaluate(source, filename, lineOffset),
     );
   }
 
@@ -346,29 +127,6 @@ export class Realm implements WebIDLRealmHost {
     const window = this.#windowImplementation;
     if (!window) throw new Error('Realm global object has no associated Document');
     return WindowImpl.getAssociatedDocument(window);
-  }
-
-  createFunction(
-    steps: RealmFunctionSteps,
-    options: RealmFunctionOptions,
-  ): JavaScriptFunction {
-    const factory = options.constructible
-      ? this.#constructibleFunctionFactory
-      : this.#callableFunctionFactory;
-    const function_ = factory(steps);
-
-    Object.defineProperties(function_, {
-      length: {
-        configurable: true,
-        value: options.length,
-      },
-      name: {
-        configurable: true,
-        value: options.name,
-      },
-    });
-    Realm.#objectRealms.set(function_, this);
-    return function_;
   }
 
   performSecurityCheck(
@@ -416,11 +174,7 @@ export class Realm implements WebIDLRealmHost {
     globalObject: object,
     globalThis: object,
   ): void {
-    if (realm.#globalObject !== realm.#hostGlobal) {
-      throw new Error('Realm global objects are already initialized');
-    }
-    realm.#globalObject = globalObject;
-    realm.#globalThis = globalThis;
+    realm.initializeGlobalObjects(globalObject, globalThis);
     const taskDestination = {
       eventLoop: realm.agent.eventLoop,
       getDocument: () => {
@@ -431,26 +185,11 @@ export class Realm implements WebIDLRealmHost {
       },
     };
     associateGlobalTaskDestination(
-      realm.#hostGlobal,
+      realm.hostGlobal,
       taskDestination,
     );
     associateGlobalTaskDestination(globalObject, taskDestination);
     associateGlobalTaskDestination(globalThis, taskDestination);
-    Realm.#installDefaultGlobalBindings(realm);
-    /*
-     * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing
-     * WindowProxy the VM context's actual global-this. Inherit through the
-     * specified global-this so free global names still reach the modeled
-     * Window graph; top-level `this` remains the documented limitation.
-     */
-    Reflect.setPrototypeOf(realm.#hostGlobal, globalThis);
-    Object.defineProperty(realm.#hostGlobal, 'globalThis', {
-      configurable: true,
-      value: globalThis,
-      writable: true,
-    });
-    Realm.#objectRealms.set(globalObject, realm);
-    Realm.#objectRealms.set(globalThis, realm);
   }
 
   static setHostDefined(
@@ -461,14 +200,15 @@ export class Realm implements WebIDLRealmHost {
   }
 
   static getAssociatedRealm(value: object): Realm | undefined {
-    return Realm.#getAssociatedRealm(value);
+    const realm = nodeRuntime.getAssociatedRealm(value);
+    return realm instanceof Realm ? realm : undefined;
   }
 
   // -- Private ----------------------------------------------------------
 
   get #windowImplementation(): WindowImpl | undefined {
-    return WindowImpl.is(this.#globalObject)
-      ? this.#globalObject
+    return WindowImpl.is(this.globalObject)
+      ? this.globalObject
       : undefined;
   }
 
@@ -481,49 +221,6 @@ export class Realm implements WebIDLRealmHost {
       return settings;
     }
     throw new Error('A JavaScript callback context is not a settings object');
-  }
-
-  static #installDefaultGlobalBindings(realm: Realm): void {
-    for (const property of Reflect.ownKeys(realm.#hostGlobal)) {
-      if (
-        property === 'globalThis' ||
-        Object.hasOwn(realm.#globalObject, property)
-      ) continue;
-
-      const descriptor = Reflect.getOwnPropertyDescriptor(
-        realm.#hostGlobal,
-        property,
-      );
-      if (
-        descriptor &&
-        !Reflect.defineProperty(realm.#globalObject, property, descriptor)
-      ) {
-        throw new Error(`Could not install global binding ${String(property)}`);
-      }
-    }
-    Object.defineProperty(realm.#globalObject, 'globalThis', {
-      configurable: true,
-      value: realm.#globalThis,
-      writable: true,
-    });
-  }
-
-  static #getAssociatedRealm(value: object): Realm | undefined {
-    try {
-      let current: object | null = value;
-      while (current !== null) {
-        const associated = Realm.#objectRealms.get(current);
-        if (associated) {
-          Realm.#objectRealms.set(value, associated);
-          return associated;
-        }
-        current = Reflect.getPrototypeOf(current);
-      }
-    } catch {
-      // Proxies can prevent prototype inspection. The converting realm is
-      // the only useful fallback until HTML owns object/realm association.
-    }
-    return Realm.#evaluatingRealm;
   }
 }
 
@@ -543,8 +240,6 @@ export type RealmCustomizations = {
 
 export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
 
-export type RealmGlobal = Record<PropertyKey, unknown>;
-
 export type RealmOptions = {
   agent?: Agent;
   crossOriginIsolated?: boolean;
@@ -553,42 +248,6 @@ export type RealmOptions = {
   secureContext?: boolean;
 };
 
-type CreateFunction = WebIDLRealmHost['createFunction'];
-type JavaScriptFunction = ReturnType<CreateFunction>;
-type RealmFunctionOptions = Parameters<CreateFunction>[1];
-type RealmFunctionSteps = Parameters<CreateFunction>[0];
-type RealmFunctionFactory = (
-  steps: RealmFunctionSteps,
-) => JavaScriptFunction;
-
 type SecurityCheckType = Parameters<
   WebIDLRealmHost['performSecurityCheck']
 >[2];
-
-const callableFunctionFactorySource = `
-  (steps) => ({
-    call() {
-      "use strict";
-      return steps(this, [...arguments], undefined);
-    },
-  }).call
-`;
-
-const constructibleFunctionFactorySource = `
-  (steps) => function() {
-    "use strict";
-    return steps(this, [...arguments], new.target);
-  }
-`;
-
-const bufferViewTypeNames = [
-  'Int8Array', 'Int16Array', 'Int32Array', 'Uint8Array', 'Uint16Array',
-  'Uint32Array', 'Uint8ClampedArray', 'BigInt64Array', 'BigUint64Array',
-  'Float16Array', 'Float32Array', 'Float64Array', 'DataView',
-] as const;
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}

@@ -11,6 +11,7 @@ export default defineConfig({
           include: [
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/unit/**/*.test.ts',
+            'test/javascript/unit/**/*.test.ts',
             'test/shared/unit/**/*.test.ts',
             'test/mime/unit/**/*.test.ts',
             'test/encoding/unit/**/*.test.ts',

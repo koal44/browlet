@@ -1,3 +1,4 @@
+import { isCallable, isConstructor } from '../javascript/index';
 import type {
   CallbackFunctionValue, CallbackInterfaceValue, CallbackValue,
 } from './callback-value';
@@ -285,22 +286,4 @@ function withCallbackRealm(
     realizeException: context.realizeException,
     realm: value.realm,
   };
-}
-
-function isConstructor(value: object): value is new (...args: unknown[]) => object {
-  const probe = new Proxy(value, {
-    construct: () => ({}),
-  });
-  try {
-    Reflect.construct(probe as CallableFunction, []);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isCallable(
-  value: unknown,
-): value is (...argumentsList: unknown[]) => unknown {
-  return typeof value === 'function';
 }

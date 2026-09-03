@@ -51,6 +51,24 @@ It must not:
 - reach through a registry to rediscover an implementation dependency which
   composition could have supplied explicitly.
 
+### JavaScript runtime
+
+[`javascript/`](./javascript/README.md) is the engine substrate beneath Web
+IDL. A `JavaScriptRealm` exposes realm-owned globals, intrinsics, function
+creation, and evaluation. The concrete `NodeRealm` owns one `node:vm` context,
+while the isolate-scoped `NodeRuntime` owns engine facilities shared across
+those realms, including raw microtask enqueueing, the provisional
+object-to-realm associations, and the synchronous checkpoint operation.
+Engine-specific built-in branding and internal-slot access also belong here;
+the consuming specification retains the decisions it makes from those facts.
+
+This is a dependency layer, not a fourth platform-object identity. Web IDL
+extends the JavaScript realm contract with binding policy, and Browlet's HTML
+`Realm` subclasses `NodeRealm` to add its Agent, environment settings object,
+callback lifecycle, and global task associations. The JavaScript project must
+not import Web IDL or HTML, and HTML event-loop state must not move into the
+runtime merely because its concrete checkpoint primitive is Node-specific.
+
 ### Binding
 
 The Binding layer owns the Web IDL boundary:
@@ -277,13 +295,15 @@ Classify a new dependency in this order:
 1. **Does the current specification own the state or behavior?** Put it on the
    Implementation object or in its algorithms.
 2. **Is it stateless and realm-neutral?** Import a shared algorithm directly.
-3. **Is it generic JavaScript/Web IDL behavior tied to the current world?** Use
-   the shared Binding Context.
-4. **Does another specification subsystem own the semantic behavior?** Import
+3. **Is it generic engine behavior tied to a JavaScript realm or runtime?** Use
+   the shared `JavaScriptRealm` or `JavaScriptRuntime` operation.
+4. **Is it Web IDL behavior tied to the current binding realm?** Use the shared
+   Binding Context.
+5. **Does another specification subsystem own the semantic behavior?** Import
    its narrow other-specifications entry point when it is an allowed dependency;
    otherwise define a narrow cross-specification capability.
-5. **Is it an actual embedder or external effect?** Define a narrow Host Port.
-6. **Is it author-facing conversion, identity, or projection?** Keep it in the
+6. **Is it an actual embedder or external effect?** Define a narrow Host Port.
+7. **Is it author-facing conversion, identity, or projection?** Keep it in the
    Binding and Platform layers.
 
 If an operation seems to fit several categories, identify who owns its

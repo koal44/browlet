@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../../src/browlet/html/parser/parse';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import { Stylelet } from '../../../../src/stylelet/stylelet';
+import { createBrowletDocument } from '../../browlet-document';
 
 describe('StyleSheetImpl', () => {
   it('is an exposed prototype but not a directly constructible interface', () => {
@@ -46,7 +44,7 @@ describe('CSSStyleSheetImpl', () => {
   });
 
   it('creates a stylesheet from specified properties', () => {
-    const document = createDocumentImpl('');
+    const document = createBrowletDocument();
     const stylelet = new Stylelet(document);
     const sheet = CSSStyleSheetImpl.__create(stylelet.snapshot, {
       location: 'https://example.com/style.css',
@@ -193,14 +191,10 @@ describe('CSSStyleSheetImpl', () => {
 function createStyleSheet(
   options: CSSStyleSheetInit = {},
 ): CSSStyleSheet {
-  const document = createDocumentImpl('');
+  const document = createBrowletDocument();
   Object.defineProperty(document, 'baseURI', {
     value: 'https://example.com/document/',
   });
 
   return new Stylelet(document).createStyleSheet(options);
-}
-
-function createDocumentImpl(source: string): Document {
-  return parseHTMLDocument(source);
 }

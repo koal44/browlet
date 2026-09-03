@@ -1,7 +1,7 @@
-import { domExceptionName, throwDOMException } from '../../../shared/dom-exception';
+import * as JavaScript from '../../../javascript/index';
+import { throwDataCloneError } from '../../../shared/dom-exception';
 import {
-  cloneSharedArrayBuffer, createArrayBuffer,
-  createArrayBufferViewFromBuffer,
+  createArrayBuffer, createArrayBufferViewFromBuffer,
 } from '../../../web-idl/buffer-source';
 import type { WebIDLRealmHost } from '../../../web-idl/index';
 import type { StructuredDataEnvironment } from './environment';
@@ -62,7 +62,7 @@ export function structuredDeserialize(
       if (environment.agentCluster !== serialized.agentCluster) {
         return throwDataCloneError();
       }
-      value = cloneSharedArrayBuffer(serialized.buffer, realm);
+      value = deserializeSharedArrayBuffer(serialized.buffer, realm);
       break;
     case 'ArrayBuffer':
     case 'ResizableArrayBuffer':
@@ -74,7 +74,7 @@ export function structuredDeserialize(
         environment,
         memory,
       );
-      if (!isObject(buffer)) {
+      if (!JavaScript.isObject(buffer)) {
         throw new Error('An ArrayBufferView record has no backing buffer');
       }
       value = createArrayBufferViewFromBuffer(
@@ -100,7 +100,7 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'Object':
-      value = Reflect.construct(realm.intrinsics.object, []);
+      value = realm.createOrdinaryObject(realm.intrinsics.objectPrototype);
       deep = true;
       break;
     case 'Error':
@@ -125,19 +125,24 @@ export function structuredDeserialize(
 
   memory.set(serialized, value);
   if (!deep) return value;
+  if (!JavaScript.isObject(value)) {
+    throw new Error('A deep record has no object value');
+  }
 
   if (serialized.type === 'Map') {
     for (const entry of serialized.entries) {
-      Reflect.apply(mapSet, value, [
+      JavaScript.appendMapData(
+        value,
         structuredDeserialize(entry.key, environment, memory),
         structuredDeserialize(entry.value, environment, memory),
-      ]);
+      );
     }
   } else if (serialized.type === 'Set') {
     for (const entry of serialized.entries) {
-      Reflect.apply(setAdd, value, [
+      JavaScript.appendSetData(
+        value,
         structuredDeserialize(entry, environment, memory),
-      ]);
+      );
     }
   } else if (serialized.type === 'Error') {
     deserializeErrorCause(serialized, value, environment, memory);
@@ -182,6 +187,28 @@ export function structuredDeserialize(
   return value;
 }
 
+/** HTML §2.7.6, SharedArrayBuffer and GrowableSharedArrayBuffer branches. */
+function deserializeSharedArrayBuffer(
+  buffer: object,
+  realm: WebIDLRealmHost,
+): object {
+  if (JavaScript.getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
+    throw new Error('Only a SharedArrayBuffer can share its backing store');
+  }
+  const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
+  if (JavaScript.getBufferTypeName(value) !== 'SharedArrayBuffer') {
+    throw new Error('The host did not clone a SharedArrayBuffer');
+  }
+  const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
+  if (!constructor) {
+    throw new Error('The target realm has no SharedArrayBuffer intrinsic');
+  }
+  if (!Reflect.setPrototypeOf(value, constructor.prototype)) {
+    throw new Error('Could not apply the target SharedArrayBuffer prototype');
+  }
+  return value;
+}
+
 /** HTML §2.7.6, ArrayBuffer and ResizableArrayBuffer branches. */
 function deserializeArrayBuffer(
   serialized: Extract<SerializedRecord, {
@@ -205,11 +232,10 @@ function deserializeProperties(
   properties: Extract<SerializedRecord, {
     type: 'Array' | 'Object';
   }>['properties'],
-  value: unknown,
+  value: object,
   environment: StructuredDeserializationEnvironment,
   memory: StructuredDeserializeMemory,
 ): void {
-  if (!isObject(value)) throw new Error('A deep record has no object value');
   for (const entry of properties) {
     const status = Reflect.defineProperty(value, entry.key, {
       configurable: true,
@@ -231,24 +257,18 @@ function deserializeError(
     constructor,
     serialized.message === undefined ? [] : [serialized.message],
   ) as object;
-  const status = Reflect.defineProperty(value, 'stack', {
-    configurable: true,
-    enumerable: false,
-    value: serialized.stack,
-    writable: true,
-  });
-  if (!status) throw new Error('Could not restore serialized Error stack');
+  JavaScript.writeErrorStack(value, serialized.stack);
   return value;
 }
 
 /** HTML §2.7.6, interesting accompanying [[ErrorData]]. */
 function deserializeErrorCause(
   serialized: ErrorSerializedRecord,
-  value: unknown,
+  value: object,
   environment: StructuredDeserializationEnvironment,
   memory: StructuredDeserializeMemory,
 ): void {
-  if (serialized.cause === undefined || !isObject(value)) return;
+  if (serialized.cause === undefined) return;
   const status = Reflect.defineProperty(value, 'cause', {
     configurable: true,
     enumerable: false,
@@ -274,25 +294,6 @@ function getErrorConstructor(
 }
 
 function isSerializedRecord(value: unknown): value is SerializedRecord {
-  return isObject(value) && typeof Reflect.get(value, 'type') === 'string';
+  return JavaScript.isObject(value) &&
+    typeof Reflect.get(value, 'type') === 'string';
 }
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
-}
-
-function throwDataCloneError(): never {
-  return throwDOMException(domExceptionName.dataClone);
-}
-
-const mapSet = Reflect.get(
-  Map.prototype,
-  'set',
-) as (this: object, key: unknown, value: unknown) => object;
-
-const setAdd = Reflect.get(
-  Set.prototype,
-  'add',
-) as (this: object, value: unknown) => object;

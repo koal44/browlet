@@ -14,6 +14,7 @@
   ],
   "references": [
     { "path": "../src/infra" },
+    { "path": "../src/javascript" },
     { "path": "../src/shared" },
     { "path": "../src/mime" },
     { "path": "../src/url" },

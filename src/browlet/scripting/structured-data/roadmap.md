@@ -116,9 +116,10 @@ interface-level `create` binding.
 ### 2. Implement structured serialization
 
 Status: complete, subject to the host limitations below. The implementation
-uses V8's cross-realm brand predicates for exposed built-in slot tests, keeps
-the HTML graph and storage mode independent of Node's native clone serializer,
-and inserts shallow records into memory before every recursive traversal.
+uses the JavaScript runtime's V8-backed primitives for exposed built-in slot
+tests, keeps the HTML graph and storage mode independent of Node's native clone
+serializer, and inserts shallow records into memory before every recursive
+traversal.
 
 Controlling sections: HTML §2.7.3, `StructuredSerializeInternal`; HTML
 §2.7.4, `StructuredSerialize`; HTML §2.7.5,
@@ -146,9 +147,11 @@ Brand checks must work across Browlet realms and must not rely on `instanceof`
 against the active Node realm. Add narrow realm/host intrinsic operations when
 JavaScript does not expose the specification's internal-slot test directly.
 
-Reuse the existing Web IDL BufferSource operations where they model the
-required ECMAScript slots. Keep inaccessible `[[ArrayBufferDetachKey]]` and
-detached-view limitations explicit rather than weakening the algorithm.
+Use the JavaScript runtime's ArrayBuffer and view operations for engine facts.
+Keep Web IDL's conversion, realm-owned allocation, copying, detachment, and
+transfer algorithms at the binding boundary. Keep inaccessible
+`[[ArrayBufferDetachKey]]` and detached-view limitations explicit rather than
+weakening the algorithm.
 
 Proof: direct internal tests cover every record family, source-realm
 independence, self- and mutual cycles, repeated identity, sparse arrays,
@@ -156,24 +159,29 @@ Map/Set ordering, Error accompanying data, getter failures, detached buffers,
 storage-mode differences, DOMException records, and exact failure types.
 
 JavaScript does not expose a general “has unsupported internal slots” query.
-The Node host boundary rejects the available V8-branded families (including
-Promise, WeakMap/WeakSet, generators, Map and Set iterators, WeakRef,
+The `node-v8-exotic-object-slots` accommodation in
+[`built-in-primitives.ts`](../../../javascript/built-in-primitives.ts)
+exposes predicates for the available V8-branded families (including Promise,
+WeakMap/WeakSet, generators, Map and Set iterators, WeakRef,
 FinalizationRegistry, proxies, and crypto-key objects), but an unrecognized
-Node-native slot-bearing object can still resemble an ordinary object. A
-bounded native-clone probe rejects propertyless Array and String iterators
+Node-native slot-bearing object can still resemble an ordinary object. Its
+bounded native-clone probe recognizes propertyless Array and String iterators
 without advancing them and distinguishes real slots from prototype impostors.
-Decorated iterators and the broader unknown-internal-slot category remain
-expected failures because probing their full property graph could invoke
-author code twice or attribute a nested clone failure to the wrong object.
+HTML uses those facts to reject the object. Decorated iterators and the broader
+unknown-internal-slot category remain expected failures because probing their
+full property graph could invoke author code twice or attribute a nested clone
+failure to the wrong object.
 
 V8 records a resizable-buffer view's internal length-tracking bit, but neither
-its public API nor Node exposes that bit. For ordinary resizable ArrayBuffers,
-Browlet recovers it with a synchronous, reversible intrinsic resize probe. The
-probe grows or truncates at most one element, restores both size and bytes, and
-runs no author code. Growable SharedArrayBuffer cannot use that technique
-because growth is irreversible; its ambiguous fixed-at-end and auto-length
-views still serialize as fixed-length. Do not replace the bounded probe with a
-second native structured clone of an arbitrarily large backing buffer.
+its public API nor Node exposes that bit. The
+[`node-v8-array-buffer-slots`](../../../javascript/README.md#nodev8-accommodations)
+accommodation recovers it for ordinary resizable ArrayBuffers with a
+synchronous, reversible intrinsic resize probe. The probe grows or truncates
+at most one element, restores both size and bytes, and runs no author code.
+Growable SharedArrayBuffer cannot use that technique because growth is
+irreversible; its ambiguous fixed-at-end and auto-length views still serialize
+as fixed-length. Do not replace the bounded probe with a second native
+structured clone of an arbitrarily large backing buffer.
 
 ### 3. Implement target-realm deserialization
 

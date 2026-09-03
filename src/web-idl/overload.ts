@@ -1,10 +1,12 @@
+import {
+  getMethod, hasStringData, isObject, type JavaScriptMethod,
+} from '../javascript/index';
 import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
 import { getBufferTypeName } from './buffer-source';
 import {
   convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
-  getMethod, isPlatformObject, materializeDefaultValue,
-  type ConversionContext, type JavaScriptMethod,
+  isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import type {
   ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
@@ -316,11 +318,15 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     const hasString = candidates.some(({ types }) =>
       containsStringType(types[index] as WebIDLType, context.definitions));
 
-    if (hasAsyncSequence && !(isStringObject(value) && hasString)) {
-      const asyncMethod = getMethod(value, Symbol.asyncIterator, context);
+    if (hasAsyncSequence && !(hasStringData(value) && hasString)) {
+      const asyncMethod = getMethod(
+        value,
+        Symbol.asyncIterator,
+        context.realm,
+      );
       const syncMethod = asyncMethod
         ? undefined
-        : getMethod(value, Symbol.iterator, context);
+        : getMethod(value, Symbol.iterator, context.realm);
       const iteratorMethod = asyncMethod ?? syncMethod;
       if (iteratorMethod) {
         matches = retain(candidates, ({ types }) =>
@@ -347,7 +353,11 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         context.definitions,
       ));
     if (hasSequenceLike) {
-      const iteratorMethod = getMethod(value, Symbol.iterator, context);
+      const iteratorMethod = getMethod(
+        value,
+        Symbol.iterator,
+        context.realm,
+      );
       if (iteratorMethod) {
         matches = retain(candidates, ({ types }) =>
           containsSequenceLikeType(
@@ -635,30 +645,11 @@ function retain<Value>(
   return matches.length > 0 ? matches : undefined;
 }
 
-function isStringObject(value: object): boolean {
-  try {
-    Reflect.apply(
-      Reflect.get(String.prototype, 'valueOf') as (...args: unknown[]) => unknown,
-      value,
-      [],
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function throwTypeError(
   context: ConversionContext,
   message: string,
 ): never {
   throw new context.realm.intrinsics.typeError(message);
-}
-
-function isObject(value: unknown): value is object {
-  return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
-  );
 }
 
 type DistinguishingResolution<Callable extends IDLCallable> = {

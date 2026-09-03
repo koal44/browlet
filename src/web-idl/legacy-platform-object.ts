@@ -1,3 +1,6 @@
+import {
+  isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
+} from '../javascript/index';
 import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
@@ -9,7 +12,6 @@ import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
 } from './registry';
-import { ordinarySetWithOwnDescriptor } from './platform-object';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
@@ -776,13 +778,4 @@ function isArrayIndex(property: string): boolean {
 
 function toArrayIndex(property: string): number {
   return Number(property) >>> 0;
-}
-
-function isDataDescriptor(descriptor: PropertyDescriptor): boolean {
-  return Object.hasOwn(descriptor, 'value') ||
-    Object.hasOwn(descriptor, 'writable');
-}
-
-function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
-  return Object.hasOwn(descriptor, 'get') || Object.hasOwn(descriptor, 'set');
 }

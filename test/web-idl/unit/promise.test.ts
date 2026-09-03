@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { TestRealm as Realm } from '../test-realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/binding';
 import { convertToIDL, convertToJavaScript } from '../../../src/web-idl/conversion';

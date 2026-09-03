@@ -1,9 +1,6 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../../src/browlet/html/parser/parse';
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
@@ -20,6 +17,7 @@ import { Snapshot } from '../../../../src/stylelet/snapshot';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
+import { createBrowletDocument } from '../../browlet-document';
 
 describe('custom property registration', () => {
   it('prefers the registered property set over stylesheet rules', () => {
@@ -314,7 +312,7 @@ function styleSheet(
 }
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createDocumentImpl(''));
+  const snapshot = options.snapshot ?? new Snapshot(createBrowletDocument());
   const engine = new CascadeEngine({ ...options, snapshot });
 
   return {
@@ -344,8 +342,4 @@ function addStyleSheet(
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
-}
-
-function createDocumentImpl(source: string): Document {
-  return parseHTMLDocument(source);
 }

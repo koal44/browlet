@@ -1,9 +1,6 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../../src/browlet/html/parser/parse';
 import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
 import {
   parseStylesheet, type StyleSheetOptions,
@@ -14,6 +11,7 @@ import {
 } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { createBrowletDocument } from '../../browlet-document';
 
 describe('cascade engine', () => {
   it('reads the root-owned final stylesheets in document order', () => {
@@ -91,7 +89,7 @@ describe('cascade engine', () => {
   });
 
   it('captures a constructed stylesheet location at creation', () => {
-    const document = createDocumentImpl('');
+    const document = createBrowletDocument();
     const location = new URL('https://example.com/constructed/');
     Object.defineProperty(document, 'baseURI', { value: location.href });
     const { engine, scope } = createCascade({
@@ -108,7 +106,7 @@ describe('cascade engine', () => {
   });
 
   it('captures an embedded stylesheet base when its source is parsed', () => {
-    const document = createDocumentImpl('');
+    const document = createBrowletDocument();
     const baseUrl = new URL('https://example.com/embedded/');
     Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
     const { engine, scope } = createCascade({
@@ -177,7 +175,7 @@ describe('cascade engine', () => {
   });
 
   it('matches a target and sorts author declarations by cascade precedence', () => {
-    const document = createDocumentImpl(
+    const document = createBrowletDocument(
       '<main id="target" class="target"></main>',
     );
     const target = document.getElementById('target')!;
@@ -205,7 +203,7 @@ describe('cascade engine', () => {
 });
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createDocumentImpl(''));
+  const snapshot = options.snapshot ?? new Snapshot(createBrowletDocument());
   const engine = new CascadeEngine({ ...options, snapshot });
 
   return {
@@ -236,8 +234,4 @@ function addStyleSheet(
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
-}
-
-function createDocumentImpl(source: string): Document {
-  return parseHTMLDocument(source);
 }
