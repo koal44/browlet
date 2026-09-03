@@ -217,7 +217,7 @@ native Promise job, its Realm Record, or HTML callback preparation and cleanup,
 so it does not implement `HostEnqueuePromiseJob` and does not remove the
 `node-v8-execution-contexts` accommodation above.
 
-**Affected code and tests:** The queue backend belongs to the lower JavaScript
+**Affected code and tests:** The queue backend belongs to JS Engine
 runtime; Agent construction, Realm creation, and
 [`EventLoop.queueMicrotask()`](./event-loop.ts) must share it. Tests must prove
 same-Agent cross-Realm FIFO and different-Agent isolation under compatible Node
@@ -255,11 +255,11 @@ promise-resolution job marks it handled, then emit
 conversion to hide this fallback artifact.
 
 **Affected code and tests:** Both checkpoint implementations are isolated in
-the lower JavaScript queue backend. The HTML policy which invokes the selected
+the JS Engine queue backend. The HTML policy which invokes the selected
 operation remains in [`event-loop.ts`](./event-loop.ts). Explicit-queue
 draining and the stock ambient, nested, rejection, and fake-clock limitations
 are recorded in
-[`node-runtime.test.ts`](../../../test/javascript/unit/node-runtime.test.ts).
+[`node-runtime.test.ts`](../../../test/js-engine/unit/node-runtime.test.ts).
 The parser/Streams adopted-rejection integration remains in
 [`tasks.test.ts`](../../../test/browlet/unit/scripting/tasks.test.ts). HTML
 §13.2.6.4 separately requires a conditional, explicit pre-script checkpoint

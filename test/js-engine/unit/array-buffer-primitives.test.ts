@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import * as JavaScript from '../../../src/javascript/index';
+import * as JSEngine from '../../../src/js-engine/index';
 
 describe('JavaScript ArrayBuffer primitives', () => {
   it('reads ArrayBuffer and view state across realms', () => {
-    const realm = new JavaScript.NodeRealm();
+    const realm = new JSEngine.NodeRealm();
     const values = realm.evaluate(`(() => {
       const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
       return {
@@ -20,23 +20,23 @@ describe('JavaScript ArrayBuffer primitives', () => {
       view: object;
     };
 
-    expect(JavaScript.getBufferTypeName(values.buffer)).toBe('ArrayBuffer');
-    expect(JavaScript.getBufferTypeName(values.shared))
+    expect(JSEngine.getBufferTypeName(values.buffer)).toBe('ArrayBuffer');
+    expect(JSEngine.getBufferTypeName(values.shared))
       .toBe('SharedArrayBuffer');
-    expect(JavaScript.getBufferTypeName(values.dataView)).toBe('DataView');
-    expect(JavaScript.getBufferTypeName(values.view)).toBe('Uint16Array');
-    expect(JavaScript.getBufferTypeName(
+    expect(JSEngine.getBufferTypeName(values.dataView)).toBe('DataView');
+    expect(JSEngine.getBufferTypeName(values.view)).toBe('Uint16Array');
+    expect(JSEngine.getBufferTypeName(
       Object.create(Uint8Array.prototype) as object,
     )).toBeUndefined();
 
-    expect(JavaScript.getArrayBufferByteLength(values.buffer)).toBe(8);
-    expect(JavaScript.getArrayBufferMaxByteLength(values.buffer)).toBe(16);
-    expect(JavaScript.getArrayBufferMaxByteLength(values.shared)).toBe(8);
-    expect(JavaScript.getArrayBufferViewBuffer(values.view)).toBe(values.buffer);
-    expect(JavaScript.getArrayBufferViewByteOffset(values.view)).toBe(2);
-    expect(JavaScript.getArrayBufferViewByteLength(values.view)).toBe(4);
-    expect(JavaScript.getTypedArrayLength(values.view)).toBe(2);
-    expect(JavaScript.getArrayBufferViewElementSize('Uint16Array')).toBe(2);
+    expect(JSEngine.getArrayBufferByteLength(values.buffer)).toBe(8);
+    expect(JSEngine.getArrayBufferMaxByteLength(values.buffer)).toBe(16);
+    expect(JSEngine.getArrayBufferMaxByteLength(values.shared)).toBe(8);
+    expect(JSEngine.getArrayBufferViewBuffer(values.view)).toBe(values.buffer);
+    expect(JSEngine.getArrayBufferViewByteOffset(values.view)).toBe(2);
+    expect(JSEngine.getArrayBufferViewByteLength(values.view)).toBe(4);
+    expect(JSEngine.getTypedArrayLength(values.view)).toBe(2);
+    expect(JSEngine.getArrayBufferViewElementSize('Uint16Array')).toBe(2);
   });
 
   it('distinguishes fixed and length-tracking resizable views', () => {
@@ -48,13 +48,13 @@ describe('JavaScript ArrayBuffer primitives', () => {
     const fixedDataView = new DataView(buffer, 2, 6);
     const trackingDataView = new DataView(buffer, 2);
 
-    expect(JavaScript.isLengthTrackingResizableArrayBufferView(fixed))
+    expect(JSEngine.isLengthTrackingResizableArrayBufferView(fixed))
       .toBe(false);
-    expect(JavaScript.isLengthTrackingResizableArrayBufferView(tracking))
+    expect(JSEngine.isLengthTrackingResizableArrayBufferView(tracking))
       .toBe(true);
-    expect(JavaScript.isLengthTrackingResizableArrayBufferView(fixedDataView))
+    expect(JSEngine.isLengthTrackingResizableArrayBufferView(fixedDataView))
       .toBe(false);
-    expect(JavaScript.isLengthTrackingResizableArrayBufferView(trackingDataView))
+    expect(JSEngine.isLengthTrackingResizableArrayBufferView(trackingDataView))
       .toBe(true);
     expect(buffer.byteLength).toBe(8);
     expect(new Uint8Array(buffer)).toEqual(bytes);
@@ -64,10 +64,10 @@ describe('JavaScript ArrayBuffer primitives', () => {
     const resizable = new ArrayBuffer(8, { maxByteLength: 8 });
     const view = new Uint8Array(resizable, 4, 4);
     resizable.resize(2);
-    expect(JavaScript.isArrayBufferViewOutOfBounds(view)).toBe(true);
+    expect(JSEngine.isArrayBufferViewOutOfBounds(view)).toBe(true);
 
     const detached = new ArrayBuffer(2);
     structuredClone(detached, { transfer: [detached] });
-    expect(JavaScript.isDetachedArrayBuffer(detached)).toBe(true);
+    expect(JSEngine.isDetachedArrayBuffer(detached)).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToJavaScript, type ConversionContext,

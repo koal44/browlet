@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { nodeRuntime } from '../../../../src/javascript/index';
+import { nodeRuntime } from '../../../../src/js-engine/index';
 import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,

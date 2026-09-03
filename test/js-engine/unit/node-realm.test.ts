@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   NodeRealm, type JavaScriptFunction, nodeRuntime,
-} from '../../../src/javascript/index';
+} from '../../../src/js-engine/index';
 
 describe('Node JavaScript Realm', () => {
   it('captures realm intrinsics and creates realm-owned functions', () => {

@@ -5,8 +5,8 @@
     "module": "preserve",
     "moduleResolution": "Bundler",
     "types": ["node"],
-    "outDir": "../../dist/.typecheck/javascript",
-    "tsBuildInfoFile": "../../dist/.typecheck/javascript.tsbuildinfo"
+    "outDir": "../../dist/.typecheck/js-engine",
+    "tsBuildInfoFile": "../../dist/.typecheck/js-engine.tsbuildinfo"
   },
   "include": ["./**/*.ts"]
 }

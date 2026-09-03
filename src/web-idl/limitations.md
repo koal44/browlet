@@ -7,7 +7,7 @@ machinery or Web IDL feature is implemented.
 ## Host and ECMAScript internal slots
 
 - **Associated realms — `node-v8-object-realms` accommodation:** ECMAScript
-  does not expose an object's `[[Realm]]`. The lower JavaScript runtime
+  does not expose an object's `[[Realm]]`. The lower JS Engine project
   maintains an isolate-scoped weak
   association for globals, intrinsics, created functions, and evaluated
   objects, then falls back to the active evaluation realm for unknown objects.
@@ -16,7 +16,7 @@ machinery or Web IDL feature is implemented.
   Replace the associations and fallback together if a future runtime API or
   direct V8 embedding exposes that slot; borrowed-operation and callback realm
   tests must continue to determine the result. The accommodation lives in
-  [`node-runtime.ts`](../javascript/node-runtime.ts), below Web IDL; integrated
+  [`node-runtime.ts`](../js-engine/node-runtime.ts), below Web IDL; integrated
   realm behavior is covered by
   [`file-api.test.ts`](../../test/browlet/unit/file-api.test.ts) and
   callback conversion covered by
@@ -63,7 +63,7 @@ machinery or Web IDL feature is implemented.
 
 ## Promises
 
-- **Promise reactions:** The JavaScript runtime's
+- **Promise reactions:** JS Engine's
   `installPromiseReactions()` operation uses `Promise.prototype.then` because
   JavaScript does not expose `PerformPromiseThen`. It approximates that
   operation's no-result-capability form, so every use creates an unreachable

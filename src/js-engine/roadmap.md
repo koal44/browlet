@@ -1,4 +1,4 @@
-# JavaScript embedding roadmap
+# JS Engine roadmap
 
 This roadmap records the boundary between the JavaScript engine, its embedder,
 and the web-platform specifications implemented by Browlet. It begins with the
@@ -10,7 +10,7 @@ stop treating all ECMAScript references alike:
 
 - language evaluation and engine-owned state remain with V8;
 - supported JavaScript operations use captured, realm-correct intrinsics;
-- facts or hooks exposed by the embedder enter through the JavaScript runtime;
+- facts or hooks exposed by the embedder enter through JS Engine;
 - unavailable engine facilities receive one bounded accommodation or one
   explicit limitation; and
 - HTML retains the agent, realm-counterpart, script, task, and event-loop

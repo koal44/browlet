@@ -1,6 +1,6 @@
 import {
   createIteratorResultObject, isObject,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';

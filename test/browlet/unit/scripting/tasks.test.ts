@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   type JavaScriptMicrotaskQueue,
-} from '../../../../src/javascript/index';
+} from '../../../../src/js-engine/index';
 import {
   EventLoop, createTaskSource, type EventLoopOptions,
   type LongTaskReporter, Task, type TaskTimingHooks,

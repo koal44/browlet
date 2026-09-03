@@ -1,6 +1,6 @@
 import {
   createIteratorResultObject, isObject,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,

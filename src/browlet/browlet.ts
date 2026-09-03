@@ -3,7 +3,7 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
-import { nodeRuntime } from '../javascript/index';
+import { nodeRuntime } from '../js-engine/index';
 import {
   browletBindings, getRelevantRealm,
 } from './bindings';

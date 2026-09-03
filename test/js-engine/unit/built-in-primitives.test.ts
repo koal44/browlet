@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import * as JavaScript from '../../../src/javascript/index';
+import * as JSEngine from '../../../src/js-engine/index';
 
 describe('Node/V8 built-in primitives', () => {
   it('recognizes and reads built-in state across realms', () => {
-    const realm = new JavaScript.NodeRealm();
+    const realm = new JSEngine.NodeRealm();
     const values = realm.evaluate(`({
       bigint: Object(7n),
       boolean: Object(false),
@@ -29,28 +29,28 @@ describe('Node/V8 built-in primitives', () => {
       symbol: object;
     };
 
-    expect(JavaScript.hasBooleanData(values.boolean)).toBe(true);
-    expect(JavaScript.getBooleanData(values.boolean)).toBe(false);
-    expect(JavaScript.hasNumberData(values.number)).toBe(true);
-    expect(JavaScript.getNumberData(values.number)).toBe(4.5);
-    expect(JavaScript.hasBigIntData(values.bigint)).toBe(true);
-    expect(JavaScript.getBigIntData(values.bigint)).toBe(7n);
-    expect(JavaScript.hasStringData(values.string)).toBe(true);
-    expect(JavaScript.getStringData(values.string)).toBe('text');
-    expect(JavaScript.hasSymbolData(values.symbol)).toBe(true);
-    expect(JavaScript.hasDateValue(values.date)).toBe(true);
-    expect(JavaScript.getDateValue(values.date)).toBe(1234);
-    expect(JavaScript.hasRegExpMatcher(values.regexp)).toBe(true);
-    expect(JavaScript.getRegExpData(values.regexp)).toEqual({
+    expect(JSEngine.hasBooleanData(values.boolean)).toBe(true);
+    expect(JSEngine.getBooleanData(values.boolean)).toBe(false);
+    expect(JSEngine.hasNumberData(values.number)).toBe(true);
+    expect(JSEngine.getNumberData(values.number)).toBe(4.5);
+    expect(JSEngine.hasBigIntData(values.bigint)).toBe(true);
+    expect(JSEngine.getBigIntData(values.bigint)).toBe(7n);
+    expect(JSEngine.hasStringData(values.string)).toBe(true);
+    expect(JSEngine.getStringData(values.string)).toBe('text');
+    expect(JSEngine.hasSymbolData(values.symbol)).toBe(true);
+    expect(JSEngine.hasDateValue(values.date)).toBe(true);
+    expect(JSEngine.getDateValue(values.date)).toBe(1234);
+    expect(JSEngine.hasRegExpMatcher(values.regexp)).toBe(true);
+    expect(JSEngine.getRegExpData(values.regexp)).toEqual({
       flags: 'dgimsuy',
       source: 'source',
     });
-    expect(JavaScript.hasMapData(values.map)).toBe(true);
-    expect(JavaScript.copyMapData(values.map))
+    expect(JSEngine.hasMapData(values.map)).toBe(true);
+    expect(JSEngine.copyMapData(values.map))
       .toEqual([['key', 3]]);
-    expect(JavaScript.hasSetData(values.set)).toBe(true);
-    expect(JavaScript.copySetData(values.set)).toEqual(['entry']);
-    expect(JavaScript.hasErrorData(values.error)).toBe(true);
+    expect(JSEngine.hasSetData(values.set)).toBe(true);
+    expect(JSEngine.copySetData(values.set)).toEqual(['entry']);
+    expect(JSEngine.hasErrorData(values.error)).toBe(true);
   });
 
   it('reads and updates Map and Set data without author methods', () => {
@@ -70,28 +70,28 @@ describe('Node/V8 built-in primitives', () => {
       [Symbol.iterator]: { get: fail },
     });
 
-    expect(JavaScript.copyMapData(map))
+    expect(JSEngine.copyMapData(map))
       .toEqual([['key', 'value']]);
-    expect(JavaScript.copySetData(set)).toEqual(['entry']);
-    JavaScript.appendMapData(map, 'second', 2);
-    JavaScript.appendSetData(set, 'second');
-    expect(JavaScript.copyMapData(map)).toEqual([
+    expect(JSEngine.copySetData(set)).toEqual(['entry']);
+    JSEngine.appendMapData(map, 'second', 2);
+    JSEngine.appendSetData(set, 'second');
+    expect(JSEngine.copyMapData(map)).toEqual([
       ['key', 'value'],
       ['second', 2],
     ]);
-    expect(JavaScript.copySetData(set)).toEqual(['entry', 'second']);
+    expect(JSEngine.copySetData(set)).toEqual(['entry', 'second']);
   });
 
   it('reads and restores V8 Error stacks without author accessors', () => {
-    const realm = new JavaScript.NodeRealm();
+    const realm = new JSEngine.NodeRealm();
     const error = realm.evaluate(
       "new Error('failed')",
       'structured-clone-error-stack.js',
     ) as object;
 
-    expect(JavaScript.readErrorStack(error, realm)).toBeTypeOf('string');
-    JavaScript.writeErrorStack(error, 'restored stack');
-    expect(JavaScript.readErrorStack(error, realm)).toBe('restored stack');
+    expect(JSEngine.readErrorStack(error, realm)).toBeTypeOf('string');
+    JSEngine.writeErrorStack(error, 'restored stack');
+    expect(JSEngine.readErrorStack(error, realm)).toBe('restored stack');
 
     let authorGetterRan = false;
     Object.defineProperty(error, 'stack', {
@@ -101,7 +101,7 @@ describe('Node/V8 built-in primitives', () => {
         return 'author stack';
       },
     });
-    expect(JavaScript.readErrorStack(error, realm)).toBeUndefined();
+    expect(JSEngine.readErrorStack(error, realm)).toBeUndefined();
     expect(authorGetterRan).toBe(false);
   });
 
@@ -118,18 +118,18 @@ describe('Node/V8 built-in primitives', () => {
       },
     });
 
-    expect(JavaScript.isProxyObject(proxy)).toBe(true);
-    expect(JavaScript.isPromiseObject(Promise.resolve())).toBe(true);
-    expect(JavaScript.isWeakMapObject(new WeakMap())).toBe(true);
-    expect(JavaScript.isWeakSetObject(new WeakSet())).toBe(true);
-    expect(JavaScript.isMapIteratorObject(
+    expect(JSEngine.isProxyObject(proxy)).toBe(true);
+    expect(JSEngine.isPromiseObject(Promise.resolve())).toBe(true);
+    expect(JSEngine.isWeakMapObject(new WeakMap())).toBe(true);
+    expect(JSEngine.isWeakSetObject(new WeakSet())).toBe(true);
+    expect(JSEngine.isMapIteratorObject(
       new Map().entries(),
     )).toBe(true);
-    expect(JavaScript.isSetIteratorObject(
+    expect(JSEngine.isSetIteratorObject(
       new Set().values(),
     )).toBe(true);
-    expect(JavaScript.isWeakRefObject(new WeakRef({}))).toBe(true);
-    expect(JavaScript.isFinalizationRegistryObject(
+    expect(JSEngine.isWeakRefObject(new WeakRef({}))).toBe(true);
+    expect(JSEngine.isFinalizationRegistryObject(
       new FinalizationRegistry(() => {}),
     )).toBe(true);
     expect(trapRan).toBe(false);
@@ -137,15 +137,15 @@ describe('Node/V8 built-in primitives', () => {
 
   it('keeps the native exotic probe narrow and non-consuming', () => {
     const iterator = [1, 2][Symbol.iterator]();
-    expect(JavaScript.nativeCloneRejectsPropertylessObject(
+    expect(JSEngine.nativeCloneRejectsPropertylessObject(
       iterator,
     )).toBe(true);
     expect(iterator.next()).toEqual({ done: false, value: 1 });
-    expect(JavaScript.nativeCloneRejectsPropertylessObject({}))
+    expect(JSEngine.nativeCloneRejectsPropertylessObject({}))
       .toBe(false);
 
     const decorated = Object.assign([][Symbol.iterator](), { marker: true });
-    expect(JavaScript.nativeCloneRejectsPropertylessObject(
+    expect(JSEngine.nativeCloneRejectsPropertylessObject(
       decorated,
     )).toBe(false);
   });

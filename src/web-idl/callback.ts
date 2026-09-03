@@ -1,4 +1,4 @@
-import { isCallable, isConstructor } from '../javascript/index';
+import { isCallable, isConstructor } from '../js-engine/index';
 import type {
   CallbackFunctionValue, CallbackInterfaceValue, CallbackValue,
 } from './callback-value';

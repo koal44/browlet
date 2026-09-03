@@ -2,7 +2,7 @@ import { toScalarValueString } from '../infra/index';
 import {
   getMethod, hasMapData, hasStringData, isObject,
   toBigInt, toNumber, toPrimitive, toString, type JavaScriptMethod,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type {
   AssembledDictionary, AssembledInterface, DefinitionAssembly,
 } from './assembly';

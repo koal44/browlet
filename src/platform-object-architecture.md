@@ -196,7 +196,7 @@ duplicated it. Browlet therefore keeps:
 - stable implementation/platform associations and origin tracking on the main
   `BindingWorld` owned by the Browlet composition root.
 
-The lower [`javascript/`](./javascript/README.md) project separately keeps the
+The lower [`js-engine/`](./js-engine/README.md) project separately keeps the
 Node/V8 object-to-realm associations which Node cannot expose. `NodeRuntime`
 owns those isolate-scoped engine facts; `BindingWorld` owns Web IDL
 implementation/platform identity. Neither map is Agent- or AgentCluster-owned,

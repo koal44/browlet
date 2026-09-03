@@ -1,4 +1,4 @@
-import { isObject } from '../javascript/index';
+import { isObject } from '../js-engine/index';
 import { getDOMExceptionRequest } from '../shared/dom-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,

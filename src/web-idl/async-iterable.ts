@@ -1,6 +1,6 @@
 import {
   createIteratorResultObject, installPromiseReactions, isObject,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import { endOfIteration } from './async-sequence';
 import {

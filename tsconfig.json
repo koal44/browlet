@@ -19,7 +19,7 @@
   ],
   "references": [
     { "path": "./src/infra" },
-    { "path": "./src/javascript" },
+    { "path": "./src/js-engine" },
     { "path": "./src/shared" },
     { "path": "./src/mime" },
     { "path": "./src/url" },

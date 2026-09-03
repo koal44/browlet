@@ -1,4 +1,4 @@
-import * as JavaScript from '../javascript/index';
+import * as JSEngine from '../js-engine/index';
 import {
   hasExtendedAttribute, type BufferTypeName, type BufferViewTypeName,
   type ExtendedAttribute,
@@ -11,7 +11,7 @@ export function convertBufferSourceToIDL(
   extendedAttributes: ExtendedAttribute[],
   realm: WebIDLRealmHost,
 ): object {
-  if (!JavaScript.isObject(value) || getBufferTypeName(value) !== name) {
+  if (!JSEngine.isObject(value) || getBufferTypeName(value) !== name) {
     return throwTypeError(realm, `Value is not a ${name}`);
   }
 
@@ -20,17 +20,17 @@ export function convertBufferSourceToIDL(
     'AllowResizable',
   );
   if (isBufferViewTypeName(name)) {
-    const buffer = JavaScript.getArrayBufferViewBuffer(value);
+    const buffer = JSEngine.getArrayBufferViewBuffer(value);
     if (
-      JavaScript.getBufferTypeName(buffer) === 'SharedArrayBuffer' &&
+      JSEngine.getBufferTypeName(buffer) === 'SharedArrayBuffer' &&
       !hasExtendedAttribute(extendedAttributes, 'AllowShared')
     ) {
       return throwTypeError(realm, `${name} is backed by a SharedArrayBuffer`);
     }
-    if (!allowResizable && JavaScript.isResizableArrayBuffer(buffer)) {
+    if (!allowResizable && JSEngine.isResizableArrayBuffer(buffer)) {
       return throwTypeError(realm, `${name} is backed by a resizable buffer`);
     }
-  } else if (!allowResizable && JavaScript.isResizableArrayBuffer(value)) {
+  } else if (!allowResizable && JSEngine.isResizableArrayBuffer(value)) {
     return throwTypeError(realm, `${name} is resizable`);
   }
   return value;
@@ -40,7 +40,7 @@ export function convertBufferSourceToJavaScript(
   value: unknown,
   name: BufferTypeName,
 ): object {
-  if (!JavaScript.isObject(value) || getBufferTypeName(value) !== name) {
+  if (!JSEngine.isObject(value) || getBufferTypeName(value) !== name) {
     throw new Error(`IDL ${name} value has the wrong buffer source type`);
   }
   return value;
@@ -85,7 +85,7 @@ export function createArrayBufferView(
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
 ): object {
-  const elementSize = JavaScript.getArrayBufferViewElementSize(name);
+  const elementSize = JSEngine.getArrayBufferViewElementSize(name);
   if (name !== 'DataView' && bytes.length % elementSize !== 0) {
     throw new Error(`${name} byte length is not a multiple of ${elementSize}`);
   }
@@ -132,7 +132,7 @@ export function createArrayBufferViewFromBuffer(
 
 export function getBufferSourceCopy(value: object): Uint8Array {
   const buffer = getBufferSourceUnderlyingBuffer(value);
-  if (JavaScript.isDetachedArrayBuffer(buffer)) return new Uint8Array();
+  if (JSEngine.isDetachedArrayBuffer(buffer)) return new Uint8Array();
   const offset = getBufferSourceByteOffset(value);
   const length = getBufferSourceByteLength(value);
   return Uint8Array.from(new Uint8Array(
@@ -145,14 +145,14 @@ export function getBufferSourceCopy(value: object): Uint8Array {
 export function getBufferSourceByteLength(value: object): number {
   const name = requireBufferTypeName(value);
   return isBufferViewTypeName(name)
-    ? JavaScript.getArrayBufferViewByteLength(value)
-    : JavaScript.getArrayBufferByteLength(value);
+    ? JSEngine.getArrayBufferViewByteLength(value)
+    : JSEngine.getArrayBufferByteLength(value);
 }
 
 export function getBufferSourceUnderlyingBuffer(value: object): object {
   const name = requireBufferTypeName(value);
   return isBufferViewTypeName(name)
-    ? JavaScript.getArrayBufferViewBuffer(value)
+    ? JSEngine.getArrayBufferViewBuffer(value)
     : value;
 }
 
@@ -186,7 +186,7 @@ export function writeArrayBufferView(
   if (!isBufferViewTypeName(name)) {
     throw new Error(`${name} is not a buffer view type`);
   }
-  const elementSize = JavaScript.getArrayBufferViewElementSize(name);
+  const elementSize = JSEngine.getArrayBufferViewElementSize(name);
   if (name !== 'DataView' && bytes.length % elementSize !== 0) {
     throw new Error(`${name} byte length is not a multiple of ${elementSize}`);
   }
@@ -209,7 +209,7 @@ export function detachArrayBuffer(
   if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
     throw new Error('Only an ArrayBuffer can be detached');
   }
-  if (JavaScript.isDetachedArrayBuffer(buffer)) return;
+  if (JSEngine.isDetachedArrayBuffer(buffer)) return;
   Reflect.apply(
     realm.intrinsics.bufferSource.arrayBufferTransfer,
     buffer,
@@ -218,7 +218,7 @@ export function detachArrayBuffer(
 }
 
 export function isBufferSourceDetached(value: object): boolean {
-  return JavaScript.isDetachedArrayBuffer(
+  return JSEngine.isDetachedArrayBuffer(
     getBufferSourceUnderlyingBuffer(value),
   );
 }
@@ -233,7 +233,7 @@ export function transferArrayBuffer(
   if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
     throw new Error('Only an ArrayBuffer can be transferred');
   }
-  if (JavaScript.isDetachedArrayBuffer(buffer)) {
+  if (JSEngine.isDetachedArrayBuffer(buffer)) {
     throw new targetRealm.intrinsics.typeError('ArrayBuffer is detached');
   }
   return Reflect.apply(
@@ -246,13 +246,13 @@ export function transferArrayBuffer(
 export type ByteSequence = Uint8Array | readonly number[];
 
 export function getBufferTypeName(value: object): BufferTypeName | undefined {
-  return JavaScript.getBufferTypeName(value);
+  return JSEngine.getBufferTypeName(value);
 }
 
 export function getBufferSourceByteOffset(value: object): number {
   const name = requireBufferTypeName(value);
   if (!isBufferViewTypeName(name)) return 0;
-  return JavaScript.getArrayBufferViewByteOffset(value);
+  return JSEngine.getArrayBufferViewByteOffset(value);
 }
 
 function requireBufferTypeName(value: object): BufferTypeName {

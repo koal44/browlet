@@ -1,6 +1,6 @@
 import { it } from 'vitest';
 
-import { nodeRuntime } from '../src/javascript/index';
+import { nodeRuntime } from '../src/js-engine/index';
 
 /*
  * Stock Node is expected to fail tests that require compatible-Node VM
