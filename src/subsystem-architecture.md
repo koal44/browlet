@@ -55,13 +55,15 @@ It must not:
 
 [`js-engine/`](./js-engine/README.md) is the engine substrate beneath Web
 IDL. A `JavaScriptRealm` exposes realm-owned globals, intrinsics, function
-creation, and evaluation. The concrete `NodeRealm` owns one `node:vm` context,
+creation, and evaluation. The concrete `NodeRealm` owns one backend context
+(a `node:vm` context or a native context supplied by the compatibility addon),
 while the isolate-scoped `NodeRuntime` owns feature selection and the
 provisional object-to-realm associations shared across those realms. It also
 supplies `JavaScriptMicrotaskQueue` backends without owning their HTML
 lifecycle: each EventLoop asks the runtime factory for one queue and shares it
 with all Realms of its Agent. The factory selects an explicit queue under
-compatible Node or the one ambient fallback queue under stock Node. Enqueue and
+compatible Node or stock Node plus the addon, or the one ambient fallback queue
+under plain stock Node. Enqueue and
 checkpoint operations travel together on that contract so the event loop
 cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;

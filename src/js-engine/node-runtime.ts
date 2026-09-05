@@ -1,12 +1,16 @@
 import * as vm from 'node:vm';
+import { createRequire } from 'node:module';
+import { isAbsolute } from 'node:path';
 import type { Context } from 'node:vm';
 
 import type {
   JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
 } from './realm';
 
+const nodeApi = loadNodeApi();
 const nodeCreateMicrotaskQueue = getNodeMicrotaskQueueFactory();
 const nodeContextSupport = getNodeContextSupport();
+const nodeMakePrototypeImmutable = getNodeMethod('makePrototypeImmutable');
 
 /*
  * One module instance represents one Node/V8 isolate. Node workers load a
@@ -25,9 +29,9 @@ class NodeRuntime implements JavaScriptRuntime {
 
   /*
    * ACCOMMODATION(node-v8-microtask-queue): Stock Node exposes neither an
-   * isolateable V8 microtask queue nor a public synchronous checkpoint. Keep
+   * isolated V8 microtask queue nor a public synchronous checkpoint. Keep
    * that fallback behind this one queue object. A compatible Node runtime
-   * instead returns an explicit queue from createMicrotaskQueue().
+   * or the addon instead returns an explicit queue from createMicrotaskQueue().
    */
   readonly #ambientMicrotaskQueue: JavaScriptMicrotaskQueue = {
     kind: 'ambient',
@@ -40,9 +44,9 @@ class NodeRuntime implements JavaScriptRuntime {
       return this.#ambientMicrotaskQueue;
     }
 
-    const handle = Reflect.apply(nodeCreateMicrotaskQueue, vm, []);
+    const handle = Reflect.apply(nodeCreateMicrotaskQueue, nodeApi, []);
     if (!isNodeMicrotaskQueue(handle)) {
-      throw new Error('Node vm.createMicrotaskQueue returned an invalid queue');
+      throw new Error('Node backend createMicrotaskQueue returned an invalid queue');
     }
 
     const queue: JavaScriptMicrotaskQueue = {
@@ -78,8 +82,8 @@ class NodeRuntime implements JavaScriptRuntime {
 
   createContext(
     microtaskQueue: JavaScriptMicrotaskQueue,
-    reuseGlobalProxyFrom?: Context,
-  ): Context {
+    reuseGlobalProxyFrom?: NodeContext,
+  ): NodeContext {
     const handle = nodeMicrotaskQueueHandles.get(microtaskQueue);
     const options = handle === undefined
       ? undefined
@@ -88,11 +92,11 @@ class NodeRuntime implements JavaScriptRuntime {
     if (nodeContextSupport !== undefined) {
       const context: unknown = Reflect.apply(
         nodeContextSupport.createContextHandle,
-        vm,
+        nodeApi,
         [{ ...options, reuseGlobalProxyFrom }],
       );
       if (!isNodeContextHandle(context)) {
-        throw new Error('Node vm.createContextHandle returned an invalid handle');
+        throw new Error('Node backend createContextHandle returned an invalid handle');
       }
       return context;
     }
@@ -106,13 +110,13 @@ class NodeRuntime implements JavaScriptRuntime {
     ]) as Context;
   }
 
-  getContextGlobal(context: Context): object {
+  getContextGlobal(context: NodeContext): object {
     return isNodeContextHandle(context)
       ? context.globalProxy
       : context;
   }
 
-  detachContext(context: Context): object {
+  detachContext(context: NodeContext): object {
     if (!isNodeContextHandle(context)) {
       throw new Error('Node does not support detachable context handles');
     }
@@ -120,8 +124,21 @@ class NodeRuntime implements JavaScriptRuntime {
   }
 
   makePrototypeImmutable(object: object): void {
-    if (nodeContextSupport === undefined) return;
-    Reflect.apply(nodeContextSupport.makePrototypeImmutable, vm, [object]);
+    if (nodeMakePrototypeImmutable === undefined) return;
+    Reflect.apply(nodeMakePrototypeImmutable, nodeApi, [object]);
+  }
+
+  runInContext(
+    source: string,
+    context: NodeContext,
+    options?: vm.RunningScriptOptions,
+  ): unknown {
+    if (nodeContextSupport !== undefined && isNodeContextHandle(context)) {
+      return Reflect.apply(nodeContextSupport.runInContext, nodeApi, [
+        source, context, options,
+      ]);
+    }
+    return vm.runInContext(source, context, options) as unknown;
   }
 
   runWithActiveRealm<Result>(
@@ -166,6 +183,8 @@ type NodeContextHandle = {
   detachGlobal(): object;
 };
 
+export type NodeContext = Context | NodeContextHandle;
+
 type NodeContextHandleFactory = (options?: {
   reuseGlobalProxyFrom?: NodeContextHandle;
   microtaskQueue?: NodeMicrotaskQueue;
@@ -173,7 +192,7 @@ type NodeContextHandleFactory = (options?: {
 
 type NodeContextSupport = {
   createContextHandle: NodeContextHandleFactory;
-  makePrototypeImmutable: (object: object) => void;
+  runInContext: CallableFunction;
 };
 
 const nodeMicrotaskQueueHandles = new WeakMap<
@@ -189,7 +208,7 @@ function isNodeMicrotaskQueue(value: unknown): value is NodeMicrotaskQueue {
 
 function getNodeMicrotaskQueueFactory():
 NodeMicrotaskQueueFactory | undefined {
-  const create = Reflect.get(vm, 'createMicrotaskQueue') as unknown;
+  const create = Reflect.get(nodeApi, 'createMicrotaskQueue') as unknown;
   if (create === undefined) return undefined;
   if (typeof create !== 'function') {
     throw new Error('Node vm.createMicrotaskQueue is not callable');
@@ -206,27 +225,41 @@ function isNodeContextHandle(value: unknown): value is NodeContextHandle {
 
 function getNodeContextSupport(): NodeContextSupport | undefined {
   const createContextHandle: unknown = Reflect.get(
-    vm,
+    nodeApi,
     'createContextHandle',
   );
-  const makePrototypeImmutable: unknown = Reflect.get(
-    vm,
-    'makePrototypeImmutable',
-  );
-  if (
-    createContextHandle === undefined &&
-    makePrototypeImmutable === undefined
-  ) return undefined;
+  if (createContextHandle === undefined) return undefined;
+  const runInContext = getNodeMethod('runInContext');
   if (
     typeof createContextHandle !== 'function' ||
-    typeof makePrototypeImmutable !== 'function'
+    runInContext === undefined
   ) {
     throw new Error('Node exposes an incomplete context-handle API');
   }
   return {
     createContextHandle: createContextHandle as NodeContextHandleFactory,
-    makePrototypeImmutable: makePrototypeImmutable as (
-      object: object,
-    ) => void,
+    runInContext,
   };
+}
+
+function getNodeMethod(name: string): CallableFunction | undefined {
+  const method: unknown = Reflect.get(nodeApi, name);
+  if (method === undefined) return undefined;
+  if (typeof method !== 'function') {
+    throw new Error(`Node backend ${name} is not callable`);
+  }
+  return method;
+}
+
+function loadNodeApi(): object {
+  const addonPath = process.env.BROWLET_NODE_ADDON;
+  if (addonPath === undefined) return vm;
+  if (!isAbsolute(addonPath)) {
+    throw new Error('BROWLET_NODE_ADDON must be an absolute module path');
+  }
+  const addon: unknown = createRequire(process.execPath)(addonPath);
+  if (typeof addon !== 'object' || addon === null) {
+    throw new Error('BROWLET_NODE_ADDON must export a Node backend');
+  }
+  return addon;
 }
