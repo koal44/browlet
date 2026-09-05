@@ -1,6 +1,5 @@
-import { runInContext, type Context } from 'node:vm';
 import { isObject } from './abstract-operations';
-import { nodeRuntime } from './node-runtime';
+import { nodeRuntime, type NodeContext } from './node-runtime';
 import type {
   JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
   JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
@@ -15,7 +14,7 @@ export class NodeRealm implements JavaScriptRealm {
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime = nodeRuntime;
   readonly #callableFunctionFactory: RealmFunctionFactory;
-  readonly #context: Context;
+  readonly #context: NodeContext;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
   #globalObject: object;
   #globalThis: object;
@@ -103,7 +102,7 @@ export class NodeRealm implements JavaScriptRealm {
     if (!iteratorPrototype) {
       throw new Error('Could not obtain the realm Iterator prototype');
     }
-    const asyncIterator = runInContext(
+    const asyncIterator = nodeRuntime.runInContext(
       '(async function* () {})()',
       this.#context,
     ) as object;
@@ -209,11 +208,11 @@ export class NodeRealm implements JavaScriptRealm {
       ) as typeof TypeError,
       uriError: URIError_,
     };
-    this.#callableFunctionFactory = runInContext(
+    this.#callableFunctionFactory = nodeRuntime.runInContext(
       callableFunctionFactorySource,
       this.#context,
     ) as RealmFunctionFactory;
-    this.#constructibleFunctionFactory = runInContext(
+    this.#constructibleFunctionFactory = nodeRuntime.runInContext(
       constructibleFunctionFactorySource,
       this.#context,
     ) as RealmFunctionFactory;
@@ -281,11 +280,11 @@ export class NodeRealm implements JavaScriptRealm {
 
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
     return nodeRuntime.runWithActiveRealm(this, () => {
-      const result = runInContext(source, this.#context, {
+      const result = nodeRuntime.runInContext(source, this.#context, {
         displayErrors: false,
         filename,
         lineOffset,
-      }) as unknown;
+      });
       if (isObject(result)) nodeRuntime.associateRealm(result, this);
       return result;
     });

@@ -57,7 +57,15 @@ use an accommodation whose narrower contract is stated explicitly.
 
 Availability is no longer one undifferentiated Node answer:
 
-| Facility | Browlet-compatible Node | Stock Node |
+The [stock-plus-addon profile](../../node-compat/README.md) now supplies the
+explicit queue and context/proxy lifecycle described in the compatible column
+below. It uses native context handles with backend-owned evaluation, rather
+than node:vm Contextify objects. Post-projection prototype immutability remains
+unavailable in this profile and fails its compatibility test. The stock
+column below describes Node without an addon. This changes the substrate for
+the existing Browlet slice; it does not complete the HTML host hooks.
+
+| Facility | Original source-patched Node | Stock Node |
 | --- | --- | --- |
 | Microtask queue | An explicit V8 queue with `enqueueMicrotask()` and `runMicrotasks()`, created once per HTML EventLoop and shared by all realms of its Agent | The isolate's one ambient queue, entered through `queueMicrotask()` and drained through the `_tickCallback()` accommodation |
 | Context and reusable VM global proxy | `vm.createContextHandle()` returns an opaque handle and stable `globalProxy`; detachment retires the handle, and passing that handle once as `reuseGlobalProxyFrom` creates a fresh Realm and backing global with the same proxy identity. `vm.makePrototypeImmutable()` seals the current backing global after projection. Handle contexts use Node's ordinary principal token for embedder access, not browser origin policy. | A fresh private VM global is bridged to Browlet's modeled global graph. |
@@ -109,8 +117,8 @@ engine-to-host calls, not globals which Browlet can invoke or monkey-patch.
 | `HostGetCodeForEval` | Extracts code from `TrustedScript` or returns no-code | **Unavailable:** Node does not expose the proposal hook. Trusted Types is deferred. |
 | `HostPromiseRejectionTracker` | Maintains each HTML global's rejected-promise state and queues `rejectionhandled` | **Unavailable:** Node's process-wide rejection reporting does not provide HTML's per-realm script/settings information. |
 | `HostSystemUTCEpochNanoseconds` | Obtains the relevant settings object's wall clock for Temporal | **Deferred/unavailable:** Browlet has a host clock for its own APIs, but cannot install Temporal's engine hook; the supported Node baseline does not currently provide this integration. |
-| `HostMakeJobCallback` | Captures incumbent settings and active-script context in a JobCallback Record | **Unavailable for native jobs:** Web IDL stores its own callback context, but that is a parallel callback boundary, not this Promise-job hook. |
-| `HostCallJobCallback` | Restores that context around the eventual `Call` | **Unavailable for native jobs:** Browlet can bracket callbacks it invokes, not callbacks invoked inside V8's Promise machinery. |
+| `HostMakeJobCallback` | Captures incumbent settings and active-script context in a JobCallback Record | **Unavailable in stock Node; reduced V8 proof exists:** Web IDL stores its own callback context, but that is a parallel callback boundary. The current V8 experiment captures an incumbent context and active-script host-defined options when a Promise reaction is registered. |
+| `HostCallJobCallback` | Restores that context around the eventual `Call` | **Unavailable in stock Node; reduced V8 proof exists:** the current V8 experiment restores the captured incumbent context and active-script host-defined options around the actual Promise handler call. Browlet does not yet have a production boundary through which to consume that state. |
 | `HostEnqueuePromiseJob` | Places every Promise job in the HTML microtask queue and prepares/cleans up its realm settings around execution | **Unavailable as a host hook:** compatible VM contexts place Promise jobs on their EventLoop's explicit queue, while stock contexts use the ambient queue, but V8 gives Browlet neither the job closure nor its Realm Record. Queue selection and checkpoint control do not supply the callback lifecycle. |
 | `HostEnqueueGenericJob` | Queues jobs such as `Atomics.waitAsync` completion on the JavaScript-engine task source | **Unavailable:** Node owns native generic-job delivery. |
 | `HostEnqueueTimeoutJob` | Routes ECMAScript timeout jobs through HTML active-time and task machinery | **Unavailable:** Browlet's own timers do not intercept engine-created timeout jobs. |
@@ -124,6 +132,81 @@ as jobs caused by a platform API. HTML does not ask for an informational
 notification: it supplies the scheduling and script-lifecycle implementation
 for the job. Controlling Web IDL callback invocation therefore cannot cover an
 author's `.then()`, `async`/`await`, or thenable assimilation.
+
+### Promise-job incumbent experiment
+
+The Node/V8 branch `browlet-promise-incumbent-experiment-2026-09-03` contains a
+deliberately broad diagnostic patch, not a proposed API. It records Promise
+reaction registration and enqueue state inside V8 and exposes the result to a
+Node Promise observer. A test-only C++ harness supplies distinct V8 security
+tokens, native function entry, native `Promise::Then`, and
+`v8::Context::BackupIncumbentScope` without adding those controls to `node:vm`.
+
+The experiment rejected several tempting realm signals:
+
+- V8's current context and existing slow incumbent walk select the Promise
+  builtin's realm after `PerformPromiseThen` has begun.
+- `GetEnteredOrMicrotaskContext()` identifies the outer caller, or even Node's
+  main realm for a native callback, rather than a reentrant registrar.
+- a fixed physical-frame depth fails when borrowed builtins add frames;
+- default stack/referrer inspection hides a correct author frame when V8
+  security tokens differ; and
+- continuation-preserved embedder data collides with AsyncLocalStorage and is
+  therefore not a valid transport for HTML callback state.
+
+One candidate survived the complete matrix: select the first physical frame
+whose script is subject to debugging, compare that frame's stack address with
+the newest `BackupIncumbentScope`, choose whichever entry is newer, then fall
+back to the entered-or-microtask context. The equivalent implementation using
+`DebuggableStackFrameIterator` produced the expected incumbent in ordinary,
+borrowed-builtin, bound/proxy, cross-realm, native-entry, distinct-security-token,
+nested, and backup-ordering cases. It also survived forced optimization of a
+cross-realm registrar and helper. Thirty-two candidate results were identical
+with and without Node's async-context-frame implementation.
+
+This proves that V8 retains enough information at reaction registration; it
+does not complete the three HTML hooks. The current diagnostic still has four
+non-production properties:
+
+1. It uses V8-internal frame iteration rather than a reviewed embedder API.
+2. It stores diagnostic state in continuation-preserved embedder data, which
+   intentionally breaks AsyncLocalStorage in the experiment.
+3. It observes job creation and enqueue rather than allowing HTML to supply
+   `HostMakeJobCallback`, `HostCallJobCallback`, and `HostEnqueuePromiseJob`.
+4. Its broad capture routine assumes a current V8 context and is not safe as a
+   general C++ entry point.
+
+The next reduction was therefore two separate questions: first, define the
+smallest V8 operation which returns the author/backup incumbent context at this
+point; second, give Promise reactions and jobs dedicated host data and a real
+host invocation boundary without reusing async-context transport. Preserve the
+diagnostic branch until both reduced contracts can be tested against the same
+matrix.
+
+The follow-up Node/V8 branch `browlet-promise-job-host-hooks` is the first
+reduced implementation. It stores dedicated callback data on Promise reactions
+and jobs instead of borrowing continuation-preserved embedder data, restores a
+`BackupIncumbentScope` around the actual handler call, and restores the captured
+active-script host-defined options when no newer author script is running. The
+Node build and its focused native-handler test pass. A direct native Promise
+handler observes the context that was incumbent when the handler was
+registered.
+
+This is an engine proof, not yet a Browlet integration. Calling the same native
+query through an ordinary JavaScript helper makes that helper's realm the
+topmost script-having realm. That is correct for author JavaScript, but
+Browlet's current `JavaScriptRealm.createFunction()` also uses JavaScript
+helpers to represent Web IDL operation functions. Browser operation functions
+are built-in functions and do not introduce such a script frame. Browlet must
+therefore gain either a true built-in-function entry boundary or an equivalent
+reviewed lifecycle boundary before this Promise state can be consumed without
+mistaking host implementation code for author code.
+
+Do not infer active-script completion merely from Node's existing
+`test-vm-module-referrer-realm.mjs`: its `Promise.resolve(...).then(eval)` cases
+pass both stock Node and the reduced patch. That test confirms Node's existing
+dynamic-import routing, but it does not distinguish the missing backup-incumbent
+behavior exercised by the HTML promise-job-incumbent tests.
 
 ### Agent correspondence
 
@@ -232,7 +315,9 @@ the probes are evidence, not a separate grab-bag phase.
    before navigation reuses the proxy, and resolve `[[PreventExtensions]]`,
    same- and cross-origin handlers, old-Realm behavior, and navigation tests
    before production adoption.
-3. **Promise-job embedding.** Investigate `HostMakeJobCallback`,
+3. **Promise-job embedding — incumbent proof complete, transport unresolved.**
+   Reduce the diagnostic author-frame/backup-scope candidate into the smallest
+   V8 contract, then investigate `HostMakeJobCallback`,
    `HostCallJobCallback`, and `HostEnqueuePromiseJob` together with the supplied
    job realm, `GetFunctionRealm`, the active script needed by callback creation,
    and controlled execution-context preparation and cleanup. Per-Agent queue

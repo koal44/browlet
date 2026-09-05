@@ -15,6 +15,11 @@ try {
   const nodePath = selectNodePath(command.runtime);
   const environment = withSelectedNode(process.env, nodePath);
   environment.BROWLET_NODE_RUNTIME = command.runtime;
+  if (command.runtime === 'addon') {
+    environment.BROWLET_NODE_ADDON = resolve(root, 'node-compat/addon/index.cjs');
+  } else {
+    delete environment.BROWLET_NODE_ADDON;
+  }
 
   console.log(
     `[browlet] Node runtime: ${command.runtime} (${nodePath})`,
@@ -27,6 +32,12 @@ try {
       { cwd: root, env: environment, stdio: 'inherit' },
     );
     exitFor(probe, 'compatible Node capability check');
+  }
+  if (command.runtime === 'addon') {
+    const probe = spawnSync(nodePath, [
+      resolve(root, 'node-compat/test/check-addon.cjs'),
+    ], { cwd: root, env: environment, stdio: 'inherit' });
+    exitFor(probe, 'Node addon capability check');
   }
 
   const run = spawnSync(
@@ -55,14 +66,14 @@ function parseCommandLine(arguments_) {
     runtime = args[1];
     args.splice(0, 2);
   }
-  if (runtime !== 'stock' && runtime !== 'compat') {
-    throw new Error('Node runtime must be "stock" or "compat"');
+  if (runtime !== 'stock' && runtime !== 'compat' && runtime !== 'addon') {
+    throw new Error('Node runtime must be "stock", "compat" or "addon"');
   }
 
   const script = args.shift();
   if (!script) {
     throw new Error(
-      'usage: npm.cmd run with-node -- [--runtime stock|compat] <script> [-- <arguments>]',
+      'usage: npm.cmd run with-node -- [--runtime stock|compat|addon] <script> [-- <arguments>]',
     );
   }
   if (args[0] === '--') args.shift();
@@ -74,7 +85,7 @@ function selectNodePath(runtime) {
     ? 'BROWLET_COMPAT_NODE'
     : 'BROWLET_STOCK_NODE';
   const configured = process.env[variable];
-  const nodePath = configured ?? (runtime === 'stock' ? process.execPath : '');
+  const nodePath = configured ?? (runtime === 'compat' ? '' : process.execPath);
 
   if (!nodePath) {
     throw new Error(`${variable} must name the ${runtime} Node executable`);

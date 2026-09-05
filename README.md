@@ -22,23 +22,31 @@ npm run test:unit
 
 ### Node runtime selection
 
-The repository can run its root and composite package scripts under either
-stock Node or a local Browlet-compatible Node build without duplicating those
-scripts. Copy `.env.example` to `.env`, set the compatible executable's
-absolute path, and select the usual default runtime there. A command-line
+Use plain stock Node or build the [compatibility addon](node-compat/README.md)
+to add shared microtask queues and reusable contexts to stock Node. Copy
+`.env.example` to `.env` and select `stock` or `addon` as the default runtime.
+A command-line
 `--runtime` selection overrides the shell environment, which overrides `.env`;
-the default is stock Node. The local `.env` and compiled Node binary are
-intentionally not committed.
+the default is stock Node. Local runtime paths and generated binaries are
+not committed.
 
 ```powershell
 npm.cmd run with-node -- test:quick
 npm.cmd run with-node -- --runtime stock test:quick
+npm.cmd run with-node -- --runtime addon test:unit
 ```
 
-Compatible mode verifies the explicit VM queue, opaque context handle, stable
-global-proxy detach/reattach, and immutable-prototype operations before running
-the requested script. It does not treat Node's shared VM principal as browser
-origin policy. Root composite scripts remain on the selected executable because
+The addon profile checks its queues and context handles before running the
+requested script. Prototype immutability remains unimplemented and appears as
+a failing compatibility test.
+
+The older `compat` mode is retained for a separately built source-patched Node.
+It requires `BROWLET_COMPAT_NODE` to name that executable and checks all three
+capabilities, including immutable prototypes. No source-patched executable is
+supplied or rebuilt by the addon workflow.
+
+Neither backend treats Node's shared VM principal as browser origin policy.
+Root composite scripts remain on the selected executable because
 orchestration uses `node --run`. The vendor setup script remains a
 package-manager boundary and may invoke npm's stock Node.
 

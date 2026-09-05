@@ -8,11 +8,21 @@ The [JS Engine roadmap](./roadmap.md) inventories HTML's complete
 ECMAScript dependency list and separates ordinary engine behavior from the
 small set of inaccessible runtime facts and genuine host hooks.
 Its work proceeds by coherent consumers. The first runtime slice established
-explicit versus ambient microtask-queue backends. Browlet-compatible Node now
-also supplies the `ContextHandle` and global-proxy lifecycle; the current slice
+explicit versus ambient microtask-queue backends. The compatibility addon also
+supplies the `ContextHandle` and global-proxy lifecycle; the current slice
 adopts that substrate in Browlet before the Promise-job host-hook audit
 continues. It does not implement imported ECMAScript terms or host hooks as
 undifferentiated families.
+
+The [compatibility addon](../../node-compat/README.md) now supplies explicit
+queues and reusable native context handles on stock Node 24. NodeRuntime loads
+it only when the embedder sets BROWLET_NODE_ADDON to its absolute module path;
+NodeRealm delegates evaluation to that selected backend. The addon does not
+make node:vm recognize its handles and does not yet supply post-creation
+prototype immutability. References to stock fallbacks below mean plain Node
+without the addon. References to source-patched Node describe the original
+Node branch, whose additional immutable-prototype operation is still missing
+from the addon.
 
 ## Admission rule
 
@@ -75,10 +85,10 @@ interface JavaScriptMicrotaskQueue {
 }
 ```
 
-A Browlet-compatible Node supplies an explicit V8 queue. Each HTML EventLoop
+The addon or source-patched Node supplies an explicit V8 queue. Each HTML EventLoop
 asks the runtime factory for one queue, passes that same queue to every realm
 belonging to its Agent, and uses it for both HTML `queueMicrotask()` and
-checkpointing. The factory selects an explicit queue under compatible Node or
+checkpointing. The factory selects an explicit queue from either backend or
 the one ambient queue backed by `queueMicrotask()` and the checkpoint
 accommodation below under stock Node. The upper layer owns the queue according to
 its lifecycle; the JS Engine project supplies its engine implementation
@@ -96,15 +106,16 @@ objects' `[[Realm]]` or Browlet moves to a direct V8 embedder.
 through Node's context global. Stock Node cannot install an existing
 WindowProxy as the VM context's true global-this, so free names reach the
 modeled global graph while top-level `this` remains the VM global. A
-Browlet-compatible Node instead exposes an opaque `ContextHandle` for the
+compatibility backend instead exposes an opaque `ContextHandle` for the
 replaceable execution context and a separate `globalProxy` identity. The
 handle can detach that proxy; supplying the detached handle as
 `reuseGlobalProxyFrom` transfers the proxy once to a fresh Realm with fresh
 intrinsics and global state. The handle itself proves provenance, so the
 runtime needs no global proxy registry. `NodeRealm` uses this handle whenever
-the compatible surface is available, and the runtime's
+compatible context creation is available. On source-patched Node, the runtime's
 `makePrototypeImmutable()` operation seals each fresh backing global after
-Browlet installs its global graph. This follows Gecko's create, project, then
+Browlet installs its global graph; the addon cannot yet perform that operation.
+This follows Gecko's create, project, then
 seal ordering; Blink instead creates its global from a generated V8 template
 which already contains the binding graph.
 
@@ -121,7 +132,7 @@ shortcut.
 
 `node-v8-checkpoint` is now the stock/ambient fallback. Stock Node has no
 supported synchronous V8 microtask-checkpoint operation, so that backend uses
-private `process._tickCallback()`. A Browlet-compatible Node instead gives an
+private `process._tickCallback()`. The addon or source-patched Node instead gives an
 explicit queue both `enqueueMicrotask()` and `runMicrotasks()`; the runtime maps
 those to the queue contract above. Replace or remove only
 the ambient backend when the supported stock baseline gains the same complete

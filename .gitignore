@@ -4,6 +4,9 @@ test-results/
 .last-run.json
 dist/
 /test/wpt/tests/
+/node-compat/experimental/
+/node-compat/addon/build/
+/node-compat/.cache/
 
 /vendor/jsdom/
 /vendor/*/
