@@ -15,6 +15,13 @@ export function createWindowProxy(): WindowProxy {
   return handler.windowProxy;
 }
 
+export function adoptNativeWindowProxy(object: object): WindowProxy {
+  if (windowProxyHandlers.has(object as WindowProxy)) return object as WindowProxy;
+  const handler = new WindowProxyHandler(object);
+  windowProxyHandlers.set(handler.windowProxy, handler);
+  return handler.windowProxy;
+}
+
 export function isWindowProxy(value: unknown): value is WindowProxy {
   return typeof value === 'object' && value !== null &&
     windowProxyHandlers.has(value as WindowProxy);
@@ -64,8 +71,8 @@ class WindowProxyHandler implements ProxyHandler<object> {
   readonly windowProxy: WindowProxy;
   #window: WindowAssociation | null = null;
 
-  constructor() {
-    this.windowProxy = new Proxy({}, this) as WindowProxy;
+  constructor(nativeProxy?: object) {
+    this.windowProxy = (nativeProxy ?? new Proxy({}, this)) as WindowProxy;
   }
 
   get window(): WindowImpl | null {

@@ -1,5 +1,5 @@
 import { assembleDefinitions, type DefinitionAssembly } from './assembly';
-import { RealmBinding } from './binding';
+import { RealmBinding, type GlobalObjectAllocation } from './binding';
 import { webIDLCommonDefinitions } from './common-definitions';
 import {
   type CapabilityRegistration, CapabilityRegistry,
@@ -115,8 +115,12 @@ export class RealmBindings {
     this.#binding.install(target);
   }
 
-  projectGlobalObject(value: object, interfaceName: string): object {
-    return this.#binding.projectGlobalObject(value, interfaceName).platformObject;
+  projectGlobalObject(
+    value: object,
+    interfaceName: string,
+    allocation?: GlobalObjectAllocation,
+  ): object {
+    return this.#binding.projectGlobalObject(value, interfaceName, allocation).platformObject;
   }
 }
 

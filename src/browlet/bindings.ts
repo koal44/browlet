@@ -6,7 +6,7 @@ import { urlIDLDefinitions } from '../url/api';
 import { originIDL } from '../url/origin-api';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  createBindings, type BindingWorld, type RealmBindings,
+  createBindings, type BindingWorld, type RealmBindings, type GlobalObjectAllocation,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import {
@@ -111,8 +111,9 @@ export class BrowletBindings {
 export function projectWindow(
   bindings: RealmBindings,
   window: WindowImpl,
+  allocation?: GlobalObjectAllocation,
 ): Window {
-  return bindings.projectGlobalObject(window, 'Window') as Window;
+  return bindings.projectGlobalObject(window, 'Window', allocation) as Window;
 }
 
 export function getRelevantRealm(value: object): Realm {

@@ -1,8 +1,12 @@
 #include <node.h>
 #include "vm.h"
+#include "property-delegate.h"
 
 #include <memory>
 #include <unordered_set>
+#include <unordered_map>
+#include <string>
+#include <vector>
 
 namespace node_compat {
 namespace {
@@ -14,6 +18,7 @@ struct AddonData {
   Global<FunctionTemplate> queue_type;
   Global<FunctionTemplate> context_type;
   Global<ObjectTemplate> global_template;
+  std::unordered_map<std::string, Global<ObjectTemplate>> prototype_templates;
   Global<Private> lifetime_key;
   Global<Private> queue_key;
   Global<Private> context_key;
@@ -25,9 +30,10 @@ class NativeHandle {
   NativeHandle(AddonData* owner, Local<Object> holder, Local<Private> brand)
       : owner(owner) {
     owner->handles.insert(this);
-    holder->SetPrivate(holder->GetIsolate()->GetCurrentContext(), brand,
-        External::New(holder->GetIsolate(), this)).Check();
-    persistent.Reset(holder->GetIsolate(), holder);
+    auto isolate = Isolate::GetCurrent();
+    holder->SetPrivate(isolate->GetCurrentContext(), brand,
+        External::New(isolate, this)).Check();
+    persistent.Reset(isolate, holder);
     persistent.SetWeak(this, [](const WeakCallbackInfo<NativeHandle>& info) {
       info.GetParameter()->persistent.Reset();
       // Queue destruction can touch V8's queue list. Wait until the second
@@ -55,15 +61,18 @@ class ContextHandle : public NativeHandle {
  public:
   enum State { kAttached, kDetached, kTransferred };
   ContextHandle(AddonData* owner, Local<Object> holder, Local<Context> realm,
-                std::shared_ptr<MicrotaskQueue> queue)
-      : NativeHandle(owner, holder, owner->context_key.Get(realm->GetIsolate())),
+                std::shared_ptr<MicrotaskQueue> queue, Local<ObjectTemplate> global_template)
+      : NativeHandle(owner, holder, owner->context_key.Get(Isolate::GetCurrent())),
         queue(std::move(queue)) {
-    context.Reset(realm->GetIsolate(), realm);
+    auto isolate = Isolate::GetCurrent();
+    context.Reset(isolate, realm);
+    this->global_template.Reset(isolate, global_template);
     // The JS holder and the realm's intrinsic Object.prototype retain each
     // other. A strong native Context reference would make that cycle immortal.
     context.SetWeak();
   }
   Global<Context> context;
+  Global<ObjectTemplate> global_template;
   std::shared_ptr<MicrotaskQueue> queue;
   State state = kAttached;
 };
@@ -149,7 +158,52 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
              .ToLocal(&proxy)) return;
   }
 
-  auto realm = Context::New(isolate, nullptr, data->global_template.Get(isolate),
+  auto global_template = data->global_template.Get(isolate);
+  std::vector<int> prototype_kinds;
+  if (!args[2]->IsUndefined()) {
+    if (!args[2]->IsArray()) {
+      Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a prototype layout array");
+      return;
+    }
+    auto layout = args[2].As<Array>();
+    if (layout->Length() == 0) {
+      Fail(isolate, "ERR_INVALID_ARG_VALUE", "Global prototype layout must not be empty");
+      return;
+    }
+    std::string key;
+    for (uint32_t i = 0; i < layout->Length(); ++i) {
+      Local<Value> kind;
+      if (!layout->Get(host, i).ToLocal(&kind)) return;
+      if (!kind->IsInt32() || kind.As<Int32>()->Value() < 0 || kind.As<Int32>()->Value() > 2) {
+        Fail(isolate, "ERR_INVALID_ARG_VALUE", "Unknown prototype layout kind");
+        return;
+      }
+      prototype_kinds.push_back(kind.As<Int32>()->Value());
+      key += static_cast<char>('0' + prototype_kinds.back());
+    }
+    auto found = data->prototype_templates.find(key);
+    if (found == data->prototype_templates.end()) {
+      Local<FunctionTemplate> parent;
+      for (auto kind = prototype_kinds.rbegin(); kind != prototype_kinds.rend(); ++kind) {
+        auto constructor = FunctionTemplate::New(isolate);
+        if (!parent.IsEmpty()) constructor->Inherit(parent);
+        if (*kind != 0) constructor->PrototypeTemplate()->SetImmutableProto();
+        if (*kind == 2) ConfigurePropertyDelegate(isolate, constructor->PrototypeTemplate());
+        parent = constructor;
+      }
+      global_template = parent->InstanceTemplate();
+      global_template->SetImmutableProto();
+      ConfigurePropertyDelegate(isolate, global_template, true);
+      data->prototype_templates.emplace(key, Global<ObjectTemplate>(isolate, global_template));
+    } else {
+      global_template = found->second.Get(isolate);
+    }
+  }
+  if (previous && previous->global_template.Get(isolate) != global_template) {
+    Fail(isolate, "ERR_INVALID_ARG_VALUE", "Reuse requires the same global prototype layout");
+    return;
+  }
+  auto realm = Context::New(isolate, nullptr, global_template,
                             proxy, {}, queue.get());
   if (realm.IsEmpty()) return;
   if (node::InitializeContext(realm).IsNothing()) return;
@@ -159,7 +213,33 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   Local<Object> holder;
   if (!data->context_type.Get(isolate)->InstanceTemplate()
            ->NewInstance(host).ToLocal(&holder)) return;
-  new ContextHandle(data, holder, realm, std::move(queue));
+  new ContextHandle(data, holder, realm, std::move(queue), global_template);
+  if (!args[2]->IsUndefined()) {
+    InitializePropertyDelegate(realm, realm->Global(), true);
+    // Allocate a distinct, realm-owned global target with the same observable
+    // prototype as the global proxy. The JS binding owns its association with
+    // the implementation; the proxy can later move to another context.
+    Context::Scope scope(realm);
+    auto object_constructor_template = FunctionTemplate::New(isolate);
+    object_constructor_template->InstanceTemplate()->SetImmutableProto();
+    auto constructor = object_constructor_template->GetFunction(realm).ToLocalChecked();
+    constructor->Set(realm, Text(isolate, "prototype"), realm->Global()->GetPrototypeV2()).Check();
+    auto object = constructor->NewInstance(realm).ToLocalChecked();
+    holder->DefineOwnProperty(host, Text(isolate, "globalObject"), object,
+        static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
+    auto chain = Array::New(isolate, static_cast<int>(prototype_kinds.size()));
+    auto prototype = realm->Global()->GetPrototypeV2();
+    for (uint32_t i = 0; i < prototype_kinds.size(); ++i) {
+      // FunctionTemplate supplies a constructor property even for layers such
+      // as WindowProperties. Bindings install the actual interface constructors.
+      if (prototype.As<Object>()->Delete(realm, Text(isolate, "constructor")).IsNothing()) return;
+      if (prototype_kinds[i] == 2) InitializePropertyDelegate(realm, prototype.As<Object>());
+      chain->Set(host, i, prototype).Check();
+      prototype = prototype.As<Object>()->GetPrototypeV2();
+    }
+    holder->DefineOwnProperty(host, Text(isolate, "prototypeChain"), chain,
+        static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
+  }
   if (holder->DefineOwnProperty(host, Text(isolate, "globalProxy"),
                                 realm->Global(),
                                 static_cast<PropertyAttribute>(ReadOnly | DontDelete))
@@ -237,7 +317,7 @@ void IsContext(const FunctionCallbackInfo<Value>& args) {
 
 void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context) {
   using namespace v8;
-  auto isolate = context->GetIsolate();
+  auto isolate = Isolate::GetCurrent();
   auto data = new AddonData{node::GetCurrentEnvironment(context)};
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     auto data = static_cast<AddonData*>(pointer);
@@ -268,6 +348,7 @@ void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context)
     {"createContextHandle", CreateContext},
     {"evaluate", Evaluate},
     {"isContext", IsContext},
+    {"setPropertyDelegate", SetPropertyDelegate},
   };
   for (const auto& method : methods) {
     Local<Function> function;

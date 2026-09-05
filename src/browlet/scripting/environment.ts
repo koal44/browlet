@@ -142,8 +142,8 @@ export function setupWindowEnvironmentSettingsObject(
   bindings: RealmBindings,
 ): WindowEnvironmentSettingsObject {
   const realm = executionContext.realm;
-  const window = realm.globalObject;
-  if (!WindowImpl.is(window)) {
+  const window = realm.windowImplementation;
+  if (window === undefined) {
     throw new Error('Window settings require a Window global object');
   }
   const settings = new WindowEnvironmentSettingsObject(

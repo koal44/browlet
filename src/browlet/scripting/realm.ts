@@ -1,4 +1,4 @@
-import { NodeRealm, nodeRuntime } from '../../js-engine/index';
+import { NodeRealm, nodeRuntime, type NodeRealmOptions } from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
@@ -48,10 +48,14 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
   readonly isGlobalPrototypeChainMutable: boolean;
   readonly secureContext: boolean;
   #hostDefined: EnvironmentSettingsObject | null = null;
+  #windowImplementation: WindowImpl | undefined;
 
   constructor(options: RealmOptions = {}) {
     const agent = options.agent ?? new WindowAgent();
-    super(agent.eventLoop.microtaskQueue);
+    super(agent.eventLoop.microtaskQueue, {
+      globalPrototypeChain: options.globalPrototypeChain,
+      reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
+    });
     this.agent = agent;
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? ['Window']);
@@ -99,6 +103,10 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
         console.error(exception);
       },
     };
+  }
+
+  get windowImplementation(): WindowImpl | undefined {
+    return this.#windowImplementation;
   }
 
   get hostDefined(): EnvironmentSettingsObject | null {
@@ -174,7 +182,9 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
     realm: Realm,
     globalObject: object,
     globalThis: object,
+    windowImplementation = WindowImpl.is(globalObject) ? globalObject : undefined,
   ): void {
+    realm.#windowImplementation = windowImplementation;
     realm.initializeGlobalObjects(globalObject, globalThis);
     if (!realm.isGlobalPrototypeChainMutable) {
       realm.makeHostGlobalPrototypeImmutable();
@@ -210,12 +220,6 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
 
   // -- Private ----------------------------------------------------------
 
-  get #windowImplementation(): WindowImpl | undefined {
-    return WindowImpl.is(this.globalObject)
-      ? this.globalObject
-      : undefined;
-  }
-
   #getCallbackSettings(
     context: object,
   ): EnvironmentSettingsObject | null {
@@ -245,6 +249,8 @@ export type RealmCustomizations = {
 export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
 
 export type RealmOptions = {
+  globalPrototypeChain?: NodeRealmOptions['globalPrototypeChain'];
+  reuseGlobalProxyFrom?: Realm;
   agent?: Agent;
   crossOriginIsolated?: boolean;
   globalNames?: readonly string[];

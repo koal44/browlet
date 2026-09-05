@@ -345,6 +345,21 @@ The ordinary two-object path is the default. Exceptions must be explicit.
   explicit allocator. Future native-exotic cases should do likewise rather
   than contaminating their implementation.
 
+The opt-in native-global integration now exercises a separate Window platform
+object without changing `WindowImpl.prototype`. The engine preallocates that
+object and the immutable prototype chain; `GlobalObjectAllocation` lets Binding
+populate those objects with the normal Web IDL members. Binding also supplies
+the named-properties behavior to the native layer. The reusable native proxy
+is recognized through the existing host-defined WindowProxy receiver seam,
+while each Window retains its own platform-object record in the same binding
+world. `Realm` retains its Window implementation explicitly for settings and
+callback lifecycle work.
+
+This is not the default browser bootstrap. The prototype and its Node 24
+deprecated-API dependency are described in
+[`node-compat/README.md`](../node-compat/README.md#native-global-integration-prototype).
+Full navigation and origin behavior still require separate validation.
+
 ## Cross-specification declarations
 
 A specification which contributes a partial interface or mixin exports the

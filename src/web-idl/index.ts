@@ -11,3 +11,4 @@ export type {
   BindingOptions, BindingWorld, RealmBindings,
 } from './registration';
 export type { WebIDLRealmHost } from './javascript-realm';
+export type { GlobalObjectAllocation } from './binding';
