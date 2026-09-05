@@ -10,6 +10,10 @@ export default defineConfig(
       'dist/**',
       'packages/*/dist/**',
       'scratch/**',
+      'node-compat/experimental/**',
+      'node-compat/.cache/**',
+      'node-compat/addon/build/**',
+      'node-compat/results/**',
       'test/selectlet/scenarios/fixtures/**',
       'test/selectlet/perf/engines/**',
       'test/wpt/tests/**',
@@ -186,7 +190,7 @@ export default defineConfig(
   },
 
   {
-    files: ['scripts/**/*.{js,mjs}'],
+    files: ['scripts/**/*.{js,mjs}', 'node-compat/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -200,7 +204,7 @@ export default defineConfig(
   },
 
   {
-    files: ['test/artifact/**/*.cjs'],
+    files: ['test/artifact/**/*.cjs', 'node-compat/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

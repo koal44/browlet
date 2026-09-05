@@ -14,38 +14,119 @@ prototypes remain unavailable through the addon.
 
 ## Build and run on Windows x64
 
-Preparation verifies the official Node 24.19.0 headers and import library;
-it does not replace the installed Node executable. Building requires Visual
+Preparation verifies the official executable, headers and import library for
+the selected version. Building the addon requires Visual
 Studio's Desktop development with C++ workload. The build reuses an x64
 developer prompt, honors VSINSTALLDIR, or discovers the installed C++ tools
 with vswhere. VsDevCmd initializes the compiler and Windows SDK environment.
 
 ```powershell
-& node-compat/scripts/prepare-node.ps1
-& node-compat/scripts/build-addon.cmd
-node --expose-gc --test node-compat/test/capabilities.test.cjs
-npm.cmd run with-node -- --runtime addon test:unit
+# Prepare once; ordinary addon rebuilds reuse these files.
+& node-compat/scripts/prepare-node.ps1 -Version 24.19.0
+& node-compat/scripts/build-addon.cmd --base 24.19.0
 ```
 
-`addon` selects the stock executable through `BROWLET_STOCK_NODE` and supplies
-the absolute `BROWLET_NODE_ADDON` module path to Browlet. `stock` selects plain
-Node. `compat` remains an optional route to a separately built source-patched
-executable; that older binary is not part of this addon baseline. An addon build
-must match the chosen runtime's native ABI. Windows x64 builds are tested on
-Node 24.19.0 and 26.8.1; Node 24 remains the default. No dependency on experimental/
-is needed to build.
+Copy `.env.example` to `.env` and set the defaults there:
+
+```ini
+NODE_BASE=24.19.0
+NODE_RUNTIME=compat
+# Required only for the custom base:
+# CUSTOM_NODE_SOURCE=C:/path/to/node
+```
+
+| Setting | Choices | Meaning |
+| --- | --- | --- |
+| `NODE_BASE` | `custom`, `24.19.0`, `26.8.1` | Which Node executable and development files to use |
+| `NODE_RUNTIME` | `compat`, `stock` | Enable the addon, or run the selected base alone |
+| `CUSTOM_NODE_SOURCE` | Absolute source-directory path | The single location for the custom engine, headers and import library |
+
+Both the addon compiler and all test commands read these settings. The shell
+environment overrides `.env`; explicit launcher/compiler options take precedence.
+Without settings, the defaults are Node 24.19.0 and `compat`. An explicit addon
+build compiles for the selected base regardless of `NODE_RUNTIME`.
+
+Run tests normally; their internal launcher reports the actual Node version and
+paths, and puts that executable first on subprocess PATH.
+`compat` supplies the internal `BROWLET_NODE_ADDON` module path to Browlet;
+`stock` removes it. You do not configure a separate addon path. For the custom
+base, `stock` still runs your custom engine, just without this addon.
+Unit, artifact, WPT, oracle and performance test commands all use this selection.
+Browser engines remain independent of the Node process running Playwright.
+
+```powershell
+npm.cmd run test:unit
+npm.cmd run test:artifact
+npm.cmd run test:node-compat
+# Test-runner arguments are forwarded unchanged:
+npm.cmd run test:unit -- test/js-engine/unit/node-runtime.test.ts
+```
 
 The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
-headers. To target Node 26, pass its prepared header/import-library directory as
-the first argument to `build-addon.cmd` (containing `include/node` and
-`Release/node.lib`). This replaces `addon/build/node-compat.node`; rebuild against
-Node 24's headers before using Node 24 again. The two versions need separate
-binaries, but use the same source. Other Node releases have not been validated.
+headers. To prepare and target Node 26:
+
+```powershell
+& node-compat/scripts/prepare-node.ps1 -Version 26.8.1
+& node-compat/scripts/build-addon.cmd --base 26.8.1
+# One-off overrides without editing .env:
+node scripts/with-node.mjs --base 26.8.1 node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
+node scripts/with-node.mjs --base 26.8.1 --runtime stock vitest run --project=unit
+```
+
+Each base has its own output directory under `addon/build/`: `24.19.0/`,
+`26.8.1/`, or `custom/`. Each successful build writes `node-compat.node` and a
+`node.json` recording its target version, native module ABI, architecture and
+platform. The loader checks those against the running Node and reports how to
+rebuild on a mismatch. Switching bases does not overwrite another base's addon.
+Missing runtimes, development files or addons produce errors; there is no
+fallback to a different base. Windows x64 is the supported build target.
+Other official releases have not been validated. No dependency on experimental/
+is needed to build.
 
 The build generates addon/build/compile_commands.json with the actual compiler,
 headers, SDK paths and C++20 options. The repository's VS Code C/C++ settings
-use that database for each source file. Machine-specific paths stay in ignored build
-output. Rebuild after changing the installed compiler or header directory.
+use that database for each source file, following the most recent successful
+addon build. Machine-specific paths stay in ignored build output. Rebuild after
+changing the installed compiler or target headers.
+
+Preparation is separate from compilation. Rerun it when setting up a version
+or restoring removed development files. It verifies the pinned release hashes
+and extracts headers using a temporary archive, which it then deletes.
+
+## Node engine work
+
+Edit and build Node/V8 in the regular checkout named by `CUSTOM_NODE_SOURCE`.
+Do not create Node checkouts or engine builds under node-compat or .cache.
+The custom base uses `out/Release/node.exe`, `out/Release/node.lib`, and the
+headers in `src`, `deps/v8/include` and `deps/uv/include` directly from that
+checkout. Nothing is copied or linked into Browlet's cache.
+
+After building the Node engine there, build only the addon here:
+
+```powershell
+& node-compat/scripts/build-addon.cmd --base custom
+# With NODE_BASE=custom in .env:
+npm.cmd run test:node-compat
+npm.cmd run test:unit
+```
+
+The addon build checks that the executable and headers agree on Node version
+and native module ABI. Rebuild the addon whenever you rebuild the custom engine:
+two custom builds can report the same version while containing different V8
+changes. These checks do not establish that an engine binary matches the current
+Git checkout. Changing `NODE_BASE` never builds the Node engine automatically.
+
+Compile the experimental probe against the regular checkout and run it with
+that checkout's executable;
+see experimental/node-promise-hooks/engine-capture.md for the commands.
+
+The duplicate node-capture worktree and its old build have been removed. Its
+two V8 commits are preserved on v8-patches, rebased onto
+6f41e4156 as 5872d7a4a and 9c176d2fd. The 2026-09-05 rebuild includes the
+FinalizationRegistry capture continuation and passes the Promise and
+FinalizationRegistry acceptance suites. See
+experimental/node-promise-hooks/finalization-registry.md for the results and
+the remaining cross-security-token script-metadata limitation.
 
 ## Scope
 
@@ -62,6 +143,14 @@ displayErrors: false. Timeouts, code-generation controls, dynamic-import
 callbacks, vm.Script interoperability and automatic afterEvaluate checkpoints
 are not implemented. Unsupported options are rejected. Existing HTML
 WindowProxy/origin accommodations and Promise host-hook gaps remain.
+
+The standalone suite retains two cases from the retired Node proxy-reuse
+experiments: collecting the old realm while the replacement remains live
+passes; indirect eval selecting its realm's dynamic-import callback is an
+ordinary failing test. It currently fails because createContextHandle rejects
+importModuleDynamically, before callback routing can be tested. Keep that
+acceptance case for future module-loading integration; it does not require
+implementing the entire vm API.
 
 The addon does not replace V8's isolate Promise hook or overwrite CPED. Node's
 context registration preserves its Promise hooks; tests cover hooks installed
@@ -115,14 +204,32 @@ adds JS/native calls and has not been benchmarked.
 - test/: standalone behavior and GC regressions plus a quick startup check.
 - scripts/: verified header preparation and addon compilation.
 - experimental/: an ignored, independent Git repository for investigation.
-- .cache/: downloaded headers and node.lib, extracted build inputs, and local
-  test output. It can be recreated with prepare-node.ps1.
+- .cache/node-v24.19.0/: Node 24 headers, Release/node.lib and node.exe.
+- .cache/node-v26.8.1/: Node 26 headers, Release/node.lib and node.exe.
+  These are replaceable dependencies prepared by scripts/prepare-node.ps1,
+  not Node source checkouts. Download archives and duplicate libraries are
+  discarded after preparation.
+- results/: ignored logs and JSON reports, grouped under addon/,
+  node-promise-hooks/, supported-global/ and node-version-check/. The last two
+  retain evidence from retired source copies; their useful implementation
+  changes are already in the maintained addon. These are disposable run outputs,
+  not build inputs. Keep raw failure logs while investigating an unresolved bug;
+  the maintained tests and experimental notes hold the lasting findings.
 
 The original Promise investigation is now experimental/node-promise-hooks/.
-Its imported Git baseline is b1bcdfb. The original four Node commits remain on
-the Node checkout's browlet-compatible-node branch at 1ce916938. They comprise
-three features and a lifetime fix. The unused patch exports and their temporary
+Its imported Git baseline is b1bcdfb. The older accumulated Node work is retained
+on browlet-node-compat-history, rebased onto origin/main at 6f41e4156. Its first
+four commits end at fa65b0f98 (equivalent to the original 1ce916938): three
+features and a lifetime fix. The following three commits preserve the earlier
+Promise callback-state and native-function experiments. All seven patches were
+verified unchanged by git range-diff after the rebase.
+The unused patch exports and their temporary
 verification checkout have been removed; this build consumes neither.
+
+The previously shared proxy-reuse branch is preserved as annotated tag
+archive/vm-global-proxy-reuse at 4e82339b8 in the Node repository (the closed
+PR #65477 tip). The useful GC and dynamic-import cases from the retired
+experiments now live in test/capabilities.test.cjs above.
 
 | Original Node commit | Addon status |
 | --- | --- |

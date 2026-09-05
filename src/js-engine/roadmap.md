@@ -135,11 +135,13 @@ author's `.then()`, `async`/`await`, or thenable assimilation.
 
 ### Promise-job incumbent experiment
 
-The Node/V8 branch `browlet-promise-incumbent-experiment-2026-09-03` contains a
-deliberately broad diagnostic patch, not a proposed API. It records Promise
-reaction registration and enqueue state inside V8 and exposes the result to a
-Node Promise observer. A test-only C++ harness supplies distinct V8 security
-tokens, native function entry, native `Promise::Then`, and
+The historical Node/V8 checkpoint `7c6ed5a4c` was a deliberately broad
+diagnostic patch, not a proposed API. Its findings, migrated tests and context
+identity API sketch now live in the independent experimental repository's
+[`signal-matrix.md`](../../node-compat/experimental/node-promise-hooks/signal-matrix.md).
+The old patch recorded Promise reaction registration and enqueue state inside
+V8 and exposed the result to a Node Promise observer. A test-only C++ harness
+supplied distinct V8 security tokens, native function entry, native `Promise::Then`, and
 `v8::Context::BackupIncumbentScope` without adding those controls to `node:vm`.
 
 The experiment rejected several tempting realm signals:
@@ -151,40 +153,41 @@ The experiment rejected several tempting realm signals:
 - a fixed physical-frame depth fails when borrowed builtins add frames;
 - default stack/referrer inspection hides a correct author frame when V8
   security tokens differ; and
-- continuation-preserved embedder data collides with AsyncLocalStorage and is
-  therefore not a valid transport for HTML callback state.
+- replacing Node's continuation-preserved embedder data with a diagnostic
+  object breaks AsyncLocalStorage. This rejects the overwrite, not CPED itself.
 
-One candidate survived the complete matrix: select the first physical frame
+The historical reports favored one candidate: select the first physical frame
 whose script is subject to debugging, compare that frame's stack address with
 the newest `BackupIncumbentScope`, choose whichever entry is newer, then fall
 back to the entered-or-microtask context. The equivalent implementation using
 `DebuggableStackFrameIterator` produced the expected incumbent in ordinary,
 borrowed-builtin, bound/proxy, cross-realm, native-entry, distinct-security-token,
 nested, and backup-ordering cases. It also survived forced optimization of a
-cross-realm registrar and helper. Thirty-two candidate results were identical
+cross-realm registrar and helper. Thirty-two candidate results were reported identical
 with and without Node's async-context-frame implementation.
 
-This proves that V8 retains enough information at reaction registration; it
-does not complete the three HTML hooks. The current diagnostic still has four
+This established that V8 retained enough information at the tested registration points; it
+does not complete the three HTML hooks. The retired diagnostic had four
 non-production properties:
 
-1. It uses V8-internal frame iteration rather than a reviewed embedder API.
-2. It stores diagnostic state in continuation-preserved embedder data, which
-   intentionally breaks AsyncLocalStorage in the experiment.
-3. It observes job creation and enqueue rather than allowing HTML to supply
+1. It used V8-internal frame iteration rather than a reviewed embedder API.
+2. It stored diagnostic state in continuation-preserved embedder data, which
+   intentionally broke AsyncLocalStorage in the experiment.
+3. It observed job creation and enqueue rather than allowing HTML to supply
    `HostMakeJobCallback`, `HostCallJobCallback`, and `HostEnqueuePromiseJob`.
-4. Its broad capture routine assumes a current V8 context and is not safe as a
+4. Its broad capture routine assumed a current V8 context and was not safe as a
    general C++ entry point.
 
-The next reduction was therefore two separate questions: first, define the
-smallest V8 operation which returns the author/backup incumbent context at this
-point; second, give Promise reactions and jobs dedicated host data and a real
-host invocation boundary without reusing async-context transport. Preserve the
-diagnostic branch until both reduced contracts can be tested against the same
-matrix.
+The current capture experiment uses that author/backup selection rule and
+retains per-registration CPED while preserving Node's application ALS state.
+The migrated matrix asserts native-entry results and retains a failing
+cross-token script-identity expectation; its engine-hook runs await the planned
+rebuild. Callback-only preparation/cleanup and the full native cross-token
+matrix remain separate work.
 
-The follow-up Node/V8 branch `browlet-promise-job-host-hooks` is the first
-reduced implementation. It stores dedicated callback data on Promise reactions
+The earlier Node/V8 checkpoint `8e1ea288a` (formerly `fcdfa2108`), retained in
+`browlet-node-compat-history`, is the first reduced
+implementation. It stores dedicated callback data on Promise reactions
 and jobs instead of borrowing continuation-preserved embedder data, restores a
 `BackupIncumbentScope` around the actual handler call, and restores the captured
 active-script host-defined options when no newer author script is running. The

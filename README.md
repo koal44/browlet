@@ -22,33 +22,43 @@ npm run test:unit
 
 ### Node runtime selection
 
-Use plain stock Node or build the [compatibility addon](node-compat/README.md)
-to add shared microtask queues and reusable contexts to stock Node. Copy
-`.env.example` to `.env` and select `stock` or `addon` as the default runtime.
-A command-line
-`--runtime` selection overrides the shell environment, which overrides `.env`;
-the default is stock Node. Local runtime paths and generated binaries are
-not committed.
+The [compatibility addon](node-compat/README.md) adds shared microtask queues
+and reusable contexts to a selected Node base. Copy `.env.example` to `.env`:
+
+- `NODE_BASE`: `custom`, `24.19.0`, or `26.8.1` (default: `24.19.0`).
+- `NODE_RUNTIME`: `compat` enables the addon; `stock` runs the base alone
+  (default: `compat`).
+- `CUSTOM_NODE_SOURCE`: absolute path to the regular Node source checkout,
+  required for the custom base.
+
+Addon builds and all test commands use these settings. The shell environment
+overrides `.env`. Each base has its own addon binary. Local settings, downloaded
+dependencies and generated binaries are not committed.
 
 ```powershell
-npm.cmd run with-node -- test:quick
-npm.cmd run with-node -- --runtime stock test:quick
-npm.cmd run with-node -- --runtime addon test:unit
+npm.cmd run test:unit
+npm.cmd run test:artifact
+npm.cmd run test:node-compat
+npm.cmd run test:quick
 ```
 
-The addon profile checks its queues and context handles before running the
-requested script. Prototype immutability remains unimplemented and appears as
-a failing compatibility test.
+The internal `scripts/with-node.mjs` launcher reads the selection, reports the
+actual executable and addon, and forwards test arguments and exit status.
+It accepts `node`, `vitest`, and `playwright`; package scripts call it directly
+to avoid another shell-parsing step through a nested package-script alias.
+The compat runtime checks its queues and context handles before running the
+tests. Prototype immutability remains unimplemented and appears as
+a failing compatibility test on the ordinary browser bootstrap path; the
+separate native-global allocation prototype is covered by focused tests.
 
-The older `compat` mode is retained for a separately built source-patched Node.
-It requires `BROWLET_COMPAT_NODE` to name that executable and checks all three
-capabilities, including immutable prototypes. No source-patched executable is
-supplied or rebuilt by the addon workflow.
+Build the custom Node engine in its regular checkout, then compile the addon
+against that checkout's headers and import library. The addon workflow does
+not build the Node engine. See the compatibility README for preparation and
+build commands.
 
 Neither backend treats Node's shared VM principal as browser origin policy.
-Root composite scripts remain on the selected executable because
-orchestration uses `node --run`. The vendor setup script remains a
-package-manager boundary and may invoke npm's stock Node.
+Composite test commands call the same runtime-selecting test scripts. Browser
+oracles use the selected Node for Playwright; the browser engines are independent.
 
 ## License
 

@@ -67,8 +67,8 @@ test('checkpoints work inside host microtasks and do not reenter themselves', as
   assert.deepEqual(trace, ['first', 'after nested checkpoint', 'second']);
 });
 
-test('detached proxy is reused once with fresh globals and intrinsics', () => {
-  // Derived from ad6ce57a1 and scripts/check-compatible-node.mjs.
+test('successive contexts reuse the proxy with fresh globals and intrinsics', () => {
+  // Derived from Node commit ad6ce57a1's global-proxy reuse regression.
   const first = compat.createContextHandle();
   const proxy = first.globalProxy;
   const firstObject = compat.runInContext('Object', first);
@@ -94,6 +94,55 @@ test('detached proxy is reused once with fresh globals and intrinsics', () => {
   assert.equal(compat.isContext(proxy), false);
   // Addon contexts are deliberately not passed off as Node Contextify objects.
   assert.equal(vm.isContext(second), false);
+
+  // Retain the successive-reuse case from Node recovery checkpoint f0e5b199f.
+  assert.equal(second.detachGlobal(), proxy);
+  const third = compat.createContextHandle({ reuseGlobalProxyFrom: second });
+  assert.equal(third.globalProxy, proxy);
+  assert.equal(compat.runInContext('globalThis', third), proxy);
+});
+
+test('a live reused proxy does not retain the previous realm', async () => {
+  // Adapted from 07301f053's GC regression; keep the replacement alive.
+  function replace() {
+    const first = compat.createContextHandle();
+    const oldHandle = new WeakRef(first);
+    const oldIntrinsic = new WeakRef(compat.runInContext('Object', first));
+    first.detachGlobal();
+    const second = compat.createContextHandle({ reuseGlobalProxyFrom: first });
+    assert.equal(second.globalProxy, first.globalProxy);
+    return { second, oldHandle, oldIntrinsic };
+  }
+  const { second, oldHandle, oldIntrinsic } = replace();
+  for (let i = 0; i < 6; i++) { await nextTurn(); global.gc(); }
+  assert.equal(oldHandle.deref(), undefined, 'previous context handle is collectible');
+  assert.equal(oldIntrinsic.deref(), undefined, 'previous realm intrinsic is collectible');
+  assert.equal(compat.runInContext('globalThis', second), second.globalProxy);
+});
+
+test('indirect eval uses the replacement realm dynamic-import callback', async () => {
+  // Adapted from 07301f053's import regression. The promise invokes realm-owned
+  // eval, which creates the importing script in that realm.
+  const calls = [];
+  const first = compat.createContextHandle({
+    importModuleDynamically() {
+      calls.push('realm 1');
+      throw new Error('realm 1');
+    },
+  });
+  const source = `Promise.resolve("import('specifier')").then(eval)`;
+  await assert.rejects(compat.runInContext(source, first), /realm 1/);
+  first.detachGlobal();
+  const second = compat.createContextHandle({
+    reuseGlobalProxyFrom: first,
+    importModuleDynamically() {
+      calls.push('realm 2');
+      throw new Error('realm 2');
+    },
+  });
+  assert.equal(second.globalProxy, first.globalProxy);
+  await assert.rejects(compat.runInContext(source, second), /realm 2/);
+  assert.deepEqual(calls, ['realm 1', 'realm 2']);
 });
 
 test('realm-owned errors carry evaluation filename and line offset', () => {

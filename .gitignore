@@ -7,6 +7,7 @@ dist/
 /node-compat/experimental/
 /node-compat/addon/build/
 /node-compat/.cache/
+/node-compat/results/
 
 /vendor/jsdom/
 /vendor/*/
