@@ -6,13 +6,50 @@ const vm = require('node:vm');
 exports.createMicrotaskQueue = native.createMicrotaskQueue;
 exports.createContextHandle = function createContextHandle(options = {}) {
   for (const key of Object.keys(options)) {
-    if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom') {
+    if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain') {
       throw new TypeError(`Unsupported node-compat context option: ${key}`);
     }
   }
-  const { microtaskQueue, reuseGlobalProxyFrom } = options;
-  return native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom);
+  const { microtaskQueue, reuseGlobalProxyFrom, globalPrototypeChain } = options;
+  const layout = globalPrototypeChain?.map(kind => {
+    const index = ['mutable', 'immutable', 'delegated'].indexOf(kind);
+    if (index === -1) throw new TypeError(`Unknown prototype kind: ${kind}`);
+    return index;
+  });
+  return native.createContextHandle(microtaskQueue, reuseGlobalProxyFrom, layout);
 };
+exports.setPropertyDelegate = function setPropertyDelegate(object, delegate) {
+  native.setPropertyDelegate(object, propertyHandlers(delegate));
+};
+exports.setGlobalObject = function setGlobalObject(handle, object) {
+  if (!native.isContext(handle) || handle.globalObject !== object) {
+    throw new TypeError('Expected the context\'s allocated global object');
+  }
+  native.setPropertyDelegate(handle.globalProxy, propertyHandlers(object));
+};
+function propertyHandlers(delegate) {
+  return {
+    has: key => Reflect.has(delegate, key),
+    // Native global callbacks omit the receiver to use the per-context target.
+    get: (key, receiver = delegate) => Reflect.get(delegate, key, receiver),
+    set: (key, value, receiver = delegate) => Reflect.set(delegate, key, value, receiver),
+    descriptor: key => Reflect.getOwnPropertyDescriptor(delegate, key),
+    query: key => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(delegate, key);
+      if (descriptor === undefined) return undefined;
+      return (descriptor.writable === false ? 1 : 0) |
+        (descriptor.enumerable ? 0 : 2) | (descriptor.configurable ? 0 : 4);
+    },
+    define: (key, descriptor) => Reflect.defineProperty(delegate, key, descriptor),
+    delete: key => Reflect.deleteProperty(delegate, key),
+    keys: () => Reflect.ownKeys(delegate).filter(key => !isIndex(key)),
+    indices: () => Reflect.ownKeys(delegate).filter(isIndex).map(Number),
+  };
+}
+function isIndex(key) {
+  return typeof key === 'string' && String(Number(key) >>> 0) === key &&
+    key !== '4294967295';
+}
 exports.runInContext = function runInContext(source, handle, options = {}) {
   for (const key of Object.keys(options)) {
     if (key !== 'filename' && key !== 'lineOffset' && key !== 'displayErrors') {

@@ -9,13 +9,13 @@ const headers = process.argv[2] === undefined
   ? fileURLToPath(new URL('../.cache/node-v24.19.0/', import.meta.url))
   : resolve(process.argv[2]);
 const build = resolve(addon, 'build');
-const sources = ['addon.cc', 'vm.cc'].map(name => resolve(addon, name));
+const sources = ['addon.cc', 'vm.cc', 'property-delegate.cc'].map(name => resolve(addon, name));
 const lookup = spawnSync('where.exe', ['cl.exe'], { encoding: 'utf8' });
 if (lookup.error) throw lookup.error;
 if (lookup.status !== 0) throw new Error('Run build-addon.cmd to initialize the C++ tools.');
 const compiler = lookup.stdout.trim().split(/\r?\n/u)[0];
 
-// Include the developer prompt's SDK paths explicitly so the editor can use
+// Include the developer prompt's SDK paths so the editor can use
 // the same compilation database from an ordinary shell.
 const includes = [
   resolve(headers, 'include/node'),

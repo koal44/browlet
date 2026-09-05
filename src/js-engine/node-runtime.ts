@@ -2,6 +2,7 @@ import * as vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
 import type { Context } from 'node:vm';
+import type { NodeGlobalPrototypeKind } from './node-realm';
 
 import type {
   JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
@@ -83,6 +84,7 @@ class NodeRuntime implements JavaScriptRuntime {
   createContext(
     microtaskQueue: JavaScriptMicrotaskQueue,
     reuseGlobalProxyFrom?: NodeContext,
+    globalPrototypeChain?: readonly NodeGlobalPrototypeKind[],
   ): NodeContext {
     const handle = nodeMicrotaskQueueHandles.get(microtaskQueue);
     const options = handle === undefined
@@ -93,7 +95,7 @@ class NodeRuntime implements JavaScriptRuntime {
       const context: unknown = Reflect.apply(
         nodeContextSupport.createContextHandle,
         nodeApi,
-        [{ ...options, reuseGlobalProxyFrom }],
+        [{ ...options, reuseGlobalProxyFrom, globalPrototypeChain }],
       );
       if (!isNodeContextHandle(context)) {
         throw new Error('Node backend createContextHandle returned an invalid handle');
@@ -101,6 +103,9 @@ class NodeRuntime implements JavaScriptRuntime {
       return context;
     }
 
+    if (globalPrototypeChain !== undefined) {
+      throw new Error('Node does not support preallocated global prototypes');
+    }
     if (reuseGlobalProxyFrom !== undefined) {
       throw new Error('Node does not support reusable global proxies');
     }
@@ -114,6 +119,26 @@ class NodeRuntime implements JavaScriptRuntime {
     return isNodeContextHandle(context)
       ? context.globalProxy
       : context;
+  }
+
+  getContextPrototypeChain(context: NodeContext): readonly object[] | undefined {
+    return isNodeContextHandle(context) ? context.prototypeChain : undefined;
+  }
+
+  getAllocatedGlobalObject(context: NodeContext): object | undefined {
+    return isNodeContextHandle(context) ? context.globalObject : undefined;
+  }
+
+  setPropertyDelegate(object: object, delegate: object): void {
+    const set = getNodeMethod('setPropertyDelegate');
+    if (!set) throw new Error('Node does not support delegated prototypes');
+    Reflect.apply(set, nodeApi, [object, delegate]);
+  }
+
+  setGlobalObject(context: NodeContext, object: object): void {
+    const set = getNodeMethod('setGlobalObject');
+    if (!set) throw new Error('Node does not support allocated global objects');
+    Reflect.apply(set, nodeApi, [context, object]);
   }
 
   detachContext(context: NodeContext): object {
@@ -180,6 +205,8 @@ type NodeMicrotaskQueueFactory = () => unknown;
 
 type NodeContextHandle = {
   readonly globalProxy: object;
+  readonly globalObject?: object;
+  readonly prototypeChain?: readonly object[];
   detachGlobal(): object;
 };
 

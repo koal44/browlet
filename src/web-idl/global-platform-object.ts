@@ -40,6 +40,7 @@ export class GlobalPlatformObjectBinding {
     interface_: AssembledInterface,
     prototype: object,
     getGlobalObject: () => object | undefined,
+    allocation?: { object: object; setDelegate(delegate: object): void; },
   ): object {
     const properties = this.#getNamedProperties(interface_);
     if (!properties) {
@@ -95,8 +96,15 @@ export class GlobalPlatformObjectBinding {
       setPrototypeOf: (target_, value) =>
         this.#setPrototypeOf(target_, value),
     });
-    namedPropertiesObjects.add(object);
-    return object;
+    if (allocation) {
+      if (Reflect.getPrototypeOf(allocation.object) !== prototype) {
+        throw new Error('Allocated named-properties object has the wrong parent');
+      }
+      allocation.setDelegate(object);
+    }
+    const platformObject = allocation?.object ?? object;
+    namedPropertiesObjects.add(platformObject);
+    return platformObject;
   }
 
   createPrototypeObject(prototype: object): object {

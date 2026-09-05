@@ -13,6 +13,7 @@ import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
 import {
   createWindowProxy, getWindowProxyWindow,
+  type WindowProxy,
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
 import {
@@ -36,7 +37,7 @@ import {
  * documents. HTML section 7.3.2 supplies its remaining state and lifecycle.
  */
 export class BrowsingContext {
-  readonly windowProxy = createWindowProxy();
+  readonly windowProxy: WindowProxy;
   readonly popupSandboxingFlagSet: SandboxingFlagSet = new Set();
   openerBrowsingContext: BrowsingContext | null = null;
   openerOriginAtCreation: Origin | null = null;
@@ -52,6 +53,10 @@ export class BrowsingContext {
    * relationship without maintaining a second per-Document activity index.
    */
   #navigable: Navigable | null = null;
+
+  constructor(windowProxy: WindowProxy = createWindowProxy()) {
+    this.windowProxy = windowProxy;
+  }
 
   get group(): BrowsingContextGroup | null {
     return this.#group;

@@ -58,6 +58,7 @@ export class RealmBinding {
   readonly #initialObjects = new WeakMap<object, DefinitionInitialObjects>();
   readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformObjectRecord | undefined;
+  #globalAllocation: GlobalObjectAllocation | undefined;
   readonly #iterables: SynchronousIterableBinding;
   readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
   readonly #observableArrays: ObservableArrayBinding;
@@ -467,9 +468,13 @@ export class RealmBinding {
         : assembled.definition.name === 'DOMException'
           ? this.realm.intrinsics.errorPrototype
           : this.realm.intrinsics.objectPrototype;
-    const prototype = this.#hasImmutableGlobalPrototype(assembled)
+    const allocated = this.#globalAllocation?.prototypes.get(assembled.definition.name);
+    const prototype = allocated ?? (this.#hasImmutableGlobalPrototype(assembled)
       ? this.#globalPlatformObjects.createPrototypeObject(parentPrototype)
-      : this.realm.createOrdinaryObject(parentPrototype);
+      : this.realm.createOrdinaryObject(parentPrototype));
+    if (Reflect.getPrototypeOf(prototype) !== parentPrototype) {
+      throw new Error(`Allocated ${assembled.definition.name} prototype has the wrong parent`);
+    }
     initial.interfacePrototypeObject = prototype;
 
     this.#defineUnscopables(prototype, assembled);
@@ -646,6 +651,7 @@ export class RealmBinding {
   projectGlobalObject(
     implementation: object,
     primaryInterface: string | AssembledInterface,
+    allocation?: GlobalObjectAllocation,
   ): PlatformObjectRecord {
     const interface_ = this.#resolveInterface(primaryInterface);
     if (!isGlobalInterface(interface_)) {
@@ -663,13 +669,26 @@ export class RealmBinding {
       throw new Error('Global interfaces cannot use indexed properties');
     }
     this.#assertOrdinaryProjection(interface_);
-
+    this.#globalAllocation = allocation;
+    if (allocation) {
+      for (const name of allocation.prototypes.keys()) {
+        const definition = this.#resolveInterface(name).definition;
+        if (this.#getInitialObjects(definition).interfacePrototypeObject) {
+          throw new Error(`Prototype ${name} was already created before global allocation`);
+        }
+      }
+    }
     const prototype = this.getInterfacePrototypeObject(interface_);
-    if (!Reflect.setPrototypeOf(implementation, prototype)) {
+    if (allocation) {
+      if (Reflect.getPrototypeOf(allocation.object) !== prototype) {
+        throw new Error('Allocated global object has the wrong prototype');
+      }
+    } else if (!Reflect.setPrototypeOf(implementation, prototype)) {
       throw new Error('Could not set the global object prototype');
     }
     this.#runImplementationInitializationSteps(implementation, interface_);
-    const object = this.#globalPlatformObjects.createObject(implementation);
+    const object = allocation?.object ??
+      this.#globalPlatformObjects.createObject(implementation);
     const record = this.associatePlatformObject(
       object,
       interface_,
@@ -1481,6 +1500,7 @@ export class RealmBinding {
       interface_,
       parent,
       () => this.#globalObject?.platformObject,
+      this.#globalAllocation?.namedProperties,
     );
     initial.namedPropertiesObject = object;
     return object;
@@ -1738,6 +1758,16 @@ type JavaScriptFunction = ReturnType<WebIDLRealmHost['createFunction']>;
 type InterfaceObject = JavaScriptFunction & { prototype: object; };
 type MemberDefinition = AssembledInterface | AssembledNamespace;
 type MemberEntry = AssembledInterfaceMember | AssembledNamespaceMember;
+/** Supply before projecting any object that needs these interface prototypes. */
+export type GlobalObjectAllocation = {
+  readonly object: object;
+  readonly prototypes: ReadonlyMap<string, object>;
+  readonly namedProperties?: {
+    readonly object: object;
+    setDelegate(delegate: object): void;
+  };
+};
+
 type MemberPlacement = 'regular' | 'static' | 'unforgeable';
 type DefinitionInitialObjects = {
   asyncIteratorPrototype?: object;

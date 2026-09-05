@@ -11,6 +11,8 @@ import type {
  * policy by subclassing this one runtime identity rather than wrapping it.
  */
 export class NodeRealm implements JavaScriptRealm {
+  readonly globalPrototypeChain: readonly object[] | undefined;
+  readonly allocatedGlobalObject: object | undefined;
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime = nodeRuntime;
   readonly #callableFunctionFactory: RealmFunctionFactory;
@@ -33,7 +35,13 @@ export class NodeRealm implements JavaScriptRealm {
     this.#context = nodeRuntime.createContext(
       microtaskQueue,
       reuseGlobalProxyFrom,
+      options.globalPrototypeChain,
     );
+    this.globalPrototypeChain = nodeRuntime.getContextPrototypeChain(this.#context);
+    this.allocatedGlobalObject = nodeRuntime.getAllocatedGlobalObject(this.#context);
+    if (options.globalPrototypeChain && !this.globalPrototypeChain) {
+      throw new Error('The Node backend did not allocate the requested global prototypes');
+    }
     this.#hostGlobal = nodeRuntime.getContextGlobal(
       this.#context,
     ) as RealmGlobal;
@@ -246,6 +254,10 @@ export class NodeRealm implements JavaScriptRealm {
     return nodeRuntime.detachContext(this.#context);
   }
 
+  setPropertyDelegate(object: object, delegate: object): void {
+    nodeRuntime.setPropertyDelegate(object, delegate);
+  }
+
   createFunction(
     steps: RealmFunctionSteps,
     options: RealmFunctionOptions,
@@ -305,13 +317,28 @@ export class NodeRealm implements JavaScriptRealm {
     this.#globalThis = globalThis;
     this.#installDefaultGlobalBindings();
 
-    /*
-     * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing host
-     * object the VM context's actual global-this. Inherit through the supplied
-     * global-this so free global names still reach the modeled global graph;
-     * top-level `this` remains a documented limitation.
-     */
-    Reflect.setPrototypeOf(this.#hostGlobal, globalThis);
+    if (this.globalPrototypeChain !== undefined) {
+      if (globalObject !== this.allocatedGlobalObject || globalThis !== this.#hostGlobal) {
+        throw new Error('Native global initialization requires its allocated object and proxy');
+      }
+      // Intrinsics have been copied to the per-realm target. Remove configurable
+      // backing properties before installing delegation so deletion/ownKeys do
+      // not reveal an obsolete second copy on V8's hidden global object.
+      for (const key of Reflect.ownKeys(this.#hostGlobal)) {
+        if (Reflect.getOwnPropertyDescriptor(this.#hostGlobal, key)?.configurable) {
+          Reflect.deleteProperty(this.#hostGlobal, key);
+        }
+      }
+      nodeRuntime.setGlobalObject(this.#context, globalObject);
+    } else {
+      /*
+       * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing host
+       * object the VM context's actual global-this. Inherit through the supplied
+       * global-this so free global names still reach the modeled global graph;
+       * top-level `this` remains a documented limitation.
+       */
+      Reflect.setPrototypeOf(this.#hostGlobal, globalThis);
+    }
     Object.defineProperty(this.#hostGlobal, 'globalThis', {
       configurable: true,
       value: globalThis,
@@ -322,6 +349,7 @@ export class NodeRealm implements JavaScriptRealm {
   }
 
   protected makeHostGlobalPrototypeImmutable(): void {
+    if (this.globalPrototypeChain !== undefined) return;
     nodeRuntime.makePrototypeImmutable(this.#hostGlobal);
   }
 
@@ -355,7 +383,10 @@ type RealmGlobal = Record<PropertyKey, unknown>;
 
 export type NodeRealmOptions = {
   reuseGlobalProxyFrom?: NodeRealm;
+  globalPrototypeChain?: readonly NodeGlobalPrototypeKind[];
 };
+
+export type NodeGlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';
 
 type RealmFunctionFactory = (
   steps: RealmFunctionSteps,

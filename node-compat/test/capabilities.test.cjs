@@ -122,6 +122,40 @@ test('native handles reject forged receivers and unsupported VM options', () => 
     /Unsupported.*timeout/);
 });
 
+test('reusing a global rejects a different allocation layout without consuming the handle', () => {
+  assert.throws(() => compat.createContextHandle({ globalPrototypeChain: [] }),
+    /must not be empty/);
+  assert.throws(() => compat.createContextHandle({ globalPrototypeChain: ['unknown'] }),
+    /Unknown prototype kind/);
+  const first = compat.createContextHandle({ globalPrototypeChain: ['immutable'] });
+  const proxy = first.detachGlobal();
+  assert.throws(() => compat.createContextHandle({ reuseGlobalProxyFrom: first }),
+    /same global prototype layout/);
+  const second = compat.createContextHandle({
+    reuseGlobalProxyFrom: first, globalPrototypeChain: ['immutable'],
+  });
+  assert.equal(second.globalProxy, proxy);
+  assert.throws(() => compat.setGlobalObject(second, {}), /allocated global object/);
+  assert.throws(() => compat.setPropertyDelegate({}, {}), /no property delegation support/);
+});
+
+test('allocated globals and their property delegates do not retain dead contexts', async () => {
+  function allocate() {
+    const queue = compat.createMicrotaskQueue();
+    const handle = compat.createContextHandle({
+      microtaskQueue: queue, globalPrototypeChain: ['immutable', 'delegated'],
+    });
+    Object.defineProperties(handle.globalObject, Object.getOwnPropertyDescriptors(handle.globalProxy));
+    compat.setPropertyDelegate(handle.prototypeChain[1], {});
+    compat.setGlobalObject(handle, handle.globalObject);
+    return [handle, handle.globalObject, handle.prototypeChain[0], queue]
+      .map(object => new WeakRef(object));
+  }
+  const references = allocate();
+  for (let i = 0; i < 6; i++) { await nextTurn(); global.gc(); }
+  assert.equal(references.every(reference => reference.deref() === undefined), true);
+});
+
 test('Promise hooks enabled after context creation still observe its jobs', () => {
   const { promiseHooks } = require('node:v8');
   const queue = compat.createMicrotaskQueue();
