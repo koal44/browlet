@@ -1,56 +1,47 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import {
-  delimiter, dirname, isAbsolute, resolve,
+  delimiter, dirname, resolve,
 } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import nodeBase from '../node-compat/node-base.cjs';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const { root, parseOptions, resolveBase, inspectNode } = nodeBase;
 const envFile = resolve(root, '.env');
+const require = createRequire(import.meta.url);
 
 try {
   if (existsSync(envFile)) process.loadEnvFile(envFile);
 
   const command = parseCommandLine(process.argv.slice(2));
-  const nodePath = selectNodePath(command.runtime);
+  const target = resolveBase(command.base);
+  const node = inspectNode(target);
+  const nodePath = target.executable;
   const environment = withSelectedNode(process.env, nodePath);
-  environment.BROWLET_NODE_RUNTIME = command.runtime;
-  if (command.runtime === 'addon') {
+  environment.NODE_BASE = command.base;
+  environment.NODE_RUNTIME = command.runtime;
+  if (command.runtime === 'compat') {
     environment.BROWLET_NODE_ADDON = resolve(root, 'node-compat/addon/index.cjs');
   } else {
     delete environment.BROWLET_NODE_ADDON;
   }
 
   console.log(
-    `[browlet] Node runtime: ${command.runtime} (${nodePath})`,
+    `[browlet] Node base: ${command.base}, Node ${node.version}, runtime: ${command.runtime}\n` +
+    `  executable: ${nodePath}` +
+    (command.runtime === 'compat' ? `\n  addon: ${resolve(target.build, 'node-compat.node')}` : ''),
   );
 
   if (command.runtime === 'compat') {
-    const probe = spawnSync(
-      nodePath,
-      [resolve(root, 'scripts/check-compatible-node.mjs')],
-      { cwd: root, env: environment, stdio: 'inherit' },
-    );
-    exitFor(probe, 'compatible Node capability check');
-  }
-  if (command.runtime === 'addon') {
     const probe = spawnSync(nodePath, [
       resolve(root, 'node-compat/test/check-addon.cjs'),
     ], { cwd: root, env: environment, stdio: 'inherit' });
     exitFor(probe, 'Node addon capability check');
   }
 
-  const run = spawnSync(
-    nodePath,
-    [
-      `--run=${command.script}`,
-      ...(command.arguments.length === 0
-        ? []
-        : ['--', ...command.arguments]),
-    ],
-    { cwd: root, env: environment, stdio: 'inherit' },
-  );
-  exitFor(run, command.script);
+  const run = spawnSync(nodePath, command.args,
+    { cwd: root, env: environment, stdio: 'inherit' });
+  exitFor(run, 'Node command');
 } catch (error) {
   console.error(
     `[browlet] ${error instanceof Error ? error.message : String(error)}`,
@@ -59,44 +50,20 @@ try {
 }
 
 function parseCommandLine(arguments_) {
-  const args = [...arguments_];
-  let runtime = process.env.BROWLET_NODE_RUNTIME ?? 'stock';
-
-  if (args[0] === '--runtime') {
-    runtime = args[1];
-    args.splice(0, 2);
-  }
-  if (runtime !== 'stock' && runtime !== 'compat' && runtime !== 'addon') {
-    throw new Error('Node runtime must be "stock", "compat" or "addon"');
-  }
-
-  const script = args.shift();
-  if (!script) {
+  const { base, runtime, args } = parseOptions(arguments_);
+  const program = args.shift();
+  if (!['node', 'vitest', 'playwright'].includes(program)) {
     throw new Error(
-      'usage: npm.cmd run with-node -- [--runtime stock|compat|addon] <script> [-- <arguments>]',
+      'usage: node scripts/with-node.mjs [--base custom|24.19.0|26.8.1] [--runtime compat|stock] <node|vitest|playwright> [arguments]',
     );
   }
-  if (args[0] === '--') args.shift();
-  return { arguments: args, runtime, script };
-}
-
-function selectNodePath(runtime) {
-  const variable = runtime === 'compat'
-    ? 'BROWLET_COMPAT_NODE'
-    : 'BROWLET_STOCK_NODE';
-  const configured = process.env[variable];
-  const nodePath = configured ?? (runtime === 'compat' ? '' : process.execPath);
-
-  if (!nodePath) {
-    throw new Error(`${variable} must name the ${runtime} Node executable`);
+  if (program !== 'node') {
+    const packageName = program === 'playwright' ? '@playwright/test' : program;
+    const packageFile = require.resolve(`${packageName}/package.json`);
+    const { bin } = require(packageFile);
+    args.unshift(resolve(dirname(packageFile), bin[program]));
   }
-  if (!isAbsolute(nodePath)) {
-    throw new Error(`${variable} must be an absolute path: ${nodePath}`);
-  }
-  if (!existsSync(nodePath) || !statSync(nodePath).isFile()) {
-    throw new Error(`${variable} is not a file: ${nodePath}`);
-  }
-  return resolve(nodePath);
+  return { base, runtime, args };
 }
 
 function withSelectedNode(source, nodePath) {

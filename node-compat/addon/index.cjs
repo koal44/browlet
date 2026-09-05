@@ -1,6 +1,20 @@
 'use strict';
 
-const native = require('./build/node-compat.node');
+const { join } = require('node:path');
+const { addonBuild, requireFile, validateRuntimeVersion } = require('../node-base.cjs');
+const base = process.env.NODE_BASE ?? '24.19.0';
+validateRuntimeVersion(base, process.versions.node);
+const build = addonBuild(base);
+const hint = `Build the addon with node-compat/scripts/build-addon.cmd --base ${base}.`;
+requireFile(join(build, 'node-compat.node'), hint);
+requireFile(join(build, 'node.json'), hint);
+const builtFor = require(join(build, 'node.json'));
+if (builtFor.version !== process.versions.node || builtFor.modules !== process.versions.modules ||
+    builtFor.arch !== process.arch || builtFor.platform !== process.platform) {
+  throw new Error(`Addon ${base} was built for Node ${builtFor.version} (${builtFor.arch}); ` +
+    `running ${process.versions.node} (${process.arch}). ${hint}`);
+}
+const native = require(join(build, 'node-compat.node'));
 const vm = require('node:vm');
 
 exports.createMicrotaskQueue = native.createMicrotaskQueue;

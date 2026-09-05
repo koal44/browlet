@@ -1,14 +1,19 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { delimiter, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
-import { fileURLToPath, URL } from 'node:url';
+import nodeBase from '../node-base.cjs';
 
-const addon = fileURLToPath(new URL('../addon/', import.meta.url));
-const headers = process.argv[2] === undefined
-  ? fileURLToPath(new URL('../.cache/node-v24.19.0/', import.meta.url))
-  : resolve(process.argv[2]);
-const build = resolve(addon, 'build');
+const { root, parseOptions, resolveBase, inspectNode, validateBuildInputs } = nodeBase;
+const envFile = resolve(root, '.env');
+if (existsSync(envFile)) process.loadEnvFile(envFile);
+const { base, args } = parseOptions(process.argv.slice(2));
+if (args.length !== 0) throw new Error('usage: build-addon.cmd [--base custom|24.19.0|26.8.1]');
+const target = resolveBase(base);
+const node = inspectNode(target);
+validateBuildInputs(target, node);
+const addon = resolve(root, 'node-compat/addon');
+const build = target.build;
 const sources = ['addon.cc', 'vm.cc', 'property-delegate.cc'].map(name => resolve(addon, name));
 const lookup = spawnSync('where.exe', ['cl.exe'], { encoding: 'utf8' });
 if (lookup.error) throw lookup.error;
@@ -18,7 +23,7 @@ const compiler = lookup.stdout.trim().split(/\r?\n/u)[0];
 // Include the developer prompt's SDK paths so the editor can use
 // the same compilation database from an ordinary shell.
 const includes = [
-  resolve(headers, 'include/node'),
+  ...target.includes,
   ...(process.env.INCLUDE ?? '').split(delimiter).filter(Boolean),
 ];
 const compileArgs = [
@@ -28,18 +33,24 @@ const compileArgs = [
   `/Fo${build}\\`,
 ];
 mkdirSync(build, { recursive: true });
-writeFileSync(resolve(build, 'compile_commands.json'), JSON.stringify(sources.map(file => ({
+const commands = sources.map(file => ({
   directory: addon,
   file,
   arguments: [compiler, ...compileArgs, file],
-})), null, 2) + '\n');
+}));
 
+console.log(`Building addon for ${base}: Node ${node.version} (${node.arch})\n  output: ${build}`);
 const result = spawnSync(compiler, [
   ...compileArgs, ...sources,
   '/link',
   `/OUT:${resolve(build, 'node-compat.node')}`,
   `/IMPLIB:${resolve(build, 'node-compat.lib')}`,
-  resolve(headers, 'Release/node.lib'),
+  target.library,
 ], { cwd: addon, stdio: 'inherit' });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
+if (process.exitCode === 0) {
+  writeFileSync(resolve(build, 'node.json'), JSON.stringify(node, null, 2) + '\n');
+  // The editor follows the most recent successful build; binaries remain separate.
+  writeFileSync(resolve(addon, 'build/compile_commands.json'), JSON.stringify(commands, null, 2) + '\n');
+}

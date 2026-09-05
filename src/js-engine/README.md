@@ -15,9 +15,11 @@ continues. It does not implement imported ECMAScript terms or host hooks as
 undifferentiated families.
 
 The [compatibility addon](../../node-compat/README.md) now supplies explicit
-queues and reusable native context handles on stock Node 24. NodeRuntime loads
-it only when the embedder sets BROWLET_NODE_ADDON to its absolute module path;
-NodeRealm delegates evaluation to that selected backend. The addon does not
+queues and reusable native context handles on Node 24 and 26. The `with-node`
+launcher chooses the Node base through `NODE_BASE` and enables the addon for
+`NODE_RUNTIME=compat`. It supplies the internal `BROWLET_NODE_ADDON` module path
+to NodeRuntime; embedders can also supply that path directly. NodeRealm delegates
+evaluation to that selected backend. The addon does not
 make node:vm recognize its handles and does not yet supply post-creation
 prototype immutability. References to stock fallbacks below mean plain Node
 without the addon. References to source-patched Node describe the original
