@@ -3,19 +3,19 @@ import type {
 } from '../scripting/agents';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
-  browletBindings, getRelevantRealm, projectWindow,
+  browletBindings, getRelevantRealm,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
 import { serializeSite } from '../../url/origin';
-import { createRealm } from '../scripting/realm';
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
 import {
-  createWindowProxy, getWindowProxyWindow,
+  getWindowProxyWindow,
   type WindowProxy,
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
+import { createWindowRealm } from './window/window-realm';
 import {
   createDocument, createProjectedDOMNodeFactory, DocumentImpl, DocumentMode,
   type DocumentLoadTimingInfo,
@@ -37,7 +37,7 @@ import {
  * documents. HTML section 7.3.2 supplies its remaining state and lifecycle.
  */
 export class BrowsingContext {
-  readonly windowProxy: WindowProxy;
+  #windowProxy: WindowProxy | undefined;
   readonly popupSandboxingFlagSet: SandboxingFlagSet = new Set();
   openerBrowsingContext: BrowsingContext | null = null;
   openerOriginAtCreation: Origin | null = null;
@@ -54,8 +54,13 @@ export class BrowsingContext {
    */
   #navigable: Navigable | null = null;
 
-  constructor(windowProxy: WindowProxy = createWindowProxy()) {
-    this.windowProxy = windowProxy;
+  constructor(windowProxy?: WindowProxy) {
+    this.#windowProxy = windowProxy;
+  }
+
+  get windowProxy(): WindowProxy {
+    if (!this.#windowProxy) throw new Error('Browsing context has no WindowProxy yet');
+    return this.#windowProxy;
   }
 
   get group(): BrowsingContextGroup | null {
@@ -76,6 +81,11 @@ export class BrowsingContext {
   }
 
   // -- Friends ----------------------------------------------------------
+
+  static initializeWindowProxy(context: BrowsingContext, proxy: WindowProxy): void {
+    if (context.#windowProxy) throw new Error('Browsing context already has a WindowProxy');
+    context.#windowProxy = proxy;
+  }
 
   static setGroup(
     browsingContext: BrowsingContext,
@@ -121,17 +131,18 @@ export function createNewBrowsingContextAndDocument(
   const agent = obtainSimilarOriginWindowAgent(origin, group, false);
   const window = new WindowImpl(new URL('about:blank'));
   const aboutBlankURL = requireURLRecord('about:blank');
-  const realmExecutionContext = createRealm(agent, {
-    createGlobalObject: () => window,
-    createGlobalThisValue: () => browsingContext.windowProxy,
-  });
+  const realmExecutionContext = createWindowRealm(agent, window);
+  BrowsingContext.initializeWindowProxy(
+    browsingContext,
+    realmExecutionContext.realm.globalThis as WindowProxy,
+  );
   const topLevelCreationURL = embedder === null
     ? aboutBlankURL
     : getEmbedderTopLevelCreationURL(embedder);
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
-  const bindings = browletBindings.register(realmExecutionContext.realm);
+  const bindings = browletBindings.forRealm(realmExecutionContext.realm);
   const settings = setupWindowEnvironmentSettingsObject(
     aboutBlankURL,
     realmExecutionContext,
@@ -190,7 +201,6 @@ export function createNewBrowsingContextAndDocument(
   }
 
   WindowImpl.setAssociatedDocument(window, document);
-  projectWindow(bindings, window);
   DocumentImpl.markReadyForPostLoadTasks(document);
   populateWithHTMLHeadBody(document);
   makeActive(document);
@@ -416,8 +426,8 @@ function makeActive(
   document: DocumentImpl,
 ): void {
   const realm = getRelevantRealm(document);
-  const window = realm.globalObject;
-  if (!WindowImpl.is(window)) {
+  const window = realm.windowImplementation;
+  if (!window) {
     throw new Error('Document relevant global object is not a Window');
   }
   const browsingContext = DocumentImpl.getBrowsingContext(document);

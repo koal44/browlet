@@ -5,9 +5,9 @@ import { WindowImpl } from './window';
  * no interface object of its own and is the stable global-this identity for
  * one browsing context while its wrapped Window can change on navigation.
  *
- * The forwarding below is the host-neutral shape of that object. Node cannot
- * currently install this object as a replacement VM realm's actual global
- * proxy; that execution-host limitation is documented separately.
+ * The forwarding below supports plain Node. With the compatibility addon,
+ * adoptNativeWindowProxy associates the actual reusable engine proxy with
+ * the same HTML Window and Web IDL receiver information.
  */
 export function createWindowProxy(): WindowProxy {
   const handler = new WindowProxyHandler();
@@ -64,8 +64,8 @@ export type WindowProxy = Window & {
 const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
 
 /*
- * The handler supplies the WindowProxy exotic internal methods while the
- * Proxy it creates remains the actual WindowProxy owned by BrowsingContext.
+ * The handler retains Window associations for both backends. Its JavaScript
+ * traps implement forwarding only for the plain-Node fallback.
  */
 class WindowProxyHandler implements ProxyHandler<object> {
   readonly windowProxy: WindowProxy;

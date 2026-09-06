@@ -113,7 +113,16 @@ export function projectWindow(
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
 ): Window {
-  return bindings.projectGlobalObject(window, 'Window', allocation) as Window;
+  const object = bindings.projectGlobalObject(window, 'Window', allocation) as Window;
+  // Preserve the provisional CSSOM operation until Stylelet supplies its
+  // Window partial and CSSStyleDeclaration projection (see WindowImpl).
+  Object.defineProperty(object, 'getComputedStyle', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: window.getComputedStyle,
+  });
+  return object;
 }
 
 export function getRelevantRealm(value: object): Realm {
