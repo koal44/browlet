@@ -3,7 +3,8 @@
 Native support for Browlet's engine backend. The first addon ports shared
 microtask queues and detachable/reusable context handles onto stock Node
 24.19.0 and 26.8.1, including the context/queue lifetime fix. Post-creation immutable
-prototypes remain unavailable through the addon.
+prototypes remain unavailable through the addon. A custom engine containing our
+V8 patches also enables the five host hooks described below.
 
 | Facility | Stock Node | Stock + addon | Original source patches |
 | --- | --- | --- | --- |
@@ -120,13 +121,84 @@ Compile the experimental probe against the regular checkout and run it with
 that checkout's executable;
 see experimental/node-promise-hooks/engine-capture.md for the commands.
 
-The duplicate node-capture worktree and its old build have been removed. Its
-two V8 commits are preserved on v8-patches, rebased onto
-6f41e4156 as 5872d7a4a and 9c176d2fd. The 2026-09-05 rebuild includes the
-FinalizationRegistry capture continuation and passes the Promise and
-FinalizationRegistry acceptance suites. See
-experimental/node-promise-hooks/finalization-registry.md for the results and
-the remaining cross-security-token script-metadata limitation.
+The active engine patches are on `v8-patches` in that checkout. The addon build
+detects the required hook APIs in the target headers; selecting `custom` alone
+does not imply that the engine supplies them.
+
+## Host hooks
+
+`supportsHostHooks` reports whether the addon was built with the required V8
+APIs. Official Node 24.19.0 and 26.8.1 support the existing context/queue APIs but
+return false here. Calling `setHostHooks()` on those bases throws
+`ERR_HOST_HOOKS_UNAVAILABLE`.
+
+`setHostHooks(hooks)` installs any combination of the following callbacks and
+returns nothing. The configuration lasts until the owning Node environment
+shuts down; there is no public removal or replacement operation. One installation
+owns the isolate; another installation throws `ERR_HOST_HOOKS_INSTALLED`.
+Workers are independent.
+The names follow the five targeted ECMAScript operations in
+[Jobs and Host Operations to Enqueue Jobs](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
+
+| Callback | Contract |
+| --- | --- |
+| `makeJobCallback(callback, registration)` | Return a record `{ callback, hostDefined }` with the original callback. Each callable reaction slot and thenable registration gets its own call to make. A FinalizationRegistry captures once at construction. |
+| `callJobCallback(record, receiver, args)` | Invoke `record.callback` with the supplied receiver and argument array; return its result or propagate its exception. The retained record is exactly the object returned by make. |
+| `enqueuePromiseJob(job, realm, enqueue)` | Take ownership of scheduling a single-use Promise job. `realm` is null for a reaction without a callable handler. `enqueue` also supplies the enqueue-time snapshot and `kind`, either `reaction` or `thenable`. |
+| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job. Currently this receives Atomics.waitAsync notification delivery. |
+| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule a single-use timeout job no earlier than the supplied delay. Currently this receives Atomics.waitAsync deadlines. A cancelled timeout may still be called once and does nothing. |
+
+Every callback is optional. Make defaults to `{ callback, hostDefined: undefined }`;
+call defaults to `Reflect.apply`. Omitting an enqueue callback leaves that kind
+of scheduling with V8. The internal make/call adapters share registration data,
+but the public callbacks can be supplied independently:
+
+```js
+const compat = require('./node-compat/addon/index.cjs');
+compat.setHostHooks({
+  makeJobCallback(callback, registration) {
+    return { callback, hostDefined: registration };
+  },
+  callJobCallback(record, receiver, args) {
+    // Host setup and finally cleanup can surround this call.
+    return Reflect.apply(record.callback, receiver, args);
+  },
+});
+```
+
+Registration and Promise-enqueue snapshots contain `current`, `entered`,
+`incumbent`, and `hostDefinedOptions`, captured before entering the host's JS.
+The first three are realm references (or null when absent). The last is an array
+of V8's opaque script metadata; the addon does not interpret Node's loader identity.
+
+`getRealm(object)` returns the stable reference for an object's creation realm.
+Each context handle also exposes `.realm`. References have a read-only `.global`
+property and remain distinct when successive contexts reuse one global proxy.
+Use the reference itself as the identity, not `.global`. A Node vm sandbox is
+usually created outside its context; use an object evaluated inside that context
+when obtaining its realm. Retaining a reference keeps that realm alive.
+
+Enqueue hooks must schedule asynchronously, preserving the required ordering
+and timeout delay. Call the supplied job with no arguments. Promise jobs can be
+placed on the maintained queue's `enqueueMicrotask(job)` or wrapped for host
+setup/cleanup; running them does not enqueue the same job through the hook again.
+The host owns queue selection and checkpoints. No raw queue pointer is exposed.
+The host may retain jobs until ready to run them; calling an already-run job throws.
+
+Make and enqueue callbacks must not throw. Invalid make records and exceptions
+from these callbacks are reported through Node's uncaught-exception machinery;
+without a handler the process exits with failure. Call-hook exceptions follow
+the underlying Promise or FinalizationRegistry callback path. Make/call records
+use private AsyncLocalStorage state alongside the application's existing ALS.
+Recursive make calls for the host's own capture work are suppressed. Work that
+predates installation invokes its original callback without a custom call hook.
+Environment teardown clears the engine callbacks and releases their native
+references. Tests use fresh workers for independent configurations.
+
+`test/host-hooks.test.cjs` exercises this public API. These are host building
+blocks: HTML active-script restoration, script cleanup, and scheduler integration
+remain separate adoption work. Installing these hooks does not implement HTML
+by itself, and Browlet's HTML algorithms do not install them yet.
 
 ## Scope
 
@@ -142,7 +214,7 @@ Evaluation supports filename, lineOffset and
 displayErrors: false. Timeouts, code-generation controls, dynamic-import
 callbacks, vm.Script interoperability and automatic afterEvaluate checkpoints
 are not implemented. Unsupported options are rejected. Existing HTML
-WindowProxy/origin accommodations and Promise host-hook gaps remain.
+WindowProxy/origin accommodations remain; host-hook adoption is described above.
 
 The standalone suite retains two cases from the retired Node proxy-reuse
 experiments: collecting the old realm while the replacement remains live
@@ -152,7 +224,7 @@ importModuleDynamically, before callback routing can be tested. Keep that
 acceptance case for future module-loading integration; it does not require
 implementing the entire vm API.
 
-The addon does not replace V8's isolate Promise hook or overwrite CPED. Node's
+The addon does not replace V8's existing isolate Promise hook. Node's
 context registration preserves its Promise hooks; tests cover hooks installed
 after context creation and ALS transport. Each worker owns its native state.
 
@@ -201,6 +273,7 @@ has not been benchmarked.
 - addon/: one native backend and its JS entry point. addon.cc registers the
   binary; vm.cc owns queues, contexts and their shared lifetime management.
   property-delegate.cc contains the opt-in global/prototype property callbacks.
+  host-hooks.cc dispatches engine hooks; host-hooks.cjs retains callback records.
   Add distinct features in their own C++ source files and initialize them from
   addon.cc. Separate binaries are useful for independently loadable components,
   not required for separate features or upstream commits.

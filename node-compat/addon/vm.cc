@@ -1,5 +1,6 @@
 #include <node.h>
 #include "vm.h"
+#include "host-hooks.h"
 #include "property-delegate.h"
 
 #include <memory>
@@ -214,6 +215,8 @@ void CreateContext(const FunctionCallbackInfo<Value>& args) {
   if (!data->context_type.Get(isolate)->InstanceTemplate()
            ->NewInstance(host).ToLocal(&holder)) return;
   new ContextHandle(data, holder, realm, std::move(queue), global_template);
+  holder->DefineOwnProperty(host, Text(isolate, "realm"), GetRealmReference(realm),
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete)).Check();
   if (!args[2]->IsUndefined()) {
     InitializePropertyDelegate(realm, realm->Global(), true);
     // Allocate a distinct, realm-owned global target with the same observable
