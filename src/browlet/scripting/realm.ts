@@ -27,15 +27,10 @@ export function createRealm(
     : globalObject;
 
   Realm.setGlobalObjects(realm, globalObject, globalThis);
-  if (agent.agentCluster?.crossOriginIsolationMode === 'none') {
-    const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
-    if (!status) throw new Error('Could not remove SharedArrayBuffer');
-  }
   if (agent instanceof WindowAgent) {
     if (!WindowImpl.is(globalObject)) {
       throw new Error('A Window realm requires a Window implementation');
     }
-    agent.windowObjects.add(globalObject);
   }
   return { realm };
 }
@@ -186,6 +181,13 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
   ): void {
     realm.#windowImplementation = windowImplementation;
     realm.initializeGlobalObjects(globalObject, globalThis);
+    if (realm.agent.agentCluster?.crossOriginIsolationMode === 'none') {
+      const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
+      if (!status) throw new Error('Could not remove SharedArrayBuffer');
+    }
+    if (windowImplementation && realm.agent instanceof WindowAgent) {
+      realm.agent.windowObjects.add(windowImplementation);
+    }
     if (!realm.isGlobalPrototypeChainMutable) {
       realm.makeHostGlobalPrototypeImmutable();
     }
@@ -204,6 +206,9 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
     );
     associateGlobalTaskDestination(globalObject, taskDestination);
     associateGlobalTaskDestination(globalThis, taskDestination);
+    if (windowImplementation) {
+      associateGlobalTaskDestination(windowImplementation, taskDestination);
+    }
   }
 
   static setHostDefined(

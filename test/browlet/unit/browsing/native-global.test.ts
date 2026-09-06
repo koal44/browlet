@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { browletBindings, projectWindow } from '../../../../src/browlet/bindings';
+import { browletBindings } from '../../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
-import { adoptNativeWindowProxy } from '../../../../src/browlet/browsing/window/window-proxy';
+import type { WindowProxy } from '../../../../src/browlet/browsing/window/window-proxy';
+import { createWindowRealm } from '../../../../src/browlet/browsing/window/window-realm';
 import {
   createDocument, createProjectedDOMNodeFactory, DocumentImpl,
 } from '../../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { Realm } from '../../../../src/browlet/scripting/realm';
 import { setupWindowEnvironmentSettingsObject } from '../../../../src/browlet/scripting/environment';
 import { parseURL } from '../../../../src/url/url';
 import { createOpaqueOrigin } from '../../../../src/url/origin';
 
-// This opt-in allocation API belongs to the addon; plain Node and the older
-// source-patched VM do not expose it. The normal browser bootstrap is separate.
+// Native allocation belongs to the addon; plain Node has no equivalent API.
 describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window allocation', () => {
   it('binds real Window and EventTarget members without changing WindowImpl identity', () => {
     const fixture = createNativeWindow();
@@ -58,7 +58,6 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
       () => [++pageState, globalThis];
     `, 'old-state.js') as () => [number, object];
     first.realm.agent.eventLoop.performMicrotaskCheckpoint();
-    expect(first.realm.detachGlobal()).toBe(proxy);
     const second = createNativeWindow(first);
     expect(second.context.windowProxy).toBe(proxy);
     expect(second.platformWindow).not.toBe(first.platformWindow);
@@ -146,51 +145,27 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
 });
 
 function createNativeWindow(previous?: NativeWindow): NativeWindow {
-  const agent = previous?.realm.agent ?? new WindowAgent();
-  const realm = new Realm({
-    agent,
-    reuseGlobalProxyFrom: previous?.realm,
-    // Window.prototype -> Window named-properties object ->
-    // EventTarget.prototype -> Object.prototype.
-    globalPrototypeChain: ['immutable', 'delegated', 'immutable'],
-  });
-  const chain = realm.globalPrototypeChain;
-  if (!chain || chain.length !== 3) throw new Error('Native global allocation missing');
-  const object = realm.allocatedGlobalObject;
-  const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
-  if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
-    throw new Error('Incomplete native prototype chain');
-  }
-  const proxy = adoptNativeWindowProxy(realm.globalThis);
-  const context = previous?.context ?? new BrowsingContext(proxy);
-  const bindings = browletBindings.register(realm);
+  const agent = previous?.agent ?? new WindowAgent();
   const window = new WindowImpl(new URL('https://example.test/'));
-  const platformWindow = projectWindow(bindings, window, {
-    object,
-    prototypes: new Map([
-      ['Window', windowPrototype],
-      ['EventTarget', eventTargetPrototype],
-    ]),
-    namedProperties: {
-      object: namedProperties,
-      setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
-    },
-  });
+  const { realm } = createWindowRealm(agent, window, previous?.realm);
+  const proxy = realm.globalThis as WindowProxy;
+  const context = previous?.context ?? new BrowsingContext(proxy);
+  const bindings = browletBindings.forRealm(realm);
+  const platformWindow = browletBindings.getPlatformObject(window) as Window;
   const document = createDocument({
     nodeFactory: createProjectedDOMNodeFactory(bindings.context),
   });
   DocumentImpl.setBrowsingContext(document, context);
   WindowImpl.setAssociatedDocument(window, document);
-  Realm.setGlobalObjects(realm, platformWindow, proxy, window);
   const url = parseURL('https://example.test/').url;
   if (!url) throw new Error('Fixture URL missing');
   setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(), bindings);
   browletBindings.retargetWindowProxy(proxy, window);
-  bindings.install(platformWindow);
-  return { realm, window, platformWindow, document, context };
+  return { agent, realm, window, platformWindow, document, context };
 }
 
 type NativeWindow = {
+  agent: WindowAgent;
   realm: Realm;
   window: WindowImpl;
   platformWindow: Window;

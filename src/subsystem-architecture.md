@@ -76,11 +76,14 @@ callback lifecycle, and global task associations. The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
 
-The opt-in native-global allocation path follows that division: the engine
+Window creation and navigation with the addon follow that division: the engine
 allocates immutable objects and forwards native property operations; Binding
 supplies interface members and Web IDL named-property behavior; HTML associates
 the native WindowProxy with the current Window. The allocation passed into
 Binding is a one-time construction input, not another environment or registry.
+`createWindowRealm` is the HTML composition point for this allocation and its
+binding; it does not put Window policy in the engine or construct Window
+implementation state inside Binding.
 See the [global-object notes](./platform-object-architecture.md#special-object-categories)
 for the current adoption boundary.
 

@@ -19,7 +19,6 @@ import {
   createDocumentState, createSessionHistoryEntry,
   type SessionHistoryEntry,
 } from './session-history';
-import { WindowImpl } from '../window/window';
 import {
   coarsenedSharedCurrentTime,
 } from '../../performance/high-resolution-time';
@@ -239,7 +238,8 @@ function applyPushOrReplaceHistoryStep(
   if (browsingContext === null) {
     throw new Error('Navigation Document has no browsing context');
   }
-  if (!WindowImpl.is(realm.globalObject)) {
+  const window = realm.windowImplementation;
+  if (!window) {
     throw new Error('Navigation Document global object is not a Window');
   }
 
@@ -248,7 +248,7 @@ function applyPushOrReplaceHistoryStep(
   traversable.currentSessionHistoryStep = targetStep;
   browletBindings.retargetWindowProxy(
     browsingContext.windowProxy,
-    realm.globalObject,
+    window,
   );
   const settings = realm.hostDefined;
   if (settings === null) throw new Error('Navigation Window has no settings');

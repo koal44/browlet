@@ -23,8 +23,9 @@ evaluation to that selected backend. The addon does not
 make node:vm recognize its handles and does not yet supply post-creation
 prototype immutability. References to stock fallbacks below mean plain Node
 without the addon. References to source-patched Node describe the original
-Node branch, whose additional immutable-prototype operation is still missing
-from the addon.
+Node branch. Browlet's Window creation and navigation now use the addon's
+creation-time immutable allocation; they no longer require that branch's
+post-creation immutable-prototype operation.
 
 ## Admission rule
 

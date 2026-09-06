@@ -7,6 +7,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { AttrImpl } from '../../../src/browlet/dom/nodes/attribute';
 import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import { Realm } from '../../../src/browlet/scripting/realm';
+import { itCompatPasses } from '../../test-runtime';
 
 describe('Browlet DOM binding', () => {
   it('projects the Window global through its Web IDL interface', () => {
@@ -101,7 +102,7 @@ describe('Browlet DOM binding', () => {
     }).toThrow(FirstTypeError);
   });
 
-  it.fails('reports Window unforgeable descriptors through WindowProxy', () => {
+  itCompatPasses('reports Window unforgeable descriptors through WindowProxy', () => {
     const descriptor = Object.getOwnPropertyDescriptor(
       createBrowlet().window,
       'document',

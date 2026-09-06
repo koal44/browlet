@@ -333,20 +333,19 @@ The ordinary two-object path is the default. Exceptions must be explicit.
 - **Legacy platform objects:** indexed and named Proxy behavior belongs to the
   platform object's Proxy target. The implementation supplies the supported
   names, indices, and implementation values.
-- **Global objects:** `Window` is currently a deliberate exception. Browlet
-  uses the host-provided global implementation as the global target and changes
-  its prototype during projection. This is not evidence that ordinary platform
-  objects should be self-backed. Because this discards `WindowImpl.prototype`
-  from normal lookup, Window and the EventTarget behavior it inherits cannot
-  participate in the ordinary static-friend cleanup yet.
+- **Global objects:** with the compatibility addon, Window has a separate
+  native platform object and retains `WindowImpl.prototype` on its implementation.
+  The plain-Node fallback still uses the implementation as its global target
+  and changes its prototype during projection. That fallback is not evidence
+  that ordinary platform objects should be self-backed.
 - **WindowProxy:** this is a stable exotic identity which forwards to the
   current Window platform object. It is not a second Window implementation.
 - **Native-exotic platform objects:** DOMException's Error object uses an
   explicit allocator. Future native-exotic cases should do likewise rather
   than contaminating their implementation.
 
-The opt-in native-global integration now exercises a separate Window platform
-object without changing `WindowImpl.prototype`. The engine preallocates that
+Normal Window creation and navigation use the native-global integration when
+the addon is enabled. The engine preallocates the Window platform
 object and the immutable prototype chain; `GlobalObjectAllocation` lets Binding
 populate those objects with the normal Web IDL members. Binding also supplies
 the named-properties behavior to the native layer. The reusable native proxy
@@ -355,10 +354,13 @@ while each Window retains its own platform-object record in the same binding
 world. `Realm` retains its Window implementation explicitly for settings and
 callback lifecycle work.
 
-This is not the default browser bootstrap. The prototype and its Node 24
-deprecated-API dependency are described in
-[`node-compat/README.md`](../node-compat/README.md#native-global-integration-prototype).
-Full navigation and origin behavior still require separate validation.
+`createWindowRealm` composes that allocation with the Window binding. A browsing
+context receives its proxy once the initial realm exists; later realms reuse
+that identity. Internal task scheduling retains the Window implementation's
+task destination as well as the author-facing objects' associations.
+The Node 24 API dependency and remaining limitations are described in
+[`node-compat/README.md`](../node-compat/README.md#native-global-integration).
+Cross-origin access checks and history traversal remain separate work.
 
 ## Cross-specification declarations
 

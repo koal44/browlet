@@ -1,6 +1,7 @@
-import { spawnSync } from 'node:child_process';
+import { setImmediate } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Browlet } from '../../../../src/browlet/browlet';
 import {
   type JavaScriptMicrotaskQueue,
 } from '../../../../src/js-engine/index';
@@ -18,7 +19,7 @@ import {
 } from '../../../../src/browlet/browsing/navigable';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { Realm } from '../../../../src/browlet/scripting/realm';
+import { getRelevantRealm } from '../../../../src/browlet/bindings';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../../src/browlet/performance/clock';
@@ -380,8 +381,7 @@ describe('task queues', () => {
     if (window === null || document === null) {
       throw new Error('Expected a complete top-level traversable');
     }
-    const realm = Realm.getAssociatedRealm(window);
-    if (realm === undefined) throw new Error('Expected a relevant Realm');
+    const realm = getRelevantRealm(window);
     const steps = vi.fn();
     const queueMicrotask = vi.spyOn(realm.agent.eventLoop, 'queueMicrotask')
       .mockImplementation(() => {});
@@ -462,35 +462,35 @@ describe('task queues', () => {
 
   itCompatPasses(
     'does not report an adopted Stream start rejection as unhandled',
-    () => {
+    async () => {
       /*
        * The parser enters this script from a host Promise job. V8 declines the
        * nested checkpoint, but Node's `_tickCallback` still reports rejected
-       * promises, producing `unhandled boo!`, `handled later`, then `done`.
+       * promises before the Stream's adoption handles them.
        */
-      const events = runNodeProbe(`
-        const { Browlet } = require('./src/browlet/browlet.ts');
-        process.on('unhandledRejection', reason => {
-          console.log('unhandled', reason.name);
+      const unhandled = vi.fn();
+      const handled = vi.fn();
+      process.on('unhandledRejection', unhandled);
+      process.on('rejectionHandled', handled);
+      try {
+        const browlet = new Browlet({
+          route: () => `<script>
+            new ReadableStream({
+              start() {
+                return Promise.reject({ name: 'boo!' });
+              }
+            });
+          </script>`,
         });
-        process.on('rejectionHandled', () => console.log('handled later'));
+        await browlet.navigate('http://example.test/');
+        await setImmediate();
 
-        void (async () => {
-          const browlet = new Browlet({
-            route: () => \`<script>
-              new ReadableStream({
-                start() {
-                  return Promise.reject({ name: 'boo!' });
-                }
-              });
-            </script>\`,
-          });
-          await browlet.navigate('http://example.test/');
-          setImmediate(() => console.log('done'));
-        })();
-      `);
-
-      expect(events).toEqual(['done']);
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(handled).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', unhandled);
+        process.off('rejectionHandled', handled);
+      }
     },
   );
 
@@ -515,9 +515,7 @@ describe('task queues', () => {
 });
 
 function requireEventLoop(global: object): EventLoop {
-  const realm = Realm.getAssociatedRealm(global);
-  if (realm === undefined) throw new Error('Expected a relevant Realm');
-  return realm.agent.eventLoop;
+  return getRelevantRealm(global).agent.eventLoop;
 }
 
 function createTask(document: DocumentImpl | null): Task {
@@ -565,19 +563,4 @@ function createTaskTimingHooks(): TaskTimingHooks {
 
 function createLongTaskReporter(): LongTaskReporter {
   return { reportLongTasks: vi.fn() };
-}
-
-function runNodeProbe(source: string): string[] {
-  const result = spawnSync(
-    process.execPath,
-    ['--import=tsx', '--eval', source],
-    { cwd: process.cwd(), encoding: 'utf8' },
-  );
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error('Node checkpoint probe failed', {
-      cause: result.stderr,
-    });
-  }
-  return result.stdout.split(/\r?\n/u).filter((line) => line !== '');
 }

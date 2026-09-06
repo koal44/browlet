@@ -11,6 +11,8 @@ import type {
  * policy by subclassing this one runtime identity rather than wrapping it.
  */
 export class NodeRealm implements JavaScriptRealm {
+  static readonly supportsGlobalPrototypeChain = nodeRuntime.hasNativeGlobalObjects;
+
   readonly globalPrototypeChain: readonly object[] | undefined;
   readonly allocatedGlobalObject: object | undefined;
   readonly intrinsics: JavaScriptIntrinsics;

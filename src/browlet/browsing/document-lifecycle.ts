@@ -8,7 +8,7 @@ import { areSameOriginDomain } from '../../url/origin';
 import { serializeURL } from '../../url/url';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
-  browletBindings, getRelevantRealm, projectWindow,
+  browletBindings, getRelevantRealm,
 } from '../bindings';
 import type { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
@@ -17,7 +17,7 @@ import type {
   NavigationParams, NavigationRequest, NavigationResponse,
 } from './navigation/navigation';
 import { TopLevelTraversable } from './navigable';
-import { createRealm } from '../scripting/realm';
+import { createWindowRealm } from './window/window-realm';
 import { WindowImpl } from './window/window';
 import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
 import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
@@ -42,7 +42,6 @@ export function createAndInitializeDocument(
 
   let window: WindowImpl;
   let bindings: ReturnType<typeof browletBindings.register>;
-  let installBindings = false;
   if (
     DocumentImpl.isInitialAboutBlank(activeDocument) &&
     areSameOriginDomain(
@@ -70,11 +69,12 @@ export function createAndInitializeDocument(
       requestsOAC,
     );
     window = new WindowImpl(new URL(serializeURL(creationURL)));
-    const realmExecutionContext = createRealm(agent, {
-      createGlobalObject: () => window,
-      createGlobalThisValue: () => browsingContext.windowProxy,
-    });
-    bindings = browletBindings.register(realmExecutionContext.realm);
+    const realmExecutionContext = createWindowRealm(
+      agent,
+      window,
+      getRelevantRealm(activeDocument),
+    );
+    bindings = browletBindings.forRealm(realmExecutionContext.realm);
     setupWindowEnvironmentSettingsObject(
       creationURL,
       realmExecutionContext,
@@ -83,7 +83,6 @@ export function createAndInitializeDocument(
       navigationParams.origin,
       bindings,
     );
-    installBindings = true;
   }
 
   const document = createDocument({
@@ -123,9 +122,6 @@ export function createAndInitializeDocument(
   );
 
   WindowImpl.setAssociatedDocument(window, document);
-  if (installBindings) {
-    projectWindow(bindings, window);
-  }
   initializeDocumentAncestry(document, navigationParams);
   initializeDocumentCSP(document);
   initializeDocumentReferrer(document, navigationParams.request);

@@ -27,6 +27,7 @@ class NodeRuntime implements JavaScriptRuntime {
   #tickCallback: (() => void) | undefined;
   readonly hasExplicitMicrotaskQueues =
     nodeCreateMicrotaskQueue !== undefined;
+  readonly hasNativeGlobalObjects = getNodeMethod('setGlobalObject') !== undefined;
 
   /*
    * ACCOMMODATION(node-v8-microtask-queue): Stock Node exposes neither an

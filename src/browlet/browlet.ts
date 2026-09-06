@@ -21,7 +21,6 @@ import {
   BrowletParser, type DocumentWrite,
 } from './html/parser/document-parser';
 import type { Realm } from './scripting/realm';
-import { WindowImpl } from './browsing/window/window';
 import { UserAgent } from './user-agent';
 import { requestNodeEventLoopTurn } from './integration/scripting';
 import { unsafeSharedCurrentTime } from
@@ -77,7 +76,7 @@ export class Browlet {
 
   expose(name: string, value: unknown): void {
     this.#exposures.set(name, value);
-    Object.defineProperty(this.requireActiveWindow(), name, {
+    Object.defineProperty(this.window, name, {
       configurable: true,
       writable: true,
       value,
@@ -104,11 +103,7 @@ export class Browlet {
       navigationParams,
     );
     const realm = getRelevantRealm(document);
-    const window = realm.globalObject;
-    if (!WindowImpl.is(window)) {
-      throw new Error('Navigation Document global object is not a Window');
-    }
-    this.installExposures(window);
+    this.installExposures(realm.globalObject);
     const historyEntry = createNavigationHistoryEntry(
       document,
       navigationParams,
@@ -128,7 +123,6 @@ export class Browlet {
           documentURL,
           write,
           document,
-          window,
           realm,
         );
       },
@@ -146,7 +140,6 @@ export class Browlet {
     documentURL: URL,
     write: DocumentWrite,
     document: DocumentImpl,
-    window: WindowImpl,
     realm: Realm,
   ): void {
     const sourceURL = element.getAttribute('src');
@@ -165,7 +158,7 @@ export class Browlet {
     });
   }
 
-  private installExposures(window: WindowImpl): void {
+  private installExposures(window: object): void {
     for (const [name, value] of this.#exposures) {
       Object.defineProperty(window, name, {
         configurable: true,
@@ -177,14 +170,6 @@ export class Browlet {
 
   private getRouteSource(url: string | URL): string {
     return this.#route(String(url));
-  }
-
-  private requireActiveWindow(): WindowImpl {
-    const window = this.#traversable.activeWindow;
-    if (window === null) {
-      throw new Error('Top-level traversable has no active Window');
-    }
-    return window;
   }
 }
 

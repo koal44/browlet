@@ -156,7 +156,7 @@ The addon does not replace V8's isolate Promise hook or overwrite CPED. Node's
 context registration preserves its Promise hooks; tests cover hooks installed
 after context creation and ALS transport. Each worker owns its native state.
 
-## Native global integration prototype
+## Native global integration
 
 `createContextHandle({ globalPrototypeChain: [...] })` preallocates an immutable
 global proxy, a separate immutable per-context global target (`globalObject`),
@@ -188,10 +188,13 @@ The integration test is
 `test/browlet/unit/browsing/native-global.test.ts`. It covers real Window and
 EventTarget bindings, the exact visible prototype chain, named properties,
 property operations and strict failures, stable receiver records, and old
-global reads/writes after reuse. The ordinary browser bootstrap still uses its
-existing path: full navigation, cross-origin checks, mutable-global mode, and
-performance have not been validated for this prototype. Property forwarding
-adds JS/native calls and has not been benchmarked.
+global reads/writes after reuse. The ordinary browser bootstrap and navigation
+now use this allocation when the addon is enabled. Document-lifecycle tests
+cover actual global-this identity, immutable prototypes, proxy reuse, and old
+closures retaining their original Window state. Plain Node keeps its existing
+fallback. Cross-origin access checks, history traversal, and a native mutable
+global mode remain separate work. Property forwarding adds JS/native calls and
+has not been benchmarked.
 
 ## Files and local state
 
@@ -235,12 +238,15 @@ experiments now live in test/capabilities.test.cjs above.
 | --- | --- |
 | a53496abb: shared microtask queues | Ported in vm.cc |
 | ad6ce57a1: reusable context handles | Ported in vm.cc |
-| f2decfdd9: post-creation immutable prototypes | Not ported; opt-in creation-time integration above, with initial probes in experimental/immutable-prototype/ |
+| f2decfdd9: post-creation immutable prototypes | Replaced for Window by the creation-time integration above; the arbitrary-object operation is not ported |
 | 1ce916938: retain handles with their contexts | Included in vm.cc, covered by the retained-Promise GC test |
 
-The standalone addon suite covers the two implemented features. Browlet uses
+The standalone addon suite covers queues, contexts, native global allocation,
+and their lifetimes. Browlet uses
 one itCompatPasses helper: an explicit-queue backend runs compatibility
-expectations normally. The addon therefore has a known failing Window global
-prototype-immutability test. A passing addon suite is not full Browlet or HTML
-conformance. The intermittent subprocess-test timeout is still under
-investigation; reducing workers has not established a fix.
+expectations normally. Window global prototype-immutability and unforgeable
+descriptor tests now pass under the addon. The unsupported context dynamic-import
+callback remains an ordinary failing standalone test. Addon tests are not full Browlet or HTML
+conformance. The Stream rejection regression observes process events in its
+Vitest worker, reusing the loaded Browlet modules. It uses the ordinary unit
+timeout and restores its event listeners after the check.

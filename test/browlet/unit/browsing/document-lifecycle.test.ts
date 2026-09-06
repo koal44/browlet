@@ -18,7 +18,7 @@ import {
   TopLevelTraversable,
 } from '../../../../src/browlet/browsing/navigable';
 import {
-  createRealm, Realm,
+  Realm,
 } from '../../../../src/browlet/scripting/realm';
 import {
   createDocumentState, createSessionHistoryEntry,
@@ -28,10 +28,11 @@ import {
   Moment, monotonicClock,
 } from '../../../../src/browlet/performance/clock';
 import {
-  getWindowProxyWindow, setWindowProxyWindow,
+  createWindowProxy, getWindowProxyWindow, setWindowProxyWindow,
   type WindowProxy as InternalWindowProxy,
 } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
+import { createWindowRealm } from '../../../../src/browlet/browsing/window/window-realm';
 import {
   DocumentImpl, type ModuleMap,
 } from '../../../../src/browlet/dom/nodes/document';
@@ -64,7 +65,7 @@ describe('browsing context groups', () => {
   });
 
   it('starts a browsing context with HTML\'s scalar defaults', () => {
-    const context = new BrowsingContext();
+    const context = new BrowsingContext(createWindowProxy());
 
     expect(getWindowProxyWindow(context.windowProxy)).toBeNull();
     expect(context.openerBrowsingContext).toBeNull();
@@ -90,20 +91,18 @@ describe('browsing context groups', () => {
   });
 
   it('gives a Window realm its Window and WindowProxy identities', () => {
-    const context = new BrowsingContext();
     const agent = new WindowAgent();
     const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createRealm(agent, {
-      createGlobalObject: () => window,
-      createGlobalThisValue: () => context.windowProxy,
-    });
+    const executionContext = createWindowRealm(agent, window);
+    const realm = executionContext.realm;
+    const context = new BrowsingContext(realm.globalThis as InternalWindowProxy);
 
-    expect(executionContext.realm.agent).toBe(agent);
-    expect(executionContext.realm.globalObject).toBe(window);
-    expect(executionContext.realm.globalThis).toBe(context.windowProxy);
-    expect(Reflect.get(window, 'Object'))
-      .toBe(executionContext.realm.intrinsics.object);
-    expect(Reflect.get(window, 'globalThis')).toBe(context.windowProxy);
+    expect(realm.agent).toBe(agent);
+    expect(realm.windowImplementation).toBe(window);
+    expect(realm.globalObject).toBe(browletBindings.getPlatformObject(window));
+    expect(realm.globalThis).toBe(context.windowProxy);
+    expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.intrinsics.object);
+    expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy);
     expect(agent.windowObjects).toEqual(new Set([window]));
   });
 
@@ -112,39 +111,31 @@ describe('browsing context groups', () => {
     const group = userAgent.createBrowsingContextGroup();
     const origin = createOpaqueOrigin();
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
-    const context = new BrowsingContext();
     const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createRealm(agent, {
-      createGlobalObject: () => window,
-      createGlobalThisValue: () => context.windowProxy,
-    });
+    const executionContext = createWindowRealm(agent, window);
+    WindowImpl.setAssociatedDocument(window, new DocumentImpl());
 
-    expect(Reflect.has(window, 'SharedArrayBuffer')).toBe(false);
+    expect(Reflect.has(executionContext.realm.globalObject, 'SharedArrayBuffer')).toBe(false);
     expect(executionContext.realm.intrinsics.bufferSource.sharedArrayBuffer)
       .toBeTypeOf('function');
   });
 
-  it.fails('uses the WindowProxy as the VM realm\'s actual global this', () => {
-    const context = new BrowsingContext();
-    const executionContext = createRealm(new WindowAgent(), {
-      createGlobalObject: () => new WindowImpl(new URL('about:blank')),
-      createGlobalThisValue: () => context.windowProxy,
-    });
+  itCompatPasses('uses the WindowProxy as the VM realm\'s actual global this', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.document);
 
-    expect(executionContext.realm.evaluate('this', 'global-this.js'))
-      .toBe(context.windowProxy);
+    expect(realm.evaluate('this', 'global-this.js')).toBe(browlet.window);
   });
 
   itCompatPasses('makes the Window realm global prototype immutable', () => {
-    const executionContext = createRealm(new WindowAgent(), {
-      createGlobalObject: () => new WindowImpl(new URL('about:blank')),
-    });
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.document);
 
-    expect(executionContext.realm.evaluate(
+    expect(realm.evaluate(
       'Reflect.setPrototypeOf(this, Object.getPrototypeOf(this))',
       'same-global-prototype.js',
     )).toBe(true);
-    expect(executionContext.realm.evaluate(
+    expect(realm.evaluate(
       'Reflect.setPrototypeOf(this, {})',
       'different-global-prototype.js',
     )).toBe(false);
@@ -251,7 +242,8 @@ describe('navigables', () => {
     expect(browsingContext.activeWindow).toBe(window);
     expect(getWindowProxyWindow(browsingContext.windowProxy)).toBe(window);
 
-    expect(realm.globalObject).toBe(window);
+    expect(realm.windowImplementation).toBe(window);
+    expect(browletBindings.getImplementation(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(browsingContext.windowProxy);
     expect(realm.agent.agentCluster).not.toBeNull();
     expect(WindowImpl.getAssociatedDocument(window)).toBe(document);
@@ -316,11 +308,8 @@ describe('environment settings objects', () => {
     const creationURL = requireURL('https://example.test/');
     const origin = createOpaqueOrigin();
     const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createRealm(new WindowAgent(), {
-      createGlobalObject: () => window,
-      createGlobalThisValue: () => new BrowsingContext().windowProxy,
-    });
-    const bindings = browletBindings.register(executionContext.realm);
+    const executionContext = createWindowRealm(new WindowAgent(), window);
+    const bindings = browletBindings.forRealm(executionContext.realm);
 
     const settings = setupWindowEnvironmentSettingsObject(
       creationURL,
@@ -350,6 +339,34 @@ describe('environment settings objects', () => {
 });
 
 describe('navigation lifecycle', () => {
+  itCompatPasses('preserves native Window identity and immutability across navigation', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const proxy = browlet.window;
+    const firstRealm = getRelevantRealm(browlet.document);
+    const firstDocument = browlet.document;
+    const oldState = firstRealm.evaluate(`
+      var pageState = 1;
+      () => [++pageState, document, globalThis];
+    `, 'old-window.js') as () => [number, Document, object];
+
+    expect(firstRealm.evaluate('this === window && window === globalThis', 'identity.js'))
+      .toBe(true);
+    await browlet.navigate('https://example.test/');
+    const nextRealm = getRelevantRealm(browlet.document);
+    expect(browlet.window).toBe(proxy);
+    expect(nextRealm).not.toBe(firstRealm);
+    expect(nextRealm.globalObject).not.toBe(firstRealm.globalObject);
+    expect(nextRealm.windowImplementation && Object.getPrototypeOf(nextRealm.windowImplementation))
+      .toBe(WindowImpl.prototype);
+    expect(oldState()).toEqual([2, firstDocument, proxy]);
+    expect(nextRealm.evaluate(`
+      this === window && window === globalThis &&
+      typeof pageState === 'undefined' &&
+      !Reflect.setPrototypeOf(this, {}) &&
+      !Reflect.setPrototypeOf(Window.prototype, {})
+    `, 'new-window.js')).toBe(true);
+  });
+
   it('exposes the browsing context WindowProxy as Document.defaultView', async () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window;
@@ -392,7 +409,8 @@ describe('navigation lifecycle', () => {
     expect(document).not.toBe(initialDocument);
     expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
-    expect(realm.globalObject).toBe(window);
+    expect(realm.windowImplementation).toBe(window);
+    expect(browletBindings.getImplementation(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
     expect(window && WindowImpl.getAssociatedDocument(window)).toBe(documentImpl);
