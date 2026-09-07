@@ -11,7 +11,8 @@ transport.
 The Fetch-independent File API foundation is implemented through `Blob`,
 `File`, and `FileList`. XHR §5 `ProgressEvent` and the no-form portion of §4
 `FormData` are also implemented. `FormData(form, submitter)` remains blocked
-on HTML forms; multipart encoding remains a Fetch responsibility.
+on HTML forms; [multipart body work](../fetch/multipart/roadmap.md) remains
+a Fetch implementation responsibility.
 
 Do not expose `XMLHttpRequest` merely because its declaration can be assembled:
 its useful behavior begins at the Fetch integration boundary.
@@ -32,8 +33,9 @@ lower-level Fetch consumer depend back on the browser host that consumes it.
 The three major responsibilities have different owners:
 
 - The XHR Standard owns `FormData`'s public entry list and methods. HTML owns
-  constructing an entry list from a form. Fetch owns multipart encoding and
-  parsing.
+  constructing an entry list from a form and defines multipart encoding.
+  Fetch consumes that encoder and defines body parsing; their implementation
+  belongs to the linked multipart roadmap.
 - The XHR Standard defines `ProgressEvent` and the progress-event firing
   algorithm. Browlet colocates the reusable interface, implementation, and IDL
   with its DOM event infrastructure, while the nearby XHR citation preserves
