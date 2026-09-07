@@ -1,6 +1,6 @@
 # Fetch dependency preflight
 
-Reviewed 2026-09-06. This file owns the dependency work order, suggested folder
+Reviewed 2026-09-07. This file owns the dependency work order, suggested folder
 layout, and local reference inventory. The [Fetch roadmap](roadmap.md) owns
 Fetch's implementation slices; the linked subsystem roadmaps own detailed
 scope, implementation status, tests, and stopping points.
@@ -99,7 +99,11 @@ their remaining multipart and Blob URL work has the owners linked above.
 
 ## Rejoin Fetch, then finish browser policy
 
-After the independent dependency work, resume the [Fetch slices](roadmap.md#slice-1--control-and-task-delivery).
+After structured fields, multipart bytes, and independent HTTP cache policy,
+resume the [Fetch slices](roadmap.md#slice-1--control-and-task-delivery).
+The remaining work-order entries above are gates for their named consumers,
+not prerequisites for starting §2. Cache storage/selection likewise resumes
+when Fetch supplies its request, response, header-list, and body records.
 Follow their order for records, APIs, and request processing. Complete the
 consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
