@@ -76,7 +76,7 @@ the external dependency work and catalogs its specification sources.
 | DOM abort and HTML structured data | §2 controller state and §5 | Browlet's existing abort/serialization capabilities |
 | Parallel queues and global task destinations | §2 task delivery | Existing `src/shared/parallel-queue.ts` and HTML task lifecycle |
 | Streams, Encoding, and MIME | §§2.2.2–2.2.4 and 5 | Existing subsystem implementations; body processing and header-list integration remain Fetch-owned |
-| Structured fields | §2.2.2 | [Structured fields](../structured-fields/roadmap.md) |
+| Structured fields | §2.2.2 | [Structured fields](../struct-fields/roadmap.md) |
 | HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP](http/roadmap.md) |
 | Blob/File bytes and Blob URLs | §§2.2.4, 5 / §4.3 | [File](../file/roadmap.md); shared keys come from [Storage](../storage/roadmap.md) |
 | FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/roadmap.md); [multipart](multipart/roadmap.md) owns byte processing |
@@ -137,7 +137,7 @@ and deterministic task routing execute without transport or public Fetch APIs.
 Implement HTTP syntax, content-coding dispatch, methods, header lists,
 normalization/combination/extraction, forbidden and safelisted header
 algorithms, range handling, and status classifications in document order.
-The [structured-field algorithms](../structured-fields/roadmap.md) must be
+The [structured-field algorithms](../struct-fields/roadmap.md) must be
 supplied before completing their header-list integration. Host codecs implement decompression; Fetch owns
 the coding selection and failure behavior.
 
