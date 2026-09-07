@@ -1,4 +1,4 @@
-import type { TextCursor } from './text-cursor';
+import type { TextCursor } from '../shared/text-cursor';
 
 /** Fetch §2.2 — collect an HTTP quoted string, starting at its opening quote. */
 export function collectHTTPQuotedString(c: TextCursor, extractValue = false): string {

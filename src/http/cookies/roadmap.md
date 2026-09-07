@@ -1,6 +1,6 @@
 # Cookies roadmap
 
-This project will own cookie records, the cookie store, and parsing, storage,
+This submodule will own cookie records, the cookie store, and parsing, storage,
 retrieval, and serialization algorithms. Fetch and HTML consume the same
 implementation. Browlet owns store instances and supplies browser policy;
 this project must not discover a process-global cookie jar or import Browlet.
@@ -13,7 +13,7 @@ Use [Cookies: HTTP State Management Mechanism](https://httpwg.org/http-extension
 the layered-cookies draft currently referenced by Fetch. Record its revision
 when implementing; it is a draft, not a published replacement RFC yet.
 
-Local sources under the [reference root](../fetch/preflight.md#local-reference-inventory):
+Local sources under the [reference root](../../fetch/preflight.md#local-reference-inventory):
 
 - `httpwg-http-extensions/draft-ietf-httpbis-layered-cookies.md`: §5
   user-agent records, eviction, subcomponent/main algorithms, and browser
@@ -36,7 +36,7 @@ Local sources under the [reference root](../fetch/preflight.md#local-reference-i
    ordering, deletion, and eviction. A `Set-Cookie` value is processed
    separately; it must not be treated as a comma-combinable field.
 4. **Browser integration.** Fetch supplies request/response and credentials
-   decisions through its [HTTP integration](../fetch/http/roadmap.md).
+   decisions through its [HTTP integration](../../fetch/http/roadmap.md).
    Browlet's Document implementation supplies non-HTTP access and the
    required browser context. The core does not infer those contexts from
    whichever realm happens to be executing.

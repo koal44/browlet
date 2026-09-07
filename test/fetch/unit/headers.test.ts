@@ -10,8 +10,8 @@ import {
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
   normalizeHeaderValue, setHeader, setStructuredFieldValue, sortAndCombineHeaders, type HeaderList,
 } from '../../../src/fetch/headers';
-import { parseDeltaSeconds, parseVary } from '../../../src/fetch/http/cache/fields';
-import type { StructuredBareItem, StructuredField, StructuredItem } from '../../../src/struct-fields/index';
+import { parseDeltaSeconds, parseVary } from '../../../src/http/cache/fields';
+import type { StructuredBareItem, StructuredField, StructuredItem } from '../../../src/http/struct-fields/index';
 import { createRequestRecord } from '../record-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {

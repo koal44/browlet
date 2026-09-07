@@ -4,12 +4,11 @@
     "composite": true,
     "module": "preserve",
     "moduleResolution": "Bundler",
-    "outDir": "../../dist/.typecheck/mime",
-    "tsBuildInfoFile": "../../dist/.typecheck/mime.tsbuildinfo"
+    "outDir": "../../dist/.typecheck/http",
+    "tsBuildInfoFile": "../../dist/.typecheck/http.tsbuildinfo"
   },
-  "include": ["./**/*.ts"],
+  "include": ["./*.ts", "./cache/**/*.ts"],
   "references": [
-    { "path": "../http" },
     { "path": "../shared" }
   ]
 }

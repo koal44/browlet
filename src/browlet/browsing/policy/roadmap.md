@@ -80,7 +80,7 @@ Read the Integrity-Policy section of
 [Subresource Integrity](https://w3c.github.io/webappsec-subresource-integrity/),
 local `w3c-subresource-integrity/index.bs`. Implement structured-field policy
 parsing, container association, and request enforce/report-only decisions.
-It depends on [structured fields](../../../struct-fields/roadmap.md),
+It depends on [structured fields](../../../http/struct-fields/roadmap.md),
 Fetch records, and Reporting. Byte/hash verification is owned by
 [Fetch's integrity work](../../../fetch/roadmap.md#subresource-integrity).
 

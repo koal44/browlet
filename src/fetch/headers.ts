@@ -1,9 +1,9 @@
 import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
 
 import { getMIMETypeEssence, parseMIMEType } from '../mime/index';
-import { collectHTTPQuotedString, isHTTPToken } from '../shared/http';
+import { collectHTTPQuotedString, isHTTPToken } from '../http/syntax';
 import { TextCursor } from '../shared/text-cursor';
-import { parseStructuredField, serializeStructuredField, type StructuredField } from '../struct-fields/index';
+import { parseStructuredField, serializeStructuredField, type StructuredField } from '../http/struct-fields/index';
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,

@@ -61,7 +61,7 @@ When an algorithm reaches a missing external dependency:
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
 | `response.ts` | Response records, filtered responses, cloning, network errors, and the `Response` implementation | §§2.2.6 and 5.5 |
-| [`http/`](http/roadmap.md) | HTTP syntax, extensions, and transactions; its [cache plan](http/cache/roadmap.md) owns caching detail | §§2.2–2.10, 3, and 4.4–4.11 |
+| [`http/`](http/roadmap.md) | Fetch-specific HTTP rules and transactions; its [cache plan](http/cache/roadmap.md) owns storage/validation over Fetch records | §§2.2–2.10, 3, and 4.4–4.11 |
 | [`multipart/`](multipart/roadmap.md) | FormData byte encoding/parsing used by Body | §§5.2–5.3 |
 | `integrity.ts` | SRI metadata and byte verification; see [the scoped plan below](#subresource-integrity) | §4.1 and SRI |
 | `schemes/` | `about:`, `blob:`, `data:`, `file:`, and HTTP(S) scheme dispatch | §§4.3 and 6 |
@@ -82,13 +82,13 @@ the external dependency work and catalogs its specification sources.
 | DOM abort and HTML structured data | §2 controller state and §5 | Browlet's existing abort/serialization capabilities |
 | Parallel queues and global task destinations | §2 task delivery | Existing `src/shared/parallel-queue.ts` and HTML task lifecycle |
 | Streams, Encoding, and MIME | §§2.2.2–2.2.4 and 5 | Existing subsystem implementations; body processing and header-list integration remain Fetch-owned |
-| Structured fields | §2.2.2 | [Structured fields](../struct-fields/roadmap.md) |
-| HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP](http/roadmap.md) |
+| Structured fields | §2.2.2 | [Structured fields](../http/struct-fields/roadmap.md) |
+| HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP syntax](../http/roadmap.md); [Fetch Metadata](http/roadmap.md#fetch-metadata) |
 | Blob/File bytes and Blob URLs | §§2.2.4, 5 / §4.3 | [File](../file/roadmap.md); shared keys come from [Storage](../storage/roadmap.md) |
 | FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/roadmap.md); [multipart](multipart/roadmap.md) owns byte processing |
 | UUIDs and cryptographic hashes | §2.2.5 / integrity checks | Narrow host primitives; a complete public Web Crypto API is not a prerequisite |
-| HTTP cache | §2.2.6, §2.8, and §4.6 | [Cache](http/cache/roadmap.md) |
-| Cookies | §3.1 | [Cookies](../cookies/roadmap.md); Fetch owns its request/response inputs |
+| HTTP cache | §2.2.6, §2.8, and §4.6 | [RFC cache rules](../http/cache/roadmap.md); [Fetch cache integration](http/cache/roadmap.md) |
+| Cookies | §3.1 | [Cookies](../http/cookies/roadmap.md); Fetch owns its request/response inputs |
 | Trustworthiness, referrer, HSTS, and integrity policy | Request construction and §4 | [Browser policy](../browlet/browsing/policy/roadmap.md); SRI byte verification is scoped below |
 | CSP / Mixed Content / Upgrade Insecure Requests | §4 | [Browser policy](../browlet/browsing/policy/roadmap.md) and its [CSP plan](../browlet/browsing/policy/csp/roadmap.md) |
 | CORP / COEP | §§2.2.5 and 3.7 | CORP is Fetch-owned HTTP work; HTML supplies embedder-policy state and processing |
@@ -213,7 +213,7 @@ setup lives in `test/fetch/record-fixture.ts`.
 Implement HTTP syntax, methods, header lists,
 normalization/combination/extraction, forbidden and safelisted header
 algorithms, range handling, and status classifications in document order.
-The [structured-field algorithms](../struct-fields/roadmap.md) must be
+The [structured-field algorithms](../http/struct-fields/roadmap.md) must be
 supplied before completing their header-list integration.
 
 **Status:** methods, header-list operations, quoted-string splitting,
@@ -291,7 +291,7 @@ behavior.
 Implement request/response records, cloning, request-client/origin/policy
 inputs, response filtering, network errors, location URLs, freshness
 predicates, and the miscellaneous HTTP concepts. Reuse URL/site operations;
-consume the [cache owner's freshness helpers](http/cache/roadmap.md).
+consume the [HTTP cache freshness helpers](../http/cache/roadmap.md).
 Storing a policy field does not implement the later policy check.
 
 **Exit proof:** record defaults, clone identity, filtered visibility, location

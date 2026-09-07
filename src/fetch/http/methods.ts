@@ -1,4 +1,4 @@
-import { isHTTPToken } from '../../shared/http';
+import { isHTTPToken } from '../../http/syntax';
 
 /** Fetch §2.2.1 — a method matches HTTP's token production. */
 export function isMethod(value: string): boolean {

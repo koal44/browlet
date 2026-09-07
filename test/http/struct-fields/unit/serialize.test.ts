@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   serializeStructuredField, type StructuredBareItem, type StructuredDictionary,
   type StructuredField, type StructuredItem, type StructuredParameters,
-} from '../../../src/struct-fields';
+} from '../../../../src/http/struct-fields';
 
 describe('RFC 9651 §4.1: serializing structured fields', () => {
   it.each([

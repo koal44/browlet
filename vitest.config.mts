@@ -15,7 +15,7 @@ export default defineConfig({
             'test/shared/unit/**/*.test.ts',
             'test/mime/unit/**/*.test.ts',
             'test/encoding/unit/**/*.test.ts',
-            'test/struct-fields/unit/**/*.test.ts',
+            'test/http/**/unit/**/*.test.ts',
             'test/file/unit/**/*.test.ts',
             'test/fetch/unit/**/*.test.ts',
             'test/url/unit/**/*.test.ts',

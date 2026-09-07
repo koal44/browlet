@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateCacheFreshness } from '../../../src/fetch/http/cache/freshness';
+import { calculateCacheFreshness } from '../../../src/http/cache/freshness';
 import {
   canStoreResponse, evaluateCacheRequest, shouldInvalidateCache,
-} from '../../../src/fetch/http/cache/policy';
+} from '../../../src/http/cache/policy';
 
 const received = Date.UTC(2026, 8, 7, 12);
 const timing = { requestTime: received, responseTime: received, now: received };

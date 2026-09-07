@@ -12,21 +12,24 @@ first and integrate it with real Fetch records/lifecycle later. CSP stays last.
 
 ## Suggested folder structure
 
-This is a **suggested implementation layout**. The new directories contain
-roadmaps only; source filenames may change as implementation becomes concrete.
-Add a TypeScript project/build reference when its first source is implemented,
-not merely because its roadmap exists. No new Git repositories or published
-packages are implied.
+This is a **suggested implementation layout**, with the adopted HTTP grouping
+defined by the [HTTP roadmap](../http/roadmap.md). Planned source filenames can
+change as implementation becomes concrete. Add a TypeScript project/build
+reference when its first source is implemented, not merely because its roadmap
+exists. No new Git repositories or published packages are implied.
 
 ```text
 src/
-├── struct-fields/
+├── http/
 │   ├── roadmap.md
-│   ├── values.ts
-│   ├── parse.ts
-│   └── serialize.ts
-├── cookies/
-│   └── roadmap.md
+│   ├── syntax.ts
+│   ├── date.ts
+│   ├── struct-fields/
+│   │   └── roadmap.md
+│   ├── cache/
+│   │   └── roadmap.md
+│   └── cookies/
+│       └── roadmap.md
 ├── storage/
 │   └── roadmap.md
 ├── fetch/
@@ -37,7 +40,6 @@ src/
 │   │   └── roadmap.md
 │   └── http/
 │       ├── roadmap.md
-│       ├── syntax.ts
 │       ├── metadata.ts
 │       └── cache/
 │           └── roadmap.md
@@ -68,9 +70,9 @@ src/
         └── roadmap.md
 ```
 
-Structured fields, cookies, and the Storage substrate have independent
-consumers and proposed top-level source projects. Multipart and HTTP caching
-remain within Fetch. Browser policy, report delivery, and timing remain in
+The HTTP roadmap owns the boundary between reusable protocol work and Fetch's
+processing. Multipart and cache transactions remain within Fetch. Storage has
+its own substrate; browser policy, report delivery, and timing remain in
 Browlet. Store instances still belong to the appropriate browser lifetime;
 a shared source project does not imply shared process-global state.
 
@@ -81,11 +83,11 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 
 | Order | Work / authoritative plan | First integration point |
 | --- | --- | --- |
-| 1 | [Structured fields](../struct-fields/roadmap.md), RFC 9651 | Fetch header operations |
+| 1 | [Structured fields](../http/struct-fields/roadmap.md), RFC 9651 | Fetch header operations |
 | 2 | [Multipart bytes](multipart/roadmap.md), RFC 7578 + HTML/Fetch | Body extraction/consumption |
-| 3 | [HTTP semantics](http/roadmap.md) and [HTTP caching](http/cache/roadmap.md), RFCs 9110/9111/5861 | Response freshness, then cache transactions |
+| 3 | [HTTP foundation](../http/roadmap.md) and [cache rules](../http/cache/roadmap.md), RFCs 9110/9111/5861 | Response freshness, then [Fetch cache transactions](http/cache/roadmap.md) |
 | 4 | [Trustworthiness](../browlet/browsing/policy/roadmap.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |
-| 5 | [Cookies](../cookies/roadmap.md), the current HTTPWG draft + HTML/Fetch | HTTP cookie processing, then HTML consumers |
+| 5 | [Cookies](../http/cookies/roadmap.md), the current HTTPWG draft + HTML/Fetch | HTTP cookie processing, then HTML consumers |
 | 6 | [Referrer Policy](../browlet/browsing/policy/roadmap.md#referrer-policy) | Request/redirect handling and policy delivery |
 | 7 | [Fetch Metadata](http/roadmap.md#fetch-metadata) | Outgoing HTTP request headers |
 | 8 | [SRI verification](roadmap.md#subresource-integrity) and [Integrity Policy](../browlet/browsing/policy/roadmap.md#integrity-policy) | Response bytes and request policy |

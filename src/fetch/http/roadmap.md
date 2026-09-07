@@ -1,13 +1,12 @@
 # Fetch HTTP roadmap
 
-This folder owns Fetch's HTTP-specific syntax, header protocols, partitioning,
-and request processing. It remains part of the Fetch project and uses its
-request/response records. The [parent roadmap](../roadmap.md) owns orchestration,
-the public API, and transport; [caching](cache/roadmap.md) owns its detailed
-storage and validation work.
+This folder owns Fetch's HTTP-specific classifications, header protocols,
+partitioning, and request processing over its request/response records. The
+[parent roadmap](../roadmap.md) owns orchestration, the public API, and transport;
+[cache integration](cache/roadmap.md) owns storage, selection, and validation.
+Reusable syntax, dates, and RFC algorithms belong to [HTTP](../../http/roadmap.md).
 
-**Status:** HTTP-date parsing supports the first [cache slice](cache/roadmap.md).
-Methods, ranges, and status classifications support parent Slice 2; header
+**Status:** methods, ranges, and status classifications support parent Slice 2; header
 lists and their rules live in `../headers.ts`. HTTP transactions and the
 transport adapter remain planned.
 
@@ -31,29 +30,19 @@ belongs to the transport, not another parser in this folder.
 
 | Work | Delivery point | Boundary |
 | --- | --- | --- |
-| HTTP syntax and classifications (`syntax.ts`, `methods.ts`, `ranges.ts`, `statuses.ts`) | Parent Slice 2, then the consuming transactions | HTTP-date, token, method, range, and status rules exist; field-specific grammars and validators arrive with their consumers. Header-list state and public Headers stay with the parent |
+| Fetch classifications (`methods.ts`, `ranges.ts`, `statuses.ts`) | Parent Slice 2, then the consuming transactions | CORS/forbidden methods, method normalization, single-range parsing, and Fetch status classifications. Reuse HTTP's syntax; header-list state and public Headers stay with the parent |
 | Authentication entries and partitions | Parent Slice 5 | Fetch owns keys/records; Browlet supplies client/top-level state and actual credential/store/pool instances |
 | §3 header protocols | Parent Slice 7 | Origin, CORS, Content-Length, MIME extraction, nosniff, CORP, and Sec-Purpose remain Fetch algorithms |
-| Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../cookies/roadmap.md); Fetch computes its browser inputs and credentials decisions |
+| Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../http/cookies/roadmap.md); Fetch computes its browser inputs and credentials decisions |
 | Browser policy | Main Fetch and redirects | Call the [policy owner](../../browlet/browsing/policy/roadmap.md); do not reimplement its language or infer an HTML environment from Node globals |
 | Cache transactions | §4.6 | Follow the [cache roadmap](cache/roadmap.md) |
 | HTTP-network processing | Parent Slice 9 | Integrate redirects, authentication, cache, CORS preflight/cache, filtering, cancellation, and transport without a second request pipeline |
-
-## Initial HTTP syntax
-
-`parseHTTPDate(value, now)` in `syntax.ts` accepts the three RFC 9110 §5.6.7
-date formats and returns UTC epoch milliseconds or null. Cache-recipient
-case-insensitivity follows RFC 9111 §4.2. Calendar/weekday validity, GMT,
-and the two-digit-year 50-year rule are checked; only surrounding SP/HTAB is
-trimmed. The caller supplies `now` so year interpretation is deterministic.
-Leap seconds round down to the preceding representable second, keeping cache
-expiration conservative. This does not add a general mail-date parser.
 
 ## Fetch Metadata
 
 Implement `metadata.ts` over the actual Fetch request record when available.
 It appends `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, and
-`Sec-Fetch-User`. Reuse [structured fields](../../struct-fields/roadmap.md),
+`Sec-Fetch-User`. Reuse [structured fields](../../http/struct-fields/roadmap.md),
 URL origin/site operations, and the policy owner's trustworthiness operation.
 Client, URL-list/redirect, destination, and activation state must retain their
 provenance from request construction; an ordinary header-setting API does not
@@ -65,8 +54,8 @@ untrustworthy targets. Verify the actual outgoing header list in Fetch tests.
 
 ## Other acceptance gates
 
-Pure tests cover invalid HTTP bytes, syntax, method/status classifications,
-range and safelist rules, and §3 header protocols. Transaction tests use an
+Fetch tests cover method/status classifications, range and safelist rules,
+and §3 header protocols; HTTP owns the shared syntax/date tests. Transaction tests use an
 explicit fake transport to prove ordering and credentials across redirects,
 authentication, cache hits/revalidation, CORS preflights, and cancellation.
 

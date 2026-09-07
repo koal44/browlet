@@ -2,7 +2,7 @@ import {
   isomorphicDecode, isomorphicEncode,
 } from '@exodus/bytes/encoding-lite.js';
 
-import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../shared/http';
+import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/syntax';
 import { TextCursor } from '../shared/text-cursor';
 
 /*

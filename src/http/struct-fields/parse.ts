@@ -1,8 +1,8 @@
 import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
 
-import { utf8DecodeWithoutBOMOrFail } from '../encoding/utf-8';
-import { forgivingBase64Decode } from '../infra/base64';
-import { TextCursor } from '../shared/text-cursor';
+import { utf8DecodeWithoutBOMOrFail } from '../../encoding/utf-8';
+import { forgivingBase64Decode } from '../../infra/base64';
+import { TextCursor } from '../../shared/text-cursor';
 
 import type {
   StructuredBareItem, StructuredDictionary, StructuredField, StructuredInnerList,

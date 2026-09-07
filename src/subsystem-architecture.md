@@ -195,6 +195,12 @@ Do not split a declaration from its implementation merely to reproduce the
 document boundary between specifications. Introduce an integration seam only
 for a genuine dependency edge or composition decision.
 
+Likewise, group related foundations by their consumers and dependency direction.
+[HTTP](./http/roadmap.md) owns reusable protocol algorithms below Fetch; MIME
+imports its syntax directly. Structured Fields keeps a nested build boundary.
+Fetch-specific policy and transactions remain with Fetch rather than creating
+a reverse dependency from the HTTP foundation.
+
 When a complete platform implementation spans a host-neutral subsystem and
 Browlet-owned facilities, keep its implementation state and IDL together on
 the Browlet side of that seam. Do not invent separate facade and browser
