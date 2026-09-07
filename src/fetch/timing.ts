@@ -10,8 +10,7 @@ export class FetchTimingInfo {
   finalNetworkResponseStartTime = 0;
   endTime = 0;
   finalConnectionTimingInfo: ConnectionTimingInfo | null = null;
-  // TODO(Service Workers): Add their timing record with worker integration.
-  serviceWorkerTimingInfo: null = null;
+  serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
   serverTimingHeaders: string[] = [];
   renderBlocking = false;
 }
@@ -44,3 +43,18 @@ export class ConnectionTimingInfo {
   secureConnectionStartTime = 0;
   alpnNegotiatedProtocol = new Uint8Array();
 }
+
+/*
+ * Service Workers, service worker timing info, retained by Fetch timing
+ * and response records. The worker owner creates/populates it; initial times
+ * are zero and initial router sources are empty strings.
+ * https://w3c.github.io/ServiceWorker/#service-worker-timing
+ */
+export type ServiceWorkerTimingInfo = {
+  startTime: number;
+  fetchEventDispatchTime: number;
+  workerRouterEvaluationStart: number;
+  workerCacheLookupStart: number;
+  workerMatchedRouterSource: string;
+  workerFinalRouterSource: string;
+};

@@ -56,7 +56,7 @@ When an algorithm reaches a missing external dependency:
 | --- | --- | --- |
 | Cross-specification capabilities at their consumers | HTML serialization/task delivery, client state, clocks, policy, and storage supplied explicitly without a Browlet dependency; no combined host service bag | §2, 4, and “Using fetch in other standards” |
 | `controller.ts`, `timing.ts`, `tasks.ts`, `infrastructure.ts`, `url.ts` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, integer serialization, and URL classifications | Opening §2 and §2.1 |
-| `params.ts` (planned) | Fetch bookkeeping over the real request/response records and the controller | §2, “Infrastructure” |
+| `params.ts` | Fetch bookkeeping over the real request/response records and the controller | §2, “Infrastructure” |
 | `headers.ts` | Header lists, parsing, normalization, extraction, guards, and forbidden/safelisted names | §§2.2.2, 3.3–3.8, and 5.1 |
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
@@ -67,8 +67,8 @@ When an algorithm reaches a missing external dependency:
 | `schemes/` | `about:`, `blob:`, `data:`, `file:`, and HTTP(S) scheme dispatch | §§4.3 and 6 |
 | `fetch.ts` | Main Fetch orchestration, response-processing callbacks, task destinations, and ongoing-fetch control | §§4.1–4.2 and “Using fetch in other standards” |
 | `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
-| `api.ts` | Realm-correct `Headers`, `Request`, `Response`, Body mixin, `fetch()`, and related promises | §5 |
-| `web-idl.ts` | Lossless Fetch IDL contributions assembled by the active browser host | §5 |
+| Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, and declaration signatures; install the family only when Slice 6 is complete | §§5.1–5.5 |
+| Public `fetch()` binding (planned) | Realm-correct orchestration and abort handling | §5.6 |
 
 ## Dependency ledger
 
@@ -131,7 +131,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | Source portion | Implementation / boundary |
 | --- | --- |
 | §2 terminology, ABNF, credentials | Definitions for subsequent consumers, not separate runtime services |
-| §2 fetch params | Pending the request/response record spine below; includes their typed callbacks and the aborted/canceled predicates |
+| §2 fetch params | `params.ts`: request/response record references, typed callbacks, defaults, and aborted/canceled predicates |
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
@@ -147,21 +147,21 @@ The adapters are ready for Fetch orchestration; no public Fetch APIs are install
 Timing records store DOMHighResTimeStamp values. Reading/coarsening clocks and
 delivering performance entries remain at the later timing producers, using the
 existing [Performance owner](../browlet/performance/roadmap.md#fetch-and-navigation-integration).
-Service Worker timing remains explicitly null until worker integration supplies
-its record. Offline policy accepts both specified booleans; browser connectivity
+Service Worker timing defaults to null; its shared data type records the six
+fields supplied by Service Workers, whose execution remains deferred. Offline
+policy accepts both specified booleans; browser connectivity
 state and real BiDi session lookup remain host integration work.
 
 **Exit proof:** abort serialization/fallback, controller transitions, timing,
 and deterministic task routing execute without transport or public Fetch APIs.
-Covered by `test/fetch/unit/control.test.ts` and
-`test/browlet/unit/fetch-control.test.ts`; fetch params remains the forward
-record dependency above.
+Covered by `test/fetch/unit/control.test.ts`,
+`test/browlet/unit/fetch-control.test.ts`, and the record tests below.
 
-### Suggested record and API spine
+### Record and API spine
 
-Establish the records' fields, defaults, and shared references before their
-later algorithms. A class can provide those defaults without prematurely
-implementing every operation. Proposed shapes:
+The records' fields, defaults, and shared references are established ahead of
+their later algorithms. Classes supply defaults; unfinished operations throw
+explicit errors. This is structural groundwork, not completed §§2.2 or 5 APIs.
 
 | Construct | Representation and ownership |
 | --- | --- |
@@ -171,15 +171,40 @@ implementing every operation. Proposed shapes:
 | Fetch params (§2) | Record over those types, `FetchController`, timing info, task destination, and typed processing steps |
 | Headers (§5.1) | `HeadersImpl` class retaining a header list and guard; a Request/Response's Headers shares that record's list |
 | Body mixin (§5.3) | `BodyMixin` supplies shared body behavior over the includer's body; it must not create another body value |
-| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` classes retaining their §2 records, Headers implementations, and the applicable realm/abort dependencies |
+| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` retain their §2 record; internal allocation uses the Binding Context to construct Headers in the same realm; Request retains a supplied DOM signal reference |
 | Unions, enums, dictionaries, callback signatures | Type aliases/record types; Web IDL owns author conversion and defaults |
 
-Review the request/client/policy and response-filtering fields when bringing
-this spine forward. Record construction need not wait for networking, cloning,
-or body consumption, but a missing external type must stay explicit. API
-classes and IDL can be authored before exposure; install the complete family
-at Slice 6. The spine's exact implementation is pending review, rather than an
-expansion of the current control slice.
+Header lists retain their identity: mutate their entries rather than replacing
+the list after an API object refers to it. Body reads through the includer's
+record, so body replacement does not strand the mixin. Request URL/current URL
+and response URL are derived from their URL lists. A request copies its initial
+URL components while retaining any Blob URL entry reference.
+
+**Remaining boundaries:**
+
+- HTML client, reserved-client, traversable, and policy-container fields retain
+  opaque owner references. Client-derived values and policy operations still
+  need narrow HTML capabilities in §4.1; these objects are not new Fetch-owned
+  environments or policy containers.
+- Request retains a DOM implementation reference for its signal. DOM-dependent
+  signal construction/following is not supplied yet. Referrer Policy's value
+  type/declaration also remains with the browser-policy work. Replace these
+  explicit opaque/string types when connecting their owner, before API exposure.
+- Headers processing and guards, BodyInit extraction/consumption, cloning,
+  and author Request/Response construction have declared signatures and throw
+  until their respective slices. Byte-sequence request bodies must be extracted
+  before a Body API can expose their stream.
+- `FilteredResponseRecord` records the internal-response relationship, but its
+  factory throws. Filtering must provide a live restricted view of that record,
+  not copy its current fields or merely change `type`.
+- API IDL is co-located with the implementations and remains uninstalled. The
+  public `fetch()` operation and transport are not introduced here.
+
+**Exit proof:** `test/fetch/unit/records.test.ts` covers defaults, independent
+mutable state, live URL/body references, shared Headers, allocation realm, and
+FetchParams cancellation. Tests allocate implementations through the shared
+Binding Context; projection/conversion coverage belongs to Slice 6. Repeated
+setup lives in `test/fetch/record-fixture.ts`.
 
 ## Slice 2 — HTTP methods, headers, and statuses
 
