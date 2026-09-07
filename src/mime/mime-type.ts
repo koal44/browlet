@@ -2,6 +2,7 @@ import {
   isomorphicDecode, isomorphicEncode,
 } from '@exodus/bytes/encoding-lite.js';
 
+import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../shared/http';
 import { TextCursor } from '../shared/text-cursor';
 
 /*
@@ -61,17 +62,14 @@ export function parseMIMEType(input: string): MIMEType | null {
   const typeStart = position.pos();
   position.consumeWhile((character) => character !== '/');
   const type = position.slice(typeStart);
-  if (type === '' || !containsOnly(type, isHTTPTokenCodePoint)) return null;
+  if (!isHTTPToken(type)) return null;
   if (position.eof()) return null;
   position.advance();
 
   const subtypeStart = position.pos();
   position.consumeWhile((character) => character !== ';');
   const subtype = trimTrailingHTTPWhitespace(position.slice(subtypeStart));
-  if (
-    subtype === '' ||
-    !containsOnly(subtype, isHTTPTokenCodePoint)
-  ) return null;
+  if (!isHTTPToken(subtype)) return null;
 
   const mimeType: MIMEType = {
     type: toASCIILowercase(type),
@@ -96,7 +94,7 @@ export function parseMIMEType(input: string): MIMEType | null {
 
     let parameterValue: string;
     if (position.peek() === '"') {
-      parameterValue = collectHTTPQuotedString(position);
+      parameterValue = collectHTTPQuotedString(position, true);
       position.consumeWhile((character) => character !== ';');
     } else {
       const valueStart = position.pos();
@@ -106,8 +104,7 @@ export function parseMIMEType(input: string): MIMEType | null {
     }
 
     if (
-      parameterName !== '' &&
-      containsOnly(parameterName, isHTTPTokenCodePoint) &&
+      isHTTPToken(parameterName) &&
       containsOnly(parameterValue, isHTTPQuotedStringTokenCodePoint) &&
       !mimeType.parameters.has(parameterName)
     ) {
@@ -137,7 +134,7 @@ export function serializeMIMEType(mimeType: MIMEType): string {
 
   for (const [name, parameter] of mimeType.parameters) {
     let value = parameter;
-    if (value === '' || !containsOnly(value, isHTTPTokenCodePoint)) {
+    if (!isHTTPToken(value)) {
       value = `"${escapeQuotedString(value)}"`;
     }
     serialization += `;${name}=${value}`;
@@ -257,30 +254,6 @@ const javaScriptMIMETypeEssences = new Set([
   'text/x-javascript',
 ]);
 
-function collectHTTPQuotedString(position: TextCursor): string {
-  position.advance();
-  let value = '';
-
-  while (true) {
-    const start = position.pos();
-    position.consumeWhile((character) => character !== '"' && character !== '\\');
-    value += position.slice(start);
-
-    if (position.eof()) break;
-
-    const quoteOrBackslash = position.next();
-    if (quoteOrBackslash === '"') break;
-
-    if (position.eof()) {
-      value += '\\';
-      break;
-    }
-    value += position.next();
-  }
-
-  return value;
-}
-
 function trimHTTPWhitespace(input: string): string {
   let start = 0;
   let end = input.length;
@@ -293,35 +266,6 @@ function trimTrailingHTTPWhitespace(input: string): string {
   let end = input.length;
   while (end > 0 && isHTTPWhitespace(input[end - 1]!)) end--;
   return input.slice(0, end);
-}
-
-function isHTTPWhitespace(character: string): boolean {
-  return character === '\t' ||
-    character === '\n' ||
-    character === '\r' ||
-    character === ' ';
-}
-
-function isHTTPTokenCodePoint(character: string): boolean {
-  const code = character.charCodeAt(0);
-  return code >= 0x30 && code <= 0x39 ||
-    code >= 0x41 && code <= 0x5a ||
-    code >= 0x61 && code <= 0x7a ||
-    character === '!' ||
-    character === '#' ||
-    character === '$' ||
-    character === '%' ||
-    character === '&' ||
-    character === "'" ||
-    character === '*' ||
-    character === '+' ||
-    character === '-' ||
-    character === '.' ||
-    character === '^' ||
-    character === '_' ||
-    character === '`' ||
-    character === '|' ||
-    character === '~';
 }
 
 function isHTTPQuotedStringTokenCodePoint(character: string): boolean {

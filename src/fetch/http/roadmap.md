@@ -6,9 +6,10 @@ request/response records. The [parent roadmap](../roadmap.md) owns orchestration
 the public API, and transport; [caching](cache/roadmap.md) owns its detailed
 storage and validation work.
 
-**Status:** HTTP-date parsing is implemented for the first
-[cache slice](cache/roadmap.md). Other HTTP algorithms and the transport
-adapter remain planned.
+**Status:** HTTP-date parsing supports the first [cache slice](cache/roadmap.md).
+Methods, ranges, and status classifications support parent Slice 2; header
+lists and their rules live in `../headers.ts`. HTTP transactions and the
+transport adapter remain planned.
 
 ## Sources
 
@@ -30,7 +31,7 @@ belongs to the transport, not another parser in this folder.
 
 | Work | Delivery point | Boundary |
 | --- | --- | --- |
-| Reusable HTTP syntax (`syntax.ts`) | Parent Slice 2 | Implement the referenced grammar/date/validator primitives; reuse existing Infra/MIME operations where their contracts match. Header-list state and public Headers stay with the parent |
+| HTTP syntax and classifications (`syntax.ts`, `methods.ts`, `ranges.ts`, `statuses.ts`) | Parent Slice 2, then the consuming transactions | HTTP-date, token, method, range, and status rules exist; field-specific grammars and validators arrive with their consumers. Header-list state and public Headers stay with the parent |
 | Authentication entries and partitions | Parent Slice 5 | Fetch owns keys/records; Browlet supplies client/top-level state and actual credential/store/pool instances |
 | §3 header protocols | Parent Slice 7 | Origin, CORS, Content-Length, MIME extraction, nosniff, CORP, and Sec-Purpose remain Fetch algorithms |
 | Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../cookies/roadmap.md); Fetch computes its browser inputs and credentials decisions |
