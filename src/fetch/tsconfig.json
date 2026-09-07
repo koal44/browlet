@@ -15,10 +15,10 @@
     { "path": "../http/struct-fields" },
     { "path": "../infra" },
     { "path": "../mime" },
-    { "path": "../shared" },
     { "path": "../streams" },
     { "path": "../url" },
     { "path": "../web-idl" },
+    { "path": "../web-idl/exceptions" },
     { "path": "../xhr" }
   ]
 }

@@ -2,11 +2,11 @@ import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
 import {
   domExceptionName, throwDOMException,
-} from '../../shared/dom-exception';
+} from '../../web-idl/exceptions/dom-exception-core';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
 import {
   createObservableArray, type ObservableArrayHandle,
-} from '../../shared/observable-array';
+} from '../../infra/observable-array';
 import type { CascadeEngine } from './cascade-engine';
 
 export class TreeScope {

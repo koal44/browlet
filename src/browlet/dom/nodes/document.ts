@@ -22,10 +22,10 @@ import {
   createSandboxingFlagSet, type SandboxingFlag,
   type SandboxingFlagSet,
 } from '../../browsing/policy/sandbox';
-import { asciiLower } from '../../../shared/css';
+import { asciiLower } from '../../../infra/ascii';
 import {
   domExceptionName, throwDOMException,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import {
   arg, contextValue, ctor, defineDictionary, defineIncludes, defineInterface,
   definePartialInterface, dictMember, emptyDictionary, idlType,

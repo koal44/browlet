@@ -1,6 +1,6 @@
 import { test, chromium, expect, firefox, webkit } from '@playwright/test';
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
-import { assertNever, type Permutations } from '../../../src/shared/util';
+import { assertNever, type Permutations } from '../../../src/infra/util';
 import {
   BROWSER_NAMES, type BrowserName, type ContextRef, type Engine,
   type Expectation, type RunScenariosOptions, type Scenario,

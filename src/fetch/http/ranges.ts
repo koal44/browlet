@@ -1,5 +1,5 @@
 import { isHTTPTabOrSpace } from '../../http/syntax';
-import { TextCursor } from '../../shared/text-cursor';
+import { TextCursor } from '../../infra/text-cursor';
 import { serializeInteger } from '../infrastructure';
 
 /** Fetch §2.2.2 — build a content range from integer offsets and length. */

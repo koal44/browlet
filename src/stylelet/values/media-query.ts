@@ -1,4 +1,4 @@
-import { asciiLower } from '../../shared/css';
+import { asciiLower } from '../../infra/ascii';
 import {
   consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken,
   consumeLessDelim, consumeParensBlock,

@@ -1,7 +1,8 @@
 import { LOOKUP_COPY, type LookupMode } from '../constants';
 import type { QueryContext, SelectletCaps } from '../selectlet';
-import { concatCollection, htmlCollectionSource } from '../../shared/collections';
-import { isDocument, isDocumentFragment, isElement } from '../../shared/dom';
+import { concatCollection, htmlCollectionSource } from '../collections';
+import { isDocument, isDocumentFragment } from '../dom';
+import { isElement } from '../../infra/selector-dom';
 import type { Snapshot } from '../snapshot';
 
 export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;

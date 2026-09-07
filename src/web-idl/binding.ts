@@ -1,5 +1,5 @@
 import { isObject } from '../js-engine/index';
-import { getDOMExceptionRequest } from '../shared/dom-exception';
+import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,

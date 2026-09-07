@@ -1,4 +1,4 @@
-import type { ParallelQueue } from '../shared/parallel-queue';
+import type { ParallelQueue } from '../infra/parallel-queue';
 import { FetchController } from './controller';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';

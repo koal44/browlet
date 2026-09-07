@@ -8,7 +8,7 @@ import {
 import type { Snapshot } from '../snapshot';
 import {
   createDOMException, domExceptionName, throwDOMException,
-} from '../../shared/dom-exception';
+} from '../../web-idl/exceptions/dom-exception-core';
 import { CSSRuleListImpl } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
 import { StyleSheetImpl } from './stylesheet';

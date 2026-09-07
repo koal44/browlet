@@ -3,8 +3,8 @@ import {
   type AttributeSelector, type ClassSelector, type IdSelector,
   type PseudoClassSelector, type SimpleSelector, type TypeSelector,
 } from '../syntax/selector';
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
+import { asciiLower } from '../../infra/ascii';
+import { assertNever } from '../../infra/util';
 import type { Snapshot } from '../snapshot';
 import {
   checkClass, checkId, checkTag, hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,

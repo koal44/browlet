@@ -1,4 +1,4 @@
-import { asciiLower } from '../../shared/css';
+import { asciiLower } from '../../infra/ascii';
 import { type TryConsumer } from '../syntax/token-cursor';
 import { consumeIdentToken } from '../syntax/component-consumers';
 import { adaptConsumer } from '../syntax/component-grammar';

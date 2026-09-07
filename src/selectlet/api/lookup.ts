@@ -1,8 +1,9 @@
 import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
-import { collectionToArray, concatCollection } from '../../shared/collections';
-import { asciiLower } from '../../shared/css';
-import { isDocumentFragment, isElement, isNamedItemAnElement } from '../../shared/dom';
+import { collectionToArray, concatCollection } from '../collections';
+import { asciiLower } from '../../infra/ascii';
+import { isDocumentFragment, isNamedItemAnElement } from '../dom';
+import { isElement } from '../../infra/selector-dom';
 import type { QueryContext } from '../selectlet';
 import type { Snapshot } from '../snapshot';
 

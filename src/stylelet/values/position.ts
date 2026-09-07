@@ -1,4 +1,4 @@
-import { mapTuple } from '../../shared/util';
+import { mapTuple } from '../../infra/util';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia,

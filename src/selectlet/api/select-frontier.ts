@@ -1,7 +1,7 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
-import { mergeDocumentOrderLists } from '../../shared/collections';
+import { mergeDocumentOrderLists } from '../collections';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeMove, resetFrontierDebug, runAdvanceMove, runBridgeMove, type FrontierProgram, type FrontierState,
 } from '../planner/frontier';

@@ -1,6 +1,6 @@
 import {
   domExceptionCode, domExceptionName,
-} from '../shared/dom-exception';
+} from './exceptions/dom-exception-core';
 import {
   arg, constant, contextValue, ctor, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, integer, nullable,

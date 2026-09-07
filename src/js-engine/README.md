@@ -4,7 +4,7 @@ This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
-The [JS Engine roadmap](./roadmap.md) inventories HTML's complete
+The [JS Engine roadmap](./ROADMAP.md) inventories HTML's complete
 ECMAScript dependency list and separates ordinary engine behavior from the
 small set of inaccessible runtime facts and genuine host hooks.
 Its work proceeds by coherent consumers. The first runtime slice established
@@ -43,7 +43,7 @@ Classify code by ownership before extracting it:
 | Home | Admission test | Examples |
 | --- | --- | --- |
 | `js-engine/` | An ECMAScript abstract operation, realm or isolate fact, captured intrinsic, or bounded substitute for an inaccessible engine operation whose contract does not import another platform subsystem | `IsObject`, realm-owned function creation, ArrayBuffer slot inspection |
-| `shared/` | A specification-, realm-, and engine-neutral convenience with genuine cross-domain reuse | `assertNever`, tuple mapping, text cursors |
+| `infra/` | An Infra algorithm or a small realm-neutral foundation with reuse across subsystems | `assertNever`, tuple mapping, text cursors |
 | Owning subsystem | Policy, state, or lifecycle defined by that specification | Web IDL conversion and overload policy, HTML task and serialization policy, Streams queues, File behavior |
 | Integration or Host Port | An external effect supplied by the embedder or composition root | clocks, native line endings, scheduling, parser input and output |
 
@@ -167,9 +167,9 @@ predicates, intrinsic probes, and native probe together if Node exposes
 complete object-kind inspection or Browlet moves to a direct V8 embedder. The
 bounded operation and its known limit are
 exercised in
-[`built-in-primitives.test.ts`](../../test/js-engine/unit/built-in-primitives.test.ts)
+[`built-in-primitives.test.ts`](../../test/js-engine/built-in-primitives.test.ts)
 and
-[`serialize.test.ts`](../../test/browlet/unit/scripting/structured-data/serialize.test.ts).
+[`serialize.test.ts`](../../test/browlet/scripting/structured-data/serialize.test.ts).
 
 `node-v8-error-stack` approximates access to the inaccessible Error `[[Stack]]`
 state. It reads V8's realm-specific own stack accessor and restores the
@@ -188,10 +188,10 @@ before returning. Growable SharedArrayBuffer views cannot be probed this way
 because growth is irreversible. Replace only these engine-fact operations if
 Node or a direct V8 embedder exposes the missing slots. The boundary is covered
 by
-[`array-buffer-primitives.test.ts`](../../test/js-engine/unit/array-buffer-primitives.test.ts)
+[`array-buffer-primitives.test.ts`](../../test/js-engine/array-buffer-primitives.test.ts)
 and the HTML structured-data tests.
 
 The runtime contracts, explicit-queue behavior, and known ambient fallback
 limits are exercised in
-[`node-realm.test.ts`](../../test/js-engine/unit/node-realm.test.ts) and
-[`node-runtime.test.ts`](../../test/js-engine/unit/node-runtime.test.ts).
+[`node-realm.test.ts`](../../test/js-engine/node-realm.test.ts) and
+[`node-runtime.test.ts`](../../test/js-engine/node-runtime.test.ts).

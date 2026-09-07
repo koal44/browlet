@@ -21,6 +21,7 @@
     "url": "git+https://github.com/koal44/browlet.git"
   },
   "scripts": {
+    "clean": "node scripts/clean.mjs",
     "build": "node scripts/build.mjs",
     "build:node": "node scripts/build-node.mjs",
     "lint": "node --run typecheck && eslint src test scripts packages node-compat",
@@ -38,7 +39,8 @@
     "test:stylelet:oracle:fixme": "cross-env HARNESS_MODE=fixme node scripts/with-node.mjs playwright test --project=stylelet",
     "test:selectlet:perf": "node scripts/with-node.mjs playwright test --project=perf --workers=1",
     "test:quick": "node --run lint && node --run build && node --run test:unit && node --run test:node-compat && node --run test:artifact",
-    "test:all": "node --run test:quick && node --run test:browlet:wpt && node --run test:selectlet:oracle && node --run test:stylelet:oracle"
+    "test:all": "node --run test:quick && node --run test:selectlet:oracle && node --run test:stylelet:oracle",
+    "test:all2": "node --run test:quick && node --run test:browlet:wpt && node --run test:selectlet:oracle && node --run test:stylelet:oracle"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

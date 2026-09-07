@@ -1,7 +1,7 @@
 import { LOOKUP_COPY, type LookupMode } from '../constants';
-import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../../shared/collections';
-import { asciiLower } from '../../shared/css';
-import { isDocumentFragment } from '../../shared/dom';
+import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../collections';
+import { asciiLower } from '../../infra/ascii';
+import { isDocumentFragment } from '../dom';
 import type { QueryContext } from '../selectlet';
 import type { Snapshot } from '../snapshot';
 

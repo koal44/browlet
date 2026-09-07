@@ -1,12 +1,13 @@
 import {
-  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiLower, asciiStartsWith, hasCssToken,
-} from '../../shared/css';
+  asciiDashMatch, asciiEndsWith, asciiEquals, hasAsciiWhitespaceToken, asciiIncludes, asciiStartsWith,
+} from '../../infra/selector-matching';
+import { asciiLower, hasWhitespaceToken } from '../../infra/ascii';
 import {
   isFormStateElement, isHtmlButton, isValidityElement,
   isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup,
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
-} from '../../shared/dom';
+} from '../../infra/selector-dom';
 import { XML_NAMESPACE } from '../../infra/index';
 import type { Snapshot } from '../snapshot';
 import type { RuntimeCache } from './runtimeCache';
@@ -175,7 +176,7 @@ function matchAttrValueOp(
       case '$': return asciiEndsWith(attrValue, htmlExpected);
       case '|': return asciiDashMatch(attrValue, htmlExpected);
       case '*': return asciiIncludes(attrValue, htmlExpected);
-      case '~': return asciiHasCssToken(attrValue, htmlExpected);
+      case '~': return hasAsciiWhitespaceToken(attrValue, htmlExpected);
       case '~R': return snap.getCssTokenRegex(expected, true).test(attrValue);
       default: return snap.getCachedRegex(pattern, true /* ignoreCase */).test(attrValue);
     }
@@ -186,7 +187,7 @@ function matchAttrValueOp(
     case '^': return attrValue.startsWith(expected);
     case '$': return attrValue.endsWith(expected);
     case '*': return attrValue.includes(expected);
-    case '~': return hasCssToken(attrValue, expected);
+    case '~': return hasWhitespaceToken(attrValue, expected);
     case '~R': return snap.getCssTokenRegex(expected, false).test(attrValue);
     case '|':
       return attrValue === expected ||

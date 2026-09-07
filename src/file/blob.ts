@@ -1,6 +1,6 @@
 import { utf8Decode, utf8Encode } from '../encoding/utf-8';
 import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
-import { domExceptionName, createDOMException } from '../shared/dom-exception';
+import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import {
   closeReadableStream, enqueueReadableStream, errorReadableStream,
   createReadableStreamWithByteReadingSupport, getReadableStreamReader,

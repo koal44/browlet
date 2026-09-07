@@ -12,8 +12,8 @@
     { "path": "../infra" },
     { "path": "../encoding" },
     { "path": "../mime" },
-    { "path": "../shared" },
     { "path": "../streams" },
-    { "path": "../web-idl" }
+    { "path": "../web-idl" },
+    { "path": "../web-idl/exceptions" }
   ]
 }

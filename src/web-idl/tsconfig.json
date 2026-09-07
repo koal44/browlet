@@ -11,7 +11,7 @@
   "references": [
     { "path": "../js-engine" },
     { "path": "./declaration" },
-    { "path": "../infra" },
-    { "path": "../shared" }
+    { "path": "./exceptions" },
+    { "path": "../infra" }
   ]
 }

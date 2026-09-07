@@ -1,4 +1,4 @@
-import { asciiLower } from '../../shared/css';
+import { asciiLower } from '../../infra/ascii';
 import {
   interpretPropertyDeclaration, propertyRegistry,
   serializePropertyDeclaration, type PropertyDeclaration,
@@ -8,7 +8,7 @@ import {
 } from '../syntax/parser';
 import {
   domExceptionName, throwDOMException,
-} from '../../shared/dom-exception';
+} from '../../web-idl/exceptions/dom-exception-core';
 import { withCSSStyleDeclaration } from './stubs/extensions';
 
 /*

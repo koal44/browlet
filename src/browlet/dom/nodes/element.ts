@@ -18,7 +18,7 @@ import { impl } from '../../../web-idl/index';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../infra/index';
-import { asciiLower } from '../../../shared/css';
+import { asciiLower } from '../../../infra/ascii';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';

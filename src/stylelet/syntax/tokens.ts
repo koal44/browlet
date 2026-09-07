@@ -1,5 +1,5 @@
-import { TextCursor } from '../../shared/text-cursor';
-import { asciiLower } from '../../shared/css';
+import { TextCursor } from '../../infra/text-cursor';
+import { asciiLower } from '../../infra/ascii';
 
 export enum TokenKind {
   Ident = 1,

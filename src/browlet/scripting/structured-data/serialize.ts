@@ -1,5 +1,5 @@
 import * as JSEngine from '../../../js-engine/index';
-import { throwDataCloneError } from '../../../shared/dom-exception';
+import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
 import {
   getBufferSourceByteLength,
   getBufferSourceByteOffset, getBufferSourceCopy,

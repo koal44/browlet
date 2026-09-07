@@ -1,6 +1,6 @@
 import {
   domExceptionName, throwDOMException,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import { bind } from '../../../web-idl/index';
 import {
   arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,

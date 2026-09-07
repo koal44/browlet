@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { DistributiveOmit } from '../../src/shared/util';
+import type { DistributiveOmit } from '../../src/infra/util';
 
 export type SelectCase =  { select: string;  ref?: ContextRef; } & CaseBase;
 export type ByIdCase =    { byId: string;    ref?: ContextRef; } & CaseBase;

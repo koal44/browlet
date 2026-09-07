@@ -3,7 +3,7 @@ import type { ParseContext } from '../../../src/selectlet/parser/parser';
 import {
   parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseForgivingSelectorList, parseRelativeSelectorList, parseSelectorList, parseStrictSelectorList,
 } from '../../../src/selectlet/parser/parser';
-import { TextCursor } from '../../../src/shared/text-cursor';
+import { TextCursor } from '../../../src/infra/text-cursor';
 import { consumeIdent } from '../../../src/selectlet/parser/lex';
 import { parseNthArgs } from '../../../src/selectlet/parser/nth';
 import { describeRelativeCompound, describeRelativeStep } from '../util';

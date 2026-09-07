@@ -9,7 +9,7 @@ import {
 } from '../../../file/index';
 import {
   domExceptionName, throwDOMException,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import {
   cancelReadableStreamReader, getReadableStreamReader,
   readReadableStreamChunk,

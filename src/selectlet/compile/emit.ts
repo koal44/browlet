@@ -2,8 +2,9 @@ import {
   type AttributeSelector, type CandidateElementPredicate, type CandidateTest, type CandidateSubjectPredicate, type CompoundSelector, type RelativeSelectorList, type SelectorList,
 } from '../parser/parser';
 import type { NthArgs } from '../parser/nth';
-import { asciiLower, cssIdentUnescape } from '../../shared/css';
-import { assertNever } from '../../shared/util';
+import { asciiLower } from '../../infra/ascii';
+import { cssIdentUnescape } from '../parser/escape';
+import { assertNever } from '../../infra/util';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,

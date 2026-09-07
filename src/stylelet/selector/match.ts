@@ -1,5 +1,5 @@
 import { Snapshot } from '../snapshot';
-import { assertNever } from '../../shared/util';
+import { assertNever } from '../../infra/util';
 import {
   PseudoArgumentKind, SelectorKind,
   type Combinator, type ComplexRealSelector, type ComplexRealSelectorList,

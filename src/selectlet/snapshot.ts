@@ -5,10 +5,11 @@ import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
 import type {
   CustomPseudoPredicate, ElementList, HtmlCollectionArray, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
 } from './selectlet';
-import { escapeRegExp } from '../shared/css';
-import { isDocument, isElement, isHtmlDoc, isQuirksMode } from '../shared/dom';
+import { escapeRegExp } from '../infra/strings';
+import { isDocument, isHtmlDoc, isQuirksMode } from './dom';
+import { isElement } from '../infra/selector-dom';
 import { HTML_NAMESPACE } from '../infra/index';
-import { TextCursorError } from '../shared/text-cursor';
+import { TextCursorError } from '../infra/text-cursor';
 import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './debug';

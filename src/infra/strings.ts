@@ -8,3 +8,7 @@ export type ScalarValueString = string & {
 export function toScalarValueString(value: string): ScalarValueString {
   return value.toWellFormed() as ScalarValueString;
 }
+
+export function escapeRegExp(pattern: string): string {
+  return pattern.replace(/[.*+?^${}()|[\]\-\\]/g, '\\$&');
+}

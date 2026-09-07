@@ -63,7 +63,7 @@ npm.cmd run test:unit
 npm.cmd run test:artifact
 npm.cmd run test:node-compat
 # Test-runner arguments are forwarded unchanged:
-npm.cmd run test:unit -- test/js-engine/unit/node-runtime.test.ts
+npm.cmd run test:unit -- test/js-engine/node-runtime.test.ts
 ```
 
 The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
@@ -229,7 +229,7 @@ The standalone suite retains two cases from the retired Node proxy-reuse
 experiments: collecting the old realm while the replacement remains live
 passes; indirect eval selecting its realm's dynamic-import callback is skipped
 until createContextHandle supports importModuleDynamically. Re-enable that
-acceptance case with the [module-loading integration](../src/js-engine/roadmap.md);
+acceptance case with the [module-loading integration](../src/js-engine/ROADMAP.md);
 it does not require implementing the entire vm API.
 
 The addon does not replace V8's existing isolate Promise hook. Node's
@@ -265,7 +265,7 @@ accessor delegates that depend on the access receiver. `SetImmutableProto()`
 itself remains a supported creation-time API; no Node or V8 source patch is used.
 
 The integration test is
-`test/browlet/unit/browsing/native-global.test.ts`. It covers real Window and
+`test/browlet/browsing/native-global.test.ts`. It covers real Window and
 EventTarget bindings, the exact visible prototype chain, named properties,
 property operations and strict failures, stable receiver records, and old
 global reads/writes after reuse. The ordinary browser bootstrap and navigation

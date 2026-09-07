@@ -1,6 +1,7 @@
 import { Snapshot } from './snapshot';
 import { toNodeList, type IndexedNodeList } from './node-list';
-import { isElement, isNode, isText } from '../shared/dom';
+import { isNode, isText } from './dom';
+import { isElement } from '../infra/selector-dom';
 
 export const DEFAULT_CONFIG = {
   /**

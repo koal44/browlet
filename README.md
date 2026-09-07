@@ -9,8 +9,8 @@ Browlet is a monorepo containing three web engines developed against web specs:
 The project is tested with unit suites, Playwright comparisons, and selected WPTs.
 
 Cross-subsystem design decisions are recorded in the
-[subsystem composition architecture](src/subsystem-architecture.md) and the
-[platform-object architecture](src/platform-object-architecture.md).
+[subsystem composition architecture](src/SUBSYSTEM-ARCHITECTURE.md) and the
+[platform-object architecture](src/PLATFORM-OBJECT-ARCHITECTURE.md).
 
 ## Development
 
@@ -19,6 +19,8 @@ npm install
 npm run build
 npm run test:unit
 ```
+
+`npm run clean` removes the root `dist/` and `test-results/` folders.
 
 ### Node runtime selection
 
@@ -47,9 +49,8 @@ actual executable and addon, and forwards test arguments and exit status.
 It accepts `node`, `vitest`, and `playwright`; package scripts call it directly
 to avoid another shell-parsing step through a nested package-script alias.
 The compat runtime checks its queues and context handles before running the
-tests. Prototype immutability remains unimplemented and appears as
-a failing compatibility test on the ordinary browser bootstrap path; the
-separate native-global allocation prototype is covered by focused tests.
+tests. Browlet's bootstrap and navigation use native Window allocation with
+immutable global prototypes, covered by the browsing and runtime tests.
 
 Build the custom Node engine in its regular checkout, then compile the addon
 against that checkout's headers and import library. The addon workflow does

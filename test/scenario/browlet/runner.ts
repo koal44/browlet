@@ -5,7 +5,7 @@ import type {
 } from '../harness';
 import { Browlet } from '../../../src/browlet/browlet';
 import { asDocument } from '../../../src/browlet/stubs';
-import { isElement } from '../../../src/shared/dom';
+import { isElement } from '../../selectlet/util';
 import { createSelectlet, type Selectlet } from '../../../src/selectlet/selectlet';
 
 const STACK_TRACE = false;

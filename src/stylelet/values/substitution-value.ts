@@ -1,4 +1,4 @@
-import { asciiLower } from '../../shared/css';
+import { asciiLower } from '../../infra/ascii';
 import {
   isComponentBlock, isFunctionBlock, serializeComponentValues, type ComponentValue,
 } from '../syntax/component-value';

@@ -2,7 +2,7 @@
 
 import {
   domExceptionName, throwDOMException,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../../infra/index';
