@@ -135,14 +135,20 @@ HTML §8.1.4.4 manipulates ECMAScript's execution-context stack, which Node does
 not expose. Browlet mirrors only entries it controls. `Realm.evaluate()` is an
 explicit host entry: it supplies a temporary task when necessary, records the
 settings object on that task, and checkpoints after its last mirrored entry
-exits. A Web IDL callback entered from an engine-owned Promise job still gets
-its relevant realm and backup incumbent bookkeeping, but Browlet does not
-invent a task or infer that V8's unseen stack is empty. This is the
-`node-v8-execution-contexts` accommodation recorded below.
+exits. With the custom engine, `host-hooks.ts` also installs make/call/enqueue:
+registration retains incumbent settings, invocation brackets the callback, and
+enqueue places the job in an HTML microtask task with its supplied realm's
+script preparation/cleanup. A handlerless job still has a queue and task but
+no script settings. Generic jobs queue a global task on the JavaScript engine
+task source. Timeout jobs use the relevant global's active-time timer steps
+before queuing on that source. Their Promise reactions still run at the
+following microtask checkpoint. Node Promise jobs keep their engine-selected
+queue. Generic and timeout handlers require an HTML realm; mixed Node/HTML
+Atomics.waitAsync scheduling is outside this integration's scope.
 
-This boundary is enough for FileReader's callback-to-promise sequencing, but
-it is not a substitute for HTML §8.1.4.1 Script records or the §8.1.6.6.4
-`HostEnqueuePromiseJob` hook. In particular, Browlet cannot reconstruct an
+This extends the lifecycle already used by FileReader's callback-to-promise
+sequencing. It is not a substitute for HTML §8.1.4.1 Script records or active
+script restoration. In particular, Browlet cannot reconstruct an
 arbitrary function execution context's hidden `ScriptOrModule` component.
 Tests of stored incumbents must use the bound-platform-callback case for which
 the backup stack is decisive, rather than pretending that an ordinary author
@@ -163,9 +169,9 @@ contexts while choosing an incumbent settings object and deciding whether
 script cleanup has emptied the stack. HTML §8.1.6.6.4 associates Promise jobs
 with their HTML microtask tasks.
 
-**Unavailable primitive:** Node does not expose V8's execution-context stack,
-the `ScriptOrModule` component of arbitrary entries, or
-`HostEnqueuePromiseJob`.
+**Remaining unavailable primitive:** Node does not expose V8's full execution
+stack or HTML Script records. Custom engine/addon hooks now expose Promise job
+boundaries; official engines still lack that interception point.
 
 **Accommodation:** `EventLoop` mirrors the realm and script entries Browlet
 controls. A nullable task on a mirrored realm entry distinguishes a visible
@@ -185,11 +191,11 @@ and direct evaluation entry live in [`event-loop.ts`](./event-loop.ts) and
 [`realm.ts`](./realm.ts). Their controlled behavior is exercised by
 [`callback-lifecycle.test.ts`](../../../test/browlet/unit/scripting/callback-lifecycle.test.ts).
 
-**Replacement condition:** A supported Node API or direct V8 embedding must
-expose execution entries and Promise-job association. At that point reevaluate
-the mirrored stack, the nullable task and cleanup gate, the temporary
-host-entry task, and the incumbent fallback together; do not leave those
-pieces behind independently.
+**Replacement condition:** Promise-job association is now supplied on custom
+Node. Complete script entry/record and transparent host-function handling
+before removing the remaining mirror, nullable task, host-entry task, or
+incumbent fallback. Those pieces still serve unsupported engines and direct
+embedder calls; queue/job adoption alone does not justify deleting them.
 
 ### `node-v8-microtask-queue`
 
@@ -212,10 +218,10 @@ checkpoint flag while that callback runs. This avoids a second TypeScript queue
 which would diverge from V8's Promise jobs, but work from unrelated code or
 another Browlet event loop is not isolated.
 
-The explicit queue controls placement and draining. It does not expose the
-native Promise job, its Realm Record, or HTML callback preparation and cleanup,
-so it does not implement `HostEnqueuePromiseJob` and does not remove the
-`node-v8-execution-contexts` accommodation above.
+The explicit queue controls placement and draining. The separate custom
+engine/addon hook supplies native jobs and their realms for HTML lifecycle
+integration; official Node plus the addon supplies only the queue. The
+remaining execution-context accommodation above applies to both profiles.
 
 **Affected code and tests:** The queue backend belongs to JS Engine
 runtime; Agent construction, Realm creation, and

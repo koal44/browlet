@@ -69,6 +69,17 @@ cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
 
+The custom engine's job hooks follow the same division. JS Engine associates
+opaque native context references with its existing realm objects and adapts
+make/call and all three enqueue callbacks. Browlet installs the HTML policy at its
+composition root: incumbent settings, callback cleanup, and Agent microtask
+tasks stay in `scripting/host-hooks.ts` and `EventLoop`. Generic jobs use the
+JavaScript engine task source; timeout jobs reach it through the global's
+active-time timer primitive. These two handlers require HTML realms; Node
+Promise jobs retain their native queues.
+This mapping reports an engine identity;
+it does not discover HTML collaborators from platform objects.
+
 This is a dependency layer, not a fourth platform-object identity. Web IDL
 extends the JavaScript realm contract with binding policy, and Browlet's HTML
 `Realm` subclasses `NodeRealm` to add its Agent, environment settings object,

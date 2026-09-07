@@ -6,9 +6,9 @@ Browlet's HTML realm model records a distinct Window global object and stable
 WindowProxy global-this value. The existing `WindowImpl` is projected through
 Web IDL's global-object machinery, and WindowProxy forwards its public surface
 to that projected Window while lifecycle code derives the implementation
-through their shared platform-object association. WindowProxy still supplies
-stable event-method forwarding because the userland outer proxy cannot itself
-carry the Window platform-object brand.
+through their shared platform-object association. Compatible mode uses the
+native WindowProxy; plain Node retains a userland proxy and its forwarding
+accommodations.
 
 ### `node-vm-global-proxy`
 
@@ -22,14 +22,11 @@ A Browlet-compatible Node now exposes an opaque `ContextHandle` for one
 execution context and a separately stable `globalProxy`. Detaching a handle and
 passing that handle once as `reuseGlobalProxyFrom` preserves the proxy identity
 while creating fresh intrinsics and global state. The handle carries the reuse
-provenance without a global proxy registry. It also exposes
-`makePrototypeImmutable()`, which Browlet applies after installing each realm's
-global graph. The ordering follows
-Gecko's dynamic prototype installation and `JS_SetImmutablePrototype` model;
-Blink instead uses generated V8 templates which contain the binding graph
-before context creation.
+provenance without a global proxy registry. The addon allocates immutable Window
+objects/prototypes at creation and Web IDL projects into them. Browlet no longer
+needs the historical post-creation immutability patch for its Window lifecycle.
 
-The experimental handle contexts use Node's ordinary VM principal token so
+The native handle contexts use Node's ordinary VM principal token so
 host code can configure the proxy. This is not a same-origin implementation:
 the `origin` option remains inspector metadata, and Node supplies none of the
 authoritative WindowProxy access callbacks that browsers apply before a shared
@@ -40,13 +37,10 @@ same- or cross-origin access.
 V8 also cancels microtasks still queued for a Realm when its global is detached.
 Browlet must therefore place reuse after the checkpoint required by the HTML
 navigation lifecycle rather than asking the generic VM primitive to drain work.
-Production adoption remains blocked on WindowProxy's `[[PreventExtensions]]`
-and cross-origin access contracts, checkpoint-before-reuse placement, and a
-Web IDL exposure seam for the externally allocated proxy. The stable proxy must
-expose each successive Window platform record without itself becoming that
-record; the API cannot accept Browlet's existing arbitrary JavaScript `Proxy`.
+The current top-level navigation path does this and reuses the native proxy.
+Complete cross-origin and nested-context access remain Priority 7 work.
 
-This accommodation has two observable limitations. Ordinary Browlet scripts
+The plain-Node accommodation has two observable limitations. Ordinary Browlet scripts
 can reach the modeled Window graph, but top-level `this` remains the VM global
 proxy rather than Browlet's modeled WindowProxy. A focused expected-failure
 test records that mismatch. The provisional JavaScript WindowProxy must also
@@ -56,12 +50,9 @@ replaced. Exact nonconfigurable `[LegacyUnforgeable]` descriptors across
 retargeting require native global-proxy machinery, and a second focused
 expected-failure test records that mismatch.
 
-Replace the modeled WindowProxy, inheritance bridge, and proxy-invariant
-compromises together only after the native context/global-proxy substrate also
-passes old-Realm closure access through real same-/cross-origin checks,
-checkpoint-before-reuse, Window/WindowProxy identity, non-extensibility, and
-cross-navigation lifecycle tests. The
-engine bridge is implemented in
+The compatible path resolves those identity/descriptor mismatches through
+native allocation; it does not complete browser origin policy. The engine
+bridge is implemented in
 [`node-realm.ts`](../js-engine/node-realm.ts), below Web IDL; Browlet's
 [`realm.ts`](./scripting/realm.ts) retains the HTML global and task
 associations. The current observable mismatches are recorded in
@@ -98,17 +89,24 @@ fake-clock, and rejection-reporting mismatches. The corresponding
 compatible-mode unit suite passes, and all 1,193 selected WPT assertions pass
 with a clean process exit. Stock Node completes those assertions but still
 reports the parser/Promise-job `boo!` rejection as unhandled and exits nonzero.
-Explicit queue ownership therefore fixes the observed queue-isolation and
-checkpoint-control defect without pretending to expose the still-missing
-Promise-job lifecycle hook.
+Explicit queue ownership fixes the observed queue-isolation and checkpoint
+defect. The custom engine now supplies separate Promise-job lifecycle hooks.
 
 These fallback limitations are not changes to HTML's checkpoint algorithm or
 permission to alter Web IDL promise conversion. Both backends remain below the
-HTML checkpoint guard and post-checkpoint work in Browlet. An explicit queue
-still does not expose Promise-job closures, Realm Records, or callback
-lifecycle, so `HostEnqueuePromiseJob` and the execution-context accommodation
-remain unresolved. Affected code and removal conditions are recorded in
+HTML checkpoint guard and post-checkpoint work in Browlet. With custom Node,
+make/call/Promise enqueue now retain each registration's incumbent and run
+jobs as HTML microtask tasks with callback/script cleanup. Official Node plus
+the addon provides queue ownership but no job hooks. HTML Script records,
+active-script restoration, rejection reporting, and arbitrary author versus
+host-frame distinctions remain incomplete. Affected code and removal conditions are recorded in
 [the event-loop architecture](./scripting/event-loop-architecture.md#runtime-integration-and-accommodations).
+
+On the custom engine, Browlet also installs generic and timeout enqueue hooks
+for HTML realms. These hooks own scheduling across the isolate and cannot
+decline individual jobs. Atomics.waitAsync in an ordinary Node/VM realm while
+Browlet's hooks are installed is unsupported and reports a host-hook error.
+HTML realm waits use the global's task queue and fully-active timeout steps.
 
 Direct calls from a Node host into a projected Browlet API are not, by
 themselves, HTML tasks or script-evaluation entries. An explicit queue therefore

@@ -5,7 +5,8 @@ import type { Context } from 'node:vm';
 import type { NodeGlobalPrototypeKind } from './node-realm';
 
 import type {
-  JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
+  JavaScriptFunction, JavaScriptHostHooks, JavaScriptMicrotaskQueue,
+  JavaScriptRealm, JavaScriptRuntime,
 } from './realm';
 
 const nodeApi = loadNodeApi();
@@ -24,10 +25,12 @@ class NodeRuntime implements JavaScriptRuntime {
    */
   #evaluatingRealm: JavaScriptRealm | undefined;
   readonly #objectRealms = new WeakMap<object, JavaScriptRealm>();
+  readonly #contextRealms = new WeakMap<object, JavaScriptRealm>();
   #tickCallback: (() => void) | undefined;
   readonly hasExplicitMicrotaskQueues =
     nodeCreateMicrotaskQueue !== undefined;
   readonly hasNativeGlobalObjects = getNodeMethod('setGlobalObject') !== undefined;
+  readonly supportsHostHooks = Reflect.get(nodeApi, 'supportsHostHooks') === true;
 
   /*
    * ACCOMMODATION(node-v8-microtask-queue): Stock Node exposes neither an
@@ -62,6 +65,41 @@ class NodeRuntime implements JavaScriptRuntime {
 
   associateRealm(value: object, realm: JavaScriptRealm): void {
     this.#objectRealms.set(value, realm);
+  }
+
+  associateContext(context: NodeContext, realm: JavaScriptRealm): void {
+    if (isNodeContextHandle(context)) this.#contextRealms.set(context.realm, realm);
+  }
+
+  setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void {
+    const install = getNodeMethod('setHostHooks');
+    const getRealm = getNodeMethod('getRealm');
+    if (!this.supportsHostHooks || !install || !getRealm) {
+      throw new Error('Node does not support job host hooks');
+    }
+    Reflect.apply(install, nodeApi, [{
+      makeJobCallback: (callback: JavaScriptFunction, registration: {
+        incumbent: object | null;
+        hostDefinedOptions: readonly unknown[];
+      }) => hooks.makeJobCallback(callback, {
+        incumbent: registration.incumbent === null ? null :
+          this.#contextRealms.get(registration.incumbent) ?? null,
+        hostDefinedOptions: registration.hostDefinedOptions,
+      }),
+      callJobCallback: hooks.callJobCallback,
+      enqueuePromiseJob: (job: () => void, realm: object | null) => {
+        // The job's creation context owns its queue, including handlerless jobs
+        // whose specification-supplied realm is null.
+        const queueRealm = Reflect.apply(getRealm, nodeApi, [job]) as object;
+        return hooks.enqueuePromiseJob(job,
+          realm === null ? null : this.#contextRealms.get(realm) ?? null,
+          this.#contextRealms.get(queueRealm) ?? null);
+      },
+      enqueueGenericJob: (job: () => void, realm: object) =>
+        hooks.enqueueGenericJob(job, this.#contextRealms.get(realm) ?? null),
+      enqueueTimeoutJob: (job: () => void, realm: object, milliseconds: number) =>
+        hooks.enqueueTimeoutJob(job, this.#contextRealms.get(realm) ?? null, milliseconds),
+    }]);
   }
 
   getAssociatedRealm(value: object): JavaScriptRealm | undefined {
@@ -205,6 +243,7 @@ type NodeMicrotaskQueue = {
 type NodeMicrotaskQueueFactory = () => unknown;
 
 type NodeContextHandle = {
+  readonly realm: object;
   readonly globalProxy: object;
   readonly globalObject?: object;
   readonly prototypeChain?: readonly object[];

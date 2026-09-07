@@ -9,6 +9,7 @@ export * from './built-in-primitives';
 export * from './promise-operations';
 export type {
   JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
+  JavaScriptHostHooks, JavaScriptJobCallback, JavaScriptJobRegistration,
   JavaScriptMethod, JavaScriptMicrotaskQueue, JavaScriptRealm,
   JavaScriptRuntime, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';

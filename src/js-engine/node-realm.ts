@@ -227,6 +227,7 @@ export class NodeRealm implements JavaScriptRealm {
       this.#context,
     ) as RealmFunctionFactory;
 
+    nodeRuntime.associateContext(this.#context, this);
     nodeRuntime.associateRealm(this.#hostGlobal, this);
     nodeRuntime.associateRealm(this.intrinsics.functionPrototype, this);
     nodeRuntime.associateRealm(this.intrinsics.objectPrototype, this);

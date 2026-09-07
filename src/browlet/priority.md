@@ -217,22 +217,23 @@ Current implementation sequence:
 4. **Complete:** Integrate the explicit microtask queue from the
    [JS Engine roadmap](../js-engine/roadmap.md). A configured HTML
    EventLoop receives one queue shared by all Realms of its Agent under a
-   Browlet-compatible Node. The full current unit suite and all 1,193 selected
-   WPT assertions pass on that path with a clean process exit. Stock Node
-   completes the WPT assertions but still exits nonzero on the retained
-   parser/Promise-job unhandled-rejection artifact; stock Node retains the
-   explicitly tested ambient fallback.
-5. **Next:** Integrate the implemented `ContextHandle` boundary into Browlet's
-   HTML Realm/navigation path. Compatible Node now provides an opaque context
-   handle, separately stable global proxy, explicit detach/reattach, and
-   post-projection prototype sealing; `NodeRealm` already selects it. Browlet
-   still needs the distinct Web IDL global exposure target,
-   checkpoint-before-reuse, `[[PreventExtensions]]`, same- and cross-origin
-   access, old-Realm behavior, and navigation tests before the native proxy can
-   replace the modeled one. The shared Node principal token permits embedder
-   access but is not origin policy.
-6. Continue the Promise-job and execution-context host-hook audit without
-   treating explicit queue ownership as `HostEnqueuePromiseJob`.
+   Browlet-compatible Node. Queue isolation, FIFO, and checkpoint behavior
+   have focused unit coverage. Plain Node retains the explicitly tested
+   ambient fallback and its rejection/checkpoint limitations.
+5. **Complete for the current top-level lifecycle:** HTML Window creation and
+   navigation use the addon's native allocation, immutable prototype chain,
+   and reusable WindowProxy. This works on the supported official Node bases
+   without the historical post-creation V8 immutability patch. Cross-origin
+   policy and nested browsing contexts remain Priority 7 work; the shared Node
+   security token is not browser origin policy.
+6. **Current integration:** The custom Node engine and addon expose job
+   capture, invocation, and scheduling. `scripting/host-hooks.ts` connects
+   make/call/enqueue to HTML incumbent settings, callback cleanup, and Agent
+   microtask tasks, plus generic/timeout jobs through HTML task and active-time
+   scheduling. Prove ordinary Window Promises, thenables, handlerless
+   propagation, and per-registration state before returning to Fetch. Active
+   Script records/restoration belong to the later classic-script pipeline;
+   module loading is not a prerequisite for this proof.
 7. Implement Fetch's records, author APIs, and first transport slices only
    after those JS Engine boundary decisions are stable.
 8. Return to the File API and XHR tails whose normative algorithms consume
@@ -339,13 +340,11 @@ Primary roadmaps: [browsing](browsing/roadmap.md),
    load propagation, sandbox/referrer/permissions inputs, and destruction.
 2. Complete same-/cross-origin WindowProxy, Window, and Location exotic
    behavior and security checks. Continue to preserve the current true-global
-   expected failure: stock Node cannot reuse the proxy. Compatible Node now
-   preserves proxy identity through `ContextHandle` detach/reattach, but HTML
-   navigation does not yet drive that lifecycle. Its shared Node principal
-   token provides embedder accessibility and bypasses browser-origin checks.
-   Production adoption remains blocked on checkpoint placement,
-   `[[PreventExtensions]]`, same- and cross-origin callbacks and policy,
-   old-Realm behavior, and Web IDL exposure.
+   expected failure on plain Node, which cannot reuse the proxy. The addon
+   path now supplies native Window allocation and top-level navigation reuse.
+   Its shared Node security token permits embedder access; browser-origin
+   policy, cross-origin callbacks, and nested/retained-Realm access still need
+   their own implementation and tests.
 3. Extend visibility, focus chains, and user activation across nested
    navigables; use the same state for popup/navigation gating and future
    automation input.

@@ -21,6 +21,7 @@ import {
   BrowletParser, type DocumentWrite,
 } from './html/parser/document-parser';
 import type { Realm } from './scripting/realm';
+import { installHostHooks } from './scripting/host-hooks';
 import { UserAgent } from './user-agent';
 import { requestNodeEventLoopTurn } from './integration/scripting';
 import { unsafeSharedCurrentTime } from
@@ -33,6 +34,7 @@ export class Browlet {
   readonly #userAgent: UserAgent;
 
   constructor(config: BrowletConfig) {
+    installHostHooks();
     this.#route = config.route;
     this.#userAgent = new UserAgent(
       {

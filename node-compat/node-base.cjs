@@ -26,7 +26,7 @@ function resolveBase(base, environment = process.env) {
     library: join(directory, custom ? 'out/Release/node.lib' : 'Release/node.lib'),
     build: addonBuild(base),
     hint: custom ? `Build Node in CUSTOM_NODE_SOURCE (${directory}).`
-      : `Run npm run build:node-compat -- --base ${base}.`,
+      : `Run npm run build:node -- --base ${base}.`,
   };
 }
 

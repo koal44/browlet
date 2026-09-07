@@ -183,9 +183,9 @@ export class EventLoop {
     /*
      * ACCOMMODATION(node-v8-execution-contexts):
      * HTML §§8.1.4.4 and 8.1.6.6.4 expect an engine-owned Promise job to have
-     * installed its microtask task before this point. Node does not expose
-     * HostEnqueuePromiseJob, so retain the realm entry when that outer task is
-     * invisible, but do not invent a task or infer that V8's stack is empty.
+     * installed its microtask task before this point. The custom engine's
+     * Promise hook does so. Unsupported engines and uncontrolled host entries
+     * still need a nullable task; do not infer that V8's unseen stack is empty.
      */
     this.#javaScriptExecutionContextStack.push({
       kind: 'realm',

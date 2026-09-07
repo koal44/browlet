@@ -9,10 +9,10 @@ ECMAScript dependency list and separates ordinary engine behavior from the
 small set of inaccessible runtime facts and genuine host hooks.
 Its work proceeds by coherent consumers. The first runtime slice established
 explicit versus ambient microtask-queue backends. The compatibility addon also
-supplies the `ContextHandle` and global-proxy lifecycle; the current slice
-adopts that substrate in Browlet before the Promise-job host-hook audit
-continues. It does not implement imported ECMAScript terms or host hooks as
-undifferentiated families.
+supplies the `ContextHandle` and global-proxy lifecycle, now adopted by HTML
+Window creation and navigation. The custom engine adds job hooks; the current
+HTML integration consumes make/call and all three enqueue hooks. Script records,
+module loading, and the remaining HTML job consumers follow their own roadmaps.
 
 The [compatibility addon](../../node-compat/README.md) now supplies explicit
 queues and reusable native context handles on Node 24 and 26. The `with-node`
@@ -26,6 +26,15 @@ without the addon. References to source-patched Node describe the original
 Node branch. Browlet's Window creation and navigation now use the addon's
 creation-time immutable allocation; they no longer require that branch's
 post-creation immutable-prototype operation.
+
+`JavaScriptRuntime.setHostHooks()` adapts the make/call and three enqueue hooks
+to known `JavaScriptRealm` identities. Context-handle references keep successive
+realms distinct even when their WindowProxy is reused. The Promise enqueue adapter also
+identifies the realm owning the job's queue, which can differ from the null
+specification realm of a handlerless reaction. HTML owns the settings and task
+policy. Returning false from Promise enqueue retains its native V8 queue;
+generic and timeout enqueue always transfer scheduling to the host. Unknown
+realm references map to null. `supportsHostHooks` is false on official engines.
 
 ## Admission rule
 
@@ -115,23 +124,17 @@ handle can detach that proxy; supplying the detached handle as
 `reuseGlobalProxyFrom` transfers the proxy once to a fresh Realm with fresh
 intrinsics and global state. The handle itself proves provenance, so the
 runtime needs no global proxy registry. `NodeRealm` uses this handle whenever
-compatible context creation is available. On source-patched Node, the runtime's
-`makePrototypeImmutable()` operation seals each fresh backing global after
-Browlet installs its global graph; the addon cannot yet perform that operation.
-This follows Gecko's create, project, then
-seal ordering; Blink instead creates its global from a generated V8 template
-which already contains the binding graph.
+compatible context creation is available. The addon allocates the immutable
+Window prototype chain at context creation, then Web IDL projects into those
+objects. Post-creation sealing survives only as historical backend support.
 
-The experimental contexts deliberately use Node's ordinary VM principal token
+The native contexts deliberately use Node's ordinary VM principal token
 so host code can configure the global proxy. That is an embedder-access choice,
 not browser origin isolation: `origin` remains inspector metadata, and the API
 does not supply WindowProxy cross-origin access callbacks. V8 also cancels jobs
-still queued for an old Realm when its global is detached. Browlet must reach
-the required HTML checkpoint before reuse, give Web IDL a distinct native
-global-proxy exposure target, and implement the remaining WindowProxy exotic
-and origin-policy contracts before navigation can adopt this substrate. The
-API cannot accept Browlet's existing arbitrary JavaScript `Proxy` as a
-shortcut.
+still queued for an old Realm when its global is detached. Browlet navigation
+checkpoints before reuse and Web IDL exposes the native proxy; the remaining
+WindowProxy cross-origin and nested-context contracts are later HTML work.
 
 `node-v8-checkpoint` is now the stock/ambient fallback. Stock Node has no
 supported synchronous V8 microtask-checkpoint operation, so that backend uses
