@@ -22,6 +22,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:node-compat": "node scripts/build-node-compat.mjs",
     "lint": "node --run typecheck && eslint src test scripts packages node-compat",
     "typecheck": "tsc -b",
     "install:vendor": "node scripts/build.mjs selectlet && tsx scripts/vendor.ts",

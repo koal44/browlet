@@ -75,6 +75,16 @@ test('custom paths all derive from the configured source directory', t => {
   assert.throws(() => resolveBase('custom', { CUSTOM_NODE_SOURCE: 'relative/node' }), /absolute/);
 });
 
+test('build command reports an unbuilt custom source without trying to build Node', t => {
+  const directory = temporaryDirectory(t);
+  const child = spawnSync(process.execPath, [
+    resolve(__dirname, '../../scripts/build-node-compat.mjs'), '--base', 'custom',
+  ], { env: { ...process.env, CUSTOM_NODE_SOURCE: directory }, encoding: 'utf8' });
+  assert.equal(child.status, 1);
+  assert.match(child.stderr, /Missing Node executable.*Build Node.*CUSTOM_NODE_SOURCE/s);
+  assert.ok(child.stderr.includes(directory));
+});
+
 test('official base validates the executable version', () => {
   const { resolveBase, inspectNode } = require('../node-base.cjs');
   const base = process.versions.node === '26.8.1' ? '24.19.0' : '26.8.1';
