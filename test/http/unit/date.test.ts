@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseHTTPDate } from '../../../src/fetch/http/syntax';
+import { parseHTTPDate } from '../../../src/http/date';
 
 const now = Date.UTC(2026, 8, 7, 12);
 const example = Date.UTC(1994, 10, 6, 8, 49, 37);

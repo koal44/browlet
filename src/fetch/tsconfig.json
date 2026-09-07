@@ -11,11 +11,12 @@
   "references": [
     { "path": "../encoding" },
     { "path": "../file" },
+    { "path": "../http" },
+    { "path": "../http/struct-fields" },
     { "path": "../infra" },
     { "path": "../mime" },
     { "path": "../shared" },
     { "path": "../streams" },
-    { "path": "../struct-fields" },
     { "path": "../url" },
     { "path": "../web-idl" },
     { "path": "../xhr" }

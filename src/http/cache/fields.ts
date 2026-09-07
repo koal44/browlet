@@ -1,5 +1,5 @@
-import { isHTTPToken } from '../../../shared/http';
-import { TextCursor } from '../../../shared/text-cursor';
+import { isHTTPToken } from '../syntax';
+import { TextCursor } from '../../shared/text-cursor';
 
 /**
  * RFC 9111 §5.2 — parse a combined Cache-Control field value.

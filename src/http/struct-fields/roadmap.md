@@ -1,6 +1,6 @@
 # Structured fields roadmap
 
-This project owns the realm-neutral value model, parsing, and serialization
+This submodule owns the realm-neutral value model, parsing, and serialization
 for [RFC 9651, Structured Field Values for HTTP](https://www.rfc-editor.org/rfc/rfc9651.html).
 It supplies shared algorithms to Fetch, browser policy, and Reporting without
 depending on their request, response, or environment objects.
@@ -10,7 +10,7 @@ are implemented. Public `Headers` projection remains in Fetch's API slice.
 
 ## Sources
 
-Paths relative to the [local reference root](../fetch/preflight.md#local-reference-inventory):
+Paths relative to the [local reference root](../../fetch/preflight.md#local-reference-inventory):
 
 - `rfcs/rfc9651.txt`: §3 data types and §4 serialization/parsing. This published
   RFC supersedes RFC 8941 and is the version referenced by Fetch.
@@ -37,7 +37,7 @@ Paths relative to the [local reference root](../fetch/preflight.md#local-referen
    pad bits. The HTTPWG corpus adds capacity tests and retains the distinction
    between mandatory and permitted failures.
 3. **Fetch integration — implemented.** The structured-field get/set operations live in
-   [Fetch's header slice](../fetch/roadmap.md#slice-2--http-methods-headers-and-statuses).
+   [Fetch's header slice](../../fetch/roadmap.md#slice-2--http-methods-headers-and-statuses).
    Tests cover combined header lines, absent or malformed fields, serialization
    failure, and omission of empty containers. Header-specific allowed keys and
    meanings remain with the specification defining that header. The Fetch
@@ -51,13 +51,13 @@ List/Dictionary field, or `null` on failure.
 
 ## Exit proof
 
-`npm run test:unit -- test/struct-fields/unit` runs 219 focused cases,
+`npm run test:unit -- test/http/struct-fields/unit` runs 219 focused cases,
 544 serialization-only HTTPWG cases, all 1,591 HTTPWG parsing cases, and 727
 independent serialization checks against that parsing corpus's expected values.
 The fixture reader preserves JSON `1.0` as Decimal and decodes its Base32 binary
 representation separately from the field's Base64 encoding. Fixture provenance
 and the unchanged upstream license are in
-[`test/struct-fields/fixtures/httpwg/`](../../test/struct-fields/fixtures/httpwg/README.md).
+[`test/http/struct-fields/fixtures/httpwg/`](../../../test/http/struct-fields/fixtures/httpwg/README.md).
 
 `test/fetch/unit/headers.test.ts` proves integration through Fetch's own header
 list, including replacement/deletion and unchanged state on serialization

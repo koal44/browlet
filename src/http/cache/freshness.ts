@@ -1,4 +1,4 @@
-import { parseHTTPDate } from '../syntax';
+import { parseHTTPDate } from '../date';
 import { getDeltaDirective, parseCacheControl, parseDeltaSeconds, type CacheDirective } from './fields';
 
 /**

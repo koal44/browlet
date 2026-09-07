@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCacheControl, parseDeltaSeconds, parseVary } from '../../../src/fetch/http/cache/fields';
+import { parseCacheControl, parseDeltaSeconds, parseVary } from '../../../src/http/cache/fields';
 
 describe('Cache-Control field parsing (RFC 9111 §5.2)', () => {
   it('preserves order and duplicates while folding directive names', () => {

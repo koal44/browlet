@@ -1,5 +1,5 @@
-import { utf8Encode } from '../encoding/utf-8';
-import { forgivingBase64Encode } from '../infra/base64';
+import { utf8Encode } from '../../encoding/utf-8';
+import { forgivingBase64Encode } from '../../infra/base64';
 
 import type {
   StructuredBareItem, StructuredField, StructuredInnerList, StructuredItem,

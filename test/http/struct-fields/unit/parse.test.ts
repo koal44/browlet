@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseStructuredField, type StructuredBareItem, type StructuredInnerList,
   type StructuredItem, type StructuredParameters,
-} from '../../../src/struct-fields';
+} from '../../../../src/http/struct-fields';
 
 describe('RFC 9651 §4.2: parsing structured fields', () => {
   it.each([

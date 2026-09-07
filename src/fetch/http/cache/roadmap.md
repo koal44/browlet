@@ -1,124 +1,46 @@
-# HTTP cache roadmap
+# Fetch HTTP cache integration roadmap
 
-This folder owns the private-browser HTTP cache rules consumed by Fetch.
-It uses Fetch records; Browlet owns the configured cache instances and their
+This folder will own storage, selection, validation, and cache transactions over
+Fetch request/response records. Browlet owns configured cache instances and their
 partitioned storage. This is distinct from the service-worker Cache API.
 
-**Status:** age/freshness calculations and independent cache-policy rules are
-implemented. The store, response selection, validation, and Fetch transactions
-still require the actual header lists, request/response records, body model,
-and transport pipeline.
+**Status:** the reusable [HTTP cache rules](../../../http/cache/roadmap.md) exist.
+Integration still requires complete body retention and the transport pipeline;
+record scaffolding alone does not provide either.
 
 ## Sources
 
-- [RFC 9111, HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111.html):
-  §3 storage, §4 selecting/freshening/invalidating responses, and §5 fields.
-- [RFC 5861](https://www.rfc-editor.org/rfc/rfc5861.html): stale extensions.
-- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html): dates, validators,
-  conditional requests, and other referenced HTTP semantics, shared through
-  the [HTTP folder](../roadmap.md).
 - [Fetch](https://fetch.spec.whatwg.org/): §2.2.6 freshness predicates,
   §2.8 partitions, and §4.6 cache modes and HTTP-network-or-cache processing.
+- [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html): storing, selecting,
+  freshening, and invalidating responses (§§3–4).
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html): validators and
+  conditional requests, shared with [Fetch HTTP](../roadmap.md).
+- [RFC 5861](https://www.rfc-editor.org/rfc/rfc5861.html): stale extensions.
 
-Local sources are `rfcs/rfc9111.txt`, `rfcs/rfc5861.txt`, `rfcs/rfc9110.txt`,
-and `whatwg-fetch/fetch.bs` under the
-[reference root](../../preflight.md#local-reference-inventory).
+Local sources and revisions are in the
+[reference inventory](../../preflight.md#local-reference-inventory).
+The HTTP cache module owns field parsing and standalone policy contracts.
 
 ## Implementation order
 
-1. **Age and freshness — implemented.** Parse the relevant fields and implement explicit
-   and permitted heuristic freshness, current-age calculations, delta-seconds,
-   and stale windows. These are the initial dependency of response helpers.
-2. **Storage and selection — independent policy implemented; store deferred.**
-   `policy.ts` implements storage eligibility, request restrictions on reuse,
-   and the invalidation trigger; `fields.ts` parses Vary names. Complete keys,
-   variant matching/selection, field retention, body storage, and invalidation
-   over retained Fetch records belong after those records exist. Apply
-   private-cache rules. Incomplete/partial responses must either follow the
-   supported storage/combination rules or be left unstored as permitted.
-3. **Validation.** Produce conditional requests and apply 304/HEAD freshening
+1. **Storage and selection.** Retain actual Fetch records and bodies. Implement
+   partitioned URI/method keys, Vary matching, newest suitable response selection,
+   field retention, and invalidation of all applicable variants. Apply the
+   existing private-cache policy. Incomplete/partial responses must follow the
+   supported storage/combination rules or remain unstored as permitted.
+2. **Validation.** Produce conditional requests and apply 304/HEAD freshening
    and replacement rules through the real Fetch pipeline. Keep stored fields,
-   body retention, and response exposure consistent.
-4. **Fetch integration.** Honor Fetch's cache modes, credentials and partition
-   selection, cancellation, and background stale-while-revalidate behavior.
-   RFC 5861's stale-if-error is a separate extension; do not enable it as an
-   unconditional network-error fallback outside the applicable Fetch rules.
+   body retention, and response exposure consistent. Revisit the HTTP module's
+   deferred status-specific storage branches as their support becomes available.
+3. **Fetch transactions.** Honor cache modes, credentials and partition selection,
+   cancellation, and background stale-while-revalidate behavior. RFC 5861's
+   stale-if-error is a separate extension; do not enable it as an unconditional
+   network-error fallback outside the applicable Fetch rules.
 
-The independent calculations and policy consume field values and controlled
-time; they do not need fake copies of future Request/Response classes. The
-remaining slices retain the real Fetch records.
-Disk persistence and eviction policy are host choices around the same cache
-contract. An explicitly disabled cache is a configuration, not proof that its
-algorithms have been implemented.
-
-## Age and freshness contract
-
-`calculateCacheFreshness(fields, status, timing)` in `freshness.ts` consumes
-combined field values and caller-supplied request/response/current timestamps
-in UTC epoch milliseconds. It returns age and freshness lifetime in seconds,
-chronological freshness, a validation requirement, and the response's
-stale-while-revalidate/stale-if-error windows. It does not read an ambient clock
-or mutate the input. [HTTP-date parsing](../roadmap.md#initial-http-syntax) and
-`fields.ts` supply the bounded field syntax.
-
-Age includes upstream Age, response delay, and residence time, using the more
-conservative of apparent age and corrected Age. Missing/invalid Date uses
-receipt time; invalid Age is ignored, and a combined Age field uses its first
-member. Delta-seconds and age arithmetic saturate at `Number.MAX_SAFE_INTEGER`.
-For this private cache, max-age takes precedence over Expires; shared-only
-s-maxage/proxy-revalidate have no effect.
-
-Heuristic freshness uses 10% of the interval from Last-Modified to Date only
-when explicit expiration is absent and the response status or a public/private
-directive permits it. This is a policy permitted by RFC 9111, not its mandated
-formula. Missing/invalid/future Last-Modified gives no positive estimate.
-
-Malformed Cache-Control syntax and duplicate/invalid max-age or applicable
-Expires information conservatively require validation. Unknown well-formed
-directives and duplicates remain available in `parseCacheControl`'s result.
-Qualified no-cache is treated as unqualified for now. A response can be young
-enough to be fresh while no-cache still requires validation; freshness alone
-does not permit storing a no-store response or bypassing other cache rules.
-
-Stale windows start at expiration and exclude their end boundary. No-cache,
-must-revalidate, and no-store prevent stale use; invalid/duplicate extension
-values grant no window. The caller still owns request restrictions, actual
-revalidation, and whether an applicable error permits stale-if-error. The
-older RFC 5861 references to Warning do not require new Warning processing:
-RFC 9111 §5.5 obsoletes that field.
-
-## Independent storage and request policy
-
-`canStoreResponse(method, status, fields, requestCacheControl)` checks permission
-to retain a complete GET/HEAD response. It honors request and response no-store,
-private-cache storage permission, and explicit or heuristic cacheability.
-No-cache and invalid expiration do not themselves prohibit storage; validation
-is a separate requirement. Authorization is not a blanket private-cache
-prohibition. Malformed Cache-Control/Vary and wildcard Vary are left unstored.
-
-The initial policy also leaves 206, 304, and must-understand responses unstored.
-Range combination, 304 updates, and the status-specific storage required before
-using must-understand's no-store override are deferred to actual store work.
-Storage is optional under RFC 9111; these choices do not claim support for
-those branches. The caller must establish response completeness before storing
-any bytes.
-
-`evaluateCacheRequest(freshness, cacheControl)` applies no-cache, max-age,
-min-fresh, and max-stale to an already storable response whose URI, method, and
-Vary fields match. It retains the only-if-cached directive for the transaction
-to honor on a miss. Request no-store forbids new storage but does not prohibit
-reuse of an existing response (RFC 9111 §5.2.1.5). Duplicate/invalid numeric
-constraints conservatively deny reuse; quoted numeric values are accepted.
-The age/staleness limits are inclusive. Response revalidation requirements
-still take precedence.
-
-This predicate does not authorize the separate stale-while-revalidate or
-stale-if-error transactions. Fetch's cache modes, conditional requests,
-Pragma compatibility, and actual network activity remain with its pipeline.
-`shouldInvalidateCache(method, status)` only identifies the RFC 9111 §4.4
-trigger: a 2xx/3xx response to an unsafe method or one whose safety is unknown.
-Deleting all variants for the target URI, and any permitted same-origin
-Location/Content-Location targets, requires the real store.
+Do not invent parallel Request/Response models for the store. Persistence and
+eviction policy are host choices around its contract. An explicitly disabled
+cache is a configuration, not proof that its algorithms have been implemented.
 
 ## Undici reuse assessment
 
@@ -150,21 +72,13 @@ a second parallel index merely to recover information hidden by the store.
 
 ## Exit proof
 
-The age/freshness and independent policy slices have 242 focused tests in
-`test/fetch/unit/`: `http-syntax.test.ts`, `cache-fields.test.ts`,
-`cache-freshness.test.ts`, and `cache-policy.test.ts`.
-They use independent field/timestamp fixtures, including the RFC's date
-examples, expiration and stale-window boundaries, two-digit year rollover,
-network delay, overflow, duplicate directives, private-cache permission,
-request restrictions, Vary syntax, and unsafe-method invalidation triggers.
-The full unit suite passed (7,601 passing, 18 existing expected failures, 15
-existing skips), as did lint/typecheck. The two failing external Undici
-comparison assertions are reported separately above.
+Stored-response tests must cover overlapping Vary variants, no-store/no-cache,
+authenticated requests, invalidation, and validation updates. Integration tests
+must observe outgoing conditional requests, returned headers and bytes,
+partition isolation, cache-mode differences, cancellation, and background
+revalidation. A successful lookup in an in-memory map is not that proof.
 
-Storage/validation slices still need stored-response tests for Vary variants,
-no-store/no-cache, authenticated requests, invalidation, and validation updates.
-
-Integration tests must observe outgoing conditional requests, returned headers
-and bytes, partition isolation, cache-mode differences, cancellation, and
-background revalidation. A successful lookup in an in-memory map is not that
-proof. Remove this roadmap when both calculation and transaction gates pass.
+Standalone calculation/policy tests remain with the
+[HTTP cache module](../../../http/cache/roadmap.md#exit-proof). The external
+Undici comparison above remains an ordinary failing probe, separate from the
+unit suite. Remove this roadmap when the storage and transaction gates pass.

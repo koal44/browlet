@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   calculateCacheFreshness, type CacheFields, type CacheTiming,
-} from '../../../src/fetch/http/cache/freshness';
+} from '../../../src/http/cache/freshness';
 
 const received = Date.UTC(2026, 8, 7, 12);
 const date = new Date(received).toUTCString();
