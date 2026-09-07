@@ -1,4 +1,4 @@
-import { createDOMException } from '../shared/dom-exception';
+import { createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import type { BindingContext } from '../web-idl/projection';
 import type { FetchTimingInfo } from './timing';
 

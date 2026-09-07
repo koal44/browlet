@@ -26,7 +26,7 @@ export function encode(input: string, encoding: string): Uint8Array {
    * ACCOMMODATION(exodus-html-encode): the public URL encoder exposes the
    * required legacy encoder and HTML character-reference fallback. Undo its
    * percent escapes; escaping literal percent signs keeps this lossless.
-   * See limitations.md.
+   * See LIMITATIONS.md.
    */
   const encoded = percentEncodeAfterEncoding(encoding, input, '%');
   return isomorphicEncode(encoded.replace(/%([0-9A-F]{2})/g,

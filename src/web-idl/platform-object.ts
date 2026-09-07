@@ -1,5 +1,5 @@
 import { isObject } from '../js-engine/index';
-import type { ObservableArrayHandle } from '../shared/observable-array';
+import type { ObservableArrayHandle } from '../infra/observable-array';
 import type { AssembledInterface } from './assembly';
 import type { AttributeMember } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';

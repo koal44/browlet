@@ -1,4 +1,4 @@
-import { assertNever, mapTuple } from '../../shared/util';
+import { assertNever, mapTuple } from '../../infra/util';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import { createFunctionalNotationConsumer, consumeComma } from '../syntax/component-consumers';
 import {

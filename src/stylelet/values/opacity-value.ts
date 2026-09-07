@@ -1,4 +1,4 @@
-import { clamp } from '../../shared/util';
+import { clamp } from '../../infra/util';
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';

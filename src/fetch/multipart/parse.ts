@@ -4,7 +4,7 @@ import { utf8DecodeWithoutBOM } from '../../encoding/utf-8';
 import { FileImpl } from '../../file/index';
 import { toScalarValueString } from '../../infra/index';
 import type { MIMEType } from '../../mime/index';
-import { TextCursor } from '../../shared/text-cursor';
+import { TextCursor } from '../../infra/text-cursor';
 import type { BindingContext } from '../../web-idl/projection';
 import type { FormDataEntry } from '../../xhr/index';
 

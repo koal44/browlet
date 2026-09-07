@@ -1,5 +1,5 @@
-import { getShadowTreeRoot } from '../../shared/dom';
-import { assertNever } from '../../shared/util';
+import { getShadowTreeRoot } from '../../infra/selector-dom';
+import { assertNever } from '../../infra/util';
 import type { Combinator } from '../syntax/selector';
 import {
   asSubjectPredicate, SubjectKind, triAnd, triOr,

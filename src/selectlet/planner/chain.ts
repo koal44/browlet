@@ -5,9 +5,9 @@ import type {
   CandidateElementPredicate, CandidateTest, CandidateSubjectPredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, RelativeSelectorList, SelectorList,
   TriMatch,
 } from '../parser/parser';
-import { assertNever } from '../../shared/util';
+import { assertNever } from '../../infra/util';
 import { SubjectKind } from '../constants';
-import { getShadowTreeRoot } from '../../shared/dom';
+import { getShadowTreeRoot } from '../../infra/selector-dom';
 import type { Snapshot } from '../snapshot';
 
 export type Chain = ChainRelation[];

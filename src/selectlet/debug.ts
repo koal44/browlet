@@ -1,6 +1,7 @@
 import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from './parser/parser';
-import { cssIdentUnescape } from '../shared/css';
-import { isDocument, isDocumentFragment, isElement } from '../shared/dom';
+import { cssIdentUnescape } from './parser/escape';
+import { isDocument, isDocumentFragment } from './dom';
+import { isElement } from '../infra/selector-dom';
 import type { QueryContext } from './selectlet';
 
 export type QueryContextDescription = {

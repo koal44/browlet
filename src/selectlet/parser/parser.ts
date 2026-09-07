@@ -1,6 +1,6 @@
 import type { CustomPseudoPredicate } from '../selectlet';
-import { cssIdentUnescape } from '../../shared/css';
-import { TextCursor } from '../../shared/text-cursor';
+import { cssIdentUnescape } from './escape';
+import { TextCursor } from '../../infra/text-cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,

@@ -1,4 +1,4 @@
-import { escapeRegExp } from '../shared/css';
+import { escapeRegExp } from '../infra/strings';
 import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
 

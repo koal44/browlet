@@ -1,6 +1,6 @@
 import {
   createDOMException, domExceptionName, type DOMExceptionName,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import { impl } from '../../../web-idl/index';
 import {
   arg, defineInterface, idlType, op, roAttr, reference, resolveArgs,

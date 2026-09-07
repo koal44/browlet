@@ -1,5 +1,5 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../shared/util';
+import { asciiLower } from '../../infra/ascii';
+import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../infra/util';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   createFunctionalNotationConsumer, consumeComma, consumeDimensionToken,

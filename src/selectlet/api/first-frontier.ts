@@ -1,7 +1,7 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
-import { precedesByDocPosition } from '../../shared/collections';
+import { precedesByDocPosition } from '../collections';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeToEndMove, resetFrontierDebug,
   runAdvanceMove, runBridgeMove, runFirstAdvanceMove, runFirstBridgeMove,

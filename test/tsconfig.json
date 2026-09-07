@@ -15,11 +15,11 @@
   "references": [
     { "path": "../src/infra" },
     { "path": "../src/js-engine" },
-    { "path": "../src/shared" },
     { "path": "../src/http" },
     { "path": "../src/mime" },
     { "path": "../src/url" },
     { "path": "../src/web-idl/declaration" },
+    { "path": "../src/web-idl/exceptions" },
     { "path": "../src/web-idl" },
     { "path": "../src/streams" },
     { "path": "../src/encoding" },

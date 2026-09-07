@@ -1,4 +1,4 @@
-import type { TextCursor } from '../../shared/text-cursor';
+import type { TextCursor } from '../../infra/text-cursor';
 import { consumeAsciiWord, consumeDigits, consumeTrivia } from './lex';
 
 export type NthArgs = { step: number; offset: number; };

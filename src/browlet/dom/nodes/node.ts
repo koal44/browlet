@@ -1,6 +1,6 @@
 import {
   domExceptionName, throwDOMException,
-} from '../../../shared/dom-exception';
+} from '../../../web-idl/exceptions/dom-exception-core';
 import {
   type EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';

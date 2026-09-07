@@ -4,7 +4,7 @@ import {
 } from '../values/media-query';
 import {
   domExceptionName, throwDOMException,
-} from '../../shared/dom-exception';
+} from '../../web-idl/exceptions/dom-exception-core';
 import type { CSSOMString } from './string';
 
 /*

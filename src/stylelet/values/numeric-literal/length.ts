@@ -1,5 +1,5 @@
-import { asciiLower } from '../../../shared/css';
-import { assertNever } from '../../../shared/util';
+import { asciiLower } from '../../../infra/ascii';
+import { assertNever } from '../../../infra/util';
 import { consumeDimensionToken, consumeNumberToken } from '../../syntax/component-consumers';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,

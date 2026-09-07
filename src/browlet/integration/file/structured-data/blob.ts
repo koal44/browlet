@@ -3,7 +3,7 @@ import {
 } from '../../../../file/index';
 import {
   domExceptionName, throwDOMException,
-} from '../../../../shared/dom-exception';
+} from '../../../../web-idl/exceptions/dom-exception-core';
 import type { StructuredDataRecord } from '../../../scripting/structured-data/records';
 import {
   serializable, type SerializableSteps,

@@ -1,6 +1,6 @@
 import {
   createObservableArray, type ObservableArrayHandle,
-} from '../shared/observable-array';
+} from '../infra/observable-array';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
   type IDLSequenceValue,

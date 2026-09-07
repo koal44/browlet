@@ -3,7 +3,7 @@ import {
 } from '@exodus/bytes/encoding-lite.js';
 
 import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/syntax';
-import { TextCursor } from '../shared/text-cursor';
+import { TextCursor } from '../infra/text-cursor';
 
 /*
  * A MIME type record.

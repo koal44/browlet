@@ -1,4 +1,4 @@
-import { ParallelQueue } from '../shared/parallel-queue';
+import { ParallelQueue } from '../infra/parallel-queue';
 
 /** Fetch §2, queue a fetch task. */
 export function queueFetchTask(

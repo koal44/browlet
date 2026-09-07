@@ -10,7 +10,7 @@
   "include": ["./**/*.ts"],
   "references": [
     { "path": "../infra" },
-    { "path": "../shared" },
-    { "path": "../web-idl/declaration" }
+    { "path": "../web-idl/declaration" },
+    { "path": "../web-idl/exceptions" }
   ]
 }

@@ -1,4 +1,4 @@
-import { asciiLower } from '../../shared/css';
+import { asciiLower } from '../../infra/ascii';
 import { isAnyValueContents, consumeAnyValue, type AnyValue } from './any-value';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { adaptConsumer, withTrivia } from './component-grammar';

@@ -1,0 +1,516 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { Browlet } from '../../src/browlet/browlet';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../src/browlet/bindings';
+import {
+  FileReaderImpl, fileReaderIDL,
+} from '../../src/browlet/integration/file/file-reader';
+import {
+  EventTargetImpl, fireEvent,
+} from '../../src/browlet/dom/events/event-target';
+import type { ProgressEventImpl } from
+  '../../src/browlet/dom/events/progress-event';
+import {
+  BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
+} from '../../src/file/index';
+import { getBufferSourceCopy } from '../../src/web-idl/buffer-source';
+import { serializeDefinition } from '../../src/web-idl/declaration/index';
+import type { BindingContext } from '../../src/web-idl/projection';
+
+describe('File API FileReader foundation', () => {
+  it('starts empty with no result, error, or event handlers', () => {
+    const reader = new FileReaderImpl();
+
+    expect(reader).toBeInstanceOf(EventTargetImpl);
+    expect(reader.readyState).toBe(0);
+    expect(reader.result).toBeNull();
+    expect(reader.error).toBeNull();
+    expect([
+      reader.onloadstart,
+      reader.onprogress,
+      reader.onload,
+      reader.onabort,
+      reader.onerror,
+      reader.onloadend,
+    ]).toEqual([null, null, null, null, null, null]);
+  });
+
+  it('keeps each event-handler attribute independent', () => {
+    const reader = new FileReaderImpl();
+    const load = vi.fn();
+    const progress = vi.fn();
+
+    reader.onload = load;
+    reader.onprogress = progress;
+    fireEvent('load', reader);
+
+    expect(load).toHaveBeenCalledOnce();
+    expect(progress).not.toHaveBeenCalled();
+    expect(reader.onload).toBe(load);
+    expect(reader.onprogress).toBe(progress);
+
+    reader.onload = null;
+    fireEvent('load', reader);
+    expect(load).toHaveBeenCalledOnce();
+    expect(reader.onload).toBeNull();
+    expect(reader.onprogress).toBe(progress);
+  });
+
+  it('preserves the complete FileReader declaration for later exposure', () => {
+    expect(serializeDefinition(fileReaderIDL)).toBe(`
+[Exposed=(Window, Worker)]
+interface FileReader : EventTarget {
+  constructor();
+  undefined readAsArrayBuffer(Blob blob);
+  undefined readAsBinaryString(Blob blob);
+  undefined readAsText(Blob blob, optional DOMString encoding);
+  undefined readAsDataURL(Blob blob);
+  undefined abort();
+  const unsigned short EMPTY = 0;
+  const unsigned short LOADING = 1;
+  const unsigned short DONE = 2;
+  readonly attribute unsigned short readyState;
+  readonly attribute (DOMString or ArrayBuffer)? result;
+  readonly attribute DOMException? error;
+  attribute EventHandler onloadstart;
+  attribute EventHandler onprogress;
+  attribute EventHandler onload;
+  attribute EventHandler onabort;
+  attribute EventHandler onerror;
+  attribute EventHandler onloadend;
+};`.trim());
+  });
+});
+
+describe('File API §6.2: FileReader reads', () => {
+  it('installs FileReader and reads a projected Blob', async () => {
+    const window = createWindow();
+    const Blob_ = requireFunction(window, 'Blob');
+    const FileReader_ = requireFunction(window, 'FileReader');
+    const blob = Reflect.construct(Blob_, [['projected']]) as object;
+    const reader = Reflect.construct(FileReader_, []) as object;
+    const done = new Promise<void>((resolve, reject) => {
+      Reflect.set(reader, 'onerror', () => {
+        reject(new Error(String(Reflect.get(reader, 'error'))));
+      });
+      Reflect.set(reader, 'onloadend', () => { resolve(); });
+    });
+
+    call(reader, 'readAsText', [blob]);
+    await done;
+
+    expect(reader).toBeInstanceOf(FileReader_);
+    expect(Reflect.get(reader, 'readyState')).toBe(2);
+    expect(Reflect.get(reader, 'result')).toBe('projected');
+  });
+
+  it('reads every result mode and creates ArrayBuffer in the relevant realm', async () => {
+    const first = createWindow();
+    const second = createWindow();
+    const context = getContext(first);
+    const blob = new BlobImpl([Uint8Array.of(0, 65, 128, 255)], {
+      type: 'application/example',
+    });
+
+    const dataURL = await read(context, blob, (reader) => {
+      reader.readAsDataURL(context, blob);
+    });
+    expect(dataURL.result)
+      .toBe('data:application/example;base64,AEGA/w==');
+
+    const binary = await read(context, blob, (reader) => {
+      reader.readAsBinaryString(context, blob);
+    });
+    expect([...binary.result as string].map((value) => value.charCodeAt(0)))
+      .toEqual([0, 65, 128, 255]);
+
+    const arrayBuffer = await read(context, blob, (reader) => {
+      reader.readAsArrayBuffer(context, blob);
+    });
+    expect(arrayBuffer.result)
+      .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
+    expect(arrayBuffer.result)
+      .not.toBeInstanceOf(requireFunction(second, 'ArrayBuffer'));
+    expect(getBufferSourceCopy(arrayBuffer.result as object))
+      .toEqual(Uint8Array.of(0, 65, 128, 255));
+  });
+
+  it('uses the interoperable octet-stream Data URL fallback', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl(['TEST']);
+    const reader = await read(context, blob, (value) => {
+      value.readAsDataURL(context, blob);
+    });
+
+    expect(reader.result)
+      .toBe('data:application/octet-stream;base64,VEVTVA==');
+  });
+
+  it('selects an explicit encoding, then MIME charset, then UTF-8', async () => {
+    const context = getContext(createWindow());
+    const windows1252 = new BlobImpl([Uint8Array.of(0x80)], {
+      type: 'text/plain;charset=windows-1252',
+    });
+    const utf8 = new BlobImpl([Uint8Array.of(0x68, 0xC3, 0xB6)]);
+
+    const explicit = await read(context, windows1252, (reader) => {
+      reader.readAsText(context, windows1252, 'windows-1252');
+    });
+    const fromType = await read(context, windows1252, (reader) => {
+      reader.readAsText(context, windows1252, 'not-an-encoding');
+    });
+    const fallback = await read(context, utf8, (reader) => {
+      reader.readAsText(context, utf8);
+    });
+
+    expect(explicit.result).toBe('€');
+    expect(fromType.result).toBe('€');
+    expect(fallback.result).toBe('hö');
+  });
+
+  it('lets a byte order mark override the fallback encoding', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl([
+      Uint8Array.of(0xFE, 0xFF, 0, 0x68, 0, 0x69),
+    ]);
+    const reader = await read(context, blob, (value) => {
+      value.readAsText(context, blob, 'UTF-8');
+    });
+
+    expect(reader.result).toBe('hi');
+  });
+
+  it('fires ordered progress events with state and byte totals', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl(['abc']);
+    const reader = new FileReaderImpl();
+    const events: Array<{
+      type: string;
+      readyState: number;
+      result: unknown;
+      loaded: number;
+      total: number;
+    }> = [];
+
+    for (const name of ['loadstart', 'progress', 'load', 'loadend'] as const) {
+      reader.addEventListener(name, (event) => {
+        const progress = event as ProgressEventImpl;
+        events.push({
+          type: event.type,
+          readyState: reader.readyState,
+          result: reader.result,
+          loaded: progress.loaded,
+          total: progress.total,
+        });
+      });
+    }
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, blob);
+    expect(reader.readyState).toBe(1);
+    expect(reader.result).toBeNull();
+    await done;
+
+    expect(events.map((event) => event.type))
+      .toEqual(['loadstart', 'progress', 'load', 'loadend']);
+    expect(events.map((event) => event.readyState)).toEqual([1, 1, 2, 2]);
+    expect(events.slice(0, 2).map((event) => event.result))
+      .toEqual([null, null]);
+    expect(events.slice(1).map(({ loaded, total }) => [loaded, total]))
+      .toEqual([[3, 3], [3, 3], [3, 3]]);
+    expect(reader.result).toBe('abc');
+  });
+
+  it('does not fire progress for an empty Blob', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl();
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+
+    reader.onloadstart = (event) => { events.push(event.type); };
+    reader.onprogress = (event) => { events.push(event.type); };
+    reader.onload = (event) => { events.push(event.type); };
+    reader.onloadend = (event) => { events.push(event.type); };
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, blob);
+    await done;
+
+    expect(events).toEqual(['loadstart', 'load', 'loadend']);
+    expect(reader.result).toBe('');
+  });
+
+  it('throttles intermediate progress and reports the final byte count', async () => {
+    const context = getContext(createWindow());
+    const size = 128 * 1024 + 1;
+    const source: BlobByteSource = {
+      size,
+      snapshotState: { version: 1 },
+      async read(_start, length) {
+        await new Promise((resolve) => { setTimeout(resolve, 60); });
+        return new Uint8Array(length);
+      },
+    };
+    const blob = BlobImpl.create(
+      BlobData.fromSource(source),
+      '',
+      source.snapshotState,
+    );
+    const reader = new FileReaderImpl();
+    const loaded: number[] = [];
+    reader.onprogress = (event) => {
+      loaded.push((event as unknown as ProgressEventImpl).loaded);
+    };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsArrayBuffer(context, blob);
+    await done;
+
+    expect(loaded.length).toBeGreaterThanOrEqual(2);
+    expect(loaded.at(-1)).toBe(size);
+    expect(loaded).toEqual([...loaded].sort((a, b) => a - b));
+  });
+
+  it('rejects a concurrent read while leaving the first read active', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl(['abc']);
+    const reader = new FileReaderImpl();
+    const done = waitForLoadEnd(reader);
+
+    reader.readAsText(context, blob);
+    let error: unknown;
+    try {
+      reader.readAsDataURL(context, blob);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(DOMException);
+    expect((error as DOMException).name).toBe('InvalidStateError');
+    await done;
+    expect(reader.result).toBe('abc');
+  });
+
+  it('aborts synchronously and does not disturb another reader', async () => {
+    const context = getContext(createWindow());
+    const first = new FileReaderImpl();
+    const second = new FileReaderImpl();
+    const firstEvents: string[] = [];
+    first.onloadstart = (event) => { firstEvents.push(event.type); };
+    first.onload = (event) => { firstEvents.push(event.type); };
+    first.onabort = (event) => { firstEvents.push(event.type); };
+    first.onloadend = (event) => { firstEvents.push(event.type); };
+
+    first.readAsText(context, new BlobImpl(['first']));
+    const secondDone = waitForLoadEnd(second);
+    second.readAsText(context, new BlobImpl(['second']));
+    first.abort();
+
+    expect(first.readyState).toBe(2);
+    expect(first.result).toBeNull();
+    expect(first.error).toBeNull();
+    expect(firstEvents).toEqual(['abort', 'loadend']);
+    await secondDone;
+    expect(second.result).toBe('second');
+    expect(firstEvents).toEqual(['abort', 'loadend']);
+  });
+
+  it('clears a completed result without firing events when aborted', async () => {
+    const context = getContext(createWindow());
+    const blob = new BlobImpl(['complete']);
+    const reader = await read(context, blob, (value) => {
+      value.readAsText(context, blob);
+    });
+    const abort = vi.fn();
+    const loadend = vi.fn();
+    reader.onabort = abort;
+    reader.onloadend = loadend;
+
+    reader.abort();
+
+    expect(reader.readyState).toBe(2);
+    expect(reader.result).toBeNull();
+    expect(abort).not.toHaveBeenCalled();
+    expect(loadend).not.toHaveBeenCalled();
+  });
+
+  it('suppresses the old loadend when onabort starts another read', async () => {
+    const context = getContext(createWindow());
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+    let firstLoadStart = true;
+    reader.onloadstart = (event) => {
+      events.push(event.type);
+      if (!firstLoadStart) return;
+      firstLoadStart = false;
+      reader.abort();
+    };
+    reader.onabort = (event) => {
+      events.push(event.type);
+      reader.readAsText(context, new BlobImpl(['second']));
+    };
+    reader.onprogress = (event) => { events.push(event.type); };
+    reader.onload = (event) => { events.push(event.type); };
+    reader.onloadend = (event) => { events.push(event.type); };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, new BlobImpl(['first']));
+    await done;
+
+    expect(reader.result).toBe('second');
+    expect(events).toEqual([
+      'loadstart', 'abort',
+      'loadstart', 'progress', 'load', 'loadend',
+    ]);
+  });
+
+  it('stops completion when a final progress handler aborts', async () => {
+    const context = getContext(createWindow());
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+    reader.onprogress = (event) => {
+      events.push(event.type);
+      reader.abort();
+    };
+    reader.onload = (event) => { events.push(event.type); };
+    reader.onabort = (event) => { events.push(event.type); };
+    reader.onloadend = (event) => { events.push(event.type); };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, new BlobImpl(['unfinished']));
+    await done;
+
+    expect(reader.result).toBeNull();
+    expect(events).toEqual(['progress', 'abort', 'loadend']);
+  });
+
+  it('suppresses the old loadend when onload starts another read', async () => {
+    const context = getContext(createWindow());
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+    let firstLoad = true;
+    reader.onload = (event) => {
+      events.push(event.type);
+      if (!firstLoad) return;
+      firstLoad = false;
+      reader.readAsText(context, new BlobImpl(['second']));
+    };
+    reader.onloadend = (event) => { events.push(event.type); };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, new BlobImpl(['first']));
+    await done;
+
+    expect(reader.result).toBe('second');
+    expect(events).toEqual(['load', 'load', 'loadend']);
+  });
+
+  it('suppresses the old loadend when onerror starts another read', async () => {
+    const context = getContext(createWindow());
+    const source: BlobByteSource = {
+      size: 1,
+      snapshotState: { version: 1 },
+      read: () => Promise.reject(new BlobReadFailure('NotFound')),
+    };
+    const failed = BlobImpl.create(
+      BlobData.fromSource(source),
+      '',
+      source.snapshotState,
+    );
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+    reader.onerror = (event) => {
+      events.push(event.type);
+      reader.readAsText(context, new BlobImpl(['recovered']));
+    };
+    reader.onload = (event) => { events.push(event.type); };
+    reader.onloadend = (event) => { events.push(event.type); };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(context, failed);
+    await done;
+
+    expect(reader.result).toBe('recovered');
+    expect(reader.error).toBeNull();
+    expect(events).toEqual(['error', 'load', 'loadend']);
+  });
+
+  it.each([
+    ['NotFound', 'NotFoundError'],
+    ['UnsafeFile', 'SecurityError'],
+    ['TooManyReads', 'SecurityError'],
+    ['SnapshotState', 'NotReadableError'],
+    ['FileLock', 'NotReadableError'],
+  ] as const)('maps the %s read failure to %s', async (reason, name) => {
+    const context = getContext(createWindow());
+    const source: BlobByteSource = {
+      size: 1,
+      snapshotState: { version: 1 },
+      read: () => Promise.reject(new BlobReadFailure(reason)),
+    };
+    const blob = BlobImpl.create(
+      BlobData.fromSource(source),
+      '',
+      source.snapshotState,
+    );
+    const reader = new FileReaderImpl();
+    const events: string[] = [];
+    reader.onloadstart = (event) => { events.push(event.type); };
+    reader.onerror = (event) => { events.push(event.type); };
+    reader.onloadend = (event) => { events.push(event.type); };
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsArrayBuffer(context, blob);
+    await done;
+
+    expect(events).toEqual(['error', 'loadend']);
+    expect(reader.readyState).toBe(2);
+    expect(reader.result).toBeNull();
+    expect(reader.error?.name).toBe(name);
+    expect(reader.error)
+      .toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
+  });
+});
+
+function createWindow(): Window & typeof globalThis {
+  return new Browlet({ route: () => '' }).window as
+    Window & typeof globalThis;
+}
+
+function getContext(window: object): BindingContext {
+  return browletBindings.forRealm(getRelevantRealm(window)).context;
+}
+
+async function read(
+  context: BindingContext,
+  blob: BlobImpl,
+  start: (reader: FileReaderImpl) => void,
+): Promise<FileReaderImpl> {
+  const reader = new FileReaderImpl();
+  const done = waitForLoadEnd(reader);
+  start(reader);
+  await done;
+  if (reader.error) throw reader.error;
+  return reader;
+}
+
+function waitForLoadEnd(reader: FileReaderImpl): Promise<void> {
+  return new Promise((resolve) => {
+    reader.addEventListener('loadend', () => { resolve(); });
+  });
+}
+
+function call(
+  object: object,
+  name: string,
+  argumentsList: unknown[] = [],
+): unknown {
+  return Reflect.apply(requireFunction(object, name), object, argumentsList);
+}
+
+function requireFunction(object: object, name: string): CallableFunction {
+  const value = Reflect.get(object, name) as unknown;
+  if (typeof value !== 'function') throw new Error(`${name} is not a function`);
+  return value;
+}

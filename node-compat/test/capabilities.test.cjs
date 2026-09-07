@@ -120,7 +120,7 @@ test('a live reused proxy does not retain the previous realm', async () => {
   assert.equal(compat.runInContext('globalThis', second), second.globalProxy);
 });
 
-// Deferred to module-loading integration; see src/js-engine/roadmap.md.
+// Deferred to module-loading integration; see src/js-engine/ROADMAP.md.
 test('indirect eval uses the replacement realm dynamic-import callback', {
   skip: 'Deferred: context-level dynamic-import callbacks are not implemented',
 }, async () => {
