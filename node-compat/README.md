@@ -15,16 +15,19 @@ V8 patches also enables the five host hooks described below.
 
 ## Build and run on Windows x64
 
-Preparation verifies the official executable, headers and import library for
-the selected version. Building the addon requires Visual
-Studio's Desktop development with C++ workload. The build reuses an x64
-developer prompt, honors VSINSTALLDIR, or discovers the installed C++ tools
-with vswhere. VsDevCmd initializes the compiler and Windows SDK environment.
+`npm.cmd run build:node-compat` prepares the selected Node base and compiles
+the addon. Missing official executables, headers and import libraries are
+downloaded and checked against pinned release hashes. Rebuilds reuse these
+cached files; header archives are deleted after extraction.
+
+Building requires Visual Studio's Desktop development with C++ workload. The
+build reuses an x64 developer prompt, honors VSINSTALLDIR, or discovers the
+installed C++ tools with vswhere. VsDevCmd initializes the compiler and Windows
+SDK environment.
 
 ```powershell
-# Prepare once; ordinary addon rebuilds reuse these files.
-& node-compat/scripts/prepare-node.ps1 -Version 24.19.0
-& node-compat/scripts/build-addon.cmd --base 24.19.0
+# Override the configured base for this build:
+npm.cmd run build:node-compat -- --base 24.19.0
 ```
 
 Copy `.env.example` to `.env` and set the defaults there:
@@ -67,8 +70,7 @@ The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
 headers. To prepare and target Node 26:
 
 ```powershell
-& node-compat/scripts/prepare-node.ps1 -Version 26.8.1
-& node-compat/scripts/build-addon.cmd --base 26.8.1
+npm.cmd run build:node-compat -- --base 26.8.1
 # One-off overrides without editing .env:
 node scripts/with-node.mjs --base 26.8.1 node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 node scripts/with-node.mjs --base 26.8.1 --runtime stock vitest run --project=unit
@@ -90,10 +92,6 @@ use that database for each source file, following the most recent successful
 addon build. Machine-specific paths stay in ignored build output. Rebuild after
 changing the installed compiler or target headers.
 
-Preparation is separate from compilation. Rerun it when setting up a version
-or restoring removed development files. It verifies the pinned release hashes
-and extracts headers using a temporary archive, which it then deletes.
-
 ## Node engine work
 
 Edit and build Node/V8 in the regular checkout named by `CUSTOM_NODE_SOURCE`.
@@ -105,7 +103,7 @@ checkout. Nothing is copied or linked into Browlet's cache.
 After building the Node engine there, build only the addon here:
 
 ```powershell
-& node-compat/scripts/build-addon.cmd --base custom
+npm.cmd run build:node-compat -- --base custom
 # With NODE_BASE=custom in .env:
 npm.cmd run test:node-compat
 npm.cmd run test:unit
@@ -278,11 +276,11 @@ has not been benchmarked.
   addon.cc. Separate binaries are useful for independently loadable components,
   not required for separate features or upstream commits.
 - test/: standalone behavior and GC regressions plus a quick startup check.
-- scripts/: verified header preparation and addon compilation.
+- ../scripts/build-node-compat.mjs: verified dependency preparation and addon compilation.
 - experimental/: an ignored, independent Git repository for investigation.
 - .cache/node-v24.19.0/: Node 24 headers, Release/node.lib and node.exe.
 - .cache/node-v26.8.1/: Node 26 headers, Release/node.lib and node.exe.
-  These are replaceable dependencies prepared by scripts/prepare-node.ps1,
+  These are replaceable dependencies prepared by `build:node-compat`,
   not Node source checkouts. Download archives and duplicate libraries are
   discarded after preparation.
 - results/: ignored logs and JSON reports, grouped under addon/,

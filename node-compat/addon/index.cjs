@@ -5,7 +5,7 @@ const { addonBuild, requireFile, validateRuntimeVersion } = require('../node-bas
 const base = process.env.NODE_BASE ?? '24.19.0';
 validateRuntimeVersion(base, process.versions.node);
 const build = addonBuild(base);
-const hint = `Build the addon with node-compat/scripts/build-addon.cmd --base ${base}.`;
+const hint = `Build the addon with npm run build:node-compat -- --base ${base}.`;
 requireFile(join(build, 'node-compat.node'), hint);
 requireFile(join(build, 'node.json'), hint);
 const builtFor = require(join(build, 'node.json'));
