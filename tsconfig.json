@@ -30,6 +30,7 @@
     { "path": "./src/struct-fields" },
     { "path": "./src/file" },
     { "path": "./src/xhr" },
+    { "path": "./src/fetch" },
     { "path": "./src/selectlet" },
     { "path": "./src/stylelet" },
     { "path": "./src/browlet" },

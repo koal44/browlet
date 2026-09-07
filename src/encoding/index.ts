@@ -16,7 +16,7 @@ import {
   textEncoderStreamIncludesGenericTransformStreamIDL,
 } from './text-encoder-stream';
 
-export { decode, getEncoding } from './hooks';
+export { decode, encode, getEncoding } from './hooks';
 
 export const encodingIDLDefinitions: Definition[] = [
   textDecoderCommonIDL,

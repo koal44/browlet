@@ -17,6 +17,7 @@ export default defineConfig({
             'test/encoding/unit/**/*.test.ts',
             'test/struct-fields/unit/**/*.test.ts',
             'test/file/unit/**/*.test.ts',
+            'test/fetch/unit/**/*.test.ts',
             'test/url/unit/**/*.test.ts',
             'test/web-idl/unit/**/*.test.ts',
             'test/stylelet/unit/**/*.test.ts',
