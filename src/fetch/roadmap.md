@@ -11,10 +11,15 @@ only needs a small public surface. Undici can supply transport bytes, but its
 `fetch`, `Headers`, `Request`, `Response`, streams, abort objects, and promises
 must not cross Browlet's implementation or Web IDL boundaries.
 
-Do not add a TypeScript project reference or public package entry until the
-first implemented source makes this boundary executable. The current
-[dependency preflight](preflight.md) owns the detour's work order and suggested
-layout; this roadmap resumes at Slice 1 after its independent prerequisites.
+The TypeScript project already contains multipart and HTTP cache algorithms.
+Public package/API exposure waits for a complete interface family. After the
+independent cache-policy work, resume the slices below; the
+[dependency preflight](preflight.md) retains the remaining external work order.
+
+`index.ts` exports the contracts consumed by production outside Fetch, currently
+the structured-data and global-task capabilities. Add exports with their real
+consumers; focused tests may import internal algorithms without widening this
+surface.
 
 ## Implementation order
 
@@ -49,8 +54,9 @@ When an algorithm reaches a missing external dependency:
 
 | Planned area | Contract | Fetch sections |
 | --- | --- | --- |
-| `host.ts` | Origins, settings/client state, task destinations, clocks, abort reasons, policy decisions, storage services, and transport entry points supplied without a Browlet dependency | §§2.1–2.2, 4, and “Using fetch in other standards” |
-| `controller.ts` | Fetch parameters, controller state, cancellation, timing, and response-body information | §2, “Infrastructure” |
+| Cross-specification capabilities at their consumers | HTML serialization/task delivery, client state, clocks, policy, and storage supplied explicitly without a Browlet dependency; no combined host service bag | §2, 4, and “Using fetch in other standards” |
+| `controller.ts`, `timing.ts`, `tasks.ts`, `infrastructure.ts`, `url.ts` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, integer serialization, and URL classifications | Opening §2 and §2.1 |
+| `params.ts` (planned) | Fetch bookkeeping over the real request/response records and the controller | §2, “Infrastructure” |
 | `headers.ts` | Header lists, parsing, normalization, extraction, guards, and forbidden/safelisted names | §§2.2.2, 3.3–3.8, and 5.1 |
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
@@ -119,16 +125,61 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 
 ## Slice 1 — control and task delivery
 
-**Specification:** opening Fetch §2 through §2.1.
+**Specification:** the opening of Fetch §2, “Infrastructure,” followed by
+§2.1, “URL.” Stop before §2.2, “HTTP.”
 
-Implement parameters/controller state, timing and body-information records,
-abort/termination and abort-reason serialization, and queue-a-fetch-task over
-global and parallel-queue destinations. Then implement the URL scheme
-predicates and offline-state contract from §2.1. Reuse HTML structured data,
-High Resolution Time, URL records, and existing task primitives.
+| Source portion | Implementation / boundary |
+| --- | --- |
+| §2 terminology, ABNF, credentials | Definitions for subsequent consumers, not separate runtime services |
+| §2 fetch params | Pending the request/response record spine below; includes their typed callbacks and the aborted/canceled predicates |
+| §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
+| §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
+| §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
+| §2 is offline and serialize an integer | `infrastructure.ts`: explicit user-agent/BiDi state inputs and decimal serialization; these precede §2.1 |
+| §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
+
+**Status:** the independent controller, timing, task, and URL work is implemented.
+`browlet/integration/fetch.ts` supplies HTML structured serialization and global
+networking tasks. Fetch retains serialization records opaquely; the caller
+supplies the source/target Binding Context and matching serialization capability.
+The adapters are ready for Fetch orchestration; no public Fetch APIs are installed.
+
+Timing records store DOMHighResTimeStamp values. Reading/coarsening clocks and
+delivering performance entries remain at the later timing producers, using the
+existing [Performance owner](../browlet/performance/roadmap.md#fetch-and-navigation-integration).
+Service Worker timing remains explicitly null until worker integration supplies
+its record. Offline policy accepts both specified booleans; browser connectivity
+state and real BiDi session lookup remain host integration work.
 
 **Exit proof:** abort serialization/fallback, controller transitions, timing,
 and deterministic task routing execute without transport or public Fetch APIs.
+Covered by `test/fetch/unit/control.test.ts` and
+`test/browlet/unit/fetch-control.test.ts`; fetch params remains the forward
+record dependency above.
+
+### Suggested record and API spine
+
+Establish the records' fields, defaults, and shared references before their
+later algorithms. A class can provide those defaults without prematurely
+implementing every operation. Proposed shapes:
+
+| Construct | Representation and ownership |
+| --- | --- |
+| Header entry / header list (§2.2.2) | Entry type and an ordered list preserving duplicates; the list has shared identity |
+| Body (§2.2.4) | `BodyRecord` with stream, source, and length; use existing Streams/File representations |
+| Request / response (§§2.2.5–2.2.6) | `RequestRecord` / `ResponseRecord` classes with actual fields and defaults; required inputs stay required |
+| Fetch params (§2) | Record over those types, `FetchController`, timing info, task destination, and typed processing steps |
+| Headers (§5.1) | `HeadersImpl` class retaining a header list and guard; a Request/Response's Headers shares that record's list |
+| Body mixin (§5.3) | `BodyMixin` supplies shared body behavior over the includer's body; it must not create another body value |
+| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` classes retaining their §2 records, Headers implementations, and the applicable realm/abort dependencies |
+| Unions, enums, dictionaries, callback signatures | Type aliases/record types; Web IDL owns author conversion and defaults |
+
+Review the request/client/policy and response-filtering fields when bringing
+this spine forward. Record construction need not wait for networking, cloning,
+or body consumption, but a missing external type must stay explicit. API
+classes and IDL can be authored before exposure; install the complete family
+at Slice 6. The spine's exact implementation is pending review, rather than an
+expansion of the current control slice.
 
 ## Slice 2 — HTTP methods, headers, and statuses
 
