@@ -12,7 +12,9 @@ only needs a small public surface. Undici can supply transport bytes, but its
 must not cross Browlet's implementation or Web IDL boundaries.
 
 Do not add a TypeScript project reference or public package entry until the
-first implemented source makes this boundary executable.
+first implemented source makes this boundary executable. The current
+[dependency preflight](preflight.md) owns the detour's work order and suggested
+layout; this roadmap resumes at Slice 1 after its independent prerequisites.
 
 ## Implementation order
 
@@ -53,7 +55,9 @@ When an algorithm reaches a missing external dependency:
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
 | `response.ts` | Response records, filtered responses, cloning, network errors, and the `Response` implementation | §§2.2.6 and 5.5 |
-| `http/` | HTTP extensions, redirects, CORS, authentication, cache integration, response blocking, and header protocols | §§2.3–2.10, 3, and 4.4–4.11 |
+| [`http/`](http/roadmap.md) | HTTP syntax, extensions, and transactions; its [cache plan](http/cache/roadmap.md) owns caching detail | §§2.2–2.10, 3, and 4.4–4.11 |
+| [`multipart/`](multipart/roadmap.md) | FormData byte encoding/parsing used by Body | §§5.2–5.3 |
+| `integrity.ts` | SRI metadata and byte verification; see [the scoped plan below](#subresource-integrity) | §4.1 and SRI |
 | `schemes/` | `about:`, `blob:`, `data:`, `file:`, and HTTP(S) scheme dispatch | §§4.3 and 6 |
 | `fetch.ts` | Main Fetch orchestration, response-processing callbacks, task destinations, and ongoing-fetch control | §§4.1–4.2 and “Using fetch in other standards” |
 | `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
@@ -62,85 +66,126 @@ When an algorithm reaches a missing external dependency:
 
 ## Dependency ledger
 
-| Dependency | First required by | Present state | Delivery decision |
-| --- | --- | --- | --- |
-| URL records, parsing, hosts, and origins | Fetch §§2.1 and 2.2.5 | Implemented in `src/url`, including the host-neutral origin and site operations | Consume the existing records and algorithms directly; do not create a second parser or IDNA path |
-| DOM abort algorithms | Fetch §§2.2 and 5.4–5.6 | Implemented through DOM §3 | Consume through a narrow Fetch host capability; never expose Node's `AbortSignal` |
-| HTML structured data | Fetch §2 controller abort steps | Implemented through HTML §2.7 | Serialize abort reasons through the existing capability boundary |
-| Streams | Fetch §2.2.4 | Ordinary Readable, Writable, and Transform Streams are implemented; Fetch's cross-specification tee clone is connected to HTML structured cloning | Transferable Streams and MessagePort are not Fetch prerequisites |
-| Parallel queues and task destinations | Fetch §§2.2 and 2.2.4 | HTML §2.1.1 parallel queues are implemented in `src/shared`; global task destinations and the networking task source also exist | Fetch retains its own task-destination union and queue-fetch-task algorithm |
-| Encoding | Fetch §§2.2.4 and 5.2–5.3 | The Encoding interfaces are projected from `src/encoding`; codec semantics delegate to `@exodus/bytes`, and stream wrappers use Browlet Streams | Consume `TextDecoderStream` for `Body.textStream()` and the host-neutral UTF-8 operations for body conversions |
-| MIME types | Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6 | MIME Sniffing §§1–8 are implemented in `src/mime` | Consume the host-neutral MIME records and algorithms directly; consumer-specific missing-type policy remains with its loader |
-| Forgiving Base64 | Fetch §7 | Infra §7 encode and forgiving decode are implemented in `src/infra` | Consume the host-neutral algorithms directly from the `data:` URL processor |
-| Blob and File | Fetch §§2.2.4, 4.3, and 5.2–5.3 | `Blob`, `File`, `FileList`, immutable backing data, stream access, slicing, and HTML structured-data integration are implemented in `src/file`; the Blob URL store remains deferred | Consume the existing File API objects and records for Body extraction. Add the File-owned URL resolver when the `blob:` scheme branch is implemented; do not substitute Node's Blob or object-URL registry |
-| FormData and multipart data | Fetch §§2.2.4 and 5.2–5.3 | XHR's no-form `FormData` entry-list core is implemented in `src/xhr`; form-backed construction and multipart encoding/parsing are not | Consume the existing entry list directly. Implement multipart processing with Fetch bodies; `FormData(form, submitter)` continues to wait for HTML forms |
-| High Resolution Time | Fetch §2 timing records and §4 timing steps | Environment timing and a shared monotonic clock exist | Keep Fetch timing records host-neutral; Browlet supplies the clock and later Resource Timing reporting |
-| Referrer Policy | Fetch §§2.2.5, 3.2, and 4.1–4.5 | Policy-container storage exists; the normative policy algorithms do not | Preserve request fields immediately and add policy hooks when the first algorithm needs to calculate or redirect a referrer |
-| Cookies, cache, authentication, and network partitioning | Fetch §§2.3, 2.7–2.8, 3.1, and 4.4–4.9 | Not implemented | Define records and explicit host services in document order; defer storage behavior until the HTTP transport slice or a Browlet consumer requires it |
-| CSP, Mixed Content, SRI, CORP/COEP, Reporting, and Service Workers | Fetch §§3.7 and 4.1–4.7 | Partial policy records exist, but the owning subsystems do not | Keep named policy/interception hooks and test the no-policy path; do not report unsupported branches as implemented |
-| Resource Timing and Navigation Timing reporting | Fetch §§2.2.6 and 4.1 | High-resolution timestamps exist; reporting does not | Store all required timing information now and add reporting at the existing loader/performance integration phase |
-| HTTP transport | Fetch §§2.5–2.6 and 4.6–4.7 | No Fetch transport adapter or direct Undici dependency | Prove behavior with an injected fake transport, then add an Undici dispatcher-level adapter with redirects disabled |
+This is a first-consumer index. Detailed status, algorithms, tests, and
+deferrals live with the linked owner. The [preflight](preflight.md) orders
+the external dependency work and catalogs its specification sources.
 
-## Slice 1 — foundational infrastructure
+| Dependency | First Fetch consumer | Owner / integration |
+| --- | --- | --- |
+| URL/origins/sites and Infra bytes/collections/Base64 | §§2.1–2.2 and 6 | Existing `src/url` and `src/infra` algorithms; reuse their IDNA/public-suffix delegation |
+| DOM abort and HTML structured data | §2 controller state and §5 | Browlet's existing abort/serialization capabilities |
+| Parallel queues and global task destinations | §2 task delivery | Existing `src/shared/parallel-queue.ts` and HTML task lifecycle |
+| Streams, Encoding, and MIME | §§2.2.2–2.2.4 and 5 | Existing subsystem implementations; body processing and header-list integration remain Fetch-owned |
+| Structured fields | §2.2.2 | [Structured fields](../structured-fields/roadmap.md) |
+| HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP](http/roadmap.md) |
+| Blob/File bytes and Blob URLs | §§2.2.4, 5 / §4.3 | [File](../file/roadmap.md); shared keys come from [Storage](../storage/roadmap.md) |
+| FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/roadmap.md); [multipart](multipart/roadmap.md) owns byte processing |
+| UUIDs and cryptographic hashes | §2.2.5 / integrity checks | Narrow host primitives; a complete public Web Crypto API is not a prerequisite |
+| HTTP cache | §2.2.6, §2.8, and §4.6 | [Cache](http/cache/roadmap.md) |
+| Cookies | §3.1 | [Cookies](../cookies/roadmap.md); Fetch owns its request/response inputs |
+| Trustworthiness, referrer, HSTS, and integrity policy | Request construction and §4 | [Browser policy](../browlet/browsing/policy/roadmap.md); SRI byte verification is scoped below |
+| CSP / Mixed Content / Upgrade Insecure Requests | §4 | [Browser policy](../browlet/browsing/policy/roadmap.md) and its [CSP plan](../browlet/browsing/policy/csp/roadmap.md) |
+| CORP / COEP | §§2.2.5 and 3.7 | CORP is Fetch-owned HTTP work; HTML supplies embedder-policy state and processing |
+| Reporting | §3.7 and other policy checks | [Reporting](../browlet/reporting/roadmap.md) |
+| Clocks / Resource and Navigation Timing | §2 records / §4 delivery | [Performance](../browlet/performance/roadmap.md#fetch-and-navigation-integration) |
+| Service Workers, deferred fetch, Permissions Policy, BiDi | Their named call sites | See [deferred work](#explicitly-deferred-work) |
+| HTTP transport and credentials | §§2.5–2.6 and 4.6–4.7 | Host services and [Slice 9](#slice-9--http-transport-cors-and-public-fetch) |
 
-**Specification:** Fetch §§2.1–2.2.3.
+### Transport and reference boundaries
 
-Implement in document order:
+Undici is the planned dispatcher-level transport. Node/Undici supply sockets,
+DNS, TCP/TLS, HTTP wire handling, connection primitives, and cancellation;
+host codecs supply decompression. Fetch owns redirects, CORS, credentials,
+partition selection, coding decisions, and encoded/decoded byte accounting.
 
-1. URL- and origin-facing Fetch concepts from §2.1 without duplicating URL
-   parsing or IDNA processing.
-2. Fetch parameters, controller state, timing information, task destinations,
-   fetch-controller abort/terminate behavior, and queue-a-fetch-task from the
-   opening portion of §2.
-3. HTTP whitespace, tokens, quoted strings, methods, header names and values,
-   header lists, header-list combination/sorting, forbidden and safelisted
-   header algorithms, and status classifications from §§2.2.1–2.2.3.
-4. The host contract required by these records, including an explicit global
-   or parallel task destination and realm-neutral error/timing values.
-5. Fetch's queue-a-fetch-task routing over the HTML §2.1.1 parallel queue
-   completed during preflight and Browlet's existing global task destination.
+Verify the selected adapter's protocol, TLS/client-certificate, timing, and
+pool-isolation controls. For example, Fetch §4.7 rejects a source-less
+streaming request body on HTTP/1.x even if a client can transmit it. A working
+HTTP client alone does not prove Fetch transport conformance.
 
-Do not add transport or public `Headers` behavior merely to test the records.
-Test the internal algorithms directly, including duplicate headers,
-`Set-Cookie`, normalization, invalid bytes, guards' prerequisite predicates,
-abort serialization, and destination ordering.
+Supporting HTTP/TLS/ALPN/DNS/SVCB and RFC 9218 priority requirements belong at
+their transport call sites. ABNF/RFC 7405 provide grammar notation, not a
+requirement for a generic grammar-parser subsystem. Fetch §6 itself defines
+`data:` processing; RFC 2397 is informative there. Historical references and
+consumer specs such as WebSockets, WebTransport, XHR, and Beacon do not make
+those entire protocols prerequisites for ordinary Fetch.
 
-**Exit proof:** Fetch's controller, timing, method, status, header-list, and
-task-destination algorithms execute without importing Browlet, Undici, or a
-Node platform object.
+Two internal forward dependencies also need explicit ordering: §2.2.4's
+bytes-as-body operation calls §5.2 safely extract, and §2.10 MIME blocking calls
+§3.5 extract a MIME type. Implement those narrow dependencies with their first
+consumers. The existing MIME parser does not perform Fetch's header-list
+extraction algorithm. Multipart parsing also needs focused browser/WPT evidence:
+Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 
-## Slice 2 — bodies, requests, and responses
+## Slice 1 — control and task delivery
 
-**Specification:** Fetch §2.2.4–§2.10.
+**Specification:** opening Fetch §2 through §2.1.
 
-Implement in document order:
+Implement parameters/controller state, timing and body-information records,
+abort/termination and abort-reason serialization, and queue-a-fetch-task over
+global and parallel-queue destinations. Then implement the URL scheme
+predicates and offline-state contract from §2.1. Reuse HTML structured data,
+High Resolution Time, URL records, and existing task primitives.
 
-1. Body records, cloning, incremental reading, fully reading, and byte-stream
-   setup from §2.2.4 using the Streams implementation.
-2. Body extraction initially for byte sequences, `BufferSource`, scalar-value
-   strings, `URLSearchParams`, and `ReadableStream`.
-3. MIME, Blob/File, FormData/multipart, and Encoding prerequisites when their
-   branches are reached; do not narrow the declared `BodyInit` union to avoid
-   implementing them.
-4. Request records, destinations, modes, credentials, referrer and policy
-   inputs, cloning, and origin/client relationships from §2.2.5.
-5. Response, filtered-response, network-error, cloning, location URL, and MIME
-   extraction records from §2.2.6.
-6. The remaining §2 infrastructure in order: miscellaneous HTTP concepts,
-   authentication entries, fetch groups, domain resolution, connections,
-   partition keys, cache partitions, port blocking, and MIME-type blocking.
-   Implement pure algorithms and records; leave network/storage actions behind
-   named host capabilities.
+**Exit proof:** abort serialization/fallback, controller transitions, timing,
+and deterministic task routing execute without transport or public Fetch APIs.
 
-Content-coding decompression belongs to the transport boundary but its Fetch
-decision and failure semantics remain in this project.
+## Slice 2 — HTTP methods, headers, and statuses
 
-**Exit proof:** request and response records can carry, clone, consume, and
-cancel streamed byte bodies with deterministic task delivery; every deferred
-§2 network or storage action is represented by a named capability rather than
-an implicit no-op.
+**Specification:** Fetch §2.2 through §2.2.3.
 
-## Slice 3 — network-independent platform APIs
+Implement HTTP syntax, content-coding dispatch, methods, header lists,
+normalization/combination/extraction, forbidden and safelisted header
+algorithms, range handling, and status classifications in document order.
+The [structured-field algorithms](../structured-fields/roadmap.md) must be
+supplied before completing their header-list integration. Host codecs implement decompression; Fetch owns
+the coding selection and failure behavior.
+
+**Exit proof:** focused tests cover invalid bytes, duplicate headers,
+`Set-Cookie`, range/safelist rules, structured fields, and coding failures;
+public `Headers` projection remains in the API slice.
+
+## Slice 3 — bodies and stream processing
+
+**Specification:** Fetch §2.2.4.
+
+Implement body records, clone/tee, incremental reading, and fully reading over
+Browlet Streams and Fetch task delivery. Bring forward only the byte-sequence
+path of §5.2 safely extract for the bytes-as-body algorithm; complete the
+author-facing `BodyInit` union in the API slice.
+
+**Exit proof:** body bytes, failures, and completion arrive in order at global
+and parallel destinations, with correct tee and cancellation behavior.
+
+## Slice 4 — requests and responses
+
+**Specification:** Fetch §§2.2.5–2.2.7.
+
+Implement request/response records, cloning, request-client/origin/policy
+inputs, response filtering, network errors, location URLs, freshness
+predicates, and the miscellaneous HTTP concepts. Reuse URL/site operations;
+consume the [cache owner's freshness helpers](http/cache/roadmap.md).
+Storing a policy field does not implement the later policy check.
+
+**Exit proof:** record defaults, clone identity, filtered visibility, location
+parsing, and freshness decisions pass without a network connection.
+
+## Slice 5 — fetch groups and network infrastructure
+
+**Specification:** Fetch §§2.3–2.10.
+
+Implement authentication-entry records, fetch groups, domain/connection
+contracts, partition keys, cache partitions, port blocking, and MIME blocking
+in order. Bring forward §3.5 MIME extraction where §2.10 calls it. Preserve
+fetch-group termination's call to §4.12 process deferred fetches, whose full
+feature remains deferred. Network/storage effects require explicit host
+contracts and deterministic fakes.
+
+**Exit proof:** pure blocking/partition algorithms and fetch-group cancellation
+work; each remaining network, storage, or deferred-fetch effect has an explicit
+owner and completion gate.
+
+## Slice 6 — network-independent platform APIs
 
 **Specification:** Fetch §§5.1–5.5. This is the deliberate document-order
 departure described above.
@@ -149,7 +194,8 @@ Implement:
 
 1. `Headers` and its iterator from §5.1 over the existing header-list and guard
    algorithms.
-2. The complete `XMLHttpRequestBodyInit` and `BodyInit` unions from §5.2.
+2. The complete `XMLHttpRequestBodyInit` and `BodyInit` unions from §5.2,
+   consuming the [multipart implementation](multipart/roadmap.md).
 3. The Body mixin from §5.3, including realm-correct promises, ArrayBuffers,
    `Uint8Array`, Blob/File, FormData, JSON parsing, UTF-8 text decoding, and
    `textStream()` through a Browlet `TextDecoderStream`.
@@ -170,7 +216,7 @@ their constructor, conversion, mutation, clone, body-consumption, abort, and
 exception tests with no network transport installed and no Node public object
 escaping.
 
-## Slice 4 — HTTP extensions
+## Slice 7 — HTTP extensions
 
 **Specification:** Fetch §§3.1–3.8.
 
@@ -192,7 +238,7 @@ is explicit and replaceable.
 or stops at a named external-policy/storage capability with its inputs fully
 formed.
 
-## Slice 5 — Fetch orchestration and local schemes
+## Slice 8 — Fetch orchestration and local schemes
 
 **Specification:** Fetch §4–§4.5 and §6.
 
@@ -217,7 +263,7 @@ embedder policy, not permission to expose arbitrary Node filesystem access.
 redirect/main-fetch control flow with deterministic response callbacks and no
 real network.
 
-## Slice 6 — HTTP transport, CORS, and public fetch
+## Slice 9 — HTTP transport, CORS, and public fetch
 
 **Specification:** Fetch §§4.6–4.11, §§5.6–5.7, and “Using fetch in other
 standards”.
@@ -249,24 +295,53 @@ a Browlet `Response`, streams bytes with backpressure, resolves through an
 explicit Fetch task destination, and aborts without leaking an Undici/Node
 public object.
 
+## Subresource integrity
+
+`integrity.ts` owns metadata parsing, strongest-supported-hash selection,
+and byte verification from [Subresource Integrity](https://w3c.github.io/webappsec-subresource-integrity/).
+Read the framework/response-verification algorithms in local
+`w3c-subresource-integrity/index.bs`; its path is relative to the
+[reference root](preflight.md#local-reference-inventory).
+
+**Status:** planned. Implement the independently testable metadata/digest
+operations first, then connect response eligibility and actual body bytes
+during main-fetch processing. Hashing uses a host cryptographic primitive.
+The [browser policy owner](../browlet/browsing/policy/roadmap.md#integrity-policy)
+separately owns Integrity-Policy parsing, container association, request
+blocking, and reporting.
+
+**Exit proof:** known byte/hash fixtures cover supported/unsupported and
+malformed metadata, strongest-algorithm selection, matches, and mismatches.
+Fetch integration tests must exercise response eligibility, actual consumed
+bytes, and integrity failure delivery. Parsing a policy or hashing arbitrary
+test bytes alone does not prove the response path.
+
 ## Explicitly deferred work
 
-These algorithms remain part of the audit and must not disappear, but they do
-not gate the initial transport proof:
+These are later consumers and integration gates. They do not prevent an
+initial transport proof over an explicitly configured subset, but that proof
+does not complete every Fetch branch.
 
-- Fetch §4.12 deferred fetching, its quota model, `fetchLater()`, and
-  `FetchLaterResult` wait for their document-lifecycle and persistence owner.
-- Full cookies, HTTP cache semantics, authentication UI, connection pooling,
-  HSTS, network partitioning, and proxy/TLS policy wait for their owning host
-  services.
+- Fetch §4.12 deferred fetching, quotas, `fetchLater()`, and FetchLaterResult
+  wait for the HTML lifecycle and Permissions Policy checks. §2.4 termination
+  must retain its forward dependency; do not accept deferred records before
+  their processing works.
 - Service Worker interception waits for worker agents, events, and lifecycle.
-- Complete Referrer Policy, CSP, Mixed Content, SRI, Reporting, CORP/COEP, and
-  Resource Timing integration waits for those subsystems, while their Fetch
-  call sites remain named and testable through host capabilities.
-- `blob:` URL fetching waits for Blob/File and the object-URL store; `file:`
-  fetching waits for an explicit embedder policy.
-- WebSockets and WebTransport use Fetch infrastructure but are not part of the
-  Fetch API delivery sequence.
+  Ordinary requests with no applicable worker can use the no-worker path.
+- WebDriver BiDi offline/emulation/interception hooks use their specified
+  no-session paths until real automation exists. Sources for this and the
+  preceding specs are in the [reference inventory](preflight.md#local-reference-inventory).
+- HTTP authentication UI and additional challenge schemes wait for credential
+  services and review of the supported schemes' RFCs. Connection pooling,
+  proxy/TLS policy, and protocol support need verified host controls.
+- Store, policy, and timing integrations close under their linked owners in
+  the dependency ledger. Fetch-owned CORP remains in the HTTP slice; Metadata
+  and trustworthiness are required for the corresponding outgoing headers.
+- `blob:` URL fetching waits for the [File-owned store and lifetime integration](../file/roadmap.md#slice-4--blob-url-store-and-urlfetch-integration-deferred);
+  existing Blob/File bytes are already available. `file:` fetching needs an
+  explicit embedder policy.
+- WebSockets, WebTransport, and unsupported transport protocols such as HTTP/3
+  remain outside the initial Fetch API delivery sequence.
 
 ## Verification policy
 
@@ -283,105 +358,14 @@ Each slice requires:
   Fetch Standard remaining authoritative unless an identified specification
   issue requires an explicit Browlet decision.
 
-## Preflight plan
+## Initial foundations
 
-Complete these bounded prerequisites before beginning Fetch Slice 1. Keep each
-step independently reviewable and committable; do not fold unrelated platform
-work into a generic Fetch-foundations commit.
-
-### Preflight 1 — MIME sniffing
-
-**Status:** Complete in `src/mime`.
-
-**Specification:** MIME Sniffing §§1–8.
-**First Fetch consumers:** Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6.
-
-Implement:
-
-1. The MIME type record: type, subtype, ordered parameters, and essence.
-2. HTTP token and quoted-string collection required by MIME parsing.
-3. MIME type parsing and serialization.
-4. Parameter mutation and serialization behavior, including duplicate names,
-   escaping, and invalid input.
-5. The MIME group predicates required by Fetch.
-
-Use the MIME Sniffing Standard as the owner. Fetch consumes the resulting
-records and algorithms; it must not grow a private MIME parser.
-
-**Required exit proof:** parser/serializer round trips, invalid input,
-parameters, essence, and required group predicates agree with focused WPTs and
-browser oracles.
-
-The implementation continued through resource metadata, bounded resource
-headers, byte-pattern matching, computed types, and context-specific sniffing.
-Fetch should consume only the algorithms reached by its normative branches;
-the completed surface does not make every loader policy a Fetch concern.
-
-### Preflight 2 — parallel queue
-
-**Status:** Complete in `src/shared/parallel-queue.ts`.
-
-**Specification:** HTML §2.1.1, “Parallelism”.
-**First Fetch consumers:** Fetch's opening §2 task-destination and
-queue-a-fetch-task algorithms, followed by Fetch §2.2.4 body reading.
-
-Implement:
-
-1. A parallel queue with a FIFO queue of algorithm steps.
-2. Enqueueing that schedules one serial drain without turning the specification
-   model into a continuously running JavaScript loop.
-3. An explicit host scheduling boundary; the parallel queue does not become an
-   HTML event loop or use Node promise timing as HTML ordering.
-4. Nonthrowing-step enforcement and deterministic handling of work enqueued
-   during a drain.
-
-Test FIFO ordering, a single active drain, reentrancy, newly enqueued work,
-exceptions, and independence from Browlet's ordinary task queues.
-
-**Exit proof:** Fetch can use one task-destination union for globals and
-parallel queues, and queue-a-fetch-task preserves each destination's required
-ordering.
-
-### Preflight 3 — host-neutral origin operations
-
-**Status:** Complete in `src/url/origin.ts` and `src/url/origin-api.ts`.
-
-**Specification:** Fetch §§2.1 and 2.2.5, consuming URL and HTML origin
-concepts.
-
-Complete. Origin records, site types, comparisons, effective-domain handling,
-and serialization live in `src/url/origin.ts`. The standalone `Origin`
-implementation and declaration live beside them in `src/url/origin-api.ts`;
-Browlet remains responsible only for selecting and exposing that declaration in
-its assembled Web IDL environment. Browsing-context policy remains in Browlet.
-
-**Exit proof:** `src/fetch` can compare and serialize origin records without
-importing from `src/browlet`, and existing Browlet origin behavior continues to
-use the same single implementation.
-
-### Preflight completion audit
-
-**Status:** Passed.
-
-The audit verified:
-
-- the MIME type core is executable from a host-neutral module;
-- HTML parallel queues have a deterministic test host and no hidden Node
-  scheduling dependency;
-- Fetch can import all required URL/origin primitives without importing
-  Browlet;
-- Streams teeing and HTML structured cloning remain connected;
-- DOM abort, High Resolution Time, global task destinations, and the networking
-  task source remain available through explicit integration seams; and
-- Infra forgiving Base64 is available from a host-neutral shared module.
-
-Encoding, Blob/File, FormData, CSP, cookies, caches, Resource Timing, Referrer
-Policy, and Service Workers remain assigned to their later first consumers
-rather than being pulled into preflight.
-
-The preflight is complete when these three changes are landed and the audit
-passes. At that point begin Fetch Slice 1 even if the optional full MIME
-Sniffing continuation has not been implemented.
+The original prerequisite work supplied MIME operations in `src/mime`,
+parallel queues in `src/shared/parallel-queue.ts`, and host-neutral
+origin/site operations in `src/url`. Their implementation contracts remain
+with those owners. The [current dependency preflight](preflight.md) supersedes
+the earlier three-item preflight; completing those foundations does not close
+the remaining external dependencies.
 
 ## Removal condition
 

@@ -246,7 +246,8 @@ FileReader.
 
 ### Slice 4 — Blob URL store and URL/Fetch integration (deferred)
 
-**Scope:** File API §§8.2–8.4, after the bounded storage-key prerequisite.
+**Scope:** File API §§8.2–8.4, after the
+[bounded storage-key prerequisite](../storage/roadmap.md#first-slice--storage-keys).
 
 - Add a Blob URL store owned by each Browlet User Agent, with strong entry
   retention and creating-environment identity.

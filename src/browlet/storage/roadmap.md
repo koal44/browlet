@@ -1,16 +1,15 @@
 # Web Storage roadmap
 
-HTML §12 owns the synchronous author-facing `Storage`/`StorageEvent` API. The
-separate Storage Standard owns storage keys, sheds, shelves, buckets, bottles,
-proxy maps, and the algorithms that obtain local and session storage maps.
-Browlet should preserve that boundary even if both parts initially use an
-in-memory backend.
+This roadmap owns HTML §12's synchronous `Storage`/`StorageEvent` API and its
+browser integration. The separate [Storage substrate roadmap](../../storage/roadmap.md)
+owns the Storage Standard's records, key algorithms, maps, and backend work.
+Browlet supplies the browser lifetime and policy even when backing is in memory.
 
 ## Early constraints
 
 - The public `Storage` API itself is not part of the first Document lifecycle.
-  Storage-key derivation arrives earlier: HTML shared-worker discovery and
-  `BroadcastChannel` both use a storage key for non-storage purposes.
+  Shared storage keys arrive first for Blob URLs; shared-worker discovery and
+  `BroadcastChannel` are later consumers of that same substrate.
 - `sessionStorage` is scoped to an origin within one top-level traversable.
   Creating an auxiliary top-level traversable with an opener legacy-clones the
   opener's traversable storage shed. Browsing triggers that transition; the
@@ -48,12 +47,10 @@ in-memory backend.
 | `web-idl.ts` | `Storage`, `StorageEvent`, dictionaries, and Window local/session mixins | HTML §12.2 |
 | existing Document and Window modules | Per-Document holders and lazy `sessionStorage`/`localStorage` wrapper creation | HTML §§12.2.2–12.2.3 |
 
-The Storage Standard substrate must provide storage-key derivation, traversable
-and user-agent storage sheds, local/session bottle-map acquisition, proxy maps,
-quota/persistence policy, and legacy shed cloning. Start it behind a narrow
-interface; promote it to a sibling `src/storage` project if IndexedDB, Cache
-Storage, or another consumer needs the same implementation before Web Storage
-is complete.
+Consume the shared substrate's local/session map acquisition, policy results,
+and clone operations. Browser composition owns its instances; this folder
+does not implement a second key or backing-store model. The independent
+project is justified by File API needing keys before Web Storage is complete.
 
 Blink likewise separates HTML-facing Window/Storage wrappers in
 `modules/storage` from browser-process storage namespaces and backing areas.
@@ -62,14 +59,14 @@ copy its multiprocess IPC architecture into Browlet.
 
 ## Delivery order
 
-1. Implement storage keys and partition inputs when SharedWorker or
-   BroadcastChannel first needs them; no public `Storage` object is required.
-2. Add traversable session-storage sheds and opener cloning with auxiliary
-   browsing contexts.
-3. Add in-memory local/session proxy maps, realm-bound wrappers, Web IDL named
-   properties, policy/quota errors, and cross-global event delivery.
-4. Add persistence and quota management behind the same synchronous HTML
-   facade when an actual persistent-storage consumer exists.
+1. Connect the shared key/map operations when their browser consumers exist;
+   follow the substrate roadmap for implementing those operations.
+2. Connect traversable session-storage ownership and opener cloning with
+   auxiliary browsing contexts.
+3. Build realm-bound Storage objects over the substrate's local/session maps;
+   add Web IDL named properties, policy/quota errors, and cross-global events.
+4. Integrate substrate persistence/quota results with the same synchronous
+   HTML facade when an actual persistent-storage consumer exists.
 
 ## Removal condition
 
