@@ -5,8 +5,8 @@ for [RFC 9651, Structured Field Values for HTTP](https://www.rfc-editor.org/rfc/
 It supplies shared algorithms to Fetch, browser policy, and Reporting without
 depending on their request, response, or environment objects.
 
-**Status:** slices 1 and 2 (values, serialization, and parsing) implemented.
-Fetch integration is deferred until its header-list infrastructure is ready.
+**Status:** values, serialization, parsing, and Fetch header-list integration
+are implemented. Public `Headers` projection remains in Fetch's API slice.
 
 ## Sources
 
@@ -36,13 +36,12 @@ Paths relative to the [local reference root](../fetch/preflight.md#local-referen
    byte views, and the chosen acceptance of missing base64 padding and nonzero
    pad bits. The HTTPWG corpus adds capacity tests and retains the distinction
    between mandatory and permitted failures.
-3. **Fetch integration — deferred.** Complete the structured-field get/set operations in
+3. **Fetch integration — implemented.** The structured-field get/set operations live in
    [Fetch's header slice](../fetch/roadmap.md#slice-2--http-methods-headers-and-statuses).
-   Test combined header lines, absent or malformed fields, serialization
+   Tests cover combined header lines, absent or malformed fields, serialization
    failure, and omission of empty containers. Header-specific allowed keys and
-   meanings remain with the specification defining that header. This slice
-   waits for Fetch's header-list infrastructure; it does not add a second
-   header-list implementation here.
+   meanings remain with the specification defining that header. The Fetch
+   roadmap records the reviewed setter edge cases and browser evidence.
 
 The shared algorithms reuse the text cursor, Infra base64, and existing UTF-8
 primitives. `parseStructuredField(bytes, type)` accepts the combined field value
@@ -60,8 +59,9 @@ representation separately from the field's Base64 encoding. Fixture provenance
 and the unchanged upstream license are in
 [`test/struct-fields/fixtures/httpwg/`](../../test/struct-fields/fixtures/httpwg/README.md).
 
-The remaining proof is Fetch integration through its own header-list operations,
-as scoped in slice 3; no standalone header-list substitute belongs here.
+`test/fetch/unit/headers.test.ts` proves integration through Fetch's own header
+list, including replacement/deletion and unchanged state on serialization
+failure. No standalone header-list substitute belongs here.
 
 Remove this roadmap when the shared algorithms and first consumers have those
 tests and any remaining gaps have a narrower owner.

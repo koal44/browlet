@@ -210,16 +210,63 @@ setup lives in `test/fetch/record-fixture.ts`.
 
 **Specification:** Fetch §2.2 through §2.2.3.
 
-Implement HTTP syntax, content-coding dispatch, methods, header lists,
+Implement HTTP syntax, methods, header lists,
 normalization/combination/extraction, forbidden and safelisted header
 algorithms, range handling, and status classifications in document order.
 The [structured-field algorithms](../struct-fields/roadmap.md) must be
-supplied before completing their header-list integration. Host codecs implement decompression; Fetch owns
-the coding selection and failure behavior.
+supplied before completing their header-list integration.
+
+**Status:** methods, header-list operations, quoted-string splitting,
+validation/normalization, CORS and forbidden-header classifications, range
+parsing, and statuses are implemented. Structured-field get/set operations use
+the existing RFC 9651 parser and serializer; the interface methods and guards
+remain in Slice 6.
+
+`Set-Cookie` coverage here preserves separate lines in sort-and-combine and
+classifies forbidden names. It does not parse cookies, maintain a cookie jar,
+or claim browser response filtering; those belong to their later consumers.
+
+Header-list extraction takes the field's parser and its single/multiple-line
+rule explicitly. It implements absence, duplicate rejection, ordering, and
+whole-field failure; concrete field grammars join it at their consumers.
+The default User-Agent selector takes the host default and any BiDi emulation
+value explicitly; browser configuration and BiDi lookup remain host work.
+Range endpoints use BigInts to preserve decimal ordering above JavaScript's
+safe-integer range, without inventing a smaller limit than the specification.
+
+The HTTP quoted-string collector is shared with MIME, and HTTP token checks
+are shared with MIME and cache parsing. Fetch's raw quoted-string return
+wording says "inclusive", but its examples stop at the consumed closing quote;
+the collector follows those examples and leaves the next delimiter unread.
+
+**Structured-field setter edge cases:** Fetch does not spell out how to handle
+the RFC serializer's omission/failure outcomes. Following RFC 9651 §4.1, setting
+an empty List/Dictionary removes that named field. Serialization failure throws
+before any list mutation; `TypeError` is our internal API's failure mapping.
+The RFC's lower-level List serialization algorithm itself returns an empty
+string for an empty list; omission belongs to the enclosing §4.1 operation.
+
+- Chromium's [QUICHE serializer](https://github.com/google/quiche/blob/main/quiche/common/structured_headers.cc)
+  returns an empty string for empty containers and nullopt on failure. Blink's
+  [client-hint serializers](https://github.com/chromium/chromium/blob/main/third_party/blink/common/user_agent/user_agent_metadata.cc)
+  can also turn failure into an empty string; this is field-specific behavior.
+- Gecko's [SFV library](https://searchfox.org/firefox-main/source/third_party/rust/sfv/src/ref_serializer.rs)
+  returns None for empty containers, explicitly citing RFC omission. Its
+  [XPCOM adapter](https://searchfox.org/firefox-main/source/netwerk/base/http-sfv/src/lib.rs)
+  surfaces that result as NS_ERROR_FAILURE.
+- WebKit's [RFC8941 module](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/platform/network/RFC8941.h)
+  exposes parsing and string escaping, not a general List/Dictionary serializer
+  or setter from which to infer this behavior.
+
+These source observations from 2026-09-07 show different internal contracts,
+not demonstrated differences in browser-visible setter behavior. No browser
+runtime comparison was performed.
 
 **Exit proof:** focused tests cover invalid bytes, duplicate headers,
-`Set-Cookie`, range/safelist rules, structured fields, and coding failures;
-public `Headers` projection remains in the API slice.
+`Set-Cookie`, range/safelist rules, structured fields, and extraction failures;
+`test/fetch/unit/headers.test.ts` and `http-concepts.test.ts` exercise these
+operations, including header mutation over the real request record. Public
+`Headers` projection remains in the API slice.
 
 ## Slice 3 — bodies and stream processing
 
@@ -230,8 +277,12 @@ Browlet Streams and Fetch task delivery. Bring forward only the byte-sequence
 path of §5.2 safely extract for the bytes-as-body algorithm; complete the
 author-facing `BodyInit` union in the API slice.
 
+Implement §2.2.4's handle-content-codings operation here as well. Host codecs
+supply decompression; Fetch owns coding support, selection, and failure behavior.
+
 **Exit proof:** body bytes, failures, and completion arrive in order at global
-and parallel destinations, with correct tee and cancellation behavior.
+and parallel destinations, with correct tee, cancellation, and content-coding
+behavior.
 
 ## Slice 4 — requests and responses
 

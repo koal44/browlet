@@ -15,6 +15,7 @@
     { "path": "../mime" },
     { "path": "../shared" },
     { "path": "../streams" },
+    { "path": "../struct-fields" },
     { "path": "../url" },
     { "path": "../web-idl" },
     { "path": "../xhr" }

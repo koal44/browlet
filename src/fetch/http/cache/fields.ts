@@ -1,3 +1,4 @@
+import { isHTTPToken } from '../../../shared/http';
 import { TextCursor } from '../../../shared/text-cursor';
 
 /**
@@ -12,7 +13,7 @@ export function parseCacheControl(input: string): CacheDirective[] | null {
     cursor.consumeWhile((ch) => ch === ' ' || ch === '\t' || ch === ',');
     if (cursor.eof()) break;
     const start = cursor.pos();
-    cursor.consumeWhile(isTokenCharacter);
+    cursor.consumeWhile(isHTTPToken);
     const name = cursor.slice(start).toLowerCase();
     if (!name) return null;
     let value: string | null = null;
@@ -32,7 +33,7 @@ export function parseCacheControl(input: string): CacheDirective[] | null {
         }
       } else {
         const start = cursor.pos();
-        cursor.consumeWhile(isTokenCharacter);
+        cursor.consumeWhile(isHTTPToken);
         value = cursor.slice(start);
         if (!value) return null;
       }
@@ -56,9 +57,7 @@ export function parseVary(input: string): string[] | null {
   for (const member of input.split(',')) {
     const name = member.replace(/^[ \t]+|[ \t]+$/g, '');
     if (!name) continue;
-    for (const ch of name) {
-      if (!isTokenCharacter(ch)) return null;
-    }
+    if (!isHTTPToken(name)) return null;
     names.push(name.toLowerCase());
   }
   return names;
@@ -83,7 +82,3 @@ export type CacheDirective = {
   readonly name: string;
   readonly value: string | null;
 };
-
-function isTokenCharacter(ch: string): boolean {
-  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]$/.test(ch);
-}
