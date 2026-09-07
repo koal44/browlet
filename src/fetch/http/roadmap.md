@@ -6,7 +6,9 @@ request/response records. The [parent roadmap](../roadmap.md) owns orchestration
 the public API, and transport; [caching](cache/roadmap.md) owns its detailed
 storage and validation work.
 
-**Status:** planned; no HTTP implementation or transport adapter exists here.
+**Status:** HTTP-date parsing is implemented for the first
+[cache slice](cache/roadmap.md). Other HTTP algorithms and the transport
+adapter remain planned.
 
 ## Sources
 
@@ -35,6 +37,16 @@ belongs to the transport, not another parser in this folder.
 | Browser policy | Main Fetch and redirects | Call the [policy owner](../../browlet/browsing/policy/roadmap.md); do not reimplement its language or infer an HTML environment from Node globals |
 | Cache transactions | §4.6 | Follow the [cache roadmap](cache/roadmap.md) |
 | HTTP-network processing | Parent Slice 9 | Integrate redirects, authentication, cache, CORS preflight/cache, filtering, cancellation, and transport without a second request pipeline |
+
+## Initial HTTP syntax
+
+`parseHTTPDate(value, now)` in `syntax.ts` accepts the three RFC 9110 §5.6.7
+date formats and returns UTC epoch milliseconds or null. Cache-recipient
+case-insensitivity follows RFC 9111 §4.2. Calendar/weekday validity, GMT,
+and the two-digit-year 50-year rule are checked; only surrounding SP/HTAB is
+trimmed. The caller supplies `now` so year interpretation is deterministic.
+Leap seconds round down to the preceding representable second, keeping cache
+expiration conservative. This does not add a general mail-date parser.
 
 ## Fetch Metadata
 
