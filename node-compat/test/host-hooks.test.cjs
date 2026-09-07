@@ -17,6 +17,24 @@ if (compat.supportsHostHooks === false) {
     assert.equal(compat.runInContext('1 + 1', handle), 2);
   });
 } else {
+  testInWorker('declined Promise jobs stay on their original explicit queue', () => {
+    const queue = compat.createMicrotaskQueue();
+    const handle = compat.createContextHandle({ microtaskQueue: queue });
+    const calls = [];
+    handle.globalProxy.record = value => calls.push(value);
+    compat.setHostHooks({
+      enqueuePromiseJob(job) {
+        if (compat.getRealm(job) === handle.realm) return false;
+        queueMicrotask(job);
+      },
+    });
+    compat.runInContext('Promise.resolve().then(() => record(1)).then().then(() => record(2))', handle);
+    assert.deepEqual(calls, []);
+    queue.enqueueMicrotask(() => calls.push('host'));
+    queue.runMicrotasks();
+    assert.deepEqual(calls, [1, 'host', 2]);
+  });
+
   testInWorker('host hook installation returns nothing and cannot be replaced', () => {
     assert.equal(compat.supportsHostHooks, true);
     assert.throws(() => compat.setHostHooks({ unknown() {} }), /Unknown host hook/);
@@ -357,8 +375,9 @@ if (compat.supportsHostHooks === false) {
         if (record.hostDefined.incumbent === handle.realm) invoked.push(args[0]);
         return Reflect.apply(record.callback, receiver, args);
       },
-      enqueueGenericJob(job, realm) { generic.push({ job, realm }); },
-      enqueueTimeoutJob(job, realm, milliseconds) { timeouts.push({ job, realm, milliseconds }); },
+      // These void hooks transfer ownership even if JavaScript returns false.
+      enqueueGenericJob(job, realm) { generic.push({ job, realm }); return false; },
+      enqueueTimeoutJob(job, realm, milliseconds) { timeouts.push({ job, realm, milliseconds }); return false; },
       enqueuePromiseJob(job, realm) {
         if (realm === handle.realm) reactions.push(job);
         else queueMicrotask(job);

@@ -15,7 +15,7 @@ V8 patches also enables the five host hooks described below.
 
 ## Build and run on Windows x64
 
-`npm.cmd run build:node-compat` prepares the selected Node base and compiles
+`npm.cmd run build:node` prepares the selected Node base and compiles
 the addon. Missing official executables, headers and import libraries are
 downloaded and checked against pinned release hashes. Rebuilds reuse these
 cached files; header archives are deleted after extraction.
@@ -27,7 +27,7 @@ SDK environment.
 
 ```powershell
 # Override the configured base for this build:
-npm.cmd run build:node-compat -- --base 24.19.0
+npm.cmd run build:node -- --base 24.19.0
 ```
 
 Copy `.env.example` to `.env` and set the defaults there:
@@ -70,7 +70,7 @@ The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
 headers. To prepare and target Node 26:
 
 ```powershell
-npm.cmd run build:node-compat -- --base 26.8.1
+npm.cmd run build:node -- --base 26.8.1
 # One-off overrides without editing .env:
 node scripts/with-node.mjs --base 26.8.1 node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 node scripts/with-node.mjs --base 26.8.1 --runtime stock vitest run --project=unit
@@ -103,7 +103,7 @@ checkout. Nothing is copied or linked into Browlet's cache.
 After building the Node engine there, build only the addon here:
 
 ```powershell
-npm.cmd run build:node-compat -- --base custom
+npm.cmd run build:node -- --base custom
 # With NODE_BASE=custom in .env:
 npm.cmd run test:node-compat
 npm.cmd run test:unit
@@ -142,7 +142,7 @@ The names follow the five targeted ECMAScript operations in
 | --- | --- |
 | `makeJobCallback(callback, registration)` | Return a record `{ callback, hostDefined }` with the original callback. Each callable reaction slot and thenable registration gets its own call to make. A FinalizationRegistry captures once at construction. |
 | `callJobCallback(record, receiver, args)` | Invoke `record.callback` with the supplied receiver and argument array; return its result or propagate its exception. The retained record is exactly the object returned by make. |
-| `enqueuePromiseJob(job, realm, enqueue)` | Take ownership of scheduling a single-use Promise job. `realm` is null for a reaction without a callable handler. `enqueue` also supplies the enqueue-time snapshot and `kind`, either `reaction` or `thenable`. |
+| `enqueuePromiseJob(job, realm, enqueue)` | Take ownership of scheduling a single-use Promise job, or return `false` to leave it on its original V8 queue. `realm` is null for a reaction without a callable handler. `enqueue` also supplies the enqueue-time snapshot and `kind`, either `reaction` or `thenable`. |
 | `enqueueGenericJob(job, realm)` | Schedule a single-use generic job. Currently this receives Atomics.waitAsync notification delivery. |
 | `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule a single-use timeout job no earlier than the supplied delay. Currently this receives Atomics.waitAsync deadlines. A cancelled timeout may still be called once and does nothing. |
 
@@ -181,6 +181,11 @@ and timeout delay. Call the supplied job with no arguments. Promise jobs can be
 placed on the maintained queue's `enqueueMicrotask(job)` or wrapped for host
 setup/cleanup; running them does not enqueue the same job through the hook again.
 The host owns queue selection and checkpoints. No raw queue pointer is exposed.
+Returning `false` from the Promise enqueue hook delegates that job to the
+engine-selected queue immediately; do not also schedule it yourself. This lets
+an HTML embedder leave unrelated Node and VM Promise jobs alone. Generic and
+timeout hooks always transfer scheduling to the host and ignore the return
+value. Their installation applies to every realm in the isolate.
 The host may retain jobs until ready to run them; calling an already-run job throws.
 
 Make and enqueue callbacks must not throw. Invalid make records and exceptions
@@ -193,10 +198,16 @@ predates installation invokes its original callback without a custom call hook.
 Environment teardown clears the engine callbacks and releases their native
 references. Tests use fresh workers for independent configurations.
 
-`test/host-hooks.test.cjs` exercises this public API. These are host building
-blocks: HTML active-script restoration, script cleanup, and scheduler integration
-remain separate adoption work. Installing these hooks does not implement HTML
-by itself, and Browlet's HTML algorithms do not install them yet.
+`test/host-hooks.test.cjs` exercises this public API. Browlet now installs
+all five hooks through `src/browlet/scripting/host-hooks.ts` on a
+supported custom engine. It retains incumbent settings and applies callback
+and script cleanup through HTML microtask tasks. Generic jobs enter the HTML
+JavaScript engine task source; timeout jobs use the global's fully-active time
+before entering that same task source. These two HTML handlers require an HTML
+realm; Atomics.waitAsync in ordinary Node/VM realms is unsupported while they
+are installed. Active-script restoration and module loading remain separate
+adoption work. HTML job integration tests require the custom engine; official
+Node plus the addon still lacks these hooks.
 
 ## Scope
 
@@ -216,11 +227,10 @@ WindowProxy/origin accommodations remain; host-hook adoption is described above.
 
 The standalone suite retains two cases from the retired Node proxy-reuse
 experiments: collecting the old realm while the replacement remains live
-passes; indirect eval selecting its realm's dynamic-import callback is an
-ordinary failing test. It currently fails because createContextHandle rejects
-importModuleDynamically, before callback routing can be tested. Keep that
-acceptance case for future module-loading integration; it does not require
-implementing the entire vm API.
+passes; indirect eval selecting its realm's dynamic-import callback is skipped
+until createContextHandle supports importModuleDynamically. Re-enable that
+acceptance case with the [module-loading integration](../src/js-engine/roadmap.md);
+it does not require implementing the entire vm API.
 
 The addon does not replace V8's existing isolate Promise hook. Node's
 context registration preserves its Promise hooks; tests cover hooks installed
@@ -276,11 +286,11 @@ has not been benchmarked.
   addon.cc. Separate binaries are useful for independently loadable components,
   not required for separate features or upstream commits.
 - test/: standalone behavior and GC regressions plus a quick startup check.
-- ../scripts/build-node-compat.mjs: verified dependency preparation and addon compilation.
+- ../scripts/build-node.mjs: verified dependency preparation and addon compilation.
 - experimental/: an ignored, independent Git repository for investigation.
 - .cache/node-v24.19.0/: Node 24 headers, Release/node.lib and node.exe.
 - .cache/node-v26.8.1/: Node 26 headers, Release/node.lib and node.exe.
-  These are replaceable dependencies prepared by `build:node-compat`,
+  These are replaceable dependencies prepared by `build:node`,
   not Node source checkouts. Download archives and duplicate libraries are
   discarded after preparation.
 - results/: ignored logs and JSON reports, grouped under addon/,
@@ -317,7 +327,7 @@ and their lifetimes. Browlet uses
 one itCompatPasses helper: an explicit-queue backend runs compatibility
 expectations normally. Window global prototype-immutability and unforgeable
 descriptor tests now pass under the addon. The unsupported context dynamic-import
-callback remains an ordinary failing standalone test. Addon tests are not full Browlet or HTML
-conformance. The Stream rejection regression observes process events in its
+callback test is explicitly skipped until module-loading integration. Addon tests
+are not full Browlet or HTML conformance. The Stream rejection regression observes process events in its
 Vitest worker, reusing the loaded Browlet modules. It uses the ordinary unit
 timeout and restores its event listeners after the check.

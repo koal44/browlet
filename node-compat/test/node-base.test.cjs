@@ -78,7 +78,7 @@ test('custom paths all derive from the configured source directory', t => {
 test('build command reports an unbuilt custom source without trying to build Node', t => {
   const directory = temporaryDirectory(t);
   const child = spawnSync(process.execPath, [
-    resolve(__dirname, '../../scripts/build-node-compat.mjs'), '--base', 'custom',
+    resolve(__dirname, '../../scripts/build-node.mjs'), '--base', 'custom',
   ], { env: { ...process.env, CUSTOM_NODE_SOURCE: directory }, encoding: 'utf8' });
   assert.equal(child.status, 1);
   assert.match(child.stderr, /Missing Node executable.*Build Node.*CUSTOM_NODE_SOURCE/s);

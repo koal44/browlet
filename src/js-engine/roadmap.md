@@ -57,39 +57,29 @@ use an accommodation whose narrower contract is stated explicitly.
 
 Availability is no longer one undifferentiated Node answer:
 
-The [stock-plus-addon profile](../../node-compat/README.md) now supplies the
-explicit queue and context/proxy lifecycle described in the compatible column
-below. It uses native context handles with backend-owned evaluation, rather
-than node:vm Contextify objects. Post-projection prototype immutability remains
-unavailable in this profile and fails its compatibility test. The stock
-column below describes Node without an addon. This changes the substrate for
-the existing Browlet slice; it does not complete the HTML host hooks.
+The [compatibility addon](../../node-compat/README.md) is maintained in Browlet.
+`NODE_BASE` selects the engine; `NODE_RUNTIME=compat` loads its matching addon.
 
-| Facility | Original source-patched Node | Stock Node |
-| --- | --- | --- |
-| Microtask queue | An explicit V8 queue with `enqueueMicrotask()` and `runMicrotasks()`, created once per HTML EventLoop and shared by all realms of its Agent | The isolate's one ambient queue, entered through `queueMicrotask()` and drained through the `_tickCallback()` accommodation |
-| Context and reusable VM global proxy | `vm.createContextHandle()` returns an opaque handle and stable `globalProxy`; detachment retires the handle, and passing that handle once as `reuseGlobalProxyFrom` creates a fresh Realm and backing global with the same proxy identity. `vm.makePrototypeImmutable()` seals the current backing global after projection. Handle contexts use Node's ordinary principal token for embedder access, not browser origin policy. | A fresh private VM global is bridged to Browlet's modeled global graph. |
+| Facility | Official Node 24/26 plus addon | Custom engine plus addon | Plain Node |
+| --- | --- | --- | --- |
+| Agent microtask queue | Explicit V8 queue shared by its realms | Same | Ambient queue and `_tickCallback()` accommodation |
+| Native Window allocation and navigation reuse | Context handles, immutable allocation, stable global proxy, detach/reattach | Same | Modeled global bridge |
+| Job make/call and Promise/generic/timeout enqueue | Unavailable | V8 patches and `setHostHooks()` supply the five interception points | Unavailable |
 
-The explicit queue and `ContextHandle` substrates are implemented in the
-compatible-Node branch. Queue ownership still is not
-`HostEnqueuePromiseJob`: V8 does not give Browlet each job closure, its Realm
-Record, or the callback preparation boundary. `ContextHandle` supplies
-context/proxy identity, explicit detach/reattach, and post-projection
-immutable-prototype ordering. It deliberately retains Node VM's principal-token
-accessibility so JavaScript embedder code can configure the context; it does
-not implement WindowProxy origin policy or V8 cross-origin access callbacks.
-V8 also cancels jobs still queued for a detached Realm. The current slice is
-Browlet adoption: expose the correct Web IDL global through the stable proxy,
-checkpoint before navigation replacement, and complete
-`[[PreventExtensions]]`, same- and cross-origin access, old-Realm behavior, and
-navigation tests.
+HTML Window creation and navigation already consume native allocation and
+reuse. They no longer require the historical `Object::SetImmutableProto()`
+patch. The shared security token permits embedder access, not browser origin
+policy; full cross-origin WindowProxy behavior remains deferred. V8 cancels
+queued work for detached contexts, so navigation retains its explicit
+checkpoint-before-reuse boundary.
 
-`vm.makePrototypeImmutable()` currently patches Node's vendored V8 by adding
-`v8::Object::SetImmutableProto()`. Its upstream path begins in V8; Node can
-expose it without carrying a V8 patch only after the V8 revision rolls into
-Node. Treat the local API as a behavioral prototype: if V8 settles on a
-different contract, adapt the compatible-Node layer rather than preserving the
-experimental shape.
+The custom engine APIs and addon tests establish capture, retained registration
+records, callback invocation, and single-use jobs. HTML adoption is a separate
+layer: Promise hooks install incumbent/callback bookkeeping and script
+preparation/cleanup around HTML microtask tasks. Generic jobs use the HTML
+engine task source, and timeout jobs reach it through fully-active-time timers.
+Active-script records/restoration and rejection reporting remain separate
+consumers. Queue support alone still does not implement them.
 
 ## Working boundary matrix
 
@@ -99,8 +89,8 @@ experimental shape.
 | --- | --- | --- | --- |
 | realm, current realm, `GetFunctionRealm` | HTML §§2.7, 7.2.1, 8.1.3, and 8.1.6.6.4 | `NodeRealm` owns known realms; `NodeRuntime` records object-to-realm evidence and the active `evaluate()` realm. It cannot read arbitrary objects' `[[Realm]]`. | **Bounded** |
 | active function object and NewTarget | HTML customized built-in element construction | Browlet-created functions receive `newTarget`; the active function object of arbitrary V8 execution is inaccessible. | **Bounded**, consumer deferred |
-| JavaScript execution context, its stack, and the running context | HTML §§8.1.3–8.1.4 and job callbacks | `EventLoop` mirrors only script/callback entries Browlet controls. It cannot inspect V8's stack or prove an unseen Promise job has exited. | **Bounded** (`node-v8-execution-contexts`) |
-| `GetActiveScriptOrModule` | HTML §8.1.4.1 active script and module loading | No supported Node API exposes an arbitrary execution context's `ScriptOrModule`. | **Unavailable** |
+| JavaScript execution context, its stack, and the running context | HTML §§8.1.3–8.1.4 and job callbacks | `EventLoop` mirrors controlled entries; custom engine hooks now expose Promise callback/job boundaries. Arbitrary engine frames remain inaccessible. | **Bounded** (`node-v8-execution-contexts`) |
+| `GetActiveScriptOrModule` | HTML §8.1.4.1 active script and module loading | Custom capture exposes V8 host-defined script metadata, including trusted cross-token lookup. It is not an HTML Script record; production Script records and restoration remain deferred. | **Bounded substrate**, HTML consumer deferred |
 | agent and surrounding agent | HTML §§8.1.2, 8.1.4.4, 8.1.7, and timers | Browlet has a useful host-side `Agent` representative, but it does not configure the underlying V8 Agent Record. | **Bounded** |
 | agent cluster and candidate execution | HTML §8.1.2 and structured data | Browlet enforces its cluster identity in HTML algorithms, but Node's actual shared-memory boundary remains the isolate/worker topology. | **Bounded** |
 
@@ -111,17 +101,17 @@ engine-to-host calls, not globals which Browlet can invoke or monkey-patch.
 
 | Hook | What HTML owns | Node/Browlet status |
 | --- | --- | --- |
-| `InitializeHostDefinedRealm` | Creates a realm with host-selected global object/global-this and records its HTML counterpart | **Bounded:** Compatible Node now exposes an opaque context handle, separately stable global proxy, explicit detach/reattach, and post-projection prototype sealing. `NodeRealm` consumes that handle, but HTML navigation does not yet reuse it and Web IDL still exposes Browlet's modeled proxy behind the VM proxy. The compatible path uses Node's principal token for embedder access; HTML origin policy, cross-origin callbacks, and the complete WindowProxy/navigation lifecycle remain Browlet work. Stock Node retains the bridge. Neither profile installs the complete HTML hook. |
+| `InitializeHostDefinedRealm` | Creates a realm with host-selected global object/global-this and records its HTML counterpart | **Bounded:** HTML Window creation and navigation consume native context handles, immutable allocation, and proxy reuse through Web IDL. Cross-origin policy and the complete browsing-context lifecycle remain deferred. Plain Node retains the modeled bridge. |
 | `HostEnsureCanAddPrivateElement` | Rejects private fields on `WindowProxy` and `Location` | **Unavailable:** V8 calls Node's host implementation and knows nothing about Browlet's platform-object identities. |
 | `HostEnsureCanCompileStrings` | Applies CSP to `eval`/Function-family string compilation | **Unavailable:** a VM context can disable string generation coarsely, but Browlet cannot install HTML's per-compilation policy hook. CSP is deferred. |
 | `HostGetCodeForEval` | Extracts code from `TrustedScript` or returns no-code | **Unavailable:** Node does not expose the proposal hook. Trusted Types is deferred. |
 | `HostPromiseRejectionTracker` | Maintains each HTML global's rejected-promise state and queues `rejectionhandled` | **Unavailable:** Node's process-wide rejection reporting does not provide HTML's per-realm script/settings information. |
 | `HostSystemUTCEpochNanoseconds` | Obtains the relevant settings object's wall clock for Temporal | **Deferred/unavailable:** Browlet has a host clock for its own APIs, but cannot install Temporal's engine hook; the supported Node baseline does not currently provide this integration. |
-| `HostMakeJobCallback` | Captures incumbent settings and active-script context in a JobCallback Record | **Unavailable in stock Node; reduced V8 proof exists:** Web IDL stores its own callback context, but that is a parallel callback boundary. The current V8 experiment captures an incumbent context and active-script host-defined options when a Promise reaction is registered. |
-| `HostCallJobCallback` | Restores that context around the eventual `Call` | **Unavailable in stock Node; reduced V8 proof exists:** the current V8 experiment restores the captured incumbent context and active-script host-defined options around the actual Promise handler call. Browlet does not yet have a production boundary through which to consume that state. |
-| `HostEnqueuePromiseJob` | Places every Promise job in the HTML microtask queue and prepares/cleans up its realm settings around execution | **Unavailable as a host hook:** compatible VM contexts place Promise jobs on their EventLoop's explicit queue, while stock contexts use the ambient queue, but V8 gives Browlet neither the job closure nor its Realm Record. Queue selection and checkpoint control do not supply the callback lifecycle. |
-| `HostEnqueueGenericJob` | Queues jobs such as `Atomics.waitAsync` completion on the JavaScript-engine task source | **Unavailable:** Node owns native generic-job delivery. |
-| `HostEnqueueTimeoutJob` | Routes ECMAScript timeout jobs through HTML active-time and task machinery | **Unavailable:** Browlet's own timers do not intercept engine-created timeout jobs. |
+| `HostMakeJobCallback` | Captures incumbent settings and active-script context in a JobCallback Record | **Bounded HTML adoption on custom:** the addon captures each registration; HTML retains its incumbent settings. Active-script context awaits Script records. Official Node has no interception point. |
+| `HostCallJobCallback` | Restores that context around the eventual `Call` | **Bounded HTML adoption on custom:** stored incumbent preparation and finally cleanup surround the callback. Active-script restoration remains deferred. |
+| `HostEnqueuePromiseJob` | Places every Promise job in the HTML microtask queue and prepares/cleans up its realm settings around execution | **Available on custom, adopted for Browlet realms:** single-use jobs enter the Agent queue as HTML microtask tasks, with the supplied realm's script lifecycle. Handlerless jobs have no script settings. Other Node jobs retain their original queues. |
+| `HostEnqueueGenericJob` | Queues jobs such as `Atomics.waitAsync` completion on the JavaScript-engine task source | **Adopted for HTML realms on custom:** notification jobs enter the relevant global's HTML task queue. No per-job native fallback. |
+| `HostEnqueueTimeoutJob` | Routes ECMAScript timeout jobs through HTML active-time and task machinery | **Adopted for HTML realms on custom:** engine deadlines use the global's fully-active time and JavaScript engine task source. No per-job native fallback. |
 | `HostEnqueueFinalizationRegistryCleanupJob` | Queues registry cleanup as an HTML task and brackets script execution | **Unavailable:** collection and cleanup scheduling remain V8/Node-owned. |
 | `HostGetImportMetaProperties` | Supplies `import.meta.url` and `import.meta.resolve` | **Deferred/partial substrate:** Node VM module callbacks can cover controlled modules, but the supported Browlet baseline has no module-script pipeline. |
 | `HostGetSupportedImportAttributes` | Declares the host's supported import attributes | **Deferred/partial substrate:** requires the module pipeline and its fetch policy. |
@@ -178,12 +168,13 @@ non-production properties:
 4. Its broad capture routine assumed a current V8 context and was not safe as a
    general C++ entry point.
 
-The current capture experiment uses that author/backup selection rule and
-retains per-registration CPED while preserving Node's application ALS state.
-The migrated matrix asserts native-entry results and retains a failing
-cross-token script-identity expectation; its engine-hook runs await the planned
-rebuild. Callback-only preparation/cleanup and the full native cross-token
-matrix remain separate work.
+The subsequent `v8-patches` work adopted that selection rule and retained
+per-registration CPED while preserving application ALS. Trusted cross-token
+script metadata lookup, make/call capture for thenables, reactions and registry
+callbacks, and Promise/generic/timeout enqueue now have maintained addon tests.
+The active-script experiment also exposed the indirect-eval cache identity bug;
+the custom engine includes its fix. These engine results do not supply HTML
+Script records or a module loader by themselves.
 
 The earlier Node/V8 checkpoint `8e1ea288a` (formerly `fcdfa2108`), retained in
 `browlet-node-compat-history`, is the first reduced
@@ -195,15 +186,17 @@ Node build and its focused native-handler test pass. A direct native Promise
 handler observes the context that was incumbent when the handler was
 registered.
 
-This is an engine proof, not yet a Browlet integration. Calling the same native
+The old checkpoint is historical, not the current addon implementation.
+Calling an incumbent native
 query through an ordinary JavaScript helper makes that helper's realm the
 topmost script-having realm. That is correct for author JavaScript, but
 Browlet's current `JavaScriptRealm.createFunction()` also uses JavaScript
 helpers to represent Web IDL operation functions. Browser operation functions
-are built-in functions and do not introduce such a script frame. Browlet must
-therefore gain either a true built-in-function entry boundary or an equivalent
-reviewed lifecycle boundary before this Promise state can be consumed without
-mistaking host implementation code for author code.
+are built-in functions and do not introduce such a script frame. Browlet
+still needs a true built-in-function entry boundary or equivalent transparent
+frame treatment for arbitrary borrowed Web IDL operation calls. The bounded
+Promise integration uses registration snapshots and the existing callback
+backup stack; it does not resolve every host-helper/author-frame distinction.
 
 Do not infer active-script completion merely from Node's existing
 `test-vm-module-referrer-realm.mjs`: its `Promise.resolve(...).then(eval)` cases
@@ -263,7 +256,7 @@ Most imported operations do not belong on an embedding interface.
 | ArrayBuffer/view inspection, copying, and detachment | Keep Web IDL/HTML policy above bounded engine-slot probes and realm intrinsics. | **Available/bounded** in `array-buffer-primitives.ts` and Web IDL buffer-source operations. |
 | `ParseScript` and `ScriptEvaluation` | Let V8 parse and execute, while HTML owns Script records, settings, fetch metadata, and error policy. | **Bounded/deferred:** `NodeRealm.evaluate()` is not yet the formal HTML classic-script pipeline. |
 | Module parse/link/evaluate operations | Let the engine own module records and evaluation; HTML owns fetching, module maps, and host metadata. | **Deferred:** Node's VM module APIs are not part of Browlet's supported baseline yet. |
-| `NewPromiseReactionJob` and `NewPromiseResolveThenableJob` | V8 creates these jobs; HTML mentions them to explain the job and realm delivered to its host hook. | **Delegated**, but delivery to HTML is **unavailable**. |
+| `NewPromiseReactionJob` and `NewPromiseResolveThenableJob` | V8 creates these jobs; HTML consumes the supplied job and realm. | **Delegated** creation; custom engine/addon delivery is available and adopted for Browlet Promise jobs. |
 | `ClearKeptObjects`, `CleanupFinalizationRegistry`, and `RunJobs` | These require coordination with engine job/checkpoint state, not TypeScript copies. | **Unavailable for direct control**; Node/V8 performs its own lifecycle. |
 | RegExp parsing/execution | Use captured RegExp intrinsics when an HTML algorithm must avoid author overrides. | **Available**, first consumer deferred. |
 
@@ -308,24 +301,17 @@ the probes are evidence, not a separate grab-bag phase.
    and use it for every associated Realm, HTML microtask enqueue, and
    checkpoint. Preserve stock Node as an explicitly tested ambient fallback
    rather than mixing the two backends.
-2. **Context/global-proxy integration — current.** The compatible-Node
-   `ContextHandle` substrate is implemented and `NodeRealm` consumes it: opaque
-   context ownership, stable proxy identity, explicit detach/reattach, and
-   post-projection immutable prototype. Integrate that lifecycle into HTML
-   Realm/navigation without coupling it to microtask-queue selection. Treat the
-   shared Node principal token as an embedder-access accommodation, not browser
-   origin policy. Add the distinct Web IDL global exposure target, checkpoint
-   before navigation reuses the proxy, and resolve `[[PreventExtensions]]`,
-   same- and cross-origin handlers, old-Realm behavior, and navigation tests
-   before production adoption.
-3. **Promise-job embedding — incumbent proof complete, transport unresolved.**
-   Reduce the diagnostic author-frame/backup-scope candidate into the smallest
-   V8 contract, then investigate `HostMakeJobCallback`,
-   `HostCallJobCallback`, and `HostEnqueuePromiseJob` together with the supplied
-   job realm, `GetFunctionRealm`, the active script needed by callback creation,
-   and controlled execution-context preparation and cleanup. Per-Agent queue
-   ownership is substrate for this work, not completion of these hooks. Do not
-   add a callable imitation of a hook which V8 never invokes.
+2. **Context/global-proxy integration — adopted for the current lifecycle.**
+   Native Window allocation, Web IDL exposure, immutable prototypes, and
+   navigation reuse are in production. Full cross-origin and nested-context
+   behavior still enters with Priority 7.
+3. **Promise-job embedding — engine/addon complete, bounded HTML adoption.**
+   `host-hooks.ts` supplies registration incumbent retention, callback
+   preparation/cleanup, and Promise scheduling through HTML microtask tasks.
+   Generic and timeout jobs use HTML global tasks and active-time timers.
+   Prove this through ordinary Window code and existing Web IDL callback
+   consumers. Script records/restoration remain item 4; do not start module
+   loading to exercise Promise hooks.
 4. **Classic-script execution.** Integrate `ParseScript`, `ScriptEvaluation`,
    Script Records, the current realm, the running execution context, and
    `GetActiveScriptOrModule` for scripts Browlet creates and executes. Revisit
@@ -341,9 +327,11 @@ the probes are evidence, not a separate grab-bag phase.
    `HostGetImportMetaProperties`, `HostGetSupportedImportAttributes`, and the
    JSON, text, and synthetic-module operations as one module-fetching pipeline,
    not as an engine framework in advance.
+   Re-enable the deferred context dynamic-import regression in
+   [capabilities.test.cjs](../../node-compat/test/capabilities.test.cjs) when
+   the addon supports context-level import callbacks.
 7. **Independent facilities with their first consumers.** Defer private-element
-   policy, dynamic-code policy, finalization cleanup, generic jobs,
-   ECMAScript-created timeout jobs, Temporal's clock hook, effective Agent
+   policy, dynamic-code policy, finalization cleanup, Temporal's clock hook, effective Agent
    controls, and native shared-memory boundaries until the corresponding
    platform feature is being implemented.
 8. Repeat the dependency scan for Web IDL and then the low-level external

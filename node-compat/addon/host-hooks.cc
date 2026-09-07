@@ -137,18 +137,21 @@ MaybeLocal<Value> CallFinalizationRegistry(Local<Context> context,
               1, &held_value, "cleanup");
 }
 
-void Enqueue(Hook kind, int argc, Local<Value> argv[]) {
+bool Enqueue(Hook kind, int argc, Local<Value> argv[]) {
   auto isolate = Isolate::GetCurrent();
   auto hook = owners.at(isolate)->hooks[kind].Get(isolate);
   TryCatch caught(isolate);
-  if (hook->Call(hook->GetCreationContext().ToLocalChecked(),
-                 Undefined(isolate), argc, argv).IsEmpty()) {
+  Local<Value> result;
+  if (!hook->Call(hook->GetCreationContext().ToLocalChecked(),
+                 Undefined(isolate), argc, argv).ToLocal(&result)) {
     if (caught.HasTerminated()) caught.ReThrow();
     else node::FatalException(isolate, caught);
+    return true;
   }
+  return !result->IsFalse();
 }
 
-void EnqueuePromise(Local<Context> realm, MicrotaskQueue*, PromiseJobKind kind,
+void EnqueuePromise(Local<Context> realm, MicrotaskQueue* queue, PromiseJobKind kind,
                      Local<Function> job) {
   auto isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
@@ -156,7 +159,7 @@ void EnqueuePromise(Local<Context> realm, MicrotaskQueue*, PromiseJobKind kind,
   Set(isolate->GetCurrentContext(), info, "kind",
       Text(isolate, kind == PromiseJobKind::kThenable ? "thenable" : "reaction"));
   Local<Value> argv[] = {job, RealmValue(realm, isolate), info};
-  Enqueue(kPromiseEnqueue, 3, argv);
+  if (!Enqueue(kPromiseEnqueue, 3, argv)) queue->EnqueueMicrotask(isolate, job);
 }
 
 void EnqueueGeneric(Local<Context> realm, Local<Function> job) {

@@ -18,7 +18,50 @@ export type JavaScriptRealm = {
 export type JavaScriptRuntime = {
   readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;
   readonly hasExplicitMicrotaskQueues: boolean;
+  readonly supportsHostHooks: boolean;
+  setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void;
   getAssociatedRealm(value: object): JavaScriptRealm | undefined;
+};
+
+export type JavaScriptHostHooks<HostDefined> = {
+  makeJobCallback(
+    this: void,
+    callback: JavaScriptFunction,
+    registration: JavaScriptJobRegistration,
+  ): JavaScriptJobCallback<HostDefined>;
+  callJobCallback(
+    this: void,
+    record: JavaScriptJobCallback<HostDefined>,
+    receiver: unknown,
+    argumentsList: unknown[],
+  ): unknown;
+  enqueuePromiseJob(
+    this: void,
+    job: () => void,
+    realm: JavaScriptRealm | null,
+    queueRealm: JavaScriptRealm | null,
+  ): false | void;
+  enqueueGenericJob(
+    this: void,
+    job: () => void,
+    realm: JavaScriptRealm | null,
+  ): void;
+  enqueueTimeoutJob(
+    this: void,
+    job: () => void,
+    realm: JavaScriptRealm | null,
+    milliseconds: number,
+  ): void;
+};
+
+export type JavaScriptJobCallback<HostDefined> = {
+  readonly callback: JavaScriptFunction;
+  readonly hostDefined: HostDefined;
+};
+
+export type JavaScriptJobRegistration = {
+  readonly incumbent: JavaScriptRealm | null;
+  readonly hostDefinedOptions: readonly unknown[];
 };
 
 export type JavaScriptMicrotaskQueue = {

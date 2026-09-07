@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { nodeRuntime } from '../../../../src/js-engine/index';
+import { installHostHooks } from '../../../../src/browlet/scripting/host-hooks';
 
 import { createOpaqueOrigin, type Origin } from
   '../../../../src/url/origin';
@@ -31,6 +33,46 @@ import {
 } from '../../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
+  it('retains each Promise registration incumbent independently of the callback realm', () => {
+    installHostHooks();
+    const agent = new TestAgent({
+      ...createEventLoopOptions(),
+      createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
+    });
+    const first = createTestRealm(agent, 'first-registration');
+    const second = createTestRealm(agent, 'second-registration');
+    const callbackRealm = createTestRealm(agent, 'callback');
+    const observations: { incumbent: object; task: Task | null; }[] = [];
+    const callback = callbackRealm.realm.createFunction(() => {
+      observations.push({
+        incumbent: callbackRealm.realm.callbacks.captureContext(),
+        task: agent.eventLoop.currentlyRunningTask,
+      });
+    }, { name: 'observe', length: 0 });
+    const promise = callbackRealm.realm.evaluate(`
+      globalThis.pending = Promise.withResolvers();
+      pending.promise;
+    `, 'pending-promise.js');
+    for (const { realm } of [first, second]) {
+      Reflect.set(realm.global, 'promise', promise);
+      Reflect.set(realm.global, 'callback', callback);
+      realm.evaluate('promise.then(callback)', 'register-promise.js');
+    }
+    expect(observations).toEqual([]);
+
+    callbackRealm.realm.evaluate('pending.resolve()', 'settle-promise.js');
+
+    expect(observations.map(({ incumbent }) => incumbent))
+      .toEqual([first.settings, second.settings]);
+    for (const { task } of observations) {
+      expect(task?.source.name).toBe('microtask');
+      expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
+        .toEqual(new Set([callbackRealm.settings]));
+    }
+    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.settings);
+    expect(agent.eventLoop.currentlyRunningTask).toBeNull();
+  });
+
   it('retains the stored incumbent for a bound platform callback', () => {
     const checkpoint = vi.fn();
     const agent = new TestAgent(createEventLoopOptions(checkpoint));

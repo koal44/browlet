@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { delimiter, dirname, resolve } from 'node:path';
 import nodeBase from '../node-compat/node-base.cjs';
 
+// Prepare the selected Node base and compile its compatibility addon.
+// Custom Node engine builds remain in CUSTOM_NODE_SOURCE.
 const { root, parseOptions, resolveBase, inspectNode, validateBuildInputs } = nodeBase;
 
 try {
@@ -11,7 +13,7 @@ try {
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   const { base, args } = parseOptions(process.argv.slice(2));
   if (args.length !== 0) {
-    throw new Error('usage: node scripts/build-node-compat.mjs [--base custom|24.19.0|26.8.1]');
+    throw new Error('usage: node scripts/build-node.mjs [--base custom|24.19.0|26.8.1]');
   }
   const target = resolveBase(base);
   if (base !== 'custom') await prepareNode(target);

@@ -19,6 +19,12 @@
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
   event loop.
+- `host-hooks.ts`: the custom engine's make/call/enqueue hooks connect
+  Promise registrations to incumbent settings and finally cleanup, and jobs
+  to HTML microtask tasks with their realm's script preparation/cleanup.
+  Generic jobs use the JavaScript engine task source; timeout jobs reach that
+  source through the global's fully-active-time timer steps.
+  Active-script records/restoration remain part of the classic-script slice.
 - `tasks.ts`: explicit global-task routing and the five generic task-source
   identities from HTML §8.1.7.4; each event loop owns their queue associations.
 - `rendering-opportunity.ts`: the independently driven Window rendering
@@ -39,9 +45,11 @@ Before adding an ECMAScript host hook or another mirror of inaccessible engine
 state, read the [JS Engine roadmap](../../js-engine/roadmap.md).
 Its HTML §2.1.9 inventory is the authoritative distinction between operations
 which remain inside V8, engine facts Browlet can observe only partially, and
-hooks which neither stock nor Browlet-compatible Node exposes. The compatible
-runtime's queue and global-proxy APIs are substrates for that work, not the
-host hooks themselves.
+hooks available only through the custom engine and addon. The maintained addon
+now exposes the five make/call and Promise/generic/timeout enqueue hooks;
+official Node plus the addon supplies queues and globals but lacks those hooks.
+HTML adopts all three enqueue hooks. Active-script restoration, rejection
+reporting, and FinalizationRegistry cleanup scheduling remain deferred.
 
 ## Section 8 execution constraints
 
@@ -86,12 +94,13 @@ host hooks themselves.
   context a separate queue. These are the stock manifestations of the
   `node-v8-microtask-queue` and `node-v8-checkpoint` accommodations recorded in
   [the event-loop architecture](./event-loop-architecture.md#runtime-integration-and-accommodations).
-- An explicit queue still does not implement `HostMakeJobCallback`,
-  `HostCallJobCallback`, or `HostEnqueuePromiseJob`. V8 selects the queue for
-  native Promise jobs but does not expose each job closure, Realm Record, or
-  callback preparation/cleanup boundary. Keep the
-  `node-v8-execution-contexts` accommodation and continue that host-hook audit
-  separately.
+- Queue ownership and job hooks are separate facilities. With the custom
+  engine, Browlet installs `host-hooks.ts` once and schedules its jobs on
+  their Agent queues, including handlerless propagation with null job realm.
+  Other Node jobs remain on their original V8 queues. The
+  `node-v8-execution-contexts` accommodation still covers unsupported engines,
+  uncontrolled entries, and missing Script records; do not claim a complete
+  execution-context stack from this integration.
 - DOM §4 assigns each similar-origin Window agent a
   mutation-observer-microtask-queued flag, pending mutation observers, and
   signal slots. Keep that state on `WindowAgent`; DOM owns record/slot
