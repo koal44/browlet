@@ -20,7 +20,7 @@ packages are implied.
 
 ```text
 src/
-├── structured-fields/
+├── struct-fields/
 │   ├── roadmap.md
 │   ├── values.ts
 │   ├── parse.ts
@@ -81,7 +81,7 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 
 | Order | Work / authoritative plan | First integration point |
 | --- | --- | --- |
-| 1 | [Structured fields](../structured-fields/roadmap.md), RFC 9651 | Fetch header operations |
+| 1 | [Structured fields](../struct-fields/roadmap.md), RFC 9651 | Fetch header operations |
 | 2 | [Multipart bytes](multipart/roadmap.md), RFC 7578 + HTML/Fetch | Body extraction/consumption |
 | 3 | [HTTP semantics](http/roadmap.md) and [HTTP caching](http/cache/roadmap.md), RFCs 9110/9111/5861 | Response freshness, then cache transactions |
 | 4 | [Trustworthiness](../browlet/browsing/policy/roadmap.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |

@@ -22,6 +22,7 @@
     { "path": "../src/web-idl" },
     { "path": "../src/streams" },
     { "path": "../src/encoding" },
+    { "path": "../src/struct-fields" },
     { "path": "../src/file" },
     { "path": "../src/xhr" },
     { "path": "../src/selectlet" },
