@@ -1,5 +1,10 @@
 # Fetch project roadmap
 
+- **Complete:** [Slice 1 — control and task delivery](#slice-1--control-and-task-delivery).
+- **Complete:** [Slice 2 — HTTP methods, headers, and statuses](#slice-2--http-methods-headers-and-statuses).
+- **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
+- **Next:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
+
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
 algorithms, and public API semantics. Browlet supplies browser-host state and
@@ -11,13 +16,13 @@ only needs a small public surface. Undici can supply transport bytes, but its
 `fetch`, `Headers`, `Request`, `Response`, streams, abort objects, and promises
 must not cross Browlet's implementation or Web IDL boundaries.
 
-The TypeScript project already contains multipart and HTTP cache algorithms.
-Public package/API exposure waits for a complete interface family. After the
-independent cache-policy work, resume the slices below; the
+This project contains multipart algorithms; reusable HTTP foundations and cache
+rules live in the [HTTP project](../http/ROADMAP.md).
+Public package/API exposure waits for a complete interface family. The
 [dependency preflight](PREFLIGHT.md) retains the remaining external work order.
 
 `index.ts` exports the contracts consumed by production outside Fetch, currently
-the structured-data and global-task capabilities. Add exports with their real
+the structured-data and task-scheduling capabilities. Add exports with their real
 consumers; focused tests may import internal algorithms without widening this
 surface.
 
@@ -138,7 +143,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 is offline and serialize an integer | `infrastructure.ts`: explicit user-agent/BiDi state inputs and decimal serialization; these precede §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
-**Status:** the independent controller, timing, task, and URL work is implemented.
+**Status:** complete. The independent controller, timing, task, and URL work is implemented.
 `browlet/integration/fetch.ts` supplies HTML structured serialization and global
 networking tasks. Fetch retains serialization records opaquely; the caller
 supplies the source/target Binding Context and matching serialization capability.
@@ -190,9 +195,9 @@ URL components while retaining any Blob URL entry reference.
   signal construction/following is not supplied yet. Referrer Policy's value
   type/declaration also remains with the browser-policy work. Replace these
   explicit opaque/string types when connecting their owner, before API exposure.
-- Headers processing and guards, BodyInit extraction/consumption, cloning,
-  and author Request/Response construction have declared signatures and throw
-  until their respective slices. Byte-sequence request bodies must be extracted
+- Full BodyInit extraction/consumption, request/response cloning, and author
+  Request/Response construction have declared signatures and throw until their
+  respective slices. Byte-sequence request bodies must be extracted
   before a Body API can expose their stream.
 - `FilteredResponseRecord` records the internal-response relationship, but its
   factory throws. Filtering must provide a live restricted view of that record,
@@ -216,7 +221,7 @@ algorithms, range handling, and status classifications in document order.
 The [structured-field algorithms](../http/struct-fields/ROADMAP.md) must be
 supplied before completing their header-list integration.
 
-**Status:** methods, header-list operations, quoted-string splitting,
+**Status:** complete. Methods, header-list operations, quoted-string splitting,
 validation/normalization, CORS and forbidden-header classifications, range
 parsing, and statuses are implemented. Structured-field get/set operations use
 the existing RFC 9651 parser and serializer; the interface methods and guards
@@ -272,17 +277,34 @@ operations, including header mutation over the real request record. Public
 
 **Specification:** Fetch §2.2.4.
 
-Implement body records, clone/tee, incremental reading, and fully reading over
-Browlet Streams and Fetch task delivery. Bring forward only the byte-sequence
-path of §5.2 safely extract for the bytes-as-body algorithm; complete the
-author-facing `BodyInit` union in the API slice.
+**Status:** complete. `BodyRecord` clones through Streams' tee operation and
+supports incremental and full reads. Incremental reading copies each chunk
+before queueing its Fetch task and begins the next read only after that task
+processes the bytes. Full reads reuse Streams' read-all-bytes operation and
+queue either the complete result or the failure, including reader acquisition
+failure.
 
-Implement §2.2.4's handle-content-codings operation here as well. Host codecs
-supply decompression; Fetch owns coding support, selection, and failure behavior.
+`bytesAsBody` brings forward only §5.2's internal byte-sequence path. It retains
+the source/length and creates a realm-owned byte stream, filled through supplied
+parallel scheduling. `BodyRecord` retains `FetchTaskScheduling` from construction
+and forwards it when cloning. This implementation dependency supplies HTML global
+networking tasks and parallel execution; the read signatures keep the specified
+callbacks and optional destination. An omitted destination starts a new parallel queue.
 
-**Exit proof:** body bytes, failures, and completion arrive in order at global
-and parallel destinations, with correct tee, cancellation, and content-coding
-behavior.
+`handleContentCodings` accepts host decoders keyed by lowercase coding names.
+It checks support for the entire list before decoding in reverse application
+order, leaves unsupported lists unchanged, and maps decoding errors to failure.
+Tests supply actual Node gzip, deflate, and Brotli codecs. The transport adapter
+will choose its codec set and retain decoder state across network chunks in
+§4.7; this slice proves decoding complete byte sequences.
+
+The full `BodyInit` union and public Body mixin operations remain in Slice 6.
+
+**Exit proof:** `test/fetch/body.test.ts` covers tee identity, branch isolation
+and cancellation, byte/BYOB extraction, global and parallel delivery, byte copies,
+cross-realm chunks, read failures, and content codings. `test/browlet/fetch-body.test.ts`
+proves delivery to the destination Window's networking task source and Document,
+full-read completion through its microtask checkpoint, and HTML parallel scheduling.
 
 ## Slice 4 — requests and responses
 
@@ -293,6 +315,21 @@ inputs, response filtering, network errors, location URLs, freshness
 predicates, and the miscellaneous HTTP concepts. Reuse URL/site operations;
 consume the [HTTP cache freshness helpers](../http/cache/ROADMAP.md).
 Storing a policy field does not implement the later policy check.
+
+**Entry review (2026-09-07):** settle the credentialless-policy check before
+implementing it. [Fetch's current step 5](https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials)
+requires redirect-taint to be *not* `same-origin` when allowing same-origin
+credentials. Taken literally, a same-origin `no-cors` request with no redirects
+loses credentials under `credentialless`. Both
+[Chromium's check](https://github.com/chromium/chromium/blob/main/services/network/url_loader_util.cc#L117)
+and [Gecko's check](https://github.com/mozilla-firefox/firefox/blob/main/dom/security/nsContentSecurityManager.cpp)
+allow that case; the local WPT `html/cross-origin-embedder-policy/credentialless/fetch.https.window.js`
+also expects its cookies. This appears to be a reversed specification condition;
+the evidence is source/test inspection, not a browser run. HTML's
+[`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) is also still an empty
+placeholder. Its value and the request-client relationship need explicit types
+when this check is connected. Independent cloning/filtering work does not depend
+on resolving this policy question.
 
 **Exit proof:** record defaults, clone identity, filtered visibility, location
 parsing, and freshness decisions pass without a network connection.
@@ -342,6 +379,14 @@ promise would make an unavailable Fetch pipeline appear implemented.
 their constructor, conversion, mutation, clone, body-consumption, abort, and
 exception tests with no network transport installed and no Node public object
 escaping.
+
+- [ ] **Multipart File realm ownership:** exercise `Request.formData()` and
+  `Response.formData()` with multipart bodies. The parser returns realm-neutral
+  `FileImpl` values; integration must give the FormData and its Files the
+  producing Request/Response's realm. Verify first File exposure through
+  `get()`, `getAll()`, and iteration, including methods borrowed from another
+  realm, and stable File identity across repeated access. This replaces the
+  parser's early-origin test; byte-parser tests do not prove this integration.
 
 ## Slice 7 — HTTP extensions
 

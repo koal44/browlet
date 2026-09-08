@@ -1,4 +1,5 @@
 import type { ParallelQueue } from '../infra/parallel-queue';
+import type { GlobalObject } from '../js-engine/index';
 import { FetchController } from './controller';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';
@@ -13,7 +14,7 @@ export class FetchParams {
   processResponse: ((response: ResponseRecord) => void) | null = null;
   processResponseEndOfBody: ((response: ResponseRecord) => void) | null = null;
   processResponseConsumeBody: ((response: ResponseRecord, body: Uint8Array | null | 'failure') => void) | null = null;
-  taskDestination: object | ParallelQueue | null = null;
+  taskDestination: GlobalObject | ParallelQueue | null = null;
   crossOriginIsolatedCapability = false;
   controller = new FetchController();
   timingInfo: FetchTimingInfo;

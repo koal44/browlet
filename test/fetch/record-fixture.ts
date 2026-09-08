@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+
 import { BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from '../../src/fetch/body';
 import { HeadersImpl, headersIDL, headersInitIDL, type HeadersGuard } from '../../src/fetch/headers';
 import {
@@ -33,12 +35,13 @@ export function createRecordFixture() {
   const realm = new TestRealm();
   const registration = bindings.register(realm);
   const { context } = registration;
+  const scheduling = { queueGlobalTask: vi.fn(), runInParallel: vi.fn() };
   // This fixture allocates implementations. The incomplete API family is not installed.
   return {
     bindings,
     realm,
     context,
-    createBody: () => new BodyRecord(createReadableStream(context)),
+    createBody: () => new BodyRecord(createReadableStream(context), scheduling),
     createRequest: (record: RequestRecord, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new ResponseRecord(), guard: HeadersGuard = 'response') =>

@@ -1,7 +1,7 @@
 import { isObject } from './abstract-operations';
 import { nodeRuntime, type NodeContext } from './node-runtime';
 import type {
-  JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
+  GlobalObject, JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
   JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
   RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
@@ -14,13 +14,13 @@ export class NodeRealm implements JavaScriptRealm {
   static readonly supportsGlobalPrototypeChain = nodeRuntime.hasNativeGlobalObjects;
 
   readonly globalPrototypeChain: readonly object[] | undefined;
-  readonly allocatedGlobalObject: object | undefined;
+  readonly allocatedGlobalObject: GlobalObject | undefined;
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime = nodeRuntime;
   readonly #callableFunctionFactory: RealmFunctionFactory;
   readonly #context: NodeContext;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
-  #globalObject: object;
+  #globalObject: GlobalObject;
   #globalThis: object;
   readonly #hostGlobal: RealmGlobal;
   readonly #microtaskQueue: JavaScriptMicrotaskQueue;
@@ -237,11 +237,11 @@ export class NodeRealm implements JavaScriptRealm {
     );
   }
 
-  get global(): object {
+  get global(): GlobalObject {
     return this.#globalObject;
   }
 
-  get globalObject(): object {
+  get globalObject(): GlobalObject {
     return this.#globalObject;
   }
 
@@ -310,7 +310,7 @@ export class NodeRealm implements JavaScriptRealm {
   }
 
   protected initializeGlobalObjects(
-    globalObject: object,
+    globalObject: GlobalObject,
     globalThis: object,
   ): void {
     if (this.#globalObject !== this.#hostGlobal) {

@@ -1,4 +1,7 @@
-/** Fetch §2, is offline, from the user agent and environment's offline state. */
+/**
+ * Fetch §2, is offline. The host supplies the two offline-state values instead
+ * of the settings object, keeping HTML and BiDi state outside Fetch.
+ */
 export function isOffline(
   userAgentIsOffline: boolean,
   webDriverBiDiNetworkIsOffline: boolean,

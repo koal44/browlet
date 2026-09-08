@@ -1,4 +1,4 @@
-import type { FetchStructuredData, QueueGlobalFetchTask } from '../../fetch/index';
+import type { FetchStructuredData, FetchTaskScheduling, QueueGlobalFetchTask } from '../../fetch/index';
 import {
   structuredDeserialize,
 } from '../scripting/structured-data/deserialize';
@@ -8,6 +8,7 @@ import type {
 import type { SerializedRecord } from '../scripting/structured-data/records';
 import { structuredSerialize } from '../scripting/structured-data/serialize';
 import { networkingTaskSource, queueGlobalTask } from '../scripting/tasks';
+import { runInParallel } from './scripting';
 
 export function createFetchStructuredData(
   environment: StructuredDataEnvironment,
@@ -24,4 +25,9 @@ export function createFetchStructuredData(
 
 export const queueGlobalFetchTask: QueueGlobalFetchTask = (global, steps) => {
   queueGlobalTask(networkingTaskSource, global, steps);
+};
+
+export const fetchTaskScheduling: FetchTaskScheduling = {
+  queueGlobalTask: queueGlobalFetchTask,
+  runInParallel,
 };

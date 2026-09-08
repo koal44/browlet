@@ -33,9 +33,12 @@ are `whatwg-html/source`, `whatwg-fetch/fetch.bs`, and
 2. **Parsing — implemented.** Parse complete bodies into string/File entries
    with Fetch's UTF-8 and Content-Type rules. The strict rejection policy and
    remaining specification gaps are recorded below.
-3. **Body integration.** Connect encoding to extraction and parsing to
-   consumption using Fetch's Body records and existing Web IDL projection.
+3. **Body integration — deferred to [Fetch Slice 6](../ROADMAP.md#slice-6--network-independent-platform-apis).**
+   Connect encoding to extraction and parsing to consumption using Fetch's Body
+   records and existing Web IDL projection.
    Preserve stream errors, unusable-body checks, lengths, and realm ownership.
+   Use the encoder's boundary and byte length during extraction, then read its
+   retained data as the body stream is consumed.
 
 Keep the RFC's wider MIME/email requirements bounded to the multipart
 operations actually referenced. HTML document parsing and form-backed entry
@@ -43,28 +46,34 @@ construction remain with [HTML forms/XHR](../../xhr/ROADMAP.md).
 
 ## Encoding contract
 
-`encodeMultipartFormData(entries, generateBoundary, encoding = 'UTF-8')` in
-`encode.ts` returns a promise for `{ bytes: Uint8Array, boundary: string }`.
-It consumes the existing `FormDataEntry` values and reads Files through
-`readBlobBytes`. Entry names, values, and file metadata are captured before
-awaiting reads; it does not mutate the original entry list or its Files.
+`encodeMultipartFormData(entries, encoding)` in `encode.ts` synchronously
+returns `{ boundary: string, data: BlobData }`. It encodes names, headers, and
+text immediately, composing those bytes with the Files' existing immutable
+byte sources. It captures the entry list and file metadata without mutating
+the inputs or reading File contents.
 
-The caller supplies fresh boundary candidates (for example, a UUID generator).
-The encoder validates RFC 2046's syntax and retries when a candidate delimiter
-occurs in the encoded parts. HTTP header construction belongs to Fetch; it
-must quote the returned boundary when necessary. This slice buffers the full
-body, propagates read failures, and supplies exact `bytes.length`. It does not
-introduce a substitute Fetch Body or stream API.
+The encoder generates the boundary internally with `crypto.randomUUID()`.
+Following the browser arrangement, it relies on random generation rather than
+scanning File contents for collisions or retrying candidate boundaries. The
+generated boundary can be used unquoted in Content-Type, whose construction
+belongs to Fetch.
+
+`data.size` supplies the exact encoded length immediately. `data.read()` reads
+the complete body later; `data.read(start, length)` reads only the requested
+range, touching File sources only where that range overlaps them. File read
+failures propagate at consumption time. This reuses File's backing-data
+operations without creating a platform Blob or a substitute Fetch stream API.
 
 ## Parsing contract
 
-`parseMultipartFormData(bytes, mimeType, context)` in `parse.ts` consumes a
-complete byte sequence and the existing parsed `MIMEType` record. It returns
-`FormDataEntry[]`; Files are constructed through the supplied `BindingContext`
-so another realm cannot claim their origin when first projecting them. File
-bytes are copied, text is decoded as UTF-8 without BOM stripping, and entry
-order and repeated names are preserved. Fetch's future Body consumer owns
-FormData construction and realization of a parsing TypeError in its realm.
+`parseMultipartFormData(bytes, mimeType)` in `parse.ts` consumes a
+complete byte sequence backed by an `ArrayBuffer` and a parsed `MIMEType`.
+It returns `FormDataEntry[]`, constructing realm-neutral `FileImpl` values
+directly. File bytes are copied; text is decoded as UTF-8 without BOM stripping.
+Entry order and repeated names are preserved. Fetch's future Body consumer owns
+FormData construction, File realm ownership, and realization of a parsing
+TypeError in its realm. The required realm tests are recorded in
+[Fetch Slice 6](../ROADMAP.md#slice-6--network-independent-platform-apis).
 
 Framing follows RFC 2046: case-sensitive boundaries, CRLF delimiters, transport
 padding, ignored preamble/epilogue, and an optional CRLF after the closing
@@ -120,20 +129,23 @@ outside this slice.
 
 ## Exit proof
 
-Encoding has 34 focused tests in `test/fetch/multipart/encode.test.ts`,
+Encoding has 21 focused tests in `test/fetch/multipart/encode.test.ts`,
 plus 11 Encoding hook tests. They cover exact output bytes, names versus
-filenames, literal escapes, UTF-8/legacy encodings, binary Files, collisions,
-entry-list preservation during reads, and read failure propagation.
-Parsing has 54 focused tests in `test/fetch/multipart/parse.test.ts`, using
+filenames, literal escapes, UTF-8/legacy encodings, binary Files, generated
+boundary/header agreement, immediate length, deferred File reads, retained
+entries/metadata/byte sources, and read failure propagation. The deferred-read
+regression failed before changing the encoder: preparation invoked the File
+source's reader once.
+Parsing has 53 focused tests in `test/fetch/multipart/parse.test.ts`, using
 independent byte fixtures for repeated entries, UTF-8/BOM handling, charset
-overrides, binary File bytes/metadata, realm ownership, header syntax, framing,
+overrides, binary File bytes/metadata, header syntax, framing,
 and malformed input. Framing cases include those from WPT's
 `fetch/api/response/response-form-data.html` and
 `fetch/content-type/multipart-malformed.any.js`; this is unit coverage of those
 cases, not a browser WPT run. The missing delimiter-CRLF regression was observed
 failing before tightening the header/body offset check.
-The full unit suite passed (7,359 passing, 18 existing expected failures, 15
-existing skips), as did lint/typecheck.
+
+The multipart/File test run passes all 99 tests; lint/typecheck also passes.
 
 Then test real Body extraction/`formData()` consumption, including the
 Content-Type boundary, File results, author entry-list preservation, rejected
