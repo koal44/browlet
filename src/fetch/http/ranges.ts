@@ -13,6 +13,7 @@ export function buildContentRange(
  * Fetch §2.2.2 — parse a single range header value. BigInts preserve the
  * ordering of unbounded decimal offsets; null denotes an omitted endpoint.
  */
+// SPEC_MISMATCH: (value, allowWhitespace) -> (rangeStartValue, rangeEndValue) or failure
 export function parseSingleRangeHeaderValue(
   value: string, allowWhitespace: boolean,
 ): [start: bigint | null, end: bigint | null] | null {

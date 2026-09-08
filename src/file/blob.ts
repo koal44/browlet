@@ -59,6 +59,7 @@ export class BlobImpl {
   #snapshotState: BlobSnapshotState;
   #type: string;
 
+  // SPEC_MISMATCH: Blob(blobParts?, options = {}) -> Blob
   constructor(
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
@@ -85,10 +86,12 @@ export class BlobImpl {
     return sliceBlob(this, start, end, contentType);
   }
 
+  // SPEC_MISMATCH: Blob.stream() -> ReadableStream
   stream(context: BindingContext): ReadableStreamImpl {
     return getBlobStream(this, context);
   }
 
+  // SPEC_MISMATCH: Blob.text() -> Promise<USVString>
   text(context: BindingContext): object {
     return readBlob(
       this,
@@ -98,6 +101,7 @@ export class BlobImpl {
     );
   }
 
+  // SPEC_MISMATCH: Blob.arrayBuffer() -> Promise<ArrayBuffer>
   arrayBuffer(context: BindingContext): object {
     return readBlob(
       this,
@@ -107,15 +111,18 @@ export class BlobImpl {
     );
   }
 
+  // SPEC_MISMATCH: Blob.textStream() -> ReadableStream
   textStream(context: BindingContext): ReadableStreamImpl {
     const stream = getBlobStream(this, context);
     const decoder = context.construct(TextDecoderStreamImpl);
+    // SPEC_MISMATCH: File API pipe through(stream, decoder: TextDecoderStream) -> ReadableStream
     return pipeReadableStreamThrough(
       stream,
       TextDecoderStreamImpl.getAssociatedTransform(decoder),
     );
   }
 
+  // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
   bytes(context: BindingContext): object {
     return readBlob(
       this,
@@ -185,6 +192,7 @@ export type BlobSerializationState = {
 };
 
 /** File API §3.1, process blob parts. */
+// SPEC_MISMATCH: (parts, options) -> bytes
 export function processBlobParts(
   parts: Iterable<BlobPart>,
   options: BlobPropertyBag,
@@ -210,6 +218,7 @@ export function processBlobParts(
 }
 
 /** File API §3.1, convert line endings to native. */
+// SPEC_MISMATCH: (s) -> string
 export function convertLineEndingsToNative(
   value: string,
   nativeLineEnding: '\n' | '\r\n',
@@ -239,6 +248,7 @@ export const nativeLineEndingForConstruction = contextValue(
 );
 
 /** File API §2, slice blob. */
+// SPEC_MISMATCH: (blob, start: number | null, end: number | null, contentType: string | null) -> Blob
 export function sliceBlob(
   blob: BlobImpl,
   start?: number,
@@ -267,6 +277,7 @@ export function readBlobBytes(
 }
 
 /** File API §3, get stream. */
+// SPEC_MISMATCH: (blob) -> ReadableStream
 export function getBlobStream(
   blob: BlobImpl,
   context: BindingContext,
@@ -332,6 +343,7 @@ function readBlob(
   const promise = context.createPromise(resultType);
   try {
     const reader = getReadableStreamReader(getBlobStream(blob, context));
+    // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
     readAllBytes(
       reader,
       (bytes) => {

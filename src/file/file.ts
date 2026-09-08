@@ -29,6 +29,7 @@ export class FileImpl extends BlobImpl {
   #lastModified: number | null;
   #name: string;
 
+  // SPEC_MISMATCH: File(fileBits, fileName, options = {}) -> File
   constructor(
     fileBits: Iterable<BlobPart> = [],
     fileName = '',

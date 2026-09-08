@@ -17,6 +17,7 @@ import {
 export class WritableStreamDefaultWriterImpl {
   state!: WritableStreamDefaultWriterState;
 
+  // SPEC_MISMATCH: WritableStreamDefaultWriter(stream) -> WritableStreamDefaultWriter
   constructor(
     readonly context: BindingContext,
     stream?: WritableStreamImpl,

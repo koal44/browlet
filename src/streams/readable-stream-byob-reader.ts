@@ -24,6 +24,7 @@ export class ReadableStreamBYOBReaderImpl {
   readonly #genericReader: ReadableStreamGenericReaderMixin;
   #readIntoRequests: ReadIntoRequest[] = [];
 
+  // SPEC_MISMATCH: ReadableStreamBYOBReader(stream) -> ReadableStreamBYOBReader
   constructor(context: BindingContext, stream?: ReadableStreamImpl) {
     this.#genericReader = new ReadableStreamGenericReaderMixin(context);
     if (stream) setUpReadableStreamBYOBReader(this, stream);

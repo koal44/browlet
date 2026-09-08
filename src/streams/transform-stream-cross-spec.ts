@@ -12,6 +12,7 @@ import {
 import { TransformStreamImpl } from './transform-stream';
 
 /** Streams §9.3, create and set up a transform stream. */
+// SPEC_MISMATCH: TransformStream.set up(stream, transformAlgorithm, flushAlgorithm?, cancelAlgorithm?) -> void
 export function createTransformStream(
   context: BindingContext,
   transformAlgorithm: (chunk: unknown) => unknown,
@@ -47,6 +48,7 @@ export function createTransformStream(
 }
 
 /** Streams §9.3, create an identity transform stream. */
+// SPEC_MISMATCH: create an identity TransformStream() -> TransformStream
 export function createIdentityTransformStream(
   context: BindingContext,
 ): TransformStreamImpl {

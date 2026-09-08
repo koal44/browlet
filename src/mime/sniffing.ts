@@ -32,6 +32,7 @@ export type ResolveMissingMIMEType = (
  *
  * https://mimesniff.spec.whatwg.org/#mime-type-sniffing-algorithm
  */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMEType(
   resource: ResourceMetadata,
   isSupportedByUserAgent: SupportsMIMEType,
@@ -84,6 +85,7 @@ export function sniffMIMEType(
  *
  * https://mimesniff.spec.whatwg.org/#identifying-a-resource-with-an-unknown-mime-type
  */
+// SPEC_MISMATCH: (resource, sniff-scriptable = unset) -> MIME type string
 export function identifyUnknownMIMEType(
   header: Uint8Array,
   sniffScriptable = false,
@@ -115,6 +117,7 @@ export function identifyUnknownMIMEType(
  *
  * https://mimesniff.spec.whatwg.org/#rules-for-text-or-binary
  */
+// SPEC_MISMATCH: (resource) -> void
 export function distinguishTextOrBinary(header: Uint8Array): MIMEType {
   if (
     matchesBytes(header, 0xfe, 0xff) ||
@@ -128,6 +131,7 @@ export function distinguishTextOrBinary(header: Uint8Array): MIMEType {
 }
 
 /* MIME Sniffing §8.1 browsing context. */
+// SPEC_MISMATCH: MIME type sniffing algorithm(resource) -> void
 export function sniffMIMETypeInBrowsingContext(
   resource: ResourceMetadata,
   isSupportedByUserAgent: SupportsMIMEType,
@@ -136,6 +140,7 @@ export function sniffMIMETypeInBrowsingContext(
 }
 
 /* MIME Sniffing §8.2 image context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInImageContext(
   resource: ResourceMetadata,
 ): MIMEType | undefined {
@@ -143,6 +148,7 @@ export function sniffMIMETypeInImageContext(
 }
 
 /* MIME Sniffing §8.3 audio or video context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInAudioOrVideoContext(
   resource: ResourceMetadata,
 ): MIMEType | undefined {
@@ -150,6 +156,7 @@ export function sniffMIMETypeInAudioOrVideoContext(
 }
 
 /* MIME Sniffing §8.4 plugin context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInPluginContext(
   resource: ResourceMetadata,
 ): MIMEType {
@@ -163,6 +170,7 @@ export function sniffMIMETypeInPluginContext(
 }
 
 /* MIME Sniffing §8.5 style context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInStyleContext(
   resource: ResourceMetadata,
   resolveMissing: ResolveMissingMIMEType,
@@ -171,6 +179,7 @@ export function sniffMIMETypeInStyleContext(
 }
 
 /* MIME Sniffing §8.6 script context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInScriptContext(
   resource: ResourceMetadata,
   resolveMissing: ResolveMissingMIMEType,
@@ -179,6 +188,7 @@ export function sniffMIMETypeInScriptContext(
 }
 
 /* MIME Sniffing §8.7 font context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInFontContext(
   resource: ResourceMetadata,
 ): MIMEType | undefined {
@@ -186,6 +196,7 @@ export function sniffMIMETypeInFontContext(
 }
 
 /* MIME Sniffing §8.8 text-track context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInTextTrackContext(
   resource: ResourceMetadata,
 ): MIMEType {
@@ -193,6 +204,7 @@ export function sniffMIMETypeInTextTrackContext(
 }
 
 /* MIME Sniffing §8.9 cache-manifest context. */
+// SPEC_MISMATCH: (resource) -> void
 export function sniffMIMETypeInCacheManifestContext(
   resource: ResourceMetadata,
 ): MIMEType {

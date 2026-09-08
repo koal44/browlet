@@ -25,6 +25,7 @@ export class TextDecoderStreamImpl {
   readonly #common: TextDecoderCommonMixin;
   readonly #generic: GenericTransformStreamMixin;
 
+  // SPEC_MISMATCH: TextDecoderStream(label = "utf-8", options = {}) -> TextDecoderStream
   constructor(
     context: BindingContext,
     label: string,

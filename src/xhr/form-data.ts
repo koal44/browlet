@@ -51,6 +51,7 @@ export class FormDataImpl {
   readonly #createEntry: CreateFormDataEntry;
   readonly #entryList: FormDataEntry[] = [];
 
+  // SPEC_MISMATCH: FormData(form?, submitter = null) -> FormData
   constructor(createEntry: CreateFormDataEntry, form?: object) {
     this.#createEntry = createEntry;
 

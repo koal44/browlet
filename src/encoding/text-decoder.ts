@@ -30,6 +30,7 @@ import {
 export class TextDecoderImpl {
   readonly #common: TextDecoderCommonMixin;
 
+  // SPEC_MISMATCH: TextDecoder(label = "utf-8", options = {}) -> TextDecoder
   constructor(
     context: BindingContext,
     label: string,

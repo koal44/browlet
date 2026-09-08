@@ -7,6 +7,7 @@ import { createArrayBuffer } from '../web-idl/buffer-source';
 import type { BindingContext } from '../web-idl/projection';
 
 /** File API §6.3 — Package data. */
+// SPEC_MISMATCH: (bytes, type, mimeType, encodingLabel?) -> string or ArrayBuffer
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,

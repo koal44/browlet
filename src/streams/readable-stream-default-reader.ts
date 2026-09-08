@@ -19,6 +19,7 @@ export class ReadableStreamDefaultReaderImpl {
   readonly #genericReader: ReadableStreamGenericReaderMixin;
   #readRequests: ReadRequest[] = [];
 
+  // SPEC_MISMATCH: ReadableStreamDefaultReader(stream) -> ReadableStreamDefaultReader
   constructor(
     context: BindingContext,
     stream?: ReadableStreamImpl,

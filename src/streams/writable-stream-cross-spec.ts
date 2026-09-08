@@ -14,8 +14,10 @@ import {
 } from './writable-stream-operations';
 
 /** Streams §9.2, create and set up a writable stream. */
+// SPEC_MISMATCH: WritableStream.set up(stream, writeAlgorithm, closeAlgorithm?, abortAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createWritableStream(
   context: BindingContext,
+  // SPEC_MISMATCH: writeAlgorithm(chunk) -> promise
   writeAlgorithm: (chunk: unknown) => unknown,
   closeAlgorithm?: () => unknown,
   abortAlgorithm?: (reason: unknown) => unknown,

@@ -64,6 +64,7 @@ export function createResourceMetadata(
  *
  * https://mimesniff.spec.whatwg.org/#supplied-mime-type-detection-algorithm
  */
+// SPEC_MISMATCH: supplied MIME type detection algorithm(resource) -> void
 export function detectSuppliedMIMEType(
   source: SuppliedMIMETypeSource,
 ): {
@@ -101,6 +102,7 @@ export function detectSuppliedMIMEType(
  *
  * https://mimesniff.spec.whatwg.org/#read-the-resource-header
  */
+// SPEC_MISMATCH: read the resource header(resource) -> void
 export async function readResourceHeader(
   metadata: ResourceMetadata,
   readBytes: ReadResourceBytes,

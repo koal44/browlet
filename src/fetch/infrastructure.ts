@@ -2,6 +2,7 @@
  * Fetch §2, is offline. The host supplies the two offline-state values instead
  * of the settings object, keeping HTML and BiDi state outside Fetch.
  */
+// SPEC_MISMATCH: (environment: environment settings object) -> boolean
 export function isOffline(
   userAgentIsOffline: boolean,
   webDriverBiDiNetworkIsOffline: boolean,

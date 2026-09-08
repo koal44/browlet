@@ -37,6 +37,7 @@ export class ReadableStreamImpl {
   readonly #context: BindingContext;
   readonly #state: ReadableStreamState;
 
+  // SPEC_MISMATCH: ReadableStream(underlyingSource?, strategy = {}) -> ReadableStream
   constructor(
     context: BindingContext,
     underlyingSource?: object | typeof internalStreamSetup,
@@ -79,6 +80,7 @@ export class ReadableStreamImpl {
     );
   }
 
+  // SPEC_MISMATCH: ReadableStream.from(asyncIterable) -> ReadableStream
   static from(
     context: BindingContext,
     asyncIterable: IDLAsyncSequence,

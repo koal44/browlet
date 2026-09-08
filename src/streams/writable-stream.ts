@@ -27,6 +27,7 @@ import { internalStreamSetup } from './internal-methods';
 export class WritableStreamImpl {
   readonly state = initializeWritableStream();
 
+  // SPEC_MISMATCH: WritableStream(underlyingSink?, strategy = {}) -> WritableStream
   constructor(
     readonly context: BindingContext,
     underlyingSink?: object | typeof internalStreamSetup,
@@ -116,6 +117,7 @@ export function acquireWritableStreamDefaultWriter(
   return writer;
 }
 
+// SPEC_MISMATCH: CreateWritableStream(startAlgorithm, writeAlgorithm, closeAlgorithm, abortAlgorithm, highWaterMark, sizeAlgorithm) -> WritableStream
 export function createWritableStream(
   context: BindingContext,
   startAlgorithm: () => unknown,

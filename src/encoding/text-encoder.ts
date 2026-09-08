@@ -35,6 +35,7 @@ export class TextEncoderImpl {
   readonly #encoder = new ExodusTextEncoder();
   readonly #context: BindingContext;
 
+  // SPEC_MISMATCH: TextEncoder() -> TextEncoder
   constructor(context: BindingContext) {
     this.#context = context;
   }

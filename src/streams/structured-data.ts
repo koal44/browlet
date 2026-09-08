@@ -10,6 +10,7 @@ export type StreamStructuredData = {
   clone(global: object, value: unknown): unknown;
 };
 
+// SPEC_MISMATCH: StructuredClone(v) -> value
 export function cloneStreamValue(
   context: BindingContext,
   value: unknown,

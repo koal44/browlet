@@ -6,6 +6,7 @@ import { matchesBytePattern } from './pattern';
  *
  * https://mimesniff.spec.whatwg.org/#matching-an-image-type-pattern
  */
+// SPEC_MISMATCH: (input: byte sequence) -> MIME type string or undefined
 export function matchImageTypePattern(input: Uint8Array): MIMEType | undefined {
   return matchSignatures(input, imageSignatures);
 }
@@ -15,6 +16,7 @@ export function matchImageTypePattern(input: Uint8Array): MIMEType | undefined {
  *
  * https://mimesniff.spec.whatwg.org/#matching-an-audio-or-video-type-pattern
  */
+// SPEC_MISMATCH: (input: byte sequence) -> MIME type string or undefined
 export function matchAudioOrVideoTypePattern(
   input: Uint8Array,
 ): MIMEType | undefined {
@@ -33,6 +35,7 @@ export function matchAudioOrVideoTypePattern(
  *
  * https://mimesniff.spec.whatwg.org/#matching-a-font-type-pattern
  */
+// SPEC_MISMATCH: (input: byte sequence) -> MIME type string or undefined
 export function matchFontTypePattern(input: Uint8Array): MIMEType | undefined {
   return matchSignatures(input, fontSignatures);
 }
@@ -42,6 +45,7 @@ export function matchFontTypePattern(input: Uint8Array): MIMEType | undefined {
  *
  * https://mimesniff.spec.whatwg.org/#matching-an-archive-type-pattern
  */
+// SPEC_MISMATCH: (input: byte sequence) -> MIME type string or undefined
 export function matchArchiveTypePattern(
   input: Uint8Array,
 ): MIMEType | undefined {
@@ -150,6 +154,7 @@ function matchesBytes(
   return expected.every((value, index) => input[offset + index] === value);
 }
 
+// SPEC_MISMATCH: parse a vint(sequence, iter) -> (parsed number, number size)
 function parseVint(
   input: Uint8Array,
   offset: number,
@@ -172,6 +177,7 @@ function parseVint(
   return { value, size };
 }
 
+// SPEC_MISMATCH: matching a padded sequence(pattern, sequence, offset, end) -> boolean
 function matchesPaddedBytes(
   input: Uint8Array,
   offset: number,
@@ -196,6 +202,7 @@ function matchesMP3Header(input: Uint8Array, offset: number): boolean {
   return 4 - layer === 3;
 }
 
+// SPEC_MISMATCH: parse an mp3 frame(sequence, s) -> void
 function parseMP3Frame(input: Uint8Array, offset: number): MP3Frame {
   const version = (input[offset + 1]! & 0x18) >> 3;
   const bitrateIndex = (input[offset + 2]! & 0xf0) >> 4;
@@ -213,6 +220,7 @@ function parseMP3Frame(input: Uint8Array, offset: number): MP3Frame {
   return { version, bitrate, sampleRate, pad };
 }
 
+// SPEC_MISMATCH: compute an mp3 frame size() -> size
 function computeMP3FrameSize(frame: MP3Frame): number {
   const scale = frame.version & 1 ? 144 : 72;
   return Math.floor(frame.bitrate * scale / frame.sampleRate) + frame.pad;

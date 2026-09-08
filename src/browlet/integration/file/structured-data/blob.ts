@@ -13,6 +13,7 @@ import {
  * File API defines Blob's record fields. HTML owns their registration and
  * execution through the generic Serializable machinery.
  */
+// SPEC_MISMATCH: Blob serialized { [[SnapshotState]], [[ByteSequence]] }
 export const blobSerializable: SerializableSteps = {
   serializationSteps(value, serialized, forStorage) {
     if (!BlobImpl.is(value)) {

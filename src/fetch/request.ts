@@ -151,6 +151,7 @@ export class RequestImpl {
 
   // Internal allocation from a request, guard, and DOM-owned signal.
   // Author RequestInfo/RequestInit processing belongs to the deferred constructor.
+  // SPEC_MISMATCH: create a Request object(request, guard, signal, realm) -> Request
   constructor(context: BindingContext, request: RequestRecord, guard: HeadersGuard, signal: object) {
     this.#request = request;
     this.#headers = context.construct(HeadersImpl, request.headerList, guard);

@@ -226,6 +226,7 @@ export function isBufferSourceDetached(value: object): boolean {
 // TODO(Web IDL BufferSource/transferable): JavaScript exposes no
 // non-destructive test for [[ArrayBufferDetachKey]]. Add a host capability
 // before exposing that predicate; the transfer operation remains authoritative.
+// SPEC_MISMATCH: TransferArrayBuffer(O) -> ArrayBuffer
 export function transferArrayBuffer(
   buffer: object,
   targetRealm: WebIDLRealmHost,

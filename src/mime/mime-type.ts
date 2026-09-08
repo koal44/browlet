@@ -36,6 +36,7 @@ export function getMIMETypeEssence(mimeType: MIMEType): string {
  *
  * https://mimesniff.spec.whatwg.org/#minimize-a-supported-mime-type
  */
+// SPEC_MISMATCH: (mimeType) -> ASCII string
 export function minimizeSupportedMIMEType(
   mimeType: MIMEType,
   isSupportedByUserAgent: SupportsMIMEType,
@@ -55,6 +56,7 @@ export function minimizeSupportedMIMEType(
  *
  * https://mimesniff.spec.whatwg.org/#parse-a-mime-type
  */
+// SPEC_MISMATCH: (input: string) -> MIME type or failure
 export function parseMIMEType(input: string): MIMEType | null {
   input = trimHTTPWhitespace(input);
   const position = new TextCursor(input);
@@ -120,6 +122,7 @@ export function parseMIMEType(input: string): MIMEType | null {
  *
  * https://mimesniff.spec.whatwg.org/#parse-a-mime-type-from-bytes
  */
+// SPEC_MISMATCH: (input: byte sequence) -> MIME type or failure
 export function parseMIMETypeFromBytes(input: Uint8Array): MIMEType | null {
   return parseMIMEType(isomorphicDecode(input));
 }

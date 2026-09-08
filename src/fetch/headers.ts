@@ -236,6 +236,7 @@ export function isRequestBodyHeaderName(name: string): boolean {
  * arguments supply the field's ABNF rules. A parser returns
  * null on failure; an absent field and a failed extraction remain distinct.
  */
+// SPEC_MISMATCH: (name, list) -> values, null, or failure
 export function extractHeaderListValues<T>(
   name: string, list: HeaderList, parseValues: (value: string) => T[] | null, allowMultiple: boolean,
 ): T[] | null | 'failure' {
@@ -256,6 +257,7 @@ export function extractHeaderListValues<T>(
  * Fetch §2.2.2 — environment default User-Agent. The host supplies the default
  * and BiDi emulation values instead of the environment settings object.
  */
+// SPEC_MISMATCH: (environment: environment settings object) -> header value
 export function getEnvironmentDefaultUserAgent(defaultValue: string, emulatedValue: string | null): string {
   return emulatedValue ?? defaultValue;
 }
