@@ -6,11 +6,13 @@ import { percentEncodeAfterEncoding } from '@exodus/bytes/whatwg.js';
 import { utf8Encode } from './utf-8';
 
 /** Encoding Standard §4.2 — Get an encoding. */
+// SPEC_MISMATCH: (label: string) -> encoding or failure
 export function getEncoding(label: string): string | null {
   return labelToName(label);
 }
 
 /** Encoding Standard §6.2 — Decode. */
+// SPEC_MISMATCH: (ioQueue: byte I/O queue, encoding, output: scalar-value I/O queue = « ») -> output
 export function decode(
   bytes: Uint8Array,
   fallbackEncoding: string,
@@ -19,6 +21,7 @@ export function decode(
 }
 
 /** Encoding Standard §6.2 — Encode, with HTML error handling. */
+// SPEC_MISMATCH: (ioQueue: scalar-value I/O queue, encoding, output: byte I/O queue = « ») -> output
 export function encode(input: string, encoding: string): Uint8Array {
   if (encoding === 'UTF-8') return utf8Encode(input);
 

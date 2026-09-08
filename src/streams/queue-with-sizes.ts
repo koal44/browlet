@@ -19,6 +19,7 @@ export function dequeueValue<Value>(container: QueueContainer<Value>): Value {
   return pair.value;
 }
 
+// SPEC_MISMATCH: EnqueueValueWithSize(container, value, size) -> void
 export function enqueueValueWithSize<Value>(
   container: QueueContainer<Value>,
   value: Value,

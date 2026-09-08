@@ -65,14 +65,17 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
+  // SPEC_MISMATCH: FileReader.readAsArrayBuffer(blob) -> undefined
   readAsArrayBuffer(context: BindingContext, blob: BlobImpl): void {
     this.#read(context, blob, 'ArrayBuffer');
   }
 
+  // SPEC_MISMATCH: FileReader.readAsBinaryString(blob) -> undefined
   readAsBinaryString(context: BindingContext, blob: BlobImpl): void {
     this.#read(context, blob, 'BinaryString');
   }
 
+  // SPEC_MISMATCH: FileReader.readAsText(blob, encoding?) -> undefined
   readAsText(
     context: BindingContext,
     blob: BlobImpl,
@@ -81,6 +84,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#read(context, blob, 'Text', encoding);
   }
 
+  // SPEC_MISMATCH: FileReader.readAsDataURL(blob) -> undefined
   readAsDataURL(context: BindingContext, blob: BlobImpl): void {
     this.#read(context, blob, 'DataURL');
   }
@@ -174,6 +178,7 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 
   /** File API §6.2 — Read operation. */
+  // SPEC_MISMATCH: read operation(blob, type, encodingLabel?)
   #read(
     context: BindingContext,
     blob: BlobImpl,

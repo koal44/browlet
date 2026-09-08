@@ -30,6 +30,7 @@ export class FetchController {
   }
 
   /** The extra context and structured-data arguments supply the aborting realm and HTML serialization. */
+  // SPEC_MISMATCH: abort(controller, error?)
   abort(
     context: BindingContext,
     structuredData: FetchStructuredData,
@@ -59,6 +60,7 @@ export class FetchController {
  * Fetch §2, deserialize a serialized abort reason in the target realm.
  * BindingContext represents that realm; the extra capability supplies HTML deserialization.
  */
+// SPEC_MISMATCH: (abortReason, realm)
 export function deserializeAbortReason(
   abortReason: object | null,
   context: BindingContext,

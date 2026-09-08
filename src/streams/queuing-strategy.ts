@@ -11,6 +11,7 @@ export type QueuingStrategy = {
 
 export type QueuingStrategySize<Value = unknown> = (chunk: Value) => number;
 
+// SPEC_MISMATCH: ExtractHighWaterMark(strategy, defaultHWM) -> number
 export function extractHighWaterMark(
   strategy: QueuingStrategy,
   defaultHighWaterMark: number,

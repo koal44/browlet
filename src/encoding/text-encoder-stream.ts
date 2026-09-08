@@ -25,6 +25,7 @@ export class TextEncoderStreamImpl {
   readonly #generic: GenericTransformStreamMixin;
   #leadingSurrogate = '';
 
+  // SPEC_MISMATCH: TextEncoderStream() -> TextEncoderStream
   constructor(context: BindingContext) {
     this.#context = context;
     const transform: TransformStreamImpl = createTransformStream(
@@ -58,6 +59,7 @@ export class TextEncoderStreamImpl {
     return this.#generic.writable;
   }
 
+  // SPEC_MISMATCH: encode and enqueue a chunk(encoder, chunk) -> void
   #encodeAndEnqueue(
     chunk: string,
     enqueue: (value: object) => void,

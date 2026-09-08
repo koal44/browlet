@@ -74,6 +74,7 @@ export class ResponseImpl {
   readonly #bodyMixin: BodyMixin;
 
   // Internal allocation from an existing response and header guard.
+  // SPEC_MISMATCH: create a Response object(response, guard, realm) -> Response
   constructor(context: BindingContext, response: ResponseRecord, guard: HeadersGuard) {
     this.#response = response;
     this.#headers = context.construct(HeadersImpl, response.headerList, guard);

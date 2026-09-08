@@ -20,6 +20,7 @@ import type { ResponseRecord } from './response';
 import { queueFetchTask, type FetchTaskScheduling } from './tasks';
 
 /** Fetch §2.2.4: a stream and the source/length retained for replay. */
+// SPEC_MISMATCH: body { stream, source, length }
 export class BodyRecord {
   stream: ReadableStreamImpl;
   source: Uint8Array | BlobImpl | FormDataImpl | null = null;
@@ -54,6 +55,7 @@ export class BodyRecord {
     readLoop();
 
     // The next read starts inside the task that processes this chunk.
+    // SPEC_MISMATCH: incrementally-read loop(reader, taskDestination, processBodyChunk, processEndOfBody, processBodyError)
     function readLoop(): void {
       readReadableStreamChunk(reader, {
         chunkSteps(chunk) {
@@ -104,6 +106,7 @@ export type BodyWithType = { body: BodyRecord; type: string | null; };
  * Fetch §2.2.4 and §5.2: safely extract an internal byte sequence as a body.
  * The extra context and scheduling arguments supply realm allocation and HTML execution.
  */
+// SPEC_MISMATCH: (bytes) -> body
 export function bytesAsBody(
   bytes: Uint8Array,
   context: BindingContext,
@@ -126,6 +129,7 @@ export function bytesAsBody(
  * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
  * supported codecs, keyed by lowercase coding names; null represents failure.
  */
+// SPEC_MISMATCH: (codings, bytes) -> bytes or failure
 export function handleContentCodings(
   codings: readonly string[],
   bytes: Uint8Array,

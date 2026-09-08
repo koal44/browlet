@@ -8,6 +8,7 @@ export function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
 }
 
+// SPEC_MISMATCH: CloneAsUint8Array(O) -> Uint8Array
 export function cloneAsUint8Array(
   context: BindingContext,
   value: object,

@@ -70,6 +70,7 @@ export function acquireReadableStreamBYOBReader(
   return reader;
 }
 
+// SPEC_MISMATCH: CreateReadableByteStream(startAlgorithm, pullAlgorithm, cancelAlgorithm) -> ReadableStream
 function createReadableByteStream(
   context: BindingContext,
   startAlgorithm: () => unknown,
@@ -889,9 +890,11 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
 }
 
 /** Streams §9.1, create and set up a stream with byte reading support. */
+// SPEC_MISMATCH: ReadableStream.set up with byte reading support(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 0) -> void
 export function createReadableStreamWithByteReadingSupport(
   context: BindingContext,
   pullAlgorithm?: () => unknown,
+  // SPEC_MISMATCH: cancelAlgorithm()
   cancelAlgorithm?: (reason: unknown) => unknown,
   highWaterMark = 0,
 ): ReadableStreamImpl {
@@ -981,6 +984,7 @@ function commitPullIntoDescriptor(
   }
 }
 
+// SPEC_MISMATCH: ReadableByteStreamControllerConvertPullIntoDescriptor(pullIntoDescriptor) -> ArrayBufferView
 function convertPullIntoDescriptor(
   controller: ReadableByteStreamControllerImpl,
   descriptor: PullIntoDescriptor,
@@ -1058,6 +1062,7 @@ function enqueueDetachedPullIntoToQueue(
   shiftPendingPullInto(controller);
 }
 
+// SPEC_MISMATCH: ReadableByteStreamControllerFillHeadPullIntoDescriptor(controller, size, pullIntoDescriptor) -> void
 function fillHeadPullInto(
   state: ReadableByteStreamControllerState,
   size: number,
@@ -1284,6 +1289,7 @@ function fulfillReadIntoRequest(
   else request.chunkSteps(chunk);
 }
 
+// SPEC_MISMATCH: ReadableStreamFulfillReadRequest(stream, chunk: any, done) -> void
 function fulfillReadRequest(
   stream: ReadableStreamImpl,
   chunk: object,
@@ -1308,6 +1314,7 @@ function errorReadIntoRequests(
   for (const request of requests) request.errorSteps(error);
 }
 
+// SPEC_MISMATCH: CloneArrayBuffer(sourceBuffer, sourceByteOffset, sourceLength) -> ArrayBuffer
 function cloneArrayBuffer(
   context: BindingContext,
   buffer: object,
@@ -1323,6 +1330,7 @@ function cloneArrayBuffer(
   );
 }
 
+// SPEC_MISMATCH: CopyDataBlockBytes(toBlock, toIndex, fromBlock, fromIndex, count) -> unused
 function copyDataBlockBytes(
   destination: object,
   destinationOffset: number,

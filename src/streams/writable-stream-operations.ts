@@ -16,6 +16,7 @@ import type {
   WritableStreamDefaultWriterImpl,
 } from './writable-stream-default-writer';
 
+// SPEC_MISMATCH: InitializeWritableStream(stream) -> void
 export function initializeWritableStream(): WritableStreamState {
   return {
     backpressure: false,
@@ -266,6 +267,7 @@ export function writableStreamDefaultWriterWrite(
   return promise;
 }
 
+// SPEC_MISMATCH: SetUpWritableStreamDefaultControllerFromUnderlyingSink(stream, underlyingSink, underlyingSinkDict, highWaterMark, sizeAlgorithm) -> void
 export function setUpWritableStreamDefaultControllerFromUnderlyingSink(
   stream: WritableStreamImpl,
   controller: WritableStreamDefaultControllerImpl,
@@ -791,6 +793,7 @@ function writableStreamDefaultWriterEnsureReadyPromiseRejected(
   context.markPromiseHandled(state.readyPromise);
 }
 
+// SPEC_MISMATCH: WritableStreamHasOperationMarkedInFlight(stream) -> boolean
 function writableStreamHasOperationInFlight(
   state: WritableStreamState,
 ): boolean {

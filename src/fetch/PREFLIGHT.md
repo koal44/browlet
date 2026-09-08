@@ -5,6 +5,10 @@ layout, and local reference inventory. The [Fetch roadmap](ROADMAP.md) owns
 Fetch's implementation slices; the linked subsystem roadmaps own detailed
 scope, implementation status, tests, and stopping points.
 
+**Signature audit:** [Slices 1–10](#signature-audit) and all five
+[deeper Streams families](#deeper-streams-reviews) are marked. The planned
+signature audit is complete; investigation and fixes remain separate.
+
 This is the agreed detour from [Browlet's priority order](../browlet/PRIORITY.md).
 Read each named specification, then implement the portion assigned by its
 owner. Where a dependency consumes Fetch itself, finish its independent work
@@ -98,6 +102,250 @@ Existing foundations are indexed in Fetch's
 [dependency ledger](ROADMAP.md#dependency-ledger). In particular, the
 [FormData entry list](../xhr/ROADMAP.md) and Blob/File bytes already exist;
 their remaining multipart and Blob URL work has the owners linked above.
+
+## Signature audit
+
+**Status:** Slices 1–10 and the deeper Streams pass below are marked as of
+2026-09-07. The planned signature audit is complete. Investigation and fixes
+come later.
+Review the callable shapes of existing
+implementations, including unmarked differences; searching `SPEC_MISMATCH`
+alone cannot establish coverage. JS Engine is outside this audit. The completed
+Fetch body-scheduling and multipart reviews are starting evidence, not proof
+that the rest of Fetch has been checked.
+
+Compare each implemented specification operation with its source: argument
+count/order, optional arguments/defaults, callback signatures, input/result
+representations, and synchronous versus promise/completion results. Account
+for an implicit receiver or surrounding algorithm state before calling an
+argument extra. Include private helpers that implement named spec algorithms;
+exclude data-only records and explicitly unimplemented operations.
+
+This is a signature review, not a line-by-line algorithm or conformance audit.
+Mark observable shape differences without investigating their justification.
+Browser comparisons, caller tracing, and design discussions are a later pass;
+a browser's different internal signature is not itself a specification failure.
+RFC prose predicates and ordinary implementation helpers do not acquire an
+invented normative signature merely to fit this exercise.
+
+Use the existing single-line `SPEC_MISMATCH: <original signature>` convention.
+Do not reorder arguments, remove dependencies, or change implementation during
+this pass, even where a difference looks easy to fix. Follow specification
+order within a slice and label differences for later review instead of stopping
+to resolve each one. Record the covered scope so the remainder is clear.
+
+Each slice should cover one related family, usually about 15–25 specification
+operations. Split a larger family at a named algorithm boundary rather than
+expanding into its behavior. Report covered operations and marker locations.
+This section owns audit progress;
+keep detailed decisions beside the code or in an existing owner note and link
+them here instead of copying them across roadmaps. A marked slice means its
+signature differences were inventoried, not resolved.
+
+### Review slices
+
+**Slice 1 coverage:** controller operations, task delivery, offline/integer
+helpers, FetchParams predicates/callback signatures, timing creation, URL
+predicates, implemented Body operations, multipart, and HTML parallel-queue
+construction. Nine new markers; the two multipart markers remain. Data-only
+records and unimplemented Body methods were excluded. The Body record's added
+scheduling dependency is marked by its original record shape.
+
+**Slice 2 coverage:** header-list operations and predicates, structured-field
+adapters, method/status helpers, ranges, and implemented Request/Response
+creation and getters, including their API declarations. Five new markers:
+header extraction's extra arguments, User-Agent environment input, range
+parsing's failure result, and the two creation signatures. Data-only records
+and unimplemented API methods were excluded.
+
+**Slice 3 coverage:** Blob/File construction, Blob-part processing and native
+line endings, slicing, Blob stream/promise reads, File metadata getters, and
+FileList's item/length/index signatures, including their API declarations.
+Eleven new markers in `src/file/blob.ts` and `file.ts`: construction
+inputs/defaults, the BlobData result, nullable slice inputs, and explicit
+Binding Context arguments on reads. FileList needed no markers; owner-only
+mutation and host-storage helpers have no corresponding named spec signatures.
+Serialization is covered by Slice 4; the Streams adapters remain in Slice 10.
+
+**Slice 4 coverage:** FileReader's API, private read operation, data packaging,
+and Blob/File/FileList serialization callbacks and record fields. Twelve new
+markers: six Binding Context inputs on reading/packaging, four serialization
+context inputs, and the Blob/File records' BlobData backing and added MIME
+type field. Callback signatures use HTML's contract, which already supplies
+`forStorage` and `targetRealm`. FileReaderSync remains unimplemented; general
+Streams adapters and event machinery were not audited here.
+
+**Slice 5 coverage:** HTTP token/whitespace predicates, quoted strings, dates,
+Cache-Control/delta-seconds/Vary parsing, freshness/stale windows, storage
+eligibility, request restrictions, and invalidation triggers. Fifteen functions
+reviewed; one new marker in `src/http/syntax.ts` for combining input and position
+in a cursor. The RFC-based helpers implement grammars, rules, and formulas
+without prescribed callable signatures; their local interfaces needed no markers.
+
+**Slice 6 coverage:** all 32 RFC 9651 §4 serialization/parsing operations,
+including inlined operations and §3 value representations, across 22 functions.
+Fourteen new markers: two in `serialize.ts` for its string result versus §4.1's
+final ASCII-byte result and bundled Item/Inner List arguments; twelve in
+`parse.ts` for cursor inputs and tagged results versus RFC strings, arrays,
+maps, tuples, and bare values. `null` represents unspecified failure signaling;
+`undefined` asks the caller to omit an empty field. Character predicates and
+data-only type declarations needed no separate markers.
+
+**Slice 7 coverage:** MIME parsing/serialization, classification, resource
+metadata/header reading, pattern matching, WebM/MP3 helpers, and all sniffing
+contexts across the five MIME source files. Twenty-five new markers: three in
+`mime-type.ts`, two in `resource.ts`, eight in `signatures.ts`, and twelve in
+`sniffing.ts`. They cover explicit host inputs, failure/result representations,
+resource updates exposed as returned values, and media-helper shapes. `void`
+denotes steps that update resource metadata or surrounding state without a
+returned value; MP3's shared locals are carried in a frame record. Byte-pattern
+tables and existing notes about unfinished sniffing/MP3 behavior were not
+re-audited; ordinary helpers and data-only records needed no separate markers.
+
+**Slice 8 coverage:** all seven implemented Encoding hooks, TextEncoder/
+TextDecoder API declarations and operations, shared decoder state, and stream construction,
+chunk/flush callbacks, and getters. Twelve new markers: seven for encoding
+names/failure values and complete byte-array/string results instead of I/O
+queues with optional output queues; four for constructor-supplied Binding
+Contexts; one for the encoder chunk helper's converted string and explicit
+enqueue callback. Exodus's public adapter declarations were checked; its
+codecs were not audited. Web IDL supplies API defaults and buffer types;
+`encodeInto`'s map result matches the specified IDL dictionary value. Ordinary
+codec/realm adapters have no separate normative signatures. The general
+Streams boundary remains in Slice 10.
+
+**Slice 9 coverage:** FormData's constructor, both append/set overloads,
+delete/get/getAll/has, entry-list iteration/access, and HTML's create-an-entry
+capability and implementation. One new marker on the constructor for the
+supplied capability; its form/submitter branch remains explicitly deferred.
+HTML's string/Blob inputs and name/value tuple match the implementation-layer
+representations, so create-an-entry needed no marker. The unresolved HTML
+forms branch and unimplemented XMLHttpRequest were excluded.
+
+**Slice 10 coverage:** all 40 entry points exposed by the three Streams
+cross-specification modules: 27 local definitions and 13 re-exports, including
+byte-stream creation. Also checked the nested read-loop, callback contracts,
+GenericTransformStream getters, and immediate Fetch/File/Encoding callers.
+Fourteen new markers: six in `readable-stream-cross-spec.ts`, two each in
+`readable-byte-stream-operations.ts`, `writable-stream-cross-spec.ts`, and
+`transform-stream-cross-spec.ts`, and two at Blob's call sites. They cover
+allocation combined with setup and explicit Binding Contexts, byte offsets
+instead of consumed-prefix removal, captured read-loop arguments, bundled
+piping options, and write/cancel callback signatures. File API's byte-read and
+text-stream call sites still describe different shapes from current Streams;
+the Blob adapter supplies the callbacks/promise and associated TransformStream.
+Internal promise and stream implementations, the DOM-backed abort signal,
+read-request callbacks, and implicit stream receivers needed no separate
+markers. General stream state machines and the deeper reviews below remain
+outside slice 10.
+
+Existing stubs and planned features remain with their implementation roadmaps.
+
+| Slice | Bounded source scope | Specification comparison |
+| --- | --- | --- |
+| 1 — Fetch control and bodies — marked | `controller.ts`, `tasks.ts`, `infrastructure.ts`, `params.ts`, `timing.ts`, `url.ts`, `body.ts`, `multipart/`, and `src/infra/parallel-queue.ts`; include constructor-supplied scheduling and the remaining extracted-helper signatures | Fetch §2 preamble, §2.1, §2.2.4, and implemented §5.2–§5.3 paths; HTML parallel queues and multipart encoding |
+| 2 — Fetch HTTP adapters — marked | `headers.ts`, `http/methods.ts`, `http/ranges.ts`, `http/statuses.ts`, and implemented operations in `request.ts`/`response.ts` | Fetch §§2.2.1–2.2.3 and implemented §§2.2.5–2.2.7; compare present API declarations with §5 without treating stubs as implemented |
+| 3 — Blob, File, and FileList — marked | `src/file/blob.ts`, `file.ts`, `file-list.ts`; inspect `blob-data.ts`/`integration.ts` only where they explain a signature | File API §§2–5 and referenced stream/byte operations; distinguish internal construction from author-facing Web IDL |
+| 4 — File reading and serialization — marked | `src/file/package-data.ts` and `src/browlet/integration/file/`, including FileReader and registered serialization steps | File API §§6–7 and Blob/File/FileList serialization; follow immediate HTML/Streams dependencies without auditing those whole subsystems |
+| 5 — HTTP syntax, dates, and cache policy — marked | `src/http/syntax.ts`, `date.ts`, and `cache/` | Fetch's quoted-string algorithm and the implemented RFC 9110/9111/5861 rules; distinguish local policy predicates from named algorithms |
+| 6 — Structured fields — marked | `src/http/struct-fields/parse.ts`, `serialize.ts`, and value representations | RFC 9651 §4 parsing/serialization; include cursor mutation, parse failure, and serialized-result shapes |
+| 7 — MIME — marked | `mime-type.ts`, `resource.ts`, `sniffing.ts`, `signatures.ts`, and `pattern.ts` | MIME Sniffing's parsing, serialization, classification, and sniffing signatures; skip byte-pattern tables and algorithm internals |
+| 8 — Encoding — marked | `src/encoding/hooks.ts`, `utf-8.ts`, and TextEncoder/TextDecoder stream and non-stream adapters | Encoding's named operations and API declarations; check the adapter contract against Exodus without auditing or replacing its codecs |
+| 9 — XHR/FormData — marked | `src/xhr/form-data.ts` and `src/browlet/html/forms/entry-list.ts` | XHR §4 and HTML's create-an-entry operation, including the supplied capability and Blob/File representations; unimplemented XMLHttpRequest remains out of scope |
+| 10 — Streams used by other specs — marked | `readable-stream-cross-spec.ts`, `writable-stream-cross-spec.ts`, `transform-stream-cross-spec.ts`, and their re-exported entry points | Streams' operations for use by other specifications; inspect the immediate creation/read/pipe callers in Fetch, File, and Encoding |
+
+Sources are the [local inventory](#local-reference-inventory), plus
+`whatwg-encoding/encoding.bs`, `whatwg-mimesniff/mimesniff.bs`, and
+`whatwg-streams/index.bs` under the same specification root.
+
+### Deeper Streams reviews
+
+The completed slice 10 covers the entry points used by other specifications.
+These five completed families extend the same marker-only review through the
+internals, including Binding Context parameters and retained contexts.
+Context use alone is not a signature mismatch. These reviews do not verify
+the stream state machines or add implementation prerequisites to Fetch.
+
+**Readable defaults coverage (2026-09-07):** checked the ReadableStream,
+generic/default reader, and default controller APIs, plus 30 functions in
+`readable-stream-operations.ts`, including asynchronous iteration and private
+named algorithms. Eleven new markers: two in `readable-stream.ts`, one in
+`readable-stream-default-reader.ts`, and eight in
+`readable-stream-operations.ts`. Five identify explicit Binding Context
+parameters on constructors and creation methods/algorithms. The others cover
+initialization returning a state record, unpacked iterator arguments, a
+separate reader mixin, and strategy extraction folded into controller setup.
+
+Streams, generic-reader mixins, and default controllers retain a Binding
+Context for construction, promises, exceptions, and underlying-source
+conversion. Operations obtaining that context from an existing receiver keep
+their specified arguments. The mixin and nonconstructible controller have no
+separate specification constructor signature to label. Converted callbacks,
+read requests, promise results, and explicit equivalents of implicit receivers
+needed no additional markers. Pipe/tee, byte operations, shared helpers, and
+unimplemented transfers remain outside this slice.
+
+**Byte streams / BYOB coverage (2026-09-07):** checked the byte controller,
+BYOB reader/request APIs and internal methods, pull-into records, and named
+algorithms in `readable-byte-stream-operations.ts`, excluding tee. Seven new
+markers: one on the BYOB reader constructor and six in the operations module.
+They cover context-supplied construction/cloning, the added controller used
+when converting a pull-into descriptor, controller state passed directly,
+ArrayBuffers in place of data blocks, and byte-only narrowing of the general
+read-request chunk. Buffer clone/copy signatures come from ECMAScript's
+`CloneArrayBuffer` and `CopyDataBlockBytes` operations.
+
+The byte controller and BYOB request retain a Binding Context without having
+author constructors to label. View-construction helpers use that context and
+a view-type name in place of the descriptor's specified view constructor;
+the descriptor itself is a data record. These uses remain visible for the
+later context review without inventing signatures for allocation helpers.
+
+**Pipe and tee coverage (2026-09-07):** checked PipeTo, default/byte tee,
+public pipe/tee methods, and their read, cancellation, abort, and clone
+callbacks. Four new markers: PipeTo's three shutdown/finalize helpers add
+booleans to preserve whether an error was supplied; `structured-data.ts`
+adds a Binding Context to Streams' `StructuredClone`. Outer pipe/tee
+signatures match. The DOM abort handle and HTML clone capability remain
+integration contracts, not additional named Streams algorithms.
+
+**Writable coverage (2026-09-07):** checked stream/writer/controller APIs,
+underlying-sink callbacks, creation/setup, queue progression, erroring,
+closing, and promise-result signatures, including private named algorithms.
+Six new markers across `writable-stream.ts`, the writer, and operations:
+constructor/creation context, creation defaults, initialization returning a
+state record, the supplied controller in sink setup, and state passed instead
+of a stream to the in-flight predicate. Streams and writers retain context;
+controllers obtain it through their stream. `createStreamAbortController`
+passes context through the existing DOM capability and has no independent
+Streams algorithm signature to label.
+
+**Transform and shared coverage (2026-09-07):** checked transform/controller
+APIs, source/sink/backpressure algorithms, the generic-transform mixin, both
+queuing strategies, queue-with-sizes, and promise/miscellaneous helpers.
+Eight new markers: the transform and two strategy constructors, the supplied
+controller in transformer setup, two explicit RangeError constructors,
+`CloneAsUint8Array`'s context, and `TransferArrayBuffer`'s realm argument.
+The last marker lives at the shared definition in `src/web-idl/buffer-source.ts`;
+it covers the Streams boundary without extending this into a Web IDL audit.
+
+Transform operations otherwise recover context from their stream. Strategy
+size functions are cached by Binding Context; their allocation/cache helper
+signatures are local, and the generated size functions keep their specified
+arguments. `runPromiseAlgorithm` is a local promise adapter, not another
+named spec operation. MessagePort-backed transfers remain deferred in
+[Streams' owner notes](../streams/PORTING-NOTES.md). `CanTransferArrayBuffer`
+has no implementation; its missing detach-key check is recorded beside
+[the shared transfer helper](../web-idl/buffer-source.ts). No state-machine
+behavior or context ownership was changed by this pass.
+
+| Follow-up | Scope |
+| --- | --- |
+| Readable defaults — marked | ReadableStream, generic/default readers, default controller, and their abstract operations; exclude pipe/tee and byte-stream operations |
+| Byte streams / BYOB — marked | Byte controller, BYOB reader/request, pull-into records, and `readable-byte-stream-operations.ts`; exclude tee |
+| Pipe and tee — marked | Default/byte tee and piping signatures, including abort and clone callbacks; inspect the HTML cloning capability only at that boundary |
+| Writable streams — marked | WritableStream, writer/controller operations, underlying-sink callback shapes, and promise results |
+| Transform and shared operations — marked | TransformStream, its controller and generic-transform mixin, queuing strategies, queue-with-sizes, and shared promise/miscellaneous helpers where they map to spec operations |
 
 ## Rejoin Fetch, then finish browser policy
 

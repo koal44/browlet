@@ -10,6 +10,7 @@ export class ByteLengthQueuingStrategyImpl {
   readonly #highWaterMark: number;
   readonly #size: CallableFunction;
 
+  // SPEC_MISMATCH: ByteLengthQueuingStrategy(init) -> ByteLengthQueuingStrategy
   constructor(context: BindingContext, init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
     this.#size = getByteLengthSizeFunction(context);

@@ -5,6 +5,7 @@ import type { GlobalObject } from '../js-engine/index';
  * Fetch §2, queue a fetch task.
  * The extra callback supplies HTML's networking task operation for global destinations.
  */
+// SPEC_MISMATCH: (algorithm, taskDestination)
 export function queueFetchTask(
   algorithm: () => void,
   taskDestination: GlobalObject | ParallelQueue,

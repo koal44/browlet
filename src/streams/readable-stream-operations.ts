@@ -43,6 +43,7 @@ import {
   writableStreamDefaultWriterRelease, writableStreamDefaultWriterWrite,
 } from './writable-stream-operations';
 
+// SPEC_MISMATCH: InitializeReadableStream(stream) -> void
 export function initializeReadableStream(): ReadableStreamState {
   return {
     detached: false,
@@ -51,6 +52,7 @@ export function initializeReadableStream(): ReadableStreamState {
   };
 }
 
+// SPEC_MISMATCH: CreateReadableStream(startAlgorithm, pullAlgorithm, cancelAlgorithm, highWaterMark = 1, sizeAlgorithm = () => 1) -> ReadableStream
 export function createReadableStream(
   context: BindingContext,
   startAlgorithm: () => unknown,
@@ -129,6 +131,7 @@ export function readableStreamCancel(
   );
 }
 
+// SPEC_MISMATCH: ReadableStreamFromIterable(asyncIterable) -> ReadableStream
 export function readableStreamFromIterable(
   context: BindingContext,
   asyncIterable: IDLAsyncSequence,
@@ -173,6 +176,7 @@ export function readableStreamFromIterable(
   return stream;
 }
 
+// SPEC_MISMATCH: ReadableStream asynchronous iterator initialization steps(stream, iterator, args) -> void
 export function initializeReadableStreamAsyncIterator(
   stream: ReadableStreamImpl,
   iterator: object,
@@ -462,6 +466,7 @@ export function readableStreamPipeTo(
     }
   }
 
+  // SPEC_MISMATCH: Shutdown with an action(action, originalError?) -> void
   function shutdownWithAction(
     action: () => StreamPromise,
     originalIsError = false,
@@ -488,6 +493,7 @@ export function readableStreamPipeTo(
     }
   }
 
+  // SPEC_MISMATCH: Shutdown(error?) -> void
   function shutdown(isError = false, error?: unknown): void {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -504,6 +510,7 @@ export function readableStreamPipeTo(
     }
   }
 
+  // SPEC_MISMATCH: Finalize(error?) -> void
   function finalize(isError: boolean, error?: unknown): void {
     writableStreamDefaultWriterRelease(writer);
     readableStreamDefaultReaderRelease(reader);
@@ -724,6 +731,7 @@ export function readableStreamError(
   }
 }
 
+// SPEC_MISMATCH: ReadableStreamReaderGenericCancel(reader: ReadableStreamDefaultReader | ReadableStreamBYOBReader, reason) -> Promise<undefined>
 export function readableStreamReaderGenericCancel(
   reader: ReadableStreamGenericReaderMixin,
   reason: unknown,
@@ -749,6 +757,7 @@ export function setUpReadableStreamDefaultReader(
   ReadableStreamDefaultReaderImpl.resetReadRequests(reader);
 }
 
+// SPEC_MISMATCH: ReadableStreamReaderGenericInitialize(reader, stream) -> void
 export function readableStreamReaderGenericInitialize(
   generic: ReadableStreamGenericReaderMixin,
   reader: NonNullable<ReadableStreamState['reader']>,
@@ -811,6 +820,7 @@ export function readableStreamDefaultReaderRelease(
   );
 }
 
+// SPEC_MISMATCH: ReadableStreamReaderGenericRelease(reader) -> void
 export function readableStreamReaderGenericRelease(
   generic: ReadableStreamGenericReaderMixin,
   reader: NonNullable<ReadableStreamState['reader']>,
@@ -998,6 +1008,7 @@ export function readableStreamDefaultControllerPull(
   readableStreamDefaultControllerCallPullIfNeeded(controller);
 }
 
+// SPEC_MISMATCH: SetUpReadableStreamDefaultControllerFromUnderlyingSource(stream, underlyingSource, underlyingSourceDict, highWaterMark, sizeAlgorithm) -> void
 export function setUpReadableStreamDefaultControllerFromUnderlyingSource(
   stream: ReadableStreamImpl,
   underlyingSource: unknown,

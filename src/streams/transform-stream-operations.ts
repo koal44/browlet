@@ -56,6 +56,7 @@ export function initializeTransformStream(
   transformStreamSetBackpressure(stream, true);
 }
 
+// SPEC_MISMATCH: SetUpTransformStreamDefaultControllerFromTransformer(stream, transformer, transformerDict) -> void
 export function setUpTransformStreamDefaultControllerFromTransformer(
   stream: TransformStreamImpl,
   controller: TransformStreamDefaultControllerImpl,

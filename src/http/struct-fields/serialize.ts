@@ -13,6 +13,7 @@ import type {
  * The input records are not mutated.
  * https://www.rfc-editor.org/rfc/rfc9651.html#section-4.1
  */
+// SPEC_MISMATCH: (structure) -> ASCII bytes
 export function serializeStructuredField(
   field: StructuredField,
 ): string | null | undefined {
@@ -53,6 +54,7 @@ export function serializeStructuredField(
 }
 
 /** RFC 9651 §4.1.1.1 and §4.1.3, Inner Lists and Items. */
+// SPEC_MISMATCH: (inner_list, list_parameters) / (bare_item, item_parameters) -> ASCII string
 function serializeMember(member: StructuredItem | StructuredInnerList): string | null {
   let value: string | null;
   if (member.type === 'inner-list') {

@@ -22,6 +22,7 @@ import { internalStreamSetup } from './internal-methods';
 export class TransformStreamImpl {
   readonly state: TransformStreamState = {};
 
+  // SPEC_MISMATCH: TransformStream(transformer?, writableStrategy = {}, readableStrategy = {}) -> TransformStream
   constructor(
     readonly context: BindingContext,
     transformer?: object | typeof internalStreamSetup,

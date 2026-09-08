@@ -10,6 +10,7 @@ export class CountQueuingStrategyImpl {
   readonly #highWaterMark: number;
   readonly #size: CallableFunction;
 
+  // SPEC_MISMATCH: CountQueuingStrategy(init) -> CountQueuingStrategy
   constructor(context: BindingContext, init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
     this.#size = getCountSizeFunction(context);

@@ -11,7 +11,9 @@ import { blobSerializable } from './blob';
  * File API defines File's record fields. HTML owns their registration and
  * composes the inherited Blob state into File's standalone capability.
  */
+// SPEC_MISMATCH: File serialized { [[SnapshotState]], [[ByteSequence]], [[Name]], [[LastModified]] }
 const fileSerializable: SerializableSteps = {
+  // SPEC_MISMATCH: serialization steps(value, serialized, forStorage)
   serializationSteps(value, serialized, forStorage, context) {
     if (!FileImpl.is(value)) {
       throw new TypeError('File serialization requires a File implementation');
@@ -27,6 +29,7 @@ const fileSerializable: SerializableSteps = {
     serialized.set('LastModified', state.lastModified);
   },
 
+  // SPEC_MISMATCH: deserialization steps(serialized, value, targetRealm)
   deserializationSteps(serialized, value, targetRealm, context) {
     if (!FileImpl.is(value)) {
       throw new TypeError('File deserialization requires a File implementation');

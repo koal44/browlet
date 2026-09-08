@@ -50,6 +50,7 @@ import {
 } from './transform-stream-cross-spec';
 
 /** Streams §9.1, create and set up a default readable stream. */
+// SPEC_MISMATCH: ReadableStream.set up(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createReadableStream(
   context: BindingContext,
   pullAlgorithm?: () => unknown,
@@ -71,6 +72,7 @@ export function createReadableStream(
 }
 
 /** Streams §9.1, create a readable stream from an async sequence. */
+// SPEC_MISMATCH: ReadableStream.create from async sequence(sequence) -> ReadableStream
 export function createReadableStreamFromAsyncSequence(
   context: BindingContext,
   sequence: IDLAsyncSequence,
@@ -185,6 +187,7 @@ export function getReadableStreamBYOBRequestView(
  * The returned offset represents removing the consumed prefix from `bytes`
  * without copying the remainder.
  */
+// SPEC_MISMATCH: pull from bytes(bytes, stream) -> void
 export function pullReadableStreamFromBytes(
   stream: ReadableStreamImpl,
   bytes: Uint8Array,
@@ -232,6 +235,7 @@ export function readAllBytes(
 
   readLoop();
 
+  // SPEC_MISMATCH: read-loop(reader, bytes, successSteps, failureSteps) -> void
   function readLoop(): void {
     readableStreamDefaultReaderRead(reader, {
       chunkSteps(chunk) {
@@ -313,6 +317,7 @@ export function isReadableStreamDisturbed(stream: ReadableStreamImpl): boolean {
 }
 
 /** Streams §9.5, pipe one stream to another. */
+// SPEC_MISMATCH: (readable, writable, preventClose = false, preventAbort = false, preventCancel = false, signal?) -> Promise<undefined>
 export function pipeReadableStreamTo(
   readable: ReadableStreamImpl,
   writable: WritableStreamImpl,
@@ -332,6 +337,7 @@ export function pipeReadableStreamTo(
 }
 
 /** Streams §9.5, pipe a stream through a transform stream. */
+// SPEC_MISMATCH: (readable, transform, preventClose = false, preventAbort = false, preventCancel = false, signal?) -> ReadableStream
 export function pipeReadableStreamThrough(
   readable: ReadableStreamImpl,
   transform: TransformStreamImpl,
