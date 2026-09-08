@@ -20,6 +20,8 @@ const vm = require('node:vm');
 exports.supportsHostHooks = native.supportsHostHooks;
 exports.setHostHooks = require('./host-hooks.cjs')(native);
 exports.getRealm = native.getRealm;
+exports.observePromise = native.observePromise;
+exports.withContinuationData = native.withContinuationData;
 exports.createMicrotaskQueue = native.createMicrotaskQueue;
 exports.createContextHandle = function createContextHandle(options = {}) {
   for (const key of Object.keys(options)) {
