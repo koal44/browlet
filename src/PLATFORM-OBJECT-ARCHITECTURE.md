@@ -213,8 +213,8 @@ When a standalone subsystem cannot own or obtain a required facility, classify
 the dependency using
 [the cross-subsystem decision rules](./SUBSYSTEM-ARCHITECTURE.md#decision-rules):
 
-- use the shared Binding Context for realm intrinsics and generic Web IDL promise
-  machinery;
+- keep realm intrinsics and generic Web IDL promise machinery in declaration
+  and member bindings, where the shared Binding Context is available;
 - use a cross-specification capability for AbortController construction, HTML
   task queueing, or HTML structured cloning; and
 - use a Host Port for clocks, I/O, native scheduling, or an engine operation.
@@ -260,26 +260,21 @@ implementation, Binding associates it with the receiver's relevant Realm before
 JavaScript conversion. A method borrowed from another Realm therefore cannot
 claim the result merely because it supplied the function object.
 
-The same receiver rule applies when an instance operation declares or directly
-accepts a Binding Context dependency. Argument conversion still belongs to the
-operation function's Realm, while realm-sensitive implementation work uses the
-receiver's Binding Context. Static operations have no receiver Realm and use the
-context in which their operation function was installed. An implementation that
-needs that context declares `invokeWith(bindingContext)`; the dependency token
-states what Binding supplies, while whether the member is static or an instance
-operation determines which Binding Context applies. A future dependency on the
-calling script or incumbent settings would require a distinct token and active
-invocation information; it must not be disguised as another interpretation of
-`bindingContext`.
+The same receiver rule applies to explicit instance-member bindings. Argument
+conversion still belongs to the operation function's Realm, while its member
+binding receives the receiver's Binding Context. Static operations have no
+receiver Realm and use the context in which their function was installed.
+Implementations must not accept or retain that context. Existing
+`invokeWith(bindingContext)` dependencies are migration work. A future dependency
+on the calling script or incumbent settings requires explicit invocation
+information at the binding boundary.
 
-Lazy projection must not let the binding whose method happened to expose the
-value claim its realm. When an internal algorithm creates a realm-owned
-platform implementation, it uses the originating Binding Context's
-implementation-construction operation. Binding records that origin without
-allocating a platform object and later projects through the same realm, even
-when the exposing method was borrowed from another realm. A raw implementation
-constructor remains suitable only for state that is deliberately realm-neutral
-until receiver-aware return conversion or another explicit projection boundary.
+When a value needs a specified realm before any ordinary result projection,
+the binding or composition boundary can record its origin with
+`context.construct()`. Borrowing a member alone does not establish that need:
+receiver-aware return conversion already handles it. Request and Response
+therefore construct their Headers implementations directly; the typed getter
+establishes platform identity and preserves `[SameObject]`.
 
 ### Return projection
 
@@ -292,6 +287,13 @@ through:
 - promise creation, resolution, and reaction results.
 
 Repeated references to one implementation must produce one platform object.
+
+JavaScript buffers and typed arrays retain their existing identity through
+ordinary conversion. A synchronous buffer-returning operation can declare
+`newBufferResult()` when its implementation returns internal bytes instead.
+Binding allocates a fresh buffer and, for a view return type, its view in the
+result realm. This allocation policy is separate from `[NewObject]`, which
+requires a fresh returned object without prescribing its backing buffer.
 
 `object` and `any` do not identify a platform interface, so Web IDL cannot infer
 which implementation to project. Do not use either merely to postpone defining
@@ -327,9 +329,16 @@ is allocated as an Error exotic
 in the owning realm.
 
 Web IDL's `exceptions/dom-exception-core.ts` owns the shared names, legacy codes,
-and exception-request helpers. Its independent build boundary lets standalone
-implementations request errors without importing the binding machinery. The
-binding recognizes those requests and realizes them in the appropriate realm.
+and DOMException-request helpers. `exceptions/simple-exception.ts` provides
+distinguishable `RangeError` and `TypeError` requests. This independent build
+boundary lets implementations request errors without importing the binding
+machinery. Translate dependency failures into requests at the dependency call.
+
+The binding realizes a request in the executing method's realm for synchronous
+calls, or the promise's realm when rejecting an internal promise. Existing
+JavaScript exceptions retain their identity, including author-thrown errors.
+The realized error is no longer a request, so forwarding it does not allocate
+another exception.
 
 ## Special object categories
 
@@ -452,7 +461,7 @@ It records migration work, not permanent architecture.
 | Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Standalone subsystem integration | Streams uses the shared Binding Context, direct shared algorithms, and narrow capabilities for DOM AbortController creation and HTML structured cloning; its copied runtime-service bag is gone | Apply the same dependency classification when another standalone subsystem crosses a specification or host boundary |
+| Implementation Binding Context removal | Request, Response, BodyMixin, TextEncoderImpl, TextDecoderImpl, TextDecoderCommonMixin, and AbortControllerImpl no longer accept or retain context; bindings own projection, buffer allocation, exception realization, and signal construction | Remove remaining implementation contexts in bounded slices, including File reads and Streams conversion/callbacks/promises; preserve observable realm behavior without a replacement service bag |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications

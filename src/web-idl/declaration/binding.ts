@@ -27,6 +27,14 @@ export function invokeWith(
 }
 
 /**
+ * Allocate a fresh buffer or view from synchronously returned bytes in the result realm.
+ * Without this declaration, buffer results retain their JavaScript identity.
+ */
+export function newBufferResult(): { readonly binding: NewBufferResultBinding; } {
+  return { binding: { newBufferResult: true } };
+}
+
+/**
  * Declare an indexed getter whose implementation supplies the supported
  * property indices while ordinary operation binding supplies invocation.
  */
@@ -137,6 +145,10 @@ export type ContextValue<Value = unknown> = {
 
 export type ArgumentInjectionBinding = {
   readonly dependencies: readonly ImplementationDependency[];
+};
+
+export type NewBufferResultBinding = {
+  readonly newBufferResult: true;
 };
 
 export type LegacyGetterHooks = {

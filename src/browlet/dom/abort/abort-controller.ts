@@ -1,6 +1,4 @@
-import {
-  bindingContext, impl, type BindingContext,
-} from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
   arg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
@@ -20,8 +18,9 @@ export class AbortControllerImpl
 {
   readonly #signal: AbortSignalImpl;
 
-  constructor(context: BindingContext) {
-    this.#signal = context.construct(AbortSignalImpl);
+  // SPEC_MISMATCH: AbortController() -> AbortController
+  constructor(signal: AbortSignalImpl) {
+    this.#signal = signal;
   }
 
   get signal(): AbortSignalImpl {
@@ -39,7 +38,7 @@ export const abortControllerIDL = defineInterface({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {
-    constructWith: [bindingContext],
+    constructWith: [AbortSignalImpl],
   }),
   members: [
     ctor(),

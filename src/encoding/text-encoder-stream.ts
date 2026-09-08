@@ -7,8 +7,8 @@ import {
 } from '../web-idl/projection';
 import { createArrayBufferView } from '../web-idl/buffer-source';
 import {
-  createTransformStream, enqueueTransformStream, GenericTransformStreamMixin,
-  type ReadableStreamImpl, type TransformStreamImpl, type WritableStreamImpl,
+  GenericTransformStreamMixin, internalStreamSetup, TransformStreamImpl,
+  type ReadableStreamImpl, type WritableStreamImpl,
 } from '../streams/index';
 
 /*
@@ -28,17 +28,17 @@ export class TextEncoderStreamImpl {
   // SPEC_MISMATCH: TextEncoderStream() -> TextEncoderStream
   constructor(context: BindingContext) {
     this.#context = context;
-    const transform: TransformStreamImpl = createTransformStream(
-      context,
+    const transform = new TransformStreamImpl(context, internalStreamSetup);
+    transform.setUp(
       (chunk) => {
         this.#encodeAndEnqueue(
           context.convert(chunk, idlType.DOMString) as string,
-          (value) => enqueueTransformStream(transform, value),
+          (value) => transform.enqueue(value),
         );
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        enqueueTransformStream(transform, this.#encode('\uFFFD'));
+        transform.enqueue(this.#encode('\uFFFD'));
         this.#leadingSurrogate = '';
       },
     );

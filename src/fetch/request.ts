@@ -3,10 +3,10 @@ import type { Origin } from '../url/origin';
 import { serializeURL, type URLRecord } from '../url/url';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
-  defineTypedef, dictMember, emptyDictionary, idlType, impl, invokeWith, nullable,
+  defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/declaration/index';
-import { bind, bindingContext, type BindingContext } from '../web-idl/projection';
+import { bind } from '../web-idl/projection';
 import { BodyMixin, type BodyInitValue, type BodyRecord } from './body';
 import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
 
@@ -152,9 +152,9 @@ export class RequestImpl {
   // Internal allocation from a request, guard, and DOM-owned signal.
   // Author RequestInfo/RequestInit processing belongs to the deferred constructor.
   // SPEC_MISMATCH: create a Request object(request, guard, signal, realm) -> Request
-  constructor(context: BindingContext, request: RequestRecord, guard: HeadersGuard, signal: object) {
+  constructor(request: RequestRecord, guard: HeadersGuard, signal: object) {
     this.#request = request;
-    this.#headers = context.construct(HeadersImpl, request.headerList, guard);
+    this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
     this.#bodyMixin = new BodyMixin(request);
   }
@@ -183,19 +183,19 @@ export class RequestImpl {
   get signal(): object { return this.#signal; }
   get duplex(): RequestDuplex { return 'half'; }
 
-  clone(_context: BindingContext): RequestImpl {
+  clone(): RequestImpl {
     throw new Error('Request.clone and dependent abort signals are not implemented');
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(context: BindingContext): object { return this.#bodyMixin.arrayBuffer(context); }
-  blob(context: BindingContext): object { return this.#bodyMixin.blob(context); }
-  bytes(context: BindingContext): object { return this.#bodyMixin.bytes(context); }
-  formData(context: BindingContext): object { return this.#bodyMixin.formData(context); }
-  json(context: BindingContext): object { return this.#bodyMixin.json(context); }
-  text(context: BindingContext): object { return this.#bodyMixin.text(context); }
-  textStream(context: BindingContext): ReadableStreamImpl { return this.#bodyMixin.textStream(context); }
+  arrayBuffer(): object { return this.#bodyMixin.arrayBuffer(); }
+  blob(): object { return this.#bodyMixin.blob(); }
+  bytes(): object { return this.#bodyMixin.bytes(); }
+  formData(): object { return this.#bodyMixin.formData(); }
+  json(): object { return this.#bodyMixin.json(); }
+  text(): object { return this.#bodyMixin.text(); }
+  textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
   static getRequest(request: RequestImpl): RequestRecord { return request.#request; }
 }
@@ -264,7 +264,7 @@ export const requestInitIDL = defineDictionary({
 export const requestIDL = defineInterface({
   name: 'Request',
   exposed: ['Window', 'Worker'],
-  implementation: impl(RequestImpl, { constructWith: [bindingContext] }),
+  implementation: impl(RequestImpl),
   members: [
     ctor([
       arg('input', reference('RequestInfo')),
@@ -286,7 +286,7 @@ export const requestIDL = defineInterface({
     roAttr('isHistoryNavigation', idlType.boolean),
     roAttr('signal', reference('AbortSignal')),
     roAttr('duplex', reference('RequestDuplex')),
-    op('clone', reference('Request'), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    op('clone', reference('Request'), [], xattr('NewObject')),
   ],
 });
 

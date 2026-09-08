@@ -10,10 +10,10 @@ import {
 import type { URLSearchParamsImpl } from '../url/api';
 import { createArrayBufferView, getBufferSourceCopy, getBufferTypeName } from '../web-idl/buffer-source';
 import {
-  defineInterfaceMixin, defineTypedef, idlType, invokeWith, nullable, op,
+  defineInterfaceMixin, defineTypedef, idlType, nullable, op,
   promise, reference, roAttr, union, xattr,
 } from '../web-idl/declaration/index';
-import { bindingContext, type BindingContext } from '../web-idl/projection';
+import type { BindingContext } from '../web-idl/projection';
 import type { FormDataImpl } from '../xhr/index';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';
@@ -187,31 +187,31 @@ export class BodyMixin {
   }
 
   // Promise-valued operations return Web IDL promise records, as Blob does.
-  arrayBuffer(_context: BindingContext): object {
+  arrayBuffer(): object {
     throw new Error('Body.arrayBuffer is not implemented');
   }
 
-  blob(_context: BindingContext): object {
+  blob(): object {
     throw new Error('Body.blob is not implemented');
   }
 
-  bytes(_context: BindingContext): object {
+  bytes(): object {
     throw new Error('Body.bytes is not implemented');
   }
 
-  formData(_context: BindingContext): object {
+  formData(): object {
     throw new Error('Body.formData is not implemented');
   }
 
-  json(_context: BindingContext): object {
+  json(): object {
     throw new Error('Body.json is not implemented');
   }
 
-  text(_context: BindingContext): object {
+  text(): object {
     throw new Error('Body.text is not implemented');
   }
 
-  textStream(_context: BindingContext): ReadableStreamImpl {
+  textStream(): ReadableStreamImpl {
     throw new Error('Body.textStream is not implemented');
   }
 
@@ -245,12 +245,12 @@ export const bodyIDL = defineInterfaceMixin({
   members: [
     roAttr('body', nullable(reference('ReadableStream'))),
     roAttr('bodyUsed', idlType.boolean),
-    op('arrayBuffer', promise(idlType.ArrayBuffer), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('blob', promise(reference('Blob')), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('bytes', promise(idlType.Uint8Array), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('formData', promise(reference('FormData')), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('json', promise(idlType.any), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('text', promise(idlType.USVString), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
-    op('textStream', reference('ReadableStream'), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    op('arrayBuffer', promise(idlType.ArrayBuffer), [], xattr('NewObject')),
+    op('blob', promise(reference('Blob')), [], xattr('NewObject')),
+    op('bytes', promise(idlType.Uint8Array), [], xattr('NewObject')),
+    op('formData', promise(reference('FormData')), [], xattr('NewObject')),
+    op('json', promise(idlType.any), [], xattr('NewObject')),
+    op('text', promise(idlType.USVString), [], xattr('NewObject')),
+    op('textStream', reference('ReadableStream'), [], xattr('NewObject')),
   ],
 });

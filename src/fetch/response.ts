@@ -2,10 +2,10 @@ import type { ReadableStreamImpl } from '../streams/index';
 import { serializeURL, type URLRecord } from '../url/url';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
-  dictMember, emptyDictionary, idlType, impl, integer, invokeWith, nullable, op, reference,
+  dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
   roAttr, xattr,
 } from '../web-idl/declaration/index';
-import { bind, bindingContext, type BindingContext } from '../web-idl/projection';
+import { bind } from '../web-idl/projection';
 import { BodyMixin, type BodyRecord } from './body';
 import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
@@ -75,21 +75,21 @@ export class ResponseImpl {
 
   // Internal allocation from an existing response and header guard.
   // SPEC_MISMATCH: create a Response object(response, guard, realm) -> Response
-  constructor(context: BindingContext, response: ResponseRecord, guard: HeadersGuard) {
+  constructor(response: ResponseRecord, guard: HeadersGuard) {
     this.#response = response;
-    this.#headers = context.construct(HeadersImpl, response.headerList, guard);
+    this.#headers = new HeadersImpl(response.headerList, guard);
     this.#bodyMixin = new BodyMixin(response);
   }
 
-  static error(_context: BindingContext): ResponseImpl {
+  static error(): ResponseImpl {
     throw new Error('Response.error is not implemented');
   }
 
-  static redirect(_context: BindingContext, _url: string, _status: number): ResponseImpl {
+  static redirect(_url: string, _status: number): ResponseImpl {
     throw new Error('Response.redirect is not implemented');
   }
 
-  static json(_context: BindingContext, _data: unknown, _init: ResponseInitRecord): ResponseImpl {
+  static json(_data: unknown, _init: ResponseInitRecord): ResponseImpl {
     throw new Error('Response.json is not implemented');
   }
 
@@ -101,19 +101,19 @@ export class ResponseImpl {
   get statusText(): string { return this.#response.statusMessage; }
   get headers(): HeadersImpl { return this.#headers; }
 
-  clone(_context: BindingContext): ResponseImpl {
+  clone(): ResponseImpl {
     throw new Error('Response.clone is not implemented');
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(context: BindingContext): object { return this.#bodyMixin.arrayBuffer(context); }
-  blob(context: BindingContext): object { return this.#bodyMixin.blob(context); }
-  bytes(context: BindingContext): object { return this.#bodyMixin.bytes(context); }
-  formData(context: BindingContext): object { return this.#bodyMixin.formData(context); }
-  json(context: BindingContext): object { return this.#bodyMixin.json(context); }
-  text(context: BindingContext): object { return this.#bodyMixin.text(context); }
-  textStream(context: BindingContext): ReadableStreamImpl { return this.#bodyMixin.textStream(context); }
+  arrayBuffer(): object { return this.#bodyMixin.arrayBuffer(); }
+  blob(): object { return this.#bodyMixin.blob(); }
+  bytes(): object { return this.#bodyMixin.bytes(); }
+  formData(): object { return this.#bodyMixin.formData(); }
+  json(): object { return this.#bodyMixin.json(); }
+  text(): object { return this.#bodyMixin.text(); }
+  textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
   static getResponse(response: ResponseImpl): ResponseRecord { return response.#response; }
 }
@@ -160,21 +160,21 @@ export const responseTypeIDL = defineEnumeration({
 export const responseIDL = defineInterface({
   name: 'Response',
   exposed: ['Window', 'Worker'],
-  implementation: impl(ResponseImpl, { constructWith: [bindingContext] }),
+  implementation: impl(ResponseImpl),
   members: [
     ctor([
       arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),
       arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
     ], bind({ invoke() { throw new Error('Response construction from BodyInit is not implemented'); } })),
-    op('error', reference('Response'), [], { static: true, ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    op('error', reference('Response'), [], { static: true, ...xattr('NewObject') }),
     op('redirect', reference('Response'), [
       arg('url', idlType.USVString),
       arg('status', idlType.unsignedShort, { optional: true, default: integer(302) }),
-    ], { static: true, ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    ], { static: true, ...xattr('NewObject') }),
     op('json', reference('Response'), [
       arg('data', idlType.any),
       arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
-    ], { static: true, ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    ], { static: true, ...xattr('NewObject') }),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),
     roAttr('redirected', idlType.boolean),
@@ -182,7 +182,7 @@ export const responseIDL = defineInterface({
     roAttr('ok', idlType.boolean),
     roAttr('statusText', idlType.ByteString),
     roAttr('headers', reference('Headers'), xattr('SameObject')),
-    op('clone', reference('Response'), [], { ...invokeWith(bindingContext), ...xattr('NewObject') }),
+    op('clone', reference('Response'), [], xattr('NewObject')),
   ],
 });
 

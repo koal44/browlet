@@ -47,14 +47,14 @@ export {
 } from './definition';
 export {
   atArg, callback, constructWith, contextValue, impl, indexedGetter,
-  invokeWith, namedGetter, resolveArgs,
+  invokeWith, namedGetter, newBufferResult, resolveArgs,
 } from './binding';
 export type {
   ArgumentBinding, ArgumentInjectionBinding, CallbackExceptionBehavior,
   ContextValue,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
   ImplementationDeclaration, ImplementationOptions, LegacyGetterBinding,
-  LegacyGetterHooks, PositionedArgument,
+  LegacyGetterHooks, NewBufferResultBinding, PositionedArgument,
 } from './binding';
 export type {
   AnnotatedType,

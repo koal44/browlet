@@ -34,15 +34,88 @@ describe('Encoding projection', () => {
       .toThrow(requireFunction(window, 'TypeError'));
   });
 
-  it('throws invalid labels in the relevant realm', () => {
-    const window = createWindow();
+  it('throws decoding errors in the method realm when decode is borrowed', () => {
+    const receiverWindow = createWindow();
+    const methodWindow = createWindow();
+    const decoder = Reflect.construct(
+      requireFunction(receiverWindow, 'TextDecoder'),
+      ['utf-8', { fatal: true }],
+    ) as object;
+    const decode = Reflect.get(
+      requireFunction(methodWindow, 'TextDecoder').prototype,
+      'decode',
+    ) as CallableFunction;
+
     expect(() => {
-      Reflect.construct(
-        requireFunction(window, 'TextDecoder'),
-        ['not-an-encoding'],
-      );
-    }).toThrow(requireFunction(window, 'RangeError'));
+      Reflect.apply(decode, decoder, [Uint8Array.of(0xFF)]);
+    }).toThrow(requireFunction(methodWindow, 'TypeError'));
   });
+
+  it.each(['TextDecoder', 'TextDecoderStream'])(
+    'throws invalid %s labels in the constructor realm',
+    (name) => {
+      const window = createWindow();
+      expect(() => {
+        Reflect.construct(requireFunction(window, name), ['not-an-encoding']);
+      }).toThrow(requireFunction(window, 'RangeError'));
+    },
+  );
+
+  it.each(['TextDecoder', 'TextDecoderStream'])(
+    'preserves author exceptions during %s argument conversion',
+    (name) => {
+      const window = createWindow();
+      const labelError = new RangeError('label conversion');
+      const optionsError = new TypeError('options conversion');
+      const cases = [
+        { args: [{ toString() { throw labelError; } }], reason: labelError },
+        {
+          args: ['utf-8', { get fatal() { throw optionsError; } }],
+          reason: optionsError,
+        },
+      ];
+
+      for (const { args, reason } of cases) {
+        let caught: unknown;
+        try {
+          Reflect.construct(requireFunction(window, name), args);
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBe(reason);
+      }
+    },
+  );
+
+  it.each(['write', 'flush'])(
+    'shares one realm-owned decoder error across stream rejections during %s',
+    async (phase) => {
+      const { window, reader, writer } = createDecoderStream({ fatal: true });
+      const read = observeBrowletPromise(
+        window, call(reader, 'read') as Promise<unknown>,
+      ).catch((reason: unknown) => reason);
+      const write = observeBrowletPromise(
+        window,
+        call(writer, 'write', [
+          Uint8Array.of(phase === 'write' ? 0xFF : 0xC2),
+        ]) as Promise<unknown>,
+      ).catch((reason: unknown) => reason);
+      performTestMicrotaskCheckpoint(window);
+
+      let completion = write;
+      if (phase === 'flush') {
+        await expect(write).resolves.toBeUndefined();
+        completion = observeBrowletPromise(
+          window, call(writer, 'close') as Promise<unknown>,
+        ).catch((reason: unknown) => reason);
+        performTestMicrotaskCheckpoint(window);
+      }
+
+      const reason = await read;
+      expect(reason).toBeInstanceOf(requireFunction(window, 'TypeError'));
+      await expect(completion).resolves.toBe(reason);
+    },
+  );
 
   it('creates realm-owned encoded bytes and writes into a destination', () => {
     const window = createWindow();
@@ -62,20 +135,21 @@ describe('Encoding projection', () => {
     expect(Array.from(destination)).toEqual([65, 240, 159, 152, 128]);
   });
 
+  it('keeps encoded bytes in the receiver realm when encode is borrowed', () => {
+    const receiverWindow = createWindow();
+    const functionWindow = createWindow();
+    const encoder = Reflect.construct(requireFunction(receiverWindow, 'TextEncoder'), []) as object;
+    const encode = Reflect.get(requireFunction(functionWindow, 'TextEncoder').prototype, 'encode') as CallableFunction;
+    const bytes = Reflect.apply(encode, encoder, ['A\uD800']) as Uint8Array;
+
+    expect(bytes).toBeInstanceOf(requireFunction(receiverWindow, 'Uint8Array'));
+    expect(bytes).not.toBeInstanceOf(requireFunction(functionWindow, 'Uint8Array'));
+    expect(Array.from(bytes)).toEqual([65, 239, 191, 189]);
+    expect(Reflect.apply(encode, encoder, ['A\uD800'])).not.toBe(bytes);
+  });
+
   it('decodes through Browlet Transform Streams', async () => {
-    const window = createWindow();
-    const decoder = Reflect.construct(
-      requireFunction(window, 'TextDecoderStream'),
-      [],
-    ) as object;
-    const writer = call(
-      requireObject(decoder, 'writable'),
-      'getWriter',
-    ) as object;
-    const reader = call(
-      requireObject(decoder, 'readable'),
-      'getReader',
-    ) as object;
+    const { window, reader, writer } = createDecoderStream();
     const read = observeBrowletPromise(
       window,
       call(reader, 'read') as Promise<unknown>,
@@ -154,6 +228,16 @@ describe('Encoding projection', () => {
 
 function createWindow(): Window {
   return new Browlet({ route: () => '' }).window;
+}
+
+function createDecoderStream(options: TextDecoderOptions = {}) {
+  const window = createWindow();
+  const decoder = Reflect.construct(
+    requireFunction(window, 'TextDecoderStream'), ['utf-8', options],
+  ) as object;
+  const writer = call(requireObject(decoder, 'writable'), 'getWriter') as object;
+  const reader = call(requireObject(decoder, 'readable'), 'getReader') as object;
+  return { window, reader, writer };
 }
 
 function call(

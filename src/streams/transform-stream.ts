@@ -6,14 +6,18 @@ import {
 import {
   bindingContext, type BindingContext,
 } from '../web-idl/projection';
-import type { StreamPromise } from './promise';
+import { runPromiseAlgorithm, type StreamPromise } from './promise';
 import {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategy,
 } from './queuing-strategy';
 import type { ReadableStreamImpl } from './readable-stream';
 import {
   initializeTransformStream,
+  setUpTransformStreamDefaultController,
   setUpTransformStreamDefaultControllerFromTransformer,
+  transformStreamDefaultControllerEnqueue,
+  transformStreamDefaultControllerError,
+  transformStreamDefaultControllerTerminate,
 } from './transform-stream-operations';
 import { TransformStreamDefaultControllerImpl } from './transform-stream-default-controller';
 import type { WritableStreamImpl } from './writable-stream';
@@ -36,6 +40,7 @@ export class TransformStreamImpl {
       transformerObject,
       reference('Transformer'),
     ) as Transformer;
+
     if ('readableType' in transformerDictionary) {
       throw new context.realm.intrinsics.rangeError(
         'Invalid readableType specified',
@@ -88,12 +93,65 @@ export class TransformStreamImpl {
     context.resolvePromise(startPromise, startResult);
   }
 
+  /** Streams §9.3, create an identity transform stream. */
+  // SPEC_MISMATCH: create an identity TransformStream() -> TransformStream
+  static createIdentity(context: BindingContext): TransformStreamImpl {
+    const stream = new TransformStreamImpl(context, internalStreamSetup);
+    stream.setUp((chunk) => stream.enqueue(chunk));
+    return stream;
+  }
+
   get readable(): ReadableStreamImpl {
     return requireStateMember(this.state.readable, 'readable');
   }
 
   get writable(): WritableStreamImpl {
     return requireStateMember(this.state.writable, 'writable');
+  }
+
+  /** Streams §9.3, set up a newly-created transform stream. */
+  setUp(
+    transformAlgorithm: (chunk: unknown) => unknown,
+    flushAlgorithm?: () => unknown,
+    cancelAlgorithm?: (reason: unknown) => unknown,
+  ): void {
+    const { context } = this;
+    initializeTransformStream(
+      this,
+      context.createResolvedPromise(undefined, idlType.undefined),
+      1,
+      () => 1,
+      0,
+      () => 1,
+    );
+    setUpTransformStreamDefaultController(
+      this,
+      context.construct(TransformStreamDefaultControllerImpl),
+      (chunk) => runPromiseAlgorithm(context, () => transformAlgorithm(chunk)),
+      () => runPromiseAlgorithm(context, () => flushAlgorithm?.()),
+      (reason) => runPromiseAlgorithm(context, () => cancelAlgorithm?.(reason)),
+    );
+  }
+
+  /** Streams §9.3, enqueue into a stream initialized by setUp. */
+  enqueue(chunk: unknown): void {
+    transformStreamDefaultControllerEnqueue(
+      requireStateMember(this.state.controller, 'controller'), chunk,
+    );
+  }
+
+  /** Streams §9.3, terminate a stream initialized by setUp. */
+  terminate(): void {
+    transformStreamDefaultControllerTerminate(
+      requireStateMember(this.state.controller, 'controller'),
+    );
+  }
+
+  /** Streams §9.3, error a stream initialized by setUp. */
+  error(reason: unknown): void {
+    transformStreamDefaultControllerError(
+      requireStateMember(this.state.controller, 'controller'), reason,
+    );
   }
 }
 

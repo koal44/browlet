@@ -6,8 +6,8 @@ import {
   bindingContext, type BindingContext,
 } from '../web-idl/projection';
 import {
-  createTransformStream, enqueueTransformStream, GenericTransformStreamMixin,
-  type ReadableStreamImpl, type TransformStreamImpl, type WritableStreamImpl,
+  GenericTransformStreamMixin, internalStreamSetup, TransformStreamImpl,
+  type ReadableStreamImpl, type WritableStreamImpl,
 } from '../streams/index';
 import {
   TextDecoderCommonMixin, type TextDecoderOptions,
@@ -31,24 +31,20 @@ export class TextDecoderStreamImpl {
     label: string,
     options: TextDecoderOptions,
   ) {
-    this.#common = new TextDecoderCommonMixin(
-      context,
-      label,
-      options,
-    );
-    const transform: TransformStreamImpl = createTransformStream(
-      context,
+    this.#common = new TextDecoderCommonMixin(label, options);
+    const transform = new TransformStreamImpl(context, internalStreamSetup);
+    transform.setUp(
       (chunk) => {
         const input = context.convert(
           chunk,
           reference('AllowSharedBufferSource'),
         ) as object;
         const output = this.#common.decode(input, true);
-        if (output !== '') enqueueTransformStream(transform, output);
+        if (output !== '') transform.enqueue(output);
       },
       () => {
         const output = this.#common.decode();
-        if (output !== '') enqueueTransformStream(transform, output);
+        if (output !== '') transform.enqueue(output);
       },
     );
     this.#generic = new GenericTransformStreamMixin(
