@@ -2,18 +2,9 @@ import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
 import { describe, expect, it } from 'vitest';
 
 import { parseMultipartFormData } from '../../../src/fetch/multipart/parse';
-import {
-  blobIDL, fileIDLDefinitions, FileImpl, nativeLineEnding, readBlobBytes,
-} from '../../../src/file/index';
+import { FileImpl, readBlobBytes } from '../../../src/file/index';
 import { parseMIMEType } from '../../../src/mime/index';
-import { createBindings } from '../../../src/web-idl/index';
-import { TestRealm } from '../../web-idl/test-realm';
 
-const bindings = createBindings(fileIDLDefinitions, {
-  capabilities: [nativeLineEnding.for(blobIDL, '\n')],
-});
-const realm = new TestRealm();
-const binding = bindings.register(realm);
 const mimeType = parseMIMEType('multipart/form-data; boundary=Boundary')!;
 
 describe('Fetch multipart/form-data parsing', () => {
@@ -32,7 +23,7 @@ describe('Fetch multipart/form-data parsing', () => {
       '--Boundary\r\nContent-Disposition: form-data; name="file"; filename="日本.txt"\r\n\r\n' +
       '\ufeffcontent\r\n--Boundary--\r\n',
     );
-    const entries = parseMultipartFormData(bytes, mimeType, binding.context);
+    const entries = parseMultipartFormData(bytes, mimeType);
     expect(entries[0]).toEqual(['é💩', '\ufeff日本']);
     const file = entries[1]![1] as FileImpl;
     expect(file.name).toBe('日本.txt');
@@ -49,12 +40,12 @@ describe('Fetch multipart/form-data parsing', () => {
   });
 
   it('keeps binary file bytes and copies them out of the input buffer', async () => {
-    const bytes = isomorphicEncode(part(
+    const bytes = Uint8Array.from(isomorphicEncode(part(
       'Content-Disposition: form-data; name="file"; filename="a.bin"\r\n' +
       'Content-Type: Application/Octet-Stream',
       '\0\xff\r\n\x80\n',
-    ));
-    const [name, value] = parseMultipartFormData(bytes, mimeType, binding.context)[0]!;
+    )));
+    const [name, value] = parseMultipartFormData(bytes, mimeType)[0]!;
     expect(name).toBe('file');
     expect(value).toBeInstanceOf(FileImpl);
     const file = value as FileImpl;
@@ -125,17 +116,6 @@ describe('Fetch multipart/form-data parsing', () => {
       .toEqual([['f', 'a'], ['f', 'b']]);
     expect(entries[0]![1]).not.toBe(entries[1]![1]);
   });
-
-  it('retains the File creation realm when another realm first projects it', () => {
-    const [, file] = parse(part(
-      'Content-Disposition: form-data; name=f; filename=a', 'bytes',
-    ))[0]!;
-    const otherRealm = new TestRealm();
-    const otherBinding = bindings.register(otherRealm);
-    const object = otherBinding.context.project(FileImpl, file as FileImpl);
-    expect(bindings.getRealm(object)).toBe(realm);
-    expect(binding.context.project(FileImpl, file as FileImpl)).toBe(object);
-  });
 });
 
 describe('RFC 2046 multipart framing', () => {
@@ -163,11 +143,11 @@ describe('RFC 2046 multipart framing', () => {
 
   it('uses the case-sensitive boundary from an already parsed MIME type', () => {
     const type = parseMIMEType('Multipart/Form-Data; boundary="B: a"')!;
-    const bytes = isomorphicEncode('--B: a--\r\n');
-    expect(parseMultipartFormData(bytes, type, binding.context)).toEqual([]);
+    const bytes = Uint8Array.from(isomorphicEncode('--B: a--\r\n'));
+    expect(parseMultipartFormData(bytes, type)).toEqual([]);
     expect(() => parseMultipartFormData(bytes, {
       ...type, parameters: new Map([['boundary', 'b: a']]),
-    }, binding.context)).toThrow(TypeError);
+    })).toThrow(TypeError);
   });
 
   it.each([
@@ -217,14 +197,14 @@ describe('RFC 2046 multipart framing', () => {
         ...mimeType,
         parameters: new Map(boundary === undefined ? [] : [['boundary', boundary]]),
       };
-      expect(() => parseMultipartFormData(new Uint8Array(), type, binding.context))
+      expect(() => parseMultipartFormData(new Uint8Array(), type))
         .toThrow(TypeError);
     },
   );
 });
 
 function parse(body: string) {
-  return parseMultipartFormData(isomorphicEncode(body), mimeType, binding.context);
+  return parseMultipartFormData(Uint8Array.from(isomorphicEncode(body)), mimeType);
 }
 
 function part(headers: string, body: string): string {

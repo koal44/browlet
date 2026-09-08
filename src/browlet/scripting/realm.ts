@@ -1,4 +1,4 @@
-import { NodeRealm, nodeRuntime, type NodeRealmOptions } from '../../js-engine/index';
+import { NodeRealm, nodeRuntime, type GlobalObject, type NodeRealmOptions } from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
@@ -175,7 +175,7 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
 
   static setGlobalObjects(
     realm: Realm,
-    globalObject: object,
+    globalObject: GlobalObject,
     globalThis: object,
     windowImplementation = WindowImpl.is(globalObject) ? globalObject : undefined,
   ): void {
@@ -247,8 +247,8 @@ export type JavaScriptExecutionContext = {
 };
 
 export type RealmCustomizations = {
-  createGlobalObject(realm: Realm): object;
-  createGlobalThisValue?(realm: Realm, globalObject: object): object;
+  createGlobalObject(realm: Realm): GlobalObject;
+  createGlobalThisValue?(realm: Realm, globalObject: GlobalObject): object;
 };
 
 export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;

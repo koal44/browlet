@@ -1,6 +1,6 @@
 export type JavaScriptRealm = {
-  readonly global: object;
-  readonly globalObject: object;
+  readonly global: GlobalObject;
+  readonly globalObject: GlobalObject;
   readonly globalThis: object;
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime;
@@ -14,6 +14,9 @@ export type JavaScriptRealm = {
 
   evaluate(source: string, filename: string, lineOffset?: number): unknown;
 };
+
+/** A realm's global object; no additional property shape is required. */
+export type GlobalObject = object;
 
 export type JavaScriptRuntime = {
   readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;

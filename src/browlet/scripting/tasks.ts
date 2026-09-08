@@ -1,3 +1,4 @@
+import type { GlobalObject } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import {
   createTaskSource, EventLoop, queueTask, type TaskCreationOptions,
@@ -32,7 +33,7 @@ export const renderingTaskSource =
  * https://html.spec.whatwg.org/multipage/webappapis.html#queuing-tasks
  */
 export function associateGlobalTaskDestination(
-  global: object,
+  global: GlobalObject,
   destination: GlobalTaskDestination,
 ): void {
   globalTaskDestinations.set(global, destination);
@@ -40,7 +41,7 @@ export function associateGlobalTaskDestination(
 
 export function queueGlobalTask(
   source: TaskSource,
-  global: object,
+  global: GlobalObject,
   steps: () => void,
   options: TaskCreationOptions = {},
 ): QueuedTaskHandle {
@@ -70,4 +71,4 @@ export type GlobalTaskDestination = {
 };
 
 const globalTaskDestinations =
-  new WeakMap<object, GlobalTaskDestination>();
+  new WeakMap<GlobalObject, GlobalTaskDestination>();

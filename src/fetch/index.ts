@@ -1,2 +1,2 @@
 export type { FetchStructuredData } from './controller';
-export type { QueueGlobalFetchTask } from './tasks';
+export type { FetchTaskScheduling, QueueGlobalFetchTask } from './tasks';

@@ -5,20 +5,19 @@ import { FileImpl } from '../../file/index';
 import { toScalarValueString } from '../../infra/index';
 import type { MIMEType } from '../../mime/index';
 import { TextCursor } from '../../infra/text-cursor';
-import type { BindingContext } from '../../web-idl/projection';
 import type { FormDataEntry } from '../../xhr/index';
 
 /*
  * Fetch §5.3, formData() multipart branch; RFC 7578 and RFC 2046 §5.1.1.
  * https://fetch.spec.whatwg.org/#dom-body-formdata
  *
- * Parse a complete body into entries. File allocation records the supplied
- * realm; Fetch's Body integration owns FormData creation and rejection.
+ * Parse a complete body into entries with realm-neutral File implementations.
+ * Fetch's Body integration owns FormData creation, projection, and rejection.
  */
+// SPEC_MISMATCH: Body.formData() -> Promise<FormData>
 export function parseMultipartFormData(
-  bytes: Uint8Array,
+  bytes: Uint8Array<ArrayBuffer>,
   mimeType: MIMEType,
-  context: BindingContext,
 ): FormDataEntry[] {
   const boundary = mimeType.parameters.get('boundary');
   if (
@@ -65,7 +64,7 @@ export function parseMultipartFormData(
     const body = bytes.subarray(headerEnd + 4, nextDelimiter);
     const value = filename === undefined
       ? toScalarValueString(utf8DecodeWithoutBOM(body))
-      : context.construct(FileImpl, [body], filename, {
+      : new FileImpl([body], filename, {
         type: contentType ?? 'text/plain',
       });
     entries.push([toScalarValueString(name), value]);

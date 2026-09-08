@@ -232,8 +232,8 @@ export function isRequestBodyHeaderName(name: string): boolean {
 }
 
 /**
- * Fetch §2.2.2 — extract header list values. The field's consumer supplies its
- * ABNF parser and whether it permits multiple field lines. A parser returns
+ * Fetch §2.2.2 — extract header list values. The extra parser and multiplicity
+ * arguments supply the field's ABNF rules. A parser returns
  * null on failure; an absent field and a failed extraction remain distinct.
  */
 export function extractHeaderListValues<T>(
@@ -252,7 +252,10 @@ export function extractHeaderListValues<T>(
   return values;
 }
 
-/** Fetch §2.2.2 — the host supplies its default and any BiDi emulation value. */
+/**
+ * Fetch §2.2.2 — environment default User-Agent. The host supplies the default
+ * and BiDi emulation values instead of the environment settings object.
+ */
 export function getEnvironmentDefaultUserAgent(defaultValue: string, emulatedValue: string | null): string {
   return emulatedValue ?? defaultValue;
 }

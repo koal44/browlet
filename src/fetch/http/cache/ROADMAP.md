@@ -5,8 +5,8 @@ Fetch request/response records. Browlet owns configured cache instances and thei
 partitioned storage. This is distinct from the service-worker Cache API.
 
 **Status:** the reusable [HTTP cache rules](../../../http/cache/ROADMAP.md) exist.
-Integration still requires complete body retention and the transport pipeline;
-record scaffolding alone does not provide either.
+Integration still requires request/response cloning and the transport pipeline;
+the body operations alone do not provide either.
 
 ## Sources
 

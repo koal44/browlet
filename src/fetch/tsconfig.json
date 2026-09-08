@@ -14,6 +14,7 @@
     { "path": "../http" },
     { "path": "../http/struct-fields" },
     { "path": "../infra" },
+    { "path": "../js-engine" },
     { "path": "../mime" },
     { "path": "../streams" },
     { "path": "../url" },
