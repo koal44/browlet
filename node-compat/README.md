@@ -125,6 +125,15 @@ does not imply that the engine supplies them.
 
 ## Host hooks
 
+The addon also supplies `observePromise(promise, realmAnchor, onFulfilled?,
+onRejected?)` on supported bases. `realmAnchor` is a function from the observer's
+realm. Native `v8::Promise::Then` installs the reactions there. Node 26.8.1 and
+the custom engine bypass author `then`, `constructor`, and `@@species`
+properties. Node 24.19.0 still consults `constructor` and fails the new capability
+regression; the addon does not work around that older engine behavior. The
+operation returns V8's derived promise; Browlet's internal observation boundary
+discards that result.
+
 `supportsHostHooks` reports whether the addon was built with the required V8
 APIs. Official Node 24.19.0 and 26.8.1 support the existing context/queue APIs but
 return false here. Calling `setHostHooks()` on those bases throws
@@ -135,6 +144,13 @@ returns nothing. The configuration lasts until the owning Node environment
 shuts down; there is no public removal or replacement operation. One installation
 owns the isolate; another installation throws `ERR_HOST_HOOKS_INSTALLED`.
 Workers are independent.
+
+On the custom engine, `withContinuationData(data, steps)` temporarily enters saved
+continuation data to inspect it through Node's existing AsyncLocalStorage API.
+Use the Promise enqueue snapshot's `continuationData`; do not inspect or invent
+Node's internal representation. Inspection is synchronous and restores the
+previous data on return or throw. Job execution restores its own saved data
+independently, so inspection neither consumes nor runs the job.
 The names follow the five targeted ECMAScript operations in
 [Jobs and Host Operations to Enqueue Jobs](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
 
@@ -168,6 +184,12 @@ Registration and Promise-enqueue snapshots contain `current`, `entered`,
 `incumbent`, and `hostDefinedOptions`, captured before entering the host's JS.
 The first three are realm references (or null when absent). The last is an array
 of V8's opaque script metadata; the addon does not interpret Node's loader identity.
+
+Promise-enqueue snapshots also contain `continuationData`, the opaque data saved
+on that job. It can differ from the enqueuer's current continuation. Reading it
+does not enter the saved continuation. The V8 handoff uses `PromiseJob.Run()`,
+`GetContinuationData()`, and `GetContext()`; the addon retains the handle through
+the callable `job` supplied to JavaScript.
 
 `getRealm(object)` returns the stable reference for an object's creation realm.
 Each context handle also exposes `.realm`. References have a read-only `.global`

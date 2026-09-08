@@ -35,6 +35,48 @@ if (compat.supportsHostHooks === false) {
     assert.deepEqual(calls, [1, 'host', 2]);
   });
 
+  testInWorker('Promise enqueue exposes saved job data without entering its continuation', () => {
+    const queue = compat.createMicrotaskQueue();
+    const storage = new AsyncLocalStorage();
+    const jobs = [];
+    const seen = [];
+    let collecting = true;
+    compat.setHostHooks({
+      enqueuePromiseJob(job, realm, enqueue) {
+        if (!collecting) return false;
+        assert.equal(storage.getStore(), 'settler C');
+        jobs.push({ job, data: enqueue.continuationData });
+      },
+    });
+    const { promise, resolve } = Promise.withResolvers();
+    storage.run('A', () => {
+      promise.then(() => seen.push(storage.getStore()));
+      promise.then(() => seen.push(storage.getStore()));
+    });
+    storage.run('B', () => promise.then(() => seen.push(storage.getStore())));
+    storage.run('settler C', resolve);
+    collecting = false;
+    assert.equal(jobs.length, 3);
+    assert.notEqual(jobs[0].data, undefined);
+    assert.equal(jobs[0].data, jobs[1].data);
+    assert.notEqual(jobs[0].data, jobs[2].data);
+    storage.run('outside inspection', () => {
+      const failure = new Error('inspection failed');
+      assert.throws(() => compat.withContinuationData(jobs[0].data, () => {
+        assert.equal(storage.getStore(), 'A');
+        assert.equal(compat.withContinuationData(jobs[2].data, () => storage.getStore()), 'B');
+        assert.equal(storage.getStore(), 'A');
+        throw failure;
+      }), error => error === failure);
+      assert.equal(storage.getStore(), 'outside inspection');
+    });
+    global.gc();
+    for (const { job } of jobs) queue.enqueueMicrotask(job);
+    queue.runMicrotasks();
+    assert.deepEqual(seen, ['A', 'A', 'B']);
+    assert.equal(storage.getStore(), undefined);
+  });
+
   testInWorker('host hook installation returns nothing and cannot be replaced', () => {
     assert.equal(compat.supportsHostHooks, true);
     assert.throws(() => compat.setHostHooks({ unknown() {} }), /Unknown host hook/);

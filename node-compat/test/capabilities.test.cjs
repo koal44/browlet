@@ -9,6 +9,25 @@ const { Worker } = require('node:worker_threads');
 const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
 
+test('native Promise observation bypasses author properties and selects the observer queue', () => {
+  const queue = compat.createMicrotaskQueue();
+  const realm = compat.createContextHandle({ microtaskQueue: queue });
+  const anchor = compat.runInContext('Promise', realm);
+  const values = [];
+  const pending = Promise.withResolvers();
+  for (const name of ['then', 'constructor']) {
+    Object.defineProperty(pending.promise, name, {
+      get() { throw new Error(`Unexpected ${name} lookup`); },
+    });
+  }
+  compat.observePromise(pending.promise, anchor, value => values.push(value));
+  compat.observePromise(Promise.reject(17), anchor, undefined, reason => values.push(reason));
+  pending.resolve('fulfilled');
+  assert.deepEqual(values, []);
+  queue.runMicrotasks();
+  assert.deepEqual(values, [17, 'fulfilled']);
+});
+
 test('shared FIFO across realms, pending promises and host microtasks', () => {
   // Derived from Node commit a53496abb's shared-queue test. Window and
   // iframe reactions retain their distinct realm ownership.
