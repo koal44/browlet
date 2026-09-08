@@ -21,6 +21,10 @@ boundary rules in
   Semantic implementation modules remain package-private.
 - Web IDL declarations remain beside their implementation modules. The entry
   aggregates them for Browlet's bindings.
+- `TransformStreamImpl` owns the §9.3 `setUp`, `enqueue`, `error`, and
+  `terminate` instance methods, plus the `createIdentity` factory. Internal
+  callers allocate the implementation explicitly and then set it up; allocation
+  alone does not run the author-facing constructor steps.
 - Reference-implementation calls to generated `.new(globalThis)` wrappers
   must become direct implementation construction using the shared per-realm
   context. Binding projects the result only when it crosses an author-visible

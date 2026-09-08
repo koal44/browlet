@@ -5,9 +5,7 @@ import {
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
 } from '../web-idl/declaration/index';
-import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
+import { RangeError, TypeError } from '../web-idl/exceptions/simple-exception';
 
 /*
  * dictionary TextDecoderOptions {
@@ -30,17 +28,8 @@ import {
 export class TextDecoderImpl {
   readonly #common: TextDecoderCommonMixin;
 
-  // SPEC_MISMATCH: TextDecoder(label = "utf-8", options = {}) -> TextDecoder
-  constructor(
-    context: BindingContext,
-    label: string,
-    options: TextDecoderOptions,
-  ) {
-    this.#common = new TextDecoderCommonMixin(
-      context,
-      label,
-      options,
-    );
+  constructor(label: string, options: TextDecoderOptions) {
+    this.#common = new TextDecoderCommonMixin(label, options);
   }
 
   get encoding(): string {
@@ -70,21 +59,15 @@ export class TextDecoderImpl {
  *   readonly attribute boolean ignoreBOM;
  * };
  */
-/** Shared TextDecoder and TextDecoderStream semantic state. */
+/** Shared TextDecoder and TextDecoderStream state. */
 export class TextDecoderCommonMixin {
   readonly #decoder: InstanceType<typeof ExodusTextDecoder>;
-  readonly #context: BindingContext;
 
-  constructor(
-    context: BindingContext,
-    label: string,
-    options: TextDecoderOptions,
-  ) {
-    this.#context = context;
+  constructor(label: string, options: TextDecoderOptions) {
     try {
       this.#decoder = new ExodusTextDecoder(label, options);
     } catch (error) {
-      realizeEncodingError(context, error);
+      rethrowEncodingError(error);
     }
   }
 
@@ -101,13 +84,11 @@ export class TextDecoderCommonMixin {
   }
 
   decode(input?: object, stream = false): string {
+    const bytes = input === undefined ? undefined : getBufferSourceCopy(input);
     try {
-      return this.#decoder.decode(
-        input === undefined ? undefined : getBufferSourceCopy(input),
-        { stream },
-      );
+      return this.#decoder.decode(bytes, { stream });
     } catch (error) {
-      realizeEncodingError(this.#context, error);
+      rethrowEncodingError(error);
     }
   }
 }
@@ -133,9 +114,7 @@ export const textDecoderCommonIDL = defineInterfaceMixin({
 export const textDecoderIDL = defineInterface({
   name: 'TextDecoder',
   exposed: '*',
-  implementation: impl(TextDecoderImpl, {
-    constructWith: [bindingContext],
-  }),
+  implementation: impl(TextDecoderImpl),
   members: [
     ctor([
       arg('label', idlType.DOMString, {
@@ -177,15 +156,12 @@ export const textDecodeOptionsIDL = defineDictionary({
   ],
 });
 
-function realizeEncodingError(
-  context: BindingContext,
-  error: unknown,
-): never {
-  if (error instanceof RangeError) {
-    throw new context.realm.intrinsics.rangeError(error.message);
+function rethrowEncodingError(error: unknown): never {
+  if (error instanceof globalThis.RangeError) {
+    throw new RangeError(error.message);
   }
-  if (error instanceof TypeError) {
-    throw new context.realm.intrinsics.typeError(error.message);
+  if (error instanceof globalThis.TypeError) {
+    throw new TypeError(error.message);
   }
   throw error;
 }

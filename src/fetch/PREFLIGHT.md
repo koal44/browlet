@@ -228,7 +228,9 @@ byte-stream creation. Also checked the nested read-loop, callback contracts,
 GenericTransformStream getters, and immediate Fetch/File/Encoding callers.
 Fourteen new markers: six in `readable-stream-cross-spec.ts`, two each in
 `readable-byte-stream-operations.ts`, `writable-stream-cross-spec.ts`, and
-`transform-stream-cross-spec.ts`, and two at Blob's call sites. They cover
+the former `transform-stream-cross-spec.ts`, and two at Blob's call sites.
+The transform operations now live on `TransformStreamImpl`; its `setUp` method
+no longer combines allocation with setup. The audit markers cover
 allocation combined with setup and explicit Binding Contexts, byte offsets
 instead of consumed-prefix removal, captured read-loop arguments, bundled
 piping options, and write/cancel callback signatures. File API's byte-read and
@@ -252,7 +254,7 @@ Existing stubs and planned features remain with their implementation roadmaps.
 | 7 — MIME — marked | `mime-type.ts`, `resource.ts`, `sniffing.ts`, `signatures.ts`, and `pattern.ts` | MIME Sniffing's parsing, serialization, classification, and sniffing signatures; skip byte-pattern tables and algorithm internals |
 | 8 — Encoding — marked | `src/encoding/hooks.ts`, `utf-8.ts`, and TextEncoder/TextDecoder stream and non-stream adapters | Encoding's named operations and API declarations; check the adapter contract against Exodus without auditing or replacing its codecs |
 | 9 — XHR/FormData — marked | `src/xhr/form-data.ts` and `src/browlet/html/forms/entry-list.ts` | XHR §4 and HTML's create-an-entry operation, including the supplied capability and Blob/File representations; unimplemented XMLHttpRequest remains out of scope |
-| 10 — Streams used by other specs — marked | `readable-stream-cross-spec.ts`, `writable-stream-cross-spec.ts`, `transform-stream-cross-spec.ts`, and their re-exported entry points | Streams' operations for use by other specifications; inspect the immediate creation/read/pipe callers in Fetch, File, and Encoding |
+| 10 — Streams used by other specs — marked | `readable-stream-cross-spec.ts`, `writable-stream-cross-spec.ts`, the §9.3 methods on `TransformStreamImpl`, and their exported entry points | Streams' operations for use by other specifications; inspect the immediate creation/read/pipe callers in Fetch, File, and Encoding |
 
 Sources are the [local inventory](#local-reference-inventory), plus
 `whatwg-encoding/encoding.bs`, `whatwg-mimesniff/mimesniff.bs`, and

@@ -17,7 +17,8 @@ import {
 } from './callback-value';
 import {
   convertBufferSourceToIDL, convertBufferSourceToJavaScript,
-  getBufferTypeName,
+  createArrayBuffer, createArrayBufferView, createSharedArrayBuffer,
+  getBufferTypeName, type ByteSequence,
 } from './buffer-source';
 import {
   hasExtendedAttribute, type AnnotatedType, type BufferTypeName,
@@ -34,7 +35,7 @@ import {
 import { defineDataProperty } from './property';
 import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
-  includesUndefined,
+  getUnannotatedType, includesUndefined,
 } from './types';
 
 export function convertToIDL(
@@ -61,6 +62,21 @@ export function convertToJavaScript(
   context: ConversionContext,
 ): unknown {
   return convertIDLValue(value, type, context, []);
+}
+
+export function createBufferResult(
+  bytes: ByteSequence,
+  type: WebIDLType,
+  context: ConversionContext,
+): ArrayBufferLike | ArrayBufferView {
+  const resultType = getUnannotatedType(type, context.definitions);
+  if (resultType.kind !== 'simple' || !bufferTypeNames.has(resultType.name)) {
+    throw new TypeError('newBufferResult requires a buffer source return type');
+  }
+  const name = resultType.name as BufferTypeName;
+  if (name === 'ArrayBuffer') return createArrayBuffer(bytes, context.realm);
+  if (name === 'SharedArrayBuffer') return createSharedArrayBuffer(bytes, context.realm);
+  return createArrayBufferView(name, bytes, context.realm);
 }
 
 export function createSequenceFromIterable(

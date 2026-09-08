@@ -65,7 +65,7 @@ export function createSharedArrayBuffer(
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
   maxByteLength?: number,
-): object {
+): SharedArrayBuffer {
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
   if (!constructor) {
     throw new Error('The target realm has no SharedArrayBuffer intrinsic');
@@ -75,7 +75,7 @@ export function createSharedArrayBuffer(
     maxByteLength === undefined
       ? [bytes.length]
       : [bytes.length, { maxByteLength }],
-  ) as object;
+  );
   writeArrayBuffer(buffer, bytes);
   return buffer;
 }
@@ -84,7 +84,7 @@ export function createArrayBufferView(
   name: BufferViewTypeName,
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
-): object {
+): ArrayBufferView {
   const elementSize = JSEngine.getArrayBufferViewElementSize(name);
   if (name !== 'DataView' && bytes.length % elementSize !== 0) {
     throw new Error(`${name} byte length is not a multiple of ${elementSize}`);
@@ -106,7 +106,7 @@ export function createArrayBufferViewFromBuffer(
   byteLength: number | 'auto',
   arrayLength: number | 'auto' | undefined,
   realm: WebIDLRealmHost,
-): object {
+): ArrayBufferView {
   const constructor = realm.intrinsics.bufferSource.views[name];
   if (!constructor) {
     throw new Error(`The target realm has no ${name} intrinsic`);
@@ -117,7 +117,7 @@ export function createArrayBufferViewFromBuffer(
       byteLength === 'auto'
         ? [buffer, byteOffset]
         : [buffer, byteOffset, byteLength],
-    ) as object;
+    ) as ArrayBufferView;
   }
   if (arrayLength === undefined) {
     throw new Error(`${name} has no serialized array length`);
@@ -127,7 +127,7 @@ export function createArrayBufferViewFromBuffer(
     arrayLength === 'auto'
       ? [buffer, byteOffset]
       : [buffer, byteOffset, arrayLength],
-  ) as object;
+  ) as ArrayBufferView;
 }
 
 export function getBufferSourceCopy(value: object): Uint8Array {

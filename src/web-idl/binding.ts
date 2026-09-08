@@ -1,5 +1,6 @@
 import { isObject } from '../js-engine/index';
 import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
+import { getSimpleExceptionRequest } from './exceptions/simple-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,
@@ -9,9 +10,10 @@ import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
 } from './collection';
 import {
-  convertToIDL, convertToJavaScript, materializeDefaultValue,
+  convertToIDL, convertToJavaScript, createBufferResult, materializeDefaultValue,
   type ConversionContext, type HostDefinedInterface,
 } from './conversion';
+import type { ByteSequence } from './buffer-source';
 import {
   hasExtendedAttribute, type AttributeMember,
   type CallbackInterfaceDefinition, type ConstantMember,
@@ -124,6 +126,8 @@ export class RealmBinding {
     this.realm = realm;
     this.platformObjects = platformObjects;
     this.realizeException = (value) => {
+      const simple = getSimpleExceptionRequest(value);
+      if (simple) return new this.realm.intrinsics[simple.type](simple.message);
       const request = getDOMExceptionRequest(value);
       if (!request) return value;
       const DOMException_ = this.getInterfaceObject(
@@ -1338,6 +1342,13 @@ export class RealmBinding {
             throw missingImplementation(definition, `operation ${name}`);
           }
           const result = Reflect.apply(steps, object, overload.values);
+          if (overload.callable.binding && 'newBufferResult' in overload.callable.binding) {
+            return createBufferResult(
+              result as ByteSequence,
+              overload.callable.returns,
+              resultContext,
+            );
+          }
           return convertToJavaScript(
             result,
             overload.callable.returns,

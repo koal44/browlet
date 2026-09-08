@@ -26,10 +26,10 @@ Browlet has three object-model layers:
 | **Binding** | Web IDL conversion, realm selection, identity, and projection |
 | **Platform** | The realm-owned JavaScript objects visible to authors |
 
-The flow is **Implementation -> Binding -> Platform**. A Binding Context,
-cross-specification capability, Host Port, or Composition Root can supply a
-dependency to the Implementation or Binding layer, but none of them creates an
-additional object-model layer.
+The flow is **Implementation -> Binding -> Platform**. Cross-specification
+capabilities and Host Ports supply implementation dependencies at a Composition
+Root. Binding Context stays in Binding code. None of these creates an additional
+object-model layer.
 
 That distinction matters. A dependency edge explains how an existing
 implementation obtains work it does not own. It must not manufacture another
@@ -45,6 +45,8 @@ It may directly import realm-neutral algorithms.
 
 It must not:
 
+- accept or retain a Binding Context; realm handling belongs in declarations
+  and member bindings;
 - wrap or unwrap platform objects;
 - repeat author-facing conversion or overload selection;
 - call an author API in order to recover an internal primitive; or
@@ -138,7 +140,7 @@ which internal algorithms should pass around.
 ### Binding Context
 
 A Binding Context is one cohesive handle to a particular JavaScript/Web IDL realm.
-Subsystems operating in that realm share its context. It carries
+Binding code operating in that realm shares its context. It carries
 generic services whose behavior inherently depends on that realm, for example:
 
 - the realm and its intrinsics;
@@ -168,6 +170,12 @@ Binding Context.
 A Binding Context is also not a service locator for unrelated specification
 subsystems. If an operation belongs to another owner, use a cross-specification
 capability. If it reaches outside the runtime, use a Host Port.
+
+Existing implementation uses are migration work, not a pattern to extend.
+Move realm handling into declaration bindings; do not replace context with a
+realm parameter, captured context callbacks, or a renamed service bag merely
+to preserve the same coupling. Track the remaining migration in the
+[platform-object ledger](./PLATFORM-OBJECT-ARCHITECTURE.md#migration-ledger-temporary).
 
 ### Shared algorithm
 
@@ -338,8 +346,8 @@ Classify a new dependency in this order:
 2. **Is it stateless and realm-neutral?** Import a shared algorithm directly.
 3. **Is it generic engine behavior tied to a JavaScript realm or runtime?** Use
    the shared `JavaScriptRealm` or `JavaScriptRuntime` operation.
-4. **Is it Web IDL behavior tied to the current binding realm?** Use the shared
-   Binding Context.
+4. **Is it Web IDL behavior tied to the current binding realm?** Put it in the
+   declaration or member binding, using the shared Binding Context there.
 5. **Does another specification subsystem own the semantic behavior?** Import
    its narrow other-specifications entry point when it is an allowed dependency;
    otherwise define a narrow cross-specification capability.
@@ -410,9 +418,9 @@ the members independently.
 ### Miniature runtime test doubles
 
 Do not make every subsystem test reconstruct a private Web IDL runtime. Test
-realm-neutral algorithms directly; test implementations with the shared Realm
-Context and narrow capability or Host Port fakes; test projection and
-author-facing conversion through the Binding layer.
+implementations with post-conversion values and narrow capability or Host Port
+fakes; test projection, realm behavior, and author-facing conversion through
+the real Binding layer.
 
 ## Lessons from removing `StreamEnvironment`
 
@@ -444,10 +452,10 @@ The removal established a repeatable diagnosis:
   can be legitimate when the receiver and argument have distinct roles, but it
   is a strong sign that the API has failed to encode ownership or automatic
   context injection cleanly. Review it rather than normalizing the repetition.
-- **Surrogate construction dependency:** do not accept a host policy value in
-  place of the Binding Context and repair ownership later. Require the context
-  when a realm-owned implementation is created; consult transient policy such
-  as native line endings only while the operation that needs it is running.
+- **Surrogate construction dependency:** establish required early ownership at
+  the binding or composition boundary. Do not inject a policy value or another
+  service bag merely to replace Binding Context. Consult transient policy only
+  while the operation that needs it is running.
 - **Split declaration authority:** if author construction and internal
   construction repeat the same hidden realm dependencies independently, they
   will drift. Declarative implementation dependencies must govern both paths;
@@ -467,6 +475,9 @@ The successful removal sequence was:
    Platform boundary; and
 6. replace subsystem-private runtime fakes with the real shared context plus
    fakes only for the remaining narrow capabilities or Host Ports.
+
+That removed the private façade, but left Binding Context in implementations.
+The current migration moves that realm work into declaration/member bindings.
 
 ### Refactor acceptance bar
 
@@ -541,8 +552,8 @@ that separate record rather than weakening the distinction.
 
 - Test pure, realm-neutral algorithms without constructing Binding machinery.
 - Test implementation algorithms with post-conversion implementation values.
-- Use the real shared Binding Context when realm identity, promises, callbacks,
-  exceptions, or buffers are part of the behavior.
+- Exercise realm identity, promises, callbacks, exceptions, and buffers through
+  real bindings rather than injecting context into implementations for tests.
 - Fake only the narrow cross-specification capability or Host Port whose effect
   the test must control.
 - Test author coercion, overloads, realm identity, projection, and wrapper
@@ -552,8 +563,8 @@ that separate record rather than weakening the distinction.
 
 ## Controlling principle
 
-Subsystems operating in the same realm share that realm's runtime context;
-realms in one Binding World share platform-object identity. They directly import
-ordinary realm-neutral algorithms and declare only genuine cross-owner or host
+Bindings operating in the same realm share its Binding Context; realms in one
+Binding World share platform-object identity. Implementations directly import
+realm-neutral algorithms and declare only genuine cross-owner or host
 dependencies as capabilities or ports. Add another abstraction layer only when
 it has its own coherent identity, lifecycle, or policy.

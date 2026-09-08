@@ -44,10 +44,7 @@ import type { QueuingStrategySize } from './queuing-strategy';
 import { runPromiseAlgorithm, type StreamPromise } from './promise';
 import type { WritableStreamImpl } from './writable-stream';
 import { isWritableStreamLocked } from './writable-stream-operations';
-import type { TransformStreamImpl } from './transform-stream';
-import {
-  createIdentityTransformStream,
-} from './transform-stream-cross-spec';
+import { TransformStreamImpl } from './transform-stream';
 
 /** Streams §9.1, create and set up a default readable stream. */
 // SPEC_MISMATCH: ReadableStream.set up(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
@@ -355,7 +352,7 @@ export function createReadableStreamProxy(
 ): ReadableStreamImpl {
   return pipeReadableStreamThrough(
     stream,
-    createIdentityTransformStream(ReadableStreamImpl.getContext(stream)),
+    TransformStreamImpl.createIdentity(ReadableStreamImpl.getContext(stream)),
   );
 }
 

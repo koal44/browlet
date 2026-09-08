@@ -9,6 +9,8 @@ import {
   getReadableStreamReader, readReadableStreamChunk, releaseReadableStreamReader,
 } from '../../src/streams/index';
 import { parseURL } from '../../src/url/url';
+import type { BindingContext } from '../../src/web-idl/projection';
+import { TestRealm } from '../web-idl/test-realm';
 import { createRecordFixture, createRequestRecord } from './record-fixture';
 
 describe('Fetch request and response records', () => {
@@ -107,7 +109,7 @@ describe('Fetch record/API sharing', () => {
     expect(request.body).toBe(record.body.stream);
   });
 
-  it('keeps the response view live and associates Headers with the allocation realm', () => {
+  it('keeps the response view live', () => {
     const fixture = createRecordFixture();
     const record = new ResponseRecord();
     const response = fixture.createResponse(record, 'immutable');
@@ -115,7 +117,6 @@ describe('Fetch record/API sharing', () => {
     expect(response.headers.headerList).toBe(record.headerList);
     expect(response.headers.guard).toBe('immutable');
     expect(fixture.bindings.getRealm(response)).toBe(fixture.realm);
-    expect(fixture.bindings.getRealm(response.headers)).toBe(fixture.realm);
     record.status = 404;
     record.statusMessage = 'Not Found';
     record.urlList.push(createRequestRecord().url, createRequestRecord('https://example.test/end#hidden').url);
@@ -125,6 +126,28 @@ describe('Fetch record/API sharing', () => {
     expect(response.redirected).toBe(true);
     expect(response.url).toBe('https://example.test/end');
     expect(response.body).toBeNull();
+  });
+
+  it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
+    const fixture = createRecordFixture();
+    const foreignRealm = new TestRealm();
+    const foreign = fixture.bindings.register(foreignRealm);
+    const createObject = (context: BindingContext) => name === 'Request'
+      ? context.project(RequestImpl, context.construct(RequestImpl, createRequestRecord(), 'request', {}))
+      : context.project(ResponseImpl, context.construct(ResponseImpl, new ResponseRecord(), 'response'));
+    const receiver = createObject(fixture.context);
+    const foreignReceiver = createObject(foreign.context);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowing the getter is the behavior under test.
+    const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreignReceiver), 'headers')?.get;
+    if (!getter) throw new Error('Missing Headers getter');
+
+    // The borrowed getter is the first path to expose the receiver's Headers.
+    const headers = Reflect.apply(getter, receiver, []) as object;
+    expect(fixture.bindings.getRealm(headers)).toBe(fixture.realm);
+    expect(Reflect.get(receiver, 'headers')).toBe(headers);
+    const foreignHeaders = Reflect.apply(getter, foreignReceiver, []) as object;
+    expect(fixture.bindings.getRealm(foreignHeaders)).toBe(foreignRealm);
+    expect(foreignHeaders).not.toBe(headers);
   });
 
   it('reads replacement bodies and stream state through the same mixin', () => {

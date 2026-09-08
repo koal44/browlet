@@ -16,7 +16,8 @@ import {
 import type {
   ArgumentInjectionBinding, CallbackExceptionBehavior, ContextValue,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
-  LegacyGetterBinding, LegacyGetterHooks, PositionedArgument,
+  LegacyGetterBinding, LegacyGetterHooks, NewBufferResultBinding,
+  PositionedArgument,
 } from './declaration/binding';
 import type {
   AsyncIteratorSteps, AttributeSteps, ConstructorSteps,
@@ -197,6 +198,7 @@ type OperationBindingDefinition =
   | (LegacyGetterHooks & {
     invoke: ContextualSteps<object | null, unknown[], unknown>;
   })
+  | (LegacyGetterHooks & NewBufferResultBinding)
   | LegacyGetterBinding;
 
 type StringifierBindingDefinition = {
@@ -1507,6 +1509,7 @@ function isMemberBindingDefinition(
     'getNext' in definition ||
     'set' in definition ||
     'invoke' in definition ||
+    'newBufferResult' in definition ||
     'getSupportedPropertyIndices' in definition ||
     'getSupportedPropertyNames' in definition;
 }

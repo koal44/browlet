@@ -3,8 +3,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import {
   browletBindings, getRelevantRealm,
 } from '../../../src/browlet/bindings';
-import { createTransformStream } from '../../../src/streams/index';
-import { TransformStreamImpl } from '../../../src/streams/transform-stream';
+import { internalStreamSetup, TransformStreamImpl } from '../../../src/streams/index';
 import type { TransformStreamDefaultControllerImpl } from '../../../src/streams/transform-stream-default-controller';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
@@ -171,10 +170,11 @@ describe('transform-stream projection', () => {
     if (resolved?.primaryInterface.definition.name !== 'TransformStream') {
       throw new Error('TransformStream did not resolve to its implementation');
     }
-    const stream = createTransformStream(
+    const stream = new TransformStreamImpl(
       (resolved.implementation as TransformStreamImpl).context,
-      () => undefined,
+      internalStreamSetup,
     );
+    stream.setUp(() => undefined);
 
     expect(bindings.context.resolvePlatformObject(stream)).toBeUndefined();
     const object = bindings.context.project(TransformStreamImpl, stream);

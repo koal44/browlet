@@ -63,11 +63,8 @@ export {
 } from './readable-stream-cross-spec';
 export type { ReadableStreamImpl } from './readable-stream';
 export { GenericTransformStreamMixin } from './generic-transform-stream';
-export {
-  createIdentityTransformStream, createTransformStream,
-  enqueueTransformStream, errorTransformStream, terminateTransformStream,
-} from './transform-stream-cross-spec';
-export type { TransformStreamImpl } from './transform-stream';
+export { TransformStreamImpl } from './transform-stream';
+export { internalStreamSetup } from './internal-methods';
 export {
   abortWritableStream, closeWritableStream, createWritableStream,
   errorWritableStream, getWritableStreamSignal, getWritableStreamWriter,
