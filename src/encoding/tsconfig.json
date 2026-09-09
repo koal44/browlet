@@ -9,8 +9,8 @@
   },
   "include": ["./**/*.ts"],
   "references": [
+    { "path": "../js-engine" },
     { "path": "../web-idl/declaration" },
-    { "path": "../web-idl/exceptions" },
     { "path": "../web-idl" },
     { "path": "../streams" }
   ]

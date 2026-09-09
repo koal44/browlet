@@ -1,4 +1,4 @@
-import { streamAbortController } from '../../streams/abort';
+import { streamAbortController } from '../../streams/integration';
 import { streamStructuredData } from '../../streams/structured-data';
 import type { CapabilityRegistration } from '../../web-idl/capability';
 import { WindowImpl, windowIDL } from '../browsing/window/window';

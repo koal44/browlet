@@ -41,7 +41,7 @@ export function createRecordFixture() {
     bindings,
     realm,
     context,
-    createBody: () => new BodyRecord(createReadableStream(context), scheduling),
+    createBody: () => new BodyRecord(createReadableStream(), scheduling),
     createRequest: (record: RequestRecord, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new ResponseRecord(), guard: HeadersGuard = 'response') =>

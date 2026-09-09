@@ -3,11 +3,7 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   idlType, impl, op, promise, reference,
 } from '../web-idl/declaration/index';
-import { createDictionaryValue } from '../web-idl/conversion';
-import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
-import type { StreamPromise } from './promise';
+import { TypeError } from '../js-engine/simple-exception';
 import type { ReadableStreamImpl } from './readable-stream';
 import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
 import {
@@ -21,61 +17,43 @@ export class ReadableStreamDefaultReaderImpl {
 
   // SPEC_MISMATCH: ReadableStreamDefaultReader(stream) -> ReadableStreamDefaultReader
   constructor(
-    context: BindingContext,
     stream?: ReadableStreamImpl,
   ) {
-    this.#genericReader = new ReadableStreamGenericReaderMixin(context);
+    this.#genericReader = new ReadableStreamGenericReaderMixin();
     if (stream) setUpReadableStreamDefaultReader(this, stream);
   }
 
-  get closed(): StreamPromise {
+  get closed(): Promise<void> {
     return ReadableStreamDefaultReaderImpl.getGenericReader(this).closed;
   }
 
-  cancel(reason?: unknown): StreamPromise {
+  cancel(reason?: unknown): Promise<void> {
     return ReadableStreamDefaultReaderImpl.getGenericReader(this).cancel(
       reason,
     );
   }
 
-  read(): StreamPromise {
+  read(): Promise<ReadableStreamReadResult> {
     const generic = ReadableStreamDefaultReaderImpl.getGenericReader(this);
-    const context = ReadableStreamGenericReaderMixin.getContext(
-      generic,
-    );
     if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
-      return context.createRejectedPromise(
-        new context.realm.intrinsics.typeError(
-          'Cannot read from a stream using a released reader',
-        ),
-        reference('ReadableStreamReadResult'),
-      );
+      return Promise.reject(new TypeError(
+        'Cannot read from a stream using a released reader',
+      ));
     }
 
-    const promise = context.createPromise(
-      reference('ReadableStreamReadResult'),
-    );
+    const promise = Promise.withResolvers<ReadableStreamReadResult>();
     readableStreamDefaultReaderRead(this, {
       chunkSteps(chunk) {
-        context.resolvePromise(promise, createDictionaryValue([
-          ['value', chunk],
-          ['done', false],
-        ]));
+        promise.resolve({ value: chunk, done: false });
       },
       closeSteps() {
-        context.resolvePromise(
-          promise,
-          createDictionaryValue([
-            ['value', undefined],
-            ['done', true],
-          ]),
-        );
+        promise.resolve({ value: undefined, done: true });
       },
       errorSteps(reason) {
-        context.rejectPromise(promise, reason);
+        promise.reject(reason);
       },
     });
-    return promise;
+    return promise.promise;
   }
 
   releaseLock(): void {
@@ -107,6 +85,11 @@ export class ReadableStreamDefaultReaderImpl {
   }
 }
 
+export type ReadableStreamReadResult = {
+  value: unknown;
+  done: boolean;
+};
+
 export type ReadRequest = {
   chunkSteps(chunk: unknown): void;
   closeSteps(): void;
@@ -118,9 +101,7 @@ export type ReadRequest = {
 export const readableStreamDefaultReaderIDL = defineInterface({
   name: 'ReadableStreamDefaultReader',
   exposed: '*',
-  implementation: impl(ReadableStreamDefaultReaderImpl, {
-    constructWith: [bindingContext],
-  }),
+  implementation: impl(ReadableStreamDefaultReaderImpl),
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),
     op('read', promise(reference('ReadableStreamReadResult'))),

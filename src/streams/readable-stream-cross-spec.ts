@@ -11,7 +11,6 @@ import {
   readableByteStreamTee,
 } from './readable-byte-stream-operations';
 import { ReadableStreamDefaultReaderImpl } from './readable-stream-default-reader';
-import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
 import {
   acquireReadableStreamDefaultReader,
   createReadableStream as createReadableStreamFromAlgorithms,
@@ -33,15 +32,14 @@ import {
   ReadableStreamImpl, type StreamPipeOptions,
 } from './readable-stream';
 import {
-  createArrayBufferView, getBufferSourceByteLength,
+  getBufferSourceByteLength,
   getBufferSourceByteOffset, getBufferSourceCopy,
   getBufferSourceUnderlyingBuffer, getBufferTypeName,
   writeArrayBufferView,
 } from '../web-idl/buffer-source';
-import type { BindingContext } from '../web-idl/projection';
-import type { IDLAsyncSequence } from '../web-idl/async-sequence';
+import { RangeError, TypeError } from '../js-engine/simple-exception';
+import type { StreamAbortController } from './abort';
 import type { QueuingStrategySize } from './queuing-strategy';
-import { runPromiseAlgorithm, type StreamPromise } from './promise';
 import type { WritableStreamImpl } from './writable-stream';
 import { isWritableStreamLocked } from './writable-stream-operations';
 import { TransformStreamImpl } from './transform-stream';
@@ -49,32 +47,26 @@ import { TransformStreamImpl } from './transform-stream';
 /** Streams §9.1, create and set up a default readable stream. */
 // SPEC_MISMATCH: ReadableStream.set up(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createReadableStream(
-  context: BindingContext,
   pullAlgorithm?: () => unknown,
   cancelAlgorithm?: (reason: unknown) => unknown,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
 ): ReadableStreamImpl {
   return createReadableStreamFromAlgorithms(
-    context,
     () => undefined,
-    () => runPromiseAlgorithm(context, () => pullAlgorithm?.()),
-    (reason) => runPromiseAlgorithm(
-      context,
-      () => cancelAlgorithm?.(reason),
-    ),
+    () => new Promise((resolve) => resolve(pullAlgorithm?.())),
+    (reason) => new Promise((resolve) => resolve(cancelAlgorithm?.(reason))),
     highWaterMark,
     sizeAlgorithm,
   );
 }
 
-/** Streams §9.1, create a readable stream from an async sequence. */
+/** Streams §9.1, create a readable stream from an acquired async iterator. */
 // SPEC_MISMATCH: ReadableStream.create from async sequence(sequence) -> ReadableStream
 export function createReadableStreamFromAsyncSequence(
-  context: BindingContext,
-  sequence: IDLAsyncSequence,
+  sequence: AsyncIterator<unknown>,
 ): ReadableStreamImpl {
-  return readableStreamFromIterable(context, sequence);
+  return readableStreamFromIterable(sequence);
 }
 
 /** Streams §9.1, get the desired size of a specification-created stream. */
@@ -203,10 +195,9 @@ export function pullReadableStreamFromBytes(
   );
   const pulled = bytes.subarray(offset, offset + pullSize);
   if (byobView === null) {
-    const context = ReadableStreamImpl.getContext(stream);
     readableByteStreamControllerEnqueue(
       requireByteController(stream),
-      createArrayBufferView('Uint8Array', pulled, context.realm),
+      new Uint8Array(pulled),
     );
   } else {
     writeArrayBufferView(byobView, pulled);
@@ -224,54 +215,67 @@ export function readAllBytes(
   successSteps: (bytes: Uint8Array) => void,
   failureSteps: (reason: unknown) => void,
 ): void {
-  const context = ReadableStreamGenericReaderMixin.getContext(
-    ReadableStreamDefaultReaderImpl.getGenericReader(reader),
-  );
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
+
+  let reading = false;
+  let readAgain = false;
+  const request = {
+    chunkSteps(chunk: unknown) {
+      let bytes: Uint8Array;
+      try {
+        if (
+          typeof chunk !== 'object' || chunk === null ||
+          getBufferTypeName(chunk) !== 'Uint8Array'
+        ) {
+          failureSteps(new TypeError(
+            'A byte stream produced a non-Uint8Array chunk',
+          ));
+          return;
+        }
+        bytes = getBufferSourceCopy(chunk);
+        if (bytes.length > Number.MAX_SAFE_INTEGER - byteLength) {
+          throw new RangeError(
+            'Readable stream byte length is too large',
+          );
+        }
+      } catch (error) {
+        failureSteps(error);
+        return;
+      }
+      chunks.push(bytes);
+      byteLength += bytes.length;
+      readLoop();
+    },
+    closeSteps() {
+      const bytes = new Uint8Array(byteLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      successSteps(bytes);
+    },
+    errorSteps: failureSteps,
+  };
 
   readLoop();
 
   // SPEC_MISMATCH: read-loop(reader, bytes, successSteps, failureSteps) -> void
   function readLoop(): void {
-    readableStreamDefaultReaderRead(reader, {
-      chunkSteps(chunk) {
-        let bytes: Uint8Array;
-        try {
-          if (
-            typeof chunk !== 'object' || chunk === null ||
-            getBufferTypeName(chunk) !== 'Uint8Array'
-          ) {
-            failureSteps(new context.realm.intrinsics.typeError(
-              'A byte stream produced a non-Uint8Array chunk',
-            ));
-            return;
-          }
-          bytes = getBufferSourceCopy(chunk);
-          if (bytes.length > Number.MAX_SAFE_INTEGER - byteLength) {
-            throw new context.realm.intrinsics.rangeError(
-              'Readable stream byte length is too large',
-            );
-          }
-        } catch (error) {
-          failureSteps(error);
-          return;
-        }
-        chunks.push(bytes);
-        byteLength += bytes.length;
-        context.realm.queueMicrotask(readLoop);
-      },
-      closeSteps() {
-        const bytes = new Uint8Array(byteLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset);
-          offset += chunk.length;
-        }
-        successSteps(bytes);
-      },
-      errorSteps: failureSteps,
-    });
+    readAgain = true;
+    if (reading) return;
+    reading = true;
+    try {
+      // The Streams note permits an iterative drain to avoid stack growth.
+      // A synchronous chunk requests another pass; a later chunk restarts it.
+      while (readAgain) {
+        readAgain = false;
+        readableStreamDefaultReaderRead(reader, request);
+      }
+    } finally {
+      reading = false;
+    }
   }
 }
 
@@ -279,7 +283,7 @@ export function readAllBytes(
 export function cancelReadableStreamReader(
   reader: ReadableStreamDefaultReaderImpl,
   reason: unknown,
-): StreamPromise {
+): Promise<unknown> {
   return readableStreamReaderGenericCancel(
     ReadableStreamDefaultReaderImpl.getGenericReader(reader),
     reason,
@@ -287,14 +291,16 @@ export function cancelReadableStreamReader(
 }
 
 /** Streams §9.2, tee a stream with cloning enabled for the second branch. */
+// SPEC_MISMATCH: ReadableStream.tee(stream) -> [ReadableStream, ReadableStream]
 export function teeReadableStream(
   stream: ReadableStreamImpl,
+  clone?: (value: unknown) => unknown,
 ): [ReadableStreamImpl, ReadableStreamImpl] {
   return ReadableByteStreamControllerImpl.is(
     ReadableStreamImpl.getController(stream),
   )
     ? readableByteStreamTee(stream)
-    : readableStreamDefaultTee(stream, true);
+    : readableStreamDefaultTee(stream, true, clone);
 }
 
 export function isReadableStreamReadable(stream: ReadableStreamImpl): boolean {
@@ -319,7 +325,7 @@ export function pipeReadableStreamTo(
   readable: ReadableStreamImpl,
   writable: WritableStreamImpl,
   options: Partial<StreamPipeOptions> = {},
-): StreamPromise {
+): Promise<unknown> {
   if (isReadableStreamLocked(readable) || isWritableStreamLocked(writable)) {
     throw new Error('Streams must be unlocked before piping');
   }
@@ -340,19 +346,20 @@ export function pipeReadableStreamThrough(
   transform: TransformStreamImpl,
   options: Partial<StreamPipeOptions> = {},
 ): ReadableStreamImpl {
-  const context = ReadableStreamImpl.getContext(readable);
   const promise = pipeReadableStreamTo(readable, transform.writable, options);
-  context.markPromiseHandled(promise);
+  void promise.catch(() => {});
   return transform.readable;
 }
 
 /** Streams §9.5, create a proxy for a readable stream. */
+// SPEC_MISMATCH: ReadableStream.create a proxy(stream) -> ReadableStream
 export function createReadableStreamProxy(
   stream: ReadableStreamImpl,
+  abortController: StreamAbortController,
 ): ReadableStreamImpl {
   return pipeReadableStreamThrough(
     stream,
-    TransformStreamImpl.createIdentity(ReadableStreamImpl.getContext(stream)),
+    TransformStreamImpl.createIdentity(abortController),
   );
 }
 

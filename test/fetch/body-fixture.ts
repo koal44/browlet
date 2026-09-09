@@ -22,7 +22,7 @@ export function createBodyFixture() {
     parallelSteps,
     global: context.realm.global,
     createBody: (chunks: readonly unknown[] = []) => {
-      const stream = createReadableStream(context);
+      const stream = createReadableStream();
       for (const chunk of chunks) enqueueReadableStream(stream, chunk);
       return new BodyRecord(stream, scheduling);
     },

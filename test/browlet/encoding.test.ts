@@ -61,6 +61,21 @@ describe('Encoding projection', () => {
     },
   );
 
+  it.each(['TextEncoderStream', 'TextDecoderStream'])(
+    'aborts the writable side of %s',
+    async (name) => {
+      const window = createWindow();
+      const stream = Reflect.construct(requireFunction(window, name), []) as object;
+      const writable = requireObject(stream, 'writable');
+      const aborted = observeBrowletPromise(
+        window, call(writable, 'abort', ['stop']) as Promise<unknown>,
+      );
+      performTestMicrotaskCheckpoint(window);
+
+      await expect(aborted).resolves.toBeUndefined();
+    },
+  );
+
   it.each(['TextDecoder', 'TextDecoderStream'])(
     'preserves author exceptions during %s argument conversion',
     (name) => {

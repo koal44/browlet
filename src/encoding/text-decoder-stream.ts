@@ -1,12 +1,13 @@
+import { isFixedBufferSource } from '../js-engine/index';
 import {
-  arg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
+  arg, atArg, contextValue, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
   impl, reference,
 } from '../web-idl/declaration/index';
+import { TypeError } from '../js-engine/simple-exception';
+import type { StreamAbortController } from '../streams/abort';
+import { createStreamAbortController } from '../streams/integration';
 import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
-import {
-  GenericTransformStreamMixin, internalStreamSetup, TransformStreamImpl,
+  GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type WritableStreamImpl,
 } from '../streams/index';
 import {
@@ -27,19 +28,18 @@ export class TextDecoderStreamImpl {
 
   // SPEC_MISMATCH: TextDecoderStream(label = "utf-8", options = {}) -> TextDecoderStream
   constructor(
-    context: BindingContext,
     label: string,
     options: TextDecoderOptions,
+    abortController: StreamAbortController,
   ) {
     this.#common = new TextDecoderCommonMixin(label, options);
-    const transform = new TransformStreamImpl(context, internalStreamSetup);
+    const transform = new TransformStreamImpl(null, {}, {}, abortController);
     transform.setUp(
       (chunk) => {
-        const input = context.convert(
-          chunk,
-          reference('AllowSharedBufferSource'),
-        ) as object;
-        const output = this.#common.decode(input, true);
+        if (!isFixedBufferSource(chunk)) {
+          throw new TypeError('Chunk is not a fixed-length buffer source');
+        }
+        const output = this.#common.decode(chunk, true);
         if (output !== '') transform.enqueue(output);
       },
       () => {
@@ -85,7 +85,7 @@ export const textDecoderStreamIDL = defineInterface({
   name: 'TextDecoderStream',
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
-    constructWith: [bindingContext],
+    constructWith: [atArg(2, contextValue(createStreamAbortController))],
   }),
   members: [ctor([
     arg('label', idlType.DOMString, {

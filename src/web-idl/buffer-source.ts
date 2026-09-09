@@ -4,15 +4,15 @@ import {
   type ExtendedAttribute,
 } from './declaration/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
+import { TypeError } from '../js-engine/simple-exception';
 
 export function convertBufferSourceToIDL(
   value: unknown,
   name: BufferTypeName,
   extendedAttributes: ExtendedAttribute[],
-  realm: WebIDLRealmHost,
 ): object {
   if (!JSEngine.isObject(value) || getBufferTypeName(value) !== name) {
-    return throwTypeError(realm, `Value is not a ${name}`);
+    throw new TypeError(`Value is not a ${name}`);
   }
 
   const allowResizable = hasExtendedAttribute(
@@ -25,13 +25,13 @@ export function convertBufferSourceToIDL(
       JSEngine.getBufferTypeName(buffer) === 'SharedArrayBuffer' &&
       !hasExtendedAttribute(extendedAttributes, 'AllowShared')
     ) {
-      return throwTypeError(realm, `${name} is backed by a SharedArrayBuffer`);
+      throw new TypeError(`${name} is backed by a SharedArrayBuffer`);
     }
     if (!allowResizable && JSEngine.isResizableArrayBuffer(buffer)) {
-      return throwTypeError(realm, `${name} is backed by a resizable buffer`);
+      throw new TypeError(`${name} is backed by a resizable buffer`);
     }
   } else if (!allowResizable && JSEngine.isResizableArrayBuffer(value)) {
-    return throwTypeError(realm, `${name} is resizable`);
+    throw new TypeError(`${name} is resizable`);
   }
   return value;
 }
@@ -278,11 +278,4 @@ function assertWriteRange(
 
 function isBufferViewTypeName(name: BufferTypeName): name is BufferViewTypeName {
   return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
-}
-
-function throwTypeError(
-  realm: WebIDLRealmHost,
-  message: string,
-): never {
-  throw new realm.intrinsics.typeError(message);
 }

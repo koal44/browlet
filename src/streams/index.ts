@@ -64,7 +64,6 @@ export {
 export type { ReadableStreamImpl } from './readable-stream';
 export { GenericTransformStreamMixin } from './generic-transform-stream';
 export { TransformStreamImpl } from './transform-stream';
-export { internalStreamSetup } from './internal-methods';
 export {
   abortWritableStream, closeWritableStream, createWritableStream,
   errorWritableStream, getWritableStreamSignal, getWritableStreamWriter,

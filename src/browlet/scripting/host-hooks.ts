@@ -65,16 +65,21 @@ function callJobCallback(
 }
 
 /* HTML §8.1.6 — HostEnqueuePromiseJob. */
+// SPEC_MISMATCH: (job, realm) -> void
 function enqueuePromiseJob(
   job: () => void,
   realm: JavaScriptRealm | null,
   queueRealm: JavaScriptRealm | null,
+  executionOwner: JavaScriptRealm | undefined,
 ): false | void {
-  // The isolate also runs Node and unrelated vm contexts. Leave their jobs
-  // on the engine-selected queue rather than moving them into an HTML Agent.
-  if (!(queueRealm instanceof Realm) || queueRealm.hostDefined === null) return false;
-  const settings = realm instanceof Realm ? realm.hostDefined : null;
-  queueRealm.queueMicrotask(() => {
+  // Unowned Node and unrelated vm jobs retain the engine-selected queue.
+  const destination = executionOwner ?? queueRealm;
+  if (!(destination instanceof Realm) || destination.hostDefined === null) return false;
+  // Internal continuations belong to the operation's destination. They do not
+  // constitute an author script, even though the implementation is JavaScript.
+  const settings = executionOwner === undefined && realm instanceof Realm
+    ? realm.hostDefined : null;
+  destination.queueMicrotask(() => {
     try {
       if (settings !== null) settings.responsibleEventLoop.prepareToRunScript(settings);
       try {
@@ -83,7 +88,7 @@ function enqueuePromiseJob(
         if (settings !== null) settings.responsibleEventLoop.cleanUpAfterRunningScript(settings);
       }
     } catch (exception) {
-      (realm instanceof Realm ? realm : queueRealm).callbacks.reportException(exception);
+      destination.callbacks.reportException(exception);
     }
   });
 }

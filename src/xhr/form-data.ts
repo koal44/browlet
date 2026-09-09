@@ -192,6 +192,7 @@ export const formDataIDL = defineInterface({
   ],
 });
 
+// BINDING_INTEGRATION: supply HTML's entry-creation algorithm to the FormData constructor.
 function getCreateEntry(context: BindingContext): CreateFormDataEntry {
   const createEntry = context.getCapability(
     formDataIDL,

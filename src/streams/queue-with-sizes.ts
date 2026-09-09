@@ -1,3 +1,4 @@
+import { RangeError } from '../js-engine/simple-exception';
 import { isNonNegativeNumber } from './miscellaneous';
 
 export type QueueEntry<Value> = {
@@ -19,15 +20,13 @@ export function dequeueValue<Value>(container: QueueContainer<Value>): Value {
   return pair.value;
 }
 
-// SPEC_MISMATCH: EnqueueValueWithSize(container, value, size) -> void
 export function enqueueValueWithSize<Value>(
   container: QueueContainer<Value>,
   value: Value,
   size: number,
-  RangeError_: typeof RangeError,
 ): void {
   if (!isNonNegativeNumber(size) || size === Infinity) {
-    throw new RangeError_(
+    throw new RangeError(
       'Size must be a finite, non-NaN, non-negative number.',
     );
   }

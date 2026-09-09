@@ -13,65 +13,80 @@ Follow the project-wide order in
 boundary rules in
 [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARCHITECTURE.md).
 
-## Contract decisions
+## Implementation migration checkpoint
 
-- `src/streams/index.ts` is the private project entry. It exports the
-  `streamsIDLDefinitions` declaration contribution plus intentional
-  cross-specification operations and types, and it does not install globals.
-  Semantic implementation modules remain package-private.
-- Web IDL declarations remain beside their implementation modules. The entry
-  aggregates them for Browlet's bindings.
-- `TransformStreamImpl` owns the §9.3 `setUp`, `enqueue`, `error`, and
-  `terminate` instance methods, plus the `createIdentity` factory. Internal
-  callers allocate the implementation explicitly and then set it up; allocation
-  alone does not run the author-facing constructor steps.
-- Reference-implementation calls to generated `.new(globalThis)` wrappers
-  must become direct implementation construction using the shared per-realm
-  context. Binding projects the result only when it crosses an author-visible
-  boundary, while retaining the construction realm across borrowed methods.
-  The implementation must never import Browlet's Window.
-- The former `StreamEnvironment` façade has been removed. Realm-sensitive
-  runtime services use the shared Binding Context, realm-neutral algorithms are
-  direct imports, and the two genuine cross-specification dependencies--HTML
-  structured cloning and DOM `AbortController` creation--are narrow,
-  independently registered capabilities. Do not recreate a Streams-specific
-  service bag.
-- Stream implementations remain independently testable with the shared Realm
-  Context and narrow fakes for genuine external dependencies. Streams never
-  imports Browlet's DOM implementation or reaches for an ambient global. A
-  converted signal already is the implementation, so piping reads its state
-  and registers its internal abort algorithm directly through a host-neutral
-  structural contract. It does not reverse through Web IDL or call the
-  projected `AbortSignal` event-listener API.
-- The focused implementation tests use Browlet's real Binding Context, Web IDL
-  promise records, conversions, and projections. They fake only structured
-  cloning and AbortController creation, the two external capabilities under
-  test; do not restore a miniature Streams runtime.
-- Cross-specification cloning is an explicit HTML-owned capability. Browlet
-  registers HTML's semantic structured-data operation for each supported
-  global interface; Streams never calls the projected author-facing
-  `structuredClone()` method. Exceptions from that semantic boundary are
-  realized by Web IDL in the stream realm before they reject stream promises.
-- Writable-stream state and Binding Context live directly on the stream, writer,
-  and controller implementations. Separate platform objects already keep that
-  state author-invisible; a sidecar `WeakMap` would duplicate the Binding
-  boundary. Operations import those implementation types only, so their direct
-  field access does not restore a runtime module cycle.
-- The Readable/BYOB and Transform module cycles are inherited from the WHATWG
-  reference implementation's class/algorithm split. Their normative object
-  graph, browser comparisons, Browlet-specific edges, and removal threshold are
-  recorded in the [cycle analysis](CYCLE.md). Participating modules acknowledge
-  their cycle group on their first line, and no cross-cycle binding may execute
-  during module initialization.
-- Ambient `Promise`, `queueMicrotask`, errors, and buffer constructors must use
-  the shared Binding Context where the specification requires the relevant
-  realm. `AbortController` construction remains a narrow cross-specification
-  capability. Do not group these unrelated dependencies into a host façade.
-- Transferable-stream steps are deliberately deferred. They belong to the
-  HTML structured-data and MessagePort integration, not the Streams core.
-- Keep incomplete implementation families private. `streamsIDLDefinitions`
-  must not expose `ReadableStream` until every interface referenced by its
-  public operations exists in the assembled definition graph.
+TransformStream, ReadableStream, WritableStream, their readers, and their
+controllers no longer accept or retain Binding Context. They construct each
+other directly and use ordinary promises, promise resolvers, internal exception
+requests, and buffers. The opaque StreamPromise adapter has been removed.
+
+TransformStream initialization and sink/source algorithms live on
+`TransformStreamImpl`; controller setup, enqueueing, and transformation live on
+`TransformStreamDefaultControllerImpl`. The separate transform-operations module
+has been removed. This is an ownership change, not a new cycle workaround.
+
+All three stream constructors now capture their dictionaries explicitly. Setup
+algorithms retain the original source, sink, or transformer as the callback
+receiver. The `callbackDictionary` declaration helper and its special projection
+path have been removed; the specification's dictionary declarations remain.
+The new source/sink capture tests pass. Seven existing constructor tests still
+fail because callbacks receive controller implementations without platform
+projection. Callback projection and realm lifecycle remain binding work; this
+intermediate constructor arrangement does not yet provide them.
+
+Blob reading and FileReader now receive explicit file-reading scheduling rather
+than Binding Context. Their promises, buffers, errors, and packaging are ordinary
+implementation values. `newBufferResult()` supports promised byte results, and
+FileReader's getters project stable buffers and errors in the receiver's realm.
+Focused tests cover those boundaries, including a borrowed FileReader getter.
+The shared rules are in [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARCHITECTURE.md).
+
+**Binding integration remains unfinished.** Current ordinary failing expectations
+include:
+
+- Blob promise reads time out in Browlet: an implementation promise can settle
+  after the last HTML checkpoint, leaving author reactions pending. FileReader's
+  event-driven reads complete. Stream rejection adoption has related unfinished
+  delivery work; neither needs Binding Context restored to its implementation.
+- Callback controllers and stream byte results still need projection; async
+  iteration and clone failures need their remaining boundary treatment.
+- `ReadableStream.from` retains obsolete context injection instead of adapting
+  the author value to an iterator. Both queuing-strategy constructors still
+  accept context to produce their realm-owned size functions.
+- Fetch cloning still needs an explicit HTML clone algorithm; BYOB views and
+  errors still need realm-correct observable results.
+
+No failures were reclassified as skips or expected failures. Remaining context
+uses are identified with `BINDING_INTEGRATION:` or `TODO(BINDING_INTEGRATION):`.
+Encoding's stream declarations now supply the same AbortController dependency
+as WritableStream and TransformStream; their two projected abort tests pass.
+
+## Current implementation contracts
+
+- Implementations capture source, sink, and transformer members in dictionary
+  order and call them with the original receiver. Promise-returning algorithms
+  adopt callback results using ordinary promises. Author controller projection
+  remains unfinished at the binding boundary.
+- A null source, sink, or transformer allocates an implementation for internal
+  setup. An empty record runs the ordinary constructor steps.
+- Writable construction receives a DOM `StreamAbortController` as its final
+  implementation-only argument. TransformStream passes that same dependency to
+  its writable side. Streams does not construct Browlet's DOM implementation.
+- Clone-enabled ordinary tee receives a clone function explicitly. Byte tee
+  copies byte storage directly. Cloning exceptions pass through unchanged until
+  a binding boundary realizes them.
+- The implementation-level `from` helper consumes an acquired async iterator.
+  Obtaining that iterator from an author value remains boundary work.
+- Implementation tests use typed records and native promises. They fake only
+  the DOM abort behavior and HTML cloning that the test controls.
+- `src/streams/index.ts` remains the private project entry for declaration
+  contributions and deliberate cross-specification exports.
+- The remaining Readable/BYOB module cycle is documented in [CYCLE.md](CYCLE.md).
+  Do not add an ambient registry or service bag to conceal it.
+- MessagePort-backed transferable-stream steps remain deferred.
+
+The audit results below record the earlier implementation and validation runs.
+Their binding and realm claims do not describe this migration checkpoint.
 
 ## Living Standard audit
 

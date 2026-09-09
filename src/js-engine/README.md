@@ -36,6 +36,15 @@ policy. Returning false from Promise enqueue retains its native V8 queue;
 generic and timeout enqueue always transfer scheduling to the host. Unknown
 realm references map to null. `supportsHostHooks` is false on official engines.
 
+`runWithExecutionOwner(realm, steps)` scopes implementation continuations to an
+explicit destination. Passing `undefined` leaves that scope for author code or
+Node backend work. NodeRuntime uses a private AsyncLocalStorage channel; enqueue
+reads that channel from the job's saved continuation data, independently of the
+settler's current state. `bindExecutionOwner(realm, steps)` retains that scope
+and the other Node async-context channels for a later explicit task handoff.
+Neither operation changes function realms or HTML callback registration data.
+Binding and HTML choose the owner; implementation algorithms do not discover it.
+
 ## Admission rule
 
 Classify code by ownership before extracting it:
@@ -145,14 +154,15 @@ the ambient backend when the supported stock baseline gains the same complete
 surface—HTML's checkpoint guard and post-checkpoint work remain specification
 behavior in either mode.
 
-`node-v8-promise-reactions` supplies `installPromiseReactions()`, Browlet's
-approximation of `PerformPromiseThen` without a result capability. JavaScript
-exposes only `Promise.prototype.then`, so the operation invokes the captured
-realm intrinsic. This installs the required reactions, but also creates an
-unreachable derived promise and can consult an author-overridden `constructor`
-or `@@species`. Web IDL retains its typed promise records, conversions,
-reaction steps, and result-capability policy. Replace only this JavaScript
-operation if Node or a direct V8 embedder exposes `PerformPromiseThen`.
+`installPromiseReactions()` uses the addon's native `v8::Promise::Then` operation.
+It installs forwarding functions in the observer's realm. Node 26.8.1 and the
+custom engine bypass author `then`, `constructor`, and `@@species`; Node 24.19.0's
+older V8 still consults `constructor` and fails the retained regression. No
+compatibility workaround is applied. The public V8 operation still
+allocates a derived promise, which this boundary discards; it is not the exact
+no-result-capability form of `PerformPromiseThen`. Web IDL retains its typed
+promise records, conversions, reaction steps, and result-capability policy.
+Plain Node without the addon cannot supply this native observation operation.
 
 `node-v8-exotic-object-slots` isolates the engine inspection needed by HTML
 structured serialization. Node's `util.types` exposes many V8 object brands,

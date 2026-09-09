@@ -98,6 +98,7 @@ export type HostFileMetadata = {
 };
 
 /** Browlet host integration for File API §4 host-selected storage. */
+// BINDING_INTEGRATION: associate a host-selected File with its destination binding.
 export function createFileFromHost(
   context: BindingContext,
   source: BlobByteSource,

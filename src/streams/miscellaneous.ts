@@ -1,28 +1,25 @@
 import {
-  createArrayBuffer, createArrayBufferViewFromBuffer,
   getBufferSourceByteLength, getBufferSourceCopy, isBufferSourceDetached,
 } from '../web-idl/buffer-source';
-import type { BindingContext } from '../web-idl/projection';
+import { isCallable } from '../js-engine/abstract-operations';
+import { TypeError } from '../js-engine/simple-exception';
+
+/** Validate a callback member while capturing a stream dictionary. */
+export function checkCallback<Callback extends CallableFunction>(
+  value: Callback | undefined,
+): Callback | undefined {
+  if (value !== undefined && !isCallable(value)) {
+    throw new TypeError('Stream callback is not callable');
+  }
+  return value;
+}
 
 export function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
 }
 
-// SPEC_MISMATCH: CloneAsUint8Array(O) -> Uint8Array
-export function cloneAsUint8Array(
-  context: BindingContext,
-  value: object,
-): object {
-  const bytes = getBufferSourceCopy(value);
-  const buffer = createArrayBuffer(bytes, context.realm);
-  return createArrayBufferViewFromBuffer(
-    'Uint8Array',
-    buffer,
-    0,
-    bytes.length,
-    bytes.length,
-    context.realm,
-  );
+export function cloneAsUint8Array(value: object): Uint8Array {
+  return getBufferSourceCopy(value);
 }
 
 export function canCopyDataBlockBytes(

@@ -6,53 +6,42 @@ import { idlType } from '../../../src/web-idl/declaration/index';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from '../test-runtime';
-import { createTestContext, unwrapStreamPromise } from './environment';
+import { createTestContext } from './environment';
+import { createWritableStream } from './implementation-fixture';
 
 describe('writable-stream implementation', () => {
-  it('treats unresolved Promise<undefined> capabilities as pending', () => {
-    const context = createTestContext();
-    const promise = context.createPromise(idlType.undefined);
-
-    expect(context.isPromiseUnresolved(promise)).toBe(true);
-    context.resolvePromise(promise, undefined);
-    expect(context.isPromiseUnresolved(promise)).toBe(false);
-  });
-
   it('keeps writable state per implementation instance', () => {
-    const context = createTestContext();
-    const first = new WritableStreamImpl(context);
-    const second = new WritableStreamImpl(context);
+    const first = createWritableStream();
+    const second = createWritableStream();
 
-    expect(first.context).toBe(context);
-    expect(second.context).toBe(context);
     expect(first.state).not.toBe(second.state);
   });
 
   it('writes queued chunks and closes the underlying sink', async () => {
     const write = vi.fn();
     const close = vi.fn(() => Promise.resolve(undefined));
-    const stream = new WritableStreamImpl(createTestContext(), {
+    const stream = createWritableStream({
       close,
       write,
     });
     const writer = stream.getWriter();
 
-    await expect(unwrapStreamPromise(writer.write('first'))).resolves
+    await expect(writer.write('first')).resolves
       .toBeUndefined();
-    await expect(unwrapStreamPromise(writer.write('second'))).resolves
+    await expect(writer.write('second')).resolves
       .toBeUndefined();
-    await expect(unwrapStreamPromise(writer.close())).resolves.toBeUndefined();
+    await expect(writer.close()).resolves.toBeUndefined();
 
     expect(write.mock.calls).toEqual([
       ['first', expect.any(Object)],
       ['second', expect.any(Object)],
     ]);
     expect(close).toHaveBeenCalledOnce();
-    await expect(unwrapStreamPromise(writer.closed)).resolves.toBeUndefined();
+    await expect(writer.closed).resolves.toBeUndefined();
   });
 
   it('locks the stream until its writer releases the lock', () => {
-    const stream = new WritableStreamImpl(createTestContext());
+    const stream = createWritableStream();
     const writer = stream.getWriter();
 
     expect(stream.locked).toBe(true);
@@ -66,14 +55,11 @@ describe('writable-stream implementation', () => {
   it('uses the injected Abort capability and exposes its signal', async () => {
     const abortController = createAbortController();
     const sinkAbort = vi.fn(() => Promise.resolve(undefined));
-    const context = createTestContext({
-      createAbortController: () => abortController,
-    });
-    const stream = new WritableStreamImpl(context, { abort: sinkAbort });
+    const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, abortController);
     const controller = requireController(stream);
 
     expect(controller.signal).toBe(abortController.signal);
-    await expect(unwrapStreamPromise(stream.abort('stop'))).resolves
+    await expect(stream.abort('stop')).resolves
       .toBeUndefined();
     expect(abortController.abort).toHaveBeenCalledWith('stop');
     expect(sinkAbort).toHaveBeenCalledWith('stop');
@@ -81,20 +67,16 @@ describe('writable-stream implementation', () => {
 
   it('applies backpressure until queued writes drain', async () => {
     let finishWrite: (() => void) | undefined;
-    const stream = new WritableStreamImpl(
-      createTestContext(),
-      {
-        write: () => new Promise<undefined>((resolve) => {
-          finishWrite = () => resolve(undefined);
-        }),
-      },
-      { highWaterMark: 1 },
-    );
+    const stream = createWritableStream({
+      write: () => new Promise<undefined>((resolve) => {
+        finishWrite = () => resolve(undefined);
+      }),
+    }, { highWaterMark: 1 });
     const writer = stream.getWriter();
-    const write = unwrapStreamPromise(writer.write('chunk'));
+    const write = writer.write('chunk');
 
     expect(writer.desiredSize).toBe(0);
-    const ready = unwrapStreamPromise(writer.ready);
+    const ready = writer.ready;
     let readySettled = false;
     void ready.then(() => {
       readySettled = true;
@@ -108,11 +90,55 @@ describe('writable-stream implementation', () => {
     expect(writer.desiredSize).toBe(1);
   });
 
+  it('replaces fulfilled monitoring promises when a writer is released', async () => {
+    const stream = createWritableStream();
+    const writer = stream.getWriter();
+    const ready = writer.ready;
+    const closed = writer.closed;
+    await writer.close();
+    await expect(closed).resolves.toBeUndefined();
+
+    writer.releaseLock();
+
+    expect(writer.ready).not.toBe(ready);
+    expect(writer.closed).not.toBe(closed);
+    await expect(writer.ready).rejects.toBeInstanceOf(TypeError);
+    await expect(writer.closed).rejects.toBeInstanceOf(TypeError);
+    await expect(ready).resolves.toBeUndefined();
+    await expect(closed).resolves.toBeUndefined();
+  });
+
+  it('signals abort immediately and waits for an in-flight write', async () => {
+    const writeStarted = Promise.withResolvers<void>();
+    const finishWrite = Promise.withResolvers<void>();
+    const abortController = createAbortController();
+    const abort = vi.fn(() => Promise.resolve());
+    const stream = new WritableStreamImpl({
+      write: () => {
+        writeStarted.resolve();
+        return finishWrite.promise;
+      },
+      abort,
+    }, {}, abortController);
+    const writer = stream.getWriter();
+    const writing = writer.write('chunk');
+    await writeStarted.promise;
+
+    const aborting = writer.abort('stop');
+    expect(abortController.signal.aborted).toBe(true);
+    expect(abort).not.toHaveBeenCalled();
+    finishWrite.resolve();
+
+    await writing;
+    await aborting;
+    expect(abort).toHaveBeenCalledExactlyOnceWith('stop');
+    await expect(writer.closed).rejects.toBe('stop');
+  });
+
   it('rejects writes with a TypeError once close is queued while erroring', async () => {
-    const context = createTestContext();
     const failure = new Error('stream failure');
     let controller: WritableStreamDefaultControllerImpl | undefined;
-    const stream = new WritableStreamImpl(context, {
+    const stream = createWritableStream({
       start(value: WritableStreamDefaultControllerImpl) {
         controller = value;
         return new Promise(() => undefined);
@@ -120,19 +146,29 @@ describe('writable-stream implementation', () => {
     });
     const writer = stream.getWriter();
 
-    void unwrapStreamPromise(writer.close());
+    void writer.close();
     if (!controller) throw new Error('Writable stream did not start');
     controller.error(failure);
 
-    const writing = unwrapStreamPromise(writer.write('late'));
+    const writing = writer.write('late');
     await expect(writing).rejects.toBeInstanceOf(
-      context.realm.intrinsics.typeError,
+      TypeError,
     );
     await expect(writing).rejects.not.toBe(failure);
   });
 });
 
 describe('writable-stream projection', () => {
+  it('treats unresolved Promise<undefined> capabilities as pending', () => {
+    const context = createTestContext();
+    const promise = context.createPromise(idlType.undefined);
+
+    expect(context.isPromiseUnresolved(promise)).toBe(true);
+    context.resolvePromise(promise, undefined);
+    expect(context.isPromiseUnresolved(promise)).toBe(false);
+  });
+
+
   it('creates its AbortSignal through the assembled bindings', () => {
     const window = new Browlet({ route: () => '' }).window;
     const WritableStream_ = requireConstructor(window, 'WritableStream');

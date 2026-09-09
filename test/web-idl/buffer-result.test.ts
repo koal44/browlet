@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   arg, createBindings, ctor, defineInterface, idlType, impl, newBufferResult,
-  op, type WebIDLType,
+  op, promise, type WebIDLType,
 } from '../../src/web-idl/index';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, writeArrayBuffer,
@@ -49,6 +49,18 @@ describe('Web IDL buffer results', () => {
     const { call } = createFixture(idlType.DOMString);
     expect(() => call('create')).toThrow('newBufferResult requires a buffer source return type');
   });
+
+  it('allocates promised bytes in the receiver realm without changing existing results', async () => {
+    const { call, implementation, realm, foreignRealm } = createFixture(idlType.Uint8Array);
+    const result = call('createAsync') as Promise<Uint8Array>;
+    expect(result).toBeInstanceOf(Reflect.get(realm.global, 'Promise'));
+    const bytes = await result;
+    expect(bytes).toBeInstanceOf(Reflect.get(realm.global, 'Uint8Array'));
+    expect(bytes).not.toBeInstanceOf(Reflect.get(foreignRealm.global, 'Uint8Array'));
+    expect(getBufferSourceCopy(bytes)).toEqual(implementation.bytes);
+    expect(await (call('existingAsync') as Promise<Uint8Array>)).toBe(implementation.bytes);
+    expect(call('createAsync')).toBe(result);
+  });
 });
 
 function createFixture(type: WebIDLType) {
@@ -60,6 +72,8 @@ function createFixture(type: WebIDLType) {
       ctor(),
       op('create', type, [], newBufferResult()),
       op('existing', idlType.Uint8Array, [arg('value', idlType.Uint8Array)]),
+      op('createAsync', promise(idlType.Uint8Array), [], newBufferResult()),
+      op('existingAsync', promise(idlType.Uint8Array)),
     ],
   });
   const bindings = createBindings([definition]);
@@ -86,6 +100,7 @@ function createFixture(type: WebIDLType) {
 class BufferResultImpl {
   // The returned bytes occupy only part of their backing buffer.
   readonly bytes = Uint8Array.of(0, 1, 2, 3, 4, 0).subarray(1, 5);
+  readonly pending = Promise.resolve(this.bytes);
 
   create(): Uint8Array {
     return this.bytes;
@@ -94,4 +109,8 @@ class BufferResultImpl {
   existing(value: Uint8Array): Uint8Array {
     return value;
   }
+
+  createAsync(): Promise<Uint8Array> { return this.pending; }
+
+  existingAsync(): Promise<Uint8Array> { return this.pending; }
 }

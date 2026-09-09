@@ -168,7 +168,7 @@ describe('Web IDL promises', () => {
     expect(argumentCount).toBe(0);
   });
 
-  it.fails('reacts without consulting author-defined Promise constructors', async () => {
+  it('reacts without consulting author-defined Promise constructors', async () => {
     const { binding } = createBinding();
     const promise = createResolvedPromise(1, idlType.long, binding);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
@@ -241,7 +241,7 @@ describe('Web IDL promises', () => {
     await Promise.resolve();
   });
 
-  it.fails('marks a promise handled without consulting author properties', () => {
+  it('marks a promise handled without consulting author properties', () => {
     const { binding } = createBinding();
     const promise = createPromise(idlType.undefined, binding);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {

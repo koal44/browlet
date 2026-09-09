@@ -26,12 +26,14 @@ import {
   type WebIDLType,
 } from './declaration/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
+import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
   PlatformObjectRecord, PlatformObjectRegistry,
 } from './platform-object';
 import {
   convertJavaScriptValueToPromise, convertPromiseToJavaScript,
 } from './promise-value';
+import { projectPromise } from './promise';
 import { defineDataProperty } from './property';
 import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
@@ -47,13 +49,19 @@ export function convertToIDL(
   const legacyCallbackAttribute = options.attributeAssignment === true &&
     isNullableLegacyCallback(type, context.definitions);
   if (legacyCallbackAttribute && !isObject(value)) return null;
-  return convertJavaScriptValue(
-    value,
-    type,
-    context,
-    [],
-    legacyCallbackAttribute,
-  );
+  try {
+    return convertJavaScriptValue(
+      value,
+      type,
+      context,
+      [],
+      legacyCallbackAttribute,
+    );
+  } catch (error) {
+    const request = getSimpleExceptionRequest(error);
+    if (request) throw new context.realm.intrinsics[request.type](request.message);
+    throw error;
+  }
 }
 
 export function convertToJavaScript(
@@ -363,7 +371,7 @@ function convertIDLValue(
     case 'frozen-array':
       return value;
     case 'promise':
-      return convertPromiseToJavaScript(value);
+      return convertPromiseToJavaScript(projectPromise(value, resolved.type.type, context));
     case 'async-sequence':
       return convertAsyncSequenceToJavaScript(value);
     case 'observable-array':
@@ -393,7 +401,6 @@ function convertJavaScriptValueToSimpleType(
       value,
       name as BufferTypeName,
       extendedAttributes,
-      context.realm,
     );
   }
 
@@ -409,24 +416,24 @@ function convertJavaScriptValueToSimpleType(
     case 'unrestricted float':
       return convertToFloat(value, true, context);
     case 'double': {
-      const number = toNumber(value, context.realm);
+      const number = toNumber(value);
       if (!Number.isFinite(number)) {
         throwTypeError(context, 'Value is not a finite double');
       }
       return number;
     }
     case 'unrestricted double':
-      return toNumber(value, context.realm);
+      return toNumber(value);
     case 'bigint':
-      return toBigInt(value, context.realm);
+      return toBigInt(value);
     case 'DOMString':
       if (
         value === null &&
         hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
       ) return '';
-      return toString(value, context.realm);
+      return toString(value);
     case 'ByteString': {
-      const string = toString(value, context.realm);
+      const string = toString(value);
       for (let i = 0; i < string.length; i++) {
         if (string.charCodeAt(i) > 255) {
           throwTypeError(context, 'Value is not a ByteString');
@@ -439,7 +446,7 @@ function convertJavaScriptValueToSimpleType(
         value === null &&
         hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
       ) return toScalarValueString('');
-      return toScalarValueString(toString(value, context.realm));
+      return toScalarValueString(toString(value));
     case 'object':
       if (!isObject(value)) {
         throwTypeError(context, 'Value is not an object');
@@ -474,7 +481,7 @@ function convertJavaScriptValueToReference(
   const definition = context.definitions.getDefinition(name);
   switch (definition?.kind) {
     case 'enumeration': {
-      const string = toString(value, context.realm);
+      const string = toString(value);
       if (!definition.values.includes(string)) {
         throwTypeError(context, `${string} is not a value of ${name}`);
       }
@@ -628,15 +635,16 @@ function convertDictionaryToJavaScript(
   dictionary: AssembledDictionary,
   context: ConversionContext,
 ): object {
-  if (!isMap(value)) {
-    throw new Error(`IDL dictionary ${dictionary.definition.name} is not a map`);
+  if (!isObject(value)) {
+    throw new Error(`IDL dictionary ${dictionary.definition.name} is not an object`);
   }
+  const members = isMap(value) ? value : new Map(Object.entries(value));
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
   );
   for (const member of dictionary.members) {
-    if (!value.has(member.name)) continue;
+    if (!members.has(member.name)) continue;
     const memberType = getTypeWithApplicableExtendedAttributes(
       member.type,
       member.extendedAttributes,
@@ -644,7 +652,7 @@ function convertDictionaryToJavaScript(
     defineDataProperty(
       result,
       member.name,
-      convertToJavaScript(value.get(member.name), memberType, context),
+      convertToJavaScript(members.get(member.name), memberType, context),
     );
   }
   return result;
@@ -856,7 +864,7 @@ function convertJavaScriptValueToUnion(
   const numeric = types.find(isNumericType);
   const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
   if (numeric && bigint) {
-    const primitive = toPrimitive(value, context.realm, 'number');
+    const primitive = toPrimitive(value, 'number');
     return typeof primitive === 'bigint'
       ? primitive
       : convertResolvedJavaScriptValue(primitive, numeric, context);
@@ -865,7 +873,7 @@ function convertJavaScriptValueToUnion(
 
   const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
   if (boolean) return Boolean(value);
-  if (bigint) return toBigInt(value, context.realm);
+  if (bigint) return toBigInt(value);
   return throwTypeError(context, 'Value cannot be converted to the union type');
 }
 
@@ -1020,7 +1028,7 @@ function convertToInteger(
   extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,
 ): number {
-  let number = toNumber(value, context.realm);
+  let number = toNumber(value);
   if (Object.is(number, -0)) number = 0;
 
   const lowerBound = bitLength === 64
@@ -1058,7 +1066,7 @@ function convertToFloat(
   unrestricted: boolean,
   context: ConversionContext,
 ): number {
-  const number = toNumber(value, context.realm);
+  const number = toNumber(value);
   if (!unrestricted && !Number.isFinite(number)) {
     throwTypeError(context, 'Value is not a finite float');
   }

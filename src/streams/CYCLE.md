@@ -86,8 +86,8 @@ mistake. Browlet had translated an internal reference-implementation `.new()`
 path into construction through an author-style underlying-source record. That
 sent already-converted callbacks and promises through Web IDL conversion a
 second time. The corrected `createReadableStream()` and
-`createReadableByteStream()` operations allocate an implementation in the
-proper Binding Context and run the specification setup algorithms directly.
+`createReadableByteStream()` operations now allocate implementations directly and run the specification
+setup algorithms without a Binding Context.
 This removed the wrong Binding round trip, but it did not create or remove an
 import edge.
 
@@ -140,7 +140,9 @@ no-top-level-execution invariant.
 The Sections 6–8 audit removed the separate `streams-transform` cycle.
 `TransformStreamImpl` and its controller now own their specification state
 directly, controller allocation stays with the implementation boundary, and
-the abstract-operations module imports both implementation types only. This
+the former abstract-operations module imported both implementation types only.
+The context-removal pass subsequently moved those operations onto their owning
+classes and deleted that module; the controller imports the stream type only. This
 matches Blink and Gecko's state-owning interface classes and WebKit's private
 stream slots without importing their physical layouts. The build therefore
 needs no Transform cycle marker; only the Readable/BYOB group remains

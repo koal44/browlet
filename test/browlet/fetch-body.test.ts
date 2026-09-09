@@ -9,7 +9,7 @@ describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), source.context, fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
@@ -33,7 +33,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('fully reads on the stream realm checkpoint and queues completion as another task', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context, fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
     await nextTurn();
     const process = vi.fn();
     const error = vi.fn();
@@ -50,7 +50,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context, fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);

@@ -192,6 +192,7 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
       realm.makeHostGlobalPrototypeImmutable();
     }
     const taskDestination = {
+      realm,
       eventLoop: realm.agent.eventLoop,
       getDocument: () => {
         const window = realm.#windowImplementation;

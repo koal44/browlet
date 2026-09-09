@@ -109,7 +109,7 @@ engine-to-host calls, not globals which Browlet can invoke or monkey-patch.
 | `HostSystemUTCEpochNanoseconds` | Obtains the relevant settings object's wall clock for Temporal | **Deferred/unavailable:** Browlet has a host clock for its own APIs, but cannot install Temporal's engine hook; the supported Node baseline does not currently provide this integration. |
 | `HostMakeJobCallback` | Captures incumbent settings and active-script context in a JobCallback Record | **Bounded HTML adoption on custom:** the addon captures each registration; HTML retains its incumbent settings. Active-script context awaits Script records. Official Node has no interception point. |
 | `HostCallJobCallback` | Restores that context around the eventual `Call` | **Bounded HTML adoption on custom:** stored incumbent preparation and finally cleanup surround the callback. Active-script restoration remains deferred. |
-| `HostEnqueuePromiseJob` | Places every Promise job in the HTML microtask queue and prepares/cleans up its realm settings around execution | **Available on custom, adopted for Browlet realms:** single-use jobs enter the Agent queue as HTML microtask tasks, with the supplied realm's script lifecycle. Handlerless jobs have no script settings. Other Node jobs retain their original queues. |
+| `HostEnqueuePromiseJob` | Places every Promise job in the HTML microtask queue and prepares/cleans up its realm settings around execution | **Available on custom, adopted:** author jobs retain their script lifecycle; implementation continuations use the execution owner saved at registration, without becoming author scripts. Handlerless jobs have no script settings. Unowned Node jobs retain their original queues. See [runtime ownership](./README.md). |
 | `HostEnqueueGenericJob` | Queues jobs such as `Atomics.waitAsync` completion on the JavaScript-engine task source | **Adopted for HTML realms on custom:** notification jobs enter the relevant global's HTML task queue. No per-job native fallback. |
 | `HostEnqueueTimeoutJob` | Routes ECMAScript timeout jobs through HTML active-time and task machinery | **Adopted for HTML realms on custom:** engine deadlines use the global's fully-active time and JavaScript engine task source. No per-job native fallback. |
 | `HostEnqueueFinalizationRegistryCleanupJob` | Queues registry cleanup as an HTML task and brackets script execution | **Unavailable:** collection and cleanup scheduling remain V8/Node-owned. |
@@ -259,6 +259,13 @@ Most imported operations do not belong on an embedding interface.
 | `NewPromiseReactionJob` and `NewPromiseResolveThenableJob` | V8 creates these jobs; HTML consumes the supplied job and realm. | **Delegated** creation; custom engine/addon delivery is available and adopted for Browlet Promise jobs. |
 | `ClearKeptObjects`, `CleanupFinalizationRegistry`, and `RunJobs` | These require coordination with engine job/checkpoint state, not TypeScript copies. | **Unavailable for direct control**; Node/V8 performs its own lifecycle. |
 | RegExp parsing/execution | Use captured RegExp intrinsics when an HTML algorithm must avoid author overrides. | **Available**, first consumer deferred. |
+
+- TODO: After the current binding cleanup, review buffer-inspection ownership.
+  `ReadableByteStreamController` imports `getBufferSourceByteLength` and
+  `getBufferSourceUnderlyingBuffer` from Web IDL; data-structure inspection
+  belongs in JS Engine, with Web IDL retaining conversion policy. Check existing
+  engine primitives first; consider addon or V8 support only for a demonstrated
+  missing capability. Defer this investigation for now.
 
 ## Complete HTML §2.1.9 inventory
 

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createBindings } from '../../../src/web-idl/index';
 import {
-  RangeError as RangeErrorRequest, TypeError as TypeErrorRequest,
-} from '../../../src/web-idl/exceptions/simple-exception';
+  RangeError as RangeErrorRequest, SyntaxError as SyntaxErrorRequest,
+  TypeError as TypeErrorRequest,
+} from '../../../src/js-engine/simple-exception';
 import { TestRealm } from '../test-realm';
 
 describe('Web IDL simple exceptions', () => {
   it.each([
     { name: 'RangeError', Exception: RangeErrorRequest },
+    { name: 'SyntaxError', Exception: SyntaxErrorRequest },
     { name: 'TypeError', Exception: TypeErrorRequest },
   ])('realizes a requested $name once, preserving its message', ({ name, Exception }) => {
     const bindings = createBindings([]);
@@ -29,7 +31,8 @@ describe('Web IDL simple exceptions', () => {
     revoke();
 
     for (const value of [
-      new RangeError('author error'), new TypeError('author error'), proxy,
+      new RangeError('author error'), new SyntaxError('author error'),
+      new TypeError('author error'), proxy,
       { name: 'TypeError', message: 'author value' }, null, undefined, 'reason',
     ]) {
       expect(context.realizeException(value)).toBe(value);

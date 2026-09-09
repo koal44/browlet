@@ -5,7 +5,7 @@ import {
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
 } from '../web-idl/declaration/index';
-import { RangeError, TypeError } from '../web-idl/exceptions/simple-exception';
+import { RangeError, TypeError } from '../js-engine/simple-exception';
 
 /*
  * dictionary TextDecoderOptions {

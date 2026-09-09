@@ -4,13 +4,10 @@ import {
   type BufferViewTypeName,
 } from '../web-idl/declaration/index';
 import {
-  createArrayBuffer, getBufferSourceByteLength,
+  getBufferSourceByteLength,
   getBufferSourceUnderlyingBuffer,
 } from '../web-idl/buffer-source';
-import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
-import type { StreamPromise } from './promise';
+import { TypeError } from '../js-engine/simple-exception';
 import {
   cancelSteps, pullSteps, releaseSteps,
 } from './internal-methods';
@@ -33,12 +30,7 @@ import {
 } from './readable-byte-stream-operations';
 
 export class ReadableByteStreamControllerImpl {
-  readonly #context: BindingContext;
   #state?: ReadableByteStreamControllerState;
-
-  constructor(context: BindingContext) {
-    this.#context = context;
-  }
 
   get byobRequest(): ReadableStreamBYOBRequestImpl | null {
     return readableByteStreamControllerGetBYOBRequest(this);
@@ -51,13 +43,13 @@ export class ReadableByteStreamControllerImpl {
   close(): void {
     const state = ReadableByteStreamControllerImpl.getState(this);
     if (state.closeRequested) {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         'The stream has already been closed',
       );
     }
     const streamState = ReadableStreamImpl.getState(state.stream).state;
     if (streamState !== 'readable') {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         `A stream in the ${streamState} state cannot be closed`,
       );
     }
@@ -66,27 +58,27 @@ export class ReadableByteStreamControllerImpl {
 
   enqueue(chunk: object): void {
     if (getBufferSourceByteLength(chunk) === 0) {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         'chunk must have non-zero byteLength',
       );
     }
     if (getBufferSourceByteLength(
       getBufferSourceUnderlyingBuffer(chunk),
     ) === 0) {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         'chunk\'s buffer must have non-zero byteLength',
       );
     }
 
     const state = ReadableByteStreamControllerImpl.getState(this);
     if (state.closeRequested) {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         'The stream is closed or draining',
       );
     }
     const streamState = ReadableStreamImpl.getState(state.stream).state;
     if (streamState !== 'readable') {
-      throw new this.#context.realm.intrinsics.typeError(
+      throw new TypeError(
         `A stream in the ${streamState} state cannot be enqueued to`,
       );
     }
@@ -97,7 +89,7 @@ export class ReadableByteStreamControllerImpl {
     readableByteStreamControllerError(this, error);
   }
 
-  readonly [cancelSteps] = (reason: unknown): StreamPromise => {
+  readonly [cancelSteps] = (reason: unknown): Promise<unknown> => {
     const state = ReadableByteStreamControllerImpl.getState(this);
     readableByteStreamControllerClearPendingPullIntos(this);
     state.queue = [];
@@ -125,10 +117,7 @@ export class ReadableByteStreamControllerImpl {
     if (autoAllocateChunkSize !== undefined) {
       let buffer: object;
       try {
-        buffer = createArrayBuffer(
-          new Uint8Array(autoAllocateChunkSize),
-          this.#context.realm,
-        );
+        buffer = new ArrayBuffer(autoAllocateChunkSize);
       } catch (error) {
         request.errorSteps(error);
         return;
@@ -161,14 +150,8 @@ export class ReadableByteStreamControllerImpl {
 
   // -- Friends ----------------------------------------------------------
 
-  static getContext(
-    controller: ReadableByteStreamControllerImpl,
-  ): BindingContext {
-    return controller.#context;
-  }
-
   static is(value: unknown): value is ReadableByteStreamControllerImpl {
-    return typeof value === 'object' && value !== null && #context in value;
+    return typeof value === 'object' && value !== null && #state in value;
   }
 
   static getState(
@@ -192,11 +175,11 @@ export type ReadableByteStreamControllerState =
   {
     autoAllocateChunkSize?: number;
     byobRequest: ReadableStreamBYOBRequestImpl | null;
-    cancelAlgorithm?: (reason: unknown) => StreamPromise;
+    cancelAlgorithm?: (reason: unknown) => Promise<unknown>;
     closeRequested: boolean;
     pendingPullIntos: PullIntoDescriptor[];
     pullAgain: boolean;
-    pullAlgorithm?: () => StreamPromise;
+    pullAlgorithm?: () => Promise<unknown>;
     pulling: boolean;
     queue: ByteQueueEntry[];
     queueTotalSize: number;
@@ -226,9 +209,7 @@ export type PullIntoDescriptor = {
 export const readableByteStreamControllerIDL = defineInterface({
   name: 'ReadableByteStreamController',
   exposed: '*',
-  implementation: impl(ReadableByteStreamControllerImpl, {
-    constructWith: [bindingContext],
-  }),
+  implementation: impl(ReadableByteStreamControllerImpl),
   members: [
     roAttr('byobRequest', nullable(reference('ReadableStreamBYOBRequest'))),
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),

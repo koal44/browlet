@@ -1,5 +1,6 @@
 import { type Capability, defineCapability } from '../web-idl/capability';
 import type { BindingContext } from '../web-idl/projection';
+import type { TaskHandle, TaskScheduling } from '../infra/index';
 
 /*
  * File's integration boundary. File defines the capabilities it consumes;
@@ -16,22 +17,16 @@ export const fileReading =
   defineCapability<FileReadingCapability>('File reading');
 
 export type FileReadingCapability = {
-  queueTask(global: object, steps: () => void): FileReadingTaskHandle;
+  queueTask(global: object, steps: () => void): TaskHandle;
   runInParallel(steps: () => void): void;
-};
-
-export type FileReadingTaskHandle = {
-  remove(): void;
 };
 
 export type NativeLineEnding = '\n' | '\r\n';
 
+// BINDING_INTEGRATION: resolve HTML file-reading scheduling for the relevant global.
 export function getFileReading(
   context: BindingContext,
-): {
-  queueTask(steps: () => void): FileReadingTaskHandle;
-  runInParallel(steps: () => void): void;
-} {
+): TaskScheduling {
   const [global, capability] = getGlobalCapability(context, fileReading);
   return {
     queueTask: (steps) => capability.queueTask(global, steps),
@@ -40,6 +35,7 @@ export function getFileReading(
 }
 
 /* Missing values indicate incomplete host composition, not optional state. */
+// BINDING_INTEGRATION: resolve a capability registered by the composing browser.
 function getGlobalCapability<Value>(
   context: BindingContext,
   capability: Capability<Value>,
