@@ -1,6 +1,6 @@
 import type { BlobImpl } from '../file/index';
 import { ParallelQueue } from '../infra/parallel-queue';
-import type { GlobalObject } from '../js-engine/index';
+import type { GlobalObject, PromiseReactions } from '../js-engine/index';
 import {
   closeReadableStream, createReadableStreamWithByteReadingSupport, enqueueReadableStream,
   getReadableStreamReader, isReadableStreamDisturbed, isReadableStreamErrored,
@@ -109,8 +109,9 @@ export type BodyWithType = { body: BodyRecord; type: string | null; };
 export function bytesAsBody(
   bytes: Uint8Array,
   scheduling: FetchTaskScheduling,
+  reactions: PromiseReactions,
 ): BodyRecord {
-  const stream = createReadableStreamWithByteReadingSupport();
+  const stream = createReadableStreamWithByteReadingSupport(undefined, undefined, 0, reactions);
   scheduling.runInParallel(() => {
     if (bytes.length > 0 && !isReadableStreamErrored(stream)) {
       enqueueReadableStream(stream, new Uint8Array(bytes));

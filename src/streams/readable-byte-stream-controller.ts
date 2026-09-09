@@ -1,4 +1,5 @@
 // @rollup-cycle streams-readable
+import type { InternalPromise } from '../js-engine/internal-promise';
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr, reference,
   type BufferViewTypeName,
@@ -89,7 +90,7 @@ export class ReadableByteStreamControllerImpl {
     readableByteStreamControllerError(this, error);
   }
 
-  readonly [cancelSteps] = (reason: unknown): Promise<unknown> => {
+  readonly [cancelSteps] = (reason: unknown): InternalPromise<unknown> => {
     const state = ReadableByteStreamControllerImpl.getState(this);
     readableByteStreamControllerClearPendingPullIntos(this);
     state.queue = [];
@@ -175,11 +176,11 @@ export type ReadableByteStreamControllerState =
   {
     autoAllocateChunkSize?: number;
     byobRequest: ReadableStreamBYOBRequestImpl | null;
-    cancelAlgorithm?: (reason: unknown) => Promise<unknown>;
+    cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
     closeRequested: boolean;
     pendingPullIntos: PullIntoDescriptor[];
     pullAgain: boolean;
-    pullAlgorithm?: () => Promise<unknown>;
+    pullAlgorithm?: () => InternalPromise<unknown>;
     pulling: boolean;
     queue: ByteQueueEntry[];
     queueTotalSize: number;

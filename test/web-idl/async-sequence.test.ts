@@ -1,21 +1,45 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
+import { createPromiseReactions } from '../../src/js-engine/index';
+import { createBindings } from '../../src/web-idl/registration';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import {
   closeAsyncIterator, convertAsyncSequenceToJavaScript, endOfIteration,
   getAsyncIteratorNextValue, isAsyncSequence, openAsyncSequence,
-  type IDLAsyncIterator, type IDLAsyncSequence,
+  type AsyncSequenceValue, type IDLAsyncIterator, type IDLAsyncSequence,
 } from '../../src/web-idl/async-sequence';
 import { RealmBinding } from '../../src/web-idl/binding';
 import { convertToIDL } from '../../src/web-idl/conversion';
 import {
-  asyncSequence, defineInterface, idlType, type OperationMember,
+  asyncSequence, defineDictionary, defineInterface, dictMember, idlType,
+  reference, type OperationMember,
 } from '../../src/web-idl/declaration/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL async sequences', () => {
+  it('supplies converted dictionary records to implementation iteration steps', async () => {
+    // dictionary Entry { DOMString name; };
+    const entryIDL = defineDictionary({
+      name: 'Entry', members: [dictMember('name', idlType.DOMString)],
+    });
+    const realm = new Realm();
+    const { context } = createBindings([entryIDL]).register(realm);
+    let conversions = 0;
+    const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
+    const sequence = context.convert(entries, asyncSequence(reference('Entry'))) as
+      AsyncSequenceValue<{ name: string; }>;
+    const first = Promise.withResolvers<unknown>();
+    sequence.next().observe(first.resolve, first.reject, createPromiseReactions(realm));
+    await expect(first.promise).resolves.toEqual({ name: 'entry' });
+    expect(conversions).toBe(1);
+
+    const next = Promise.withResolvers<unknown>();
+    sequence.next().observe(next.resolve, next.reject, createPromiseReactions(realm));
+    await expect(next.promise).resolves.toBe(endOfIteration);
+  });
+
   it('retains the source and captured asynchronous iterator method', () => {
     const { binding } = createBinding();
     let gets = 0;

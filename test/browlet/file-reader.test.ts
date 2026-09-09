@@ -18,6 +18,7 @@ import {
 import { getBufferSourceCopy } from '../../src/web-idl/buffer-source';
 import { serializeDefinition } from '../../src/web-idl/declaration/index';
 import type { BindingContext } from '../../src/web-idl/projection';
+import { createPromiseReactions } from '../../src/js-engine/index';
 
 describe('File API FileReader foundation', () => {
   it('starts empty with no result, error, or event handlers', () => {
@@ -499,7 +500,7 @@ function createWindow(): Window & typeof globalThis {
 }
 
 function createReader(context = getContext(createWindow())): FileReaderImpl {
-  return new FileReaderImpl(getFileReading(context));
+  return new FileReaderImpl(getFileReading(context), createPromiseReactions(context.realm));
 }
 
 function getContext(window: object): BindingContext {

@@ -1,4 +1,5 @@
 // @rollup-cycle streams-readable
+import { InternalPromise, type PromiseReactions } from '../js-engine/internal-promise';
 import {
   getBufferSourceByteLength, getBufferSourceByteOffset,
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, getBufferTypeName,
@@ -67,11 +68,12 @@ export function acquireReadableStreamBYOBReader(
 
 // SPEC_MISMATCH: CreateReadableByteStream(startAlgorithm, pullAlgorithm, cancelAlgorithm) -> ReadableStream
 function createReadableByteStream(
-  startAlgorithm: () => unknown,
-  pullAlgorithm: () => Promise<unknown>,
-  cancelAlgorithm: (reason: unknown) => Promise<unknown>,
+  startAlgorithm: () => InternalPromise<unknown> | void,
+  pullAlgorithm: () => InternalPromise<unknown>,
+  cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
-  const stream = new ReadableStreamImpl(null);
+  const stream = new ReadableStreamImpl(null, {}, reactions);
   const controller = new ReadableByteStreamControllerImpl();
   setUpReadableByteStreamController(
     stream,
@@ -98,7 +100,7 @@ export function readableByteStreamTee(
   let canceled2 = false;
   let reason1: unknown = undefined;
   let reason2: unknown = undefined;
-  const cancelPromise = Promise.withResolvers<void>();
+  const cancelPromise = InternalPromise.withResolvers<void>();
 
   const forwardReaderError = (
     currentReader: ReadableStreamDefaultReaderImpl |
@@ -107,7 +109,7 @@ export function readableByteStreamTee(
     const generic = ReadableStreamDefaultReaderImpl.is(currentReader)
       ? ReadableStreamDefaultReaderImpl.getGenericReader(currentReader)
       : ReadableStreamBYOBReaderImpl.getGenericReader(currentReader);
-    void ReadableStreamGenericReaderMixin.getState(generic).closedPromise.promise.then(() => undefined, (reason) => {
+    void ReadableStreamGenericReaderMixin.getState(generic).closedPromise.promise.chain(() => undefined, (reason) => {
       if (currentReader !== reader) return;
       readableByteStreamControllerError(
         requireByteController(branch1),
@@ -120,7 +122,7 @@ export function readableByteStreamTee(
       if (!canceled1 || !canceled2) {
         cancelPromise.resolve(undefined);
       }
-    });
+    }, stream.reactions);
   };
 
   const pullWithDefaultReader = (): void => {
@@ -135,7 +137,7 @@ export function readableByteStreamTee(
     readableStreamDefaultReaderRead(reader, {
       chunkSteps(chunk) {
         const byteChunk = requireObject(chunk);
-        queueMicrotask(() => {
+        InternalPromise.resolve().chain(() => {
           readAgainForBranch1 = false;
           readAgainForBranch2 = false;
           let chunk2 = byteChunk;
@@ -173,7 +175,7 @@ export function readableByteStreamTee(
           if (readAgainForBranch1) void pull1Algorithm();
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           else if (readAgainForBranch2) void pull2Algorithm();
-        });
+        }, undefined, stream.reactions);
       },
       closeSteps() {
         reading = false;
@@ -216,7 +218,7 @@ export function readableByteStreamTee(
     const otherBranch = forBranch2 ? branch1 : branch2;
     readableStreamBYOBReaderRead(reader, view, 1, {
       chunkSteps(chunk) {
-        queueMicrotask(() => {
+        InternalPromise.resolve().chain(() => {
           readAgainForBranch1 = false;
           readAgainForBranch2 = false;
           const byobCanceled = forBranch2 ? canceled2 : canceled1;
@@ -259,7 +261,7 @@ export function readableByteStreamTee(
           if (readAgainForBranch1) void pull1Algorithm();
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           else if (readAgainForBranch2) void pull2Algorithm();
-        });
+        }, undefined, stream.reactions);
       },
       closeSteps(chunk) {
         reading = false;
@@ -293,10 +295,10 @@ export function readableByteStreamTee(
     });
   };
 
-  const pull1Algorithm = (): Promise<unknown> => {
+  const pull1Algorithm = (): InternalPromise<unknown> => {
     if (reading) {
       readAgainForBranch1 = true;
-      return Promise.resolve();
+      return InternalPromise.resolve();
     }
     reading = true;
     const request = readableByteStreamControllerGetBYOBRequest(
@@ -305,12 +307,12 @@ export function readableByteStreamTee(
     const view = request?.view;
     if (view) pullWithBYOBReader(view, false);
     else pullWithDefaultReader();
-    return Promise.resolve();
+    return InternalPromise.resolve();
   };
-  const pull2Algorithm = (): Promise<unknown> => {
+  const pull2Algorithm = (): InternalPromise<unknown> => {
     if (reading) {
       readAgainForBranch2 = true;
-      return Promise.resolve();
+      return InternalPromise.resolve();
     }
     reading = true;
     const request = readableByteStreamControllerGetBYOBRequest(
@@ -319,15 +321,15 @@ export function readableByteStreamTee(
     const view = request?.view;
     if (view) pullWithBYOBReader(view, true);
     else pullWithDefaultReader();
-    return Promise.resolve();
+    return InternalPromise.resolve();
   };
-  const cancel1Algorithm = (reason: unknown): Promise<unknown> => {
+  const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
     canceled1 = true;
     reason1 = reason;
     if (canceled2) settleCancelPromise([reason1, reason2]);
     return cancelPromise.promise;
   };
-  const cancel2Algorithm = (reason: unknown): Promise<unknown> => {
+  const cancel2Algorithm = (reason: unknown): InternalPromise<unknown> => {
     canceled2 = true;
     reason2 = reason;
     if (canceled1) settleCancelPromise([reason1, reason2]);
@@ -337,17 +339,19 @@ export function readableByteStreamTee(
     () => undefined,
     pull1Algorithm,
     cancel1Algorithm,
+    stream.reactions,
   );
   const branch2 = createReadableByteStream(
     () => undefined,
     pull2Algorithm,
     cancel2Algorithm,
+    stream.reactions,
   );
   forwardReaderError(reader);
   return [branch1, branch2];
 
   function settleCancelPromise(reason: unknown): void {
-    void readableStreamCancel(stream, reason).then(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error));
+    void readableStreamCancel(stream, reason).chain(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error), stream.reactions);
   }
 }
 
@@ -460,7 +464,7 @@ export function readableByteStreamControllerCallPullIfNeeded(
 
   state.pulling = true;
   const promise = requireAlgorithm(state.pullAlgorithm, 'pull')();
-  void promise.then(() => {
+  void promise.chain(() => {
     state.pulling = false;
     if (state.pullAgain) {
       state.pullAgain = false;
@@ -468,7 +472,7 @@ export function readableByteStreamControllerCallPullIfNeeded(
     }
   }, (error) => {
     readableByteStreamControllerError(controller, error);
-  });
+  }, state.stream.reactions);
 }
 
 export function readableByteStreamControllerClearAlgorithms(
@@ -797,10 +801,8 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
   const controller = new ReadableByteStreamControllerImpl();
   const { start, pull, cancel } = sourceDict;
   const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-  const pullAlgorithm = () => new Promise((resolve) =>
-    resolve(pull && Reflect.apply(pull, source, [controller])));
-  const cancelAlgorithm = (reason: unknown) => new Promise((resolve) =>
-    resolve(cancel && Reflect.apply(cancel, source, [reason])));
+  const pullAlgorithm = () => InternalPromise.try(() => pull?.call(source, controller));
+  const cancelAlgorithm = (reason: unknown) => InternalPromise.try(() => cancel?.call(source, reason));
 
   const autoAllocateChunkSize = sourceDict.autoAllocateChunkSize;
   if (autoAllocateChunkSize === 0) {
@@ -822,19 +824,20 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
 /** Streams §9.1, create and set up a stream with byte reading support. */
 // SPEC_MISMATCH: ReadableStream.set up with byte reading support(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 0) -> void
 export function createReadableStreamWithByteReadingSupport(
-  pullAlgorithm?: () => unknown,
+  pullAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
   // SPEC_MISMATCH: cancelAlgorithm()
-  cancelAlgorithm?: (reason: unknown) => unknown,
+  cancelAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
   highWaterMark = 0,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
-  const stream = new ReadableStreamImpl(null);
+  const stream = new ReadableStreamImpl(null, {}, reactions);
   const controller = new ReadableByteStreamControllerImpl();
   setUpReadableByteStreamController(
     stream,
     controller,
     () => undefined,
-    () => new Promise((resolve) => resolve(pullAlgorithm?.())),
-    (reason) => new Promise((resolve) => resolve(cancelAlgorithm?.(reason))),
+    () => InternalPromise.try(() => pullAlgorithm?.()),
+    (reason) => InternalPromise.try(() => cancelAlgorithm?.(reason)),
     highWaterMark,
     undefined,
   );
@@ -844,9 +847,9 @@ export function createReadableStreamWithByteReadingSupport(
 function setUpReadableByteStreamController(
   stream: ReadableStreamImpl,
   controller: ReadableByteStreamControllerImpl,
-  startAlgorithm: () => unknown,
-  pullAlgorithm: () => Promise<unknown>,
-  cancelAlgorithm: (reason: unknown) => Promise<unknown>,
+  startAlgorithm: () => InternalPromise<unknown> | void,
+  pullAlgorithm: () => InternalPromise<unknown>,
+  cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
   highWaterMark: number,
   autoAllocateChunkSize: number | undefined,
 ): void {
@@ -871,12 +874,12 @@ function setUpReadableByteStreamController(
   ReadableByteStreamControllerImpl.setState(controller, state);
   ReadableStreamImpl.getState(stream).controller = controller;
 
-  void Promise.resolve(startAlgorithm()).then(() => {
+  void InternalPromise.resolve(startAlgorithm()).chain(() => {
     state.started = true;
     readableByteStreamControllerCallPullIfNeeded(controller);
   }, (error) => {
     readableByteStreamControllerError(controller, error);
-  });
+  }, stream.reactions);
 }
 
 function commitPullIntoDescriptor(

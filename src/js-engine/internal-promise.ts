@@ -22,6 +22,63 @@ export class InternalPromise<T> {
     };
   }
 
+  static resolve(): InternalPromise<void>;
+  static resolve<T>(value: T | InternalPromise<T>): InternalPromise<T>;
+  static resolve<T>(value?: T | InternalPromise<T>): InternalPromise<T | undefined> {
+    if (value instanceof InternalPromise) return value;
+    const result = InternalPromise.withResolvers<T | undefined>();
+    result.resolve(value);
+    return result.promise;
+  }
+
+  static reject<T = never>(reason: unknown): InternalPromise<T> {
+    const result = InternalPromise.withResolvers<T>();
+    result.reject(reason);
+    return result.promise;
+  }
+
+  /** Run internal steps, preserving internal results and capturing synchronous failure. */
+  static try<T>(steps: () => T | InternalPromise<T>): InternalPromise<T> {
+    try { return InternalPromise.resolve(steps()); }
+    catch (error) { return InternalPromise.reject(error); }
+  }
+
+  static all<T>(values: readonly InternalPromise<T>[], reactions: PromiseReactions): InternalPromise<T[]> {
+    const result = InternalPromise.withResolvers<T[]>();
+    const results: T[] = [];
+    let remaining = values.length;
+    if (remaining === 0) result.resolve(results);
+    values.forEach((value, index) => {
+      value.observe((item) => {
+        results[index] = item;
+        if (--remaining === 0) result.resolve(results);
+      }, result.reject, reactions);
+    });
+    return result.promise;
+  }
+
+  /** Chain internal steps; only InternalPromise results are adopted. */
+  chain<F = T, R = never>(
+    fulfilled: ((value: T) => F | InternalPromise<F>) | undefined,
+    rejected: ((reason: unknown) => R | InternalPromise<R>) | undefined,
+    reactions: PromiseReactions,
+  ): InternalPromise<F | R> {
+    const result = InternalPromise.withResolvers<F | R>();
+    const settle = (value: F | R | InternalPromise<F | R>): void => {
+      if (value instanceof InternalPromise) value.observe(result.resolve, result.reject, reactions);
+      else result.resolve(value);
+    };
+    this.observe((value) => {
+      try { settle(fulfilled ? fulfilled(value) : value as unknown as F); }
+      catch (error) { result.reject(error); }
+    }, (reason) => {
+      if (!rejected) { result.reject(reason); return; }
+      try { settle(rejected(reason)); }
+      catch (error) { result.reject(error); }
+    }, reactions);
+    return result.promise;
+  }
+
   /** Map an implementation value in the explicitly selected destination. */
   map<U>(steps: (value: T) => U, reactions: PromiseReactions): InternalPromise<U> {
     const result = InternalPromise.withResolvers<U>();

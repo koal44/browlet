@@ -53,7 +53,7 @@ export function queueGlobalTask(
     source,
     destination.eventLoop,
     destination.getDocument(),
-    destination.realm.runtime.bindExecutionOwner(destination.realm, steps),
+    destination.realm.runtime.bindAsyncContext(steps),
     options,
   );
   return {

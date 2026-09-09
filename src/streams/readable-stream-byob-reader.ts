@@ -1,4 +1,5 @@
 // @rollup-cycle streams-readable
+import { InternalPromise } from '../js-engine/internal-promise';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, op, promise, reference, xattr,
@@ -27,15 +28,18 @@ export class ReadableStreamBYOBReaderImpl {
     if (stream) setUpReadableStreamBYOBReader(this, stream);
   }
 
-  get closed(): Promise<void> {
+  // SPEC_MISMATCH: get closed() -> Promise<undefined>
+  get closed(): InternalPromise<void> {
     return ReadableStreamBYOBReaderImpl.getGenericReader(this).closed;
   }
 
-  cancel(reason?: unknown): Promise<void> {
+  // SPEC_MISMATCH: cancel(reason?) -> Promise<undefined>
+  cancel(reason?: unknown): InternalPromise<void> {
     return ReadableStreamBYOBReaderImpl.getGenericReader(this).cancel(reason);
   }
 
-  read(view: object, options: ReadableStreamBYOBReaderReadOptions): Promise<ReadableStreamReadResult> {
+  // SPEC_MISMATCH: read(view, options = {}) -> Promise<ReadableStreamReadResult>
+  read(view: object, options: ReadableStreamBYOBReaderReadOptions): InternalPromise<ReadableStreamReadResult> {
     const generic = ReadableStreamBYOBReaderImpl.getGenericReader(this);
     const viewByteLength = getBufferSourceByteLength(view);
     const buffer = getBufferSourceUnderlyingBuffer(view);
@@ -60,7 +64,7 @@ export class ReadableStreamBYOBReaderImpl {
       ? viewByteLength
       : viewByteLength / elementSize;
     if (options.min > viewLength) {
-      return Promise.reject(new RangeError(
+      return InternalPromise.reject(new RangeError(
         `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
         }`,
@@ -72,7 +76,7 @@ export class ReadableStreamBYOBReaderImpl {
       );
     }
 
-    const promise = Promise.withResolvers<ReadableStreamReadResult>();
+    const promise = InternalPromise.withResolvers<ReadableStreamReadResult>();
     readableStreamBYOBReaderRead(this, view, options.min, {
       chunkSteps: (chunk) => promise.resolve({ value: chunk, done: false }),
       closeSteps: (chunk) => promise.resolve({ value: chunk, done: true }),
@@ -169,8 +173,8 @@ const bufferViewElementSizes = {
 
 function rejectedTypeError(
   message: string,
-): Promise<never> {
-  return Promise.reject(new TypeError(message));
+): InternalPromise<never> {
+  return InternalPromise.reject(new TypeError(message));
 }
 
 function requireBufferViewType(view: object): BufferViewTypeName {

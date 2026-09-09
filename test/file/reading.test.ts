@@ -18,8 +18,8 @@ describe('File reading implementation', () => {
     const reactions = createPromiseReactions(new TestRealm());
     const [decoded, bytes, bufferBytes] = await Promise.all([
       observe(blob.text(scheduling, reactions), reactions),
-      observe(blob.bytes(scheduling), reactions),
-      observe(blob.arrayBuffer(scheduling), reactions),
+      observe(blob.bytes(scheduling, reactions), reactions),
+      observe(blob.arrayBuffer(scheduling, reactions), reactions),
     ]);
     expect(decoded).toBe(text);
     expect(bytes).toEqual(new TextEncoder().encode(text));
@@ -34,9 +34,7 @@ describe('File reading implementation', () => {
     });
     const blob = BlobImpl.create(data, '', null);
     const reactions = createPromiseReactions(new TestRealm());
-    const result = method === 'text'
-      ? blob.text(scheduling, reactions)
-      : blob[method](scheduling);
+    const result = blob[method](scheduling, reactions);
     const failure = await observe<unknown>(result, reactions).catch((error: unknown) => error);
     expect(getDOMExceptionRequest(failure)?.name).toBe('NotFoundError');
   });

@@ -1,14 +1,15 @@
 // @rollup-cycle streams-readable
+import { InternalPromise, createPromiseReactions, type PromiseReactions } from '../js-engine/internal-promise';
 import {
-  arg, asyncIter, asyncSequence, callback, ctor, defineCallbackFunction,
+  arg, atArg, asyncIter, asyncSequence, callback, contextValue, ctor, defineCallbackFunction,
   defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr,
   reference, sequence, union, xattr,
 } from '../web-idl/declaration/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
-import { bindingContext } from '../web-idl/projection';
-import { toNumber, toString } from '../js-engine/abstract-operations';
-import { checkCallback } from './miscellaneous';
+import { bind, type BindingContext } from '../web-idl/projection';
+import type { AsyncSequenceValue } from '../web-idl/async-sequence';
+import { convertStreamCallbacks } from './integration';
 import type { StreamAbortSignal } from './abort';
 import {
   extractHighWaterMark, type QueuingStrategy,
@@ -40,17 +41,12 @@ export class ReadableStreamImpl {
   constructor(
     underlyingSource: UnderlyingSource | null = {},
     strategy: QueuingStrategy = {},
+    readonly reactions: PromiseReactions,
   ) {
     this.#state = initializeReadableStream();
     if (underlyingSource === null) return;
 
-    const sourceDict = {
-      autoAllocateChunkSize: readAutoAllocateChunkSize(underlyingSource.autoAllocateChunkSize),
-      cancel: checkCallback(underlyingSource.cancel),
-      pull: checkCallback(underlyingSource.pull),
-      start: checkCallback(underlyingSource.start),
-      type: readSourceType(underlyingSource.type),
-    };
+    const sourceDict = underlyingSource;
 
     if (sourceDict.type === 'bytes') {
       if (strategy.size !== undefined) {
@@ -62,7 +58,7 @@ export class ReadableStreamImpl {
       setUpReadableByteStreamControllerFromUnderlyingSource(
         this,
         underlyingSource,
-        sourceDict as UnderlyingByteSource,
+        sourceDict,
         highWaterMark,
       );
       return;
@@ -71,25 +67,27 @@ export class ReadableStreamImpl {
     setUpReadableStreamDefaultControllerFromUnderlyingSource(
       this,
       underlyingSource,
-      sourceDict as UnderlyingDefaultSource,
+      sourceDict,
       strategy,
     );
   }
 
   // SPEC_MISMATCH: ReadableStream.from(asyncIterable) -> ReadableStream
   static from(
-    iterator: AsyncIterator<unknown>,
+    iterator: AsyncSequenceValue<unknown>,
+    reactions: PromiseReactions,
   ): ReadableStreamImpl {
-    return readableStreamFromIterable(iterator);
+    return readableStreamFromIterable(iterator, reactions);
   }
 
   get locked(): boolean {
     return isReadableStreamLocked(this);
   }
 
-  cancel(reason?: unknown): Promise<void> {
+  // SPEC_MISMATCH: cancel(reason?) -> Promise<undefined>
+  cancel(reason?: unknown): InternalPromise<void> {
     if (isReadableStreamLocked(this)) {
-      return Promise.reject(new TypeError(
+      return InternalPromise.reject(new TypeError(
         'Cannot cancel a stream that already has a reader',
       ));
     }
@@ -133,21 +131,22 @@ export class ReadableStreamImpl {
       options.preventCancel,
       options.signal,
     );
-    void promise.catch(() => {});
+    void promise.chain(undefined, () => {}, this.reactions);
     return transform.readable;
   }
 
+  // SPEC_MISMATCH: pipeTo(destination, options = {}) -> Promise<undefined>
   pipeTo(
     destination: WritableStreamImpl,
     options: StreamPipeOptions,
-  ): Promise<unknown> {
+  ): InternalPromise<unknown> {
     if (isReadableStreamLocked(this)) {
-      return Promise.reject(new TypeError(
+      return InternalPromise.reject(new TypeError(
         'ReadableStream.prototype.pipeTo cannot be used on a locked ReadableStream',
       ));
     }
     if (isWritableStreamLocked(destination)) {
-      return Promise.reject(new TypeError(
+      return InternalPromise.reject(new TypeError(
         'ReadableStream.prototype.pipeTo cannot be used on a locked WritableStream',
       ));
     }
@@ -183,22 +182,6 @@ export class ReadableStreamImpl {
   static getState(stream: ReadableStreamImpl): ReadableStreamState {
     return stream.#state;
   }
-}
-
-/** Streams' explicit UnderlyingSource dictionary conversion. */
-function readAutoAllocateChunkSize(value: number | undefined): number | undefined {
-  if (value === undefined) return;
-  const size = Math.trunc(toNumber(value));
-  if (!Number.isFinite(size) || size < 0 || size > Number.MAX_SAFE_INTEGER) {
-    throw new TypeError('autoAllocateChunkSize is outside the unsigned long long range');
-  }
-  return size === 0 ? 0 : size;
-}
-
-function readSourceType(value: string | undefined): 'bytes' | undefined {
-  if (value === undefined) return;
-  if (toString(value) !== 'bytes') throw new TypeError('Invalid ReadableStream type');
-  return 'bytes';
 }
 
 export type ReadableStreamState = {
@@ -244,9 +227,9 @@ export type UnderlyingByteSource = UnderlyingSourceSteps<ReadableByteStreamContr
 };
 
 type UnderlyingSourceSteps<Controller> = {
-  readonly cancel?: (reason?: unknown) => unknown;
-  readonly pull?: (controller: Controller) => unknown;
-  readonly start?: (controller: Controller) => unknown;
+  readonly cancel?: (reason?: unknown) => InternalPromise<unknown> | void;
+  readonly pull?: (controller: Controller) => InternalPromise<unknown> | void;
+  readonly start?: (controller: Controller) => InternalPromise<unknown> | void;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -255,7 +238,9 @@ export const readableStreamIDL = defineInterface({
   name: 'ReadableStream',
   exposed: '*',
   ...xattr('Transferable'),
-  implementation: impl(ReadableStreamImpl),
+  implementation: impl(ReadableStreamImpl, {
+    constructWith: [atArg(2, contextValue((context: BindingContext) => createPromiseReactions(context.realm)))],
+  }),
   members: [
     ctor([
       arg('underlyingSource', idlType.object, {
@@ -265,11 +250,18 @@ export const readableStreamIDL = defineInterface({
         default: emptyDictionary,
         optional: true,
       }),
-    ]),
+    ], bind({
+      construct(context, source, strategy) {
+        return new ReadableStreamImpl(
+          convertStreamCallbacks(context, source, 'UnderlyingSource', ['start', 'pull', 'cancel']),
+          strategy as QueuingStrategy,
+          createPromiseReactions(context.realm),
+        );
+      },
+    })),
     op('from', reference('ReadableStream'),
       [arg('asyncIterable', asyncSequence(idlType.any))],
-      // TODO(BINDING_INTEGRATION): replace obsolete context injection with iterator adaptation.
-      { ...invokeWith(bindingContext), static: true }
+      { ...invokeWith(atArg(1, contextValue((context: BindingContext) => createPromiseReactions(context.realm)))), static: true }
     ),
     roAttr('locked', idlType.boolean),
     op('cancel', promise(idlType.undefined), [

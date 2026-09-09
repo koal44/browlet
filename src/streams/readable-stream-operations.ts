@@ -1,6 +1,7 @@
 // @rollup-cycle streams-readable
+import { InternalPromise, type PromiseReactions } from '../js-engine/internal-promise';
 import { TypeError } from '../js-engine/simple-exception';
-import { endOfIteration } from '../web-idl/async-sequence';
+import { endOfIteration, type AsyncSequenceValue } from '../web-idl/async-sequence';
 import type {
   StreamAbortAlgorithmHandle, StreamAbortSignal,
 } from './abort';
@@ -46,14 +47,16 @@ export function initializeReadableStream(): ReadableStreamState {
   };
 }
 
+// SPEC_MISMATCH: CreateReadableStream(startAlgorithm, pullAlgorithm, cancelAlgorithm, highWaterMark = 1, sizeAlgorithm) -> ReadableStream
 export function createReadableStream(
-  startAlgorithm: () => unknown,
-  pullAlgorithm: () => Promise<unknown>,
-  cancelAlgorithm: (reason: unknown) => Promise<unknown>,
+  startAlgorithm: () => InternalPromise<unknown> | void,
+  pullAlgorithm: () => InternalPromise<unknown>,
+  cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
-  const stream = new ReadableStreamImpl(null);
+  const stream = new ReadableStreamImpl(null, {}, reactions);
   const controller = new ReadableStreamDefaultControllerImpl();
   setUpReadableStreamDefaultController(
     stream,
@@ -79,19 +82,19 @@ export function acquireReadableStreamDefaultReader(
   return reader;
 }
 
+// SPEC_MISMATCH: ReadableStreamCancel(stream, reason) -> Promise<undefined>
 export function readableStreamCancel(
   stream: ReadableStreamImpl,
   reason: unknown,
-): Promise<void> {
+): InternalPromise<void> {
   const state = ReadableStreamImpl.getState(stream);
   state.disturbed = true;
 
   if (state.state === 'closed') {
-    return Promise.resolve(undefined);
+    return InternalPromise.resolve(undefined);
   }
   if (state.state === 'errored') {
-    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the stream rejection reason.
-    return Promise.reject(state.storedError);
+    return InternalPromise.reject(state.storedError);
   }
 
   readableStreamClose(stream);
@@ -104,24 +107,25 @@ export function readableStreamCancel(
   const sourceCancelPromise = ReadableStreamImpl.getController(stream)[
     cancelSteps
   ](reason);
-  return sourceCancelPromise.then(() => undefined);
+  return sourceCancelPromise.chain(() => undefined, undefined, stream.reactions);
 }
 
 // SPEC_MISMATCH: ReadableStreamFromIterable(asyncIterable) -> ReadableStream
 export function readableStreamFromIterable(
-  iterator: AsyncIterator<unknown>,
+  iterator: AsyncSequenceValue<unknown>,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
   const stream = createReadableStream(
     () => undefined,
-    () => iterator.next().then((result) => {
+    () => iterator.next().chain((result) => {
       const controller = requireDefaultController(stream);
-      if (result.done) readableStreamDefaultControllerClose(controller);
-      else readableStreamDefaultControllerEnqueue(controller, result.value);
+      if (result === endOfIteration) readableStreamDefaultControllerClose(controller);
+      else readableStreamDefaultControllerEnqueue(controller, result);
     }, (reason: unknown) => {
       readableStreamDefaultControllerError(requireDefaultController(stream), reason);
-    }),
-    async (reason) => { await iterator.return?.(reason); },
-    0,
+    }, stream.reactions),
+    (reason) => iterator.return(reason),
+    0, () => 1, reactions,
   );
   return stream;
 }
@@ -138,10 +142,11 @@ export function initializeReadableStreamAsyncIterator(
   });
 }
 
+// SPEC_MISMATCH: ReadableStream get the next iteration result(stream, iterator) -> Promise<any>
 export function readableStreamAsyncIteratorGetNext(
   stream: ReadableStreamImpl,
   iterator: object,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   const state = requireAsyncIteratorState(stream, iterator);
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(
     state.reader,
@@ -150,7 +155,7 @@ export function readableStreamAsyncIteratorGetNext(
     throw new Error('Readable stream async iterator reader was released');
   }
 
-  const promise = Promise.withResolvers<unknown>();
+  const promise = InternalPromise.withResolvers<unknown>();
   readableStreamDefaultReaderRead(state.reader, {
     chunkSteps: (chunk) => promise.resolve(chunk),
     closeSteps() {
@@ -165,11 +170,12 @@ export function readableStreamAsyncIteratorGetNext(
   return promise.promise;
 }
 
+// SPEC_MISMATCH: ReadableStream asynchronous iterator return(stream, iterator, arg) -> Promise<undefined>
 export function readableStreamAsyncIteratorReturn(
   stream: ReadableStreamImpl,
   iterator: object,
   value: unknown,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   const state = requireAsyncIteratorState(stream, iterator);
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(
     state.reader,
@@ -185,9 +191,10 @@ export function readableStreamAsyncIteratorReturn(
   }
 
   readableStreamDefaultReaderRelease(state.reader);
-  return Promise.resolve(undefined);
+  return InternalPromise.resolve(undefined);
 }
 
+// SPEC_MISMATCH: ReadableStreamPipeTo(source, dest, preventClose, preventAbort, preventCancel, signal) -> Promise<undefined>
 export function readableStreamPipeTo(
   source: ReadableStreamImpl,
   destination: WritableStreamImpl,
@@ -195,7 +202,7 @@ export function readableStreamPipeTo(
   preventAbort: boolean,
   preventCancel: boolean,
   signal?: StreamAbortSignal,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   const reader = acquireReadableStreamDefaultReader(source);
   const writer = acquireWritableStreamDefaultWriter(destination);
   const sourceState = ReadableStreamImpl.getState(source);
@@ -207,26 +214,26 @@ export function readableStreamPipeTo(
   sourceState.disturbed = true;
 
   let shuttingDown = false;
-  let currentWrite = Promise.resolve(undefined);
-  const result = Promise.withResolvers<void>();
+  let currentWrite = InternalPromise.resolve(undefined);
+  const result = InternalPromise.withResolvers<void>();
   let abortAlgorithmHandle: StreamAbortAlgorithmHandle | null | undefined;
 
   if (signal) {
     const abortAlgorithm = () => {
       const error = signal.reason;
-      const actions: Array<() => Promise<unknown>> = [];
+      const actions: Array<() => InternalPromise<unknown>> = [];
       if (!preventAbort) {
         actions.push(() => isWritableStreamWritable(destination)
           ? writableStreamAbort(destination, error)
-          : Promise.resolve(undefined));
+          : InternalPromise.resolve(undefined));
       }
       if (!preventCancel) {
         actions.push(() => sourceState.state === 'readable'
           ? readableStreamCancel(source, error)
-          : Promise.resolve(undefined));
+          : InternalPromise.resolve(undefined));
       }
       shutdownWithAction(
-        () => Promise.all(actions.map((action) => action())).then(() => undefined),
+        () => InternalPromise.all(actions.map((action) => action()), source.reactions).chain(() => undefined, undefined, source.reactions),
         true,
         error,
       );
@@ -295,79 +302,79 @@ export function readableStreamPipeTo(
     }
   }
 
-  void pipeLoop().catch(() => {});
+  void pipeLoop().chain(undefined, () => {}, source.reactions);
   return result.promise;
 
-  function pipeLoop(): Promise<void> {
-    const loop = Promise.withResolvers<void>();
+  function pipeLoop(): InternalPromise<void> {
+    const loop = InternalPromise.withResolvers<void>();
     const next = (done: unknown): void => {
       if (done) {
         loop.resolve(undefined);
         return;
       }
-      void pipeStep().then(next, (reason) => loop.reject(reason));
+      void pipeStep().chain(next, (reason) => loop.reject(reason), source.reactions);
     };
     next(false);
     return loop.promise;
   }
 
-  function pipeStep(): Promise<boolean> {
+  function pipeStep(): InternalPromise<boolean> {
     if (shuttingDown) {
-      return Promise.resolve(true);
+      return InternalPromise.resolve(true);
     }
 
-    return writerState.readyPromise.promise.then(() => {
-      const read = Promise.withResolvers<boolean>();
+    return writerState.readyPromise.promise.chain(() => {
+      const read = InternalPromise.withResolvers<boolean>();
       readableStreamDefaultReaderRead(reader, {
         chunkSteps(chunk) {
-          const write = Promise.resolve(undefined).then(() => writableStreamDefaultWriterWrite(
+          const write = InternalPromise.resolve(undefined).chain(() => writableStreamDefaultWriterWrite(
             writer,
             chunk,
-          ));
-          currentWrite = write.then(undefined, () => undefined);
+          ), undefined, source.reactions);
+          currentWrite = write.chain(undefined, () => undefined, source.reactions);
           read.resolve(false);
         },
         closeSteps: () => read.resolve(true),
         errorSteps: (reason) => read.reject(reason),
       });
       return read.promise;
-    });
+    }, undefined, source.reactions);
   }
 
-  function waitForWritesToFinish(): Promise<void> {
+  function waitForWritesToFinish(): InternalPromise<void> {
     const oldCurrentWrite = currentWrite;
-    return currentWrite.then(() => oldCurrentWrite !== currentWrite
+    return currentWrite.chain(() => oldCurrentWrite !== currentWrite
           ? waitForWritesToFinish()
-          : undefined);
+          : undefined, undefined, source.reactions);
   }
 
   function isOrBecomesErrored(
     state: { readonly state: string; readonly storedError?: unknown; },
-    promise: Promise<unknown>,
+    promise: InternalPromise<unknown>,
     action: (reason: unknown) => void,
   ): void {
     if (state.state === 'errored') {
       action(state.storedError);
     } else {
-      void promise.then(undefined, action);
+      void promise.chain(undefined, action, source.reactions);
     }
   }
 
   function isOrBecomesClosed(
     state: { readonly state: string; },
-    promise: Promise<unknown>,
+    promise: InternalPromise<unknown>,
     action: () => void,
   ): void {
     if (state.state === 'closed') {
       action();
     } else {
-      void promise.then(action, () => undefined);
+      void promise.chain(action, () => undefined, source.reactions);
     }
   }
 
   // SPEC_MISMATCH: Shutdown with an action(action, originalError?) -> void
   function shutdownWithAction(
-    action: () => Promise<unknown>,
+    action: () => InternalPromise<unknown>,
     originalIsError = false,
     originalError?: unknown,
   ): void {
@@ -375,11 +382,11 @@ export function readableStreamPipeTo(
     shuttingDown = true;
 
     const doTheRest = (): void => {
-      void action().then(() => finalize(originalIsError, originalError), (newError) => finalize(true, newError));
+      void action().chain(() => finalize(originalIsError, originalError), (newError) => finalize(true, newError), source.reactions);
     };
     if (isWritableStreamWritable(destination) &&
       !writableStreamCloseQueuedOrInFlight(destination)) {
-      void waitForWritesToFinish().then(doTheRest);
+      void waitForWritesToFinish().chain(doTheRest, undefined, source.reactions);
     } else {
       doTheRest();
     }
@@ -392,7 +399,7 @@ export function readableStreamPipeTo(
 
     if (isWritableStreamWritable(destination) &&
       !writableStreamCloseQueuedOrInFlight(destination)) {
-      void waitForWritesToFinish().then(() => finalize(isError, error));
+      void waitForWritesToFinish().chain(() => finalize(isError, error), undefined, source.reactions);
     } else {
       finalize(isError, error);
     }
@@ -422,17 +429,17 @@ export function readableStreamDefaultTee(
   let canceled2 = false;
   let reason1: unknown = undefined;
   let reason2: unknown = undefined;
-  const cancelPromise = Promise.withResolvers<void>();
+  const cancelPromise = InternalPromise.withResolvers<void>();
 
-  const pullAlgorithm = (): Promise<unknown> => {
+  const pullAlgorithm = (): InternalPromise<unknown> => {
     if (reading) {
       readAgain = true;
-      return Promise.resolve(undefined);
+      return InternalPromise.resolve(undefined);
     }
     reading = true;
     readableStreamDefaultReaderRead(reader, {
       chunkSteps(chunk) {
-        queueMicrotask(() => {
+        InternalPromise.resolve().chain(() => {
           readAgain = false;
           let chunk2 = chunk;
           if (cloneForBranch2 && !canceled2) {
@@ -448,7 +455,7 @@ export function readableStreamDefaultTee(
                 requireDefaultController(branch2),
                 error,
               );
-              cancelPromise.resolve(readableStreamCancel(stream, error));
+              readableStreamCancel(stream, error).observe(cancelPromise.resolve, cancelPromise.reject, stream.reactions);
               return;
             }
           }
@@ -468,7 +475,7 @@ export function readableStreamDefaultTee(
           // Enqueuing can synchronously reenter a branch pull algorithm.
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (readAgain) void pullAlgorithm();
-        });
+        }, undefined, stream.reactions);
       },
       closeSteps() {
         reading = false;
@@ -490,16 +497,16 @@ export function readableStreamDefaultTee(
         reading = false;
       },
     });
-    return Promise.resolve(undefined);
+    return InternalPromise.resolve(undefined);
   };
 
-  const cancel1Algorithm = (reason: unknown): Promise<unknown> => {
+  const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
     canceled1 = true;
     reason1 = reason;
     if (canceled2) settleCancelPromise([reason1, reason2]);
     return cancelPromise.promise;
   };
-  const cancel2Algorithm = (reason: unknown): Promise<unknown> => {
+  const cancel2Algorithm = (reason: unknown): InternalPromise<unknown> => {
     canceled2 = true;
     reason2 = reason;
     if (canceled1) settleCancelPromise([reason1, reason2]);
@@ -509,14 +516,16 @@ export function readableStreamDefaultTee(
     () => undefined,
     pullAlgorithm,
     cancel1Algorithm,
+    1, () => 1, stream.reactions,
   );
   const branch2 = createReadableStream(
     () => undefined,
     pullAlgorithm,
     cancel2Algorithm,
+    1, () => 1, stream.reactions,
   );
 
-  void ReadableStreamGenericReaderMixin.getState(generic).closedPromise.promise.then(() => undefined, (reason) => {
+  void ReadableStreamGenericReaderMixin.getState(generic).closedPromise.promise.chain(() => undefined, (reason) => {
     readableStreamDefaultControllerError(
       requireDefaultController(branch1),
       reason,
@@ -528,11 +537,11 @@ export function readableStreamDefaultTee(
     if (!canceled1 || !canceled2) {
       cancelPromise.resolve(undefined);
     }
-  });
+  }, stream.reactions);
   return [branch1, branch2];
 
   function settleCancelPromise(reason: readonly unknown[]): void {
-    void readableStreamCancel(stream, [...reason]).then(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error));
+    void readableStreamCancel(stream, [...reason]).chain(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error), stream.reactions);
   }
 }
 
@@ -575,7 +584,7 @@ export function readableStreamError(
     generic,
   ).closedPromise;
   closedPromise.reject(error);
-  void closedPromise.promise.catch(() => {});
+  void closedPromise.promise.chain(undefined, () => {}, stream.reactions);
   if (ReadableStreamDefaultReaderImpl.is(reader)) {
     readableStreamDefaultReaderErrorReadRequests(reader, error);
   } else {
@@ -589,7 +598,7 @@ export function readableStreamError(
 export function readableStreamReaderGenericCancel(
   reader: ReadableStreamGenericReaderMixin,
   reason: unknown,
-): Promise<void> {
+): InternalPromise<void> {
   const stream = ReadableStreamGenericReaderMixin.getState(reader).stream;
   if (!stream) throw new Error('Cannot cancel through a released reader');
   return readableStreamCancel(stream, reason);
@@ -617,16 +626,16 @@ export function readableStreamReaderGenericInitialize(
   stream: ReadableStreamImpl,
 ): void {
   const streamState = ReadableStreamImpl.getState(stream);
-  const closedPromise = Promise.withResolvers<void>();
+  const closedPromise = InternalPromise.withResolvers<void>();
   if (streamState.state === 'closed') closedPromise.resolve();
   if (streamState.state === 'errored') {
     closedPromise.reject(streamState.storedError);
-    void closedPromise.promise.catch(() => {});
+    void closedPromise.promise.chain(undefined, () => {}, stream.reactions);
   }
 
   ReadableStreamGenericReaderMixin.setState(
     generic,
-    { closedPromise, stream },
+    { closedPromise, stream, reactions: stream.reactions },
   );
   streamState.reader = reader;
 }
@@ -681,10 +690,10 @@ export function readableStreamReaderGenericRelease(
   if (streamState.state === 'readable') {
     genericState.closedPromise.reject(error);
   } else {
-    genericState.closedPromise = Promise.withResolvers<void>();
+    genericState.closedPromise = InternalPromise.withResolvers<void>();
     genericState.closedPromise.reject(error);
   }
-  void genericState.closedPromise.promise.catch(() => {});
+  void genericState.closedPromise.promise.chain(undefined, () => {}, genericState.reactions);
 
   ReadableStreamImpl.getController(stream)[releaseSteps]();
   streamState.reader = undefined;
@@ -704,7 +713,7 @@ export function readableStreamDefaultControllerCallPullIfNeeded(
 
   state.pulling = true;
   const pullPromise = requireAlgorithm(state.pullAlgorithm, 'pull')();
-  void pullPromise.then(() => {
+  void pullPromise.chain(() => {
     state.pulling = false;
     if (state.pullAgain) {
       state.pullAgain = false;
@@ -712,7 +721,7 @@ export function readableStreamDefaultControllerCallPullIfNeeded(
     }
   }, (error) => {
     readableStreamDefaultControllerError(controller, error);
-  });
+  }, state.stream.reactions);
 }
 
 export function readableStreamDefaultControllerClearAlgorithms(
@@ -852,10 +861,8 @@ export function setUpReadableStreamDefaultControllerFromUnderlyingSource(
 
   const { start, pull, cancel } = sourceDict;
   const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-  const pullAlgorithm = () => new Promise((resolve) =>
-    resolve(pull && Reflect.apply(pull, source, [controller])));
-  const cancelAlgorithm = (reason: unknown) => new Promise((resolve) =>
-    resolve(cancel && Reflect.apply(cancel, source, [reason])));
+  const pullAlgorithm = () => InternalPromise.try(() => pull?.call(source, controller));
+  const cancelAlgorithm = (reason: unknown) => InternalPromise.try(() => cancel?.call(source, reason));
 
   setUpReadableStreamDefaultController(
     stream,
@@ -871,9 +878,9 @@ export function setUpReadableStreamDefaultControllerFromUnderlyingSource(
 function setUpReadableStreamDefaultController(
   stream: ReadableStreamImpl,
   controller: ReadableStreamDefaultControllerImpl,
-  startAlgorithm: () => unknown,
-  pullAlgorithm: () => Promise<unknown>,
-  cancelAlgorithm: (reason: unknown) => Promise<unknown>,
+  startAlgorithm: () => InternalPromise<unknown> | void,
+  pullAlgorithm: () => InternalPromise<unknown>,
+  cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
   highWaterMark: number,
   sizeAlgorithm: QueuingStrategySize,
 ): void {
@@ -898,13 +905,13 @@ function setUpReadableStreamDefaultController(
   ReadableStreamDefaultControllerImpl.setState(controller, state);
   streamState.controller = controller;
 
-  const startPromise = Promise.resolve(startAlgorithm());
-  void startPromise.then(() => {
+  const startPromise = InternalPromise.resolve(startAlgorithm());
+  void startPromise.chain(() => {
     state.started = true;
     readableStreamDefaultControllerCallPullIfNeeded(controller);
   }, (reason) => {
     readableStreamDefaultControllerError(controller, reason);
-  });
+  }, stream.reactions);
 }
 
 function readableStreamDefaultControllerShouldCallPull(

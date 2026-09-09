@@ -1,3 +1,5 @@
+import { InternalPromise } from '../../../src/js-engine/internal-promise';
+import { observe, createReactions } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { WritableStreamImpl } from '../../../src/streams/writable-stream';
@@ -19,25 +21,25 @@ describe('writable-stream implementation', () => {
 
   it('writes queued chunks and closes the underlying sink', async () => {
     const write = vi.fn();
-    const close = vi.fn(() => Promise.resolve(undefined));
+    const close = vi.fn(() => InternalPromise.resolve(undefined));
     const stream = createWritableStream({
       close,
       write,
     });
     const writer = stream.getWriter();
 
-    await expect(writer.write('first')).resolves
+    await expect(observe(writer.write('first'))).resolves
       .toBeUndefined();
-    await expect(writer.write('second')).resolves
+    await expect(observe(writer.write('second'))).resolves
       .toBeUndefined();
-    await expect(writer.close()).resolves.toBeUndefined();
+    await expect(observe(writer.close())).resolves.toBeUndefined();
 
     expect(write.mock.calls).toEqual([
       ['first', expect.any(Object)],
       ['second', expect.any(Object)],
     ]);
     expect(close).toHaveBeenCalledOnce();
-    await expect(writer.closed).resolves.toBeUndefined();
+    await expect(observe(writer.closed)).resolves.toBeUndefined();
   });
 
   it('locks the stream until its writer releases the lock', () => {
@@ -54,23 +56,21 @@ describe('writable-stream implementation', () => {
 
   it('uses the injected Abort capability and exposes its signal', async () => {
     const abortController = createAbortController();
-    const sinkAbort = vi.fn(() => Promise.resolve(undefined));
-    const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, abortController);
+    const sinkAbort = vi.fn(() => InternalPromise.resolve(undefined));
+    const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, abortController, createReactions());
     const controller = requireController(stream);
 
     expect(controller.signal).toBe(abortController.signal);
-    await expect(stream.abort('stop')).resolves
+    await expect(observe(stream.abort('stop'))).resolves
       .toBeUndefined();
     expect(abortController.abort).toHaveBeenCalledWith('stop');
     expect(sinkAbort).toHaveBeenCalledWith('stop');
   });
 
   it('applies backpressure until queued writes drain', async () => {
-    let finishWrite: (() => void) | undefined;
+    const finishWrite = InternalPromise.withResolvers<void>();
     const stream = createWritableStream({
-      write: () => new Promise<undefined>((resolve) => {
-        finishWrite = () => resolve(undefined);
-      }),
+      write: () => finishWrite.promise,
     }, { highWaterMark: 1 });
     const writer = stream.getWriter();
     const write = writer.write('chunk');
@@ -78,15 +78,15 @@ describe('writable-stream implementation', () => {
     expect(writer.desiredSize).toBe(0);
     const ready = writer.ready;
     let readySettled = false;
-    void ready.then(() => {
+    void observe(ready).then(() => {
       readySettled = true;
     });
     await Promise.resolve();
     expect(readySettled).toBe(false);
 
-    finishWrite?.();
-    await expect(write).resolves.toBeUndefined();
-    await expect(ready).resolves.toBeUndefined();
+    finishWrite.resolve();
+    await expect(observe(write)).resolves.toBeUndefined();
+    await expect(observe(ready)).resolves.toBeUndefined();
     expect(writer.desiredSize).toBe(1);
   });
 
@@ -95,44 +95,44 @@ describe('writable-stream implementation', () => {
     const writer = stream.getWriter();
     const ready = writer.ready;
     const closed = writer.closed;
-    await writer.close();
-    await expect(closed).resolves.toBeUndefined();
+    await observe(writer.close());
+    await expect(observe(closed)).resolves.toBeUndefined();
 
     writer.releaseLock();
 
     expect(writer.ready).not.toBe(ready);
     expect(writer.closed).not.toBe(closed);
-    await expect(writer.ready).rejects.toBeInstanceOf(TypeError);
-    await expect(writer.closed).rejects.toBeInstanceOf(TypeError);
-    await expect(ready).resolves.toBeUndefined();
-    await expect(closed).resolves.toBeUndefined();
+    await expect(observe(writer.ready)).rejects.toBeInstanceOf(TypeError);
+    await expect(observe(writer.closed)).rejects.toBeInstanceOf(TypeError);
+    await expect(observe(ready)).resolves.toBeUndefined();
+    await expect(observe(closed)).resolves.toBeUndefined();
   });
 
   it('signals abort immediately and waits for an in-flight write', async () => {
-    const writeStarted = Promise.withResolvers<void>();
-    const finishWrite = Promise.withResolvers<void>();
+    const writeStarted = InternalPromise.withResolvers<void>();
+    const finishWrite = InternalPromise.withResolvers<void>();
     const abortController = createAbortController();
-    const abort = vi.fn(() => Promise.resolve());
+    const abort = vi.fn(() => InternalPromise.resolve());
     const stream = new WritableStreamImpl({
       write: () => {
         writeStarted.resolve();
         return finishWrite.promise;
       },
       abort,
-    }, {}, abortController);
+    }, {}, abortController, createReactions());
     const writer = stream.getWriter();
     const writing = writer.write('chunk');
-    await writeStarted.promise;
+    await observe(writeStarted.promise);
 
     const aborting = writer.abort('stop');
     expect(abortController.signal.aborted).toBe(true);
     expect(abort).not.toHaveBeenCalled();
     finishWrite.resolve();
 
-    await writing;
-    await aborting;
+    await observe(writing);
+    await observe(aborting);
     expect(abort).toHaveBeenCalledExactlyOnceWith('stop');
-    await expect(writer.closed).rejects.toBe('stop');
+    await expect(observe(writer.closed)).rejects.toBe('stop');
   });
 
   it('rejects writes with a TypeError once close is queued while erroring', async () => {
@@ -141,7 +141,7 @@ describe('writable-stream implementation', () => {
     const stream = createWritableStream({
       start(value: WritableStreamDefaultControllerImpl) {
         controller = value;
-        return new Promise(() => undefined);
+        return InternalPromise.withResolvers<unknown>().promise;
       },
     });
     const writer = stream.getWriter();
@@ -151,10 +151,10 @@ describe('writable-stream implementation', () => {
     controller.error(failure);
 
     const writing = writer.write('late');
-    await expect(writing).rejects.toBeInstanceOf(
+    await expect(observe(writing)).rejects.toBeInstanceOf(
       TypeError,
     );
-    await expect(writing).rejects.not.toBe(failure);
+    await expect(observe(writing)).rejects.not.toBe(failure);
   });
 });
 

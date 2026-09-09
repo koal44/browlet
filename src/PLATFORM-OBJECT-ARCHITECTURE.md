@@ -297,8 +297,9 @@ through the existing result-type conversion, exception realization, and identity
 cache; it does not add a Blob-specific adapter or another projection cache.
 The byte-result methods retain `newBufferResult()` for their realm-owned
 ArrayBuffer/Uint8Array allocation.
-The default stream reader's `read()` also returns an internal record; the
-existing dictionary-result binding projects its `{ value, done }` fulfillment.
+Streams uses internal records throughout, with a reaction destination retained
+at construction and passed to derived streams. The existing dictionary-result
+binding projects each reader's `{ value, done }` fulfillment.
 
 Unmigrated implementation methods return ordinary `Promise<T>` values. Binding adapts
 their fulfillment through the declared `T` and creates the author-visible
@@ -313,29 +314,27 @@ conversion. Implementations supply an explicit reaction destination when
 observing or mapping them; neither native `await` nor `.then()` consumes these
 records. Web IDL's
 PromiseCapability records remain internal to its specification machinery;
-implementations do not create or operate on them. Async iterator bindings
-adapt ordinary promises at that same boundary.
+implementations do not create or operate on them. Async sequence arguments
+supply iteration steps whose internal results carry converted element values.
+The adapter retains dictionary and interface types through each fulfillment.
 
 The fulfillment adapters use native Promise observation in the destination
-realm. For the existing ordinary-Promise paths, execution ownership is established
-separately: the shared implementation
-invoker selects the receiver's realm (or the installed realm for construction
-and static operations). Return adaptation uses the result realm. Ordinary
-implementation `.then` and `await` continuations retain that owner through the
-engine's saved job state.
+realm. Internal reactions receive that destination explicitly; Binding invocation
+does not attach an ambient owner to ordinary `.then` or `await` continuations.
+HTML's Promise enqueue hook uses the job's queue realm and leaves Node jobs on
+Node's queue. This also keeps Node instrumentation and rejection reporting
+independent of HTML checkpoints. HTML's incumbent settings and script/callback
+lifecycle remain separate Binding and host-hook responsibilities.
 
-Platform function entry clears implementation ownership before author argument
-conversion. Web IDL callback invocation also leaves ownership; a nested platform
-call establishes its own receiver's owner, and returning restores the caller's
-scope. This transport does not replace HTML's incumbent settings or script
-lifecycle. Unconverted author objects inside implementation algorithms still
-require an explicit binding boundary; ownership is not inferred from their code.
+HTML global tasks retain their scheduling-time Node async context, including
+unrelated AsyncLocalStorage channels, without changing Promise routing. Node
+backend completion returns through an explicit destination task. See
+[JS Engine](./js-engine/README.md) for the runtime operations.
 
-HTML global tasks retain their destination owner and scheduling-time async
-context. Node backend scheduling leaves implementation ownership, then completion
-returns through a destination task. See [JS Engine](./js-engine/README.md) for the
-runtime operations. Unmigrated implementations retain their ordinary promises
-and explicit task/I/O dependencies.
+Unmigrated native implementation chains still run on Node. Projecting their final
+result does not move the preceding work into HTML's checkpoint. Their delivery
+failures remain migration work; do not restore ambient routing or pump Node's
+queue from an HTML checkpoint to make them pass.
 
 JavaScript buffers and typed arrays retain their existing identity through
 ordinary conversion. A buffer-returning operation can declare
@@ -371,13 +370,14 @@ with a platform object. A direct implementation test can invoke converted
 callbacks with implementation values, but that is not a substitute for a
 projected callback test.
 
-Streams currently exercises an implementation-side alternative: each constructor
-explicitly captures its source, sink, or transformer dictionary after ordinary
-argument conversion and retains the original callback receiver. The specialized
-dictionary declaration helper has been removed. Author callback projection and
-lifecycle integration remain unfinished; the controller-realm tests continue to
-require platform objects and currently fail. This intermediate comparison does
-not remove the binding responsibilities above.
+Streams constructor bindings explicitly convert their source, sink, or
+transformer dictionary after ordinary argument conversion. They retain the
+original callback receiver and pass converted steps to ordinary implementation
+constructors. Shared callback binding supplies controller platform objects and
+imports Promise results; start's `any` result is adopted at that boundary too.
+A constructor's `bind({ construct })` supplies creation steps when conversion
+must precede implementation allocation. It returns the implementation; ordinary
+binding still owns platform allocation, subclass prototypes, and association.
 
 ### Exceptions
 
@@ -526,7 +526,7 @@ It records migration work, not permanent architecture.
 | Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Implementation Binding Context removal | Fetch records, Encoding, stream implementations, Blob reading, FileReader, and AbortController no longer accept or retain context; bindings own projection, buffer allocation, exception realization, and signal construction | Finish stream callback/result projection and HTML promise delivery; move the remaining queuing-strategy and Fetch abort context uses into bindings or integration. Current failures are tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
+| Implementation Binding Context removal | Fetch records, Encoding, stream implementations, Blob reading, FileReader, and AbortController no longer accept or retain context; stream callbacks and internal Promise delivery now cross explicit binding/runtime boundaries | Finish byte-result and clone-error projection; move the remaining queuing-strategy and Fetch abort context uses into bindings or integration. Current failures are tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications

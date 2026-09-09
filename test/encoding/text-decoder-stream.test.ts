@@ -1,3 +1,4 @@
+import { createReactions } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
@@ -22,9 +23,9 @@ describe('TextDecoderStream chunk conversion', () => {
   ])('decodes a %s', async (_label, createChunk) => {
     const { reader, writer } = createDecoder();
     const read = observe(reader.read());
-    await writer.write(createChunk());
+    await observe(writer.write(createChunk()));
     expect(await read).toEqual({ done: false, value: 'A' });
-    await writer.close();
+    await observe(writer.close());
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
 
@@ -40,7 +41,7 @@ describe('TextDecoderStream chunk conversion', () => {
   ])('rejects a %s', async (_label, createChunk) => {
     const { reader, writer } = createDecoder();
     const reading = observe(reader.read()).catch((error: unknown) => error);
-    const writing = writer.write(createChunk()).catch((error: unknown) => error);
+    const writing = observe(writer.write(createChunk())).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
     expect(getSimpleExceptionRequest(error)?.type).toBe('typeError');
@@ -51,17 +52,17 @@ describe('TextDecoderStream chunk conversion', () => {
     const { reader, writer } = createDecoder();
     const read = observe(reader.read());
     const first = Uint8Array.of(0xF0, 0x9F);
-    await writer.write(first);
+    await observe(writer.write(first));
     first.fill(0);
-    await writer.write(Uint8Array.of(0x98, 0x80));
+    await observe(writer.write(Uint8Array.of(0x98, 0x80)));
     expect(await read).toEqual({ done: false, value: '😀' });
-    await writer.close();
+    await observe(writer.close());
   });
 });
 
 function createDecoder() {
   const decoder = new TextDecoderStreamImpl(
-    'utf-8', { fatal: false, ignoreBOM: false }, createAbortController(),
+    'utf-8', { fatal: false, ignoreBOM: false }, createAbortController(), createReactions(),
   );
   return { reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
 }

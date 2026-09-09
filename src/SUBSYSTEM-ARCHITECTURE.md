@@ -321,11 +321,10 @@ Resolve dependencies at one of these explicit integration boundaries.
 Implementation algorithms must not perform ambient discovery of the same
 objects later.
 
-Execution ownership follows this rule too. Binding invocation and HTML task
-creation choose the destination realm; JS Engine transports it across Promise
-continuations. Author callbacks and Node backend work leave that scope.
-Implementations use ordinary promises without querying an ambient owner or
-receiving another context object. The boundary contract lives in
+Promise reaction placement follows this rule too. Binding supplies an explicit
+destination for `InternalPromise` observation; HTML task creation selects its
+event loop. Neither establishes ambient ownership over ordinary Node Promise
+continuations. The boundary contract and remaining migration live in
 [return projection](./PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
 
 Browlet's concrete composition root is

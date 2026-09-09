@@ -1,6 +1,8 @@
 import {
   createIteratorResultObject, getMethod, installPromiseReactions, isObject,
 } from '../js-engine/index';
+import type { InternalPromise } from '../js-engine/internal-promise';
+
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './declaration/index';
@@ -9,6 +11,12 @@ import {
   createPromiseValue, type IDLPromise,
 } from './promise-value';
 import { defineDataProperty } from './property';
+
+/** Converted iteration steps supplied to implementation algorithms. */
+export type AsyncSequenceValue<T> = {
+  next(): InternalPromise<T | typeof endOfIteration>;
+  return(reason: unknown): InternalPromise<unknown>;
+};
 
 export function createAsyncSequenceValue(
   object: object,

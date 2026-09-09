@@ -17,24 +17,25 @@ boundary rules in
 
 TransformStream, ReadableStream, WritableStream, their readers, and their
 controllers no longer accept or retain Binding Context. They construct each
-other directly and use internal exception requests and buffers. Most Promise
-paths still use ordinary promises and resolvers; default-reader `read()` now
-returns JS Engine's explicit `InternalPromise` record through the shared result
-binding. The opaque StreamPromise adapter has been removed.
+other directly and use internal exception requests and buffers. All Streams
+implementation Promise paths now use JS Engine's `InternalPromise` records:
+start/pull/write, reader and writer results, backpressure, cancellation,
+pipe/tee, and asynchronous iteration. Constructors retain one explicit
+`PromiseReactions` destination, supplied last by their binding or internal
+caller. Factories and TransformStream's readable/writable sides carry it on.
+Neither native `await` nor Node's global `queueMicrotask` schedules this work.
 
 TransformStream initialization and sink/source algorithms live on
 `TransformStreamImpl`; controller setup, enqueueing, and transformation live on
 `TransformStreamDefaultControllerImpl`. The separate transform-operations module
 has been removed. This is an ownership change, not a new cycle workaround.
 
-All three stream constructors now capture their dictionaries explicitly. Setup
-algorithms retain the original source, sink, or transformer as the callback
-receiver. The `callbackDictionary` declaration helper and its special projection
-path have been removed; the specification's dictionary declarations remain.
-The new source/sink capture tests pass. Seven existing constructor tests still
-fail because callbacks receive controller implementations without platform
-projection. Callback projection and realm lifecycle remain binding work; this
-intermediate constructor arrangement does not yet provide them.
+All three constructor bindings convert their dictionaries after the other
+arguments, preserving the specification's getter order and callback receiver.
+They call ordinary implementation constructors with converted callbacks and
+explicit dependencies. The shared callback adapter projects controllers and
+imports Promise results. Start's `any` result is adopted at this same boundary.
+The `callbackDictionary` declaration helper remains removed.
 
 Blob reading and FileReader now receive explicit file-reading scheduling rather
 than Binding Context. Their promises, buffers, errors, and packaging are ordinary
@@ -46,40 +47,42 @@ The shared rules are in [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARC
 **Binding integration remains unfinished.** Current ordinary failing expectations
 include:
 
-- Blob promise reads time out in Browlet: an implementation promise can settle
-  after the last HTML checkpoint, leaving author reactions pending. FileReader's
-  event-driven reads complete. Stream rejection adoption has related unfinished
-  delivery work; neither needs Binding Context restored to its implementation.
-- Callback controllers and stream byte results still need projection; async
-  iteration and clone failures need their remaining boundary treatment.
-- `ReadableStream.from` retains obsolete context injection instead of adapting
-  the author value to an iterator. Both queuing-strategy constructors still
-  accept context to produce their realm-owned size functions.
+- Stream byte results and clone failures still need realm-correct projection.
+  Both queuing-strategy constructors still accept context to produce their
+  realm-owned size functions.
 - Fetch cloning still needs an explicit HTML clone algorithm; BYOB views and
   errors still need realm-correct observable results.
 
 No failures were reclassified as skips or expected failures. Remaining context
 uses are identified with `BINDING_INTEGRATION:` or `TODO(BINDING_INTEGRATION):`.
 Encoding's stream declarations now supply the same AbortController dependency
-as WritableStream and TransformStream; their two projected abort tests pass.
+as WritableStream and TransformStream, together with their reaction destination.
+Blob and FileReader reading also supply explicit reactions to their streams;
+Blob's backend I/O remains native work.
+
+The source-delivery regressions cover delayed start/pull fulfillment and
+rejection on independent HTML queues, plus a Node callback whose native result
+settles before the stream continues in HTML. The full unit suite finishes
+normally: 7,960 pass, 14 fail, 15 expected failures, 15 skipped. The failure count
+was 39 before this migration; the remaining failures have not been reclassified.
 
 ## Current implementation contracts
 
-- Implementations capture source, sink, and transformer members in dictionary
-  order and call them with the original receiver. Promise-returning algorithms
-  adopt callback results using ordinary promises. Author controller projection
-  remains unfinished at the binding boundary.
+- Bindings capture source, sink, and transformer members in dictionary order,
+  retain the original receiver, and supply converted callback steps.
+  Implementations chain internal results in the stream's explicit destination.
 - A null source, sink, or transformer allocates an implementation for internal
   setup. An empty record runs the ordinary constructor steps.
-- Writable construction receives a DOM `StreamAbortController` as its final
-  implementation-only argument. TransformStream passes that same dependency to
-  its writable side. Streams does not construct Browlet's DOM implementation.
+- Writable construction receives a DOM `StreamAbortController` followed by its
+  reaction destination. TransformStream passes both to its writable side.
+  Streams does not construct Browlet's DOM implementation.
 - Clone-enabled ordinary tee receives a clone function explicitly. Byte tee
   copies byte storage directly. Cloning exceptions pass through unchanged until
   a binding boundary realizes them.
-- The implementation-level `from` helper consumes an acquired async iterator.
-  Obtaining that iterator from an author value remains boundary work.
-- Implementation tests use typed records and native promises. They fake only
+- The implementation-level `from` helper consumes converted async iteration
+  steps returning internal results. The shared binding adapter acquires the
+  author iterator and converts its elements, including dictionary records.
+- Implementation tests use typed records and internal promises. They fake only
   the DOM abort behavior and HTML cloning that the test controls.
 - `src/streams/index.ts` remains the private project entry for declaration
   contributions and deliberate cross-specification exports.

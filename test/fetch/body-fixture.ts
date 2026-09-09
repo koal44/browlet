@@ -1,3 +1,4 @@
+import { createReactions } from '../browlet/streams/implementation-fixture';
 import { vi } from 'vitest';
 
 import { BodyRecord } from '../../src/fetch/body';
@@ -22,7 +23,7 @@ export function createBodyFixture() {
     parallelSteps,
     global: context.realm.global,
     createBody: (chunks: readonly unknown[] = []) => {
-      const stream = createReadableStream();
+      const stream = createReadableStream(undefined, undefined, 1, () => 1, createReactions());
       for (const chunk of chunks) enqueueReadableStream(stream, chunk);
       return new BodyRecord(stream, scheduling);
     },

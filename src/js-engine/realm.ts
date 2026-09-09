@@ -24,10 +24,8 @@ export type JavaScriptRuntime = {
   readonly supportsHostHooks: boolean;
   setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void;
   getAssociatedRealm(value: object): JavaScriptRealm | undefined;
-  /** Scope implementation continuations; undefined leaves ownership for author or host work. */
-  runWithExecutionOwner<T>(owner: JavaScriptRealm | undefined, steps: () => T): T;
-  /** Retain an owned continuation for an explicitly scheduled task. */
-  bindExecutionOwner<T>(owner: JavaScriptRealm, steps: () => T): () => T;
+  /** Retain the registration's host async context for a later task handoff. */
+  bindAsyncContext<T>(steps: () => T): () => T;
   observePromise(
     realm: JavaScriptRealm,
     promise: Promise<unknown>,
@@ -53,7 +51,6 @@ export type JavaScriptHostHooks<HostDefined> = {
     job: () => void,
     realm: JavaScriptRealm | null,
     queueRealm: JavaScriptRealm | null,
-    executionOwner: JavaScriptRealm | undefined,
   ): false | void;
   enqueueGenericJob(
     this: void,

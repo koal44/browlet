@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { setImmediate } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -103,6 +104,26 @@ describe('task queues', () => {
     expect(EventLoop.getTaskQueue(firstLoop, firstSource)).not.toBe(
       EventLoop.getTaskQueue(secondLoop, firstSource),
     );
+  });
+
+  it('retains task registration context without moving Node reactions into HTML', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.window);
+    const unrelated = new AsyncLocalStorage<string>();
+    const observed: (string | undefined)[] = [];
+    unrelated.run('registration', () => {
+      queueGlobalTask(networkingTaskSource, realm.globalObject, () => {
+        observed.push(unrelated.getStore());
+        void Promise.resolve().then(() => { observed.push(unrelated.getStore()); });
+      });
+    });
+    unrelated.run('draining turn', () => {
+      expect(realm.agent.eventLoop.runTaskTurn(createEventLoopOptions())).toBe(true);
+      expect(unrelated.getStore()).toBe('draining turn');
+    });
+    expect(observed).toEqual(['registration']);
+    await setImmediate();
+    expect(observed).toEqual(['registration', 'registration']);
   });
 
   it('runs the oldest runnable task and then reaches its checkpoint', () => {

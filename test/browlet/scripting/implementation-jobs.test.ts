@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile } from 'node:fs/promises';
+import { setImmediate } from 'node:timers/promises';
+import { promiseHooks } from 'node:v8';
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
@@ -12,15 +14,36 @@ import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scri
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import { createDocument, createProjectedDOMNodeFactory } from '../../../src/browlet/dom/nodes/document';
-import { nodeRuntime } from '../../../src/js-engine/index';
 import { createBindings } from '../../../src/web-idl/registration';
 import {
   arg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op, promise,
   reference, roAttr,
 } from '../../../src/web-idl/declaration/index';
 
-describe('implementation Promise ownership', () => {
-  it('owns ordinary Promise initialization started by a projected constructor', () => {
+describe('implementation Promise delivery', () => {
+  it('keeps runtime instrumentation on Node during projected construction', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.window);
+    createBindings([initializationIDL]).register(realm).install(realm.global);
+    const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
+    const unrelated = new AsyncLocalStorage<string>();
+    let reported: string | undefined;
+    // Stop before creating the report so it cannot instrument itself.
+    const stop = promiseHooks.onInit(() => {
+      stop();
+      void Promise.resolve().then(() => { reported = unrelated.getStore(); });
+    }) as () => void;
+    try {
+      unrelated.run('instrumentation', () => { Reflect.construct(constructor, []); });
+      await setImmediate();
+      expect(reported).toBe('instrumentation');
+    } finally {
+      stop();
+      realm.agent.eventLoop.performMicrotaskCheckpoint();
+    }
+  });
+
+  it('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     createBindings([initializationIDL]).register(realm).install(realm.global);
@@ -30,26 +53,24 @@ describe('implementation Promise ownership', () => {
     expect(trace).toEqual(['ready']);
   });
 
-  it('leaves ownership for Node I/O and completes on the destination task checkpoint', async () => {
+  it('keeps Node I/O separate and completes on the destination task checkpoint', async () => {
     const { a, trace, pending } = createFixture();
     a.expose('operation', a.object);
     a.realm.evaluate('operation.read().then(value => record(value))', 'read.js');
     const ready = Promise.withResolvers<void>();
     const unrelated = new AsyncLocalStorage<string>();
     unrelated.run('backend library', () => {
-      nodeRuntime.runWithExecutionOwner(a.realm, () => {
-        runInParallel(() => {
-          void readFile('package.json').then((bytes) => {
-            expect(bytes.length).toBeGreaterThan(0);
+      runInParallel(() => {
+        void readFile('package.json').then((bytes) => {
+          expect(bytes.length).toBeGreaterThan(0);
+          expect(unrelated.getStore()).toBe('backend library');
+          queueGlobalTask(networkingTaskSource, a.realm.globalObject, () => {
             expect(unrelated.getStore()).toBe('backend library');
-            queueGlobalTask(networkingTaskSource, a.realm.globalObject, () => {
-              expect(unrelated.getStore()).toBe('backend library');
-              trace.push('completion task');
-              pending.resolve('done');
-            });
-            ready.resolve();
-          }, ready.reject);
-        });
+            trace.push('completion task');
+            pending.resolve('done');
+          });
+          ready.resolve();
+        }, ready.reject);
       });
     });
     a.realm.agent.eventLoop.performMicrotaskCheckpoint();
@@ -82,7 +103,7 @@ describe('implementation Promise ownership', () => {
       }
     });
     const c = getRelevantRealm(new Browlet({ route: () => '' }).window);
-    nodeRuntime.runWithExecutionOwner(c, () => pending.resolve('done'));
+    c.createFunction(() => { pending.resolve('done'); }, { name: 'settle', length: 0 })();
     void Promise.resolve().then(() => trace.push('Node promise'));
     queueMicrotask(() => trace.push('Node microtask'));
 
@@ -97,7 +118,7 @@ describe('implementation Promise ownership', () => {
     expect(trace.slice(-2)).toEqual(['Node promise', 'Node microtask']);
   });
 
-  it.each(['fulfill', 'reject'] as const)('leaves ownership for an author callback and restores it on %s', async (mode) => {
+  it.each(['fulfill', 'reject'] as const)('delivers an author callback result to its caller on %s', async (mode) => {
     const { a, b, trace, pending } = createFixture(true);
     b.expose('operation', b.object);
     const callback = b.realm.evaluate(`() => {
@@ -164,6 +185,8 @@ function createSiblingWindow(first: Browlet): Window {
   return execution.realm.globalThis as Window;
 }
 
+// These ordinary-Promise fixtures still need migration to InternalPromise.
+// Keep their delivery expectations while the remaining paths are unfinished.
 class OwnershipProbeImpl {
   observe = () => {};
   constructor(

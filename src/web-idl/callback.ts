@@ -184,20 +184,18 @@ function runCallback(
   value: CallbackValue,
   steps: () => unknown,
 ): unknown {
-  const { callbacks, runtime } = value.realm;
-  return runtime.runWithExecutionOwner(undefined, () => {
-    callbacks.prepareToRunScript();
+  const { callbacks } = value.realm;
+  callbacks.prepareToRunScript();
+  try {
+    callbacks.prepareToRunCallback(value.callbackContext);
     try {
-      callbacks.prepareToRunCallback(value.callbackContext);
-      try {
-        return steps();
-      } finally {
-        callbacks.cleanUpAfterRunningCallback(value.callbackContext);
-      }
+      return steps();
     } finally {
-      callbacks.cleanUpAfterRunningScript();
+      callbacks.cleanUpAfterRunningCallback(value.callbackContext);
     }
-  });
+  } finally {
+    callbacks.cleanUpAfterRunningScript();
+  }
 }
 
 function getCallbackOperation(

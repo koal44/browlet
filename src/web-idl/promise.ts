@@ -64,8 +64,7 @@ export function projectPromise(
     if (source instanceof InternalPromise) {
       source.observe(onFulfilled, onRejected, createPromiseReactions(context.realm));
     } else {
-      context.realm.runtime.runWithExecutionOwner(context.realm, () =>
-        installPromiseReactions(context.realm, source, onFulfilled, onRejected));
+      installPromiseReactions(context.realm, source, onFulfilled, onRejected);
     }
   } catch (error) {
     promise.reject(error);

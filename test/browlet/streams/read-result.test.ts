@@ -1,3 +1,4 @@
+import { createReactions } from './implementation-fixture';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
@@ -80,7 +81,7 @@ function createFixture() {
 function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
-  const stream = new ReadableStreamImpl();
+  const stream = new ReadableStreamImpl({}, {}, createReactions());
   const controller = ReadableStreamImpl.getController(stream);
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();

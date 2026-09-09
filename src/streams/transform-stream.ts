@@ -1,12 +1,15 @@
 import {
+  InternalPromise, createPromiseReactions, type InternalPromiseCapability, type PromiseReactions,
+} from '../js-engine/internal-promise';
+import {
   arg, atArg, callback, contextValue, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, promise,
   roAttr, reference, xattr,
 } from '../web-idl/declaration/index';
 import { RangeError } from '../js-engine/simple-exception';
-import { checkCallback } from './miscellaneous';
+import { bind, type BindingContext } from '../web-idl/projection';
 import type { StreamAbortController } from './abort';
-import { createStreamAbortController } from './integration';
+import { convertStreamCallbacks, createStreamAbortController } from './integration';
 import {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategy,
   type QueuingStrategySize,
@@ -40,18 +43,12 @@ export class TransformStreamImpl {
     writableStrategy: QueuingStrategy = {},
     readableStrategy: QueuingStrategy = {},
     abortController: StreamAbortController,
+    readonly reactions: PromiseReactions,
   ) {
     this.#abortController = abortController;
     if (transformer === null) return;
 
-    const transformerDict: TransformerRecord = {
-      cancel: checkCallback(transformer.cancel),
-      flush: checkCallback(transformer.flush),
-      readableType: transformer.readableType,
-      start: checkCallback(transformer.start),
-      transform: checkCallback(transformer.transform),
-      writableType: transformer.writableType,
-    };
+    const transformerDict = transformer;
 
     if (transformerDict.readableType !== undefined) {
       throw new RangeError('Invalid readableType specified');
@@ -64,7 +61,7 @@ export class TransformStreamImpl {
     const readableSizeAlgorithm = extractSizeAlgorithm(readableStrategy);
     const writableHighWaterMark = extractHighWaterMark(writableStrategy, 1);
     const writableSizeAlgorithm = extractSizeAlgorithm(writableStrategy);
-    const start = Promise.withResolvers<unknown>();
+    const start = InternalPromise.withResolvers<unknown>();
     this.#initialize(
       start.promise,
       writableHighWaterMark,
@@ -75,15 +72,16 @@ export class TransformStreamImpl {
     const controller = new TransformStreamDefaultControllerImpl();
     controller.setUpFromTransformer(this, transformer, transformerDict);
 
-    start.resolve(transformerDict.start
+    const startResult = transformerDict.start
       ? Reflect.apply(transformerDict.start, transformer, [controller])
-      : undefined);
+      : undefined;
+    InternalPromise.resolve(startResult).observe(start.resolve, start.reject, this.reactions);
   }
 
   /** Streams §9.3, create an identity transform stream. */
   // SPEC_MISMATCH: create an identity TransformStream() -> TransformStream
-  static createIdentity(abortController: StreamAbortController): TransformStreamImpl {
-    const stream = new TransformStreamImpl(null, {}, {}, abortController);
+  static createIdentity(abortController: StreamAbortController, reactions: PromiseReactions): TransformStreamImpl {
+    const stream = new TransformStreamImpl(null, {}, {}, abortController, reactions);
     stream.setUp((chunk) => stream.enqueue(chunk));
     return stream;
   }
@@ -106,12 +104,12 @@ export class TransformStreamImpl {
 
   /** Streams §9.3, set up a newly-created transform stream. */
   setUp(
-    transformAlgorithm: (chunk: unknown) => unknown,
-    flushAlgorithm?: () => unknown,
-    cancelAlgorithm?: (reason: unknown) => unknown,
+    transformAlgorithm: (chunk: unknown) => InternalPromise<unknown> | void,
+    flushAlgorithm?: () => InternalPromise<unknown> | void,
+    cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown> | void,
   ): void {
     this.#initialize(
-      Promise.resolve(),
+      InternalPromise.resolve(),
       1,
       () => 1,
       0,
@@ -119,9 +117,9 @@ export class TransformStreamImpl {
     );
     new TransformStreamDefaultControllerImpl().setUp(
       this,
-      (chunk) => new Promise((resolve) => resolve(transformAlgorithm(chunk))),
-      () => new Promise((resolve) => resolve(flushAlgorithm?.())),
-      (reason) => new Promise((resolve) => resolve(cancelAlgorithm?.(reason))),
+      (chunk) => InternalPromise.try(() => transformAlgorithm(chunk)),
+      () => InternalPromise.try(() => flushAlgorithm?.()),
+      (reason) => InternalPromise.try(() => cancelAlgorithm?.(reason)),
     );
   }
 
@@ -152,7 +150,7 @@ export class TransformStreamImpl {
       throw new Error('Transform stream backpressure did not change');
     }
     this.state.backpressureChange?.resolve();
-    this.state.backpressureChange = Promise.withResolvers<void>();
+    this.state.backpressureChange = InternalPromise.withResolvers<void>();
     this.state.backpressure = backpressure;
   }
 
@@ -165,7 +163,7 @@ export class TransformStreamImpl {
   }
 
   #initialize(
-    startPromise: Promise<unknown>,
+    startPromise: InternalPromise<unknown>,
     writableHighWaterMark: number,
     writableSizeAlgorithm: QueuingStrategySize,
     readableHighWaterMark: number,
@@ -179,6 +177,7 @@ export class TransformStreamImpl {
       writableHighWaterMark,
       writableSizeAlgorithm,
       this.#abortController,
+      this.reactions,
     );
     this.state.readable = createReadableStream(
       () => startPromise,
@@ -186,6 +185,7 @@ export class TransformStreamImpl {
       (reason) => this.#cancel(reason),
       readableHighWaterMark,
       readableSizeAlgorithm,
+      this.reactions,
     );
     this.setBackpressure(true);
   }
@@ -194,7 +194,8 @@ export class TransformStreamImpl {
     if (this.state.backpressure) this.setBackpressure(false);
   }
 
-  #write(chunk: unknown): Promise<unknown> {
+  // SPEC_MISMATCH: TransformStreamDefaultSinkWriteAlgorithm(stream, chunk) -> Promise<undefined>
+  #write(chunk: unknown): InternalPromise<unknown> {
     const { state } = this.writable;
     if (state.state !== 'writable') {
       throw new Error('Transform stream writable side is not writable');
@@ -202,21 +203,22 @@ export class TransformStreamImpl {
     if (!this.state.backpressure) return this.#controller.performTransform(chunk);
 
     return requireStateMember(this.state.backpressureChange, 'backpressure change')
-      .promise.then(() => {
+      .promise.chain(() => {
         if (state.state === 'erroring') throw state.storedError;
         return this.#controller.performTransform(chunk);
-      });
+      }, undefined, this.reactions);
   }
 
-  #abort(reason: unknown): Promise<void> {
+  // SPEC_MISMATCH: TransformStreamDefaultSinkAbortAlgorithm(stream, reason) -> Promise<undefined>
+  #abort(reason: unknown): InternalPromise<void> {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = Promise.withResolvers<void>();
+    const finish = InternalPromise.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
-    void cancelPromise.then(() => {
+    void cancelPromise.chain(() => {
       const readable = ReadableStreamImpl.getState(this.readable);
       if (readable.state === 'errored') {
         finish.reject(readable.storedError);
@@ -227,19 +229,20 @@ export class TransformStreamImpl {
     }, (error: unknown) => {
       readableStreamDefaultControllerError(this.readableController, error);
       finish.reject(error);
-    });
+    }, this.reactions);
     return finish.promise;
   }
 
-  #close(): Promise<void> {
+  // SPEC_MISMATCH: TransformStreamDefaultSinkCloseAlgorithm(stream) -> Promise<undefined>
+  #close(): InternalPromise<void> {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = Promise.withResolvers<void>();
+    const finish = InternalPromise.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const flushPromise = controller.flush();
     controller.clearAlgorithms();
-    void flushPromise.then(() => {
+    void flushPromise.chain(() => {
       const readable = ReadableStreamImpl.getState(this.readable);
       if (readable.state === 'errored') {
         finish.reject(readable.storedError);
@@ -250,11 +253,12 @@ export class TransformStreamImpl {
     }, (error: unknown) => {
       readableStreamDefaultControllerError(this.readableController, error);
       finish.reject(error);
-    });
+    }, this.reactions);
     return finish.promise;
   }
 
-  #pull(): Promise<void> {
+  // SPEC_MISMATCH: TransformStreamDefaultSourcePullAlgorithm(stream) -> Promise<undefined>
+  #pull(): InternalPromise<void> {
     if (!this.state.backpressure) {
       throw new Error('Transform stream source pulled without backpressure');
     }
@@ -262,15 +266,16 @@ export class TransformStreamImpl {
     return requireStateMember(this.state.backpressureChange, 'backpressure change').promise;
   }
 
-  #cancel(reason: unknown): Promise<void> {
+  // SPEC_MISMATCH: TransformStreamDefaultSourceCancelAlgorithm(stream, reason) -> Promise<undefined>
+  #cancel(reason: unknown): InternalPromise<void> {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = Promise.withResolvers<void>();
+    const finish = InternalPromise.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
-    void cancelPromise.then(() => {
+    void cancelPromise.chain(() => {
       const writable = this.writable.state;
       if (writable.state === 'errored') {
         finish.reject(writable.storedError);
@@ -283,33 +288,33 @@ export class TransformStreamImpl {
       writableStreamDefaultControllerErrorIfNeeded(this.#writableController, error);
       this.#unblockWrite();
       finish.reject(error);
-    });
+    }, this.reactions);
     return finish.promise;
   }
 }
 
 export type TransformStreamState = {
   backpressure?: boolean;
-  backpressureChange?: PromiseWithResolvers<void>;
+  backpressureChange?: InternalPromiseCapability<void>;
   controller?: TransformStreamDefaultControllerImpl;
   readable?: ReadableStreamImpl;
   writable?: WritableStreamImpl;
 };
 
-/** Transformer members captured by the constructor before stream setup. */
+/** Converted transformer members supplied before stream setup. */
 export type TransformerRecord = {
-  readonly cancel?: (reason: unknown) => unknown;
+  readonly cancel?: (reason: unknown) => InternalPromise<unknown> | void;
   readonly flush?: (
     controller: TransformStreamDefaultControllerImpl,
-  ) => unknown;
+  ) => InternalPromise<unknown> | void;
   readonly readableType?: unknown;
   readonly start?: (
     controller: TransformStreamDefaultControllerImpl,
-  ) => unknown;
+  ) => InternalPromise<unknown> | void;
   readonly transform?: (
     chunk: unknown,
     controller: TransformStreamDefaultControllerImpl,
-  ) => unknown;
+  ) => InternalPromise<unknown> | void;
   readonly writableType?: unknown;
 };
 
@@ -318,7 +323,10 @@ export const transformStreamIDL = defineInterface({
   exposed: '*',
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
-    constructWith: [atArg(3, contextValue(createStreamAbortController))],
+    constructWith: [
+      atArg(3, contextValue(createStreamAbortController)),
+      atArg(4, contextValue((context: BindingContext) => createPromiseReactions(context.realm))),
+    ],
   }),
   members: [
     ctor([
@@ -331,7 +339,17 @@ export const transformStreamIDL = defineInterface({
         default: emptyDictionary,
         optional: true,
       }),
-    ]),
+    ], bind({
+      construct(context, transformer, writableStrategy, readableStrategy) {
+        return new TransformStreamImpl(
+          convertStreamCallbacks(context, transformer, 'Transformer', ['start', 'transform', 'flush', 'cancel']),
+          writableStrategy as QueuingStrategy,
+          readableStrategy as QueuingStrategy,
+          createStreamAbortController(context),
+          createPromiseReactions(context.realm),
+        );
+      },
+    })),
     roAttr('readable', reference('ReadableStream')),
     roAttr('writable', reference('WritableStream')),
   ],
