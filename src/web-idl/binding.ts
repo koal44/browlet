@@ -1,4 +1,4 @@
-import { isObject, type RealmFunctionOptions, type RealmFunctionSteps } from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
 import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
@@ -263,7 +263,7 @@ export class RealmBinding {
     const overridden = this.implementations.getOverriddenConstructorSteps(
       assembled.definition,
     );
-    const object = this.#createPlatformFunction(
+    const object = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
           return overridden(argumentsList, newTarget, object);
@@ -341,7 +341,7 @@ export class RealmBinding {
       return initial.legacyCallbackInterfaceObject;
     }
 
-    const object = this.#createPlatformFunction(
+    const object = this.realm.createFunction(
       () => this.#throwTypeError('Illegal invocation'),
       { length: 0, name: definition.name },
     );
@@ -377,7 +377,7 @@ export class RealmBinding {
     const existing = initial.legacyFactoryFunctions?.get(id);
     if (existing) return existing;
 
-    const function_ = this.#createPlatformFunction(
+    const function_ = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {
           return this.#throwTypeError(
@@ -955,7 +955,7 @@ export class RealmBinding {
       'stringifier',
       interface_.definition,
       stringifier,
-      () => this.#createPlatformFunction(
+      () => this.realm.createFunction(
         (thisArgument) => {
           if (thisArgument === null || thisArgument === undefined) {
             return this.#throwTypeError(
@@ -1111,7 +1111,7 @@ export class RealmBinding {
       'getter',
       definition.definition,
       attribute,
-      () => this.#createPlatformFunction((thisArgument) => {
+      () => this.realm.createFunction((thisArgument) => {
         let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
@@ -1201,7 +1201,7 @@ export class RealmBinding {
       'setter',
       definition.definition,
       attribute,
-      () => this.#createPlatformFunction((thisArgument, argumentsList) => {
+      () => this.realm.createFunction((thisArgument, argumentsList) => {
         const value = argumentsList[0];
         const jsValue = this.#resolveThisValue(thisArgument);
         const receiver = attribute.static
@@ -1306,7 +1306,7 @@ export class RealmBinding {
       'operation',
       definition.definition,
       source,
-      () => this.#createPlatformFunction((thisArgument, argumentsList) => {
+      () => this.realm.createFunction((thisArgument, argumentsList) => {
         let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
@@ -1617,13 +1617,6 @@ export class RealmBinding {
       return this.#throwTypeError('Illegal invocation');
     }
     return record;
-  }
-
-  // Author entry and argument coercion must not inherit the calling operation's owner.
-  #createPlatformFunction(steps: RealmFunctionSteps, options: RealmFunctionOptions): JavaScriptFunction {
-    return this.realm.createFunction((thisArgument, argumentsList, newTarget) =>
-      this.realm.runtime.runWithExecutionOwner(undefined, () =>
-        steps(thisArgument, argumentsList, newTarget)), options);
   }
 
   #resultContext(realm: WebIDLRealmHost | undefined): ConversionContext {

@@ -17,7 +17,7 @@ export function createTransformStream(
   readableStrategy: QueuingStrategy = {},
 ): TransformStreamImpl {
   return new TransformStreamImpl(
-    transformer, writableStrategy, readableStrategy, createAbortController(),
+    transformer, writableStrategy, readableStrategy, createAbortController(), createReactions(),
   );
 }
 
@@ -25,7 +25,11 @@ export function createWritableStream(
   sink: UnderlyingSink | null = {},
   strategy: QueuingStrategy = {},
 ): WritableStreamImpl {
-  return new WritableStreamImpl(sink, strategy, createAbortController());
+  return new WritableStreamImpl(sink, strategy, createAbortController(), createReactions());
+}
+
+export function createReactions() {
+  return createPromiseReactions(new TestRealm());
 }
 
 /** Observe an implementation result on the unit harness's queue. */

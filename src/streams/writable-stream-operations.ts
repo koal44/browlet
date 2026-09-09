@@ -1,3 +1,4 @@
+import { InternalPromise } from '../js-engine/internal-promise';
 import { TypeError } from '../js-engine/simple-exception';
 import type { StreamAbortController } from './abort';
 import {
@@ -32,23 +33,24 @@ export function isWritableStreamWritable(stream: WritableStreamImpl): boolean {
   return stream.state.state === 'writable';
 }
 
+// SPEC_MISMATCH: WritableStreamAbort(stream, reason) -> Promise<undefined>
 export function writableStreamAbort(
   stream: WritableStreamImpl,
   reason: unknown,
-): Promise<void> {
+): InternalPromise<void> {
   const { state } = stream;
   if (isWritableStreamFinished(state)) {
-    return Promise.resolve(undefined);
+    return InternalPromise.resolve(undefined);
   }
 
   requireController(state).state.abortController.abort(reason);
   if (isWritableStreamFinished(state)) {
-    return Promise.resolve(undefined);
+    return InternalPromise.resolve(undefined);
   }
   if (state.pendingAbortRequest) return state.pendingAbortRequest.promise.promise;
 
   const wasAlreadyErroring = state.state === 'erroring';
-  const promise = Promise.withResolvers<void>();
+  const promise = InternalPromise.withResolvers<void>();
   state.pendingAbortRequest = {
     promise,
     reason: wasAlreadyErroring ? undefined : reason,
@@ -58,10 +60,11 @@ export function writableStreamAbort(
   return promise.promise;
 }
 
-export function writableStreamClose(stream: WritableStreamImpl): Promise<void> {
+// SPEC_MISMATCH: WritableStreamClose(stream) -> Promise<undefined>
+export function writableStreamClose(stream: WritableStreamImpl): InternalPromise<void> {
   const { state } = stream;
   if (state.state === 'closed' || state.state === 'errored') {
-    return Promise.reject(new TypeError(
+    return InternalPromise.reject(new TypeError(
       `A stream in the ${state.state} state cannot be closed`,
     ));
   }
@@ -69,7 +72,7 @@ export function writableStreamClose(stream: WritableStreamImpl): Promise<void> {
     throw new Error('Writable stream already has a close operation');
   }
 
-  const promise = Promise.withResolvers<void>();
+  const promise = InternalPromise.withResolvers<void>();
   state.closeRequest = promise;
   if (state.writer && state.backpressure && state.state === 'writable') {
     state.writer.state.readyPromise.resolve();
@@ -98,8 +101,8 @@ export function setUpWritableStreamDefaultWriter(
   }
 
   const streamState = stream.state;
-  const readyPromise = Promise.withResolvers<void>();
-  const closedPromise = Promise.withResolvers<void>();
+  const readyPromise = InternalPromise.withResolvers<void>();
+  const closedPromise = InternalPromise.withResolvers<void>();
   const readyPending = streamState.state === 'writable' &&
     !writableStreamCloseQueuedOrInFlight(stream) && streamState.backpressure;
   const closedPending = streamState.state === 'writable' ||
@@ -108,42 +111,44 @@ export function setUpWritableStreamDefaultWriter(
     if (!readyPending) readyPromise.resolve();
   } else {
     readyPromise.reject(streamState.storedError);
-    void readyPromise.promise.catch(() => {});
+    void readyPromise.promise.chain(undefined, () => {}, stream.reactions);
   }
   if (streamState.state === 'closed') closedPromise.resolve();
   if (streamState.state === 'errored') {
     closedPromise.reject(streamState.storedError);
-    void closedPromise.promise.catch(() => {});
+    void closedPromise.promise.chain(undefined, () => {}, stream.reactions);
   }
-  writer.state = { closedPromise, closedPending, readyPromise, readyPending, stream };
+  writer.state = { closedPromise, closedPending, readyPromise, readyPending, stream, reactions: stream.reactions };
   streamState.writer = writer;
 }
 
+// SPEC_MISMATCH: WritableStreamDefaultWriterAbort(writer, reason) -> Promise<undefined>
 export function writableStreamDefaultWriterAbort(
   writer: WritableStreamDefaultWriterImpl,
   reason: unknown,
-): Promise<void> {
+): InternalPromise<void> {
   return writableStreamAbort(requireWriterStream(writer), reason);
 }
 
+// SPEC_MISMATCH: WritableStreamDefaultWriterClose(writer) -> Promise<undefined>
 export function writableStreamDefaultWriterClose(
   writer: WritableStreamDefaultWriterImpl,
-): Promise<void> {
+): InternalPromise<void> {
   return writableStreamClose(requireWriterStream(writer));
 }
 
+// SPEC_MISMATCH: WritableStreamDefaultWriterCloseWithErrorPropagation(writer) -> Promise<undefined>
 export function writableStreamDefaultWriterCloseWithErrorPropagation(
   writer: WritableStreamDefaultWriterImpl,
-): Promise<void> {
+): InternalPromise<void> {
   const stream = requireWriterStream(writer);
   const { state: streamState } = stream;
   if (writableStreamCloseQueuedOrInFlight(stream) ||
     streamState.state === 'closed') {
-    return Promise.resolve(undefined);
+    return InternalPromise.resolve(undefined);
   }
   if (streamState.state === 'errored') {
-    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the stream rejection reason.
-    return Promise.reject(streamState.storedError);
+    return InternalPromise.reject(streamState.storedError);
   }
   return writableStreamDefaultWriterClose(writer);
 }
@@ -185,10 +190,11 @@ export function writableStreamDefaultWriterRelease(
   writerState.stream = undefined;
 }
 
+// SPEC_MISMATCH: WritableStreamDefaultWriterWrite(writer, chunk) -> Promise<undefined>
 export function writableStreamDefaultWriterWrite(
   writer: WritableStreamDefaultWriterImpl,
   chunk: unknown,
-): Promise<void> {
+): InternalPromise<void> {
   const stream = requireWriterStream(writer);
   const { state: streamState } = stream;
   const controller = requireController(streamState);
@@ -198,26 +204,24 @@ export function writableStreamDefaultWriterWrite(
   );
 
   if (stream !== writer.state.stream) {
-    return Promise.reject(new TypeError(
+    return InternalPromise.reject(new TypeError(
       'Cannot write using a released writer',
     ));
   }
   if (streamState.state === 'errored') {
-    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the stream rejection reason.
-    return Promise.reject(streamState.storedError);
+    return InternalPromise.reject(streamState.storedError);
   }
   if (writableStreamCloseQueuedOrInFlight(stream) ||
     streamState.state === 'closed') {
-    return Promise.reject(new TypeError(
+    return InternalPromise.reject(new TypeError(
       'The stream is closing or closed',
     ));
   }
   if (streamState.state === 'erroring') {
-    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve the stream rejection reason.
-    return Promise.reject(streamState.storedError);
+    return InternalPromise.reject(streamState.storedError);
   }
 
-  const promise = Promise.withResolvers<void>();
+  const promise = InternalPromise.withResolvers<void>();
   streamState.writeRequests.push(promise);
   writableStreamDefaultControllerWrite(controller, chunk, chunkSize);
   return promise.promise;
@@ -235,12 +239,9 @@ export function setUpWritableStreamDefaultControllerFromUnderlyingSink(
 ): void {
   const { start, write, close, abort } = sinkDict;
   const startAlgorithm = () => start && Reflect.apply(start, sink, [controller]);
-  const writeAlgorithm = (chunk: unknown) => new Promise((resolve) =>
-    resolve(write && Reflect.apply(write, sink, [chunk, controller])));
-  const closeAlgorithm = () => new Promise((resolve) =>
-    resolve(close && Reflect.apply(close, sink, [])));
-  const abortAlgorithm = (reason: unknown) => new Promise((resolve) =>
-    resolve(abort && Reflect.apply(abort, sink, [reason])));
+  const writeAlgorithm = (chunk: unknown) => InternalPromise.try(() => write?.call(sink, chunk, controller));
+  const closeAlgorithm = () => InternalPromise.try(() => close?.call(sink));
+  const abortAlgorithm = (reason: unknown) => InternalPromise.try(() => abort?.call(sink, reason));
 
   setUpWritableStreamDefaultController(
     stream,
@@ -291,10 +292,10 @@ export function writableStreamDefaultControllerErrorIfNeeded(
 export function setUpWritableStreamDefaultController(
   stream: WritableStreamImpl,
   controller: WritableStreamDefaultControllerImpl,
-  startAlgorithm: () => unknown,
-  writeAlgorithm: (chunk: unknown) => Promise<unknown>,
-  closeAlgorithm: () => Promise<unknown>,
-  abortAlgorithm: (reason: unknown) => Promise<unknown>,
+  startAlgorithm: () => InternalPromise<unknown> | void,
+  writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
+  closeAlgorithm: () => InternalPromise<unknown>,
+  abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
   highWaterMark: number,
   sizeAlgorithm: QueuingStrategySize,
   abortController: StreamAbortController,
@@ -322,14 +323,14 @@ export function setUpWritableStreamDefaultController(
     stream,
     writableStreamDefaultControllerGetBackpressure(controller),
   );
-  const startPromise = Promise.resolve(startAlgorithm());
-  void startPromise.then(() => {
+  const startPromise = InternalPromise.resolve(startAlgorithm());
+  void startPromise.chain(() => {
     state.started = true;
     writableStreamDefaultControllerAdvanceQueueIfNeeded(controller);
   }, (reason) => {
     state.started = true;
     writableStreamDealWithRejection(stream, reason);
-  });
+  }, stream.reactions);
 }
 
 function writableStreamDefaultControllerAdvanceQueueIfNeeded(
@@ -415,8 +416,8 @@ function writableStreamDefaultControllerProcessClose(
     'close',
   )();
   writableStreamDefaultControllerClearAlgorithms(controller);
-  void closePromise.then(() => writableStreamFinishInFlightClose(stream), (reason) =>
-    writableStreamFinishInFlightCloseWithError(stream, reason));
+  void closePromise.chain(() => writableStreamFinishInFlightClose(stream), (reason) =>
+    writableStreamFinishInFlightCloseWithError(stream, reason), stream.reactions);
 }
 
 function writableStreamDefaultControllerProcessWrite(
@@ -436,7 +437,7 @@ function writableStreamDefaultControllerProcessWrite(
     controllerState.writeAlgorithm,
     'write',
   )(chunk);
-  void writePromise.then(() => {
+  void writePromise.chain(() => {
     writableStreamFinishInFlightWrite(stream);
     dequeueValue(controllerState);
     if (!writableStreamCloseQueuedOrInFlight(stream) &&
@@ -452,7 +453,7 @@ function writableStreamDefaultControllerProcessWrite(
       writableStreamDefaultControllerClearAlgorithms(controller);
     }
     writableStreamFinishInFlightWriteWithError(stream, reason);
-  });
+  }, stream.reactions);
 }
 
 function writableStreamDefaultControllerWrite(
@@ -524,13 +525,13 @@ function writableStreamFinishErroring(stream: WritableStreamImpl): void {
     requireController(state),
     abortRequest.reason,
   );
-  void abortPromise.then(() => {
+  void abortPromise.chain(() => {
     abortRequest.promise.resolve(undefined);
     writableStreamRejectCloseAndClosedPromiseIfNeeded(stream);
   }, (reason) => {
     abortRequest.promise.reject(reason);
     writableStreamRejectCloseAndClosedPromiseIfNeeded(stream);
-  });
+  }, stream.reactions);
 }
 
 function writableStreamFinishInFlightClose(stream: WritableStreamImpl): void {
@@ -557,7 +558,7 @@ function writableStreamFinishInFlightClose(stream: WritableStreamImpl): void {
 function writableStreamDefaultControllerAbortSteps(
   controller: WritableStreamDefaultControllerImpl,
   reason: unknown,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   const { state } = controller;
   const promise = requireAlgorithm(state.abortAlgorithm, 'abort')(reason);
   writableStreamDefaultControllerClearAlgorithms(controller);
@@ -620,7 +621,7 @@ function writableStreamRejectCloseAndClosedPromiseIfNeeded(
     const { closedPromise } = state.writer.state;
     closedPromise.reject(state.storedError);
     state.writer.state.closedPending = false;
-    void closedPromise.promise.catch(() => {});
+    void closedPromise.promise.chain(undefined, () => {}, stream.reactions);
   }
 }
 
@@ -654,7 +655,7 @@ function writableStreamUpdateBackpressure(
   if (state.writer && backpressure !== state.backpressure) {
     const writerState = state.writer.state;
     if (backpressure) {
-      writerState.readyPromise = Promise.withResolvers<void>();
+      writerState.readyPromise = InternalPromise.withResolvers<void>();
       writerState.readyPending = true;
     } else {
       writerState.readyPromise.resolve();
@@ -669,10 +670,10 @@ function writableStreamDefaultWriterEnsureClosedPromiseRejected(
   error: unknown,
 ): void {
   const { state } = writer;
-  if (!state.closedPending) state.closedPromise = Promise.withResolvers<void>();
+  if (!state.closedPending) state.closedPromise = InternalPromise.withResolvers<void>();
   state.closedPromise.reject(error);
   state.closedPending = false;
-  void state.closedPromise.promise.catch(() => {});
+  void state.closedPromise.promise.chain(undefined, () => {}, writer.state.reactions);
 }
 
 function writableStreamDefaultWriterEnsureReadyPromiseRejected(
@@ -680,10 +681,10 @@ function writableStreamDefaultWriterEnsureReadyPromiseRejected(
   error: unknown,
 ): void {
   const { state } = writer;
-  if (!state.readyPending) state.readyPromise = Promise.withResolvers<void>();
+  if (!state.readyPending) state.readyPromise = InternalPromise.withResolvers<void>();
   state.readyPromise.reject(error);
   state.readyPending = false;
-  void state.readyPromise.promise.catch(() => {});
+  void state.readyPromise.promise.chain(undefined, () => {}, writer.state.reactions);
 }
 
 // SPEC_MISMATCH: WritableStreamHasOperationMarkedInFlight(stream) -> boolean

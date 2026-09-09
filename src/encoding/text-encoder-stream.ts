@@ -1,5 +1,6 @@
 import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
-import { toString } from '../js-engine/index';
+import { toString, createPromiseReactions, type PromiseReactions } from '../js-engine/index';
+import type { BindingContext } from '../web-idl/projection';
 import {
   contextValue, ctor, defineIncludes, defineInterface, impl,
 } from '../web-idl/declaration/index';
@@ -24,8 +25,8 @@ export class TextEncoderStreamImpl {
   #leadingSurrogate = '';
 
   // SPEC_MISMATCH: TextEncoderStream() -> TextEncoderStream
-  constructor(abortController: StreamAbortController) {
-    const transform = new TransformStreamImpl(null, {}, {}, abortController);
+  constructor(abortController: StreamAbortController, reactions: PromiseReactions) {
+    const transform = new TransformStreamImpl(null, {}, {}, abortController, reactions);
     transform.setUp(
       (chunk) => {
         this.#encodeAndEnqueue(
@@ -78,7 +79,10 @@ export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    constructWith: [contextValue(createStreamAbortController)],
+    constructWith: [
+      contextValue(createStreamAbortController),
+      contextValue((context: BindingContext) => createPromiseReactions(context.realm)),
+    ],
   }),
   members: [ctor()],
 });

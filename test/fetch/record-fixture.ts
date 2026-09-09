@@ -1,3 +1,4 @@
+import { createReactions } from '../browlet/streams/implementation-fixture';
 import { vi } from 'vitest';
 
 import { BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from '../../src/fetch/body';
@@ -41,7 +42,7 @@ export function createRecordFixture() {
     bindings,
     realm,
     context,
-    createBody: () => new BodyRecord(createReadableStream(), scheduling),
+    createBody: () => new BodyRecord(createReadableStream(undefined, undefined, 1, () => 1, createReactions()), scheduling),
     createRequest: (record: RequestRecord, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new ResponseRecord(), guard: HeadersGuard = 'response') =>

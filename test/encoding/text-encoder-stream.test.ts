@@ -1,3 +1,4 @@
+import { createReactions } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
@@ -13,9 +14,9 @@ describe('TextEncoderStream byte production', () => {
   ])('coerces %s to a DOMString', async (chunk, expected) => {
     const { reader, writer } = createEncoder();
     const read = observe(reader.read());
-    await writer.write(chunk);
+    await observe(writer.write(chunk));
     expect((await read).value).toEqual(new TextEncoder().encode(expected));
-    await writer.close();
+    await observe(writer.close());
   });
 
   it('converts at transformation time with the string hint and original receiver', async () => {
@@ -31,10 +32,10 @@ describe('TextEncoderStream byte production', () => {
     expect(convert).not.toHaveBeenCalled();
 
     const read = observe(reader.read());
-    await write;
+    await observe(write);
     expect((await read).value).toEqual(Uint8Array.of(65));
     expect(convert).toHaveBeenCalledOnce();
-    await writer.close();
+    await observe(writer.close());
   });
 
   it.each([
@@ -46,7 +47,7 @@ describe('TextEncoderStream byte production', () => {
   ])('rejects %s', async (_label, chunk) => {
     const { reader, writer } = createEncoder();
     const failure = observe(reader.read()).catch((error: unknown) => error);
-    const writing = writer.write(chunk).catch((error: unknown) => error);
+    const writing = observe(writer.write(chunk)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
     expect(getSimpleExceptionRequest(error)?.type).toBe('typeError');
@@ -57,33 +58,33 @@ describe('TextEncoderStream byte production', () => {
     const { reader, writer } = createEncoder();
     const error = new TypeError('author failure');
     const failure = observe(reader.read()).catch((reason: unknown) => reason);
-    await expect(writer.write({ toString() { throw error; } })).rejects.toBe(error);
+    await expect(observe(writer.write({ toString() { throw error; } }))).rejects.toBe(error);
     expect(await failure).toBe(error);
   });
 
   it('rejoins split surrogate pairs and keeps earlier chunk storage independent', async () => {
     const { reader, writer } = createEncoder();
     const firstRead = observe(reader.read());
-    await writer.write('A\uD83D');
+    await observe(writer.write('A\uD83D'));
     const first = await firstRead;
     expect(first).toEqual({ done: false, value: Uint8Array.of(65) });
 
     const secondRead = observe(reader.read());
-    await writer.write('\uDE00');
+    await observe(writer.write('\uDE00'));
     const second = await secondRead;
     expect(second).toEqual({ done: false, value: Uint8Array.of(240, 159, 152, 128) });
 
     (first.value as Uint8Array).fill(0);
     expect(second.value).toEqual(Uint8Array.of(240, 159, 152, 128));
-    await writer.close();
+    await observe(writer.close());
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
 
   it('flushes a trailing surrogate into replacement-character bytes', async () => {
     const { reader, writer } = createEncoder();
     const read = observe(reader.read());
-    await writer.write('\uD83D');
-    await writer.close();
+    await observe(writer.write('\uD83D'));
+    await observe(writer.close());
 
     expect(await read).toEqual({ done: false, value: Uint8Array.of(239, 191, 189) });
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
@@ -91,6 +92,6 @@ describe('TextEncoderStream byte production', () => {
 });
 
 function createEncoder() {
-  const encoder = new TextEncoderStreamImpl(createAbortController());
+  const encoder = new TextEncoderStreamImpl(createAbortController(), createReactions());
   return { reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
 }

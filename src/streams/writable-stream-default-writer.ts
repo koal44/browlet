@@ -1,3 +1,4 @@
+import { InternalPromise, type InternalPromiseCapability, type PromiseReactions } from '../js-engine/internal-promise';
 import {
   arg, ctor, defineInterface, idlType, impl, nullable, op, promise, roAttr,
   reference,
@@ -21,7 +22,8 @@ export class WritableStreamDefaultWriterImpl {
     if (stream) setUpWritableStreamDefaultWriter(this, stream);
   }
 
-  get closed(): Promise<void> {
+  // SPEC_MISMATCH: get closed() -> Promise<undefined>
+  get closed(): InternalPromise<void> {
     return this.state.closedPromise.promise;
   }
 
@@ -32,24 +34,27 @@ export class WritableStreamDefaultWriterImpl {
     return writableStreamDefaultWriterGetDesiredSize(this);
   }
 
-  get ready(): Promise<void> {
+  // SPEC_MISMATCH: get ready() -> Promise<undefined>
+  get ready(): InternalPromise<void> {
     return this.state.readyPromise.promise;
   }
 
-  abort(reason?: unknown): Promise<void> {
+  // SPEC_MISMATCH: abort(reason?) -> Promise<undefined>
+  abort(reason?: unknown): InternalPromise<void> {
     if (!this.state.stream) {
-      return Promise.reject(defaultWriterLockException('abort'));
+      return InternalPromise.reject(defaultWriterLockException('abort'));
     }
     return writableStreamDefaultWriterAbort(this, reason);
   }
 
-  close(): Promise<void> {
+  // SPEC_MISMATCH: close() -> Promise<undefined>
+  close(): InternalPromise<void> {
     const stream = this.state.stream;
     if (!stream) {
-      return Promise.reject(defaultWriterLockException('close'));
+      return InternalPromise.reject(defaultWriterLockException('close'));
     }
     if (writableStreamCloseQueuedOrInFlight(stream)) {
-      return Promise.reject(new TypeError(
+      return InternalPromise.reject(new TypeError(
         'Cannot close an already-closing stream',
       ));
     }
@@ -61,18 +66,20 @@ export class WritableStreamDefaultWriterImpl {
     writableStreamDefaultWriterRelease(this);
   }
 
-  write(chunk?: unknown): Promise<void> {
+  // SPEC_MISMATCH: write(chunk?) -> Promise<undefined>
+  write(chunk?: unknown): InternalPromise<void> {
     if (!this.state.stream) {
-      return Promise.reject(defaultWriterLockException('write to'));
+      return InternalPromise.reject(defaultWriterLockException('write to'));
     }
     return writableStreamDefaultWriterWrite(this, chunk);
   }
 }
 
 export type WritableStreamDefaultWriterState = {
-  closedPromise: PromiseWithResolvers<void>;
+  readonly reactions: PromiseReactions;
+  closedPromise: InternalPromiseCapability<void>;
   closedPending: boolean;
-  readyPromise: PromiseWithResolvers<void>;
+  readyPromise: InternalPromiseCapability<void>;
   readyPending: boolean;
   stream?: WritableStreamImpl;
 };

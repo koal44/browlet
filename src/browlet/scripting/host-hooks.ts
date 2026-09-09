@@ -70,15 +70,11 @@ function enqueuePromiseJob(
   job: () => void,
   realm: JavaScriptRealm | null,
   queueRealm: JavaScriptRealm | null,
-  executionOwner: JavaScriptRealm | undefined,
 ): false | void {
-  // Unowned Node and unrelated vm jobs retain the engine-selected queue.
-  const destination = executionOwner ?? queueRealm;
+  // Node and unrelated vm jobs retain the engine-selected queue.
+  const destination = queueRealm;
   if (!(destination instanceof Realm) || destination.hostDefined === null) return false;
-  // Internal continuations belong to the operation's destination. They do not
-  // constitute an author script, even though the implementation is JavaScript.
-  const settings = executionOwner === undefined && realm instanceof Realm
-    ? realm.hostDefined : null;
+  const settings = realm instanceof Realm ? realm.hostDefined : null;
   destination.queueMicrotask(() => {
     try {
       if (settings !== null) settings.responsibleEventLoop.prepareToRunScript(settings);

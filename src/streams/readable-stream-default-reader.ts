@@ -24,11 +24,13 @@ export class ReadableStreamDefaultReaderImpl {
     if (stream) setUpReadableStreamDefaultReader(this, stream);
   }
 
-  get closed(): Promise<void> {
+  // SPEC_MISMATCH: get closed() -> Promise<undefined>
+  get closed(): InternalPromise<void> {
     return ReadableStreamDefaultReaderImpl.getGenericReader(this).closed;
   }
 
-  cancel(reason?: unknown): Promise<void> {
+  // SPEC_MISMATCH: cancel(reason?) -> Promise<undefined>
+  cancel(reason?: unknown): InternalPromise<void> {
     return ReadableStreamDefaultReaderImpl.getGenericReader(this).cancel(
       reason,
     );

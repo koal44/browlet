@@ -36,14 +36,16 @@ policy. Returning false from Promise enqueue retains its native V8 queue;
 generic and timeout enqueue always transfer scheduling to the host. Unknown
 realm references map to null. `supportsHostHooks` is false on official engines.
 
-`runWithExecutionOwner(realm, steps)` scopes implementation continuations to an
-explicit destination. Passing `undefined` leaves that scope for author code or
-Node backend work. NodeRuntime uses a private AsyncLocalStorage channel; enqueue
-reads that channel from the job's saved continuation data, independently of the
-settler's current state. `bindExecutionOwner(realm, steps)` retains that scope
-and the other Node async-context channels for a later explicit task handoff.
-Neither operation changes function realms or HTML callback registration data.
-Binding and HTML choose the owner; implementation algorithms do not discover it.
+Promise routing uses the job's queue realm, without an ambient execution owner
+or a saved-continuation-data lookup. Node reactions, including runtime diagnostics,
+remain on Node's queue even when created during a platform operation or HTML task.
+`InternalPromise` observers select their destination explicitly through
+`createPromiseReactions(realm)` and native observation. See the shared
+[return boundary](../PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
+
+`bindAsyncContext(steps)` retains Node's scheduling-time async context for an
+explicit task handoff. This preserves unrelated AsyncLocalStorage channels;
+it neither selects a Promise queue nor adds a Browlet ownership channel.
 
 ## Admission rule
 

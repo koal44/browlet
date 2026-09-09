@@ -1,3 +1,5 @@
+import { createReactions } from './implementation-fixture';
+import { InternalPromise } from '../../../src/js-engine/internal-promise';
 import { describe, expect, it, vi } from 'vitest';
 import {
   closeReadableStream, closeWritableStream, createReadableStream,
@@ -22,7 +24,7 @@ import { createAbortController, createTransformStream, observe } from './impleme
 
 describe('Streams operations for other specifications', () => {
   it('drains buffered bytes without recursion or Node microtask scheduling', () => {
-    const stream = createReadableStream();
+    const stream = createReadableStream(undefined, undefined, 1, () => 1, createReactions());
     for (let i = 0; i < 4_096; i++) enqueueReadableStream(stream, Uint8Array.of(i % 256));
     closeReadableStream(stream);
     const success = vi.fn();
@@ -41,7 +43,7 @@ describe('Streams operations for other specifications', () => {
   });
 
   it('resumes byte reading when later chunks arrive', () => {
-    const stream = createReadableStream();
+    const stream = createReadableStream(undefined, undefined, 1, () => 1, createReactions());
     const success = vi.fn();
     const failure = vi.fn();
     readAllBytes(getReadableStreamReader(stream), success, failure);
@@ -71,7 +73,7 @@ describe('Streams operations for other specifications', () => {
       pulled = true;
       enqueueReadableStream(stream, 'chunk');
       closeReadableStream(stream);
-    });
+    }, undefined, 1, () => 1, createReactions());
 
     expect(getReadableStreamDesiredSize(stream)).toBe(1);
     expect(readableStreamNeedsMoreData(stream)).toBe(true);
@@ -102,11 +104,11 @@ describe('Streams operations for other specifications', () => {
       writeArrayBufferView(chunk, [7, 8]);
       enqueueReadableStream(stream, chunk);
       closeReadableStream(stream);
-    });
+    }, undefined, 0, createReactions());
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
 
-    const result = await reader.read(destination, { min: 1 });
+    const result = await observe(reader.read(destination, { min: 1 }));
 
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(requireObject(result.value)))
@@ -119,50 +121,48 @@ describe('Streams operations for other specifications', () => {
     const stream: ReadableStreamImpl = createReadableStreamWithByteReadingSupport(() => {
       offset = pullReadableStreamFromBytes(stream, bytes, offset);
       closeReadableStream(stream);
-    });
+    }, undefined, 0, createReactions());
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
 
-    const result = await reader.read(destination, { min: 1 });
+    const result = await observe(reader.read(destination, { min: 1 }));
 
     expect(offset).toBe(4);
     expect(getBufferSourceCopy(requireObject(result.value)))
       .toEqual(Uint8Array.from([2, 3, 4]));
   });
 
-  it('waits for host promises returned by writable algorithms', async () => {
-    let finishWrite: (() => void) | undefined;
-    const write = vi.fn(() => new Promise<void>((resolve) => {
-      finishWrite = resolve;
-    }));
-    const stream = createWritableStream(write, undefined, undefined, 1, () => 1, createAbortController());
+  it('waits for internal promises returned by writable algorithms', async () => {
+    const finishWrite = InternalPromise.withResolvers<void>();
+    const write = vi.fn(() => finishWrite.promise);
+    const stream = createWritableStream(write, undefined, undefined, 1, () => 1, createAbortController(), createReactions());
     const writer = getWritableStreamWriter(stream);
     const writing = writeWritableStreamChunk(
       writer,
       'chunk',
     );
     let settled = false;
-    void writing.then(() => { settled = true; });
+    void observe(writing).then(() => { settled = true; });
 
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(getWritableStreamSignal(stream).aborted).toBe(false);
-    finishWrite?.();
-    await expect(writing).resolves.toBeUndefined();
-    await expect(closeWritableStream(stream))
+    finishWrite.resolve();
+    await expect(observe(writing)).resolves.toBeUndefined();
+    await expect(observe(closeWritableStream(stream)))
       .resolves.toBeUndefined();
     releaseWritableStreamWriter(writer);
     expect(write).toHaveBeenCalledWith('chunk');
   });
 
   it('errors a writable stream and proxies a readable stream', async () => {
-    const writable = createWritableStream(() => undefined, undefined, undefined, 1, () => 1, createAbortController());
+    const writable = createWritableStream(() => undefined, undefined, undefined, 1, () => 1, createAbortController(), createReactions());
     const writer = getWritableStreamWriter(writable);
     const failure = new Error('sink failed');
     errorWritableStream(writable, failure);
-    await expect(writer.closed).rejects.toBe(failure);
+    await expect(observe(writer.closed)).rejects.toBe(failure);
 
-    const source = createReadableStream();
+    const source = createReadableStream(undefined, undefined, 1, () => 1, createReactions());
     const proxy = createReadableStreamProxy(source, createAbortController());
     expect(isReadableStreamLocked(source)).toBe(true);
     expect(isReadableStreamDisturbed(source)).toBe(true);

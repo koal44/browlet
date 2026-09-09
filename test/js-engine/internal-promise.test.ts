@@ -35,6 +35,62 @@ describe('internal Promise results', () => {
     queue.performMicrotaskCheckpoint();
     expect(reasons).toEqual([failure]);
   });
+
+  it('adopts an internal chain result without adopting its payload', () => {
+    const first = createTarget();
+    const second = createTarget();
+    const pending = InternalPromise.withResolvers<object>();
+    const payload = { get then(): never { throw new Error('Not a thenable'); } };
+    const values: unknown[] = [];
+    const result = InternalPromise.resolve(1).chain(() => pending.promise, undefined, first.reactions);
+    result.observe((value) => { values.push(value); }, fail, second.reactions);
+    pending.resolve(payload);
+    second.queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([]);
+    first.queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([]);
+    second.queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([payload]);
+    expect(InternalPromise.resolve(pending.promise)).toBe(pending.promise);
+  });
+
+  it('captures a thrown failure and adopts an asynchronous recovery', () => {
+    const { queue, reactions } = createTarget();
+    const failure = new Error('failed step');
+    const recovery = InternalPromise.withResolvers<number>();
+    const values: unknown[] = [];
+    InternalPromise.try(() => { throw failure; })
+      .chain(undefined, (reason) => {
+        expect(reason).toBe(failure);
+        return recovery.promise;
+      }, reactions)
+      .observe((value) => { values.push(value); }, fail, reactions);
+    queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([]);
+    recovery.resolve(7);
+    queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([7]);
+  });
+
+  it('joins out-of-order results and forwards a rejection unchanged', () => {
+    const { queue, reactions } = createTarget();
+    const first = InternalPromise.withResolvers<number>();
+    const second = InternalPromise.withResolvers<number>();
+    const values: unknown[] = [];
+    const failure = new Error('failed input');
+    InternalPromise.all([first.promise, second.promise], reactions)
+      .observe((value) => { values.push(value); }, fail, reactions);
+    InternalPromise.all([], reactions)
+      .observe((value) => { values.push(value); }, fail, reactions);
+    InternalPromise.all([first.promise, InternalPromise.reject<number>(failure)], reactions)
+      .observe(fail, (reason) => { values.push(reason); }, reactions);
+    second.resolve(2);
+    queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([[], failure]);
+    first.resolve(1);
+    queue.performMicrotaskCheckpoint();
+    expect(values).toEqual([[], failure, [1, 2]]);
+  });
 });
 
 function createTarget() {

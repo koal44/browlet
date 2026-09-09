@@ -1,4 +1,5 @@
-import { isFixedBufferSource } from '../js-engine/index';
+import { isFixedBufferSource, createPromiseReactions, type PromiseReactions } from '../js-engine/index';
+import type { BindingContext } from '../web-idl/projection';
 import {
   arg, atArg, contextValue, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
   impl, reference,
@@ -31,9 +32,10 @@ export class TextDecoderStreamImpl {
     label: string,
     options: TextDecoderOptions,
     abortController: StreamAbortController,
+    reactions: PromiseReactions,
   ) {
     this.#common = new TextDecoderCommonMixin(label, options);
-    const transform = new TransformStreamImpl(null, {}, {}, abortController);
+    const transform = new TransformStreamImpl(null, {}, {}, abortController, reactions);
     transform.setUp(
       (chunk) => {
         if (!isFixedBufferSource(chunk)) {
@@ -85,7 +87,10 @@ export const textDecoderStreamIDL = defineInterface({
   name: 'TextDecoderStream',
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
-    constructWith: [atArg(2, contextValue(createStreamAbortController))],
+    constructWith: [
+      atArg(2, contextValue(createStreamAbortController)),
+      atArg(3, contextValue((context: BindingContext) => createPromiseReactions(context.realm))),
+    ],
   }),
   members: [ctor([
     arg('label', idlType.DOMString, {

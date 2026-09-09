@@ -3,6 +3,7 @@ import {
   op, roAttr, reference, union,
 } from '../../../web-idl/declaration/index';
 import { bind, type BindingContext } from '../../../web-idl/projection';
+import { createPromiseReactions, type PromiseReactions } from '../../../js-engine/index';
 import {
   getBlobStream, getFileReading, packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
@@ -67,7 +68,7 @@ export class FileReaderImpl extends EventTargetImpl {
   ]);
 
   // SPEC_MISMATCH: FileReader() -> FileReader
-  constructor(scheduling: TaskScheduling) {
+  constructor(scheduling: TaskScheduling, readonly reactions: PromiseReactions) {
     super();
     this.#scheduling = scheduling;
   }
@@ -194,11 +195,12 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#error = null;
 
     const fileReading = this.#scheduling;
-    const reader = getReadableStreamReader(getBlobStream(blob, fileReading));
+    const reader = getReadableStreamReader(getBlobStream(blob, fileReading, this.reactions));
+    const reactions = this.reactions;
     const operation: FileReadOperation = {
       cancel() {
         const promise = cancelReadableStreamReader(reader, undefined);
-        void promise.catch(() => {});
+        promise.observe(() => {}, () => {}, reactions);
       },
       loaded: 0,
       tasks: new Set(),
@@ -316,7 +318,7 @@ export const fileReaderIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [contextValue(getFileReading)],
+    constructWith: [contextValue(getFileReading), contextValue((context: BindingContext) => createPromiseReactions(context.realm))],
   }),
   members: [
     ctor(),

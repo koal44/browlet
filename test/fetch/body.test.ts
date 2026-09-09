@@ -1,3 +1,4 @@
+import { createReactions, observe } from '../browlet/streams/implementation-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { brotliCompressSync, brotliDecompressSync, deflateSync, gunzipSync, gzipSync, inflateSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
@@ -53,13 +54,13 @@ describe('Fetch body cloning', () => {
   it('cancels the source only after both cloned branches cancel', async () => {
     const { scheduling } = createBodyFixture();
     const cancel = vi.fn();
-    const body = new BodyRecord(createReadableStream(undefined, cancel), scheduling);
+    const body = new BodyRecord(createReadableStream(undefined, cancel, 1, () => 1, createReactions()), scheduling);
     const clone = body.clone();
 
     const first = cancelReadableStream(body.stream, 'first');
     expect(cancel).not.toHaveBeenCalled();
     const second = cancelReadableStream(clone.stream, 'second');
-    await Promise.all([first, second]);
+    await Promise.all([observe(first), observe(second)]);
     expect(cancel).toHaveBeenCalledExactlyOnceWith(['first', 'second']);
   });
 });
@@ -68,7 +69,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('retains the source and length and creates a separate stream buffer in parallel', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(9, 1, 2, 9).subarray(1, 3);
-    const body = bytesAsBody(source, fixture.scheduling);
+    const body = bytesAsBody(source, fixture.scheduling, createReactions());
 
     expect(body.source).toBe(source);
     expect(body.length).toBe(2);
@@ -83,12 +84,12 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('supports BYOB reading in the supplied realm', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.scheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.scheduling, createReactions());
     const reader = body.stream.getReader({ mode: 'byob' });
     const view = createArrayBufferView('Uint8Array', [0, 0, 0, 0], fixture.context.realm);
     const reading = reader.read(view, { min: 1 });
     fixture.runParallel();
-    const result = await reading;
+    const result = await observe(reading);
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(1, 2));
     expect(Object.getPrototypeOf(result.value)).toBe(Object.getPrototypeOf(view));
@@ -96,7 +97,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('closes an empty byte sequence without enqueueing an empty chunk', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(new Uint8Array(), fixture.scheduling);
+    const body = bytesAsBody(new Uint8Array(), fixture.scheduling, createReactions());
     fixture.runParallel();
     expect(body.length).toBe(0);
     expect(isReadableStreamClosed(body.stream)).toBe(true);
@@ -106,7 +107,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('allows a byte body to be cloned before its bytes become available', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(1, 2, 3);
-    const body = bytesAsBody(source, fixture.scheduling);
+    const body = bytesAsBody(source, fixture.scheduling, createReactions());
     const clone = body.clone();
     const process = vi.fn();
     const error = vi.fn();
@@ -127,15 +128,15 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('does not revive a byte stream canceled before its parallel work runs', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling);
-    await cancelReadableStream(body.stream, 'canceled');
+    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling, createReactions());
+    await observe(cancelReadableStream(body.stream, 'canceled'));
     expect(() => fixture.runParallel()).not.toThrow();
     expect(await readBodyBytes(body)).toEqual(new Uint8Array());
   });
 
   it('preserves a byte stream error raised before its parallel work runs', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling);
+    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling, createReactions());
     const failure = new Error('failed');
     errorReadableStream(body.stream, failure);
     fixture.runParallel();
@@ -244,7 +245,7 @@ describe('Fetch incremental body reading', () => {
     const end = vi.fn();
     const error = vi.fn();
     body.incrementallyRead(vi.fn(), end, error);
-    await cancelReadableStream(body.stream, 'aborted');
+    await observe(cancelReadableStream(body.stream, 'aborted'));
     expect(end).not.toHaveBeenCalled();
     fixture.runParallel();
     expect(end).toHaveBeenCalledExactlyOnceWith();

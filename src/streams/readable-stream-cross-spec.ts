@@ -1,3 +1,5 @@
+import { InternalPromise, type PromiseReactions } from '../js-engine/internal-promise';
+import type { AsyncSequenceValue } from '../web-idl/async-sequence';
 import {
   ReadableByteStreamControllerImpl,
 } from './readable-byte-stream-controller';
@@ -47,26 +49,29 @@ import { TransformStreamImpl } from './transform-stream';
 /** Streams §9.1, create and set up a default readable stream. */
 // SPEC_MISMATCH: ReadableStream.set up(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createReadableStream(
-  pullAlgorithm?: () => unknown,
-  cancelAlgorithm?: (reason: unknown) => unknown,
+  pullAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
+  cancelAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
   return createReadableStreamFromAlgorithms(
     () => undefined,
-    () => new Promise((resolve) => resolve(pullAlgorithm?.())),
-    (reason) => new Promise((resolve) => resolve(cancelAlgorithm?.(reason))),
+    () => InternalPromise.try(() => pullAlgorithm?.()),
+    (reason) => InternalPromise.try(() => cancelAlgorithm?.(reason)),
     highWaterMark,
     sizeAlgorithm,
+    reactions,
   );
 }
 
 /** Streams §9.1, create a readable stream from an acquired async iterator. */
 // SPEC_MISMATCH: ReadableStream.create from async sequence(sequence) -> ReadableStream
 export function createReadableStreamFromAsyncSequence(
-  sequence: AsyncIterator<unknown>,
+  sequence: AsyncSequenceValue<unknown>,
+  reactions: PromiseReactions,
 ): ReadableStreamImpl {
-  return readableStreamFromIterable(sequence);
+  return readableStreamFromIterable(sequence, reactions);
 }
 
 /** Streams §9.1, get the desired size of a specification-created stream. */
@@ -283,7 +288,7 @@ export function readAllBytes(
 export function cancelReadableStreamReader(
   reader: ReadableStreamDefaultReaderImpl,
   reason: unknown,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   return readableStreamReaderGenericCancel(
     ReadableStreamDefaultReaderImpl.getGenericReader(reader),
     reason,
@@ -325,7 +330,7 @@ export function pipeReadableStreamTo(
   readable: ReadableStreamImpl,
   writable: WritableStreamImpl,
   options: Partial<StreamPipeOptions> = {},
-): Promise<unknown> {
+): InternalPromise<unknown> {
   if (isReadableStreamLocked(readable) || isWritableStreamLocked(writable)) {
     throw new Error('Streams must be unlocked before piping');
   }
@@ -347,7 +352,7 @@ export function pipeReadableStreamThrough(
   options: Partial<StreamPipeOptions> = {},
 ): ReadableStreamImpl {
   const promise = pipeReadableStreamTo(readable, transform.writable, options);
-  void promise.catch(() => {});
+  void promise.chain(undefined, () => {}, readable.reactions);
   return transform.readable;
 }
 
@@ -359,7 +364,7 @@ export function createReadableStreamProxy(
 ): ReadableStreamImpl {
   return pipeReadableStreamThrough(
     stream,
-    TransformStreamImpl.createIdentity(abortController),
+    TransformStreamImpl.createIdentity(abortController, stream.reactions),
   );
 }
 

@@ -37,6 +37,10 @@ import { isPromiseValue } from './promise-value';
 import { getUnannotatedType } from './types';
 import type { Capability } from './capability';
 import type { PlatformObjectRecord } from './platform-object';
+import {
+  closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
+  isAsyncSequence, openAsyncSequence,
+} from './async-sequence';
 
 export type BindingContext = {
   readonly realm: WebIDLRealmHost;
@@ -191,6 +195,7 @@ type AttributeBindingDefinition = {
 
 type ConstructorBindingDefinition =
   | ArgumentInjectionBinding
+  | { construct: ContextualSteps<undefined, unknown[], object>; }
   | { invoke: ContextualSteps<object, unknown[], void>; };
 
 type OperationBindingDefinition =
@@ -526,6 +531,17 @@ function registerDefinedInterface(
                 member.binding.dependencies,
               ),
             );
+          } else if ('construct' in member.binding) {
+            const construct = member.binding.construct;
+            registry.setImplementationConstructorSteps(member, (values) => {
+              const args = values.map((value, index) => {
+                const argument = getArgument(member.arguments, index);
+                return toImplementationValue(
+                  value, argument?.type, getArgumentProjection(argument), context, realmBinding,
+                );
+              });
+              return callImplementation(construct, undefined, [context, ...args], realmBinding);
+            });
           } else {
             registry.setConstructorSteps(
               member,
@@ -1257,11 +1273,8 @@ function callImplementation<This, Values extends unknown[], Result>(
   values: Values,
   binding: RealmBinding,
 ): Result {
-  const owner = binding.platformObjects.getImplementationRecord(thisArgument)?.realm ??
-    binding.realm;
   try {
-    return owner.runtime.runWithExecutionOwner(owner, () =>
-      Reflect.apply(implementation, thisArgument, values));
+    return Reflect.apply(implementation, thisArgument, values);
   } catch (exception) {
     throw binding.realizeException(exception);
   }
@@ -1289,6 +1302,21 @@ function toImplementationValue(
   realmBinding: RealmBinding,
 ): unknown {
   if (value === missingArgument) return undefined;
+  if (isAsyncSequence(value)) {
+    const iterator = openAsyncSequence(value, realmBinding.realm);
+    return {
+      next: () => toImplementationPromise(
+        getAsyncIteratorNextValue(iterator, realmBinding.realm,
+          (item, itemType) => convertToIDL(item, itemType, realmBinding)),
+        realmBinding,
+        (item) => item === endOfIteration ? item :
+          toImplementationValue(item, value.elementType, {}, context, realmBinding),
+      ),
+      return: (reason: unknown) => toImplementationPromise(
+        closeAsyncIterator(iterator, reason, realmBinding.realm), realmBinding, (result) => result,
+      ),
+    };
+  }
   if (isPromiseValue(value)) {
     return toImplementationPromise(value, realmBinding, (result) =>
       toImplementationValue(
@@ -1525,6 +1553,7 @@ function isMemberBindingDefinition(
     'getNext' in definition ||
     'set' in definition ||
     'invoke' in definition ||
+    'construct' in definition ||
     'newBufferResult' in definition ||
     'getSupportedPropertyIndices' in definition ||
     'getSupportedPropertyNames' in definition;

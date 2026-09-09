@@ -4,12 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { fetchTaskScheduling } from '../../src/browlet/integration/fetch';
 import { bytesAsBody } from '../../src/fetch/body';
 import { createFetchWindow } from './fetch-fixture';
+import { createPromiseReactions } from '../../src/js-engine/index';
 
 describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(source.realm));
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
@@ -33,7 +34,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('fully reads on the stream realm checkpoint and queues completion as another task', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(fixture.realm));
     await nextTurn();
     const process = vi.fn();
     const error = vi.fn();
@@ -50,7 +51,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling);
+    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(fixture.realm));
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);

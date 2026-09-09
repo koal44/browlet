@@ -1,8 +1,6 @@
-import { nodeRuntime } from '../../js-engine/index';
-
 export function requestNodeEventLoopTurn(steps: () => void): void {
   // Enter from a later Node task; never run an HTML turn synchronously.
-  nodeRuntime.runWithExecutionOwner(undefined, () => { setImmediate(steps); });
+  setImmediate(steps);
 }
 
 /*
