@@ -7,6 +7,7 @@ export * from './abstract-operations';
 export * from './array-buffer-primitives';
 export * from './built-in-primitives';
 export * from './promise-operations';
+export * from './internal-promise';
 export * from './simple-exception';
 export type {
   GlobalObject, JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,

@@ -1,4 +1,6 @@
-import { installPromiseReactions } from '../js-engine/index';
+import {
+  InternalPromise, createPromiseReactions, installPromiseReactions,
+} from '../js-engine/index';
 import type { PlatformObjectRegistry } from './platform-object';
 import type { WebIDLRealmHost } from './javascript-realm';
 import {
@@ -26,7 +28,7 @@ export function projectPromise(
   newBufferResult = false,
 ): IDLPromise {
   if (isPromiseValue(value)) return value;
-  const source = value as Promise<unknown>;
+  const source = value as Promise<unknown> | InternalPromise<unknown>;
   let promises = promiseProjections.get(context.platformObjects);
   if (!promises) {
     promises = new WeakMap();
@@ -59,8 +61,12 @@ export function projectPromise(
     promise.reject(reason);
   };
   try {
-    context.realm.runtime.runWithExecutionOwner(context.realm, () =>
-      installPromiseReactions(context.realm, source, onFulfilled, onRejected));
+    if (source instanceof InternalPromise) {
+      source.observe(onFulfilled, onRejected, createPromiseReactions(context.realm));
+    } else {
+      context.realm.runtime.runWithExecutionOwner(context.realm, () =>
+        installPromiseReactions(context.realm, source, onFulfilled, onRejected));
+    }
   } catch (error) {
     promise.reject(error);
   }
@@ -72,18 +78,21 @@ export function toImplementationPromise(
   promise: IDLPromise,
   context: ConversionContext,
   convertValue: (value: unknown) => unknown,
-): Promise<unknown> {
+): InternalPromise<unknown> {
   const conversionContext = withPromiseRealm(context, promise);
-  return new Promise((resolve, reject) => {
+  const result = InternalPromise.withResolvers<unknown>();
+  try {
     installPromiseReactions(promise.realm, promise.promise, (value) => {
       try {
-        resolve(convertValue(convertToIDL(value, promise.type, conversionContext)));
+        result.resolve(convertValue(convertToIDL(value, promise.type, conversionContext)));
       } catch (error) {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve author-thrown values.
-        reject(error);
+        result.reject(error);
       }
-    }, reject);
-  });
+    }, result.reject);
+  } catch (error) {
+    result.reject(error);
+  }
+  return result.promise;
 }
 
 export function createResolvedPromise(
@@ -339,7 +348,7 @@ function isUndefinedType(
 // A retained implementation promise has one projection per result type and
 // realm within a binding world, including when a foreign method is borrowed.
 const promiseProjections = new WeakMap<PlatformObjectRegistry, WeakMap<
-  Promise<unknown>,
+  Promise<unknown> | InternalPromise<unknown>,
   {
     realm: WebIDLRealmHost;
     type: WebIDLType;

@@ -4,25 +4,40 @@ import {
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
 import { getDOMExceptionRequest } from '../../src/web-idl/exceptions/dom-exception-core';
+import {
+  createPromiseReactions, type InternalPromise, type PromiseReactions,
+} from '../../src/js-engine/index';
+import { TestRealm } from '../web-idl/test-realm';
 
 describe('File reading implementation', () => {
-  it('reads bytes and text using ordinary promises and explicit scheduling', async () => {
-    const blob = new BlobImpl(['hello']);
-    const bytes = blob.bytes(scheduling);
-    expect(bytes).toBeInstanceOf(Promise);
-    await expect(bytes).resolves.toEqual(Uint8Array.of(104, 101, 108, 108, 111));
-    await expect(blob.text(scheduling)).resolves.toBe('hello');
-    await expect(blob.arrayBuffer(scheduling)).resolves.toEqual(await bytes);
+  it.each([
+    { name: 'empty input', text: '' },
+    { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
+  ])('reads bytes and text for $name', async ({ text }) => {
+    const blob = new BlobImpl([text]);
+    const reactions = createPromiseReactions(new TestRealm());
+    const [decoded, bytes, bufferBytes] = await Promise.all([
+      observe(blob.text(scheduling, reactions), reactions),
+      observe(blob.bytes(scheduling), reactions),
+      observe(blob.arrayBuffer(scheduling), reactions),
+    ]);
+    expect(decoded).toBe(text);
+    expect(bytes).toEqual(new TextEncoder().encode(text));
+    expect(bufferBytes).toEqual(bytes);
   });
 
-  it('retains a read-failure request for the binding boundary', async () => {
+  it.each(['text', 'bytes', 'arrayBuffer'] as const)('retains a %s read-failure request for the binding boundary', async (method) => {
     const data = BlobData.fromSource({
       size: 1,
       snapshotState: null,
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
     const blob = BlobImpl.create(data, '', null);
-    const failure = await blob.bytes(scheduling).catch((error: unknown) => error);
+    const reactions = createPromiseReactions(new TestRealm());
+    const result = method === 'text'
+      ? blob.text(scheduling, reactions)
+      : blob[method](scheduling);
+    const failure = await observe<unknown>(result, reactions).catch((error: unknown) => error);
     expect(getDOMExceptionRequest(failure)?.name).toBe('NotFoundError');
   });
 
@@ -37,7 +52,13 @@ describe('File reading implementation', () => {
   });
 });
 
-// The standalone implementation needs only file-task delivery, not a realm.
+function observe<T>(result: InternalPromise<T>, reactions: PromiseReactions): Promise<T> {
+  const observed = Promise.withResolvers<T>();
+  result.observe(observed.resolve, observed.reject, reactions);
+  return observed.promise;
+}
+
+// File-task delivery stays separate from explicit result observation.
 const scheduling: TaskScheduling = {
   queueTask(steps) {
     const task = setImmediate(steps);

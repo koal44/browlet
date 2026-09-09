@@ -1,5 +1,8 @@
 import { utf8Decode, utf8Encode } from '../encoding/utf-8';
 import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
+import {
+  InternalPromise, createPromiseReactions, type PromiseReactions,
+} from '../js-engine/index';
 import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import {
   closeReadableStream, enqueueReadableStream, errorReadableStream,
@@ -92,12 +95,12 @@ export class BlobImpl {
   }
 
   // SPEC_MISMATCH: Blob.text() -> Promise<USVString>
-  text(scheduling: TaskScheduling): Promise<string> {
-    return readBlob(this, scheduling).then(utf8Decode);
+  text(scheduling: TaskScheduling, reactions: PromiseReactions): InternalPromise<string> {
+    return readBlob(this, scheduling).map(utf8Decode, reactions);
   }
 
   // SPEC_MISMATCH: Blob.arrayBuffer() -> Promise<ArrayBuffer>
-  arrayBuffer(scheduling: TaskScheduling): Promise<Uint8Array> {
+  arrayBuffer(scheduling: TaskScheduling): InternalPromise<Uint8Array> {
     return readBlob(this, scheduling);
   }
 
@@ -118,7 +121,7 @@ export class BlobImpl {
   }
 
   // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
-  bytes(scheduling: TaskScheduling): Promise<Uint8Array> {
+  bytes(scheduling: TaskScheduling): InternalPromise<Uint8Array> {
     return readBlob(this, scheduling);
   }
 
@@ -317,12 +320,12 @@ export function getBlobStream(
 function readBlob(
   blob: BlobImpl,
   scheduling: TaskScheduling,
-): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const reader = getReadableStreamReader(getBlobStream(blob, scheduling));
-    // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
-    readAllBytes(reader, resolve, reject);
-  });
+): InternalPromise<Uint8Array> {
+  const result = InternalPromise.withResolvers<Uint8Array>();
+  const reader = getReadableStreamReader(getBlobStream(blob, scheduling));
+  // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
+  readAllBytes(reader, result.resolve, result.reject);
+  return result.promise;
 }
 
 function realizeReadFailure(error: unknown): unknown {
@@ -356,7 +359,6 @@ function normalizeBlobType(value: string): string {
 
 // -- Web IDL ------------------------------------------------------------
 // BINDING_INTEGRATION: provide reading dependencies and project promises and fresh buffers.
-// TODO(BINDING_INTEGRATION): complete HTML checkpoint delivery after an implementation promise settles.
 
 export const endingTypeIDL = defineEnumeration({
   name: 'EndingType',
@@ -417,7 +419,11 @@ export const blobIDL = defineInterface({
       ...invokeWith(contextValue(getFileReading)), ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
-      ...invokeWith(contextValue(getFileReading)), ...xattr('NewObject'),
+      ...invokeWith(
+        contextValue(getFileReading),
+        contextValue((context: BindingContext) => createPromiseReactions(context.realm)),
+      ),
+      ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
       ...xattr('NewObject'),

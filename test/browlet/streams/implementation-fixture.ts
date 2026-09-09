@@ -1,4 +1,8 @@
 import type { StreamAbortController } from '../../../src/streams/abort';
+import {
+  createPromiseReactions, type InternalPromise,
+} from '../../../src/js-engine/index';
+import { TestRealm } from '../../web-idl/test-realm';
 import type { QueuingStrategy } from '../../../src/streams/queuing-strategy';
 import {
   TransformStreamImpl, type TransformerRecord,
@@ -22,6 +26,13 @@ export function createWritableStream(
   strategy: QueuingStrategy = {},
 ): WritableStreamImpl {
   return new WritableStreamImpl(sink, strategy, createAbortController());
+}
+
+/** Observe an implementation result on the unit harness's queue. */
+export function observe<T>(result: InternalPromise<T>): Promise<T> {
+  const observed = Promise.withResolvers<T>();
+  result.observe(observed.resolve, observed.reject, createPromiseReactions(new TestRealm()));
+  return observed.promise;
 }
 
 export function createAbortController(): StreamAbortController {

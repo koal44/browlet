@@ -16,7 +16,7 @@ import {
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from '../test-runtime';
-import { createWritableStream } from './implementation-fixture';
+import { createWritableStream, observe } from './implementation-fixture';
 
 describe('ordinary readable-stream implementation', () => {
   it('creates a stream from an acquired async iterator', async () => {
@@ -26,11 +26,11 @@ describe('ordinary readable-stream implementation', () => {
     })());
     const reader = stream.getReader({});
 
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult('first', false));
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult('second', false));
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -38,12 +38,12 @@ describe('ordinary readable-stream implementation', () => {
     const { controller, stream } = createReadableStream();
     const reader = stream.getReader({});
 
-    const chunk = reader.read();
+    const chunk = observe(reader.read());
     controller.enqueue('chunk');
     await expect(chunk).resolves.toEqual(readResult('chunk', false));
 
     controller.close();
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult(undefined, true));
     await expect(reader.closed).resolves.toBeUndefined();
   });
@@ -54,7 +54,7 @@ describe('ordinary readable-stream implementation', () => {
 
     enqueueReadableStream(stream, 'chunk');
 
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult('chunk', false));
   });
 
@@ -146,17 +146,17 @@ describe('ordinary readable-stream implementation', () => {
     const [branch1, branch2] = stream.tee();
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
-    const read1 = reader1.read();
-    const read2 = reader2.read();
+    const read1 = observe(reader1.read());
+    const read2 = observe(reader2.read());
 
     controller.enqueue('shared');
     controller.close();
 
     await expect(read1).resolves.toEqual(readResult('shared', false));
     await expect(read2).resolves.toEqual(readResult('shared', false));
-    await expect(reader1.read()).resolves
+    await expect(observe(reader1.read())).resolves
       .toEqual(readResult(undefined, true));
-    await expect(reader2.read()).resolves
+    await expect(observe(reader2.read())).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -165,8 +165,8 @@ describe('ordinary readable-stream implementation', () => {
     const [branch1, branch2] = readableStreamDefaultTee(stream, true, structuredClone);
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
-    const read1 = reader1.read();
-    const read2 = reader2.read();
+    const read1 = observe(reader1.read());
+    const read2 = observe(reader2.read());
     const chunk = { nested: { value: 'chunk' } };
 
     controller.enqueue(chunk);
@@ -188,8 +188,8 @@ describe('ordinary readable-stream implementation', () => {
       ReadableStreamImpl.getState(stream).controller,
     );
     const [branch1, branch2] = readableStreamDefaultTee(stream, true, () => { throw error; });
-    const read1 = branch1.getReader({}).read();
-    const read2 = branch2.getReader({}).read();
+    const read1 = observe(branch1.getReader({}).read());
+    const read2 = observe(branch2.getReader({}).read());
 
     controller.enqueue(() => undefined);
 
@@ -528,8 +528,8 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     });
     const [branch1, branch2] = stream.tee();
-    const read1 = branch1.getReader({}).read();
-    const read2 = branch2.getReader({}).read();
+    const read1 = observe(branch1.getReader({}).read());
+    const read2 = observe(branch2.getReader({}).read());
 
     requireByteController(controller).enqueue(Uint8Array.from([3, 4, 5]));
 
@@ -557,7 +557,7 @@ describe('readable byte-stream implementation', () => {
       new Uint8Array(4),
       { min: 1 },
     );
-    const defaultRead = defaultBranch.getReader({}).read();
+    const defaultRead = observe(defaultBranch.getReader({}).read());
 
     requireByteController(controller).enqueue(Uint8Array.from([6, 7]));
 
@@ -576,7 +576,7 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     });
     const reader = stream.getReader({});
-    const read = reader.read();
+    const read = observe(reader.read());
     const chunk = Uint8Array.from([1, 2, 3]);
 
     requireByteController(controller).enqueue(chunk);
@@ -623,7 +623,7 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     });
 
-    const result = await stream.getReader({}).read();
+    const result = await observe(stream.getReader({}).read());
 
     expect(Array.from(result.value as Uint8Array)).toEqual([7, 8]);
   });

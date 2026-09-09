@@ -14,6 +14,9 @@ import {
 } from '../../src/web-idl/declaration/index';
 import { createBindings } from '../../src/web-idl/registration';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
+import {
+  createPromiseReactions, type InternalPromise, type PromiseReactions,
+} from '../../src/js-engine/index';
 import { registerDefinitionBindings } from '../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
@@ -65,17 +68,27 @@ describe('Web IDL promise member binding', () => {
     await expect(call(owner, 'reject', authorError)).rejects.toBe(authorError);
   });
 
-  it('gives implementations ordinary promises with converted argument and callback results', async () => {
+  it.each(['promise', 'thenable'] as const)('imports %s arguments and callback results as internal promises', async (kind) => {
     const fixture = createOrdinaryPromiseFixture();
     const child = new PromiseChildImpl();
     const projected = fixture.firstBinding.context.project(PromiseChildImpl, child);
 
-    await expect(call(fixture.owner, 'consume', Promise.resolve(projected))).resolves.toBe(7);
-    await expect(call(fixture.owner, 'invoke', () => Promise.resolve(projected))).resolves.toBe(7);
+    const input = () => kind === 'promise'
+      ? Promise.resolve(projected)
+      : { then(resolve: (value: object) => void) { resolve(projected); } };
+    await expect(call(fixture.owner, 'consume', input())).resolves.toBe(7);
+    await expect(call(fixture.owner, 'invoke', input)).resolves.toBe(7);
     expect(fixture.implementation.received).toBe(child);
     const authorError = new fixture.second.intrinsics.typeError('callback failed');
     await expect(call(fixture.owner, 'invoke', () => { throw authorError; }))
       .rejects.toBe(authorError);
+  });
+
+  it('rejects an incoming fulfillment that does not match its declared interface', async () => {
+    const fixture = createOrdinaryPromiseFixture();
+    await expect(call(fixture.owner, 'consume', Promise.resolve(4)))
+      .rejects.toBeInstanceOf(fixture.first.intrinsics.typeError);
+    expect(fixture.implementation.received).toBeUndefined();
   });
 
   it('projects a plain dictionary fulfillment and its interface-valued member', async () => {
@@ -274,7 +287,7 @@ function createOrdinaryPromiseFixture() {
   const secondBinding = bindings.register(second);
   firstBinding.install(first.global);
   secondBinding.install(second.global);
-  const implementation = new OrdinaryPromiseOwnerImpl();
+  const implementation = new OrdinaryPromiseOwnerImpl(createPromiseReactions(first));
   const owner = firstBinding.context.project(OrdinaryPromiseOwnerImpl, implementation);
   const foreignConstructor = Reflect.get(second.global, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
@@ -285,6 +298,8 @@ class OrdinaryPromiseOwnerImpl {
   received: PromiseChildImpl | undefined;
   returned: unknown;
   readonly visited = new WeakSet<object>();
+
+  constructor(private readonly reactions: PromiseReactions) {}
 
   get result(): Promise<PromiseChildImpl> { return this.pending.promise; }
   read(): Promise<PromiseChildImpl> { return this.pending.promise; }
@@ -306,14 +321,14 @@ class OrdinaryPromiseOwnerImpl {
     return Promise.reject(reason);
   }
 
-  consume(value: Promise<PromiseChildImpl>): Promise<number> {
-    return value.then((child) => {
+  consume(value: InternalPromise<PromiseChildImpl>): InternalPromise<number> {
+    return value.map((child) => {
       this.received = child;
       return child.value;
-    });
+    }, this.reactions);
   }
 
-  invoke(callback: () => Promise<PromiseChildImpl>): Promise<number> {
+  invoke(callback: () => InternalPromise<PromiseChildImpl>): InternalPromise<number> {
     return this.consume(callback());
   }
 }

@@ -64,6 +64,30 @@ describe('File API Blob projection', () => {
     expect(Array.from(bytes as Uint8Array)).toEqual([104, 101, 108, 108, 111]);
   });
 
+  it.each(['bytes', 'arrayBuffer'] as const)('returns fresh %s results without changing Blob data', async (method) => {
+    const window = createWindow();
+    const blob = constructBlob(window, ['ABC']);
+    const firstPromise = call(blob, method) as Promise<unknown>;
+    const secondPromise = call(blob, method) as Promise<unknown>;
+    expect(firstPromise).not.toBe(secondPromise);
+    const [first, second] = await Promise.all([
+      observeBrowletPromise(window, firstPromise),
+      observeBrowletPromise(window, secondPromise),
+    ]);
+    expect(first).not.toBe(second);
+    expect(await observeBrowletPromise(window, firstPromise)).toBe(first);
+    const asBytes = (value: unknown): Uint8Array => method === 'bytes'
+      ? value as Uint8Array : new Uint8Array(value as ArrayBuffer);
+    const firstBytes = asBytes(first);
+    const secondBytes = asBytes(second);
+    expect(firstBytes.buffer).not.toBe(secondBytes.buffer);
+    firstBytes[0] = 90;
+    expect(Array.from(secondBytes)).toEqual([65, 66, 67]);
+    const nextPromise = call(blob, method) as Promise<unknown>;
+    expect(Array.from(asBytes(await observeBrowletPromise(window, nextPromise))))
+      .toEqual([65, 66, 67]);
+  });
+
   it('keeps the Blob relevant realm when a method is borrowed', async () => {
     const first = createWindow();
     const second = createWindow();
