@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import { getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
@@ -131,6 +132,7 @@ function createTimerFixture() {
   });
   timers.setAssociatedDocument(document);
   associateGlobalTaskDestination(global, {
+    realm: getRelevantRealm(document),
     eventLoop,
     getDocument: () => document,
   });

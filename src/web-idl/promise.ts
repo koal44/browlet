@@ -1,7 +1,10 @@
 import { installPromiseReactions } from '../js-engine/index';
+import type { PlatformObjectRegistry } from './platform-object';
+import type { WebIDLRealmHost } from './javascript-realm';
 import {
-  convertToIDL, convertToJavaScript, type ConversionContext,
+  convertToIDL, convertToJavaScript, createBufferResult, type ConversionContext,
 } from './conversion';
+import type { ByteSequence } from './buffer-source';
 import { idlType, sequence, type WebIDLType } from './declaration/index';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
@@ -13,6 +16,74 @@ export function createPromise(
   context: ConversionContext,
 ): IDLPromise {
   return createPromiseValue(type, context.realm, context.realizeException);
+}
+
+/** Adapt an implementation promise to the declared result type and realm. */
+export function projectPromise(
+  value: unknown,
+  type: WebIDLType,
+  context: ConversionContext,
+  newBufferResult = false,
+): IDLPromise {
+  if (isPromiseValue(value)) return value;
+  const source = value as Promise<unknown>;
+  let promises = promiseProjections.get(context.platformObjects);
+  if (!promises) {
+    promises = new WeakMap();
+    promiseProjections.set(context.platformObjects, promises);
+  }
+  let projections = promises.get(source);
+  const existing = projections?.find((entry) =>
+    entry.realm === context.realm && entry.type === type &&
+    entry.newBufferResult === newBufferResult);
+  if (existing) return existing.promise;
+
+  const promise = createPromise(type, context);
+  if (!projections) {
+    projections = [];
+    promises.set(source, projections);
+  }
+  projections.push({ realm: context.realm, type, promise, newBufferResult });
+  // These callbacks adapt implementation state; author reactions still run
+  // through the projected promise's own realm and queue.
+  const onFulfilled = (result: unknown): void => {
+    try {
+      resolvePromise(promise, newBufferResult
+        ? createBufferResult(result as ByteSequence, type, context)
+        : result, context);
+    } catch (error) {
+      promise.reject(error);
+    }
+  };
+  const onRejected = (reason: unknown): void => {
+    promise.reject(reason);
+  };
+  try {
+    context.realm.runtime.runWithExecutionOwner(context.realm, () =>
+      installPromiseReactions(context.realm, source, onFulfilled, onRejected));
+  } catch (error) {
+    promise.reject(error);
+  }
+  return promise;
+}
+
+/** Convert author fulfillment values before supplying an implementation promise. */
+export function toImplementationPromise(
+  promise: IDLPromise,
+  context: ConversionContext,
+  convertValue: (value: unknown) => unknown,
+): Promise<unknown> {
+  const conversionContext = withPromiseRealm(context, promise);
+  return new Promise((resolve, reject) => {
+    installPromiseReactions(promise.realm, promise.promise, (value) => {
+      try {
+        resolve(convertValue(convertToIDL(value, promise.type, conversionContext)));
+      } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve author-thrown values.
+        reject(error);
+      }
+    }, reject);
+  });
 }
 
 export function createResolvedPromise(
@@ -264,3 +335,15 @@ function isUndefinedType(
   const resolved = getUnannotatedType(type, context.definitions);
   return resolved.kind === 'simple' && resolved.name === 'undefined';
 }
+
+// A retained implementation promise has one projection per result type and
+// realm within a binding world, including when a foreign method is borrowed.
+const promiseProjections = new WeakMap<PlatformObjectRegistry, WeakMap<
+  Promise<unknown>,
+  {
+    realm: WebIDLRealmHost;
+    type: WebIDLType;
+    promise: IDLPromise;
+    newBufferResult: boolean;
+  }[]
+>>();

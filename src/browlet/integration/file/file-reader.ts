@@ -1,12 +1,12 @@
 import {
-  arg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op,
-  invokeWith, roAttr, reference, union,
+  arg, constant, contextValue, ctor, defineInterface, idlType, impl, integer, nullable,
+  op, roAttr, reference, union,
 } from '../../../web-idl/declaration/index';
-import { bindingContext, type BindingContext } from '../../../web-idl/projection';
+import { bind, type BindingContext } from '../../../web-idl/projection';
 import {
-  getBlobStream, getFileReading, packageData, type BlobImpl,
-  type FileReadingTaskHandle, type FileReadType,
+  getBlobStream, getFileReading, packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
+import type { TaskHandle, TaskScheduling } from '../../../infra/index';
 import {
   domExceptionName, throwDOMException,
 } from '../../../web-idl/exceptions/dom-exception-core';
@@ -14,7 +14,7 @@ import {
   cancelReadableStreamReader, getReadableStreamReader,
   readReadableStreamChunk,
 } from '../../../streams/index';
-import { getBufferSourceCopy } from '../../../web-idl/buffer-source';
+import { createArrayBuffer, getBufferSourceCopy } from '../../../web-idl/buffer-source';
 import { fireProgressEvent } from '../../dom/events/progress-event';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
@@ -52,6 +52,7 @@ import {
  * };
  */
 export class FileReaderImpl extends EventTargetImpl {
+  readonly #scheduling: TaskScheduling;
   #state: FileReaderState = 'empty';
   #result: string | ArrayBuffer | null = null;
   #error: DOMException | null = null;
@@ -65,28 +66,29 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
-  // SPEC_MISMATCH: FileReader.readAsArrayBuffer(blob) -> undefined
-  readAsArrayBuffer(context: BindingContext, blob: BlobImpl): void {
-    this.#read(context, blob, 'ArrayBuffer');
+  // SPEC_MISMATCH: FileReader() -> FileReader
+  constructor(scheduling: TaskScheduling) {
+    super();
+    this.#scheduling = scheduling;
   }
 
-  // SPEC_MISMATCH: FileReader.readAsBinaryString(blob) -> undefined
-  readAsBinaryString(context: BindingContext, blob: BlobImpl): void {
-    this.#read(context, blob, 'BinaryString');
+  readAsArrayBuffer(blob: BlobImpl): void {
+    this.#read(blob, 'ArrayBuffer');
   }
 
-  // SPEC_MISMATCH: FileReader.readAsText(blob, encoding?) -> undefined
+  readAsBinaryString(blob: BlobImpl): void {
+    this.#read(blob, 'BinaryString');
+  }
+
   readAsText(
-    context: BindingContext,
     blob: BlobImpl,
     encoding?: string,
   ): void {
-    this.#read(context, blob, 'Text', encoding);
+    this.#read(blob, 'Text', encoding);
   }
 
-  // SPEC_MISMATCH: FileReader.readAsDataURL(blob) -> undefined
-  readAsDataURL(context: BindingContext, blob: BlobImpl): void {
-    this.#read(context, blob, 'DataURL');
+  readAsDataURL(blob: BlobImpl): void {
+    this.#read(blob, 'DataURL');
   }
 
   /** File API §6.2.3.5 — The abort() method. */
@@ -178,9 +180,7 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 
   /** File API §6.2 — Read operation. */
-  // SPEC_MISMATCH: read operation(blob, type, encodingLabel?)
   #read(
-    context: BindingContext,
     blob: BlobImpl,
     type: FileReadType,
     encodingLabel?: string,
@@ -193,12 +193,12 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const reader = getReadableStreamReader(getBlobStream(blob, context));
-    const fileReading = getFileReading(context);
+    const fileReading = this.#scheduling;
+    const reader = getReadableStreamReader(getBlobStream(blob, fileReading));
     const operation: FileReadOperation = {
       cancel() {
         const promise = cancelReadableStreamReader(reader, undefined);
-        context.markPromiseHandled(promise);
+        void promise.catch(() => {});
       },
       loaded: 0,
       tasks: new Set(),
@@ -252,7 +252,7 @@ export class FileReaderImpl extends EventTargetImpl {
               fireProgressEvent('progress', this, transmitted, blob.size);
             });
           }
-          context.realm.queueMicrotask(readNextChunk);
+          void Promise.resolve().then(readNextChunk);
         },
         closeSteps: () => {
           if (this.#operation !== operation) return;
@@ -278,11 +278,10 @@ export class FileReaderImpl extends EventTargetImpl {
                 type,
                 blob.type,
                 encodingLabel,
-                context,
               );
               fire('load');
             } catch (error) {
-              this.#error = context.realizeException(error) as DOMException;
+              this.#error = error as DOMException;
               fire('error');
             }
             if (!this.#isLoading()) fire('loadend');
@@ -310,34 +309,45 @@ export class FileReaderImpl extends EventTargetImpl {
 }
 
 // -- Web IDL ------------------------------------------------------------
+// BINDING_INTEGRATION: supply HTML scheduling and materialize retained author results.
 
 export const fileReaderIDL = defineInterface({
   name: 'FileReader',
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
-  implementation: impl(FileReaderImpl),
+  implementation: impl(FileReaderImpl, {
+    constructWith: [contextValue(getFileReading)],
+  }),
   members: [
     ctor(),
     op('readAsArrayBuffer', idlType.undefined, [
       arg('blob', reference('Blob')),
-    ], invokeWith(bindingContext)),
+    ]),
     op('readAsBinaryString', idlType.undefined, [
       arg('blob', reference('Blob')),
-    ], invokeWith(bindingContext)),
+    ]),
     op('readAsText', idlType.undefined, [
       arg('blob', reference('Blob')),
       arg('encoding', idlType.DOMString, { optional: true }),
-    ], invokeWith(bindingContext)),
+    ]),
     op('readAsDataURL', idlType.undefined, [
       arg('blob', reference('Blob')),
-    ], invokeWith(bindingContext)),
+    ]),
     op('abort', idlType.undefined),
     constant('EMPTY', idlType.unsignedShort, integer(0)),
     constant('LOADING', idlType.unsignedShort, integer(1)),
     constant('DONE', idlType.unsignedShort, integer(2)),
     roAttr('readyState', idlType.unsignedShort),
-    roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer))),
-    roAttr('error', nullable(reference('DOMException'))),
+    roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer)), bind({
+      get: projectResult,
+    })),
+    roAttr('error', nullable(reference('DOMException')), bind({
+      // BINDING_INTEGRATION: realize a retained failure on its first author observation.
+      get(context) {
+        const error = context.realizeException((this as FileReaderImpl).error);
+        return context.convert(error, nullable(reference('DOMException')));
+      },
+    })),
     eventHandlerAttr('onloadstart'),
     eventHandlerAttr('onprogress'),
     eventHandlerAttr('onload'),
@@ -347,12 +357,31 @@ export const fileReaderIDL = defineInterface({
   ],
 });
 
+// BINDING_INTEGRATION: repeated result reads share one buffer in the receiver realm.
+function projectResult(this: object | null, context: BindingContext): string | ArrayBuffer | null {
+  const value = (this as FileReaderImpl).result;
+  if (value === null || typeof value === 'string') return value;
+  let buffers = resultBuffers.get(context);
+  if (!buffers) {
+    buffers = new WeakMap();
+    resultBuffers.set(context, buffers);
+  }
+  let buffer = buffers.get(value);
+  if (!buffer) {
+    buffer = createArrayBuffer(new Uint8Array(value), context.realm);
+    buffers.set(value, buffer);
+  }
+  return buffer;
+}
+
+const resultBuffers = new WeakMap<BindingContext, WeakMap<ArrayBuffer, ArrayBuffer>>();
+
 type FileReaderState = 'empty' | 'loading' | 'done';
 
 type FileReadOperation = {
   cancel(): void;
   loaded: number;
-  readonly tasks: Set<FileReadingTaskHandle>;
+  readonly tasks: Set<TaskHandle>;
   readonly total: number;
 };
 

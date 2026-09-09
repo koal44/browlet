@@ -288,12 +288,51 @@ through:
 
 Repeated references to one implementation must produce one platform object.
 
+Implementation methods return ordinary `Promise<T>` values. Binding adapts
+their fulfillment through the declared `T` and creates the author-visible
+promise in the receiver's relevant realm. A retained implementation promise
+keeps one projection per result type and realm within its binding world.
+Dictionary results can be ordinary records, including `{ value, done }` from
+stream reads; binding creates the realm-owned result and projects its members.
+
+Promise arguments and callback results reach implementations as callable
+promises whose fulfillment has undergone the declared conversion. Web IDL's
+PromiseCapability records remain internal to its specification machinery;
+implementations do not create or operate on them. Async iterator bindings
+adapt ordinary promises at that same boundary.
+
+The fulfillment adapters use native Promise observation in the destination
+realm. Execution ownership is established separately: the shared implementation
+invoker selects the receiver's realm (or the installed realm for construction
+and static operations). Return adaptation uses the result realm. Ordinary
+implementation `.then` and `await` continuations retain that owner through the
+engine's saved job state.
+
+Platform function entry clears implementation ownership before author argument
+conversion. Web IDL callback invocation also leaves ownership; a nested platform
+call establishes its own receiver's owner, and returning restores the caller's
+scope. This transport does not replace HTML's incumbent settings or script
+lifecycle. Unconverted author objects inside implementation algorithms still
+require an explicit binding boundary; ownership is not inferred from their code.
+
+HTML global tasks retain their destination owner and scheduling-time async
+context. Node backend scheduling leaves implementation ownership, then completion
+returns through a destination task. See [JS Engine](./js-engine/README.md) for the
+runtime operations. Implementations retain their ordinary promises and explicit
+task/I/O dependencies.
+
 JavaScript buffers and typed arrays retain their existing identity through
-ordinary conversion. A synchronous buffer-returning operation can declare
+ordinary conversion. A buffer-returning operation can declare
 `newBufferResult()` when its implementation returns internal bytes instead.
+This also applies to bytes delivered by an ordinary implementation promise.
 Binding allocates a fresh buffer and, for a view return type, its view in the
-result realm. This allocation policy is separate from `[NewObject]`, which
+result realm. A retained promise keeps distinct projections for allocating
+and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.
+
+FileReader's result getter instead retains one projected ArrayBuffer per internal
+result and receiver context. Repeated reads, including a borrowed getter, return
+that same buffer. Its error getter realizes a retained failure at this boundary.
 
 `object` and `any` do not identify a platform interface, so Web IDL cannot infer
 which implementation to project. Do not use either merely to postpone defining
@@ -311,10 +350,18 @@ author function directly. The adapter:
 - enters the callback's realm and lifecycle; and
 - applies the declared report/rethrow/promise exception policy.
 
-An author-observable callback receiver must already be associated with a
-platform object. A direct implementation test can invoke converted callbacks with
-implementation values, but that is not a substitute for a projected callback
-test.
+When a callback receiver is an implementation, it must already be associated
+with a platform object. A direct implementation test can invoke converted
+callbacks with implementation values, but that is not a substitute for a
+projected callback test.
+
+Streams currently exercises an implementation-side alternative: each constructor
+explicitly captures its source, sink, or transformer dictionary after ordinary
+argument conversion and retains the original callback receiver. The specialized
+dictionary declaration helper has been removed. Author callback projection and
+lifecycle integration remain unfinished; the controller-realm tests continue to
+require platform objects and currently fail. This intermediate comparison does
+not remove the binding responsibilities above.
 
 ### Exceptions
 
@@ -329,16 +376,18 @@ is allocated as an Error exotic
 in the owning realm.
 
 Web IDL's `exceptions/dom-exception-core.ts` owns the shared names, legacy codes,
-and DOMException-request helpers. `exceptions/simple-exception.ts` provides
-distinguishable `RangeError` and `TypeError` requests. This independent build
-boundary lets implementations request errors without importing the binding
-machinery. Translate dependency failures into requests at the dependency call.
+and DOMException-request helpers. JS Engine's
+[`simple-exception.ts`](./js-engine/simple-exception.ts) provides distinguishable
+`RangeError`, `SyntaxError`, and `TypeError` requests without importing Web IDL.
+Translate dependency failures into requests at the dependency call.
 
 The binding realizes a request in the executing method's realm for synchronous
 calls, or the promise's realm when rejecting an internal promise. Existing
 JavaScript exceptions retain their identity, including author-thrown errors.
 The realized error is no longer a request, so forwarding it does not allocate
-another exception.
+another exception. Each realm binding also remembers the realization of a
+request, so separately projected promises rejected with the same request
+expose the same error object in that realm.
 
 ## Special object categories
 
@@ -461,7 +510,7 @@ It records migration work, not permanent architecture.
 | Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Implementation Binding Context removal | Request, Response, BodyMixin, TextEncoderImpl, TextDecoderImpl, TextDecoderCommonMixin, and AbortControllerImpl no longer accept or retain context; bindings own projection, buffer allocation, exception realization, and signal construction | Remove remaining implementation contexts in bounded slices, including File reads and Streams conversion/callbacks/promises; preserve observable realm behavior without a replacement service bag |
+| Implementation Binding Context removal | Fetch records, Encoding, stream implementations, Blob reading, FileReader, and AbortController no longer accept or retain context; bindings own projection, buffer allocation, exception realization, and signal construction | Finish stream callback/result projection and HTML promise delivery; move the remaining queuing-strategy and Fetch abort context uses into bindings or integration. Current failures are tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications

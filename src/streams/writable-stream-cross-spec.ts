@@ -1,6 +1,4 @@
-import type { BindingContext } from '../web-idl/projection';
-import type { StreamAbortSignal } from './abort';
-import { runPromiseAlgorithm } from './promise';
+import type { StreamAbortController, StreamAbortSignal } from './abort';
 import type { QueuingStrategySize } from './queuing-strategy';
 import {
   acquireWritableStreamDefaultWriter,
@@ -16,25 +14,22 @@ import {
 /** Streams §9.2, create and set up a writable stream. */
 // SPEC_MISMATCH: WritableStream.set up(stream, writeAlgorithm, closeAlgorithm?, abortAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createWritableStream(
-  context: BindingContext,
   // SPEC_MISMATCH: writeAlgorithm(chunk) -> promise
   writeAlgorithm: (chunk: unknown) => unknown,
-  closeAlgorithm?: () => unknown,
-  abortAlgorithm?: (reason: unknown) => unknown,
+  closeAlgorithm: (() => unknown) | undefined,
+  abortAlgorithm: ((reason: unknown) => unknown) | undefined,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
+  abortController: StreamAbortController,
 ): WritableStreamImpl {
   return createWritableStreamFromAlgorithms(
-    context,
     () => undefined,
-    (chunk) => runPromiseAlgorithm(context, () => writeAlgorithm(chunk)),
-    () => runPromiseAlgorithm(context, () => closeAlgorithm?.()),
-    (reason) => runPromiseAlgorithm(
-      context,
-      () => abortAlgorithm?.(reason),
-    ),
+    (chunk) => new Promise((resolve) => resolve(writeAlgorithm(chunk))),
+    () => new Promise((resolve) => resolve(closeAlgorithm?.())),
+    (reason) => new Promise((resolve) => resolve(abortAlgorithm?.(reason))),
     highWaterMark,
     sizeAlgorithm,
+    abortController,
   );
 }
 

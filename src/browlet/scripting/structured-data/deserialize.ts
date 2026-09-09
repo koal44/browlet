@@ -14,6 +14,7 @@ import { serializable } from './serializable';
 export type StructuredDeserializationEnvironment = StructuredDataEnvironment;
 
 /** HTML §2.7.6, StructuredDeserialize. */
+// BINDING_INTEGRATION: reconstruct platform objects in the destination realm.
 export function structuredDeserialize(
   serialized: SerializedRecord,
   environment: StructuredDeserializationEnvironment,

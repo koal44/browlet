@@ -1,5 +1,3 @@
-// Web IDL: https://webidl.spec.whatwg.org/#js-creating-throwing-exceptions
-
 /*
  * Implementations can request an exception without selecting its realm. The
  * binding recognizes only these requests; existing JavaScript errors pass
@@ -9,6 +7,13 @@ export class RangeError extends globalThis.RangeError {
   constructor(message = '') {
     super(message);
     simpleExceptionRequests.set(this, { type: 'rangeError', message });
+  }
+}
+
+export class SyntaxError extends globalThis.SyntaxError {
+  constructor(message = '') {
+    super(message);
+    simpleExceptionRequests.set(this, { type: 'syntaxError', message });
   }
 }
 
@@ -28,7 +33,7 @@ export function getSimpleExceptionRequest(
 }
 
 type SimpleExceptionRequest = {
-  type: 'rangeError' | 'typeError';
+  type: 'rangeError' | 'syntaxError' | 'typeError';
   message: string;
 };
 

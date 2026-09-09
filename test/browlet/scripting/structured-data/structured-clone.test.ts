@@ -34,6 +34,28 @@ describe('HTML structuredClone()', () => {
     expect(clone.cause.error).toBe(clone);
   });
 
+  it('realizes error-message conversion failures and preserves author exceptions', () => {
+    const browlet = createBrowlet();
+    const TypeError_ = getConstructor<typeof TypeError>(browlet, 'TypeError');
+    const symbolMessage = Object.defineProperty(new Error(), 'message', {
+      value: Symbol(),
+    });
+    expect(() => browlet.window.structuredClone(symbolMessage))
+      .toThrow(TypeError_);
+
+    const authorError = new TypeError('author conversion');
+    const throwingMessage = Object.defineProperty(new Error(), 'message', {
+      value: { toString() { throw authorError; } },
+    });
+    let caught: unknown;
+    try {
+      browlet.window.structuredClone(throwingMessage);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(authorError);
+  });
+
   it('uses the receiver relevant realm when a method is borrowed', () => {
     const first = createBrowlet();
     const second = createBrowlet();

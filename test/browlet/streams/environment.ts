@@ -1,14 +1,11 @@
-import {
-  streamAbortController, type StreamAbortController,
-} from '../../../src/streams/abort';
+import type { StreamAbortController } from '../../../src/streams/abort';
+import { streamAbortController } from '../../../src/streams/integration';
 import { streamsIDLDefinitions } from '../../../src/streams/index';
-import type { StreamPromise } from '../../../src/streams/promise';
 import { streamStructuredData } from '../../../src/streams/structured-data';
 import {
   createBindings, defineInterface, xattr,
   type BindingContext,
 } from '../../../src/web-idl/index';
-import { isPromiseValue } from '../../../src/web-idl/promise-value';
 import { TestRealm } from '../../web-idl/test-realm';
 
 export function createTestContext(
@@ -31,15 +28,6 @@ export function createTestContext(
   const realmBindings = bindings.register(realm);
   realmBindings.projectGlobalObject(realm.global, testGlobalIDL.name);
   return realmBindings.context;
-}
-
-export function unwrapStreamPromise<Value = unknown>(
-  value: StreamPromise,
-): Promise<Value> {
-  if (!isPromiseValue(value)) {
-    throw new TypeError('Expected an internal Web IDL promise record');
-  }
-  return value.promise as Promise<Value>;
 }
 
 type TestContextOptions = {

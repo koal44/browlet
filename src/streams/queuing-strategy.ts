@@ -3,6 +3,7 @@ import {
   reference,
 } from '../web-idl/declaration/index';
 import { callback } from '../web-idl/index';
+import { RangeError } from '../js-engine/simple-exception';
 
 export type QueuingStrategy = {
   readonly highWaterMark?: number;
@@ -11,17 +12,15 @@ export type QueuingStrategy = {
 
 export type QueuingStrategySize<Value = unknown> = (chunk: Value) => number;
 
-// SPEC_MISMATCH: ExtractHighWaterMark(strategy, defaultHWM) -> number
 export function extractHighWaterMark(
   strategy: QueuingStrategy,
   defaultHighWaterMark: number,
-  RangeError_: typeof RangeError,
 ): number {
   if (strategy.highWaterMark === undefined) return defaultHighWaterMark;
 
   const { highWaterMark } = strategy;
   if (Number.isNaN(highWaterMark) || highWaterMark < 0) {
-    throw new RangeError_('Invalid highWaterMark');
+    throw new RangeError('Invalid highWaterMark');
   }
   return highWaterMark;
 }

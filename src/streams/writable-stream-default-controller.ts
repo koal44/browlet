@@ -4,7 +4,6 @@ import {
 import {
   type StreamAbortController, type StreamAbortSignal,
 } from './abort';
-import type { StreamPromise } from './promise';
 import type { QueueContainer } from './queue-with-sizes';
 import type { QueuingStrategySize } from './queuing-strategy';
 import type { WritableStreamImpl } from './writable-stream';
@@ -28,14 +27,14 @@ export class WritableStreamDefaultControllerImpl {
 
 export type WritableStreamDefaultControllerState =
   QueueContainer<unknown> & {
-    abortAlgorithm?: (reason: unknown) => StreamPromise;
+    abortAlgorithm?: (reason: unknown) => Promise<unknown>;
     abortController: StreamAbortController;
-    closeAlgorithm?: () => StreamPromise;
+    closeAlgorithm?: () => Promise<unknown>;
     started: boolean;
     strategyHighWaterMark: number;
     strategySizeAlgorithm?: QueuingStrategySize;
     stream: WritableStreamImpl;
-    writeAlgorithm?: (chunk: unknown) => StreamPromise;
+    writeAlgorithm?: (chunk: unknown) => Promise<unknown>;
   };
 
 // -- Web IDL ------------------------------------------------------------

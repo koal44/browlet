@@ -41,6 +41,7 @@ export function structuredSerializeForStorage(
 }
 
 /** HTML §2.7.3, StructuredSerializeInternal. */
+// BINDING_INTEGRATION: recognize platform objects before serializing JavaScript data.
 export function structuredSerializeInternal(
   value: unknown,
   forStorage: boolean,
@@ -306,6 +307,7 @@ function serializeSetData(
 }
 
 /** HTML §2.7.3, serializable platform-object steps. */
+// BINDING_INTEGRATION: dispatch the registered interface's serialization steps.
 function serializePlatformObject(
   value: object,
   serialized: PlatformObjectSerializedRecord,
@@ -381,7 +383,7 @@ function serializeError(
     : 'Error';
   const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
   const message = messageDescriptor && 'value' in messageDescriptor
-    ? JSEngine.toString(messageDescriptor.value, realm)
+    ? JSEngine.toString(messageDescriptor.value)
     : undefined;
   const stackValue = JSEngine.readErrorStack(value, realm);
   const stack = typeof stackValue === 'string' ? stackValue : '';

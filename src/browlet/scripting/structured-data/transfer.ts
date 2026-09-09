@@ -72,6 +72,7 @@ export function structuredDeserializeWithTransfer(
   };
 }
 
+// BINDING_INTEGRATION: resolve the source platform object and its transferable capability.
 function prepareTransfer(
   value: unknown,
   environment: StructuredDataEnvironment,
@@ -138,6 +139,7 @@ function performTransfer(
   };
 }
 
+// BINDING_INTEGRATION: construct and initialize the destination platform object.
 function receiveTransfer(
   dataHolder: TransferDataHolder,
   environment: StructuredDataEnvironment,

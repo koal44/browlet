@@ -64,22 +64,21 @@ machinery or Web IDL feature is implemented.
 
 ## Promises
 
-- **Promise reactions:** JS Engine's
-  `installPromiseReactions()` operation uses `Promise.prototype.then` because
-  JavaScript does not expose `PerformPromiseThen`. It approximates that
-  operation's no-result-capability form, so every use creates an unreachable
-  derived promise and can consult an author-overridden `constructor` or
-  `@@species`. Web IDL separately settles its typed result capability where
-  required.
+- **Promise reactions:** JS Engine's `installPromiseReactions()` uses native
+  `v8::Promise::Then`, which bypasses author `then`, `constructor`, and
+  `@@species` properties. V8's public API still allocates an unreachable derived
+  promise; it does not expose the exact no-result-capability form of
+  `PerformPromiseThen`. Web IDL separately settles its typed result capability.
+  Node 24.19.0's older implementation of the native API still consults
+  `constructor`; its regression remains an ordinary failure on that base.
+  Node 26.8.1 and the custom engine pass.
 - **Handled flag:** JavaScript does not expose `[[PromiseIsHandled]]` directly.
   Attaching a rejection reaction marks the original promise handled while also
-  creating one unreachable fulfilled promise and sharing the same observable
-  `constructor`/`@@species` limitation.
+  creating one unreachable fulfilled promise.
 
 These substitutions preserve settlement, realm, conversion, and handled-state
-behavior for ordinary promises. The expected-failure tests record the
-remaining author-property observability; revisit them if the host eventually
-provides the underlying ECMAScript operations. Known future consumers include
+behavior for ordinary promises. Constructor observability now has passing
+regression coverage. Known future consumers include
 Web IDL async iterators and HTML navigation, module, and service-worker promise
 reactions; exact unhandled-rejection tracking and APIs that mark promises
 handled depend on the same inaccessible machinery.

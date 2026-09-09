@@ -8,7 +8,7 @@ import {
   type CallbackFunctionValue,
 } from './callback-value';
 import {
-  hasExtendedAttribute, type ArgumentDefinition,
+  hasExtendedAttribute, idlType, type ArgumentDefinition,
   type AsyncIterableMember, type AttributeMember, type IterableMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
   type WebIDLType,
@@ -31,7 +31,7 @@ import { convertToIDL } from './conversion';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
   getPromiseForWaitingForAll, isPromiseUnresolved, markPromiseAsHandled,
-  reactToPromise, rejectPromise, resolvePromise,
+  projectPromise, reactToPromise, rejectPromise, resolvePromise, toImplementationPromise,
 } from './promise';
 import { isPromiseValue } from './promise-value';
 import { getUnannotatedType } from './types';
@@ -777,7 +777,7 @@ function registerDefinedAttribute(
       return callImplementation(
         binding.get,
         this,
-        [context],
+        [getMemberBindingContext(member, this, context, realmBinding)],
         realmBinding,
       );
     },
@@ -789,7 +789,7 @@ function registerDefinedAttribute(
         set,
         this,
         [
-          context,
+          getMemberBindingContext(member, this, context, realmBinding),
           toImplementationValue(
             value,
             member.type,
@@ -882,7 +882,7 @@ function createDefinedOperationSteps(
   realmBinding: RealmBinding,
 ): OperationSteps {
   return function(...values) {
-    const operationContext = getOperationBindingContext(
+    const operationContext = getMemberBindingContext(
       member,
       this,
       context,
@@ -947,12 +947,12 @@ function createDefinedAsyncIteratorSteps(
 ): AsyncIteratorSteps {
   return {
     getNext(target, iterator) {
-      return requirePromiseValue(callImplementation(
+      return projectPromise(callImplementation(
         binding.getNext,
         undefined,
         [target, iterator],
         realmBinding,
-      ));
+      ), idlType.any, realmBinding);
     },
     ...(binding.initialize
       ? {
@@ -986,12 +986,12 @@ function createDefinedAsyncIteratorSteps(
     ...(binding.return
       ? {
         return(target: object, iterator: object, value: unknown) {
-          return requirePromiseValue(callImplementation(
+          return projectPromise(callImplementation(
             binding.return!,
             undefined,
             [target, iterator, value],
             realmBinding,
-          ));
+          ), idlType.any, realmBinding);
         },
       }
       : {}),
@@ -1085,7 +1085,7 @@ function createOperationSteps(
   dependencies: readonly ImplementationDependency[] = [],
 ): OperationSteps {
   return function(...values) {
-    const operationContext = getOperationBindingContext(
+    const operationContext = getMemberBindingContext(
       member,
       this,
       context,
@@ -1113,23 +1113,23 @@ function createOperationSteps(
   };
 }
 
-function getOperationBindingContext(
-  member: OperationMember,
+function getMemberBindingContext(
+  member: OperationMember | AttributeMember,
   receiver: object | null,
   installedContext: BindingContext,
   realmBinding: RealmBinding,
 ): BindingContext {
   if (member.static) return installedContext;
   if (!receiver) {
-    throw new Error('Instance operation has no implementation receiver');
+    throw new Error('Instance member has no implementation receiver');
   }
   const record = realmBinding.platformObjects.getImplementationRecord(receiver);
   if (!record) {
-    throw new Error('Instance operation receiver has no platform-object record');
+    throw new Error('Instance member receiver has no platform-object record');
   }
   const context = realmBinding.platformObjects.getBindingContext(record.realm);
   if (!context) {
-    throw new Error('Operation receiver realm has no binding context');
+    throw new Error('Member receiver realm has no binding context');
   }
   return context;
 }
@@ -1257,8 +1257,11 @@ function callImplementation<This, Values extends unknown[], Result>(
   values: Values,
   binding: RealmBinding,
 ): Result {
+  const owner = binding.platformObjects.getImplementationRecord(thisArgument)?.realm ??
+    binding.realm;
   try {
-    return Reflect.apply(implementation, thisArgument, values);
+    return owner.runtime.runWithExecutionOwner(owner, () =>
+      Reflect.apply(implementation, thisArgument, values));
   } catch (exception) {
     throw binding.realizeException(exception);
   }
@@ -1286,6 +1289,12 @@ function toImplementationValue(
   realmBinding: RealmBinding,
 ): unknown {
   if (value === missingArgument) return undefined;
+  if (isPromiseValue(value)) {
+    return toImplementationPromise(value, realmBinding, (result) =>
+      toImplementationValue(
+        result, value.type, projection, context, realmBinding,
+      ));
+  }
   for (const implementation of projection.implementations ?? []) {
     const resolved = context.getImplementation(value, implementation);
     if (resolved) return resolved;
@@ -1294,6 +1303,8 @@ function toImplementationValue(
     return projectCallbackFunction(
       value,
       projection.callbackExceptionBehavior,
+      context,
+      realmBinding,
     );
   }
   if (isCallbackInterfaceValue(value)) {
@@ -1383,6 +1394,8 @@ function getArgumentProjection(
 function projectCallbackFunction(
   value: CallbackFunctionValue,
   exceptionBehavior: CallbackExceptionBehavior | undefined,
+  context: BindingContext,
+  realmBinding: RealmBinding,
 ): CallableFunction {
   const existing = callbackFunctionProjections.get(value);
   if (existing) return existing;
@@ -1395,11 +1408,14 @@ function projectCallbackFunction(
    */
   const adapter = new Proxy(function callback() {}, {
     apply(_target, thisArgument, argumentsList) {
-      return invokeCallbackFunction(
+      const result = invokeCallbackFunction(
         value,
         argumentsList,
         exceptionBehavior,
         thisArgument,
+      );
+      return toImplementationValue(
+        result, value.definition.returns, {}, context, realmBinding,
       );
     },
     construct(_target, argumentsList) {

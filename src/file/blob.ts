@@ -6,17 +6,17 @@ import {
   createReadableStreamWithByteReadingSupport, getReadableStreamReader,
   pipeReadableStreamThrough, readAllBytes, type ReadableStreamImpl,
 } from '../streams/index';
-import {
-  createArrayBuffer, createArrayBufferView, getBufferSourceCopy,
-} from '../web-idl/buffer-source';
+import { getBufferSourceCopy } from '../web-idl/buffer-source';
 import {
   arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration,
   defineInterface, defineTypedef, dictMember, emptyDictionary, emptySequence,
-  idlType, impl, invokeWith, op, promise, reference, roAttr, sequence, union,
+  idlType, impl, invokeWith, newBufferResult, op, promise, reference, roAttr, sequence, union,
   xattr,
-  type WebIDLType,
 } from '../web-idl/declaration/index';
-import { bindingContext, type BindingContext } from '../web-idl/projection';
+import type { BindingContext } from '../web-idl/projection';
+import type { TaskScheduling } from '../infra/index';
+import type { StreamAbortController } from '../streams/abort';
+import { createStreamAbortController } from '../streams/integration';
 import {
   BlobData, BlobReadFailure, type BlobSnapshotState,
 } from './blob-data';
@@ -87,34 +87,29 @@ export class BlobImpl {
   }
 
   // SPEC_MISMATCH: Blob.stream() -> ReadableStream
-  stream(context: BindingContext): ReadableStreamImpl {
-    return getBlobStream(this, context);
+  stream(scheduling: TaskScheduling): ReadableStreamImpl {
+    return getBlobStream(this, scheduling);
   }
 
   // SPEC_MISMATCH: Blob.text() -> Promise<USVString>
-  text(context: BindingContext): object {
-    return readBlob(
-      this,
-      context,
-      idlType.USVString,
-      utf8Decode,
-    );
+  text(scheduling: TaskScheduling): Promise<string> {
+    return readBlob(this, scheduling).then(utf8Decode);
   }
 
   // SPEC_MISMATCH: Blob.arrayBuffer() -> Promise<ArrayBuffer>
-  arrayBuffer(context: BindingContext): object {
-    return readBlob(
-      this,
-      context,
-      idlType.ArrayBuffer,
-      (bytes) => createArrayBuffer(bytes, context.realm),
-    );
+  arrayBuffer(scheduling: TaskScheduling): Promise<Uint8Array> {
+    return readBlob(this, scheduling);
   }
 
   // SPEC_MISMATCH: Blob.textStream() -> ReadableStream
-  textStream(context: BindingContext): ReadableStreamImpl {
-    const stream = getBlobStream(this, context);
-    const decoder = context.construct(TextDecoderStreamImpl);
+  textStream(
+    scheduling: TaskScheduling,
+    abortController: StreamAbortController,
+  ): ReadableStreamImpl {
+    const stream = getBlobStream(this, scheduling);
+    const decoder = new TextDecoderStreamImpl(
+      'utf-8', { fatal: false, ignoreBOM: false }, abortController,
+    );
     // SPEC_MISMATCH: File API pipe through(stream, decoder: TextDecoderStream) -> ReadableStream
     return pipeReadableStreamThrough(
       stream,
@@ -123,13 +118,8 @@ export class BlobImpl {
   }
 
   // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
-  bytes(context: BindingContext): object {
-    return readBlob(
-      this,
-      context,
-      idlType.Uint8Array,
-      (bytes) => createArrayBufferView('Uint8Array', bytes, context.realm),
-    );
+  bytes(scheduling: TaskScheduling): Promise<Uint8Array> {
+    return readBlob(this, scheduling);
   }
 
   // -- Friends ----------------------------------------------------------
@@ -226,6 +216,7 @@ export function convertLineEndingsToNative(
   return value.replace(/\r\n|\r|\n/g, nativeLineEnding);
 }
 
+// BINDING_INTEGRATION: supply platform line-ending policy at Blob/File construction.
 function getNativeLineEnding(context: BindingContext): NativeLineEnding {
   const value = context.getCapability(blobIDL, nativeLineEndingCapability);
   if (value === undefined) {
@@ -280,17 +271,15 @@ export function readBlobBytes(
 // SPEC_MISMATCH: (blob) -> ReadableStream
 export function getBlobStream(
   blob: BlobImpl,
-  context: BindingContext,
+  scheduling: TaskScheduling,
 ): ReadableStreamImpl {
   let canceled = false;
-  const fileReading = getFileReading(context);
   const stream = createReadableStreamWithByteReadingSupport(
-    context,
     undefined,
     () => { canceled = true; },
   );
 
-  fileReading.runInParallel(() => { void readChunks(); });
+  scheduling.runInParallel(() => { void readChunks(); });
   return stream;
 
   async function readChunks(): Promise<void> {
@@ -300,35 +289,26 @@ export function getBlobStream(
         const byteLength = Math.min(blob.size - offset, blobReadChunkSize);
         const bytes = await readBlobBytes(blob, offset, byteLength);
         offset += bytes.length;
-        fileReading.queueTask(() => {
+        scheduling.queueTask(() => {
           if (canceled) return;
           try {
-            enqueueReadableStream(
-              stream,
-              createArrayBufferView('Uint8Array', bytes, context.realm),
-            );
+            enqueueReadableStream(stream, bytes);
           } catch (error) {
             canceled = true;
-            errorReadableStream(
-              stream,
-              context.realizeException(error),
-            );
+            errorReadableStream(stream, error);
           }
         });
       }
       if (!canceled) {
-        fileReading.queueTask(() => {
+        scheduling.queueTask(() => {
           if (!canceled) closeReadableStream(stream);
         });
       }
     } catch (error) {
-      fileReading.queueTask(() => {
+      scheduling.queueTask(() => {
         if (canceled) return;
         canceled = true;
-        errorReadableStream(
-          stream,
-          context.realizeException(realizeReadFailure(error)),
-        );
+        errorReadableStream(stream, realizeReadFailure(error));
       });
     }
   }
@@ -336,29 +316,13 @@ export function getBlobStream(
 
 function readBlob(
   blob: BlobImpl,
-  context: BindingContext,
-  resultType: WebIDLType,
-  transform: (bytes: Uint8Array) => unknown,
-): object {
-  const promise = context.createPromise(resultType);
-  try {
-    const reader = getReadableStreamReader(getBlobStream(blob, context));
+  scheduling: TaskScheduling,
+): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const reader = getReadableStreamReader(getBlobStream(blob, scheduling));
     // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
-    readAllBytes(
-      reader,
-      (bytes) => {
-        try {
-          context.resolvePromise(promise, transform(bytes));
-        } catch (error) {
-          context.rejectPromise(promise, error);
-        }
-      },
-      (reason) => context.rejectPromise(promise, reason),
-    );
-  } catch (error) {
-    context.rejectPromise(promise, error);
-  }
-  return promise;
+    readAllBytes(reader, resolve, reject);
+  });
 }
 
 function realizeReadFailure(error: unknown): unknown {
@@ -391,6 +355,8 @@ function normalizeBlobType(value: string): string {
 }
 
 // -- Web IDL ------------------------------------------------------------
+// BINDING_INTEGRATION: provide reading dependencies and project promises and fresh buffers.
+// TODO(BINDING_INTEGRATION): complete HTML checkpoint delivery after an implementation promise settles.
 
 export const endingTypeIDL = defineEnumeration({
   name: 'EndingType',
@@ -448,19 +414,28 @@ export const blobIDL = defineInterface({
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
     op('stream', reference('ReadableStream'), [], {
-      ...invokeWith(bindingContext), ...xattr('NewObject'),
+      ...invokeWith(contextValue(getFileReading)), ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
-      ...invokeWith(bindingContext), ...xattr('NewObject'),
+      ...invokeWith(contextValue(getFileReading)), ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
-      ...invokeWith(bindingContext), ...xattr('NewObject'),
+      ...xattr('NewObject'),
+      binding: {
+        ...invokeWith(contextValue(getFileReading)).binding,
+        ...newBufferResult().binding,
+      },
     }),
     op('textStream', reference('ReadableStream'), [], {
-      ...invokeWith(bindingContext), ...xattr('NewObject'),
+      ...xattr('NewObject'),
+      ...invokeWith(contextValue(getFileReading), contextValue(createStreamAbortController)),
     }),
     op('bytes', promise(idlType.Uint8Array), [], {
-      ...invokeWith(bindingContext), ...xattr('NewObject'),
+      ...xattr('NewObject'),
+      binding: {
+        ...invokeWith(contextValue(getFileReading)).binding,
+        ...newBufferResult().binding,
+      },
     }),
   ],
 });

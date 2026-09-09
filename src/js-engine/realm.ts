@@ -24,6 +24,16 @@ export type JavaScriptRuntime = {
   readonly supportsHostHooks: boolean;
   setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void;
   getAssociatedRealm(value: object): JavaScriptRealm | undefined;
+  /** Scope implementation continuations; undefined leaves ownership for author or host work. */
+  runWithExecutionOwner<T>(owner: JavaScriptRealm | undefined, steps: () => T): T;
+  /** Retain an owned continuation for an explicitly scheduled task. */
+  bindExecutionOwner<T>(owner: JavaScriptRealm, steps: () => T): () => T;
+  observePromise(
+    realm: JavaScriptRealm,
+    promise: Promise<unknown>,
+    onFulfilled: JavaScriptFunction | undefined,
+    onRejected: JavaScriptFunction | undefined,
+  ): void;
 };
 
 export type JavaScriptHostHooks<HostDefined> = {
@@ -43,6 +53,7 @@ export type JavaScriptHostHooks<HostDefined> = {
     job: () => void,
     realm: JavaScriptRealm | null,
     queueRealm: JavaScriptRealm | null,
+    executionOwner: JavaScriptRealm | undefined,
   ): false | void;
   enqueueGenericJob(
     this: void,

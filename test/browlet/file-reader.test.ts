@@ -13,7 +13,7 @@ import {
 import type { ProgressEventImpl } from
   '../../src/browlet/dom/events/progress-event';
 import {
-  BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
+  BlobData, BlobImpl, BlobReadFailure, getFileReading, type BlobByteSource,
 } from '../../src/file/index';
 import { getBufferSourceCopy } from '../../src/web-idl/buffer-source';
 import { serializeDefinition } from '../../src/web-idl/declaration/index';
@@ -21,7 +21,7 @@ import type { BindingContext } from '../../src/web-idl/projection';
 
 describe('File API FileReader foundation', () => {
   it('starts empty with no result, error, or event handlers', () => {
-    const reader = new FileReaderImpl();
+    const reader = createReader();
 
     expect(reader).toBeInstanceOf(EventTargetImpl);
     expect(reader.readyState).toBe(0);
@@ -38,7 +38,7 @@ describe('File API FileReader foundation', () => {
   });
 
   it('keeps each event-handler attribute independent', () => {
-    const reader = new FileReaderImpl();
+    const reader = createReader();
     const load = vi.fn();
     const progress = vi.fn();
 
@@ -106,6 +106,25 @@ describe('File API §6.2: FileReader reads', () => {
     expect(Reflect.get(reader, 'result')).toBe('projected');
   });
 
+  it('keeps the same result buffer when its getter is borrowed from another realm', async () => {
+    const first = createWindow();
+    const second = createWindow();
+    const reader = new first.FileReader();
+    const done = new Promise<void>((resolve) => {
+      reader.addEventListener('loadend', () => { resolve(); });
+    });
+    reader.readAsArrayBuffer(new first.Blob(['ABC']));
+    await done;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- borrowing the getter with an explicit receiver is the behavior under test
+    const getter = Object.getOwnPropertyDescriptor(second.FileReader.prototype, 'result')!.get!;
+    const result = Reflect.apply(getter, reader, []) as ArrayBuffer;
+
+    expect(result).toBeInstanceOf(first.ArrayBuffer);
+    expect(result).toBe(reader.result);
+    expect(Reflect.apply(getter, reader, [])).toBe(result);
+    expect(Array.from(new Uint8Array(result))).toEqual([65, 66, 67]);
+  });
+
   it('reads every result mode and creates ArrayBuffer in the relevant realm', async () => {
     const first = createWindow();
     const second = createWindow();
@@ -115,25 +134,26 @@ describe('File API §6.2: FileReader reads', () => {
     });
 
     const dataURL = await read(context, blob, (reader) => {
-      reader.readAsDataURL(context, blob);
+      reader.readAsDataURL(blob);
     });
     expect(dataURL.result)
       .toBe('data:application/example;base64,AEGA/w==');
 
     const binary = await read(context, blob, (reader) => {
-      reader.readAsBinaryString(context, blob);
+      reader.readAsBinaryString(blob);
     });
     expect([...binary.result as string].map((value) => value.charCodeAt(0)))
       .toEqual([0, 65, 128, 255]);
 
     const arrayBuffer = await read(context, blob, (reader) => {
-      reader.readAsArrayBuffer(context, blob);
+      reader.readAsArrayBuffer(blob);
     });
-    expect(arrayBuffer.result)
+    const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer), 'result') as object;
+    expect(result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
-    expect(arrayBuffer.result)
+    expect(result)
       .not.toBeInstanceOf(requireFunction(second, 'ArrayBuffer'));
-    expect(getBufferSourceCopy(arrayBuffer.result as object))
+    expect(getBufferSourceCopy(result))
       .toEqual(Uint8Array.of(0, 65, 128, 255));
   });
 
@@ -141,7 +161,7 @@ describe('File API §6.2: FileReader reads', () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl(['TEST']);
     const reader = await read(context, blob, (value) => {
-      value.readAsDataURL(context, blob);
+      value.readAsDataURL(blob);
     });
 
     expect(reader.result)
@@ -156,13 +176,13 @@ describe('File API §6.2: FileReader reads', () => {
     const utf8 = new BlobImpl([Uint8Array.of(0x68, 0xC3, 0xB6)]);
 
     const explicit = await read(context, windows1252, (reader) => {
-      reader.readAsText(context, windows1252, 'windows-1252');
+      reader.readAsText(windows1252, 'windows-1252');
     });
     const fromType = await read(context, windows1252, (reader) => {
-      reader.readAsText(context, windows1252, 'not-an-encoding');
+      reader.readAsText(windows1252, 'not-an-encoding');
     });
     const fallback = await read(context, utf8, (reader) => {
-      reader.readAsText(context, utf8);
+      reader.readAsText(utf8);
     });
 
     expect(explicit.result).toBe('€');
@@ -176,7 +196,7 @@ describe('File API §6.2: FileReader reads', () => {
       Uint8Array.of(0xFE, 0xFF, 0, 0x68, 0, 0x69),
     ]);
     const reader = await read(context, blob, (value) => {
-      value.readAsText(context, blob, 'UTF-8');
+      value.readAsText(blob, 'UTF-8');
     });
 
     expect(reader.result).toBe('hi');
@@ -185,7 +205,7 @@ describe('File API §6.2: FileReader reads', () => {
   it('fires ordered progress events with state and byte totals', async () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl(['abc']);
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: Array<{
       type: string;
       readyState: number;
@@ -208,7 +228,7 @@ describe('File API §6.2: FileReader reads', () => {
     }
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, blob);
+    reader.readAsText(blob);
     expect(reader.readyState).toBe(1);
     expect(reader.result).toBeNull();
     await done;
@@ -226,7 +246,7 @@ describe('File API §6.2: FileReader reads', () => {
   it('does not fire progress for an empty Blob', async () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl();
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
 
     reader.onloadstart = (event) => { events.push(event.type); };
@@ -234,7 +254,7 @@ describe('File API §6.2: FileReader reads', () => {
     reader.onload = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, blob);
+    reader.readAsText(blob);
     await done;
 
     expect(events).toEqual(['loadstart', 'load', 'loadend']);
@@ -257,14 +277,14 @@ describe('File API §6.2: FileReader reads', () => {
       '',
       source.snapshotState,
     );
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const loaded: number[] = [];
     reader.onprogress = (event) => {
       loaded.push((event as unknown as ProgressEventImpl).loaded);
     };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsArrayBuffer(context, blob);
+    reader.readAsArrayBuffer(blob);
     await done;
 
     expect(loaded.length).toBeGreaterThanOrEqual(2);
@@ -275,13 +295,13 @@ describe('File API §6.2: FileReader reads', () => {
   it('rejects a concurrent read while leaving the first read active', async () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl(['abc']);
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const done = waitForLoadEnd(reader);
 
-    reader.readAsText(context, blob);
+    reader.readAsText(blob);
     let error: unknown;
     try {
-      reader.readAsDataURL(context, blob);
+      reader.readAsDataURL(blob);
     } catch (caught) {
       error = caught;
     }
@@ -294,17 +314,17 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('aborts synchronously and does not disturb another reader', async () => {
     const context = getContext(createWindow());
-    const first = new FileReaderImpl();
-    const second = new FileReaderImpl();
+    const first = createReader(context);
+    const second = createReader(context);
     const firstEvents: string[] = [];
     first.onloadstart = (event) => { firstEvents.push(event.type); };
     first.onload = (event) => { firstEvents.push(event.type); };
     first.onabort = (event) => { firstEvents.push(event.type); };
     first.onloadend = (event) => { firstEvents.push(event.type); };
 
-    first.readAsText(context, new BlobImpl(['first']));
+    first.readAsText(new BlobImpl(['first']));
     const secondDone = waitForLoadEnd(second);
-    second.readAsText(context, new BlobImpl(['second']));
+    second.readAsText(new BlobImpl(['second']));
     first.abort();
 
     expect(first.readyState).toBe(2);
@@ -320,7 +340,7 @@ describe('File API §6.2: FileReader reads', () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl(['complete']);
     const reader = await read(context, blob, (value) => {
-      value.readAsText(context, blob);
+      value.readAsText(blob);
     });
     const abort = vi.fn();
     const loadend = vi.fn();
@@ -337,7 +357,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('suppresses the old loadend when onabort starts another read', async () => {
     const context = getContext(createWindow());
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
     let firstLoadStart = true;
     reader.onloadstart = (event) => {
@@ -348,14 +368,14 @@ describe('File API §6.2: FileReader reads', () => {
     };
     reader.onabort = (event) => {
       events.push(event.type);
-      reader.readAsText(context, new BlobImpl(['second']));
+      reader.readAsText(new BlobImpl(['second']));
     };
     reader.onprogress = (event) => { events.push(event.type); };
     reader.onload = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, new BlobImpl(['first']));
+    reader.readAsText(new BlobImpl(['first']));
     await done;
 
     expect(reader.result).toBe('second');
@@ -367,7 +387,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('stops completion when a final progress handler aborts', async () => {
     const context = getContext(createWindow());
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
     reader.onprogress = (event) => {
       events.push(event.type);
@@ -378,7 +398,7 @@ describe('File API §6.2: FileReader reads', () => {
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, new BlobImpl(['unfinished']));
+    reader.readAsText(new BlobImpl(['unfinished']));
     await done;
 
     expect(reader.result).toBeNull();
@@ -387,19 +407,19 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('suppresses the old loadend when onload starts another read', async () => {
     const context = getContext(createWindow());
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
     let firstLoad = true;
     reader.onload = (event) => {
       events.push(event.type);
       if (!firstLoad) return;
       firstLoad = false;
-      reader.readAsText(context, new BlobImpl(['second']));
+      reader.readAsText(new BlobImpl(['second']));
     };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, new BlobImpl(['first']));
+    reader.readAsText(new BlobImpl(['first']));
     await done;
 
     expect(reader.result).toBe('second');
@@ -418,17 +438,17 @@ describe('File API §6.2: FileReader reads', () => {
       '',
       source.snapshotState,
     );
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
     reader.onerror = (event) => {
       events.push(event.type);
-      reader.readAsText(context, new BlobImpl(['recovered']));
+      reader.readAsText(new BlobImpl(['recovered']));
     };
     reader.onload = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(context, failed);
+    reader.readAsText(failed);
     await done;
 
     expect(reader.result).toBe('recovered');
@@ -454,21 +474,21 @@ describe('File API §6.2: FileReader reads', () => {
       '',
       source.snapshotState,
     );
-    const reader = new FileReaderImpl();
+    const reader = createReader(context);
     const events: string[] = [];
     reader.onloadstart = (event) => { events.push(event.type); };
     reader.onerror = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsArrayBuffer(context, blob);
+    reader.readAsArrayBuffer(blob);
     await done;
 
     expect(events).toEqual(['error', 'loadend']);
     expect(reader.readyState).toBe(2);
     expect(reader.result).toBeNull();
     expect(reader.error?.name).toBe(name);
-    expect(reader.error)
+    expect(Reflect.get(context.project(FileReaderImpl, reader), 'error'))
       .toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
   });
 });
@@ -476,6 +496,10 @@ describe('File API §6.2: FileReader reads', () => {
 function createWindow(): Window & typeof globalThis {
   return new Browlet({ route: () => '' }).window as
     Window & typeof globalThis;
+}
+
+function createReader(context = getContext(createWindow())): FileReaderImpl {
+  return new FileReaderImpl(getFileReading(context));
 }
 
 function getContext(window: object): BindingContext {
@@ -487,7 +511,7 @@ async function read(
   blob: BlobImpl,
   start: (reader: FileReaderImpl) => void,
 ): Promise<FileReaderImpl> {
-  const reader = new FileReaderImpl();
+  const reader = createReader(context);
   const done = waitForLoadEnd(reader);
   start(reader);
   await done;

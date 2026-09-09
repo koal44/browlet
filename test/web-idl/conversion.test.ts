@@ -115,6 +115,47 @@ describe('Web IDL value conversion', () => {
     );
   });
 
+  it('preserves author exceptions while realizing primitive-conversion failures', () => {
+    const { binding, realm } = createBinding();
+    const authorError = new TypeError('author conversion');
+    const value = { toString() { throw authorError; } };
+
+    for (const type of [
+      idlType.DOMString, idlType.USVString, idlType.ByteString,
+      idlType.long, idlType.double, idlType.bigint,
+      union(idlType.long, idlType.bigint),
+    ]) {
+      let caught: unknown;
+      try {
+        convertToIDL(value, type, binding);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(authorError);
+      expectRealmTypeError(
+        () => convertToIDL({ [Symbol.toPrimitive]: () => ({}) }, type, binding),
+        realm,
+      );
+    }
+  });
+
+  it('realizes BigInt syntax failures without replacing author SyntaxErrors', () => {
+    const { binding, realm } = createBinding();
+    expect(() => convertToIDL('not an integer', idlType.bigint, binding))
+      .toThrow(realm.intrinsics.syntaxError);
+
+    const authorError = new SyntaxError('author conversion');
+    let caught: unknown;
+    try {
+      convertToIDL({
+        [Symbol.toPrimitive]() { throw authorError; },
+      }, idlType.bigint, binding);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(authorError);
+  });
+
   it('reads inherited dictionary members in specification order', () => {
     const parent = defineDictionary({
       name: 'ParentOptions',

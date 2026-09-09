@@ -7,6 +7,19 @@ export type JavaScriptBufferTypeName =
   | 'SharedArrayBuffer'
   | JavaScriptBufferViewName;
 
+/** Buffer or view with fixed-length backing storage, including shared buffers. */
+export function isFixedBufferSource(
+  value: unknown,
+): value is ArrayBufferLike | ArrayBufferView {
+  if (typeof value !== 'object' || value === null) return false;
+  const name = getBufferTypeName(value);
+  if (!name) return false;
+  const buffer = name === 'ArrayBuffer' || name === 'SharedArrayBuffer'
+    ? value
+    : getArrayBufferViewBuffer(value);
+  return !isResizableArrayBuffer(buffer);
+}
+
 export function getBufferTypeName(
   value: object,
 ): JavaScriptBufferTypeName | undefined {

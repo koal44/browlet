@@ -334,8 +334,8 @@ it covers the Streams boundary without extending this into a Web IDL audit.
 Transform operations otherwise recover context from their stream. Strategy
 size functions are cached by Binding Context; their allocation/cache helper
 signatures are local, and the generated size functions keep their specified
-arguments. `runPromiseAlgorithm` is a local promise adapter, not another
-named spec operation. MessagePort-backed transfers remain deferred in
+arguments. The local `runPromiseAlgorithm` adapter was later removed by the
+implementation migration recorded in [Streams' owner notes](../streams/PORTING-NOTES.md). MessagePort-backed transfers remain deferred in
 [Streams' owner notes](../streams/PORTING-NOTES.md). `CanTransferArrayBuffer`
 has no implementation; its missing detach-key check is recorded beside
 [the shared transfer helper](../web-idl/buffer-source.ts). No state-machine

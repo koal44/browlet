@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createIteratorResultObject, getMethod, isAccessorDescriptor, isCallable,
-  isConstructor, isDataDescriptor, isObject, NodeRealm,
+  createIteratorResultObject, getMethod, getSimpleExceptionRequest,
+  isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, NodeRealm,
   ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
 } from '../../src/js-engine/index';
 
@@ -68,7 +68,6 @@ describe('ECMAScript abstract operations', () => {
   });
 
   it('uses the requested primitive-conversion hint', () => {
-    const realm = new NodeRealm();
     const hints: string[] = [];
     const value = {
       [Symbol.toPrimitive](hint: string) {
@@ -77,13 +76,12 @@ describe('ECMAScript abstract operations', () => {
       },
     };
 
-    expect(toNumber(value, realm)).toBe(7);
-    expect(toString(value, realm)).toBe('seven');
+    expect(toNumber(value)).toBe(7);
+    expect(toString(value)).toBe('seven');
     expect(hints).toEqual(['number', 'string']);
   });
 
   it('uses the ordinary primitive-conversion method order', () => {
-    const realm = new NodeRealm();
     const calls: string[] = [];
     const value = {
       toString() {
@@ -96,13 +94,12 @@ describe('ECMAScript abstract operations', () => {
       },
     };
 
-    expect(toPrimitive(value, realm, 'number')).toBe(1);
-    expect(toPrimitive(value, realm, 'string')).toBe('string');
+    expect(toPrimitive(value, 'number')).toBe(1);
+    expect(toPrimitive(value, 'string')).toBe('string');
     expect(calls).toEqual(['valueOf', 'toString']);
   });
 
   it('uses the default hint and number ordering when no type is preferred', () => {
-    const realm = new NodeRealm();
     const hints: string[] = [];
     const exotic = {
       [Symbol.toPrimitive](hint: string) {
@@ -110,7 +107,7 @@ describe('ECMAScript abstract operations', () => {
         return 'value';
       },
     };
-    expect(toPrimitive(exotic, realm)).toBe('value');
+    expect(toPrimitive(exotic)).toBe('value');
     expect(hints).toEqual(['default']);
 
     const calls: string[] = [];
@@ -123,20 +120,32 @@ describe('ECMAScript abstract operations', () => {
         calls.push('valueOf');
         return 1;
       },
-    }, realm)).toBe(1);
+    })).toBe(1);
     expect(calls).toEqual(['valueOf']);
   });
 
-  it('performs BigInt conversion and realizes failures in the supplied realm', () => {
-    const realm = new NodeRealm();
-    expect(toBigInt('42', realm)).toBe(42n);
-    expect(toBigInt(true, realm)).toBe(1n);
-    expect(() => toBigInt(1, realm)).toThrow(realm.intrinsics.typeError);
-    expect(() => toNumber(1n, realm)).toThrow(realm.intrinsics.typeError);
-    expect(() => toString(Symbol(), realm)).toThrow(realm.intrinsics.typeError);
-    expect(() => toPrimitive({
-      [Symbol.toPrimitive]: () => ({}),
-    }, realm, 'number')).toThrow(realm.intrinsics.typeError);
+  it('performs BigInt conversion', () => {
+    expect(toBigInt('42')).toBe(42n);
+    expect(toBigInt(true)).toBe(1n);
+  });
+
+  it('requests errors for invalid primitive conversions', () => {
+    for (const [convert, type] of [
+      [() => toPrimitive({ [Symbol.toPrimitive]: () => ({}) }), 'typeError'],
+      [() => toNumber(1n), 'typeError'],
+      [() => toNumber(Symbol()), 'typeError'],
+      [() => toString(Symbol()), 'typeError'],
+      [() => toBigInt(1), 'typeError'],
+      [() => toBigInt('not an integer'), 'syntaxError'],
+    ] as const) {
+      let caught: unknown;
+      try {
+        convert();
+      } catch (error) {
+        caught = error;
+      }
+      expect(getSimpleExceptionRequest(caught)).toMatchObject({ type });
+    }
   });
 
   it('creates realm-owned ordinary and iterator-result objects', () => {

@@ -1,4 +1,5 @@
 import * as vm from 'node:vm';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
 import type { Context } from 'node:vm';
@@ -26,6 +27,7 @@ class NodeRuntime implements JavaScriptRuntime {
   #evaluatingRealm: JavaScriptRealm | undefined;
   readonly #objectRealms = new WeakMap<object, JavaScriptRealm>();
   readonly #contextRealms = new WeakMap<object, JavaScriptRealm>();
+  readonly #executionOwner = new AsyncLocalStorage<JavaScriptRealm | undefined>();
   #tickCallback: (() => void) | undefined;
   readonly hasExplicitMicrotaskQueues =
     nodeCreateMicrotaskQueue !== undefined;
@@ -71,10 +73,32 @@ class NodeRuntime implements JavaScriptRuntime {
     if (isNodeContextHandle(context)) this.#contextRealms.set(context.realm, realm);
   }
 
+  runWithExecutionOwner<T>(owner: JavaScriptRealm | undefined, steps: () => T): T {
+    return this.#executionOwner.run(owner, steps);
+  }
+
+  bindExecutionOwner<T>(owner: JavaScriptRealm, steps: () => T): () => T {
+    return this.runWithExecutionOwner(owner, () => AsyncLocalStorage.bind(steps));
+  }
+
+  observePromise(
+    realm: JavaScriptRealm,
+    promise: Promise<unknown>,
+    onFulfilled: JavaScriptFunction | undefined,
+    onRejected: JavaScriptFunction | undefined,
+  ): void {
+    const observe = getNodeMethod('observePromise');
+    if (!observe) throw new Error('Node does not support native Promise observation');
+    Reflect.apply(observe, nodeApi, [
+      promise, realm.intrinsics.promise.constructor, onFulfilled, onRejected,
+    ]);
+  }
+
   setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void {
     const install = getNodeMethod('setHostHooks');
     const getRealm = getNodeMethod('getRealm');
-    if (!this.supportsHostHooks || !install || !getRealm) {
+    const withContinuationData = getNodeMethod('withContinuationData');
+    if (!this.supportsHostHooks || !install || !getRealm || !withContinuationData) {
       throw new Error('Node does not support job host hooks');
     }
     Reflect.apply(install, nodeApi, [{
@@ -87,13 +111,20 @@ class NodeRuntime implements JavaScriptRuntime {
         hostDefinedOptions: registration.hostDefinedOptions,
       }),
       callJobCallback: hooks.callJobCallback,
-      enqueuePromiseJob: (job: () => void, realm: object | null) => {
+      enqueuePromiseJob: (job: () => void, realm: object | null, snapshot: {
+        continuationData: unknown;
+      }) => {
         // The job's creation context owns its queue, including handlerless jobs
         // whose specification-supplied realm is null.
         const queueRealm = Reflect.apply(getRealm, nodeApi, [job]) as object;
+        // Inspect the registration's saved state, never the current settler's.
+        // Node owns the continuation representation; ALS reads only our channel.
+        const owner = Reflect.apply(withContinuationData, nodeApi, [
+          snapshot.continuationData, () => this.#executionOwner.getStore(),
+        ]) as JavaScriptRealm | undefined;
         return hooks.enqueuePromiseJob(job,
           realm === null ? null : this.#contextRealms.get(realm) ?? null,
-          this.#contextRealms.get(queueRealm) ?? null);
+          this.#contextRealms.get(queueRealm) ?? null, owner);
       },
       enqueueGenericJob: (job: () => void, realm: object) =>
         hooks.enqueueGenericJob(job, this.#contextRealms.get(realm) ?? null),

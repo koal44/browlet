@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TypeError as TypeErrorRequest } from '../../../../src/js-engine/simple-exception';
 
 import {
   getDOMExceptionRequest,
@@ -360,9 +361,8 @@ describe('HTML structured serialization', () => {
       Object.defineProperty(error, 'message', { value: Symbol() });
       return error;
     })()`, 'structured-serialize-symbol-message.js') as object;
-    const TypeError_ = Reflect.get(realm.global, 'TypeError') as typeof TypeError;
     expect(() => structuredSerialize(symbolMessage, environment))
-      .toThrow(TypeError_);
+      .toThrow(TypeErrorRequest);
   });
 
   it('serializes Error cause through the shared graph memory', () => {

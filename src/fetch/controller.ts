@@ -31,6 +31,7 @@ export class FetchController {
 
   /** The extra context and structured-data arguments supply the aborting realm and HTML serialization. */
   // SPEC_MISMATCH: abort(controller, error?)
+  // TODO(BINDING_INTEGRATION): move fallback-error realization to the HTML serialization boundary.
   abort(
     context: BindingContext,
     structuredData: FetchStructuredData,
@@ -61,6 +62,7 @@ export class FetchController {
  * BindingContext represents that realm; the extra capability supplies HTML deserialization.
  */
 // SPEC_MISMATCH: (abortReason, realm)
+// TODO(BINDING_INTEGRATION): isolate target-realm error creation at the HTML deserialization boundary.
 export function deserializeAbortReason(
   abortReason: object | null,
   context: BindingContext,

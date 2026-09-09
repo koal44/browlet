@@ -43,6 +43,11 @@ An implementation owns the state and algorithms assigned to its specification.
 It works with implementation objects and other post-Web-IDL-conversion values.
 It may directly import realm-neutral algorithms.
 
+An algorithm can explicitly require a later Web IDL conversion, such as Encoding
+converting a chunk received through a generic writable stream. Use a shared
+context-free conversion at that specified point, with internal exception requests;
+do not move it to the earlier author call or inject Binding Context.
+
 It must not:
 
 - accept or retain a Binding Context; realm handling belongs in declarations
@@ -70,6 +75,8 @@ checkpoint operations travel together on that contract so the event loop
 cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
+JS Engine also owns internal simple-exception requests; their realization into
+realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
 The custom engine's job hooks follow the same division. JS Engine associates
 opaque native context references with its existing realm objects and adapts
@@ -112,7 +119,7 @@ The Binding layer owns the Web IDL boundary:
 - stable platform-object/implementation identity; and
 - legacy indexed, named, and other exotic behavior.
 
-It projects implementation state. It does not construct the semantic state
+It projects implementation state. It does not construct the state
 which makes a subsystem work.
 
 ### Binding World
@@ -151,6 +158,17 @@ generic services whose behavior inherently depends on that realm, for example:
 - realm-owned function and exception creation;
 - microtask integration; and
 - realm-sensitive buffer allocation.
+
+Binding Context belongs in code that connects implementation values to
+realm-owned JavaScript objects. This includes declaration bindings, browser
+composition, and structured cloning's platform-object handling. Implementation
+algorithms receive ordinary values and explicit dependencies instead.
+
+Outside Web IDL's binding machinery, label these uses with
+`BINDING_INTEGRATION:`. Use `TODO(BINDING_INTEGRATION):` for an implementation
+dependency that still needs removal or a boundary awaiting design review.
+An `integration.ts` file is a useful home for capability resolution, but its
+name does not justify passing Binding Context through implementation algorithms.
 
 The concrete type is `BindingContext`, created once for each registered Web IDL
 realm. Its `realm` property identifies that realm; Binding assembles and owns
@@ -222,7 +240,7 @@ objects solely so each specification can retain a source directory.
 
 ### Cross-specification capability
 
-A cross-specification capability is a narrow semantic operation owned by one
+A cross-specification capability is a narrow operation owned by one
 specification and required by another. It is an explicit dependency edge, not
 a general runtime layer.
 
@@ -250,7 +268,10 @@ of its own state and algorithms.
 
 File reading demonstrates why these roles must stay separate. Running read
 steps in parallel and queueing results on File's task source form one narrow
-HTML scheduling capability. The underlying platform's native line ending is
+HTML scheduling capability. Once integration selects the global and task source,
+consumers use Infra's shared `TaskScheduling` and removable `TaskHandle` contracts.
+FileReader retains that dependency; EventTarget owns synchronous dispatch, not
+task scheduling. The underlying platform's native line ending is
 an immutable composition value, while File's wall-clock default is the
 directly available ECMAScript `Date.now()` operation. Neither needs a
 subsystem-wide host facade.
@@ -269,7 +290,7 @@ Host Ports should be narrow, replaceable, and named for the external effect.
 Do not call a dependency a Host Port merely because it lives in another
 package. Structured cloning and abort construction are cross-specification
 capabilities; reading a monotonic native clock is a Host Port. HTML timer/task
-ordering and Fetch semantics remain specification behavior even when they use
+ordering and Fetch remain specification behavior even when they use
 host primitives underneath.
 
 Likewise, do not promote an immutable host configuration value or an operation
@@ -291,6 +312,13 @@ ambient runtime discovery. A Composition Root assembles:
 Resolve dependencies at one of these explicit integration boundaries.
 Implementation algorithms must not perform ambient discovery of the same
 objects later.
+
+Execution ownership follows this rule too. Binding invocation and HTML task
+creation choose the destination realm; JS Engine transports it across Promise
+continuations. Author callbacks and Node backend work leave that scope.
+Implementations use ordinary promises without querying an ambient owner or
+receiving another context object. The boundary contract lives in
+[return projection](./PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
 
 Browlet's concrete composition root is
 [`browlet/bindings.ts`](browlet/bindings.ts). Its

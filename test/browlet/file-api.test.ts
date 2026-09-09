@@ -21,6 +21,13 @@ import {
 } from './test-runtime';
 
 describe('File API Blob projection', () => {
+  it('completes a text-only Blob read', async () => {
+    const window = createWindow();
+    const blob = constructBlob(window, ['hello']);
+
+    await expect(call(blob, 'text')).resolves.toBe('hello');
+  });
+
   it('constructs Blob state with the host native line ending', async () => {
     const window = createWindow();
     const blob = constructBlob(window, ['a\nb'], {

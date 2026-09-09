@@ -1,4 +1,5 @@
 import type { JavaScriptMethod, JavaScriptRealm } from './realm';
+import { SyntaxError, TypeError } from './simple-exception';
 
 /** Selected ECMAScript abstract operations shared by higher specifications. */
 
@@ -96,7 +97,6 @@ export function getMethod(
 
 export function toPrimitive(
   value: unknown,
-  realm: JavaScriptRealm,
   preferredType?: 'number' | 'string',
 ): Primitive {
   if (!isObject(value)) return value as Primitive;
@@ -105,11 +105,11 @@ export function toPrimitive(
   const exotic = Reflect.get(value, Symbol.toPrimitive) as unknown;
   if (exotic !== undefined && exotic !== null) {
     if (!isCallable(exotic)) {
-      return throwTypeError(realm, 'Symbol.toPrimitive is not callable');
+      throw new TypeError('Symbol.toPrimitive is not callable');
     }
     const result = Reflect.apply(exotic, value, [hint]);
     if (isObject(result)) {
-      return throwTypeError(realm, 'Symbol.toPrimitive returned an object');
+      throw new TypeError('Symbol.toPrimitive returned an object');
     }
     return result as Primitive;
   }
@@ -123,29 +123,42 @@ export function toPrimitive(
     const result = Reflect.apply(method, value, []);
     if (!isObject(result)) return result as Primitive;
   }
-  return throwTypeError(realm, 'Object cannot be converted to a primitive');
+  throw new TypeError('Object cannot be converted to a primitive');
 }
 
-export function toNumber(value: unknown, realm: JavaScriptRealm): number {
-  return toNumberFromPrimitive(toPrimitive(value, realm, 'number'), realm);
-}
-
-export function toBigInt(value: unknown, realm: JavaScriptRealm): bigint {
-  const primitive = toPrimitive(value, realm, 'number');
-  if (
-    typeof primitive === 'bigint' ||
-    typeof primitive === 'boolean' ||
-    typeof primitive === 'string'
-  ) return realm.intrinsics.bigInt(primitive);
-  return throwTypeError(realm, 'Value cannot be converted to a bigint');
-}
-
-export function toString(value: unknown, realm: JavaScriptRealm): string {
-  const primitive = toPrimitive(value, realm, 'string');
-  if (typeof primitive === 'symbol') {
-    return throwTypeError(realm, 'Cannot convert a Symbol value to a string');
+export function toNumber(value: unknown): number {
+  const primitive = toPrimitive(value, 'number');
+  if (typeof primitive === 'bigint' || typeof primitive === 'symbol') {
+    throw new TypeError('Value cannot be converted to a number');
   }
-  return realm.intrinsics.string(primitive);
+  return Number(primitive);
+}
+
+export function toBigInt(value: unknown): bigint {
+  const primitive = toPrimitive(value, 'number');
+  if (
+    typeof primitive !== 'bigint' &&
+    typeof primitive !== 'boolean' &&
+    typeof primitive !== 'string'
+  ) throw new TypeError('Value cannot be converted to a bigint');
+
+  // Author conversion has finished; only the primitive parser can fail here.
+  try {
+    return BigInt(primitive);
+  } catch (error) {
+    if (error instanceof globalThis.SyntaxError) {
+      throw new SyntaxError(error.message);
+    }
+    throw error;
+  }
+}
+
+export function toString(value: unknown): string {
+  const primitive = toPrimitive(value, 'string');
+  if (typeof primitive === 'symbol') {
+    throw new TypeError('Cannot convert a Symbol value to a string');
+  }
+  return String(primitive);
 }
 
 export function createIteratorResultObject(
@@ -170,23 +183,6 @@ function dataDescriptor(value: unknown): PropertyDescriptor {
     value,
     writable: true,
   };
-}
-
-function toNumberFromPrimitive(
-  value: Primitive,
-  realm: JavaScriptRealm,
-): number {
-  if (typeof value === 'bigint' || typeof value === 'symbol') {
-    return throwTypeError(realm, 'Value cannot be converted to a number');
-  }
-  return realm.intrinsics.number(value);
-}
-
-function throwTypeError(
-  realm: JavaScriptRealm,
-  message: string,
-): never {
-  throw new realm.intrinsics.typeError(message);
 }
 
 type Primitive = bigint | boolean | null | number | string | symbol | undefined;

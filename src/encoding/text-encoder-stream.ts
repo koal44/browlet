@@ -1,13 +1,12 @@
 import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
+import { toString } from '../js-engine/index';
 import {
-  ctor, defineIncludes, defineInterface, idlType, impl,
+  contextValue, ctor, defineIncludes, defineInterface, impl,
 } from '../web-idl/declaration/index';
+import type { StreamAbortController } from '../streams/abort';
+import { createStreamAbortController } from '../streams/integration';
 import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
-import { createArrayBufferView } from '../web-idl/buffer-source';
-import {
-  GenericTransformStreamMixin, internalStreamSetup, TransformStreamImpl,
+  GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type WritableStreamImpl,
 } from '../streams/index';
 
@@ -21,24 +20,22 @@ import {
  */
 export class TextEncoderStreamImpl {
   readonly #encoder = new ExodusTextEncoder();
-  readonly #context: BindingContext;
   readonly #generic: GenericTransformStreamMixin;
   #leadingSurrogate = '';
 
   // SPEC_MISMATCH: TextEncoderStream() -> TextEncoderStream
-  constructor(context: BindingContext) {
-    this.#context = context;
-    const transform = new TransformStreamImpl(context, internalStreamSetup);
+  constructor(abortController: StreamAbortController) {
+    const transform = new TransformStreamImpl(null, {}, {}, abortController);
     transform.setUp(
       (chunk) => {
         this.#encodeAndEnqueue(
-          context.convert(chunk, idlType.DOMString) as string,
+          toString(chunk),
           (value) => transform.enqueue(value),
         );
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        transform.enqueue(this.#encode('\uFFFD'));
+        transform.enqueue(this.#encoder.encode('\uFFFD'));
         this.#leadingSurrogate = '';
       },
     );
@@ -62,7 +59,7 @@ export class TextEncoderStreamImpl {
   // SPEC_MISMATCH: encode and enqueue a chunk(encoder, chunk) -> void
   #encodeAndEnqueue(
     chunk: string,
-    enqueue: (value: object) => void,
+    enqueue: (value: Uint8Array) => void,
   ): void {
     let input = this.#leadingSurrogate + chunk;
     this.#leadingSurrogate = '';
@@ -73,15 +70,7 @@ export class TextEncoderStreamImpl {
       this.#leadingSurrogate = input.at(-1) ?? '';
       input = input.slice(0, -1);
     }
-    if (input !== '') enqueue(this.#encode(input));
-  }
-
-  #encode(input: string): object {
-    return createArrayBufferView(
-      'Uint8Array',
-      this.#encoder.encode(input),
-      this.#context.realm,
-    );
+    if (input !== '') enqueue(this.#encoder.encode(input));
   }
 }
 
@@ -89,7 +78,7 @@ export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    constructWith: [bindingContext],
+    constructWith: [contextValue(createStreamAbortController)],
   }),
   members: [ctor()],
 });

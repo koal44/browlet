@@ -11,6 +11,7 @@ export class CountQueuingStrategyImpl {
   readonly #size: CallableFunction;
 
   // SPEC_MISMATCH: CountQueuingStrategy(init) -> CountQueuingStrategy
+  // TODO(BINDING_INTEGRATION): move the realm-owned size function to the getter binding.
   constructor(context: BindingContext, init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
     this.#size = getCountSizeFunction(context);
@@ -50,6 +51,7 @@ const sizeFunctions = new WeakMap<
   CallableFunction
 >();
 
+// BINDING_INTEGRATION: one author-visible size function per realm.
 function getCountSizeFunction(
   context: BindingContext,
 ): CallableFunction {

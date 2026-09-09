@@ -285,7 +285,7 @@ queue either the complete result or the failure, including reader acquisition
 failure.
 
 `bytesAsBody` brings forward only §5.2's internal byte-sequence path. It retains
-the source/length and creates a realm-owned byte stream, filled through supplied
+the source/length and creates a byte-stream implementation, filled through supplied
 parallel scheduling. `BodyRecord` retains `FetchTaskScheduling` from construction
 and forwards it when cloning. This implementation dependency supplies HTML global
 networking tasks and parallel execution; the read signatures keep the specified

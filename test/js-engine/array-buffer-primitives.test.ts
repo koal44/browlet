@@ -3,6 +3,23 @@ import { describe, expect, it } from 'vitest';
 import * as JSEngine from '../../src/js-engine/index';
 
 describe('JavaScript ArrayBuffer primitives', () => {
+  it('recognizes fixed buffer sources across realms without accepting impostors', () => {
+    const realm = new JSEngine.NodeRealm();
+    const values = realm.evaluate(`(() => {
+      const buffer = new ArrayBuffer(2);
+      const shared = new SharedArrayBuffer(2);
+      return [buffer, shared, new Uint8Array(buffer), new DataView(shared)];
+    })()`, 'fixed-buffer-sources.js') as unknown[];
+
+    for (const value of values) {
+      expect(JSEngine.isFixedBufferSource(value)).toBe(true);
+    }
+    expect(JSEngine.isFixedBufferSource(Object.create(Uint8Array.prototype)))
+      .toBe(false);
+    expect(JSEngine.isFixedBufferSource(new Proxy(new Uint8Array(2), {})))
+      .toBe(false);
+  });
+
   it('reads ArrayBuffer and view state across realms', () => {
     const realm = new JSEngine.NodeRealm();
     const values = realm.evaluate(`(() => {
@@ -25,6 +42,9 @@ describe('JavaScript ArrayBuffer primitives', () => {
       .toBe('SharedArrayBuffer');
     expect(JSEngine.getBufferTypeName(values.dataView)).toBe('DataView');
     expect(JSEngine.getBufferTypeName(values.view)).toBe('Uint16Array');
+    for (const value of Object.values(values)) {
+      expect(JSEngine.isFixedBufferSource(value)).toBe(false);
+    }
     expect(JSEngine.getBufferTypeName(
       Object.create(Uint8Array.prototype) as object,
     )).toBeUndefined();
@@ -67,7 +87,10 @@ describe('JavaScript ArrayBuffer primitives', () => {
     expect(JSEngine.isArrayBufferViewOutOfBounds(view)).toBe(true);
 
     const detached = new ArrayBuffer(2);
+    const detachedView = new Uint8Array(detached);
     structuredClone(detached, { transfer: [detached] });
     expect(JSEngine.isDetachedArrayBuffer(detached)).toBe(true);
+    expect(JSEngine.isFixedBufferSource(detached)).toBe(true);
+    expect(JSEngine.isFixedBufferSource(detachedView)).toBe(true);
   });
 });

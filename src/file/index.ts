@@ -17,8 +17,7 @@ export {
 } from './blob-data';
 export {
   fileReading, getFileReading, nativeLineEnding,
-  type FileReadingCapability, type FileReadingTaskHandle,
-  type NativeLineEnding,
+  type FileReadingCapability, type NativeLineEnding,
 } from './integration';
 export {
   createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,

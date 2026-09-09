@@ -27,7 +27,7 @@ export function invokeWith(
 }
 
 /**
- * Allocate a fresh buffer or view from synchronously returned bytes in the result realm.
+ * Allocate a fresh buffer or view from returned or promised bytes in the result realm.
  * Without this declaration, buffer results retain their JavaScript identity.
  */
 export function newBufferResult(): { readonly binding: NewBufferResultBinding; } {

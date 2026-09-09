@@ -1,6 +1,6 @@
-import { isObject } from '../js-engine/index';
+import { isObject, type RealmFunctionOptions, type RealmFunctionSteps } from '../js-engine/index';
 import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
-import { getSimpleExceptionRequest } from './exceptions/simple-exception';
+import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,
@@ -35,7 +35,7 @@ import { ObservableArrayBinding } from './observable-array';
 import type {
   PlatformObjectRecord, PlatformObjectRegistry,
 } from './platform-object';
-import { createRejectedPromise } from './promise';
+import { createRejectedPromise, projectPromise } from './promise';
 import { getUnannotatedType } from './types';
 import { CapabilityRegistry } from './capability';
 
@@ -64,6 +64,7 @@ export class RealmBinding {
   readonly #iterables: SynchronousIterableBinding;
   readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
   readonly #observableArrays: ObservableArrayBinding;
+  readonly #realizedExceptions = new WeakMap<object, object>();
 
   #projectInRealm(
     value: object,
@@ -126,14 +127,23 @@ export class RealmBinding {
     this.realm = realm;
     this.platformObjects = platformObjects;
     this.realizeException = (value) => {
+      if (!isObject(value)) return value;
+      const existing = this.#realizedExceptions.get(value);
+      if (existing) return existing;
       const simple = getSimpleExceptionRequest(value);
-      if (simple) return new this.realm.intrinsics[simple.type](simple.message);
+      if (simple) {
+        const error = new this.realm.intrinsics[simple.type](simple.message);
+        this.#realizedExceptions.set(value, error);
+        return error;
+      }
       const request = getDOMExceptionRequest(value);
       if (!request) return value;
       const DOMException_ = this.getInterfaceObject(
         'DOMException',
       ) as unknown as typeof DOMException;
-      return new DOMException_(request.message, request.name);
+      const error = new DOMException_(request.message, request.name);
+      this.#realizedExceptions.set(value, error);
+      return error;
     };
     this.#asyncIterables = new AsynchronousIterableBinding(
       this,
@@ -253,7 +263,7 @@ export class RealmBinding {
     const overridden = this.implementations.getOverriddenConstructorSteps(
       assembled.definition,
     );
-    const object = this.realm.createFunction(
+    const object = this.#createPlatformFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
           return overridden(argumentsList, newTarget, object);
@@ -331,7 +341,7 @@ export class RealmBinding {
       return initial.legacyCallbackInterfaceObject;
     }
 
-    const object = this.realm.createFunction(
+    const object = this.#createPlatformFunction(
       () => this.#throwTypeError('Illegal invocation'),
       { length: 0, name: definition.name },
     );
@@ -367,7 +377,7 @@ export class RealmBinding {
     const existing = initial.legacyFactoryFunctions?.get(id);
     if (existing) return existing;
 
-    const function_ = this.realm.createFunction(
+    const function_ = this.#createPlatformFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {
           return this.#throwTypeError(
@@ -945,7 +955,7 @@ export class RealmBinding {
       'stringifier',
       interface_.definition,
       stringifier,
-      () => this.realm.createFunction(
+      () => this.#createPlatformFunction(
         (thisArgument) => {
           if (thisArgument === null || thisArgument === undefined) {
             return this.#throwTypeError(
@@ -1101,7 +1111,7 @@ export class RealmBinding {
       'getter',
       definition.definition,
       attribute,
-      () => this.realm.createFunction((thisArgument) => {
+      () => this.#createPlatformFunction((thisArgument) => {
         let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
@@ -1191,7 +1201,7 @@ export class RealmBinding {
       'setter',
       definition.definition,
       attribute,
-      () => this.realm.createFunction((thisArgument, argumentsList) => {
+      () => this.#createPlatformFunction((thisArgument, argumentsList) => {
         const value = argumentsList[0];
         const jsValue = this.#resolveThisValue(thisArgument);
         const receiver = attribute.static
@@ -1296,7 +1306,7 @@ export class RealmBinding {
       'operation',
       definition.definition,
       source,
-      () => this.realm.createFunction((thisArgument, argumentsList) => {
+      () => this.#createPlatformFunction((thisArgument, argumentsList) => {
         let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
@@ -1343,6 +1353,14 @@ export class RealmBinding {
           }
           const result = Reflect.apply(steps, object, overload.values);
           if (overload.callable.binding && 'newBufferResult' in overload.callable.binding) {
+            const type = getUnannotatedType(overload.callable.returns, this.definitions);
+            if (type.kind === 'promise') {
+              return convertToJavaScript(
+                projectPromise(result, type.type, resultContext, true),
+                type,
+                resultContext,
+              );
+            }
             return createBufferResult(
               result as ByteSequence,
               overload.callable.returns,
@@ -1601,15 +1619,25 @@ export class RealmBinding {
     return record;
   }
 
+  // Author entry and argument coercion must not inherit the calling operation's owner.
+  #createPlatformFunction(steps: RealmFunctionSteps, options: RealmFunctionOptions): JavaScriptFunction {
+    return this.realm.createFunction((thisArgument, argumentsList, newTarget) =>
+      this.realm.runtime.runWithExecutionOwner(undefined, () =>
+        steps(thisArgument, argumentsList, newTarget)), options);
+  }
+
   #resultContext(realm: WebIDLRealmHost | undefined): ConversionContext {
     if (!realm || realm === this.realm) return this;
+    const receiverContext = this.platformObjects.getBindingContext(realm);
     return {
       definitions: this.definitions,
       hostDefinedInterfaces: this.hostDefinedInterfaces,
       platformObjects: this.platformObjects,
       projectImplementationObject: (value, interface_) =>
         this.#projectInRealm(value, interface_, realm),
-      realizeException: this.realizeException,
+      realizeException: receiverContext
+        ? (value) => receiverContext.realizeException(value)
+        : this.realizeException,
       realm,
     };
   }

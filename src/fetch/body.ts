@@ -8,12 +8,11 @@ import {
   type ReadableStreamImpl,
 } from '../streams/index';
 import type { URLSearchParamsImpl } from '../url/api';
-import { createArrayBufferView, getBufferSourceCopy, getBufferTypeName } from '../web-idl/buffer-source';
+import { getBufferSourceCopy, getBufferTypeName } from '../web-idl/buffer-source';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op,
   promise, reference, roAttr, union, xattr,
 } from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
 import type { FormDataImpl } from '../xhr/index';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';
@@ -104,18 +103,17 @@ export type BodyWithType = { body: BodyRecord; type: string | null; };
 
 /**
  * Fetch §2.2.4 and §5.2: safely extract an internal byte sequence as a body.
- * The extra context and scheduling arguments supply realm allocation and HTML execution.
+ * The extra scheduling argument supplies HTML task delivery.
  */
 // SPEC_MISMATCH: (bytes) -> body
 export function bytesAsBody(
   bytes: Uint8Array,
-  context: BindingContext,
   scheduling: FetchTaskScheduling,
 ): BodyRecord {
-  const stream = createReadableStreamWithByteReadingSupport(context);
+  const stream = createReadableStreamWithByteReadingSupport();
   scheduling.runInParallel(() => {
     if (bytes.length > 0 && !isReadableStreamErrored(stream)) {
-      enqueueReadableStream(stream, createArrayBufferView('Uint8Array', bytes, context.realm));
+      enqueueReadableStream(stream, new Uint8Array(bytes));
     }
     closeReadableStream(stream);
   });

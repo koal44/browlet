@@ -2,45 +2,30 @@
 import {
   arg, defineInterfaceMixin, idlType, op, promise, roAttr,
 } from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
-import type { StreamPromise } from './promise';
+import { TypeError } from '../js-engine/simple-exception';
 import type { ReadableStreamImpl } from './readable-stream';
 import {
   readableStreamReaderGenericCancel,
 } from './readable-stream-operations';
 
 export class ReadableStreamGenericReaderMixin {
-  readonly #context: BindingContext;
   #state?: ReadableStreamGenericReaderState;
 
-  constructor(context: BindingContext) {
-    this.#context = context;
+  get closed(): Promise<void> {
+    return ReadableStreamGenericReaderMixin.getState(this).closedPromise.promise;
   }
 
-  get closed(): StreamPromise {
-    return ReadableStreamGenericReaderMixin.getState(this).closedPromise;
-  }
-
-  cancel(reason?: unknown): StreamPromise {
+  cancel(reason?: unknown): Promise<void> {
     const state = ReadableStreamGenericReaderMixin.getState(this);
     if (!state.stream) {
-      return this.#context.createRejectedPromise(
-        new this.#context.realm.intrinsics.typeError(
-          'Cannot cancel a stream using a released reader',
-        ),
-        idlType.undefined,
-      );
+      return Promise.reject(new TypeError(
+        'Cannot cancel a stream using a released reader',
+      ));
     }
     return readableStreamReaderGenericCancel(this, reason);
   }
 
   // -- Friends ----------------------------------------------------------
-
-  static getContext(
-    reader: ReadableStreamGenericReaderMixin,
-  ): BindingContext {
-    return reader.#context;
-  }
 
   static getState(
     reader: ReadableStreamGenericReaderMixin,
@@ -60,7 +45,7 @@ export class ReadableStreamGenericReaderMixin {
 }
 
 export type ReadableStreamGenericReaderState = {
-  closedPromise: StreamPromise;
+  closedPromise: PromiseWithResolvers<void>;
   stream?: ReadableStreamImpl;
 };
 

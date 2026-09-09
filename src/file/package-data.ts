@@ -3,17 +3,13 @@ import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
 import { decode, getEncoding } from '../encoding/hooks';
 import { parseMIMEType } from '../mime/index';
 import { forgivingBase64Encode } from '../infra/index';
-import { createArrayBuffer } from '../web-idl/buffer-source';
-import type { BindingContext } from '../web-idl/projection';
 
 /** File API §6.3 — Package data. */
-// SPEC_MISMATCH: (bytes, type, mimeType, encodingLabel?) -> string or ArrayBuffer
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,
   mimeType: string,
-  encodingLabel: string | undefined,
-  context: BindingContext,
+  encodingLabel?: string,
 ): string | ArrayBuffer {
   switch (type) {
     case 'DataURL': {
@@ -27,7 +23,7 @@ export function packageData(
     case 'Text':
       return packageText(bytes, mimeType, encodingLabel);
     case 'ArrayBuffer':
-      return createArrayBuffer(bytes, context.realm);
+      return new Uint8Array(bytes).buffer;
     case 'BinaryString':
       return isomorphicDecode(bytes);
   }

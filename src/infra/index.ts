@@ -8,3 +8,4 @@ export {
 export {
   toScalarValueString, type ScalarValueString,
 } from './strings';
+export type { TaskHandle, TaskScheduling } from './scheduling';

@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import { extractHighWaterMark } from '../../../src/streams/queuing-strategy';
+import { RangeError } from '../../../src/js-engine/simple-exception';
 
 describe('Streams queuing strategies', () => {
+  it('extracts high-water marks and requests internal RangeErrors', () => {
+    expect(extractHighWaterMark({}, 1)).toBe(1);
+    expect(extractHighWaterMark({ highWaterMark: 0 }, 1)).toBe(0);
+    expect(extractHighWaterMark({ highWaterMark: Infinity }, 1)).toBe(Infinity);
+    expect(() => extractHighWaterMark({ highWaterMark: -1 }, 1))
+      .toThrow(RangeError);
+    expect(() => extractHighWaterMark({ highWaterMark: NaN }, 1))
+      .toThrow(RangeError);
+  });
+
   it('installs the strategy interfaces on Window', () => {
     const window = createBrowlet().window;
 

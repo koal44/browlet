@@ -5,7 +5,7 @@ import {
 } from '../../src/js-engine/index';
 
 describe('JavaScript promise operations', () => {
-  it('installs reactions through the captured realm intrinsic', async () => {
+  it('installs reactions without consulting the promise then property', async () => {
     const microtaskQueue = nodeRuntime.createMicrotaskQueue();
     const realm = new NodeRealm(microtaskQueue);
     const promise = new realm.intrinsics.promise.constructor((resolve) => {
@@ -27,7 +27,7 @@ describe('JavaScript promise operations', () => {
     expect(values).toEqual(['fulfilled']);
   });
 
-  it.fails('does not consult author-defined promise constructors', () => {
+  it('does not consult author-defined promise constructors', () => {
     const realm = new NodeRealm();
     const promise = new realm.intrinsics.promise.constructor(() => undefined);
     expect(Reflect.defineProperty(promise, 'constructor', {
@@ -40,5 +40,23 @@ describe('JavaScript promise operations', () => {
       undefined,
       undefined,
     )).not.toThrow();
+  });
+
+  it('places native observation of a Node promise on the supplied realm queue', async () => {
+    const queue = nodeRuntime.createMicrotaskQueue();
+    const realm = new NodeRealm(queue);
+    const { promise, resolve } = Promise.withResolvers<string>();
+    const seen: unknown[] = [];
+    expect(Reflect.defineProperty(promise, 'constructor', {
+      get() { throw new Error('author constructor was consulted'); },
+    })).toBe(true);
+    installPromiseReactions(realm, promise, (value) => { seen.push(value); }, undefined);
+    resolve('observed');
+    void Promise.resolve().then(() => seen.push('Node'));
+    expect(seen).toEqual([]);
+    queue.performMicrotaskCheckpoint();
+    expect(seen).toEqual(['observed']);
+    await Promise.resolve();
+    expect(seen).toEqual(['observed', 'Node']);
   });
 });
