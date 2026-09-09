@@ -16,10 +16,12 @@ FileReader is implemented through §6.4 except for shared global teardown.
 Slice 4, the Blob URL work in §§8.2–8.4, remains deferred until its storage-key
 and Fetch dependencies exist; §6.5 `FileReaderSync` waits for real workers.
 
+Blob's `text()`, `bytes()`, and `arrayBuffer()` now share an internal Promise
+read-result path, with focused coverage for HTML delivery and binding projection.
 The current [Streams implementation migration](../streams/PORTING-NOTES.md#implementation-migration-checkpoint)
-temporarily leaves stream byte-result projection and HTML delivery of Blob
-promise results unfinished. FileReader's event-driven reads and result bindings
-have focused passing coverage; the migration journal owns the remaining failures.
+still leaves stream byte-result projection and the broader Promise migration
+unfinished. FileReader's event-driven reads and result bindings have focused
+passing coverage; the migration journal owns the remaining failures.
 
 The roadmap deliberately put the Fetch-enabling data model before
 `FileReader`. This is the one departure from specification order. Blob and File

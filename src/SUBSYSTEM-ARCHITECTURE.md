@@ -78,6 +78,14 @@ the consuming specification retains the decisions it makes from those facts.
 JS Engine also owns internal simple-exception requests; their realization into
 realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
+Blob's shared read-result path and the default stream reader's `read()` use
+JS Engine's `InternalPromise` record.
+Binding supplies the narrow `PromiseReactions` operation for the receiver's
+realm when `text()` needs a decoding reaction. Result conversion and projection
+remain Binding work. Shared Binding also imports declared Promise arguments and
+Promise-returning callback functions' results into these records. The backend read loop and the remaining
+Streams Promise paths have not migrated to this contract.
+
 The custom engine's job hooks follow the same division. JS Engine associates
 opaque native context references with its existing realm objects and adapts
 make/call and all three enqueue callbacks. Browlet installs the HTML policy at its

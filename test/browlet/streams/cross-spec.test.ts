@@ -18,7 +18,7 @@ import {
   getBufferSourceUnderlyingBuffer,
   writeArrayBufferView,
 } from '../../../src/web-idl/buffer-source';
-import { createAbortController, createTransformStream } from './implementation-fixture';
+import { createAbortController, createTransformStream, observe } from './implementation-fixture';
 
 describe('Streams operations for other specifications', () => {
   it('drains buffered bytes without recursion or Node microtask scheduling', () => {
@@ -166,7 +166,7 @@ describe('Streams operations for other specifications', () => {
     const proxy = createReadableStreamProxy(source, createAbortController());
     expect(isReadableStreamLocked(source)).toBe(true);
     expect(isReadableStreamDisturbed(source)).toBe(true);
-    const reading = proxy.getReader({}).read();
+    const reading = observe(proxy.getReader({}).read());
     enqueueReadableStream(source, 'proxied');
     closeReadableStream(source);
     await expect(reading).resolves.toEqual({

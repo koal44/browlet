@@ -4,6 +4,7 @@ import {
   idlType, impl, op, promise, reference,
 } from '../web-idl/declaration/index';
 import { TypeError } from '../js-engine/simple-exception';
+import { InternalPromise } from '../js-engine/index';
 import type { ReadableStreamImpl } from './readable-stream';
 import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
 import {
@@ -33,15 +34,17 @@ export class ReadableStreamDefaultReaderImpl {
     );
   }
 
-  read(): Promise<ReadableStreamReadResult> {
+  // SPEC_MISMATCH: read() -> Promise<ReadableStreamReadResult>
+  read(): InternalPromise<ReadableStreamReadResult> {
+    const promise = InternalPromise.withResolvers<ReadableStreamReadResult>();
     const generic = ReadableStreamDefaultReaderImpl.getGenericReader(this);
     if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
-      return Promise.reject(new TypeError(
+      promise.reject(new TypeError(
         'Cannot read from a stream using a released reader',
       ));
+      return promise.promise;
     }
 
-    const promise = Promise.withResolvers<ReadableStreamReadResult>();
     readableStreamDefaultReaderRead(this, {
       chunkSteps(chunk) {
         promise.resolve({ value: chunk, done: false });

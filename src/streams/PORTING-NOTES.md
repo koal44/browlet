@@ -17,8 +17,10 @@ boundary rules in
 
 TransformStream, ReadableStream, WritableStream, their readers, and their
 controllers no longer accept or retain Binding Context. They construct each
-other directly and use ordinary promises, promise resolvers, internal exception
-requests, and buffers. The opaque StreamPromise adapter has been removed.
+other directly and use internal exception requests and buffers. Most Promise
+paths still use ordinary promises and resolvers; default-reader `read()` now
+returns JS Engine's explicit `InternalPromise` record through the shared result
+binding. The opaque StreamPromise adapter has been removed.
 
 TransformStream initialization and sink/source algorithms live on
 `TransformStreamImpl`; controller setup, enqueueing, and transformation live on

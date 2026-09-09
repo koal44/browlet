@@ -288,21 +288,37 @@ through:
 
 Repeated references to one implementation must produce one platform object.
 
-Implementation methods return ordinary `Promise<T>` values. Binding adapts
+Blob's `text()`, `bytes()`, and `arrayBuffer()` share a read-result path using
+JS Engine's `InternalPromise<T>`.
+The record retains native settlement state but exposes explicit observation and
+value mapping instead of `.then` or native `await`. Its reaction destination is
+supplied at the Binding boundary. Shared promise projection consumes this record
+through the existing result-type conversion, exception realization, and identity
+cache; it does not add a Blob-specific adapter or another projection cache.
+The byte-result methods retain `newBufferResult()` for their realm-owned
+ArrayBuffer/Uint8Array allocation.
+The default stream reader's `read()` also returns an internal record; the
+existing dictionary-result binding projects its `{ value, done }` fulfillment.
+
+Unmigrated implementation methods return ordinary `Promise<T>` values. Binding adapts
 their fulfillment through the declared `T` and creates the author-visible
 promise in the receiver's relevant realm. A retained implementation promise
 keeps one projection per result type and realm within its binding world.
 Dictionary results can be ordinary records, including `{ value, done }` from
 stream reads; binding creates the realm-owned result and projects its members.
 
-Promise arguments and callback results reach implementations as callable
-promises whose fulfillment has undergone the declared conversion. Web IDL's
+Declared Promise arguments and Promise-returning callback functions supply
+`InternalPromise<T>` records whose fulfillment has undergone the declared
+conversion. Implementations supply an explicit reaction destination when
+observing or mapping them; neither native `await` nor `.then()` consumes these
+records. Web IDL's
 PromiseCapability records remain internal to its specification machinery;
 implementations do not create or operate on them. Async iterator bindings
 adapt ordinary promises at that same boundary.
 
 The fulfillment adapters use native Promise observation in the destination
-realm. Execution ownership is established separately: the shared implementation
+realm. For the existing ordinary-Promise paths, execution ownership is established
+separately: the shared implementation
 invoker selects the receiver's realm (or the installed realm for construction
 and static operations). Return adaptation uses the result realm. Ordinary
 implementation `.then` and `await` continuations retain that owner through the
@@ -318,8 +334,8 @@ require an explicit binding boundary; ownership is not inferred from their code.
 HTML global tasks retain their destination owner and scheduling-time async
 context. Node backend scheduling leaves implementation ownership, then completion
 returns through a destination task. See [JS Engine](./js-engine/README.md) for the
-runtime operations. Implementations retain their ordinary promises and explicit
-task/I/O dependencies.
+runtime operations. Unmigrated implementations retain their ordinary promises
+and explicit task/I/O dependencies.
 
 JavaScript buffers and typed arrays retain their existing identity through
 ordinary conversion. A buffer-returning operation can declare

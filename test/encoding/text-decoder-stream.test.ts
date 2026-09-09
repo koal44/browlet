@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
 import { getSimpleExceptionRequest } from '../../src/js-engine/simple-exception';
-import { createAbortController } from '../browlet/streams/implementation-fixture';
+import { createAbortController, observe } from '../browlet/streams/implementation-fixture';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([
@@ -21,11 +21,11 @@ describe('TextDecoderStream chunk conversion', () => {
     }],
   ])('decodes a %s', async (_label, createChunk) => {
     const { reader, writer } = createDecoder();
-    const read = reader.read();
+    const read = observe(reader.read());
     await writer.write(createChunk());
     expect(await read).toEqual({ done: false, value: 'A' });
     await writer.close();
-    expect(await reader.read()).toEqual({ done: true, value: undefined });
+    expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
 
   it.each([
@@ -39,7 +39,7 @@ describe('TextDecoderStream chunk conversion', () => {
     ['growable shared view', () => new Uint8Array(new SharedArrayBuffer(1, { maxByteLength: 2 }))],
   ])('rejects a %s', async (_label, createChunk) => {
     const { reader, writer } = createDecoder();
-    const reading = reader.read().catch((error: unknown) => error);
+    const reading = observe(reader.read()).catch((error: unknown) => error);
     const writing = writer.write(createChunk()).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
@@ -49,7 +49,7 @@ describe('TextDecoderStream chunk conversion', () => {
 
   it('retains a split UTF-8 sequence while copying the consumed input', async () => {
     const { reader, writer } = createDecoder();
-    const read = reader.read();
+    const read = observe(reader.read());
     const first = Uint8Array.of(0xF0, 0x9F);
     await writer.write(first);
     first.fill(0);

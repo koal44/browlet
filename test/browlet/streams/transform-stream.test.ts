@@ -9,7 +9,7 @@ import { RangeError, TypeError } from '../../../src/js-engine/simple-exception';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from '../test-runtime';
-import { createTransformStream } from './implementation-fixture';
+import { createTransformStream, observe } from './implementation-fixture';
 
 describe('transform-stream implementation', () => {
   it('validates transformer types before strategy high-water marks', () => {
@@ -57,7 +57,7 @@ describe('transform-stream implementation', () => {
     expect(getters).toEqual(['flush', 'start', 'transform']);
     const reader = stream.readable.getReader();
     const writer = stream.writable.getWriter();
-    const read = reader.read();
+    const read = observe(reader.read());
     await writer.write('chunk');
     await expect(read).resolves.toEqual(readResult('chunk', false));
     await writer.close();
@@ -70,14 +70,14 @@ describe('transform-stream implementation', () => {
     const stream = createTransformStream({});
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = reader.read();
+    const read = observe(reader.read());
 
     await expect(writer.write('chunk')).resolves
       .toBeUndefined();
     await expect(read).resolves.toEqual(readResult('chunk', false));
 
     await expect(writer.close()).resolves.toBeUndefined();
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -96,13 +96,13 @@ describe('transform-stream implementation', () => {
     const stream = createTransformStream({ flush, transform });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const firstRead = reader.read();
+    const firstRead = observe(reader.read());
 
     await expect(writer.write('hello')).resolves
       .toBeUndefined();
     await expect(firstRead).resolves.toEqual(readResult('HELLO', false));
 
-    const flushRead = reader.read();
+    const flushRead = observe(reader.read());
     const close = writer.close();
     await expect(flushRead).resolves.toEqual(readResult('DONE', false));
     await expect(close).resolves.toBeUndefined();
@@ -131,7 +131,7 @@ describe('transform-stream implementation', () => {
     expect(settled).toBe(false);
     expect(transform).not.toHaveBeenCalled();
 
-    const read = stream.readable.getReader({}).read();
+    const read = observe(stream.readable.getReader({}).read());
     await expect(write).resolves.toBeUndefined();
     await expect(read).resolves.toEqual(readResult('waiting', false));
     expect(transform).toHaveBeenCalledOnce();
@@ -146,7 +146,7 @@ describe('transform-stream implementation', () => {
     const stream = createTransformStream({ start: () => start.promise, transform });
     const reader = stream.readable.getReader();
     const writer = stream.writable.getWriter();
-    const reading = reader.read();
+    const reading = observe(reader.read());
     const writing = writer.write('after start');
 
     await Promise.resolve();
@@ -164,7 +164,7 @@ describe('transform-stream implementation', () => {
     });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = reader.read();
+    const read = observe(reader.read());
 
     await expect(writer.write('chunk')).rejects
       .toBe(failure);
@@ -203,7 +203,7 @@ describe('transform-stream implementation', () => {
 
     requireController(controller).terminate();
 
-    await expect(reader.read()).resolves
+    await expect(observe(reader.read())).resolves
       .toEqual(readResult(undefined, true));
     await expect(writer.closed).rejects
       .toBeInstanceOf(TypeError);
