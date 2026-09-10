@@ -1,6 +1,6 @@
 import * as JSEngine from './array-buffer-primitives';
-import type { JavaScriptBufferTypeName } from './array-buffer-primitives';
-import type { JavaScriptBufferViewName, JavaScriptRealm } from './realm';
+import type { JavaScriptBufferTypeName, JavaScriptBufferViewName } from './array-buffer-primitives';
+import type { JavaScriptRealm } from './realm';
 
 /** Realm-owned allocation for implementation producers. */
 export function createRuntimeBuffers(realm: JavaScriptRealm): RuntimeBuffers {

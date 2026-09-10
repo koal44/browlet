@@ -123,6 +123,24 @@ The active engine patches are on `v8-patches` in that checkout. The addon build
 detects the required hook APIs in the target headers; selecting `custom` alone
 does not imply that the engine supplies them.
 
+The unused opaque Promise-job handle and saved-data API is preserved on
+`codex/promise-job-handles` at `f79760c4a`. The active branch uses the earlier
+callable-job API. Rebuild the engine and addon together when switching between
+those APIs; their native callback signatures differ.
+
+## ArrayBuffer views
+
+When the engine exposes `v8::ArrayBufferView::IsLengthTracking()`, the addon
+exports `isLengthTrackingArrayBufferView(view)`. It reads whether the view's
+length is `auto`, without resizing its buffer or invoking author properties.
+It supports typed arrays and DataView over both resizable ArrayBuffers and
+growable SharedArrayBuffers, including detached or out-of-bounds views.
+
+The build detects this API independently of the host hooks. Official Node
+24.19.0 and 26.8.1 leave the query unavailable. Browlet keeps its reversible
+resize probe for ordinary resizable buffers on those bases and on plain Node;
+growable shared views retain their documented limitation there.
+
 ## Host hooks
 
 The addon also supplies `observePromise(promise, realmAnchor, onFulfilled?,
@@ -145,12 +163,6 @@ shuts down; there is no public removal or replacement operation. One installatio
 owns the isolate; another installation throws `ERR_HOST_HOOKS_INSTALLED`.
 Workers are independent.
 
-On the custom engine, `withContinuationData(data, steps)` temporarily enters saved
-continuation data to inspect it through Node's existing AsyncLocalStorage API.
-Use the Promise enqueue snapshot's `continuationData`; do not inspect or invent
-Node's internal representation. Inspection is synchronous and restores the
-previous data on return or throw. Job execution restores its own saved data
-independently, so inspection neither consumes nor runs the job.
 The names follow the five targeted ECMAScript operations in
 [Jobs and Host Operations to Enqueue Jobs](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
 
@@ -185,11 +197,9 @@ Registration and Promise-enqueue snapshots contain `current`, `entered`,
 The first three are realm references (or null when absent). The last is an array
 of V8's opaque script metadata; the addon does not interpret Node's loader identity.
 
-Promise-enqueue snapshots also contain `continuationData`, the opaque data saved
-on that job. It can differ from the enqueuer's current continuation. Reading it
-does not enter the saved continuation. The V8 handoff uses `PromiseJob.Run()`,
-`GetContinuationData()`, and `GetContext()`; the addon retains the handle through
-the callable `job` supplied to JavaScript.
+Promise jobs are callable functions retaining V8's original job. Running one
+restores its saved continuation internally; that data is not exposed to the
+enqueue callback. The function's creation realm identifies its execution queue.
 
 `getRealm(object)` returns the stable reference for an object's creation realm.
 Each context handle also exposes `.realm`. References have a read-only `.global`
@@ -367,7 +377,7 @@ experiments now live in test/capabilities.test.cjs above.
 
 The standalone addon suite covers queues, contexts, native global allocation,
 and their lifetimes. Browlet uses `itPassesWith(...requirements)` to declare
-capabilities (`'explicitQueues'`, `'hostHooks'`) and minimum
+capabilities (`'explicitQueues'`, `'hostHooks'`, `'lengthTracking'`) and minimum
 Node versions (`'v24+'`, `'v26+'`). All requirements must hold. For example,
 `itPassesWith('v26+', 'explicitQueues')` covers native Promise observation without
 constructor/species lookup. The helper returns Vitest's `it` or `it.fails`,

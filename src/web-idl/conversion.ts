@@ -1,6 +1,6 @@
 import { toScalarValueString } from '../infra/index';
 import {
-  getMethod, hasMapData, hasStringData, isObject,
+  bufferViewNames, getMethod, hasMapData, hasStringData, isObject,
   toBigInt, toNumber, toPrimitive, toString, type JavaScriptMethod,
 } from '../js-engine/index';
 import type {
@@ -1299,8 +1299,5 @@ const stringTypeNames = new Set<SimpleTypeName>([
 ]);
 
 const bufferTypeNames = new Set<SimpleTypeName>([
-  'ArrayBuffer', 'SharedArrayBuffer', 'DataView', 'Int8Array', 'Int16Array',
-  'Int32Array', 'Uint8Array', 'Uint16Array', 'Uint32Array',
-  'Uint8ClampedArray', 'BigInt64Array', 'BigUint64Array', 'Float16Array',
-  'Float32Array', 'Float64Array',
+  'ArrayBuffer', 'SharedArrayBuffer', ...bufferViewNames,
 ]);

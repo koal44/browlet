@@ -68,13 +68,13 @@ describe('JavaScript ArrayBuffer primitives', () => {
     const fixedDataView = new DataView(buffer, 2, 6);
     const trackingDataView = new DataView(buffer, 2);
 
-    expect(JSEngine.isLengthTrackingResizableArrayBufferView(fixed))
+    expect(JSEngine.isLengthTrackingArrayBufferView(fixed))
       .toBe(false);
-    expect(JSEngine.isLengthTrackingResizableArrayBufferView(tracking))
+    expect(JSEngine.isLengthTrackingArrayBufferView(tracking))
       .toBe(true);
-    expect(JSEngine.isLengthTrackingResizableArrayBufferView(fixedDataView))
+    expect(JSEngine.isLengthTrackingArrayBufferView(fixedDataView))
       .toBe(false);
-    expect(JSEngine.isLengthTrackingResizableArrayBufferView(trackingDataView))
+    expect(JSEngine.isLengthTrackingArrayBufferView(trackingDataView))
       .toBe(true);
     expect(buffer.byteLength).toBe(8);
     expect(new Uint8Array(buffer)).toEqual(bytes);

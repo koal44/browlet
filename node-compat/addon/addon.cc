@@ -1,4 +1,5 @@
 #include <node.h>
+#include "array-buffer.h"
 #include "vm.h"
 #include "host-hooks.h"
 
@@ -11,6 +12,7 @@ void ObservePromise(const FunctionCallbackInfo<Value>& args);
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
                 v8::Local<v8::Context> context) {
   InitializeVm(exports, context);
+  InitializeArrayBuffer(exports, context);
   InitializeHostHooks(exports, context);
   NODE_SET_METHOD(exports, "observePromise", ObservePromise);
 }

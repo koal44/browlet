@@ -13,6 +13,7 @@ const nodeMajor = Number(process.versions.node.split('.')[0]);
 const supported = {
   explicitQueues: nodeRuntime.hasExplicitMicrotaskQueues,
   hostHooks: nodeRuntime.supportsHostHooks,
+  lengthTracking: nodeRuntime.isLengthTrackingArrayBufferView(new Uint8Array()) !== undefined,
   'v24+': nodeMajor >= 24,
   'v26+': nodeMajor >= 26,
 };

@@ -1,3 +1,4 @@
+import type { JavaScriptBufferViewName } from './array-buffer-primitives';
 import type { Promises } from './promises';
 
 export type JavaScriptRealm = {
@@ -25,6 +26,8 @@ export type JavaScriptRuntime = {
   readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;
   readonly hasExplicitMicrotaskQueues: boolean;
   readonly supportsHostHooks: boolean;
+  /** Undefined when the backend cannot directly query the view's length mode. */
+  isLengthTrackingArrayBufferView(value: object): boolean | undefined;
   setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void;
   getAssociatedRealm(value: object): JavaScriptRealm | undefined;
   /** Retain the registration's host async context for a later task handoff. */
@@ -146,21 +149,6 @@ export type RealmFunctionSteps = (
   argumentsList: unknown[],
   newTarget: JavaScriptFunction | undefined,
 ) => unknown;
-
-export type JavaScriptBufferViewName =
-  | 'BigInt64Array'
-  | 'BigUint64Array'
-  | 'DataView'
-  | 'Float16Array'
-  | 'Float32Array'
-  | 'Float64Array'
-  | 'Int16Array'
-  | 'Int32Array'
-  | 'Int8Array'
-  | 'Uint16Array'
-  | 'Uint32Array'
-  | 'Uint8Array'
-  | 'Uint8ClampedArray';
 
 export type JavaScriptMethod = (
   this: unknown,

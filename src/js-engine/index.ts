@@ -15,7 +15,7 @@ export type {
   NetworkingTasks, RuntimeContext,
 } from './runtime-context';
 export type {
-  GlobalObject, JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
+  GlobalObject, JavaScriptFunction, JavaScriptIntrinsics,
   JavaScriptHostHooks, JavaScriptJobCallback, JavaScriptJobRegistration,
   JavaScriptMethod, JavaScriptMicrotaskQueue, JavaScriptRealm,
   JavaScriptRuntime, RealmFunctionOptions, RealmFunctionSteps,

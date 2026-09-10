@@ -1,4 +1,5 @@
-import type { JavaScriptBufferViewName } from './realm';
+import { types as nodeTypes } from 'node:util';
+import { nodeRuntime } from './node-runtime';
 
 /** JavaScript engine facts for ArrayBuffer objects and views. */
 
@@ -6,6 +7,27 @@ export type JavaScriptBufferTypeName =
   | 'ArrayBuffer'
   | 'SharedArrayBuffer'
   | JavaScriptBufferViewName;
+
+export type JavaScriptBufferViewName = keyof typeof bufferViewElementSizes;
+
+const bufferViewElementSizes = {
+  BigInt64Array: 8,
+  BigUint64Array: 8,
+  DataView: 1,
+  Float16Array: 2,
+  Float32Array: 4,
+  Float64Array: 8,
+  Int16Array: 2,
+  Int32Array: 4,
+  Int8Array: 1,
+  Uint16Array: 2,
+  Uint32Array: 4,
+  Uint8Array: 1,
+  Uint8ClampedArray: 1,
+} as const;
+
+export const bufferViewNames = Object.keys(bufferViewElementSizes) as
+  readonly JavaScriptBufferViewName[];
 
 /** Buffer or view with fixed-length backing storage, including shared buffers. */
 export function isFixedBufferSource(
@@ -23,23 +45,13 @@ export function isFixedBufferSource(
 export function getBufferTypeName(
   value: object,
 ): JavaScriptBufferTypeName | undefined {
-  if (hasInternalSlot(value, arrayBufferByteLength)) return 'ArrayBuffer';
-  if (
-    sharedArrayBufferByteLength &&
-    hasInternalSlot(value, sharedArrayBufferByteLength)
-  ) return 'SharedArrayBuffer';
-  if (hasInternalSlot(value, dataViewBuffer)) return 'DataView';
-
-  try {
-    const name = Reflect.apply(typedArrayName, value, []);
-    return typeof name === 'string' && bufferViewTypeNames.has(
-      name as JavaScriptBufferViewName,
-    )
-      ? name as JavaScriptBufferViewName
-      : undefined;
-  } catch {
-    return;
-  }
+  if (nodeTypes.isArrayBuffer(value)) return 'ArrayBuffer';
+  if (nodeTypes.isSharedArrayBuffer(value)) return 'SharedArrayBuffer';
+  if (nodeTypes.isDataView(value)) return 'DataView';
+  const name: unknown = Reflect.apply(typedArrayName, value, []);
+  return typeof name === 'string' && Object.hasOwn(bufferViewElementSizes, name)
+    ? name as JavaScriptBufferViewName
+    : undefined;
 }
 
 export function getArrayBufferByteLength(value: object): number {
@@ -159,16 +171,25 @@ export function isArrayBufferViewOutOfBounds(value: object): boolean {
   }
 }
 
-/*
- * ACCOMMODATION(node-v8-array-buffer-slots): V8 records whether a resizable
- * ArrayBuffer view is length-tracking, but Node exposes no direct query. Grow
- * or truncate the buffer just enough to distinguish the states, then restore
- * its length and bytes before returning.
- */
-export function isLengthTrackingResizableArrayBufferView(
+/** Whether a view's specification length is auto rather than a fixed number. */
+export function isLengthTrackingArrayBufferView(
   value: object,
 ): boolean {
   const name = requireBufferViewTypeName(value);
+  const native = nodeRuntime.isLengthTrackingArrayBufferView(value);
+  if (native !== undefined) return native;
+  return probeLengthTrackingArrayBufferView(value, name);
+}
+
+/*
+ * ACCOMMODATION(node-v8-array-buffer-slots): Stock Node lacks a direct query.
+ * Grow or truncate an ordinary resizable buffer, then restore its length and
+ * bytes. Shared buffers cannot be restored, so their tracking remains unknown.
+ */
+function probeLengthTrackingArrayBufferView(
+  value: object,
+  name: JavaScriptBufferViewName,
+): boolean {
   const buffer = getArrayBufferViewBuffer(value);
   if (
     getBufferTypeName(buffer) === 'SharedArrayBuffer' ||
@@ -244,18 +265,6 @@ function resizeArrayBuffer(buffer: object, byteLength: number): void {
   Reflect.apply(arrayBufferResize, buffer, [byteLength]);
 }
 
-function hasInternalSlot(
-  value: object,
-  getter: (this: object) => unknown,
-): boolean {
-  try {
-    Reflect.apply(getter, value, []);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function getAccessor(
   object: object,
   key: PropertyKey,
@@ -289,28 +298,6 @@ function requireSharedArrayBufferMaxByteLength(): (this: object) => unknown {
   }
   return sharedArrayBufferMaxByteLength;
 }
-
-const bufferViewTypeNames = new Set<JavaScriptBufferViewName>([
-  'Int8Array', 'Int16Array', 'Int32Array', 'Uint8Array', 'Uint16Array',
-  'Uint32Array', 'Uint8ClampedArray', 'BigInt64Array', 'BigUint64Array',
-  'Float16Array', 'Float32Array', 'Float64Array', 'DataView',
-]);
-
-const bufferViewElementSizes: Record<JavaScriptBufferViewName, number> = {
-  BigInt64Array: 8,
-  BigUint64Array: 8,
-  DataView: 1,
-  Float16Array: 2,
-  Float32Array: 4,
-  Float64Array: 8,
-  Int16Array: 2,
-  Int32Array: 4,
-  Int8Array: 1,
-  Uint16Array: 2,
-  Uint32Array: 4,
-  Uint8Array: 1,
-  Uint8ClampedArray: 1,
-};
 
 const arrayBufferByteLength = getAccessor(ArrayBuffer.prototype, 'byteLength');
 const arrayBufferResizable = getOptionalAccessor(

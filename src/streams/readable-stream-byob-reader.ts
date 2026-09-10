@@ -3,11 +3,10 @@ import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, op, promise, reference, xattr,
-  type BufferViewTypeName,
 } from '../web-idl/declaration/index';
 import {
-  getBufferSourceByteLength, getBufferSourceUnderlyingBuffer,
-  getBufferTypeName, isBufferSourceDetached,
+  getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceUnderlyingBuffer,
+  getBufferTypeName, isBufferSourceDetached, type JavaScriptBufferViewName,
 } from '../js-engine/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
 import type { ReadableStreamReadResult } from './readable-stream-default-reader';
@@ -60,7 +59,7 @@ export class ReadableStreamBYOBReaderImpl {
     }
 
     const type = requireBufferViewType(view);
-    const elementSize = bufferViewElementSizes[type];
+    const elementSize = getArrayBufferViewElementSize(type);
     const viewLength = type === 'DataView'
       ? viewByteLength
       : viewByteLength / elementSize;
@@ -156,23 +155,7 @@ export const readableStreamBYOBReaderReadOptionsIDL = defineDictionary({
   })],
 });
 
-const bufferViewElementSizes = {
-  BigInt64Array: 8,
-  BigUint64Array: 8,
-  DataView: 1,
-  Float16Array: 2,
-  Float32Array: 4,
-  Float64Array: 8,
-  Int16Array: 2,
-  Int32Array: 4,
-  Int8Array: 1,
-  Uint16Array: 2,
-  Uint32Array: 4,
-  Uint8Array: 1,
-  Uint8ClampedArray: 1,
-} as const;
-
-function requireBufferViewType(view: object): BufferViewTypeName {
+function requireBufferViewType(view: object): JavaScriptBufferViewName {
   const type = getBufferTypeName(view);
   if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
     throw new Error('ArrayBuffer view has no recognized view type');

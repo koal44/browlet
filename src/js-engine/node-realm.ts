@@ -1,8 +1,9 @@
 import { isObject } from './abstract-operations';
+import { bufferViewNames } from './array-buffer-primitives';
 import { Promises } from './promises';
 import { nodeRuntime, type NodeContext } from './node-runtime';
 import type {
-  GlobalObject, JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
+  GlobalObject, JavaScriptFunction, JavaScriptIntrinsics,
   JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
   RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
@@ -413,9 +414,3 @@ const constructibleFunctionFactorySource = `
     return steps(this, [...arguments], new.target);
   }
 `;
-
-const bufferViewNames: readonly JavaScriptBufferViewName[] = [
-  'Int8Array', 'Int16Array', 'Int32Array', 'Uint8Array', 'Uint16Array',
-  'Uint32Array', 'Uint8ClampedArray', 'BigInt64Array', 'BigUint64Array',
-  'Float16Array', 'Float32Array', 'Float64Array', 'DataView',
-];
