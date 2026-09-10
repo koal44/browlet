@@ -86,7 +86,7 @@ and asks a scheduler host to invoke the next turn from a later host task while
 runnable work remains. The host may eventually support batching under a
 fairness or time budget, but it must preserve Browlet's per-source ordering and
 perform the HTML checkpoint after every task. The task turn uses its required
-`JavaScriptMicrotaskQueue`; it does not silently use Node's ambient end-of-turn
+`JSMicrotaskQueue`; it does not silently use Node's ambient end-of-turn
 behavior as an approximation.
 
 The same host supplies unsafe shared time because the processing model samples
@@ -203,7 +203,7 @@ embedder calls; queue/job adoption alone does not justify deleting them.
 loop and identifies the queued microtask as the currently running task while
 its steps execute.
 
-**Runtime contract:** `JavaScriptMicrotaskQueue` identifies an `explicit` or
+**Runtime contract:** `JSMicrotaskQueue` identifies an `explicit` or
 `ambient` backend and supplies both `enqueueMicrotask()` and
 `performMicrotaskCheckpoint()`. Every EventLoop asks the runtime factory for one
 queue. Under a Browlet-compatible Node the factory creates an explicit V8 queue,
@@ -265,7 +265,7 @@ the JS Engine queue backend. The HTML policy which invokes the selected
 operation remains in [`event-loop.ts`](./event-loop.ts). Explicit-queue
 draining and the stock ambient, nested, rejection, and fake-clock limitations
 are recorded in
-[`node-runtime.test.ts`](../../../test/js-engine/node-runtime.test.ts).
+[`runtime.test.ts`](../../../test/js-engine/runtime.test.ts).
 The parser/Streams adopted-rejection integration remains in
 [`tasks.test.ts`](../../../test/browlet/scripting/tasks.test.ts). HTML
 §13.2.6.4 separately requires a conditional, explicit pre-script checkpoint

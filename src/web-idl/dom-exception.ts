@@ -6,7 +6,7 @@ import {
   dictMember, emptyDictionary, idlType, integer, nullable,
   roAttr, reference, xattr,
 } from './declaration/index';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import { bind, type BindingContext } from './projection';
 
 /*

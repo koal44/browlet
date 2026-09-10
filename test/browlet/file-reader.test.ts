@@ -14,7 +14,7 @@ import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-ev
 import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
-import { getBufferSourceCopy } from '../../src/web-idl/buffer-source';
+import { getBufferSourceCopy } from '../../src/js-engine/index';
 import { serializeDefinition } from '../../src/web-idl/declaration/index';
 import type { BindingContext } from '../../src/web-idl/projection';
 

@@ -1,8 +1,5 @@
 import * as JSEngine from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  createArrayBuffer, createArrayBufferViewFromBuffer,
-} from '../../../web-idl/buffer-source';
 import type { WebIDLRealmHost } from '../../../web-idl/index';
 import type { StructuredDataEnvironment } from './environment';
 import type {
@@ -78,13 +75,17 @@ export function structuredDeserialize(
       if (!JSEngine.isObject(buffer)) {
         throw new Error('An ArrayBufferView record has no backing buffer');
       }
-      value = createArrayBufferViewFromBuffer(
+      const length = serialized.constructor === 'DataView'
+        ? serialized.byteLength
+        : serialized.arrayLength;
+      if (length === undefined) {
+        throw new Error(`${serialized.constructor} has no serialized array length`);
+      }
+      value = realm.createView(
         serialized.constructor,
-        buffer,
+        buffer as ArrayBufferLike,
         serialized.byteOffset,
-        serialized.byteLength,
-        serialized.arrayLength,
-        realm,
+        length === 'auto' ? undefined : length,
       );
       break;
     }
@@ -216,11 +217,10 @@ function deserializeArrayBuffer(
     type: 'ArrayBuffer' | 'ResizableArrayBuffer';
   }>,
   realm: WebIDLRealmHost,
-): object {
+): ArrayBuffer {
   try {
-    return createArrayBuffer(
+    return realm.createArrayBuffer(
       serialized.bytes,
-      realm,
       serialized.maxByteLength,
     );
   } catch {

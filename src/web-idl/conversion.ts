@@ -1,7 +1,7 @@
 import { toScalarValueString } from '../infra/index';
 import {
-  bufferViewNames, getMethod, hasMapData, hasStringData, isObject,
-  toBigInt, toNumber, toPrimitive, toString, type JavaScriptMethod,
+  bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject,
+  toBigInt, toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
 } from '../js-engine/index';
 import type {
   AssembledDictionary, AssembledInterface, DefinitionAssembly,
@@ -15,17 +15,13 @@ import {
   createCallbackFunctionValue, createCallbackInterfaceValue,
   isCallbackFunctionValue, isCallbackInterfaceValue,
 } from './callback-value';
-import {
-  convertBufferSourceToIDL, convertBufferSourceToJavaScript,
-  createArrayBuffer, createArrayBufferView, createSharedArrayBuffer,
-  getBufferTypeName, type ByteSequence,
-} from './buffer-source';
+import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
 import {
   hasExtendedAttribute, type AnnotatedType, type BufferTypeName,
   type DefaultValue, type ExtendedAttribute, type SimpleTypeName,
   type WebIDLType,
 } from './declaration/definition';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
   PlatformObjectRecord, PlatformObjectRegistry,
@@ -82,15 +78,15 @@ export function createBufferResult(
     throw new TypeError('newBufferResult requires a buffer source return type');
   }
   const name = resultType.name as BufferTypeName;
-  if (name === 'ArrayBuffer') return createArrayBuffer(bytes, context.realm);
-  if (name === 'SharedArrayBuffer') return createSharedArrayBuffer(bytes, context.realm);
-  return createArrayBufferView(name, bytes, context.realm);
+  if (name === 'ArrayBuffer') return context.realm.createArrayBuffer(bytes);
+  if (name === 'SharedArrayBuffer') return context.realm.createSharedArrayBuffer(bytes);
+  return context.realm.createArrayBufferView(name, bytes);
 }
 
 export function createSequenceFromIterable(
   iterable: object,
   elementType: WebIDLType,
-  method: JavaScriptMethod,
+  method: JSMethod,
   context: ConversionContext,
 ): IDLSequenceValue {
   const iterator = Reflect.apply(method, iterable, []);
@@ -131,7 +127,7 @@ export function createFrozenArray(
 export function createFrozenArrayFromIterable(
   iterable: object,
   elementType: WebIDLType,
-  method: JavaScriptMethod,
+  method: JSMethod,
   context: ConversionContext,
 ): readonly unknown[] {
   return createFrozenArray(

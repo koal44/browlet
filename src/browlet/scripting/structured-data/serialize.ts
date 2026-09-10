@@ -1,10 +1,5 @@
 import * as JSEngine from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  getBufferSourceByteLength,
-  getBufferSourceByteOffset, getBufferSourceCopy,
-  getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
-} from '../../../web-idl/buffer-source';
 import type {
   WebIDLRealmHost,
 } from '../../../web-idl/index';
@@ -108,7 +103,7 @@ export function structuredSerializeInternal(
         return throwDataCloneError();
       }
       const bufferSerialized = structuredSerializeInternal(
-        getBufferSourceUnderlyingBuffer(value),
+        JSEngine.getBufferSourceUnderlyingBuffer(value),
         forStorage,
         environment,
         memory,
@@ -121,7 +116,7 @@ export function structuredSerializeInternal(
         type: 'ArrayBufferView',
         constructor: bufferType,
         buffer: bufferSerialized,
-        byteOffset: getBufferSourceByteOffset(value),
+        byteOffset: JSEngine.getBufferSourceByteOffset(value),
         ...serializeArrayBufferViewLengths(value, bufferType),
       };
     } else if (JSEngine.hasMapData(value)) {
@@ -208,7 +203,7 @@ export function structuredSerializeInternal(
 /** HTML §2.7.3, ArrayBufferView [[ByteLength]] and [[ArrayLength]]. */
 function serializeArrayBufferViewLengths(
   value: object,
-  type: JSEngine.JavaScriptBufferViewName,
+  type: JSEngine.JSBufferViewName,
 ): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
   if (JSEngine.isLengthTrackingArrayBufferView(value)) {
     return type === 'DataView'
@@ -216,10 +211,10 @@ function serializeArrayBufferViewLengths(
       : { arrayLength: 'auto', byteLength: 'auto' };
   }
   return type === 'DataView'
-    ? { byteLength: getBufferSourceByteLength(value) }
+    ? { byteLength: JSEngine.getBufferSourceByteLength(value) }
     : {
       arrayLength: JSEngine.getTypedArrayLength(value),
-      byteLength: getBufferSourceByteLength(value),
+      byteLength: JSEngine.getBufferSourceByteLength(value),
     };
 }
 
@@ -230,7 +225,7 @@ function serializeBuffer(
   forStorage: boolean,
   environment: StructuredSerializationEnvironment,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
-  const byteLength = getBufferSourceByteLength(value);
+  const byteLength = JSEngine.getBufferSourceByteLength(value);
   const maxByteLength = JSEngine.getArrayBufferMaxByteLength(value);
 
   if (type === 'SharedArrayBuffer') {
@@ -253,8 +248,8 @@ function serializeBuffer(
       };
   }
 
-  if (isBufferSourceDetached(value)) return throwDataCloneError();
-  const bytes = getBufferSourceCopy(value);
+  if (JSEngine.isBufferSourceDetached(value)) return throwDataCloneError();
+  const bytes = JSEngine.getBufferSourceCopy(value);
   return maxByteLength === undefined
     ? { type: 'ArrayBuffer', bytes, byteLength }
     : {

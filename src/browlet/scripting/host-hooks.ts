@@ -1,7 +1,7 @@
-import { nodeRuntime } from '../../js-engine/index';
+import { jsRuntime } from '../../js-engine/index';
 import type {
-  JavaScriptJobCallback, JavaScriptJobRegistration, JavaScriptFunction,
-  JavaScriptRealm,
+  JSJobCallback, JSJobRegistration, JSFunction,
+  JSRealm,
 } from '../../js-engine/index';
 import type { EnvironmentSettingsObject } from './environment';
 import { createTaskSource } from './event-loop';
@@ -9,12 +9,12 @@ import { Realm } from './realm';
 import { queueGlobalTask } from './tasks';
 import { runStepsAfterTimeout } from './timers';
 
-export const javaScriptEngineTaskSource = createTaskSource('JavaScript engine');
+export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
 /* One HTML host installation serves all Browlet instances in this runtime. */
 export function installHostHooks(): void {
-  if (installed || !nodeRuntime.supportsHostHooks) return;
-  nodeRuntime.setHostHooks({
+  if (installed || !jsRuntime.supportsHostHooks) return;
+  jsRuntime.setHostHooks({
     makeJobCallback,
     callJobCallback,
     enqueuePromiseJob,
@@ -26,12 +26,12 @@ export function installHostHooks(): void {
 
 let installed = false;
 
-type JobCallback = JavaScriptJobCallback<EnvironmentSettingsObject | null>;
+type JobCallback = JSJobCallback<EnvironmentSettingsObject | null>;
 
 /* HTML §8.1.6 — HostMakeJobCallback. */
 function makeJobCallback(
-  callback: JavaScriptFunction,
-  registration: JavaScriptJobRegistration,
+  callback: JSFunction,
+  registration: JSJobRegistration,
 ): JobCallback {
   const incumbent = registration.incumbent;
   /*
@@ -68,8 +68,8 @@ function callJobCallback(
 // SPEC_MISMATCH: (job, realm) -> void
 function enqueuePromiseJob(
   job: () => void,
-  realm: JavaScriptRealm | null,
-  queueRealm: JavaScriptRealm | null,
+  realm: JSRealm | null,
+  queueRealm: JSRealm | null,
 ): false | void {
   // Node and unrelated vm jobs retain the engine-selected queue.
   const destination = queueRealm;
@@ -90,23 +90,23 @@ function enqueuePromiseJob(
 }
 
 /* HTML §8.1.6 — HostEnqueueGenericJob. */
-function enqueueGenericJob(job: () => void, realm: JavaScriptRealm | null): void {
+function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
   if (!(realm instanceof Realm) || realm.hostDefined === null) {
     throw new Error('HTML generic jobs require an HTML realm');
   }
-  queueGlobalTask(javaScriptEngineTaskSource, realm.globalObject, job);
+  queueGlobalTask(jsEngineTaskSource, realm.globalObject, job);
 }
 
 /* HTML §8.1.6 — HostEnqueueTimeoutJob. */
 function enqueueTimeoutJob(
   job: () => void,
-  realm: JavaScriptRealm | null,
+  realm: JSRealm | null,
   milliseconds: number,
 ): void {
   if (!(realm instanceof Realm) || realm.hostDefined === null) {
     throw new Error('HTML timeout jobs require an HTML realm');
   }
   runStepsAfterTimeout(realm.globalObject, 'JavaScript', milliseconds, () => {
-    queueGlobalTask(javaScriptEngineTaskSource, realm.globalObject, job);
+    queueGlobalTask(jsEngineTaskSource, realm.globalObject, job);
   });
 }

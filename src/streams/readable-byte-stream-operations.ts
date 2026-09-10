@@ -4,7 +4,7 @@ import type { PromiseValue } from '../js-engine/promises';
 import {
   getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceByteOffset,
   getBufferSourceUnderlyingBuffer, getBufferTypeName,
-  isBufferSourceDetached, writeArrayBuffer, type JavaScriptBufferViewName,
+  isBufferSourceDetached, writeArrayBuffer, type JSBufferViewName,
 } from '../js-engine/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
 import {
@@ -1225,7 +1225,7 @@ function copyDataBlockBytes(
   );
 }
 
-function requireBufferViewType(view: object): JavaScriptBufferViewName {
+function requireBufferViewType(view: object): JSBufferViewName {
   const type = getBufferTypeName(view);
   if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
     throw new Error('ArrayBuffer view has no recognized view type');

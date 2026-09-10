@@ -1,4 +1,4 @@
-import { isObject } from '../js-engine/index';
+import { isObject, type ByteSequence } from '../js-engine/index';
 import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
 import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
@@ -13,7 +13,6 @@ import {
   convertToIDL, convertToJavaScript, createBufferResult, materializeDefaultValue,
   type ConversionContext, type HostDefinedInterface,
 } from './conversion';
-import type { ByteSequence } from './buffer-source';
 import {
   hasExtendedAttribute, type AttributeMember,
   type CallbackInterfaceDefinition, type ConstantMember,
@@ -26,7 +25,7 @@ import {
   ImplementationRegistry, type ConstructorBehavior,
 } from './registry';
 import { SynchronousIterableBinding } from './iterable';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import { LegacyPlatformObjectBinding } from './legacy-platform-object';
 import {
   computeEffectiveOverloadSet, type IDLCallable, resolveOverload,
@@ -360,7 +359,7 @@ export class RealmBinding {
   getLegacyFactoryFunction(
     interface_: string | AssembledInterface,
     id: string,
-  ): JavaScriptFunction {
+  ): JSFunction {
     const assembled = this.#resolveInterface(interface_);
     const declarations = getLegacyFactoryFunctionDeclarations(
       assembled,
@@ -950,7 +949,7 @@ export class RealmBinding {
   #getStringifierFunction(
     interface_: AssembledInterface,
     stringifier: StringifierMember | AttributeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#getOrCreateMemberInitialObject(
       'stringifier',
       interface_.definition,
@@ -1106,7 +1105,7 @@ export class RealmBinding {
   #getAttributeGetter(
     definition: MemberDefinition,
     attribute: AttributeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#getOrCreateMemberInitialObject(
       'getter',
       definition.definition,
@@ -1180,7 +1179,7 @@ export class RealmBinding {
   #getAttributeSetter(
     definition: MemberDefinition,
     attribute: AttributeMember,
-  ): JavaScriptFunction | undefined {
+  ): JSFunction | undefined {
     if (definition.definition.kind === 'namespace') return;
     const interface_ = getMemberInterface(definition);
     if (!interface_) throw new Error('Namespace attribute unexpectedly had a setter');
@@ -1299,7 +1298,7 @@ export class RealmBinding {
     definition: MemberDefinition,
     name: string,
     operations: OperationMember[],
-  ): JavaScriptFunction {
+  ): JSFunction {
     const source = operations[0];
     if (!source) throw new Error(`Operation group ${name} is empty`);
     return this.#getOrCreateMemberInitialObject(
@@ -1746,8 +1745,8 @@ export class RealmBinding {
     kind: keyof MemberInitialObjects,
     definition: object,
     member: object,
-    create: () => JavaScriptFunction,
-  ): JavaScriptFunction {
+    create: () => JSFunction,
+  ): JSFunction {
     const initial = this.#getInitialObjects(definition);
     const members = initial.members ??= new WeakMap();
     let objects = members.get(member);
@@ -1786,8 +1785,8 @@ export class RealmBinding {
   }
 }
 
-type JavaScriptFunction = ReturnType<WebIDLRealmHost['createFunction']>;
-type InterfaceObject = JavaScriptFunction & { prototype: object; };
+type JSFunction = ReturnType<WebIDLRealmHost['createFunction']>;
+type InterfaceObject = JSFunction & { prototype: object; };
 type MemberDefinition = AssembledInterface | AssembledNamespace;
 type MemberEntry = AssembledInterfaceMember | AssembledNamespaceMember;
 /** Supply before projecting any object that needs these interface prototypes. */
@@ -1806,8 +1805,8 @@ type DefinitionInitialObjects = {
   interfaceObject?: InterfaceObject;
   interfacePrototypeObject?: object;
   iteratorPrototype?: object;
-  legacyCallbackInterfaceObject?: JavaScriptFunction;
-  legacyFactoryFunctions?: Map<string, JavaScriptFunction>;
+  legacyCallbackInterfaceObject?: JSFunction;
+  legacyFactoryFunctions?: Map<string, JSFunction>;
   members?: WeakMap<object, MemberInitialObjects>;
   namedPropertiesObject?: object;
   namespaceObject?: object;
@@ -1815,7 +1814,7 @@ type DefinitionInitialObjects = {
 };
 type MemberInitialObjects = Partial<Record<
   'getter' | 'operation' | 'setter' | 'stringifier',
-  JavaScriptFunction
+  JSFunction
 >>;
 type StringifierEntry = AssembledInterfaceMember & {
   member: StringifierMember | AttributeMember;

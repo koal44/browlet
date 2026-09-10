@@ -1,8 +1,5 @@
 import * as JSEngine from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  getBufferSourceByteLength, isBufferSourceDetached, transferArrayBuffer,
-} from '../../../web-idl/buffer-source';
 import type { StructuredDataEnvironment } from './environment';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
@@ -83,7 +80,7 @@ function prepareTransfer(
     type: 'transfer-placeholder',
   };
   if (bufferType === 'ArrayBuffer') {
-    return { kind: 'ArrayBuffer', placeholder, value };
+    return { kind: 'ArrayBuffer', placeholder, value: value as ArrayBuffer };
   }
   if (bufferType === 'SharedArrayBuffer') return throwDataCloneError();
   if (bufferType !== undefined) return throwDataCloneError();
@@ -109,8 +106,8 @@ function performTransfer(
   environment: StructuredDataEnvironment,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
-    if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
-    const byteLength = getBufferSourceByteLength(prepared.value);
+    if (JSEngine.isBufferSourceDetached(prepared.value)) return throwDataCloneError();
+    const byteLength = JSEngine.getBufferSourceByteLength(prepared.value);
     const maxByteLength = JSEngine.getArrayBufferMaxByteLength(
       prepared.value,
     );
@@ -119,7 +116,7 @@ function performTransfer(
         ? 'ArrayBuffer'
         : 'ResizableArrayBuffer',
       placeholder: prepared.placeholder,
-      buffer: transferArrayBuffer(prepared.value, environment.realm),
+      buffer: environment.realm.transferArrayBuffer(prepared.value),
       byteLength,
       ...(maxByteLength === undefined ? {} : { maxByteLength }),
     };
@@ -168,9 +165,9 @@ function receiveTransfer(
     return platformObject.platformObject;
   }
 
-  const value = transferArrayBuffer(dataHolder.buffer, environment.realm);
+  const value = environment.realm.transferArrayBuffer(dataHolder.buffer);
   if (
-    getBufferSourceByteLength(value) !== dataHolder.byteLength ||
+    JSEngine.getBufferSourceByteLength(value) !== dataHolder.byteLength ||
     JSEngine.getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
     throw new Error('Received ArrayBuffer does not match its data holder');
@@ -183,7 +180,7 @@ type PreparedTransfer = PreparedArrayBufferTransfer | PreparedPlatformTransfer;
 type PreparedArrayBufferTransfer = {
   kind: 'ArrayBuffer';
   placeholder: TransferPlaceholderSerializedRecord;
-  value: object;
+  value: ArrayBuffer;
 };
 
 type PreparedPlatformTransfer = {

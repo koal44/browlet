@@ -167,7 +167,7 @@ broader or orthogonal identity boundary:
 
 Browlet's own evidence is intentionally kept executable. Two `Browlet`
 instances create separate UserAgents, browsing-context groups, Window agents,
-and Realms inside the same isolate-scoped `NodeRuntime`. This is a Browlet
+and Realms inside the same isolate-scoped `JSRuntime`. This is a Browlet
 embedding invariant, not a claim that web author code can synchronously
 exchange objects between isolated browser agent clusters. The
 [Browlet DOM binding](../test/browlet/dom-binding.test.ts),
@@ -197,7 +197,7 @@ duplicated it. Browlet therefore keeps:
   `BindingWorld` owned by the Browlet composition root.
 
 The lower [`js-engine/`](./js-engine/README.md) project separately keeps the
-Node/V8 object-to-realm associations which Node cannot expose. `NodeRuntime`
+Node/V8 object-to-realm associations which Node cannot expose. `JSRuntime`
 owns those isolate-scoped engine facts; `BindingWorld` owns Web IDL
 implementation/platform identity. Neither map is Agent- or AgentCluster-owned,
 and their different keys and responsibilities are not a reason to merge them.
@@ -368,8 +368,10 @@ JavaScript buffers and typed arrays retain their existing identity through
 ordinary conversion. A buffer-returning operation can declare
 `newBufferResult()` when its implementation returns internal bytes instead.
 This also applies to bytes delivered by an ordinary implementation promise.
-Binding allocates a fresh buffer and, for a view return type, its view in the
-result realm. A retained promise keeps distinct projections for allocating
+Binding uses the result realm's engine methods to allocate a fresh buffer and,
+for a view return type, its view. Buffer inspection and construction do not
+belong to Web IDL; conversion and the choice to allocate do.
+A retained promise keeps distinct projections for allocating
 and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.
 

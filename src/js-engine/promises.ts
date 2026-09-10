@@ -1,18 +1,17 @@
-import { installPromiseReactions } from './promise-operations';
-import type { JavaScriptFunction, JavaScriptRealm } from './realm';
+import type { JSFunction, JSRealm } from './realm';
 import { TypeError } from './simple-exception';
 
 /** Promise allocation, adoption, and observation in one supplied destination. */
 export class Promises {
   readonly #Promise: PromiseConstructor;
   readonly observeNative: (
-    promise: Promise<unknown>, fulfilled: JavaScriptFunction, rejected: JavaScriptFunction,
+    promise: Promise<unknown>, fulfilled: JSFunction, rejected: JSFunction,
   ) => void;
 
-  constructor(realm: JavaScriptRealm) {
+  constructor(realm: JSRealm) {
     this.#Promise = realm.intrinsics.promise.constructor;
     this.observeNative = (promise, fulfilled, rejected) => {
-      installPromiseReactions(realm, promise, fulfilled, rejected);
+      realm.observePromise(promise, fulfilled, rejected);
     };
   }
 

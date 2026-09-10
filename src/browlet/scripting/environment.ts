@@ -1,6 +1,6 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { EventLoop } from './event-loop';
-import { Realm, type JavaScriptExecutionContext } from './realm';
+import { Realm, type JSExecutionContext } from './realm';
 import { DocumentImpl, type ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import { WindowImpl } from '../browsing/window/window';
@@ -44,7 +44,7 @@ export class Environment {
 
 export abstract class EnvironmentSettingsObject extends Environment {
   readonly timing: EnvironmentTiming;
-  readonly realmExecutionContext: JavaScriptExecutionContext;
+  readonly realmExecutionContext: JSExecutionContext;
 
   constructor(initialization: EnvironmentSettingsInitialization) {
     super(initialization);
@@ -135,7 +135,7 @@ export class WindowEnvironmentSettingsObject
 
 export function setupWindowEnvironmentSettingsObject(
   creationURL: URLRecord,
-  executionContext: JavaScriptExecutionContext,
+  executionContext: JSExecutionContext,
   reservedEnvironment: Environment | null,
   topLevelCreationURL: URLRecord,
   topLevelOrigin: Origin,
@@ -195,5 +195,5 @@ export type EnvironmentInitialization = {
 };
 
 export type EnvironmentSettingsInitialization = EnvironmentInitialization & {
-  realmExecutionContext: JavaScriptExecutionContext;
+  realmExecutionContext: JSExecutionContext;
 };

@@ -2,31 +2,20 @@ import * as vm from 'node:vm';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
-import type { Context } from 'node:vm';
-import type { NodeGlobalPrototypeKind } from './node-realm';
-
-import type {
-  JavaScriptFunction, JavaScriptHostHooks, JavaScriptMicrotaskQueue,
-  JavaScriptRealm, JavaScriptRuntime,
-} from './realm';
-
-const nodeApi = loadNodeApi();
-const nodeCreateMicrotaskQueue = getNodeMicrotaskQueueFactory();
-const nodeContextSupport = getNodeContextSupport();
-const nodeMakePrototypeImmutable = getNodeMethod('makePrototypeImmutable');
+import type { GlobalPrototypeKind, JSFunction, JSRealm } from './realm';
 
 /*
  * One module instance represents one Node/V8 isolate. Node workers load a
  * separate module instance and therefore receive a separate runtime owner.
  */
-class NodeRuntime implements JavaScriptRuntime {
+export class JSRuntime {
   /*
    * ACCOMMODATION(node-v8-object-realms): ECMAScript does not expose [[Realm]]
    * for arbitrary objects, so retain associations for objects this host sees.
    */
-  #evaluatingRealm: JavaScriptRealm | undefined;
-  readonly #objectRealms = new WeakMap<object, JavaScriptRealm>();
-  readonly #contextRealms = new WeakMap<object, JavaScriptRealm>();
+  #evaluatingRealm: JSRealm | undefined;
+  readonly #objectRealms = new WeakMap<object, JSRealm>();
+  readonly #contextRealms = new WeakMap<object, JSRealm>();
   #tickCallback: (() => void) | undefined;
   readonly hasExplicitMicrotaskQueues =
     nodeCreateMicrotaskQueue !== undefined;
@@ -39,13 +28,13 @@ class NodeRuntime implements JavaScriptRuntime {
    * that fallback behind this one queue object. A compatible Node runtime
    * or the addon instead returns an explicit queue from createMicrotaskQueue().
    */
-  readonly #ambientMicrotaskQueue: JavaScriptMicrotaskQueue = {
+  readonly #ambientMicrotaskQueue: JSMicrotaskQueue = {
     kind: 'ambient',
     enqueueMicrotask: (steps) => { globalThis.queueMicrotask(steps); },
     performMicrotaskCheckpoint: () => { this.#getTickCallback()(); },
   };
 
-  readonly createMicrotaskQueue = (): JavaScriptMicrotaskQueue => {
+  readonly createMicrotaskQueue = (): JSMicrotaskQueue => {
     if (nodeCreateMicrotaskQueue === undefined) {
       return this.#ambientMicrotaskQueue;
     }
@@ -55,7 +44,7 @@ class NodeRuntime implements JavaScriptRuntime {
       throw new Error('Node backend createMicrotaskQueue returned an invalid queue');
     }
 
-    const queue: JavaScriptMicrotaskQueue = {
+    const queue: JSMicrotaskQueue = {
       kind: 'explicit',
       enqueueMicrotask: (steps) => { handle.enqueueMicrotask(steps); },
       performMicrotaskCheckpoint: () => { handle.runMicrotasks(); },
@@ -64,14 +53,15 @@ class NodeRuntime implements JavaScriptRuntime {
     return queue;
   };
 
-  associateRealm(value: object, realm: JavaScriptRealm): void {
+  associateRealm(value: object, realm: JSRealm): void {
     this.#objectRealms.set(value, realm);
   }
 
-  associateContext(context: NodeContext, realm: JavaScriptRealm): void {
+  associateContext(context: NodeContext, realm: JSRealm): void {
     if (isNodeContextHandle(context)) this.#contextRealms.set(context.realm, realm);
   }
 
+  /** Retain the registration's host async context for a later task handoff. */
   bindAsyncContext<T>(steps: () => T): () => T {
     return AsyncLocalStorage.bind(steps);
   }
@@ -84,10 +74,10 @@ class NodeRuntime implements JavaScriptRuntime {
   }
 
   observePromise(
-    realm: JavaScriptRealm,
+    realm: JSRealm,
     promise: Promise<unknown>,
-    onFulfilled: JavaScriptFunction | undefined,
-    onRejected: JavaScriptFunction | undefined,
+    onFulfilled: JSFunction | undefined,
+    onRejected: JSFunction | undefined,
   ): void {
     const observe = getNodeMethod('observePromise');
     if (observe) {
@@ -104,14 +94,14 @@ class NodeRuntime implements JavaScriptRuntime {
     }
   }
 
-  setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void {
+  setHostHooks<HostDefined>(hooks: JSHostHooks<HostDefined>): void {
     const install = getNodeMethod('setHostHooks');
     const getRealm = getNodeMethod('getRealm');
     if (!this.supportsHostHooks || !install || !getRealm) {
       throw new Error('Node does not support job host hooks');
     }
     Reflect.apply(install, nodeApi, [{
-      makeJobCallback: (callback: JavaScriptFunction, registration: {
+      makeJobCallback: (callback: JSFunction, registration: {
         incumbent: object | null;
         hostDefinedOptions: readonly unknown[];
       }) => hooks.makeJobCallback(callback, {
@@ -135,7 +125,7 @@ class NodeRuntime implements JavaScriptRuntime {
     }]);
   }
 
-  getAssociatedRealm(value: object): JavaScriptRealm | undefined {
+  getAssociatedRealm(value: object): JSRealm | undefined {
     try {
       let current: object | null = value;
       while (current !== null) {
@@ -154,9 +144,9 @@ class NodeRuntime implements JavaScriptRuntime {
   }
 
   createContext(
-    microtaskQueue: JavaScriptMicrotaskQueue,
+    microtaskQueue: JSMicrotaskQueue,
     reuseGlobalProxyFrom?: NodeContext,
-    globalPrototypeChain?: readonly NodeGlobalPrototypeKind[],
+    globalPrototypeChain?: readonly GlobalPrototypeKind[],
   ): NodeContext {
     const handle = nodeMicrotaskQueueHandles.get(microtaskQueue);
     const options = handle === undefined
@@ -184,7 +174,7 @@ class NodeRuntime implements JavaScriptRuntime {
     return Reflect.apply(vm.createContext, vm, [
       vm.constants.DONT_CONTEXTIFY,
       options,
-    ]) as Context;
+    ]) as NodeContext;
   }
 
   getContextGlobal(context: NodeContext): object {
@@ -228,7 +218,11 @@ class NodeRuntime implements JavaScriptRuntime {
   runInContext(
     source: string,
     context: NodeContext,
-    options?: vm.RunningScriptOptions,
+    options?: {
+      displayErrors?: boolean;
+      filename?: string;
+      lineOffset?: number;
+    },
   ): unknown {
     if (nodeContextSupport !== undefined && isNodeContextHandle(context)) {
       return Reflect.apply(nodeContextSupport.runInContext, nodeApi, [
@@ -239,7 +233,7 @@ class NodeRuntime implements JavaScriptRuntime {
   }
 
   runWithActiveRealm<Result>(
-    realm: JavaScriptRealm,
+    realm: JSRealm,
     steps: () => Result,
   ): Result {
     const previous = this.#evaluatingRealm;
@@ -266,7 +260,59 @@ class NodeRuntime implements JavaScriptRuntime {
   }
 }
 
-export const nodeRuntime = new NodeRuntime();
+const nodeApi = loadNodeApi();
+const nodeCreateMicrotaskQueue = getNodeMicrotaskQueueFactory();
+const nodeContextSupport = getNodeContextSupport();
+const nodeMakePrototypeImmutable = getNodeMethod('makePrototypeImmutable');
+
+export const jsRuntime = new JSRuntime();
+
+export type JSHostHooks<HostDefined> = {
+  makeJobCallback(
+    this: void,
+    callback: JSFunction,
+    registration: JSJobRegistration,
+  ): JSJobCallback<HostDefined>;
+  callJobCallback(
+    this: void,
+    record: JSJobCallback<HostDefined>,
+    receiver: unknown,
+    argumentsList: unknown[],
+  ): unknown;
+  enqueuePromiseJob(
+    this: void,
+    job: () => void,
+    realm: JSRealm | null,
+    queueRealm: JSRealm | null,
+  ): false | void;
+  enqueueGenericJob(
+    this: void,
+    job: () => void,
+    realm: JSRealm | null,
+  ): void;
+  enqueueTimeoutJob(
+    this: void,
+    job: () => void,
+    realm: JSRealm | null,
+    milliseconds: number,
+  ): void;
+};
+
+export type JSJobCallback<HostDefined> = {
+  readonly callback: JSFunction;
+  readonly hostDefined: HostDefined;
+};
+
+export type JSJobRegistration = {
+  readonly incumbent: JSRealm | null;
+  readonly hostDefinedOptions: readonly unknown[];
+};
+
+export type JSMicrotaskQueue = {
+  readonly kind: 'ambient' | 'explicit';
+  enqueueMicrotask(steps: () => void): void;
+  performMicrotaskCheckpoint(): void;
+};
 
 type NodeMicrotaskQueue = {
   enqueueMicrotask(steps: () => void): void;
@@ -283,7 +329,8 @@ type NodeContextHandle = {
   detachGlobal(): object;
 };
 
-export type NodeContext = Context | NodeContextHandle;
+/** Opaque Node VM context or compatibility-addon context handle. */
+export type NodeContext = object;
 
 type NodeContextHandleFactory = (options?: {
   reuseGlobalProxyFrom?: NodeContextHandle;
@@ -296,7 +343,7 @@ type NodeContextSupport = {
 };
 
 const nodeMicrotaskQueueHandles = new WeakMap<
-  JavaScriptMicrotaskQueue,
+  JSMicrotaskQueue,
   NodeMicrotaskQueue
 >();
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
-import { nodeRuntime } from '../../../src/js-engine/index';
+import { jsRuntime } from '../../../src/js-engine/index';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 
 import { createOpaqueOrigin, type Origin } from
@@ -38,7 +38,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     installHostHooks();
     const agent = new TestAgent({
       ...createEventLoopOptions(),
-      createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
+      createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
     });
     const first = createTestRealm(agent, 'first-registration');
     const second = createTestRealm(agent, 'second-registration');

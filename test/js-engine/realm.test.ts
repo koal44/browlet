@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../test-runtime';
 
 import {
-  NodeRealm, type JavaScriptFunction, nodeRuntime,
+  JSRealm, type JSFunction, jsRuntime,
 } from '../../src/js-engine/index';
 
-describe('Node JavaScript Realm', () => {
+describe('JavaScript Realm', () => {
   it('captures realm intrinsics and creates realm-owned functions', () => {
-    const realm = new NodeRealm();
+    const realm = new JSRealm();
     const Array_ = realm.intrinsics.array;
     const BigInt_ = realm.intrinsics.bigInt;
     const Number_ = realm.intrinsics.number;
@@ -56,7 +57,7 @@ describe('Node JavaScript Realm', () => {
 
     const instance = Reflect.construct(constructible, ['value']) as {
       argumentsList: unknown[];
-      newTarget: JavaScriptFunction;
+      newTarget: JSFunction;
     };
     expect(Object.hasOwn(constructible, 'prototype')).toBe(true);
     expect(Object.getPrototypeOf(constructible))
@@ -81,8 +82,8 @@ describe('Node JavaScript Realm', () => {
   });
 
   it('isolates evaluation and recognizes objects across the shared runtime', () => {
-    const first = new NodeRealm();
-    const second = new NodeRealm();
+    const first = new JSRealm();
+    const second = new JSRealm();
     first.evaluate('globalThis.answer = 41', 'first.js');
     second.evaluate('globalThis.answer = 42', 'second.js');
 
@@ -101,13 +102,13 @@ describe('Node JavaScript Realm', () => {
     });
     const foreign = second.evaluate('({})', 'foreign.js') as object;
 
-    expect(nodeRuntime.getAssociatedRealm(container.nested)).toBe(first);
-    expect(nodeRuntime.getAssociatedRealm(function_)).toBe(first);
-    expect(nodeRuntime.getAssociatedRealm(foreign)).toBe(second);
-    expect(nodeRuntime.getAssociatedRealm({})).toBeUndefined();
+    expect(jsRuntime.getAssociatedRealm(container.nested)).toBe(first);
+    expect(jsRuntime.getAssociatedRealm(function_)).toBe(first);
+    expect(jsRuntime.getAssociatedRealm(foreign)).toBe(second);
+    expect(jsRuntime.getAssociatedRealm({})).toBeUndefined();
 
     Reflect.set(first.global, 'hasActiveRealm', (value: object) =>
-      nodeRuntime.getAssociatedRealm(value) === first);
+      jsRuntime.getAssociatedRealm(value) === first);
     expect(first.evaluate(`
       hasActiveRealm(new Proxy({}, {
         getPrototypeOf() { throw new Error('hidden prototype'); }
@@ -116,7 +117,7 @@ describe('Node JavaScript Realm', () => {
   });
 
   it('bridges one supplied global object and global-this value', () => {
-    const realm = new ConfigurableNodeRealm();
+    const realm = new ConfigurableRealm();
     const globalObject = {};
     const globalThis = { answer: 42 };
 
@@ -126,15 +127,84 @@ describe('Node JavaScript Realm', () => {
     expect(Reflect.get(globalObject, 'globalThis')).toBe(globalThis);
     expect(realm.evaluate('globalThis', 'global-this.js')).toBe(globalThis);
     expect(realm.evaluate('answer', 'free-name.js')).toBe(42);
-    expect(nodeRuntime.getAssociatedRealm(globalObject)).toBe(realm);
-    expect(nodeRuntime.getAssociatedRealm(globalThis)).toBe(realm);
+    expect(jsRuntime.getAssociatedRealm(globalObject)).toBe(realm);
+    expect(jsRuntime.getAssociatedRealm(globalThis)).toBe(realm);
     expect(() => realm.setGlobalObjects({}, {})).toThrow(
       'Realm global objects are already initialized',
     );
   });
+
+  it('creates realm-owned ordinary and iterator-result objects', () => {
+    const realm = new JSRealm();
+    const prototype = realm.createOrdinaryObject(null);
+    const object = realm.createOrdinaryObject(prototype);
+    expect(Reflect.getPrototypeOf(object)).toBe(prototype);
+    expect(realm.runtime.getAssociatedRealm(object)).toBe(realm);
+
+    const result = realm.createIteratorResultObject('value', false);
+    expect(result).toEqual({ value: 'value', done: false });
+    expect(Reflect.getPrototypeOf(result))
+      .toBe(realm.intrinsics.objectPrototype);
+  });
 });
 
-class ConfigurableNodeRealm extends NodeRealm {
+describe('Realm Promise observation', () => {
+  it('installs reactions without consulting the promise then property', async () => {
+    const microtaskQueue = jsRuntime.createMicrotaskQueue();
+    const realm = new JSRealm(microtaskQueue);
+    const promise = new realm.intrinsics.promise.constructor((resolve) => {
+      resolve('fulfilled');
+    });
+    const values: unknown[] = [];
+    const onFulfilled = realm.createFunction(
+      (_thisArgument, [value]) => { values.push(value); },
+      { length: 1, name: '' },
+    );
+    expect(Reflect.defineProperty(promise, 'then', {
+      value() { throw new Error('author then was called'); },
+    })).toBe(true);
+
+    realm.observePromise(promise, onFulfilled, undefined);
+    microtaskQueue.performMicrotaskCheckpoint();
+    await Promise.resolve();
+
+    expect(values).toEqual(['fulfilled']);
+  });
+
+  itPassesWith('v26+', 'explicitQueues')('does not consult author-defined promise constructors', () => {
+    const realm = new JSRealm();
+    const promise = new realm.intrinsics.promise.constructor(() => undefined);
+    expect(Reflect.defineProperty(promise, 'constructor', {
+      get() { throw new Error('author constructor was consulted'); },
+    })).toBe(true);
+
+    expect(() => realm.observePromise(
+      promise,
+      undefined,
+      undefined,
+    )).not.toThrow();
+  });
+
+  itPassesWith('v26+', 'explicitQueues')('places native observation of a Node promise on the supplied realm queue', async () => {
+    const queue = jsRuntime.createMicrotaskQueue();
+    const realm = new JSRealm(queue);
+    const { promise, resolve } = Promise.withResolvers<string>();
+    const seen: unknown[] = [];
+    expect(Reflect.defineProperty(promise, 'constructor', {
+      get() { throw new Error('author constructor was consulted'); },
+    })).toBe(true);
+    realm.observePromise(promise, (value) => { seen.push(value); }, undefined);
+    resolve('observed');
+    void Promise.resolve().then(() => seen.push('Node'));
+    expect(seen).toEqual([]);
+    queue.performMicrotaskCheckpoint();
+    expect(seen).toEqual(['observed']);
+    await Promise.resolve();
+    expect(seen).toEqual(['observed', 'Node']);
+  });
+});
+
+class ConfigurableRealm extends JSRealm {
   setGlobalObjects(globalObject: object, globalThis: object): void {
     this.initializeGlobalObjects(globalObject, globalThis);
   }

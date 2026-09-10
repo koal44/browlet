@@ -2,7 +2,7 @@ import { isObject } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../infra/observable-array';
 import type { AssembledInterface } from './assembly';
 import type { AttributeMember } from './declaration/index';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import type { BindingContext } from './projection';
 
 export class PlatformObjectRegistry {

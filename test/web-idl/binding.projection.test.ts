@@ -14,7 +14,7 @@ import {
 } from '../../src/web-idl/declaration/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { RealmBinding } from '../../src/web-idl/binding';
-import type { SecurityCheckType } from '../../src/web-idl/javascript-realm';
+import type { SecurityCheckType } from '../../src/web-idl/js-realm';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL ordinary interface projection', () => {

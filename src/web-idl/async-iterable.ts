@@ -1,6 +1,4 @@
-import {
-  createIteratorResultObject, installPromiseReactions, isObject,
-} from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import { endOfIteration } from './async-sequence';
 import {
@@ -86,7 +84,7 @@ export class AsynchronousIterableBinding {
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const target = this.#implementationObject(
@@ -197,7 +195,7 @@ export class AsynchronousIterableBinding {
     );
     return this.#react(
       ongoing,
-      () => createIteratorResultObject(this.#context.realm, value, true),
+      () => this.#context.realm.createIteratorResultObject(value, true),
     ).promise;
   }
 
@@ -207,7 +205,7 @@ export class AsynchronousIterableBinding {
   ): IDLPromise {
     if (state.finished) {
       return this.#resolvedPromise(
-        createIteratorResultObject(this.#context.realm, undefined, true),
+        this.#context.realm.createIteratorResultObject(undefined, true),
       );
     }
 
@@ -229,14 +227,12 @@ export class AsynchronousIterableBinding {
         state.ongoing = null;
         if (next === endOfIteration) {
           state.finished = true;
-          return createIteratorResultObject(
-            this.#context.realm,
+          return this.#context.realm.createIteratorResultObject(
             undefined,
             true,
           );
         }
-        return createIteratorResultObject(
-          this.#context.realm,
+        return this.#context.realm.createIteratorResultObject(
           this.#convertResult(next, declaration, state.kind),
           false,
         );
@@ -300,8 +296,7 @@ export class AsynchronousIterableBinding {
       },
       { length: 0, name: '' },
     );
-    installPromiseReactions(
-      this.#context.realm,
+    this.#context.realm.observePromise(
       ongoing.promise,
       onSettled,
       onSettled,
@@ -340,8 +335,7 @@ export class AsynchronousIterableBinding {
       },
       { length: 1, name: '' },
     );
-    installPromiseReactions(
-      this.#context.realm,
+    this.#context.realm.observePromise(
       promise.promise,
       onFulfilled,
       onRejected,
@@ -491,6 +485,6 @@ type DefaultAsyncIterator = {
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';
-type JavaScriptFunction = ReturnType<
+type JSFunction = ReturnType<
   ConversionContext['realm']['createFunction']
 >;

@@ -5,9 +5,8 @@ import {
   createBindings, defineInterface, impl, xattr,
 } from '../../../../src/web-idl/index';
 import {
-  detachArrayBuffer, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
-  isBufferSourceDetached,
-} from '../../../../src/web-idl/buffer-source';
+  getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
+} from '../../../../src/js-engine/index';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { StructuredDataEnvironment } from '../../../../src/browlet/scripting/structured-data/environment';
 import {
@@ -178,7 +177,7 @@ describe('HTML structured transfer', () => {
       'new ArrayBuffer(2)',
       'structured-transfer-second-buffer.js',
     ) as ArrayBuffer;
-    detachArrayBuffer(second, sourceRealm);
+    sourceRealm.detachArrayBuffer(second);
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
       null,
