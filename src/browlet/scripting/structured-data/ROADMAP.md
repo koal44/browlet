@@ -172,16 +172,18 @@ unknown-internal-slot category remain expected failures because probing their
 full property graph could invoke author code twice or attribute a nested clone
 failure to the wrong object.
 
-V8 records a resizable-buffer view's internal length-tracking bit, but neither
-its public API nor Node exposes that bit. The
+The custom engine exposes a view's length-tracking bit through
+`ArrayBufferView::IsLengthTracking()` and the compatibility addon. Ordinary
+resizable and growable shared views retain their length mode through cloning.
+On stock engines and without the addon, the
 [`node-v8-array-buffer-slots`](../../../js-engine/README.md#nodev8-accommodations)
 accommodation recovers it for ordinary resizable ArrayBuffers with a
 synchronous, reversible intrinsic resize probe. The probe grows or truncates
 at most one element, restores both size and bytes, and runs no author code.
 Growable SharedArrayBuffer cannot use that technique because growth is
-irreversible; its ambiguous fixed-at-end and auto-length views still serialize
-as fixed-length. Do not replace the bounded probe with a second native
-structured clone of an arbitrarily large backing buffer.
+irreversible; without the native query, its ambiguous fixed-at-end and
+auto-length views still serialize as fixed-length. Do not replace the bounded
+probe with a second native structured clone of an arbitrarily large backing buffer.
 
 ### 3. Implement target-realm deserialization
 

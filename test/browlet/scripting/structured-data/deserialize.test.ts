@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../../../test-runtime';
 
 import {
   getDOMExceptionRequest,
@@ -213,7 +214,7 @@ describe('HTML structured deserialization', () => {
     expect(new Uint8Array(buffer)[0]).toBe(11);
   });
 
-  it.fails('preserves growable SharedArrayBuffer view length tracking', () => {
+  itPassesWith('lengthTracking')('preserves growable SharedArrayBuffer view length tracking', () => {
     const agentCluster = {};
     const { source, sourceRealm, target } = createEnvironments({ agentCluster });
     const value = sourceRealm.evaluate(`(() => {
@@ -222,17 +223,23 @@ describe('HTML structured deserialization', () => {
         buffer,
         fixed: new Uint8Array(buffer, 0, 4),
         tracking: new Uint8Array(buffer),
+        fixedData: new DataView(buffer, 0, 4),
+        trackingData: new DataView(buffer),
       };
     })()`, 'growable-shared-buffer-view.js');
     const clone = cloneValue(value, source, target) as {
       buffer: SharedArrayBuffer;
       fixed: Uint8Array;
       tracking: Uint8Array;
+      fixedData: DataView;
+      trackingData: DataView;
     };
 
     clone.buffer.grow(8);
     expect(clone.fixed.length).toBe(4);
     expect(clone.tracking.length).toBe(8);
+    expect(clone.fixedData.byteLength).toBe(4);
+    expect(clone.trackingData.byteLength).toBe(8);
   });
 
   it('preserves container prototypes, cycles, identity, and property shape', () => {

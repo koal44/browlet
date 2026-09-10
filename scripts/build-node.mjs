@@ -22,13 +22,15 @@ try {
 
   const addon = resolve(root, 'node-compat/addon');
   const build = target.build;
-  const sources = ['addon.cc', 'vm.cc', 'property-delegate.cc', 'host-hooks.cc'].map(name => resolve(addon, name));
+  const sources = ['addon.cc', 'array-buffer.cc', 'vm.cc', 'property-delegate.cc', 'host-hooks.cc'].map(name => resolve(addon, name));
   const isolateHeader = target.includes.map(path => resolve(path, 'v8-isolate.h')).find(existsSync);
   const api = readFileSync(isolateHeader, 'utf8');
   const hostHooks = ['SetPromiseCaptureHook', 'SetPromiseCallHook', 'SetPromiseJobEnqueueHook',
     'SetFinalizationRegistryCaptureHook', 'SetFinalizationRegistryCallHook',
     'SetGenericJobEnqueueHook', 'SetTimeoutJobEnqueueHook',
     'GetCurrentHostDefinedOptions(bool'].every(name => api.includes(name));
+  const arrayBufferHeader = resolve(dirname(isolateHeader), 'v8-array-buffer.h');
+  const lengthTracking = readFileSync(arrayBufferHeader, 'utf8').includes('bool IsLengthTracking() const;');
   const environment = compilerEnvironment();
   const compiler = run('where.exe', ['cl.exe'], { env: environment }).split(/\r?\n/u)[0];
 
@@ -42,6 +44,7 @@ try {
     '/nologo', '/std:c++20', '/Zc:__cplusplus', '/EHsc', '/MD', '/LD', '/O2',
     '/DNODE_GYP_MODULE_NAME=node_compat',
     ...(hostHooks ? ['/DNODE_COMPAT_HOST_HOOKS'] : []),
+    ...(lengthTracking ? ['/DNODE_COMPAT_ARRAY_BUFFER_LENGTH_TRACKING'] : []),
     ...includes.map(path => `/I${path}`),
     `/Fo${build}\\`,
   ];

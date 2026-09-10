@@ -224,16 +224,20 @@ write. The JavaScript operation returns the raw value; HTML remains responsible
 for choosing its implementation-defined serialized string. Replace the read
 and write operations together if Node exposes Error stack state directly.
 
-`node-v8-array-buffer-slots` exposes cross-realm ArrayBuffer and view facts
-through captured intrinsic accessors. Web IDL retains conversion, allocation,
-copying, detachment, and transfer policy; HTML retains the structured-data
-record shape and reconstruction rules. V8's fixed-versus-length-tracking view
-bit is not exposed by Node, so the runtime uses a synchronous reversible resize
-probe for resizable ArrayBuffers and restores the original length and bytes
-before returning. Growable SharedArrayBuffer views cannot be probed this way
-because growth is irreversible. Replace only these engine-fact operations if
-Node or a direct V8 embedder exposes the missing slots. The boundary is covered
-by
+ArrayBuffer brands come from Node's `util.types`; captured intrinsic accessors
+read the remaining buffer and view facts. Runtime buffers own allocation,
+copying, and transfer primitives. Web IDL retains conversion and projection;
+HTML retains structured-data records and reconstruction rules.
+
+The custom engine and addon expose `ArrayBufferView::IsLengthTracking()` for
+typed arrays and DataView over ordinary or shared backing storage. It reads
+V8's length-mode bit without mutation. `node-v8-array-buffer-slots` remains the
+stock fallback: a synchronous reversible resize probe for ordinary resizable
+ArrayBuffers, restoring their original length and bytes before returning.
+Growable SharedArrayBuffer views cannot be probed this way because growth is
+irreversible, and retain the existing expected failure only on backends without
+the native query. Remove the probe when every supported backend exposes the
+query. The boundary is covered by
 [`array-buffer-primitives.test.ts`](../../test/js-engine/array-buffer-primitives.test.ts)
 and the HTML structured-data tests.
 

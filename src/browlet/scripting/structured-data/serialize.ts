@@ -210,7 +210,7 @@ function serializeArrayBufferViewLengths(
   value: object,
   type: JSEngine.JavaScriptBufferViewName,
 ): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
-  if (JSEngine.isLengthTrackingResizableArrayBufferView(value)) {
+  if (JSEngine.isLengthTrackingArrayBufferView(value)) {
     return type === 'DataView'
       ? { byteLength: 'auto' }
       : { arrayLength: 'auto', byteLength: 'auto' };

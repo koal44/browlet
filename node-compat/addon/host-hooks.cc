@@ -151,28 +151,15 @@ bool Enqueue(Hook kind, int argc, Local<Value> argv[]) {
   return !result->IsFalse();
 }
 
-void RunPromiseJob(const FunctionCallbackInfo<Value>& args) {
-  auto job = args.Data().As<PromiseJob>();
-  Local<Value> result;
-  if (job->Run(job->GetContext()).ToLocal(&result)) {
-    args.GetReturnValue().Set(result);
-  }
-}
-
 void EnqueuePromise(Local<Context> realm, MicrotaskQueue* queue, PromiseJobKind kind,
-                     Local<PromiseJob> job) {
+                     Local<Function> job) {
   auto isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
   auto info = Snapshot(isolate);
   Set(isolate->GetCurrentContext(), info, "kind",
       Text(isolate, kind == PromiseJobKind::kThenable ? "thenable" : "reaction"));
-  Set(isolate->GetCurrentContext(), info, "continuationData",
-      job->GetContinuationData().As<Value>());
-  // Function data keeps the opaque handle on V8's traced heap graph.
-  auto run = Function::New(job->GetContext(), RunPromiseJob, job, 0,
-      ConstructorBehavior::kThrow).ToLocalChecked();
-  Local<Value> argv[] = {run, RealmValue(realm, isolate), info};
-  if (!Enqueue(kPromiseEnqueue, 3, argv)) queue->EnqueueMicrotask(isolate, run);
+  Local<Value> argv[] = {job, RealmValue(realm, isolate), info};
+  if (!Enqueue(kPromiseEnqueue, 3, argv)) queue->EnqueueMicrotask(isolate, job);
 }
 
 void EnqueueGeneric(Local<Context> realm, Local<Function> job) {
@@ -226,21 +213,6 @@ void GetContinuationData(const FunctionCallbackInfo<Value>& args) {
       args.GetIsolate()->GetContinuationPreservedEmbedderDataV2().As<Value>());
 }
 
-void WithContinuationData(const FunctionCallbackInfo<Value>& args) {
-  auto isolate = args.GetIsolate();
-  if (!args[1]->IsFunction()) {
-    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected continuation inspection steps");
-    return;
-  }
-  auto previous = isolate->GetContinuationPreservedEmbedderDataV2();
-  isolate->SetContinuationPreservedEmbedderDataV2(args[0]);
-  auto steps = args[1].As<Function>();
-  auto returned = steps->Call(steps->GetCreationContext().ToLocalChecked(),
-                              Undefined(isolate), 0, nullptr);
-  isolate->SetContinuationPreservedEmbedderDataV2(previous);
-  Local<Value> result;
-  if (returned.ToLocal(&result)) args.GetReturnValue().Set(result);
-}
 #endif  // NODE_COMPAT_HOST_HOOKS
 }  // namespace
 
@@ -291,8 +263,6 @@ void InitializeHostHooks(v8::Local<v8::Object> exports,
   Set(context, exports, "installHostHooks", Function::New(context, InstallHooks, data).ToLocalChecked());
   Set(context, exports, "getContinuationData",
       Function::New(context, GetContinuationData).ToLocalChecked());
-  Set(context, exports, "withContinuationData",
-      Function::New(context, WithContinuationData).ToLocalChecked());
 #else
   Set(context, exports, "supportsHostHooks", False(isolate));
 #endif

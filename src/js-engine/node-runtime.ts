@@ -76,6 +76,13 @@ class NodeRuntime implements JavaScriptRuntime {
     return AsyncLocalStorage.bind(steps);
   }
 
+  /** Undefined when the selected backend cannot inspect the view's length mode. */
+  isLengthTrackingArrayBufferView(value: object): boolean | undefined {
+    const query = getNodeMethod('isLengthTrackingArrayBufferView');
+    return query === undefined ? undefined :
+      Reflect.apply(query, nodeApi, [value]) as boolean;
+  }
+
   observePromise(
     realm: JavaScriptRealm,
     promise: Promise<unknown>,
