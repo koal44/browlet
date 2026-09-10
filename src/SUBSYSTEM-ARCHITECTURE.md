@@ -65,8 +65,9 @@ IDL. The `JSRealm` class exposes realm-owned globals, intrinsics, function and
 iterator-result creation, buffer allocation/transfer, Promise observation,
 and evaluation. It owns one backend context
 (a `node:vm` context or a native context supplied by the compatibility addon),
-while the isolate-scoped `JSRuntime` owns feature selection and the
-provisional object-to-realm associations shared across those realms. It also
+while the isolate-scoped `JSRuntime` owns feature selection and native
+context-to-realm mapping. Explicit host-object associations remain available;
+plain Node uses provisional prototype evidence when native lookup is absent. It also
 supplies `JSMicrotaskQueue` backends without owning their HTML
 lifecycle: each EventLoop asks the runtime factory for one queue and shares it
 with all Realms of its Agent. The factory selects an explicit queue under

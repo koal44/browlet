@@ -64,6 +64,8 @@ describe('JavaScript Realm', () => {
       .toBe(realm.intrinsics.functionPrototype);
     expect(Reflect.get(constructible, 'prototype'))
       .toBeInstanceOf(realm.intrinsics.object);
+    expect(Reflect.get(Reflect.get(constructible, 'prototype') as object, 'constructor'))
+      .toBe(constructible);
     expect(instance.argumentsList).toEqual(['value']);
     expect(instance.newTarget).toBe(constructible);
 
@@ -132,6 +134,57 @@ describe('JavaScript Realm', () => {
     expect(() => realm.setGlobalObjects({}, {})).toThrow(
       'Realm global objects are already initialized',
     );
+  });
+
+  it('keeps a function realm after its prototype chain changes', () => {
+    const first = new JSRealm();
+    const second = new JSRealm();
+    second.evaluate('globalThis.target = function () {}; undefined;', 'target.js');
+    const target = Reflect.get(second.global, 'target') as object;
+    Reflect.setPrototypeOf(target, first.intrinsics.functionPrototype);
+
+    expect(jsRuntime.getAssociatedRealm(target)).toBe(second);
+  });
+
+  it('does not assign a foreign function to the realm that returns it', () => {
+    const first = new JSRealm();
+    const second = new JSRealm();
+    const target = second.evaluate('(function () {})', 'target.js') as object;
+    Reflect.set(first.global, 'foreignTarget', target);
+
+    expect(first.evaluate('foreignTarget', 'return-target.js')).toBe(target);
+    expect(jsRuntime.getAssociatedRealm(target)).toBe(second);
+  });
+
+  it('retains the realm of evaluated values without prototype evidence', () => {
+    const realm = new JSRealm();
+    for (const source of [
+      'Object.create(null)',
+      'Object.setPrototypeOf(function () {}, null)',
+      'new Proxy(function () {}, { getPrototypeOf() { throw new Error("hidden"); } })',
+    ]) {
+      const value = realm.evaluate(source, 'no-prototype.js') as object;
+      expect(jsRuntime.getAssociatedRealm(value)).toBe(realm);
+    }
+  });
+
+  it('recognizes a callable proxy without invoking its getPrototypeOf trap', () => {
+    const first = new JSRealm();
+    const second = new JSRealm();
+    const target = second.evaluate('(function () {})', 'target.js') as object;
+    const calls: string[] = [];
+    Reflect.set(first.global, 'foreignTarget', target);
+    Reflect.set(first.global, 'record', (name: string) => { calls.push(name); });
+    first.evaluate(`
+      globalThis.proxy = new Proxy(foreignTarget, {
+        getPrototypeOf() { record('getPrototypeOf'); return Function.prototype; },
+      });
+      undefined;
+    `, 'proxy.js');
+
+    const realm = jsRuntime.getAssociatedRealm(Reflect.get(first.global, 'proxy') as object);
+    expect(calls).toEqual([]);
+    expect(realm).toBe(second);
   });
 
   it('creates realm-owned ordinary and iterator-result objects', () => {

@@ -196,8 +196,9 @@ duplicated it. Browlet therefore keeps:
 - stable implementation/platform associations and origin tracking on the main
   `BindingWorld` owned by the Browlet composition root.
 
-The lower [`js-engine/`](./js-engine/README.md) project separately keeps the
-Node/V8 object-to-realm associations which Node cannot expose. `JSRuntime`
+The lower [`js-engine/`](./js-engine/README.md) project separately maps native
+Node/V8 contexts to realms, with explicit host-object associations and a
+prototype-based fallback when the addon is absent. `JSRuntime`
 owns those isolate-scoped engine facts; `BindingWorld` owns Web IDL
 implementation/platform identity. Neither map is Agent- or AgentCluster-owned,
 and their different keys and responsibilities are not a reason to merge them.
@@ -249,6 +250,12 @@ For a constructible interface:
 
 An author subclass changes the platform object's prototype chain. It must not replace
 the implementation constructor's `newTarget` or implementation prototype.
+
+For a non-object `newTarget.prototype`, Binding obtains the function's engine
+realm and uses that realm's interface prototype through the existing binding-world
+registration. The new platform object's own realm remains the constructor's realm.
+The construction entry leaves allocation to Binding, avoiding an ordinary JS
+constructor's preliminary receiver allocation and duplicate prototype read.
 
 ### Internal creation
 

@@ -20,6 +20,7 @@ const vm = require('node:vm');
 exports.supportsHostHooks = native.supportsHostHooks;
 exports.setHostHooks = require('./host-hooks.cjs')(native);
 exports.getRealm = native.getRealm;
+exports.getFunctionRealm = native.getFunctionRealm;
 exports.observePromise = native.observePromise;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
 exports.createMicrotaskQueue = native.createMicrotaskQueue;

@@ -1,4 +1,3 @@
-import { isObject } from './abstract-operations';
 import {
   bufferViewNames, getArrayBufferViewElementSize, getBufferTypeName,
   isDetachedArrayBuffer, writeArrayBuffer,
@@ -88,6 +87,7 @@ export class JSRealm {
       this.#hostGlobal,
       'ReferenceError',
     ) as ReferenceErrorConstructor;
+    const Reflect_ = Reflect.get(this.#hostGlobal, 'Reflect') as typeof Reflect;
     const RegExp_ = Reflect.get(
       this.#hostGlobal,
       'RegExp',
@@ -214,6 +214,7 @@ export class JSRealm {
         'RangeError',
       ) as typeof RangeError,
       referenceError: ReferenceError_,
+      reflectGet: Reflect_.get,
       regExp: RegExp_,
       set: Set_,
       string: Reflect.get(this.#hostGlobal, 'String') as StringConstructor,
@@ -409,15 +410,12 @@ export class JSRealm {
   }
 
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    return jsRuntime.runWithActiveRealm(this, () => {
-      const result = jsRuntime.runInContext(source, this.#context, {
+    return jsRuntime.runWithActiveRealm(this, () =>
+      jsRuntime.runInContext(source, this.#context, {
         displayErrors: false,
         filename,
         lineOffset,
-      });
-      if (isObject(result)) jsRuntime.associateRealm(result, this);
-      return result;
-    });
+      }));
   }
 
   protected enqueueMicrotask(steps: () => void): void {
@@ -546,6 +544,7 @@ export type JSIntrinsics = {
   };
   rangeError: typeof RangeError;
   referenceError: ReferenceErrorConstructor;
+  reflectGet: typeof Reflect.get;
   regExp: RegExpConstructor;
   set: SetConstructor;
   string: StringConstructor;
@@ -594,9 +593,21 @@ const callableFunctionFactorySource = `
   }).call
 `;
 
+// Binding owns construction and must return the object. An ordinary function's
+// [[Construct]] would first allocate a discarded receiver and read
+// newTarget.prototype before the binding's own prototype lookup.
 const constructibleFunctionFactorySource = `
-  (steps) => function() {
-    "use strict";
-    return steps(this, [...arguments], new.target);
-  }
+  ((Proxy) => (steps) => {
+    const target = function() {
+      "use strict";
+      return steps(this, [...arguments], undefined);
+    };
+    const function_ = new Proxy(target, {
+      construct(_target, argumentsList, newTarget) {
+        return steps(undefined, argumentsList, newTarget);
+      },
+    });
+    target.prototype.constructor = function_;
+    return function_;
+  })(Proxy)
 `;

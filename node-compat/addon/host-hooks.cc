@@ -36,6 +36,39 @@ void GetRealm(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(GetRealmReference(realm));
 }
 
+void GetFunctionRealm(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  auto value = args[0];
+  if (!value->IsFunction()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a callable");
+    return;
+  }
+  // Follow internal targets, never observable prototypes or proxy traps.
+  for (;;) {
+    if (value->IsProxy()) {
+      auto proxy = value.As<Proxy>();
+      if (proxy->IsRevoked()) {
+        Fail(isolate, "ERR_REVOKED_PROXY", "Cannot get the realm of a revoked proxy");
+        return;
+      }
+      value = proxy->GetTarget();
+      continue;
+    }
+    auto bound = value.As<Function>()->GetBoundFunction();
+    if (!bound->IsUndefined()) {
+      value = bound;
+      continue;
+    }
+    Local<Context> realm;
+    if (!value.As<Object>()->GetCreationContext().ToLocal(&realm)) {
+      Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected a realm-owned callable");
+      return;
+    }
+    args.GetReturnValue().Set(GetRealmReference(realm));
+    return;
+  }
+}
+
 #ifdef NODE_COMPAT_HOST_HOOKS
 enum Hook { kCapture, kCall, kPromiseEnqueue, kGenericEnqueue, kTimeoutEnqueue, kHookCount };
 
@@ -240,6 +273,7 @@ void InitializeHostHooks(v8::Local<v8::Object> exports,
   using namespace v8;
   auto isolate = Isolate::GetCurrent();
   Set(context, exports, "getRealm", Function::New(context, GetRealm).ToLocalChecked());
+  Set(context, exports, "getFunctionRealm", Function::New(context, GetFunctionRealm).ToLocalChecked());
 #ifdef NODE_COMPAT_HOST_HOOKS
   Set(context, exports, "supportsHostHooks", True(isolate));
   auto state = new HookState{isolate};
