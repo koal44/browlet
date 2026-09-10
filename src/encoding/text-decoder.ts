@@ -1,5 +1,5 @@
 import { TextDecoder as ExodusTextDecoder } from '@exodus/bytes/encoding.js';
-import { getBufferSourceCopy } from '../web-idl/buffer-source';
+import { getBufferSourceCopy } from '../js-engine/index';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,

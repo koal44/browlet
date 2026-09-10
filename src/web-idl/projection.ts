@@ -1,4 +1,6 @@
 import type { AssembledInterface } from './assembly';
+import type { Promises } from '../js-engine/promises';
+import type { RuntimeContext } from '../js-engine/runtime-context';
 import type { RealmBinding } from './binding';
 import {
   callUserObjectOperation, constructCallbackFunction, invokeCallbackFunction,
@@ -28,11 +30,7 @@ import type { ValuePair } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { missingArgument } from './overload';
 import { convertToIDL } from './conversion';
-import {
-  createPromise, createRejectedPromise, createResolvedPromise,
-  getPromiseForWaitingForAll, isPromiseUnresolved, markPromiseAsHandled,
-  projectPromise, reactToPromise, rejectPromise, resolvePromise, toImplementationPromise,
-} from './promise';
+import { projectPromise, toImplementationPromise } from './promise';
 import { isPromiseValue } from './promise-value';
 import { getUnannotatedType } from './types';
 import type { Capability } from './capability';
@@ -44,6 +42,8 @@ import {
 
 export type BindingContext = {
   readonly realm: WebIDLRealmHost;
+  readonly promises: Promises;
+  getRuntime(): RuntimeContext;
 
   convert(value: unknown, type: WebIDLType): unknown;
   realizeException(value: unknown): unknown;
@@ -73,27 +73,15 @@ export type BindingContext = {
     implementation: ImplementationClass<T>,
     value: T,
   ): object;
-
-  createPromise(type: WebIDLType): object;
-  createRejectedPromise(reason: unknown, type: WebIDLType): object;
-  createResolvedPromise(value: unknown, type: WebIDLType): object;
-  isPromiseUnresolved(value: unknown): boolean;
-  markPromiseHandled(value: unknown): void;
-  reactToPromise(
-    value: unknown,
-    resultType: WebIDLType,
-    steps: {
-      fulfilled?: (value: unknown) => unknown;
-      rejected?: (reason: unknown) => unknown;
-    },
-  ): object;
-  rejectPromise(value: unknown, reason: unknown): void;
-  resolvePromise(value: unknown, result: unknown): void;
-  waitForAllPromises(values: readonly unknown[], type: WebIDLType): object;
 };
 
 export const bindingContext: ContextValue<BindingContext> = {
   resolve: (context) => context as BindingContext,
+};
+
+/** Supply the implementation runtime belonging to this binding's realm. */
+export const runtimeContext: ContextValue<RuntimeContext> = {
+  resolve: (context) => (context as BindingContext).getRuntime(),
 };
 
 type InterfaceBindingDefinition = {
@@ -382,8 +370,9 @@ function createInterfaceOperations(
 
 export function registerDefinitionBindings(
   binding: RealmBinding,
+  createRuntime?: (context: BindingContext) => RuntimeContext,
 ): BindingContext {
-  const context = createBindingContext(binding);
+  const context = createBindingContext(binding, createRuntime);
   for (const interface_ of binding.definitions.getInterfaces()) {
     const { definition } = interface_;
     if (!definition.implementation) continue;
@@ -408,9 +397,15 @@ export function registerDefinitionBindings(
 
 function createBindingContext(
   binding: RealmBinding,
+  createRuntime?: (context: BindingContext) => RuntimeContext,
 ): BindingContext {
   const context: BindingContext = {
     realm: binding.realm,
+    promises: binding.realm.promises,
+    getRuntime() {
+      if (!runtime) throw new Error('The binding realm has no implementation runtime');
+      return runtime;
+    },
 
     convert(value, type) {
       return toImplementationValue(
@@ -427,56 +422,9 @@ function createBindingContext(
 
     ...createInterfaceOperations(binding),
     ...createPlatformObjectOperations(binding, () => context),
-
-    createPromise(type) {
-      return createPromise(type, binding);
-    },
-    createRejectedPromise(reason, type) {
-      return createRejectedPromise(reason, type, binding);
-    },
-    createResolvedPromise(value, type) {
-      return createResolvedPromise(value, type, binding);
-    },
-    isPromiseUnresolved(value) {
-      return isPromiseUnresolved(requirePromiseValue(value));
-    },
-    markPromiseHandled(value) {
-      markPromiseAsHandled(requirePromiseValue(value));
-    },
-    reactToPromise(value, resultType, steps) {
-      return reactToPromise(
-        requirePromiseValue(value),
-        resultType,
-        steps,
-        binding,
-      );
-    },
-    rejectPromise(value, reason) {
-      rejectPromise(requirePromiseValue(value), reason);
-    },
-    resolvePromise(value, result) {
-      resolvePromise(
-        requirePromiseValue(value),
-        result,
-        binding,
-      );
-    },
-    waitForAllPromises(values, type) {
-      return getPromiseForWaitingForAll(
-        values.map(requirePromiseValue),
-        type,
-        binding,
-      );
-    },
   };
+  const runtime = createRuntime?.(context);
   return context;
-}
-
-function requirePromiseValue(value: unknown) {
-  if (!isPromiseValue(value)) {
-    throw new TypeError('Expected a Web IDL promise value');
-  }
-  return value;
 }
 
 function registerDefinedInterface(
@@ -801,16 +749,17 @@ function registerDefinedAttribute(
   const set = binding.set;
   if (set && !member.readonly) {
     steps.set = function(value) {
+      const operationContext = getMemberBindingContext(member, this, context, realmBinding);
       callImplementation(
         set,
         this,
         [
-          getMemberBindingContext(member, this, context, realmBinding),
+          operationContext,
           toImplementationValue(
             value,
             member.type,
             { callbackExceptionBehavior: binding.callbackExceptionBehavior },
-            context,
+            operationContext,
             realmBinding,
           ),
         ],
@@ -915,7 +864,7 @@ function createDefinedOperationSteps(
             value,
             argument?.type,
             getArgumentProjection(argument),
-            context,
+            operationContext,
             realmBinding,
           );
         }),
@@ -1039,6 +988,7 @@ function registerAttribute(
     ...(set && !member.readonly
       ? {
         set(value: unknown) {
+          const operationContext = getMemberBindingContext(member, this, context, realmBinding);
           callImplementation(
             set,
             this,
@@ -1050,7 +1000,7 @@ function registerAttribute(
                   callbackExceptionBehavior:
                     member.binding?.callbackExceptionBehavior,
                 },
-                context,
+                operationContext,
                 realmBinding,
               ),
             ],
@@ -1117,7 +1067,7 @@ function createOperationSteps(
             value,
             argument?.type,
             getArgumentProjection(argument),
-            context,
+            operationContext,
             realmBinding,
           );
         }),
@@ -1311,9 +1261,11 @@ function toImplementationValue(
         realmBinding,
         (item) => item === endOfIteration ? item :
           toImplementationValue(item, value.elementType, {}, context, realmBinding),
+        context.promises,
       ),
       return: (reason: unknown) => toImplementationPromise(
         closeAsyncIterator(iterator, reason, realmBinding.realm), realmBinding, (result) => result,
+        context.promises,
       ),
     };
   }
@@ -1321,7 +1273,7 @@ function toImplementationValue(
     return toImplementationPromise(value, realmBinding, (result) =>
       toImplementationValue(
         result, value.type, projection, context, realmBinding,
-      ));
+      ), context.promises);
   }
   for (const implementation of projection.implementations ?? []) {
     const resolved = context.getImplementation(value, implementation);

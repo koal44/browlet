@@ -1,6 +1,7 @@
 import {
-  getBufferSourceByteLength, getBufferSourceCopy, isBufferSourceDetached,
-} from '../web-idl/buffer-source';
+  getBufferSourceByteLength, getBufferSourceByteOffset, getBufferSourceUnderlyingBuffer,
+  isBufferSourceDetached, type RuntimeContext,
+} from '../js-engine/index';
 import { isCallable } from '../js-engine/abstract-operations';
 import { TypeError } from '../js-engine/simple-exception';
 
@@ -18,8 +19,12 @@ export function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
 }
 
-export function cloneAsUint8Array(value: object): Uint8Array {
-  return getBufferSourceCopy(value);
+export function cloneAsUint8Array(value: object, runtime: RuntimeContext): Uint8Array<ArrayBuffer> {
+  const bytes = runtime.buffers.createView(
+    'Uint8Array', getBufferSourceUnderlyingBuffer(value) as ArrayBuffer,
+    getBufferSourceByteOffset(value), getBufferSourceByteLength(value),
+  );
+  return runtime.buffers.copyUint8Array(bytes);
 }
 
 export function canCopyDataBlockBytes(

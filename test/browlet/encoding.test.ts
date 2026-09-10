@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
+import { getRelevantRealm } from '../../src/browlet/bindings';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from './test-runtime';
@@ -238,6 +239,49 @@ describe('Encoding projection', () => {
     const second = await secondRead;
     expect(second.done).toBe(false);
     expect(Array.from(second.value)).toEqual([240, 159, 152, 128]);
+  });
+
+  it('creates encoded bytes in the encoder realm before downstream callbacks', async () => {
+    const window = createWindow();
+    const result = getRelevantRealm(window).evaluate(`
+      (async () => {
+        const encoder = new TextEncoderStream();
+        let seen;
+        let arrayInRealm = false;
+        let bufferInRealm = false;
+        const downstream = new TransformStream({
+          transform(chunk, controller) {
+            seen = chunk;
+            arrayInRealm = chunk instanceof Uint8Array;
+            bufferInRealm = chunk.buffer instanceof ArrayBuffer;
+            controller.enqueue(chunk);
+          },
+        });
+        const reader = encoder.readable.pipeThrough(downstream).getReader();
+        const writer = encoder.writable.getWriter();
+        const read = reader.read();
+        await writer.write('A');
+        const first = await read;
+        const end = reader.read();
+        await writer.close();
+        await end;
+        return {
+          arrayInRealm,
+          bufferInRealm,
+          sameChunk: first.value === seen,
+          bytes: Array.from(first.value),
+        };
+      })()
+    `, 'encoding-stream-callback.js') as Promise<unknown>;
+    const completion = observeBrowletPromise(window, result);
+    performTestMicrotaskCheckpoint(window);
+
+    await expect(completion).resolves.toEqual({
+      arrayInRealm: true,
+      bufferInRealm: true,
+      sameChunk: true,
+      bytes: [65],
+    });
   });
 });
 

@@ -3,7 +3,7 @@ import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr, reference,
   xattr,
 } from '../web-idl/declaration/index';
-import { isBufferSourceDetached } from '../web-idl/buffer-source';
+import { isBufferSourceDetached } from '../js-engine/index';
 import { TypeError } from '../js-engine/simple-exception';
 import type { ReadableByteStreamControllerImpl } from './readable-byte-stream-controller';
 import {

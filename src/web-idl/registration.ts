@@ -12,6 +12,7 @@ import {
   registerDefinitionBindings, type BindingContext,
 } from './projection';
 import { ImplementationRegistry } from './registry';
+import type { RuntimeContext } from '../js-engine/runtime-context';
 
 /*
  * Create one binding world for a specification contribution. A binding world
@@ -31,6 +32,10 @@ export function createBindings(
 export type BindingOptions = {
   readonly capabilities?: readonly CapabilityRegistration[];
   readonly hostDefinedInterfaces?: readonly HostDefinedInterface[];
+};
+
+export type RealmBindingOptions = {
+  readonly createRuntime?: (context: BindingContext) => RuntimeContext;
 };
 
 export class BindingWorld {
@@ -55,7 +60,7 @@ export class BindingWorld {
     );
   }
 
-  register(realm: WebIDLRealmHost): RealmBindings {
+  register(realm: WebIDLRealmHost, options: RealmBindingOptions = {}): RealmBindings {
     let registered = this.#realms.get(realm);
     if (registered) return registered;
 
@@ -67,7 +72,7 @@ export class BindingWorld {
       [...this.#hostDefinedInterfaces],
       this.#capabilities,
     );
-    const context = registerDefinitionBindings(binding);
+    const context = registerDefinitionBindings(binding, options.createRuntime);
     registered = new RealmBindings(binding, context);
     this.#realms.set(realm, registered);
     return registered;

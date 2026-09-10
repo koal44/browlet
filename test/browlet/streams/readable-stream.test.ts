@@ -1,6 +1,7 @@
-import { InternalPromise } from '../../../src/js-engine/internal-promise';
+import { createRuntime } from '../../js-engine/runtime-fixture';
+import type { PromiseValue } from '../../../src/js-engine/promises';
 import { endOfIteration } from '../../../src/web-idl/async-sequence';
-import { createReactions } from './implementation-fixture';
+import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
@@ -19,15 +20,16 @@ import {
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from '../test-runtime';
-import { createWritableStream, observe } from './implementation-fixture';
 
 describe('ordinary readable-stream implementation', () => {
   it('creates a stream from an acquired async iterator', async () => {
+    const runtime = createRuntime();
+    const { promises } = runtime;
     const values = ['first', 'second'];
     const stream = ReadableStreamImpl.from({
-      next: () => InternalPromise.resolve(values.shift() ?? endOfIteration),
-      return: () => InternalPromise.resolve(),
-    }, createReactions());
+      next: () => promises.resolve(values.shift() ?? endOfIteration),
+      return: () => promises.resolve(),
+    }, runtime);
     const reader = stream.getReader({});
 
     await expect(observe(reader.read())).resolves
@@ -75,7 +77,9 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('forwards cancellation to the underlying source', async () => {
-    const cancel = vi.fn(() => InternalPromise.resolve(undefined));
+    const runtime = createRuntime();
+    const { promises } = runtime;
+    const cancel = vi.fn(() => promises.resolve(undefined));
     const { stream } = createReadableStream({ cancel });
 
     await expect(observe(stream.cancel('finished'))).resolves
@@ -84,12 +88,14 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('pipes chunks to a writable stream and propagates close', async () => {
-    const source = new ReadableStreamImpl({}, {}, createReactions());
+    const runtime = createRuntime();
+    const { promises } = runtime;
+    const source = new ReadableStreamImpl({}, {}, runtime);
     const controller = requireDefaultController(
       ReadableStreamImpl.getState(source).controller,
     );
-    const write = vi.fn(() => InternalPromise.resolve(undefined));
-    const close = vi.fn(() => InternalPromise.resolve(undefined));
+    const write = vi.fn(() => promises.resolve(undefined));
+    const close = vi.fn(() => promises.resolve(undefined));
     const destination = createWritableStream({ close, write });
     const piping = source.pipeTo(destination, defaultPipeOptions);
 
@@ -108,9 +114,11 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('aborts both sides of a pipe when its signal aborts', async () => {
-    const cancel = vi.fn(() => InternalPromise.resolve(undefined));
-    const abort = vi.fn(() => InternalPromise.resolve(undefined));
-    const source = new ReadableStreamImpl({ cancel }, {}, createReactions());
+    const runtime = createRuntime();
+    const { promises } = runtime;
+    const cancel = vi.fn(() => promises.resolve(undefined));
+    const abort = vi.fn(() => promises.resolve(undefined));
+    const source = new ReadableStreamImpl({ cancel }, {}, runtime);
     const destination = createWritableStream({ abort });
     const signal = new TestAbortSignal();
     const piping = source.pipeTo(destination, {
@@ -128,11 +136,13 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('aborts the destination when the readable stream errors', async () => {
-    const source = new ReadableStreamImpl({}, {}, createReactions());
+    const runtime = createRuntime();
+    const { promises } = runtime;
+    const source = new ReadableStreamImpl({}, {}, runtime);
     const controller = requireDefaultController(
       ReadableStreamImpl.getState(source).controller,
     );
-    const abort = vi.fn(() => InternalPromise.resolve(undefined));
+    const abort = vi.fn(() => promises.resolve(undefined));
     const destination = createWritableStream({ abort });
     const piping = source.pipeTo(destination, defaultPipeOptions);
     const error = new Error('source failed');
@@ -166,7 +176,7 @@ describe('ordinary readable-stream implementation', () => {
 
   it('clones the second branch for cross-specification teeing', async () => {
     const { controller, stream } = createReadableStream();
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true, structuredClone);
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
     const read1 = observe(reader1.read());
@@ -185,13 +195,16 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('errors both tee branches when cross-specification cloning fails', async () => {
+    const runtime = createRuntime();
+    const { promises } = runtime;
     const error = new DOMException('', 'DataCloneError');
-    const cancel = vi.fn(() => InternalPromise.resolve(undefined));
-    const stream = new ReadableStreamImpl({ cancel }, {}, createReactions());
+    const cancel = vi.fn(() => promises.resolve(undefined));
+    const stream = new ReadableStreamImpl({ cancel }, {}, runtime);
     const controller = requireDefaultController(
       ReadableStreamImpl.getState(stream).controller,
     );
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true, () => { throw error; });
+    vi.spyOn(runtime, 'clone').mockImplementation(() => { throw error; });
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
     const read1 = observe(branch1.getReader({}).read());
     const read2 = observe(branch2.getReader({}).read());
 
@@ -203,7 +216,9 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('cancels a tee source after both branches cancel', async () => {
-    const cancel = vi.fn(() => InternalPromise.resolve(undefined));
+    const runtime = createRuntime();
+    const { promises } = runtime;
+    const cancel = vi.fn(() => promises.resolve(undefined));
     const { stream } = createReadableStream({ cancel });
     const [branch1, branch2] = stream.tee();
     const cancel1 = branch1.cancel('one');
@@ -219,8 +234,10 @@ describe('ordinary readable-stream implementation', () => {
   });
 
   it('rejects both tee cancellations when source cancellation fails', async () => {
+    const runtime = createRuntime();
+    const { promises } = runtime;
     const error = new Error('cancel failed');
-    const cancel = vi.fn(() => InternalPromise.reject(error));
+    const cancel = vi.fn(() => promises.reject(error));
     const { stream } = createReadableStream({ cancel });
     const [branch1, branch2] = stream.tee();
     const cancel1 = branch1.cancel('one');
@@ -261,7 +278,7 @@ describe('readable-stream projection', () => {
       throw new Error('ReadableStream did not resolve to its implementation');
     }
     const stream = resolved.implementation as ReadableStreamImpl;
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true, structuredClone);
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
     const branch1Object = bindings.context.project(ReadableStreamImpl, branch1);
     const branch2Object = bindings.context.project(ReadableStreamImpl, branch2);
     const read1 = observeBrowletPromise(
@@ -505,7 +522,7 @@ describe('readable-stream projection', () => {
 
 describe('readable byte-stream implementation', () => {
   it('transfers a BYOB buffer without invoking its own transfer property', async () => {
-    const stream = new ReadableStreamImpl({ type: 'bytes' }, {}, createReactions());
+    const stream = new ReadableStreamImpl({ type: 'bytes' }, {}, createRuntime());
     const reader = stream.getReader({ mode: 'byob' });
     const supplied = new Uint8Array(2);
     const transfer = vi.fn(() => { throw new Error('Author transfer must not run'); });
@@ -530,7 +547,7 @@ describe('readable byte-stream implementation', () => {
         controller = value;
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, createRuntime());
     const [branch1, branch2] = stream.tee();
     const read1 = observe(branch1.getReader({}).read());
     const read2 = observe(branch2.getReader({}).read());
@@ -555,7 +572,7 @@ describe('readable byte-stream implementation', () => {
         controller = value;
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, createRuntime());
     const [byobBranch, defaultBranch] = stream.tee();
     const byobRead = byobBranch.getReader({ mode: 'byob' }).read(
       new Uint8Array(4),
@@ -578,7 +595,7 @@ describe('readable byte-stream implementation', () => {
         controller = value;
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, createRuntime());
     const reader = stream.getReader({});
     const read = observe(reader.read());
     const chunk = Uint8Array.from([1, 2, 3]);
@@ -598,7 +615,7 @@ describe('readable byte-stream implementation', () => {
         controller = value;
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, createRuntime());
     const reader = stream.getReader({ mode: 'byob' });
     const supplied = new Uint16Array(4);
     const read = reader.read(supplied, { min: 2 });
@@ -615,6 +632,8 @@ describe('readable byte-stream implementation', () => {
   });
 
   it('auto-allocates a pull-into buffer for a default reader', async () => {
+    const runtime = createRuntime();
+    const { promises } = runtime;
     const stream = new ReadableStreamImpl({
       autoAllocateChunkSize: 4,
       pull(controller: ReadableByteStreamControllerImpl) {
@@ -622,10 +641,10 @@ describe('readable byte-stream implementation', () => {
         if (!request?.view) throw new Error('Missing auto-allocated request');
         (request.view as Uint8Array).set([7, 8]);
         request.respond(2);
-        return InternalPromise.resolve(undefined);
+        return promises.resolve(undefined);
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, runtime);
 
     const result = await observe(stream.getReader({}).read());
 
@@ -639,7 +658,7 @@ describe('readable byte-stream implementation', () => {
         controller = value;
       },
       type: 'bytes',
-    }, {}, createReactions());
+    }, {}, createRuntime());
     const reader = stream.getReader({ mode: 'byob' });
     const read = reader.read(new Uint8Array(2), { min: 1 });
     const byteController = requireByteController(controller);
@@ -664,12 +683,12 @@ describe('readable byte-stream implementation', () => {
 });
 
 function createReadableStream(
-  source: { cancel?(reason: unknown): InternalPromise<undefined>; } = {},
+  source: { cancel?(reason: unknown): PromiseValue<undefined>; } = {},
 ): {
   controller: ReadableStreamDefaultControllerImpl;
   stream: ReadableStreamImpl;
 } {
-  const stream = new ReadableStreamImpl(source, {}, createReactions());
+  const stream = new ReadableStreamImpl(source, {}, createRuntime());
   const controller = ReadableStreamImpl.getState(stream).controller;
   if (!ReadableStreamDefaultControllerImpl.is(controller)) {
     throw new Error('Readable stream has no default controller');

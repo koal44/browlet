@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { promiseHooks } from 'node:v8';
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
@@ -15,8 +16,10 @@ import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import { createDocument, createProjectedDOMNodeFactory } from '../../../src/browlet/dom/nodes/document';
 import { createBindings } from '../../../src/web-idl/registration';
+import type { BindingContext } from '../../../src/web-idl/projection';
+import type { Promises, PromiseValue } from '../../../src/js-engine/index';
 import {
-  arg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op, promise,
+  arg, contextValue, ctor, defineCallbackFunction, defineInterface, idlType, impl, op, promise,
   reference, roAttr,
 } from '../../../src/web-idl/declaration/index';
 
@@ -43,7 +46,7 @@ describe('implementation Promise delivery', () => {
     }
   });
 
-  it('completes initialization started by a projected constructor', () => {
+  itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     createBindings([initializationIDL]).register(realm).install(realm.global);
@@ -53,7 +56,7 @@ describe('implementation Promise delivery', () => {
     expect(trace).toEqual(['ready']);
   });
 
-  it('keeps Node I/O separate and completes on the destination task checkpoint', async () => {
+  itPassesWith('explicitQueues')('keeps Node I/O separate and completes on the destination task checkpoint', async () => {
     const { a, trace, pending } = createFixture();
     a.expose('operation', a.object);
     a.realm.evaluate('operation.read().then(value => record(value))', 'read.js');
@@ -83,12 +86,12 @@ describe('implementation Promise delivery', () => {
       requestEventLoopTurn: () => {},
       unsafeSharedCurrentTime,
     })).toBe(true);
-    expect(trace).toEqual(['completion task', 'A continues', 'A after await', 'A done']);
+    expect(trace).toEqual(['completion task', 'A continues', 'A after continuation', 'A done']);
     await Promise.resolve();
     expect(trace.at(-1)).toBe('unrelated Node');
   });
 
-  it('routes shared-source continuations by receiver, independently of the settler', async () => {
+  itPassesWith('explicitQueues')('routes shared-source continuations by receiver, independently of the settler', async () => {
     const { a, b, trace, pending } = createFixture();
     const unrelated = new AsyncLocalStorage<string>();
     unrelated.run('other library', () => {
@@ -108,17 +111,17 @@ describe('implementation Promise delivery', () => {
     queueMicrotask(() => trace.push('Node microtask'));
 
     a.realm.agent.eventLoop.performMicrotaskCheckpoint();
-    expect(trace).toEqual(['A continues', 'A after await', 'A done']);
+    expect(trace).toEqual(['A continues', 'A after continuation', 'A done']);
     b.realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(trace).toEqual([
-      'A continues', 'A after await', 'A done',
-      'B continues', 'B after await', 'B done',
+      'A continues', 'A after continuation', 'A done',
+      'B continues', 'B after continuation', 'B done',
     ]);
     await Promise.resolve();
     expect(trace.slice(-2)).toEqual(['Node promise', 'Node microtask']);
   });
 
-  it.each(['fulfill', 'reject'] as const)('delivers an author callback result to its caller on %s', async (mode) => {
+  itPassesWith('hostHooks').each(['fulfill', 'reject'] as const)('delivers an author callback result to its caller on %s', async (mode) => {
     const { a, b, trace, pending } = createFixture(true);
     b.expose('operation', b.object);
     const callback = b.realm.evaluate(`() => {
@@ -132,12 +135,30 @@ describe('implementation Promise delivery', () => {
     a.realm.evaluate(`operation.invoke(callback).then(
       value => record(value), reason => record('rejected ' + reason))`, 'invoke.js');
     expect(trace).toEqual(['author B']);
+    expect(b.callbackSettings).toEqual([new Set([b.realm.hostDefined])]);
     pending.resolve('done');
     a.realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(trace).toEqual(mode === 'fulfill'
-      ? ['author B', 'B continues', 'B after await', 'A callback returned', 'A B done']
-      : ['author B', 'B continues', 'B after await', 'rejected 17']);
+      ? ['author B', 'B continues', 'B after continuation', 'A callback returned', 'A B done']
+      : ['author B', 'B continues', 'B after continuation', 'rejected 17']);
     await Promise.resolve();
+  });
+
+  itPassesWith('explicitQueues').each(['pending', 'settled'] as const)('converts a %s promise argument for the receiver of a borrowed method', (state) => {
+    const { a, b, trace } = createFixture();
+    const pending = new a.realm.intrinsics.promise.constructor<string>((resolve) => {
+      a.expose('settle', () => { resolve('input'); });
+    });
+    if (state === 'settled') (Reflect.get(a.realm.globalThis, 'settle') as () => void)();
+    const borrowed = Reflect.get(b.object, 'consume') as CallableFunction;
+    a.expose('result', Reflect.apply(borrowed, a.object, [pending]));
+    a.realm.evaluate('result.then(value => record(value))', 'consume.js');
+    if (state === 'pending') {
+      expect(trace).toEqual([]);
+      (Reflect.get(a.realm.globalThis, 'settle') as () => void)();
+    }
+    a.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    expect(trace).toEqual(['A input']);
   });
 });
 
@@ -152,20 +173,24 @@ function createFixture(sharedAgent = false) {
   const entries = [first.window, secondWindow].map((window, index) => {
     const name = index === 0 ? 'A' : 'B';
     const realm = getRelevantRealm(window);
+    const callbackSettings: unknown[] = [];
     const expose = (key: string, value: unknown) => {
       Object.defineProperty(window, key, { configurable: true, value });
     };
     const binding = bindings.register(realm);
-    const implementation = new OwnershipProbeImpl(name, pending.promise, trace);
+    const implementation = new OwnershipProbeImpl(
+      name, realm.promises.import(pending.promise, String), trace, realm.promises,
+    );
     const object = binding.context.project(OwnershipProbeImpl, implementation);
     expose('record', (value: string) => {
       if (value === 'author B') {
-        expect(realm.agent.eventLoop.currentlyRunningTask
-          ?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set([realm.hostDefined]));
+        const settings = realm.agent.eventLoop.currentlyRunningTask
+          ?.scriptEvaluationEnvironmentSettingsObjectSet;
+        callbackSettings.push(settings && new Set(settings));
       }
       trace.push(value);
     });
-    return { expose, realm, object, implementation };
+    return { expose, realm, object, implementation, callbackSettings };
   });
   return { a: entries[0]!, b: entries[1]!, trace, pending };
 }
@@ -185,33 +210,38 @@ function createSiblingWindow(first: Browlet): Window {
   return execution.realm.globalThis as Window;
 }
 
-// These ordinary-Promise fixtures still need migration to InternalPromise.
-// Keep their delivery expectations while the remaining paths are unfinished.
 class OwnershipProbeImpl {
   observe = () => {};
   constructor(
     readonly name: string,
-    readonly pending: Promise<string>,
+    readonly pending: PromiseValue<string>,
     readonly trace: string[],
+    readonly promises: Promises,
   ) {}
 
-  get result(): Promise<string> { return this.read(); }
+  get result(): PromiseValue<string> { return this.read(); }
 
-  read(): Promise<string> {
-    return this.pending.then(async (value) => {
+  read(): PromiseValue<string> {
+    return this.pending.then((value) => {
       this.observe();
       this.trace.push(`${this.name} continues`);
-      await Promise.resolve();
-      this.observe();
-      this.trace.push(`${this.name} after await`);
+      return this.promises.resolve().then(() => {
+        this.observe();
+        this.trace.push(`${this.name} after continuation`);
+        return `${this.name} ${value}`;
+      });
+    });
+  }
+
+  invoke(callback: () => PromiseValue<string>): PromiseValue<string> {
+    return callback().then((value) => {
+      this.trace.push(`${this.name} callback returned`);
       return `${this.name} ${value}`;
     });
   }
 
-  async invoke(callback: () => Promise<string>): Promise<string> {
-    const value = await callback();
-    this.trace.push(`${this.name} callback returned`);
-    return `${this.name} ${value}`;
+  consume(value: PromiseValue<string>): PromiseValue<string> {
+    return value.then((value) => `${this.name} ${value}`);
   }
 }
 
@@ -223,6 +253,7 @@ const callbackIDL = defineCallbackFunction({
 //   readonly attribute Promise<DOMString> result;
 //   Promise<DOMString> read();
 //   Promise<DOMString> invoke(OwnershipCallback callback);
+//   Promise<DOMString> consume(Promise<DOMString> value);
 // };
 const operationIDL = defineInterface({
   name: 'OwnershipProbe', exposed: '*', implementation: impl(OwnershipProbeImpl),
@@ -230,16 +261,18 @@ const operationIDL = defineInterface({
     roAttr('result', promise(idlType.DOMString)),
     op('read', promise(idlType.DOMString)),
     op('invoke', promise(idlType.DOMString), [arg('callback', reference('OwnershipCallback'))]),
+    op('consume', promise(idlType.DOMString), [arg('value', promise(idlType.DOMString))]),
   ],
 });
 
 class InitializationProbeImpl {
-  readonly #ready = Promise.resolve().then(async () => {
-    await Promise.resolve();
-    return 'ready';
-  });
+  readonly #ready: PromiseValue<string>;
 
-  get ready(): Promise<string> { return this.#ready; }
+  constructor(promises: Promises) {
+    this.#ready = promises.resolve().then(() => promises.resolve().then(() => 'ready'));
+  }
+
+  get ready(): PromiseValue<string> { return this.#ready; }
 }
 
 // interface InitializationProbe {
@@ -247,6 +280,8 @@ class InitializationProbeImpl {
 //   readonly attribute Promise<DOMString> ready;
 // };
 const initializationIDL = defineInterface({
-  name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl),
+  name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl, {
+    constructWith: [contextValue((context: BindingContext) => context.promises)],
+  }),
   members: [ctor(), roAttr('ready', promise(idlType.DOMString))],
 });

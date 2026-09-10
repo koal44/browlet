@@ -1,4 +1,3 @@
-import { createReactions } from '../browlet/streams/implementation-fixture';
 import { vi } from 'vitest';
 
 import { BodyRecord } from '../../src/fetch/body';
@@ -16,16 +15,18 @@ export function createBodyFixture() {
     queueGlobalTask: vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); }),
     runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
   };
+  const runtime = { ...context.getRuntime(), networking: scheduling };
   return {
     context,
+    runtime,
     scheduling,
     tasks,
     parallelSteps,
     global: context.realm.global,
     createBody: (chunks: readonly unknown[] = []) => {
-      const stream = createReadableStream(undefined, undefined, 1, () => 1, createReactions());
+      const stream = createReadableStream(undefined, undefined, 1, () => 1, runtime);
       for (const chunk of chunks) enqueueReadableStream(stream, chunk);
-      return new BodyRecord(stream, scheduling);
+      return new BodyRecord(stream, runtime);
     },
     createParallelQueue: () => new ParallelQueue(scheduling.runInParallel),
     runTask: () => tasks.shift()!.steps(),

@@ -1,4 +1,4 @@
-import { createReactions } from '../browlet/streams/implementation-fixture';
+import { createRuntime } from '../js-engine/runtime-fixture';
 import { vi } from 'vitest';
 
 import { BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from '../../src/fetch/body';
@@ -37,12 +37,13 @@ export function createRecordFixture() {
   const registration = bindings.register(realm);
   const { context } = registration;
   const scheduling = { queueGlobalTask: vi.fn(), runInParallel: vi.fn() };
+  const runtime = { ...createRuntime(realm), networking: scheduling };
   // This fixture allocates implementations. The incomplete API family is not installed.
   return {
     bindings,
     realm,
     context,
-    createBody: () => new BodyRecord(createReadableStream(undefined, undefined, 1, () => 1, createReactions()), scheduling),
+    createBody: () => new BodyRecord(createReadableStream(undefined, undefined, 1, () => 1, runtime), runtime),
     createRequest: (record: RequestRecord, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new ResponseRecord(), guard: HeadersGuard = 'response') =>

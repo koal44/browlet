@@ -171,12 +171,17 @@ describe('File API Blob projection', () => {
       if (!result.value) throw new Error('Blob stream returned no chunk');
       expect(result.value)
         .toBeInstanceOf(requireFunction(window, 'Uint8Array'));
+      expect(result.value.buffer)
+        .toBeInstanceOf(requireFunction(window, 'ArrayBuffer'));
       chunks.push(result.value);
     }
 
     expect(chunks.map((chunk) => chunk.byteLength))
       .toEqual([64 * 1024, 64 * 1024, 3]);
     expect(concatenate(chunks)).toEqual(source);
+    chunks[0]?.fill(99);
+    const reread = await call(blob, 'bytes') as Uint8Array;
+    expect(Array.from(reread)).toEqual(Array.from(source));
   });
 
   it('decodes through a realm-owned TextDecoderStream', async () => {

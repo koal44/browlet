@@ -1,5 +1,5 @@
 // @rollup-cycle streams-readable
-import type { InternalPromise } from '../js-engine/internal-promise';
+import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
@@ -50,7 +50,7 @@ export class ReadableStreamDefaultControllerImpl {
     readableStreamDefaultControllerError(this, error);
   }
 
-  readonly [cancelSteps] = (reason: unknown): InternalPromise<unknown> => {
+  readonly [cancelSteps] = (reason: unknown): PromiseValue<unknown> => {
     const state = ReadableStreamDefaultControllerImpl.getState(this);
     state.queue = [];
     state.queueTotalSize = 0;
@@ -90,10 +90,10 @@ export class ReadableStreamDefaultControllerImpl {
 
 export type ReadableStreamDefaultControllerState =
   QueueContainer<unknown> & {
-    cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+    cancelAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
     closeRequested: boolean;
     pullAgain: boolean;
-    pullAlgorithm?: () => InternalPromise<unknown>;
+    pullAlgorithm?: () => PromiseValue<unknown>;
     pulling: boolean;
     started: boolean;
     strategyHighWaterMark: number;

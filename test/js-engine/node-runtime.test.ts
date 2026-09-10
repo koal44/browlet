@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { NodeRealm, nodeRuntime } from '../../src/js-engine/index';
-import { itCompatPasses } from '../test-runtime';
+import { itPassesWith } from '../test-runtime';
 
 describe('Node runtime', () => {
-  itCompatPasses(
+  itPassesWith('explicitQueues')(
     'reuses a detached global proxy in a replacement Realm',
     () => {
       const microtaskQueue = nodeRuntime.createMicrotaskQueue();
@@ -48,7 +48,7 @@ describe('Node runtime', () => {
     });
   });
 
-  itCompatPasses(
+  itPassesWith('explicitQueues')(
     'isolates checkpoints from ambient Node next ticks',
     async () => {
       await runInHostTask(() => {
@@ -64,7 +64,7 @@ describe('Node runtime', () => {
     },
   );
 
-  itCompatPasses('drains jobs when entered from a host microtask', async () => {
+  itPassesWith('explicitQueues')('drains jobs when entered from a host microtask', async () => {
     await Promise.resolve();
     const microtaskQueue = nodeRuntime.createMicrotaskQueue();
     const order: string[] = [];
@@ -75,7 +75,7 @@ describe('Node runtime', () => {
     expect(order).toEqual(['nested microtask']);
   });
 
-  itCompatPasses(
+  itPassesWith('explicitQueues')(
     'drains jobs when a test clock runs a host task synchronously',
     () => {
       vi.useFakeTimers();
@@ -95,7 +95,7 @@ describe('Node runtime', () => {
     },
   );
 
-  itCompatPasses('isolates queues owned by different agents', async () => {
+  itPassesWith('explicitQueues')('isolates queues owned by different agents', async () => {
     await runInHostTask(() => {
       const firstQueue = nodeRuntime.createMicrotaskQueue();
       const secondQueue = nodeRuntime.createMicrotaskQueue();

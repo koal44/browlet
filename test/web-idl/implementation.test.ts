@@ -406,32 +406,19 @@ describe('Web IDL implementation registration', () => {
         })),
         op('createdPromiseResult', promiseType(resultType), [], bind({
           invoke(context) {
-            return context.createResolvedPromise(
-              createResult('created promise'),
-              resultType,
-            );
+            return context.promises.resolve(createResult('created promise'));
           },
         })),
         op('resolvedPromiseResult', promiseType(resultType), [], bind({
           invoke(context) {
-            const promise = context.createPromise(resultType);
-            context.resolvePromise(
-              promise,
-              createResult('resolved promise'),
-            );
-            return promise;
+            const result = context.promises.withResolvers<NestedResultImpl>();
+            result.resolve(createResult('resolved promise'));
+            return result.promise;
           },
         })),
         op('reactedPromiseResult', promiseType(resultType), [], bind({
           invoke(context) {
-            return context.reactToPromise(
-              context.createResolvedPromise(
-                undefined,
-                idlType.undefined,
-              ),
-              resultType,
-              { fulfilled: () => createResult('reacted promise') },
-            );
+            return context.promises.resolve().then(() => createResult('reacted promise'));
           },
         })),
         op('callbackArguments', idlType.undefined, [

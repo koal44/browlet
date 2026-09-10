@@ -1,9 +1,9 @@
-import { createReactions } from '../browlet/streams/implementation-fixture';
+import { createRuntime } from '../js-engine/runtime-fixture';
+import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
 import { getSimpleExceptionRequest } from '../../src/js-engine/simple-exception';
-import { createAbortController, observe } from '../browlet/streams/implementation-fixture';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([
@@ -62,7 +62,7 @@ describe('TextDecoderStream chunk conversion', () => {
 
 function createDecoder() {
   const decoder = new TextDecoderStreamImpl(
-    'utf-8', { fatal: false, ignoreBOM: false }, createAbortController(), createReactions(),
+    'utf-8', { fatal: false, ignoreBOM: false }, createRuntime(),
   );
   return { reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
 }

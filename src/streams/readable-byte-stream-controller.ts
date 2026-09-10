@@ -1,13 +1,13 @@
 // @rollup-cycle streams-readable
-import type { InternalPromise } from '../js-engine/internal-promise';
+import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr, reference,
-  type BufferViewTypeName,
 } from '../web-idl/declaration/index';
 import {
   getBufferSourceByteLength,
   getBufferSourceUnderlyingBuffer,
-} from '../web-idl/buffer-source';
+  type JavaScriptBufferViewName,
+} from '../js-engine/index';
 import { TypeError } from '../js-engine/simple-exception';
 import {
   cancelSteps, pullSteps, releaseSteps,
@@ -90,7 +90,7 @@ export class ReadableByteStreamControllerImpl {
     readableByteStreamControllerError(this, error);
   }
 
-  readonly [cancelSteps] = (reason: unknown): InternalPromise<unknown> => {
+  readonly [cancelSteps] = (reason: unknown): PromiseValue<unknown> => {
     const state = ReadableByteStreamControllerImpl.getState(this);
     readableByteStreamControllerClearPendingPullIntos(this);
     state.queue = [];
@@ -116,9 +116,9 @@ export class ReadableByteStreamControllerImpl {
 
     const autoAllocateChunkSize = state.autoAllocateChunkSize;
     if (autoAllocateChunkSize !== undefined) {
-      let buffer: object;
+      let buffer: ArrayBuffer;
       try {
-        buffer = new ArrayBuffer(autoAllocateChunkSize);
+        buffer = state.stream.runtime.buffers.allocateArrayBuffer(autoAllocateChunkSize);
       } catch (error) {
         request.errorSteps(error);
         return;
@@ -176,11 +176,11 @@ export type ReadableByteStreamControllerState =
   {
     autoAllocateChunkSize?: number;
     byobRequest: ReadableStreamBYOBRequestImpl | null;
-    cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+    cancelAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
     closeRequested: boolean;
     pendingPullIntos: PullIntoDescriptor[];
     pullAgain: boolean;
-    pullAlgorithm?: () => InternalPromise<unknown>;
+    pullAlgorithm?: () => PromiseValue<unknown>;
     pulling: boolean;
     queue: ByteQueueEntry[];
     queueTotalSize: number;
@@ -190,13 +190,13 @@ export type ReadableByteStreamControllerState =
   };
 
 export type ByteQueueEntry = {
-  buffer: object;
+  buffer: ArrayBuffer;
   byteLength: number;
   byteOffset: number;
 };
 
 export type PullIntoDescriptor = {
-  buffer: object;
+  buffer: ArrayBuffer;
   bufferByteLength: number;
   byteLength: number;
   byteOffset: number;
@@ -204,7 +204,7 @@ export type PullIntoDescriptor = {
   elementSize: number;
   minimumFill: number;
   readerType: 'byob' | 'default' | 'none';
-  viewType: BufferViewTypeName;
+  viewType: JavaScriptBufferViewName;
 };
 
 export const readableByteStreamControllerIDL = defineInterface({

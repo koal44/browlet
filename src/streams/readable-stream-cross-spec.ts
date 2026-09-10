@@ -1,4 +1,5 @@
-import { InternalPromise, type PromiseReactions } from '../js-engine/internal-promise';
+import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { PromiseValue } from '../js-engine/promises';
 import type { AsyncSequenceValue } from '../web-idl/async-sequence';
 import {
   ReadableByteStreamControllerImpl,
@@ -38,9 +39,8 @@ import {
   getBufferSourceByteOffset, getBufferSourceCopy,
   getBufferSourceUnderlyingBuffer, getBufferTypeName,
   writeArrayBufferView,
-} from '../web-idl/buffer-source';
+} from '../js-engine/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
-import type { StreamAbortController } from './abort';
 import type { QueuingStrategySize } from './queuing-strategy';
 import type { WritableStreamImpl } from './writable-stream';
 import { isWritableStreamLocked } from './writable-stream-operations';
@@ -49,19 +49,19 @@ import { TransformStreamImpl } from './transform-stream';
 /** Streams §9.1, create and set up a default readable stream. */
 // SPEC_MISMATCH: ReadableStream.set up(stream, pullAlgorithm?, cancelAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createReadableStream(
-  pullAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
-  cancelAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
+  pullAlgorithm: (() => PromiseValue<unknown> | void) | undefined,
+  cancelAlgorithm: ((reason: unknown) => PromiseValue<unknown> | void) | undefined,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): ReadableStreamImpl {
   return createReadableStreamFromAlgorithms(
     () => undefined,
-    () => InternalPromise.try(() => pullAlgorithm?.()),
-    (reason) => InternalPromise.try(() => cancelAlgorithm?.(reason)),
+    () => runtime.promises.try(() => pullAlgorithm?.()),
+    (reason) => runtime.promises.try(() => cancelAlgorithm?.(reason)),
     highWaterMark,
     sizeAlgorithm,
-    reactions,
+    runtime,
   );
 }
 
@@ -69,9 +69,9 @@ export function createReadableStream(
 // SPEC_MISMATCH: ReadableStream.create from async sequence(sequence) -> ReadableStream
 export function createReadableStreamFromAsyncSequence(
   sequence: AsyncSequenceValue<unknown>,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): ReadableStreamImpl {
-  return readableStreamFromIterable(sequence, reactions);
+  return readableStreamFromIterable(sequence, runtime);
 }
 
 /** Streams §9.1, get the desired size of a specification-created stream. */
@@ -202,7 +202,7 @@ export function pullReadableStreamFromBytes(
   if (byobView === null) {
     readableByteStreamControllerEnqueue(
       requireByteController(stream),
-      new Uint8Array(pulled),
+      stream.runtime.buffers.copyUint8Array(pulled),
     );
   } else {
     writeArrayBufferView(byobView, pulled);
@@ -288,7 +288,7 @@ export function readAllBytes(
 export function cancelReadableStreamReader(
   reader: ReadableStreamDefaultReaderImpl,
   reason: unknown,
-): InternalPromise<unknown> {
+): PromiseValue<unknown> {
   return readableStreamReaderGenericCancel(
     ReadableStreamDefaultReaderImpl.getGenericReader(reader),
     reason,
@@ -296,16 +296,14 @@ export function cancelReadableStreamReader(
 }
 
 /** Streams §9.2, tee a stream with cloning enabled for the second branch. */
-// SPEC_MISMATCH: ReadableStream.tee(stream) -> [ReadableStream, ReadableStream]
 export function teeReadableStream(
   stream: ReadableStreamImpl,
-  clone?: (value: unknown) => unknown,
 ): [ReadableStreamImpl, ReadableStreamImpl] {
   return ReadableByteStreamControllerImpl.is(
     ReadableStreamImpl.getController(stream),
   )
     ? readableByteStreamTee(stream)
-    : readableStreamDefaultTee(stream, true, clone);
+    : readableStreamDefaultTee(stream, true);
 }
 
 export function isReadableStreamReadable(stream: ReadableStreamImpl): boolean {
@@ -330,7 +328,7 @@ export function pipeReadableStreamTo(
   readable: ReadableStreamImpl,
   writable: WritableStreamImpl,
   options: Partial<StreamPipeOptions> = {},
-): InternalPromise<unknown> {
+): PromiseValue<unknown> {
   if (isReadableStreamLocked(readable) || isWritableStreamLocked(writable)) {
     throw new Error('Streams must be unlocked before piping');
   }
@@ -352,19 +350,17 @@ export function pipeReadableStreamThrough(
   options: Partial<StreamPipeOptions> = {},
 ): ReadableStreamImpl {
   const promise = pipeReadableStreamTo(readable, transform.writable, options);
-  void promise.chain(undefined, () => {}, readable.reactions);
+  void promise.then(undefined, () => {});
   return transform.readable;
 }
 
 /** Streams §9.5, create a proxy for a readable stream. */
-// SPEC_MISMATCH: ReadableStream.create a proxy(stream) -> ReadableStream
 export function createReadableStreamProxy(
   stream: ReadableStreamImpl,
-  abortController: StreamAbortController,
 ): ReadableStreamImpl {
   return pipeReadableStreamThrough(
     stream,
-    TransformStreamImpl.createIdentity(abortController, stream.reactions),
+    TransformStreamImpl.createIdentity(stream.runtime),
   );
 }
 

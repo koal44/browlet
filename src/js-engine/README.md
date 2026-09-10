@@ -4,6 +4,25 @@ This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
+It also defines the neutral [`RuntimeContext`](./runtime-context.ts) contract
+shared by asynchronous implementations. Browlet composes its task, abort, and
+clone providers; their HTML/DOM policy stays above this layer. Engine-owned
+buffer operations live in [`buffers.ts`](./buffers.ts), while Web IDL retains
+BufferSource conversion. The composition and lifetime rules are authoritative
+in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md#runtime-context).
+
+`runtime.buffers.allocateArrayBuffer(byteLength)` creates zero-initialized,
+fixed-length storage in the owning realm. `createView(name, buffer, byteOffset?,
+length?)` creates a concrete typed array or DataView over the supplied buffer
+without copying or replacing it. Length counts elements for typed arrays and
+bytes for DataView; omitting it uses the remaining range and tracks resizing.
+The view belongs to the runtime's realm; its buffer keeps its existing identity.
+Prefer allocating final storage directly when the implementation controls it.
+The existing `copyArrayBuffer` and `copyUint8Array` operations preserve input;
+`transferArrayBuffer` consumes an exclusively owned buffer and detaches its old
+views. Ordinary transfer preserves resizability; consuming specifications still
+determine which buffers are admissible.
+
 The [JS Engine roadmap](./ROADMAP.md) inventories HTML's complete
 ECMAScript dependency list and separates ordinary engine behavior from the
 small set of inaccessible runtime facts and genuine host hooks.
@@ -39,8 +58,16 @@ realm references map to null. `supportsHostHooks` is false on official engines.
 Promise routing uses the job's queue realm, without an ambient execution owner
 or a saved-continuation-data lookup. Node reactions, including runtime diagnostics,
 remain on Node's queue even when created during a platform operation or HTML task.
-`InternalPromise` observers select their destination explicitly through
-`createPromiseReactions(realm)` and native observation. See the shared
+Each realm owns a `Promises` facility for allocation, adoption, and native
+observation. Bindings supply it through Runtime Context to asynchronous implementations. A
+`PromiseValue<T>` retains that facility through `.then()` and `.catch()`;
+terminal `.observe()` needs no destination argument. `Promises.import()` brings
+a native or another owner's internal result into the consumer's destination.
+Internal payloads are boxed so they are not accidentally adopted as thenables.
+Capabilities expose a read-only `pending` flag maintained by their resolving
+functions, so callers do not duplicate settlement tracking. This describes
+internal boxed settlement, not the resolution state of an adopted author Promise.
+The generic machinery lives in [promises.ts](./promises.ts); see the shared
 [return boundary](../PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
 
 `bindAsyncContext(steps)` retains Node's scheduling-time async context for an
@@ -159,12 +186,19 @@ behavior in either mode.
 `installPromiseReactions()` uses the addon's native `v8::Promise::Then` operation.
 It installs forwarding functions in the observer's realm. Node 26.8.1 and the
 custom engine bypass author `then`, `constructor`, and `@@species`; Node 24.19.0's
-older V8 still consults `constructor` and fails the retained regression. No
+older V8 still consults `constructor`, retained as an expected failure. No
 compatibility workaround is applied. The public V8 operation still
 allocates a derived promise, which this boundary discards; it is not the exact
 no-result-capability form of `PerformPromiseThen`. Web IDL retains its typed
 promise records, conversions, reaction steps, and result-capability policy.
-Plain Node without the addon cannot supply this native observation operation.
+Without the addon, `node-v8-promise-reactions` retains the captured
+`Promise.prototype.then` fallback so ordinary asynchronous work can finish.
+That path also bypasses an overridden `then`, but reads `constructor` and
+`@@species` and cannot isolate or synchronously drain Node's ambient queue
+from an already running microtask. The conformance regressions remain visible;
+the eventual-delivery test separately checks ordinary fulfillment and recovery.
+Remove this fallback when native observation is available on every supported
+backend, rather than turning a missing optional addon into a blanket throw.
 
 `node-v8-exotic-object-slots` isolates the engine inspection needed by HTML
 structured serialization. Node's `util.types` exposes many V8 object brands,

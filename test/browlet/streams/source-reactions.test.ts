@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import * as scheduling from '../../../src/browlet/integration/scripting';
@@ -6,7 +8,7 @@ import * as scheduling from '../../../src/browlet/integration/scripting';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('ReadableStream source reaction delivery', () => {
-  it('imports a Node callback result before continuing in the stream\'s HTML queue', async () => {
+  itPassesWith('explicitQueues')('imports a Node callback result before continuing in the stream\'s HTML queue', async () => {
     vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation(() => {});
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
@@ -29,7 +31,7 @@ describe('ReadableStream source reaction delivery', () => {
     expect(results).toEqual([{ value: 'host chunk', done: false }]);
   });
 
-  it('runs delayed start and pull through each stream\'s own HTML queue', () => {
+  itPassesWith('explicitQueues')('runs delayed start and pull through each stream\'s own HTML queue', () => {
     const { first, second } = createFixtures();
     expect(first.calls).toEqual(['start']);
     expect(second.calls).toEqual(['start']);
@@ -59,9 +61,12 @@ describe('ReadableStream source reaction delivery', () => {
     }
   });
 
-  it.each(['start', 'pull'] as const)(
-    'delivers a delayed %s rejection to the pending read in its own queue', (stage) => {
+  itPassesWith('explicitQueues').each(['start', 'pull'] as const)(
+    'delivers a delayed %s rejection to the pending read in its own queue', async (stage) => {
       const { first, second } = createFixtures();
+      // Finish attaching the source observers before triggering a later failure,
+      // including on Node's ambient queue. Queue isolation is still checked below.
+      await nextTurn();
       if (stage === 'pull') {
         first.controls.resolveStart();
         second.controls.resolveStart();

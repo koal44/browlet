@@ -11,6 +11,7 @@ describe('Web IDL package surface', () => {
       'bindingContext',
       'createBindings',
       'defineCapability',
+      'runtimeContext',
     ].sort());
   });
 });

@@ -1,4 +1,4 @@
-import { InternalPromise } from '../js-engine/internal-promise';
+import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
@@ -50,9 +50,9 @@ export class TransformStreamDefaultControllerImpl {
 
   setUp(
     stream: TransformStreamImpl,
-    transformAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
-    flushAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    transformAlgorithm: (chunk: unknown) => PromiseValue<unknown>,
+    flushAlgorithm: () => PromiseValue<unknown>,
+    cancelAlgorithm: (reason: unknown) => PromiseValue<unknown>,
   ): void {
     if (stream.state.controller) throw new Error('TransformStream already has a controller');
     this.state = { stream, transformAlgorithm, flushAlgorithm, cancelAlgorithm };
@@ -68,26 +68,26 @@ export class TransformStreamDefaultControllerImpl {
     const { transform, flush, cancel } = transformerDict;
     this.setUp(
       stream,
-      (chunk) => InternalPromise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk)),
-      () => InternalPromise.try(() => flush?.call(transformer, this)),
-      (reason) => InternalPromise.try(() => cancel?.call(transformer, reason)),
+      (chunk) => stream.runtime.promises.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk)),
+      () => stream.runtime.promises.try(() => flush?.call(transformer, this)),
+      (reason) => stream.runtime.promises.try(() => cancel?.call(transformer, reason)),
     );
   }
 
   // SPEC_MISMATCH: TransformStreamDefaultControllerPerformTransform(controller, chunk) -> Promise<undefined>
-  performTransform(chunk: unknown): InternalPromise<unknown> {
+  performTransform(chunk: unknown): PromiseValue<unknown> {
     return requireAlgorithm(this.state.transformAlgorithm, 'transform')(chunk)
-      .chain(undefined, (reason: unknown) => {
+      .then(undefined, (reason: unknown) => {
         this.state.stream.error(reason);
         throw reason;
-      }, this.state.stream.reactions);
+      });
   }
 
-  flush(): InternalPromise<unknown> {
+  flush(): PromiseValue<unknown> {
     return requireAlgorithm(this.state.flushAlgorithm, 'flush')();
   }
 
-  cancel(reason: unknown): InternalPromise<unknown> {
+  cancel(reason: unknown): PromiseValue<unknown> {
     return requireAlgorithm(this.state.cancelAlgorithm, 'cancel')(reason);
   }
 
@@ -99,11 +99,11 @@ export class TransformStreamDefaultControllerImpl {
 }
 
 export type TransformStreamDefaultControllerState = {
-  cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
-  finishPromise?: InternalPromise<void>;
-  flushAlgorithm?: () => InternalPromise<unknown>;
+  cancelAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
+  finishPromise?: PromiseValue<void>;
+  flushAlgorithm?: () => PromiseValue<unknown>;
   stream: TransformStreamImpl;
-  transformAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
+  transformAlgorithm?: (chunk: unknown) => PromiseValue<unknown>;
 };
 
 export const transformStreamDefaultControllerIDL = defineInterface({

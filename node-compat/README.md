@@ -129,10 +129,10 @@ The addon also supplies `observePromise(promise, realmAnchor, onFulfilled?,
 onRejected?)` on supported bases. `realmAnchor` is a function from the observer's
 realm. Native `v8::Promise::Then` installs the reactions there. Node 26.8.1 and
 the custom engine bypass author `then`, `constructor`, and `@@species`
-properties. Node 24.19.0 still consults `constructor` and fails the new capability
-regression; the addon does not work around that older engine behavior. The
-operation returns V8's derived promise; Browlet's internal observation boundary
-discards that result.
+properties. Node 24.19.0 still consults `constructor`; its capability regression
+remains an expected failure. The addon does not work around that older engine
+behavior. The operation returns V8's derived promise; Browlet's internal
+observation boundary discards that result.
 
 `supportsHostHooks` reports whether the addon was built with the required V8
 APIs. Official Node 24.19.0 and 26.8.1 support the existing context/queue APIs but
@@ -230,6 +230,27 @@ realm; Atomics.waitAsync in ordinary Node/VM realms is unsupported while they
 are installed. Active-script restoration and module loading remain separate
 adoption work. HTML job integration tests require the custom engine; official
 Node plus the addon still lacks these hooks.
+
+### Embedder integration caveat
+
+These hooks grant isolate-wide scheduling authority. An upstream proposal should
+explain that adopting them requires explicit boundaries between the embedding,
+Node, and other libraries already running in the isolate.
+
+Our ambient-ownership experiment demonstrated the risk: Node restored an owned
+async context while reporting an unhandled rejection. Vitest's reporting
+continuation inherited that ownership and was diverted to an HTML queue. The
+tests finished, but the runner could not finish reporting and exit. A separate
+Promise-instrumentation probe reproduced ownership leakage outside the rejection
+path, so repairing rejection reporting alone did not establish a complete boundary.
+
+Selecting owned author realms alone also leaves implementation async functions
+compiled in Node's realm on Node's queue. Saved continuation data records context;
+it does not by itself establish which subsystem owns a job. Integration needs
+deliberate implementation, backend, and reporting boundaries, with regression
+coverage for unrelated Node progress and runner shutdown without an HTML
+checkpoint. A passing application result alone is insufficient evidence that
+the host-hook policy coexists correctly with the surrounding runtime.
 
 ## Scope
 
@@ -345,9 +366,23 @@ experiments now live in test/capabilities.test.cjs above.
 | 1ce916938: retain handles with their contexts | Included in vm.cc, covered by the retained-Promise GC test |
 
 The standalone addon suite covers queues, contexts, native global allocation,
-and their lifetimes. Browlet uses
-one itCompatPasses helper: an explicit-queue backend runs compatibility
-expectations normally. Window global prototype-immutability and unforgeable
+and their lifetimes. Browlet uses `itPassesWith(...requirements)` to declare
+capabilities (`'explicitQueues'`, `'hostHooks'`) and minimum
+Node versions (`'v24+'`, `'v26+'`). All requirements must hold. For example,
+`itPassesWith('v26+', 'explicitQueues')` covers native Promise observation without
+constructor/species lookup. The helper returns Vitest's `it` or `it.fails`,
+including their `.each` support. Unsupported backends run the original
+assertions as expected failures; an unexpected pass fails the test so the
+support boundary is revisited. Node 24's corresponding standalone addon
+assertion runs as a TODO.
+
+Ordinary completion remains unconditional. The Streams constructor tests run
+page scripts that fulfill and reject after a timer, then continue reading,
+without test-driven checkpoints. Blob reads and Promise fulfillment/recovery
+also remain ordinary tests on every backend. These demonstrate useful fallback
+behavior without claiming identical queue ordering or host-hook support.
+
+Window global prototype-immutability and unforgeable
 descriptor tests now pass under the addon. The unsupported context dynamic-import
 callback test is explicitly skipped until module-loading integration. Addon tests
 are not full Browlet or HTML conformance. The Stream rejection regression observes process events in its

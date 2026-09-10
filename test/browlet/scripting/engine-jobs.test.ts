@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 import { nodeRuntime } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
@@ -20,7 +21,7 @@ afterEach(() => {
 });
 
 describe('HTML generic and timeout jobs', () => {
-  it('delivers a notification as an engine task before running its Promise reaction', async () => {
+  itPassesWith('hostHooks')('delivers a notification as an engine task before running its Promise reaction', async () => {
     const fixture = createFixture();
     fixture.realm.evaluate(`
       Atomics.waitAsync(waitArray, 0, 0).value.then(value => observe(value));
@@ -42,7 +43,7 @@ describe('HTML generic and timeout jobs', () => {
     expect(fixture.loop.currentlyRunningTask).toBeNull();
   });
 
-  it('counts fully-active time, then queues an engine task for the timeout', () => {
+  itPassesWith('hostHooks')('counts fully-active time, then queues an engine task for the timeout', () => {
     const fixture = createFixture();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let now = 0;

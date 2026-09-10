@@ -1,16 +1,22 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
+import { itPassesWith } from '../test-runtime';
 
-import { fetchTaskScheduling } from '../../src/browlet/integration/fetch';
-import { bytesAsBody } from '../../src/fetch/body';
+import { BodyRecord, bytesAsBody } from '../../src/fetch/body';
+import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
+import {
+  createReadableStream, enqueueReadableStream, errorReadableStream, getReadableStreamReader,
+} from '../../src/streams/index';
+import { defineInterface, idlType, impl, op, promise } from '../../src/web-idl/declaration/index';
+import { createBindings } from '../../src/web-idl/registration';
 import { createFetchWindow } from './fetch-fixture';
-import { createPromiseReactions } from '../../src/js-engine/index';
+import { performTestMicrotaskCheckpoint } from './test-runtime';
 
 describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(source.realm));
+    const body = bytesAsBody(Uint8Array.of(1, 2), source.context.getRuntime());
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
@@ -34,7 +40,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('fully reads on the stream realm checkpoint and queues completion as another task', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(fixture.realm));
+    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context.getRuntime());
     await nextTurn();
     const process = vi.fn();
     const error = vi.fn();
@@ -51,7 +57,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fetchTaskScheduling, createPromiseReactions(fixture.realm));
+    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context.getRuntime());
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);
@@ -61,4 +67,78 @@ describe('Fetch body delivery through HTML', () => {
     expect(chunks).toEqual([[1, 2]]);
     expect(fixture.networkingTasks()).toHaveLength(0);
   });
+});
+
+describe('Fetch body errors at the Promise binding boundary', () => {
+  itPassesWith('explicitQueues').each([
+    ['locked', 'full'], ['non-byte', 'full'], ['non-byte', 'incremental'], ['author', 'full'],
+  ] as const)('delivers a %s failure through a borrowed %s read', (failure, method) => {
+    const owner = createFetchWindow();
+    const other = createFetchWindow();
+    const runtime = owner.context.getRuntime();
+    const stream = createReadableStream(undefined, undefined, 1, () => 1, runtime);
+    const body = new BodyRecord(stream, runtime);
+    const authorError = new other.realm.intrinsics.typeError('author failure');
+    if (failure === 'locked') getReadableStreamReader(stream);
+    else if (failure === 'non-byte') enqueueReadableStream(stream, 'not bytes');
+    else errorReadableStream(stream, authorError);
+
+    const bindings = createBindings([bodyConsumerIDL]);
+    const ownerBinding = bindings.register(owner.realm).context;
+    bindings.register(other.realm).install(other.realm.global);
+    const consumer = ownerBinding.project(
+      BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, runtime),
+    );
+    const otherPrototype = (Reflect.get(other.realm.global, 'BodyConsumer') as typeof Object).prototype;
+    const borrowed = Reflect.get(otherPrototype, method) as CallableFunction;
+    const result = Reflect.apply(borrowed, consumer, []) as Promise<void>;
+    expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
+    const observed: unknown[] = [];
+    const fulfilled = vi.fn();
+    const record = owner.realm.createFunction(
+      (_receiver, [reason]) => { observed.push(reason); }, { name: 'record', length: 1 },
+    );
+    Reflect.apply(owner.realm.intrinsics.promise.then, result, [fulfilled, record]);
+
+    performTestMicrotaskCheckpoint(owner.realm.global);
+    other.runTask();
+    expect(observed).toEqual([]);
+    owner.runTask();
+    expect(fulfilled).not.toHaveBeenCalled();
+    expect(observed).toHaveLength(1);
+    if (failure === 'author') {
+      expect(observed[0]).toBe(authorError);
+    } else {
+      expect(observed[0]).toBeInstanceOf(owner.realm.intrinsics.typeError);
+      expect(observed[0]).not.toBeInstanceOf(other.realm.intrinsics.typeError);
+    }
+  });
+});
+
+// A test consumer covers real body algorithms and shared Promise projection
+// while Request/Response's author-facing body consumption is still unfinished.
+class BodyConsumerImpl {
+  constructor(
+    readonly body: BodyRecord,
+    readonly destination: GlobalObject,
+    readonly runtime: RuntimeContext,
+  ) {}
+
+  full(): PromiseValue<void> {
+    const result = this.runtime.promises.withResolvers<void>();
+    this.body.fullyRead(() => result.resolve(), result.reject, this.destination);
+    return result.promise;
+  }
+
+  incremental(): PromiseValue<void> {
+    const result = this.runtime.promises.withResolvers<void>();
+    this.body.incrementallyRead(() => {}, result.resolve, result.reject, this.destination);
+    return result.promise;
+  }
+}
+
+// interface BodyConsumer { Promise<undefined> full(); Promise<undefined> incremental(); };
+const bodyConsumerIDL = defineInterface({
+  name: 'BodyConsumer', exposed: '*', implementation: impl(BodyConsumerImpl),
+  members: [op('full', promise(idlType.undefined)), op('incremental', promise(idlType.undefined))],
 });

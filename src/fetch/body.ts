@@ -1,6 +1,7 @@
 import type { BlobImpl } from '../file/index';
 import { ParallelQueue } from '../infra/parallel-queue';
-import type { GlobalObject, PromiseReactions } from '../js-engine/index';
+import type { GlobalObject, RuntimeContext } from '../js-engine/index';
+import { TypeError } from '../js-engine/simple-exception';
 import {
   closeReadableStream, createReadableStreamWithByteReadingSupport, enqueueReadableStream,
   getReadableStreamReader, isReadableStreamDisturbed, isReadableStreamErrored,
@@ -8,7 +9,7 @@ import {
   type ReadableStreamImpl,
 } from '../streams/index';
 import type { URLSearchParamsImpl } from '../url/api';
-import { getBufferSourceCopy, getBufferTypeName } from '../web-idl/buffer-source';
+import { getBufferSourceCopy, getBufferTypeName } from '../js-engine/index';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op,
   promise, reference, roAttr, union, xattr,
@@ -16,26 +17,25 @@ import {
 import type { FormDataImpl } from '../xhr/index';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';
-import { queueFetchTask, type FetchTaskScheduling } from './tasks';
+import { queueFetchTask } from './tasks';
 
 /** Fetch §2.2.4: a stream and the source/length retained for replay. */
-// SPEC_MISMATCH: body { stream, source, length }
 export class BodyRecord {
   stream: ReadableStreamImpl;
   source: Uint8Array | BlobImpl | FormDataImpl | null = null;
   length: number | null = null;
   // Implementation dependency for HTML task delivery, retained across clones.
-  readonly #scheduling: FetchTaskScheduling;
+  readonly #runtime: RuntimeContext;
 
-  constructor(stream: ReadableStreamImpl, scheduling: FetchTaskScheduling) {
+  constructor(stream: ReadableStreamImpl, runtime: RuntimeContext) {
     this.stream = stream;
-    this.#scheduling = scheduling;
+    this.#runtime = runtime;
   }
 
   clone(): BodyRecord {
     const [out1, out2] = teeReadableStream(this.stream);
     this.stream = out1;
-    const clone = new BodyRecord(out2, this.#scheduling);
+    const clone = new BodyRecord(out2, this.#runtime);
     clone.source = this.source;
     clone.length = this.length;
     return clone;
@@ -48,7 +48,7 @@ export class BodyRecord {
     processBodyError: (error: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
-    const scheduling = this.#scheduling;
+    const scheduling = this.#runtime.networking;
     const destination = taskDestination ?? new ParallelQueue(scheduling.runInParallel);
     const reader = getReadableStreamReader(this.stream);
     readLoop();
@@ -82,7 +82,7 @@ export class BodyRecord {
     processBodyError: (error?: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
-    const scheduling = this.#scheduling;
+    const scheduling = this.#runtime.networking;
     const destination = taskDestination ?? new ParallelQueue(scheduling.runInParallel);
     const successSteps = (bytes: Uint8Array) =>
       queueFetchTask(() => processBody(bytes), destination, scheduling.queueGlobalTask);
@@ -103,22 +103,21 @@ export type BodyWithType = { body: BodyRecord; type: string | null; };
 
 /**
  * Fetch §2.2.4 and §5.2: safely extract an internal byte sequence as a body.
- * The extra scheduling argument supplies HTML task delivery.
+ * The runtime supplies stream ownership and HTML task delivery.
  */
-// SPEC_MISMATCH: (bytes) -> body
 export function bytesAsBody(
   bytes: Uint8Array,
-  scheduling: FetchTaskScheduling,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): BodyRecord {
-  const stream = createReadableStreamWithByteReadingSupport(undefined, undefined, 0, reactions);
+  const scheduling = runtime.networking;
+  const stream = createReadableStreamWithByteReadingSupport(undefined, undefined, 0, runtime);
   scheduling.runInParallel(() => {
     if (bytes.length > 0 && !isReadableStreamErrored(stream)) {
-      enqueueReadableStream(stream, new Uint8Array(bytes));
+      enqueueReadableStream(stream, runtime.buffers.copyUint8Array(bytes));
     }
     closeReadableStream(stream);
   });
-  const body = new BodyRecord(stream, scheduling);
+  const body = new BodyRecord(stream, runtime);
   body.source = bytes;
   body.length = bytes.length;
   return body;

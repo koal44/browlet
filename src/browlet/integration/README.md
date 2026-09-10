@@ -21,8 +21,10 @@ Domain-local behavior still remains with its owning subsystem.
 - `file/` connects File API algorithms to HTML scheduling and structured data,
   supplies platform line ending policy, and owns `FileReader`, whose concrete
   implementation depends on Browlet's EventTarget, tasks, timing, and events.
-- `streams.ts` connects Streams to DOM AbortController construction and HTML
-  structured cloning.
+- `runtime.ts` composes each Window's implementation Runtime Context from its
+  engine facilities, DOM AbortController construction, HTML task delivery, and
+  structured cloning. Binding registration retains that one context and
+  declaration bindings supply it to implementations.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.

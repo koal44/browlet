@@ -1,9 +1,10 @@
-import { createReactions } from '../browlet/streams/implementation-fixture';
+import { createRuntime } from '../js-engine/runtime-fixture';
+import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
 import { getSimpleExceptionRequest } from '../../src/js-engine/simple-exception';
-import { createAbortController, observe } from '../browlet/streams/implementation-fixture';
+import { getBufferSourceCopy } from '../../src/js-engine/buffers';
 
 describe('TextEncoderStream byte production', () => {
   it.each([
@@ -15,7 +16,7 @@ describe('TextEncoderStream byte production', () => {
     const { reader, writer } = createEncoder();
     const read = observe(reader.read());
     await observe(writer.write(chunk));
-    expect((await read).value).toEqual(new TextEncoder().encode(expected));
+    expect(getBufferSourceCopy((await read).value as object)).toEqual(new TextEncoder().encode(expected));
     await observe(writer.close());
   });
 
@@ -33,7 +34,7 @@ describe('TextEncoderStream byte production', () => {
 
     const read = observe(reader.read());
     await observe(write);
-    expect((await read).value).toEqual(Uint8Array.of(65));
+    expect(getBufferSourceCopy((await read).value as object)).toEqual(Uint8Array.of(65));
     expect(convert).toHaveBeenCalledOnce();
     await observe(writer.close());
   });
@@ -67,15 +68,17 @@ describe('TextEncoderStream byte production', () => {
     const firstRead = observe(reader.read());
     await observe(writer.write('A\uD83D'));
     const first = await firstRead;
-    expect(first).toEqual({ done: false, value: Uint8Array.of(65) });
+    expect(first.done).toBe(false);
+    expect(getBufferSourceCopy(first.value as object)).toEqual(Uint8Array.of(65));
 
     const secondRead = observe(reader.read());
     await observe(writer.write('\uDE00'));
     const second = await secondRead;
-    expect(second).toEqual({ done: false, value: Uint8Array.of(240, 159, 152, 128) });
+    expect(second.done).toBe(false);
+    expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
 
     (first.value as Uint8Array).fill(0);
-    expect(second.value).toEqual(Uint8Array.of(240, 159, 152, 128));
+    expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
     await observe(writer.close());
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
@@ -86,12 +89,14 @@ describe('TextEncoderStream byte production', () => {
     await observe(writer.write('\uD83D'));
     await observe(writer.close());
 
-    expect(await read).toEqual({ done: false, value: Uint8Array.of(239, 191, 189) });
+    const result = await read;
+    expect(result.done).toBe(false);
+    expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(239, 191, 189));
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
 });
 
 function createEncoder() {
-  const encoder = new TextEncoderStreamImpl(createAbortController(), createReactions());
+  const encoder = new TextEncoderStreamImpl(createRuntime());
   return { reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
 }

@@ -18,12 +18,16 @@ boundary rules in
 TransformStream, ReadableStream, WritableStream, their readers, and their
 controllers no longer accept or retain Binding Context. They construct each
 other directly and use internal exception requests and buffers. All Streams
-implementation Promise paths now use JS Engine's `InternalPromise` records:
+implementation Promise paths now use JS Engine's `PromiseValue` values:
 start/pull/write, reader and writer results, backpressure, cancellation,
 pipe/tee, and asynchronous iteration. Constructors retain one explicit
-`PromiseReactions` destination, supplied last by their binding or internal
-caller. Factories and TransformStream's readable/writable sides carry it on.
+`RuntimeContext` dependency, supplied last by their binding or internal
+caller. It retains the existing Promise facility together with allocation and
+cross-specification facilities. Factories and TransformStream's readable/writable
+sides carry the same runtime on.
 Neither native `await` nor Node's global `queueMicrotask` schedules this work.
+Chains retain their destination; `pipeTo` imports the destination writer's
+results into the source's facility before continuing its own algorithm.
 
 TransformStream initialization and sink/source algorithms live on
 `TransformStreamImpl`; controller setup, enqueueing, and transformation live on
@@ -37,34 +41,84 @@ explicit dependencies. The shared callback adapter projects controllers and
 imports Promise results. Start's `any` result is adopted at this same boundary.
 The `callbackDictionary` declaration helper remains removed.
 
-Blob reading and FileReader now receive explicit file-reading scheduling rather
-than Binding Context. Their promises, buffers, errors, and packaging are ordinary
-implementation values. `newBufferResult()` supports promised byte results, and
-FileReader's getters project stable buffers and errors in the receiver's realm.
+Blob reading and FileReader now receive Runtime Context rather than Binding
+Context or separate scheduling/Promise/abort arguments. `newBufferResult()`
+supports Blob's promised byte results. FileReader creates and retains its final
+buffer at packaging time; its result getter needs no projection cache. Its error
+getter retains the existing exception projection.
 Focused tests cover those boundaries, including a borrowed FileReader getter.
 The shared rules are in [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARCHITECTURE.md).
 
-**Binding integration remains unfinished.** Current ordinary failing expectations
-include:
-
-- Stream byte results and clone failures still need realm-correct projection.
-  Both queuing-strategy constructors still accept context to produce their
-  realm-owned size functions.
-- Fetch cloning still needs an explicit HTML clone algorithm; BYOB views and
-  errors still need realm-correct observable results.
+**Binding integration remains unfinished.** Both queuing-strategy constructors
+still accept context to produce their realm-owned size functions. The Promise
+bookkeeping and architecture reviews are complete for the migrated paths.
+Settlement tracking belongs to Promise capabilities; writer state no longer
+mirrors it with `readyPending`/`closedPending`. The old Binding Context Promise
+façade had only test callers and is removed. Shared typed projection and exception
+identity caches remain necessary; no additional cache or engine patch was added.
+Projected writer tests cover pending, writable, closed, and errored release,
+stable/changed Promise identity, borrowed getters, and independent queue delivery.
+HTML's rejection-event lifecycle remains the separate deferred
+[`HostPromiseRejectionTracker` work](../js-engine/ROADMAP.md#host-hooks-supplied-by-html).
 
 No failures were reclassified as skips or expected failures. Remaining context
 uses are identified with `BINDING_INTEGRATION:` or `TODO(BINDING_INTEGRATION):`.
-Encoding's stream declarations now supply the same AbortController dependency
-as WritableStream and TransformStream, together with their reaction destination.
-Blob and FileReader reading also supply explicit reactions to their streams;
+Encoding, Blob, and FileReader supply their runtime to streams. Writable
+controller setup obtains a fresh AbortController from it. Generic tee cloning
+uses `runtime.clone`; Fetch no longer needs to pass an extra clone algorithm.
+TextEncoderStream creates realm-owned chunks before downstream callbacks run.
+The obsolete stream/file capability-resolution helpers have been removed.
 Blob's backend I/O remains native work.
 
 The source-delivery regressions cover delayed start/pull fulfillment and
 rejection on independent HTML queues, plus a Node callback whose native result
-settles before the stream continues in HTML. The full unit suite finishes
-normally: 7,960 pass, 14 fail, 15 expected failures, 15 skipped. The failure count
-was 39 before this migration; the remaining failures have not been reclassified.
+settles before the stream continues in HTML. Dependency migration also covers
+borrowed method Promise arguments, constructor initialization, iterator inputs,
+and pipes between distinct destinations. The full unit checkpoint on 2026-09-09
+finished normally in 45.81 seconds: 7,975 pass, 9 fail, 15 expected failures,
+15 skipped. The prior Explicit checkpoint had 14 failures; five old
+implementation-delivery cases now pass after migrating their fixtures. The nine
+remaining failures cover buffer/error projection, missing Fetch cloning, and
+Fetch's task-function identity assertion. None were reclassified.
+
+The subsequent Runtime Context checkpoint completed normally in 11.79 seconds:
+7,983 passed, 5 failed, 15 expected failures, and 15 skipped. FileReader's final
+buffer identity, Encoding's callback-visible byte allocation, runtime registration,
+and tee cloning pass. The five remaining failures are the Blob chunk and Fetch
+BYOB realm checks, two Fetch queued-error realm checks, and task-function identity.
+Typecheck, scoped lint, and the Browlet build passed at that checkpoint.
+
+Byte-controller allocation, transfer, view construction, and tee copying now use
+the stream's `runtime.buffers`. Blob's fresh backend read storage is transferred
+at enqueue; Fetch and `pull from bytes` copy their retained source bytes once.
+The Node constructor table and intermediate copying helpers are removed. Five
+projected regressions failed before this change and pass afterward, covering
+sink callbacks, foreign BYOB buffers, DataView/typed-array layout, automatic
+allocation, and byte tee independence. The Blob chunk and Fetch BYOB failures
+also pass. The full unit run finished normally in 10.97 seconds: 7,996 passed,
+3 failed, 15 expected failures, and 15 skipped. The remaining failures are the
+two Fetch error-boundary checks and task-function identity. Typecheck, scoped
+lint, and the Browlet build pass; no failures were reclassified.
+
+The exception/task review removes two implementation-only error tests and the
+task-function identity assertion. Projected consumer tests cover deferred
+rejection, borrowed-method realm selection, and preservation of author errors;
+the task test checks execution order on independent event loops. Full reading
+already used the shared exception boundary. Incremental reading leaked a Node
+TypeError, reproduced by the new test and fixed with the existing exception
+request import. Full unit run: 8,001 passed, 15 expected failures, 15 skipped,
+exit 0 in 11.58 seconds. Typecheck, scoped lint, and the Browlet build pass.
+Request/Response body consumption remains unfinished; its later integration
+must retain these observable checks.
+
+After Promise bookkeeping cleanup and architecture reconciliation, all 180 unit
+files pass: 8,003 passed, 15 expected failures, 15 skipped, exit 0 in 11.42 seconds.
+Typecheck, scoped lint, and the Browlet build pass. Existing build-cycle warnings
+remain; no browser/WPT suite was run for this cleanup.
+
+ESLint forbids native Promise construction, `async`/`await`, and global
+microtask scheduling in Streams, Encoding, Fetch, and FileReader. File's native
+backend loop is separate: it hands bytes to the stream through file tasks.
 
 ## Current implementation contracts
 
@@ -73,12 +127,12 @@ was 39 before this migration; the remaining failures have not been reclassified.
   Implementations chain internal results in the stream's explicit destination.
 - A null source, sink, or transformer allocates an implementation for internal
   setup. An empty record runs the ordinary constructor steps.
-- Writable construction receives a DOM `StreamAbortController` followed by its
-  reaction destination. TransformStream passes both to its writable side.
-  Streams does not construct Browlet's DOM implementation.
-- Clone-enabled ordinary tee receives a clone function explicitly. Byte tee
-  copies byte storage directly. Cloning exceptions pass through unchanged until
-  a binding boundary realizes them.
+- Writable construction gets its DOM abort controller from the supplied runtime.
+  TransformStream passes that same runtime to its writable side. Streams does
+  not construct Browlet's DOM implementation.
+- Clone-enabled ordinary tee uses `runtime.clone`; byte tee copies through
+  `runtime.buffers`. Cloning exceptions pass through unchanged until a binding
+  boundary realizes them.
 - The implementation-level `from` helper consumes converted async iteration
   steps returning internal results. The shared binding adapter acquires the
   author iterator and converts its elements, including dictionary records.

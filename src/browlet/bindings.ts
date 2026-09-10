@@ -6,7 +6,8 @@ import { urlIDLDefinitions } from '../url/api';
 import { originIDL } from '../url/origin-api';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  createBindings, type BindingWorld, type RealmBindings, type GlobalObjectAllocation,
+  createBindings, type BindingWorld, type RealmBindingOptions, type RealmBindings,
+  type GlobalObjectAllocation,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import {
@@ -23,7 +24,6 @@ import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
 import { fileReaderIDL } from './integration/file/file-reader';
-import { streamsCapabilities } from './integration/streams';
 import { xhrCapabilities } from './integration/xhr';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
@@ -63,8 +63,8 @@ export class BrowletBindings {
     );
   }
 
-  register(realm: Realm): RealmBindings {
-    return this.#world.register(realm);
+  register(realm: Realm, options: RealmBindingOptions = {}): RealmBindings {
+    return this.#world.register(realm, options);
   }
 
   forRealm(realm: Realm): RealmBindings {
@@ -138,7 +138,6 @@ const hostDefinedInterfaces = [{
 const browletCapabilities = [
   ...domExceptionCapabilities,
   ...fileCapabilities,
-  ...streamsCapabilities,
   ...xhrCapabilities,
 ];
 

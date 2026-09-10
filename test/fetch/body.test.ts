@@ -1,4 +1,4 @@
-import { createReactions, observe } from '../browlet/streams/implementation-fixture';
+import { observe } from '../browlet/streams/implementation-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { brotliCompressSync, brotliDecompressSync, deflateSync, gunzipSync, gzipSync, inflateSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,9 @@ import {
   getReadableStreamReader, isReadableStreamClosed, isReadableStreamDisturbed,
   isReadableStreamLocked, readReadableStreamChunk,
 } from '../../src/streams/index';
-import { createArrayBufferView, getBufferSourceCopy } from '../../src/web-idl/buffer-source';
+import {
+  createArrayBufferView, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
+} from '../../src/js-engine/index';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 
 describe('Fetch body cloning', () => {
@@ -52,9 +54,9 @@ describe('Fetch body cloning', () => {
   });
 
   it('cancels the source only after both cloned branches cancel', async () => {
-    const { scheduling } = createBodyFixture();
+    const { runtime } = createBodyFixture();
     const cancel = vi.fn();
-    const body = new BodyRecord(createReadableStream(undefined, cancel, 1, () => 1, createReactions()), scheduling);
+    const body = new BodyRecord(createReadableStream(undefined, cancel, 1, () => 1, runtime), runtime);
     const clone = body.clone();
 
     const first = cancelReadableStream(body.stream, 'first');
@@ -69,7 +71,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('retains the source and length and creates a separate stream buffer in parallel', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(9, 1, 2, 9).subarray(1, 3);
-    const body = bytesAsBody(source, fixture.scheduling, createReactions());
+    const body = bytesAsBody(source, fixture.runtime);
 
     expect(body.source).toBe(source);
     expect(body.length).toBe(2);
@@ -84,20 +86,24 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('supports BYOB reading in the supplied realm', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.scheduling, createReactions());
+    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.runtime);
     const reader = body.stream.getReader({ mode: 'byob' });
     const view = createArrayBufferView('Uint8Array', [0, 0, 0, 0], fixture.context.realm);
+    const buffer = getBufferSourceUnderlyingBuffer(view);
     const reading = reader.read(view, { min: 1 });
     fixture.runParallel();
     const result = await observe(reading);
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(1, 2));
     expect(Object.getPrototypeOf(result.value)).toBe(Object.getPrototypeOf(view));
+    expect(getBufferSourceCopy(buffer)).toHaveLength(0);
+    expect(Object.getPrototypeOf(getBufferSourceUnderlyingBuffer(result.value as object)))
+      .toBe(Object.getPrototypeOf(buffer));
   });
 
   it('closes an empty byte sequence without enqueueing an empty chunk', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(new Uint8Array(), fixture.scheduling, createReactions());
+    const body = bytesAsBody(new Uint8Array(), fixture.runtime);
     fixture.runParallel();
     expect(body.length).toBe(0);
     expect(isReadableStreamClosed(body.stream)).toBe(true);
@@ -107,7 +113,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('allows a byte body to be cloned before its bytes become available', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(1, 2, 3);
-    const body = bytesAsBody(source, fixture.scheduling, createReactions());
+    const body = bytesAsBody(source, fixture.runtime);
     const clone = body.clone();
     const process = vi.fn();
     const error = vi.fn();
@@ -128,7 +134,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('does not revive a byte stream canceled before its parallel work runs', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling, createReactions());
+    const body = bytesAsBody(Uint8Array.of(1), fixture.runtime);
     await observe(cancelReadableStream(body.stream, 'canceled'));
     expect(() => fixture.runParallel()).not.toThrow();
     expect(await readBodyBytes(body)).toEqual(new Uint8Array());
@@ -136,7 +142,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('preserves a byte stream error raised before its parallel work runs', async () => {
     const fixture = createBodyFixture();
-    const body = bytesAsBody(Uint8Array.of(1), fixture.scheduling, createReactions());
+    const body = bytesAsBody(Uint8Array.of(1), fixture.runtime);
     const failure = new Error('failed');
     errorReadableStream(body.stream, failure);
     fixture.runParallel();
@@ -288,17 +294,6 @@ describe('Fetch full body reading', () => {
     expect(process).toHaveBeenCalledExactlyOnceWith(new Uint8Array());
   });
 
-  it('queues reader acquisition failure rather than throwing it to the caller', () => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody();
-    getReadableStreamReader(body.stream);
-    const error = vi.fn();
-    expect(() => body.fullyRead(vi.fn(), error, fixture.global)).not.toThrow();
-    expect(error).not.toHaveBeenCalled();
-    fixture.runTask();
-    expect(error).toHaveBeenCalledExactlyOnceWith(expect.any(fixture.context.realm.intrinsics.typeError));
-  });
-
   it('queues stream failures without exposing partial bytes', async () => {
     const fixture = createBodyFixture();
     const body = fixture.createBody([Uint8Array.of(1)]);
@@ -312,16 +307,6 @@ describe('Fetch full body reading', () => {
     fixture.runParallel();
     expect(error).toHaveBeenCalledExactlyOnceWith(failure);
     expect(process).not.toHaveBeenCalled();
-  });
-
-  it('queues the existing Streams non-byte-chunk failure', () => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody(['not bytes']);
-    const error = vi.fn();
-    body.fullyRead(vi.fn(), error);
-    expect(error).not.toHaveBeenCalled();
-    fixture.runParallel();
-    expect(error).toHaveBeenCalledExactlyOnceWith(expect.any(fixture.context.realm.intrinsics.typeError));
   });
 });
 

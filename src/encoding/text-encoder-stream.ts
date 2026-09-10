@@ -1,11 +1,7 @@
 import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
-import { toString, createPromiseReactions, type PromiseReactions } from '../js-engine/index';
-import type { BindingContext } from '../web-idl/projection';
-import {
-  contextValue, ctor, defineIncludes, defineInterface, impl,
-} from '../web-idl/declaration/index';
-import type { StreamAbortController } from '../streams/abort';
-import { createStreamAbortController } from '../streams/integration';
+import { toString, type RuntimeContext } from '../js-engine/index';
+import { runtimeContext } from '../web-idl/projection';
+import { ctor, defineIncludes, defineInterface, impl } from '../web-idl/declaration/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type WritableStreamImpl,
@@ -24,19 +20,21 @@ export class TextEncoderStreamImpl {
   readonly #generic: GenericTransformStreamMixin;
   #leadingSurrogate = '';
 
-  // SPEC_MISMATCH: TextEncoderStream() -> TextEncoderStream
-  constructor(abortController: StreamAbortController, reactions: PromiseReactions) {
-    const transform = new TransformStreamImpl(null, {}, {}, abortController, reactions);
+  constructor(runtime: RuntimeContext) {
+    const transform = new TransformStreamImpl(null, {}, {}, runtime);
+    const enqueue = (bytes: Uint8Array): void => {
+      transform.enqueue(runtime.buffers.copyUint8Array(bytes));
+    };
     transform.setUp(
       (chunk) => {
         this.#encodeAndEnqueue(
           toString(chunk),
-          (value) => transform.enqueue(value),
+          enqueue,
         );
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        transform.enqueue(this.#encoder.encode('\uFFFD'));
+        enqueue(this.#encoder.encode('\uFFFD'));
         this.#leadingSurrogate = '';
       },
     );
@@ -80,8 +78,7 @@ export const textEncoderStreamIDL = defineInterface({
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
     constructWith: [
-      contextValue(createStreamAbortController),
-      contextValue((context: BindingContext) => createPromiseReactions(context.realm)),
+      runtimeContext,
     ],
   }),
   members: [ctor()],

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { createPromiseReactions } from '../../src/js-engine/index';
 import { createBindings } from '../../src/web-idl/registration';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import {
@@ -31,12 +30,12 @@ describe('Web IDL async sequences', () => {
     const sequence = context.convert(entries, asyncSequence(reference('Entry'))) as
       AsyncSequenceValue<{ name: string; }>;
     const first = Promise.withResolvers<unknown>();
-    sequence.next().observe(first.resolve, first.reject, createPromiseReactions(realm));
+    sequence.next().observe(first.resolve, first.reject);
     await expect(first.promise).resolves.toEqual({ name: 'entry' });
     expect(conversions).toBe(1);
 
     const next = Promise.withResolvers<unknown>();
-    sequence.next().observe(next.resolve, next.reject, createPromiseReactions(realm));
+    sequence.next().observe(next.resolve, next.reject);
     await expect(next.promise).resolves.toBe(endOfIteration);
   });
 

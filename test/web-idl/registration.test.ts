@@ -1,13 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import {
   arg, atArg, bind, bindingContext, contextValue, createBindings, ctor,
   defineCapability, defineInterface, idlType, impl, invokeWith, namedGetter, op,
-  reference, roAttr, xattr, type BindingContext,
+  reference, roAttr, runtimeContext, xattr, type BindingContext,
 } from '../../src/web-idl/index';
+import { createRuntime } from '../js-engine/runtime-fixture';
 
 describe('Web IDL interface registration', () => {
+  it('composes the implementation runtime once per realm registration', () => {
+    const realm = new Realm();
+    const runtime = createRuntime(realm);
+    const compose = vi.fn((context: BindingContext) => {
+      expect(context.realm).toBe(realm);
+      return runtime;
+    });
+    const world = createBindings([exampleIDL]);
+    const first = world.register(realm, { createRuntime: compose });
+    const second = world.register(realm, { createRuntime: compose });
+
+    expect(second).toBe(first);
+    expect(compose).toHaveBeenCalledOnce();
+    expect(runtimeContext.resolve(first.context)).toBe(runtime);
+    expect(first.context.getRuntime().promises).toBe(first.context.promises);
+  });
+
+  it('requires explicit runtime composition only when a binding requests it', () => {
+    const { context } = createBindings([]).register(new Realm());
+    expect(() => runtimeContext.resolve(context))
+      .toThrow('The binding realm has no implementation runtime');
+  });
+
   it('shares platform-object identity across realm registrations', () => {
     const interfaces = createBindings([exampleIDL]);
     const firstRealm = new Realm();

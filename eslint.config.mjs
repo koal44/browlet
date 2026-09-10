@@ -182,6 +182,28 @@ export default defineConfig(
   },
 
   {
+    files: ['src/streams/**/*.ts', 'src/encoding/**/*.ts', 'src/fetch/**/*.ts',
+      'src/browlet/integration/file/file-reader.ts'],
+    rules: {
+      'no-restricted-globals': ['error',
+        { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
+        { name: 'queueMicrotask', message: 'Use the supplied Promise or task scheduling dependency.' },
+      ],
+      'no-restricted-syntax': ['error',
+        {
+          selector: ':function[async=true], AwaitExpression',
+          message: 'Native async/await schedules Node continuations; chain the supplied PromiseValue instead.',
+        },
+        {
+          selector: 'MemberExpression[object.name="globalThis"][property.name=/^(Promise|queueMicrotask)$/]',
+          message: 'Use the supplied Promise or task scheduling dependency.',
+        },
+      ],
+      '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true, checkThenables: true }],
+    },
+  },
+
+  {
     files: ['test/**/*.ts'],
     rules: {
       'no-console': 'off',

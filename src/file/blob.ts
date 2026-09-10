@@ -1,30 +1,25 @@
 import { utf8Decode, utf8Encode } from '../encoding/utf-8';
 import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
-import {
-  InternalPromise, createPromiseReactions, type PromiseReactions,
-} from '../js-engine/index';
+import type { PromiseValue, RuntimeContext } from '../js-engine/index';
 import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import {
   closeReadableStream, enqueueReadableStream, errorReadableStream,
   createReadableStreamWithByteReadingSupport, getReadableStreamReader,
   pipeReadableStreamThrough, readAllBytes, type ReadableStreamImpl,
 } from '../streams/index';
-import { getBufferSourceCopy } from '../web-idl/buffer-source';
+import { getBufferSourceCopy } from '../js-engine/index';
 import {
   arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration,
   defineInterface, defineTypedef, dictMember, emptyDictionary, emptySequence,
   idlType, impl, invokeWith, newBufferResult, op, promise, reference, roAttr, sequence, union,
   xattr,
 } from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
-import type { TaskScheduling } from '../infra/index';
-import type { StreamAbortController } from '../streams/abort';
-import { createStreamAbortController } from '../streams/integration';
+import { runtimeContext, type BindingContext } from '../web-idl/projection';
 import {
   BlobData, BlobReadFailure, type BlobSnapshotState,
 } from './blob-data';
 import {
-  getFileReading, nativeLineEnding as nativeLineEndingCapability,
+  nativeLineEnding as nativeLineEndingCapability,
   type NativeLineEnding,
 } from './integration';
 
@@ -89,30 +84,26 @@ export class BlobImpl {
     return sliceBlob(this, start, end, contentType);
   }
 
-  // SPEC_MISMATCH: Blob.stream() -> ReadableStream
-  stream(scheduling: TaskScheduling, reactions: PromiseReactions): ReadableStreamImpl {
-    return getBlobStream(this, scheduling, reactions);
+  stream(runtime: RuntimeContext): ReadableStreamImpl {
+    return getBlobStream(this, runtime);
   }
 
   // SPEC_MISMATCH: Blob.text() -> Promise<USVString>
-  text(scheduling: TaskScheduling, reactions: PromiseReactions): InternalPromise<string> {
-    return readBlob(this, scheduling, reactions).map(utf8Decode, reactions);
+  text(runtime: RuntimeContext): PromiseValue<string> {
+    return readBlob(this, runtime).then(utf8Decode);
   }
 
   // SPEC_MISMATCH: Blob.arrayBuffer() -> Promise<ArrayBuffer>
-  arrayBuffer(scheduling: TaskScheduling, reactions: PromiseReactions): InternalPromise<Uint8Array> {
-    return readBlob(this, scheduling, reactions);
+  arrayBuffer(runtime: RuntimeContext): PromiseValue<Uint8Array> {
+    return readBlob(this, runtime);
   }
 
-  // SPEC_MISMATCH: Blob.textStream() -> ReadableStream
   textStream(
-    scheduling: TaskScheduling,
-    abortController: StreamAbortController,
-    reactions: PromiseReactions,
+    runtime: RuntimeContext,
   ): ReadableStreamImpl {
-    const stream = getBlobStream(this, scheduling, reactions);
+    const stream = getBlobStream(this, runtime);
     const decoder = new TextDecoderStreamImpl(
-      'utf-8', { fatal: false, ignoreBOM: false }, abortController, reactions,
+      'utf-8', { fatal: false, ignoreBOM: false }, runtime,
     );
     // SPEC_MISMATCH: File API pipe through(stream, decoder: TextDecoderStream) -> ReadableStream
     return pipeReadableStreamThrough(
@@ -122,8 +113,8 @@ export class BlobImpl {
   }
 
   // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
-  bytes(scheduling: TaskScheduling, reactions: PromiseReactions): InternalPromise<Uint8Array> {
-    return readBlob(this, scheduling, reactions);
+  bytes(runtime: RuntimeContext): PromiseValue<Uint8Array> {
+    return readBlob(this, runtime);
   }
 
   // -- Friends ----------------------------------------------------------
@@ -262,7 +253,7 @@ export function sliceBlob(
   );
 }
 
-/** Read an exact Blob byte range for future Streams, Fetch, and XHR consumers. */
+/** Read an exact Blob byte range into fresh storage that the caller can transfer. */
 export function readBlobBytes(
   blob: BlobImpl,
   start = 0,
@@ -272,19 +263,19 @@ export function readBlobBytes(
 }
 
 /** File API §3, get stream. */
-// SPEC_MISMATCH: (blob) -> ReadableStream
 export function getBlobStream(
   blob: BlobImpl,
-  scheduling: TaskScheduling,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): ReadableStreamImpl {
+  const scheduling = runtime.fileReading;
   let canceled = false;
   const stream = createReadableStreamWithByteReadingSupport(
     undefined,
     () => { canceled = true; },
-    0, reactions,
+    0, runtime,
   );
 
+  // Backend I/O runs outside HTML; only the queued file tasks touch the stream.
   scheduling.runInParallel(() => { void readChunks(); });
   return stream;
 
@@ -298,6 +289,7 @@ export function getBlobStream(
         scheduling.queueTask(() => {
           if (canceled) return;
           try {
+            // Byte-stream enqueue transfers this read's storage into the stream runtime.
             enqueueReadableStream(stream, bytes);
           } catch (error) {
             canceled = true;
@@ -322,11 +314,10 @@ export function getBlobStream(
 
 function readBlob(
   blob: BlobImpl,
-  scheduling: TaskScheduling,
-  reactions: PromiseReactions,
-): InternalPromise<Uint8Array> {
-  const result = InternalPromise.withResolvers<Uint8Array>();
-  const reader = getReadableStreamReader(getBlobStream(blob, scheduling, reactions));
+  runtime: RuntimeContext,
+): PromiseValue<Uint8Array> {
+  const result = runtime.promises.withResolvers<Uint8Array>();
+  const reader = getReadableStreamReader(getBlobStream(blob, runtime));
   // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
   readAllBytes(reader, result.resolve, result.reject);
   return result.promise;
@@ -420,30 +411,29 @@ export const blobIDL = defineInterface({
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
     op('stream', reference('ReadableStream'), [], {
-      ...invokeWith(contextValue(getFileReading), contextValue((context: BindingContext) => createPromiseReactions(context.realm))), ...xattr('NewObject'),
+      ...invokeWith(runtimeContext), ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
       ...invokeWith(
-        contextValue(getFileReading),
-        contextValue((context: BindingContext) => createPromiseReactions(context.realm)),
+        runtimeContext,
       ),
       ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
       ...xattr('NewObject'),
       binding: {
-        ...invokeWith(contextValue(getFileReading), contextValue((context: BindingContext) => createPromiseReactions(context.realm))).binding,
+        ...invokeWith(runtimeContext).binding,
         ...newBufferResult().binding,
       },
     }),
     op('textStream', reference('ReadableStream'), [], {
       ...xattr('NewObject'),
-      ...invokeWith(contextValue(getFileReading), contextValue(createStreamAbortController), contextValue((context: BindingContext) => createPromiseReactions(context.realm))),
+      ...invokeWith(runtimeContext),
     }),
     op('bytes', promise(idlType.Uint8Array), [], {
       ...xattr('NewObject'),
       binding: {
-        ...invokeWith(contextValue(getFileReading), contextValue((context: BindingContext) => createPromiseReactions(context.realm))).binding,
+        ...invokeWith(runtimeContext).binding,
         ...newBufferResult().binding,
       },
     }),

@@ -4,10 +4,8 @@ import {
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
 import { getDOMExceptionRequest } from '../../src/web-idl/exceptions/dom-exception-core';
-import {
-  createPromiseReactions, type InternalPromise, type PromiseReactions,
-} from '../../src/js-engine/index';
-import { TestRealm } from '../web-idl/test-realm';
+import type { PromiseValue } from '../../src/js-engine/index';
+import { createRuntime } from '../js-engine/runtime-fixture';
 
 describe('File reading implementation', () => {
   it.each([
@@ -15,11 +13,11 @@ describe('File reading implementation', () => {
     { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
   ])('reads bytes and text for $name', async ({ text }) => {
     const blob = new BlobImpl([text]);
-    const reactions = createPromiseReactions(new TestRealm());
+    const runtime = { ...createRuntime(), fileReading: scheduling };
     const [decoded, bytes, bufferBytes] = await Promise.all([
-      observe(blob.text(scheduling, reactions), reactions),
-      observe(blob.bytes(scheduling, reactions), reactions),
-      observe(blob.arrayBuffer(scheduling, reactions), reactions),
+      observe(blob.text(runtime)),
+      observe(blob.bytes(runtime)),
+      observe(blob.arrayBuffer(runtime)),
     ]);
     expect(decoded).toBe(text);
     expect(bytes).toEqual(new TextEncoder().encode(text));
@@ -33,26 +31,27 @@ describe('File reading implementation', () => {
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
     const blob = BlobImpl.create(data, '', null);
-    const reactions = createPromiseReactions(new TestRealm());
-    const result = blob[method](scheduling, reactions);
-    const failure = await observe<unknown>(result, reactions).catch((error: unknown) => error);
+    const runtime = { ...createRuntime(), fileReading: scheduling };
+    const result = blob[method](runtime);
+    const failure = await observe<unknown>(result).catch((error: unknown) => error);
     expect(getDOMExceptionRequest(failure)?.name).toBe('NotFoundError');
   });
 
   it('packages bytes without a binding context and preserves the source', () => {
+    const runtime = createRuntime();
     const bytes = Uint8Array.of(65, 66, 67);
-    const result = packageData(bytes, 'ArrayBuffer', '') as ArrayBuffer;
+    const result = packageData(bytes, 'ArrayBuffer', '', undefined, runtime) as ArrayBuffer;
     expect(new Uint8Array(result)).toEqual(bytes);
     new Uint8Array(result)[0] = 90;
     expect(bytes[0]).toBe(65);
-    expect(packageData(bytes, 'Text', '')).toBe('ABC');
-    expect(packageData(bytes, 'DataURL', '')).toBe('data:application/octet-stream;base64,QUJD');
+    expect(packageData(bytes, 'Text', '', undefined, runtime)).toBe('ABC');
+    expect(packageData(bytes, 'DataURL', '', undefined, runtime)).toBe('data:application/octet-stream;base64,QUJD');
   });
 });
 
-function observe<T>(result: InternalPromise<T>, reactions: PromiseReactions): Promise<T> {
+function observe<T>(result: PromiseValue<T>): Promise<T> {
   const observed = Promise.withResolvers<T>();
-  result.observe(observed.resolve, observed.reject, reactions);
+  result.observe(observed.resolve, observed.reject);
   return observed.promise;
 }
 

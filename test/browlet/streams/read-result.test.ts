@@ -1,11 +1,9 @@
-import { createReactions } from './implementation-fixture';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import * as scheduling from '../../../src/browlet/integration/scripting';
-import {
-  createPromiseReactions, type InternalPromise, type PromiseReactions,
-} from '../../../src/js-engine/index';
+import type { PromiseValue } from '../../../src/js-engine/index';
 import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
 import { ReadableStreamDefaultControllerImpl } from '../../../src/streams/readable-stream-default-controller';
 import {
@@ -20,7 +18,7 @@ import { createBindings } from '../../../src/web-idl/registration';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('stream read Promise boundaries', () => {
-  it.each(['chunk', 'close', 'error', 'released'] as const)(
+  itPassesWith('explicitQueues').each(['chunk', 'close', 'error', 'released'] as const)(
     'projects a borrowed read on %s in the receiver queue', (mode) => {
       const { first, second } = createFixture();
       const read = Reflect.get(second.reader, 'read') as CallableFunction;
@@ -39,12 +37,12 @@ describe('stream read Promise boundaries', () => {
     },
   );
 
-  it.each(['consume', 'invoke'] as const)(
+  itPassesWith('explicitQueues').each(['consume', 'invoke'] as const)(
     'imports a real stream read through %s without crossing independent queues', (method) => {
       const { first, second } = createFixture();
       const bindings = createBindings([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
       const entries = [first, second].map((fixture) => {
-        const consumer = new ReadConsumerImpl(createPromiseReactions(fixture.realm));
+        const consumer = new ReadConsumerImpl();
         const object = bindings.register(fixture.realm).context.project(ReadConsumerImpl, consumer);
         fixture.browlet.expose('reader', fixture.reader);
         const callback = fixture.realm.evaluate('() => reader.read()', 'read-callback.js') as () => Promise<unknown>;
@@ -81,7 +79,7 @@ function createFixture() {
 function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
-  const stream = new ReadableStreamImpl({}, {}, createReactions());
+  const stream = new ReadableStreamImpl({}, {}, browletBindings.forRealm(realm).context.getRuntime());
   const controller = ReadableStreamImpl.getController(stream);
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
@@ -118,17 +116,14 @@ function expectResult(fixture: ReaderFixture, result: unknown, mode: 'chunk' | '
 }
 
 // A test consumer exercises the shared argument/callback adapter with real reads.
-// Streams' underlying-source callback bindings are a separate unfinished path.
 class ReadConsumerImpl {
   received: ReadableStreamReadResult | undefined;
 
-  constructor(private readonly reactions: PromiseReactions) {}
-
-  consume(result: InternalPromise<ReadableStreamReadResult>): InternalPromise<ReadableStreamReadResult> {
-    return result.map((value) => { this.received = value; return value; }, this.reactions);
+  consume(result: PromiseValue<ReadableStreamReadResult>): PromiseValue<ReadableStreamReadResult> {
+    return result.then((value) => { this.received = value; return value; });
   }
 
-  invoke(callback: () => InternalPromise<ReadableStreamReadResult>): InternalPromise<ReadableStreamReadResult> {
+  invoke(callback: () => PromiseValue<ReadableStreamReadResult>): PromiseValue<ReadableStreamReadResult> {
     return this.consume(callback());
   }
 }

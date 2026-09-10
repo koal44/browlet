@@ -1,12 +1,10 @@
-import { isFixedBufferSource, createPromiseReactions, type PromiseReactions } from '../js-engine/index';
-import type { BindingContext } from '../web-idl/projection';
+import { isFixedBufferSource, type RuntimeContext } from '../js-engine/index';
+import { runtimeContext } from '../web-idl/projection';
 import {
-  arg, atArg, contextValue, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
+  arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
   impl, reference,
 } from '../web-idl/declaration/index';
 import { TypeError } from '../js-engine/simple-exception';
-import type { StreamAbortController } from '../streams/abort';
-import { createStreamAbortController } from '../streams/integration';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type WritableStreamImpl,
@@ -31,11 +29,10 @@ export class TextDecoderStreamImpl {
   constructor(
     label: string,
     options: TextDecoderOptions,
-    abortController: StreamAbortController,
-    reactions: PromiseReactions,
+    runtime: RuntimeContext,
   ) {
     this.#common = new TextDecoderCommonMixin(label, options);
-    const transform = new TransformStreamImpl(null, {}, {}, abortController, reactions);
+    const transform = new TransformStreamImpl(null, {}, {}, runtime);
     transform.setUp(
       (chunk) => {
         if (!isFixedBufferSource(chunk)) {
@@ -88,8 +85,7 @@ export const textDecoderStreamIDL = defineInterface({
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
     constructWith: [
-      atArg(2, contextValue(createStreamAbortController)),
-      atArg(3, contextValue((context: BindingContext) => createPromiseReactions(context.realm))),
+      atArg(2, runtimeContext),
     ],
   }),
   members: [ctor([

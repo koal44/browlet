@@ -1,15 +1,13 @@
+import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { PromiseValue, PromiseValueCapability } from '../js-engine/promises';
 import {
-  InternalPromise, createPromiseReactions, type InternalPromiseCapability, type PromiseReactions,
-} from '../js-engine/internal-promise';
-import {
-  arg, atArg, callback, contextValue, ctor, defineCallbackFunction, defineDictionary,
+  arg, atArg, callback, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, op, promise,
   roAttr, reference, xattr,
 } from '../web-idl/declaration/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
-import { bind, type BindingContext } from '../web-idl/projection';
-import type { StreamAbortController } from './abort';
-import { convertStreamCallbacks, createStreamAbortController } from './integration';
+import { bind, runtimeContext } from '../web-idl/projection';
+import { convertStreamCallbacks } from './integration';
 import {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategy,
   type QueuingStrategySize,
@@ -33,8 +31,7 @@ export class WritableStreamImpl {
   constructor(
     underlyingSink: UnderlyingSink | null = {},
     strategy: QueuingStrategy = {},
-    abortController: StreamAbortController,
-    readonly reactions: PromiseReactions,
+    readonly runtime: RuntimeContext,
   ) {
     if (underlyingSink === null) return;
     const sinkDict = underlyingSink;
@@ -54,7 +51,6 @@ export class WritableStreamImpl {
       sinkDict,
       highWaterMark,
       sizeAlgorithm,
-      abortController,
     );
   }
 
@@ -63,9 +59,9 @@ export class WritableStreamImpl {
   }
 
   // SPEC_MISMATCH: abort(reason?) -> Promise<undefined>
-  abort(reason?: unknown): InternalPromise<void> {
+  abort(reason?: unknown): PromiseValue<void> {
     if (isWritableStreamLocked(this)) {
-      return InternalPromise.reject(new TypeError(
+      return this.runtime.promises.reject(new TypeError(
         'Cannot abort a stream that already has a writer',
       ));
     }
@@ -73,14 +69,14 @@ export class WritableStreamImpl {
   }
 
   // SPEC_MISMATCH: close() -> Promise<undefined>
-  close(): InternalPromise<void> {
+  close(): PromiseValue<void> {
     if (isWritableStreamLocked(this)) {
-      return InternalPromise.reject(new TypeError(
+      return this.runtime.promises.reject(new TypeError(
         'Cannot close a stream that already has a writer',
       ));
     }
     if (writableStreamCloseQueuedOrInFlight(this)) {
-      return InternalPromise.reject(new TypeError(
+      return this.runtime.promises.reject(new TypeError(
         'Cannot close an already-closing stream',
       ));
     }
@@ -102,16 +98,15 @@ export function acquireWritableStreamDefaultWriter(
 
 // SPEC_MISMATCH: CreateWritableStream(startAlgorithm, writeAlgorithm, closeAlgorithm, abortAlgorithm, highWaterMark, sizeAlgorithm) -> WritableStream
 export function createWritableStream(
-  startAlgorithm: () => InternalPromise<unknown> | void,
-  writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
-  closeAlgorithm: () => InternalPromise<unknown>,
-  abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+  startAlgorithm: () => PromiseValue<unknown> | void,
+  writeAlgorithm: (chunk: unknown) => PromiseValue<unknown>,
+  closeAlgorithm: () => PromiseValue<unknown>,
+  abortAlgorithm: (reason: unknown) => PromiseValue<unknown>,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
-  abortController: StreamAbortController,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): WritableStreamImpl {
-  const stream = new WritableStreamImpl(null, {}, abortController, reactions);
+  const stream = new WritableStreamImpl(null, {}, runtime);
   const controller = new WritableStreamDefaultControllerImpl();
   setUpWritableStreamDefaultController(
     stream,
@@ -122,39 +117,38 @@ export function createWritableStream(
     abortAlgorithm,
     highWaterMark,
     sizeAlgorithm,
-    abortController,
   );
   return stream;
 }
 
 export type WritableStreamState = {
   backpressure: boolean;
-  closeRequest?: InternalPromiseCapability<void>;
+  closeRequest?: PromiseValueCapability<void>;
   controller?: WritableStreamDefaultControllerImpl;
-  inFlightCloseRequest?: InternalPromiseCapability<void>;
-  inFlightWriteRequest?: InternalPromiseCapability<void>;
+  inFlightCloseRequest?: PromiseValueCapability<void>;
+  inFlightWriteRequest?: PromiseValueCapability<void>;
   pendingAbortRequest?: WritableStreamPendingAbortRequest;
   state: 'closed' | 'errored' | 'erroring' | 'writable';
   storedError?: unknown;
   writer?: WritableStreamDefaultWriterImpl;
-  writeRequests: InternalPromiseCapability<void>[];
+  writeRequests: PromiseValueCapability<void>[];
 };
 
 type WritableStreamPendingAbortRequest = {
-  readonly promise: InternalPromiseCapability<void>;
+  readonly promise: PromiseValueCapability<void>;
   readonly reason: unknown;
   readonly wasAlreadyErroring: boolean;
 };
 
 export type UnderlyingSink = {
-  readonly abort?: (reason?: unknown) => InternalPromise<unknown> | void;
-  readonly close?: () => InternalPromise<unknown> | void;
-  readonly start?: (controller: WritableStreamDefaultControllerImpl) => InternalPromise<unknown> | void;
+  readonly abort?: (reason?: unknown) => PromiseValue<unknown> | void;
+  readonly close?: () => PromiseValue<unknown> | void;
+  readonly start?: (controller: WritableStreamDefaultControllerImpl) => PromiseValue<unknown> | void;
   readonly type?: unknown;
   readonly write?: (
     chunk: unknown,
     controller: WritableStreamDefaultControllerImpl,
-  ) => InternalPromise<unknown> | void;
+  ) => PromiseValue<unknown> | void;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -165,8 +159,7 @@ export const writableStreamIDL = defineInterface({
   ...xattr('Transferable'),
   implementation: impl(WritableStreamImpl, {
     constructWith: [
-      atArg(2, contextValue(createStreamAbortController)),
-      atArg(3, contextValue((context: BindingContext) => createPromiseReactions(context.realm))),
+      atArg(2, runtimeContext),
     ],
   }),
   members: [
@@ -183,8 +176,7 @@ export const writableStreamIDL = defineInterface({
         return new WritableStreamImpl(
           convertStreamCallbacks(context, sink, 'UnderlyingSink', ['start', 'write', 'close', 'abort']),
           strategy as QueuingStrategy,
-          createStreamAbortController(context),
-          createPromiseReactions(context.realm),
+          context.getRuntime(),
         );
       },
     })),
