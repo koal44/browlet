@@ -87,7 +87,7 @@ consumers. Queue support alone still does not implement them.
 
 | ECMAScript term | Principal HTML consumer | Current Browlet treatment | Status |
 | --- | --- | --- | --- |
-| realm, current realm, `GetFunctionRealm` | HTML §§2.7, 7.2.1, 8.1.3, and 8.1.6.6.4 | `JSRealm` owns known realms; `JSRuntime` records object-to-realm evidence and the active `evaluate()` realm. It cannot read arbitrary objects' `[[Realm]]`. | **Bounded** |
+| realm, current realm, `GetFunctionRealm` | HTML §§2.7, 7.2.1, 8.1.3, and 8.1.6.6.4 | `JSRuntime` maps native creation contexts and ordinary/bound/proxy function targets to registered `JSRealm`s. Web IDL constructor fallback uses this lookup. Plain Node retains incomplete prototype/evaluation evidence. | **Native lookup available**, stock fallback bounded |
 | active function object and NewTarget | HTML customized built-in element construction | Browlet-created functions receive `newTarget`; the active function object of arbitrary V8 execution is inaccessible. | **Bounded**, consumer deferred |
 | JavaScript execution context, its stack, and the running context | HTML §§8.1.3–8.1.4 and job callbacks | `EventLoop` mirrors controlled entries; custom engine hooks now expose Promise callback/job boundaries. Arbitrary engine frames remain inaccessible. | **Bounded** (`node-v8-execution-contexts`) |
 | `GetActiveScriptOrModule` | HTML §8.1.4.1 active script and module loading | Custom capture exposes V8 host-defined script metadata, including trusted cross-token lookup. It is not an HTML Script record; production Script records and restoration remain deferred. | **Bounded substrate**, HTML consumer deferred |

@@ -1,6 +1,7 @@
-import { isObject } from '../js-engine/index';
+import { isObject, type JSRealm } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../infra/observable-array';
 import type { AssembledInterface } from './assembly';
+import type { RealmBinding } from './binding';
 import type { AttributeMember } from './declaration/index';
 import type { WebIDLRealmHost } from './js-realm';
 import type { BindingContext } from './projection';
@@ -11,17 +12,16 @@ export class PlatformObjectRegistry {
   #implementationOrigins = new WeakMap<object, PlatformImplementationOrigin>();
   #implementationRecords = new WeakMap<object, PlatformObjectRecord>();
   #objectRecords = new WeakMap<object, PlatformObjectRecord>();
-  #realmBindings = new WeakMap<WebIDLRealmHost, RealmPlatformBinding>();
+  #realmBindings = new WeakMap<JSRealm, RealmPlatformBinding>();
 
   registerRealm(
-    realm: WebIDLRealmHost,
+    binding: RealmBinding,
     context: BindingContext,
-    project: PlatformObjectProjector,
   ): void {
-    if (this.#realmBindings.has(realm)) {
-      throw new TypeError('Realm already has a platform-object projector');
+    if (this.#realmBindings.has(binding.realm)) {
+      throw new TypeError('Realm already has a registered binding');
     }
-    this.#realmBindings.set(realm, { context, project });
+    this.#realmBindings.set(binding.realm, { context, binding });
   }
 
   associateOrigin(
@@ -45,11 +45,13 @@ export class PlatformObjectRegistry {
   projectImplementationOrigin(implementation: object): object {
     const origin = this.#implementationOrigins.get(implementation);
     if (!origin) throw new TypeError('Implementation object has no origin');
-    const binding = this.#realmBindings.get(origin.realm);
-    if (!binding) {
+    const registration = this.#realmBindings.get(origin.realm);
+    if (!registration) {
       throw new TypeError('Implementation origin has no registered realm');
     }
-    return binding.project(implementation, origin.primaryInterface);
+    return registration.binding.projectPlatformObject(
+      implementation, origin.primaryInterface,
+    ).platformObject;
   }
 
   associate(
@@ -112,6 +114,10 @@ export class PlatformObjectRegistry {
     return this.#realmBindings.get(realm)?.context;
   }
 
+  getRealmBinding(realm: JSRealm): RealmBinding | undefined {
+    return this.#realmBindings.get(realm)?.binding;
+  }
+
   getImplementationObject(value: unknown): object | undefined {
     return this.getRecord(value)?.implementation;
   }
@@ -165,14 +171,9 @@ export type PlatformImplementationOrigin = {
   realm: WebIDLRealmHost;
 };
 
-type PlatformObjectProjector = (
-  implementation: object,
-  primaryInterface: AssembledInterface,
-) => object;
-
 type RealmPlatformBinding = {
   context: BindingContext;
-  project: PlatformObjectProjector;
+  binding: RealmBinding;
 };
 
 export type PlatformObjectRecord = {

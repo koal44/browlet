@@ -611,13 +611,22 @@ export class RealmBinding {
   ): object {
     if (!newTarget) return this.getInterfacePrototypeObject(interface_);
 
-    const candidate = Reflect.get(newTarget, 'prototype') as unknown;
-    if (!isObject(candidate)) {
-      throw new Error(
-        'A non-object newTarget prototype requires deferred GetFunctionRealm support',
-      );
+    const candidate: unknown = this.realm.intrinsics.reflectGet(newTarget, 'prototype');
+    if (isObject(candidate)) return candidate;
+
+    // Web IDL's interface-object fallback uses newTarget's function realm,
+    // after reading prototype. The platform object still belongs to this realm.
+    try {
+      const realm = this.realm.runtime.getAssociatedRealm(newTarget);
+      const binding = realm === this.realm ? this :
+        realm && this.platformObjects.getRealmBinding(realm);
+      if (!binding) {
+        return this.#throwTypeError('newTarget realm has no registered Web IDL binding');
+      }
+      return binding.getInterfacePrototypeObject(interface_.definition.name);
+    } catch (error) {
+      throw this.realizeException(error);
     }
-    return candidate;
   }
 
   isExposed(interface_: string | AssembledInterface): boolean {

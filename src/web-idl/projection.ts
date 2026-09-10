@@ -384,14 +384,7 @@ export function registerDefinitionBindings(
       context,
     );
   }
-  binding.platformObjects.registerRealm(
-    binding.realm,
-    context,
-    (implementation, primaryInterface) => binding.projectPlatformObject(
-      implementation,
-      primaryInterface,
-    ).platformObject,
-  );
+  binding.platformObjects.registerRealm(binding, context);
   return context;
 }
 

@@ -202,6 +202,10 @@ restores its saved continuation internally; that data is not exposed to the
 enqueue callback. The function's creation realm identifies its execution queue.
 
 `getRealm(object)` returns the stable reference for an object's creation realm.
+`getFunctionRealm(callable)` instead follows bound-function and proxy targets,
+then returns the target's realm reference. It uses public V8 APIs on all supported
+Node bases, invokes no proxy traps, and throws `ERR_REVOKED_PROXY` for a revoked
+callable proxy. It does not replace the creation-realm lookup used for job queues.
 Each context handle also exposes `.realm`. References have a read-only `.global`
 property and remain distinct when successive contexts reuse one global proxy.
 Use the reference itself as the identity, not `.global`. A Node vm sandbox is

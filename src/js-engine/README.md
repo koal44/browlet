@@ -106,7 +106,9 @@ implementation. Otherwise leave the native expression with its caller.
 
 Do not give a partial substitute the name of a complete ECMAScript operation.
 In particular, `JSRuntime.getAssociatedRealm()` reports the realm evidence
-available to this embedder; it is not a faithful `GetFunctionRealm`. The Web
+available to this embedder. With the addon it follows ordinary, bound, and proxy
+function targets through V8; plain Node still uses incomplete prototype evidence.
+It returns only realms registered with this runtime. The Web
 IDL iterator state machines likewise remain Web IDL behavior rather than being
 presented as `CreateIteratorFromClosure` until the JavaScript layer can supply
 that operation independently of Web IDL records and conversion policy.
@@ -149,11 +151,24 @@ without importing HTML.
 
 ## Node/V8 accommodations
 
-`node-v8-object-realms` records realm associations for objects the host sees
-and follows prototype chains for evaluated objects. It falls back to the realm
-of an active `JSRealm.evaluate()` call when a Proxy prevents inspection.
-Replace the associations and fallback together if Node exposes arbitrary
-objects' `[[Realm]]` or Browlet moves to a direct V8 embedder.
+With the addon, function lookup uses V8's public proxy-target, bound-target, and
+creation-context APIs without invoking author traps. Other objects use explicit
+host associations or V8's creation context. Evaluating a foreign value does not
+change its ownership.
+
+Without the addon, `node-v8-object-realms` follows prototype chains and falls
+back to an active `JSRealm.evaluate()` call when inspection fails. It retains
+the first evaluation association for returned values, including null-prototype
+objects, without overwriting known origins or inspecting author properties.
+These are incomplete clues: an unseen foreign result can still be assigned to
+the returning realm, and hidden bound/proxy targets cannot be inspected. The
+constructor-realm regressions retain these stock-Node failures.
+
+Constructible functions use a realm-owned Proxy construction entry so Binding
+performs allocation and reads `newTarget.prototype` once. Construction steps
+receive no preallocated receiver and must return their object. This fixes
+construction behavior; the separate host-helper/author-script distinction in
+the [roadmap](./ROADMAP.md#working-boundary-matrix) remains open.
 
 `node-vm-global-proxy` bridges a supplied global object and global-this value
 through Node's context global. Stock Node cannot install an existing

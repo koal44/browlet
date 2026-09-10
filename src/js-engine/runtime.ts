@@ -2,17 +2,17 @@ import * as vm from 'node:vm';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
+import { isObject } from './abstract-operations';
 import type { GlobalPrototypeKind, JSFunction, JSRealm } from './realm';
+import { TypeError } from './simple-exception';
 
 /*
  * One module instance represents one Node/V8 isolate. Node workers load a
  * separate module instance and therefore receive a separate runtime owner.
  */
 export class JSRuntime {
-  /*
-   * ACCOMMODATION(node-v8-object-realms): ECMAScript does not expose [[Realm]]
-   * for arbitrary objects, so retain associations for objects this host sees.
-   */
+  // Explicit associations cover host-created objects. Plain Node additionally
+  // uses prototype evidence and the active evaluation when native lookup is absent.
   #evaluatingRealm: JSRealm | undefined;
   readonly #objectRealms = new WeakMap<object, JSRealm>();
   readonly #contextRealms = new WeakMap<object, JSRealm>();
@@ -126,6 +126,29 @@ export class JSRuntime {
   }
 
   getAssociatedRealm(value: object): JSRealm | undefined {
+    const getFunctionRealm = getNodeMethod('getFunctionRealm');
+    if (typeof value === 'function' && getFunctionRealm) {
+      try {
+        const reference = Reflect.apply(getFunctionRealm, nodeApi, [value]) as object;
+        return this.#contextRealms.get(reference);
+      } catch (error) {
+        if (typeof error === 'object' && error !== null &&
+          Reflect.get(error, 'code') === 'ERR_REVOKED_PROXY') {
+          throw new TypeError('Cannot get the realm of a revoked proxy');
+        }
+        throw error;
+      }
+    }
+
+    const associated = this.#objectRealms.get(value);
+    if (associated) return associated;
+    const getRealm = getNodeMethod('getRealm');
+    if (getRealm) {
+      const reference = Reflect.apply(getRealm, nodeApi, [value]) as object;
+      return this.#contextRealms.get(reference);
+    }
+
+    // ACCOMMODATION(node-v8-object-realms): plain Node has no native realm lookup.
     try {
       let current: object | null = value;
       while (current !== null) {
@@ -239,7 +262,15 @@ export class JSRuntime {
     const previous = this.#evaluatingRealm;
     this.#evaluatingRealm = realm;
     try {
-      return steps();
+      const result = steps();
+      // ACCOMMODATION(node-v8-object-realms): plain Node cannot inspect a
+      // returned value's creation realm without author traps. Keep its first
+      // evaluation association, without overwriting an already-known origin.
+      if (getNodeMethod('getRealm') === undefined && isObject(result) &&
+        !this.#objectRealms.has(result)) {
+        this.#objectRealms.set(result, realm);
+      }
+      return result;
     } finally {
       this.#evaluatingRealm = previous;
     }

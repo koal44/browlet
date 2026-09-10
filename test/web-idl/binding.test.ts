@@ -8,6 +8,7 @@ import {
   idlType, observableArray, type AttributeMember, type MaplikeMember,
 } from '../../src/web-idl/declaration/index';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { registerDefinitionBindings } from '../../src/web-idl/projection';
 
 describe('Web IDL JavaScript binding foundation', () => {
   it('recognizes platform objects and inherited interfaces across realms', () => {
@@ -129,12 +130,14 @@ describe('Web IDL JavaScript binding foundation', () => {
     expect(Reflect.apply(get, object, ['answer'])).toBe(42);
   });
 
-  it.fails('uses the newTarget realm when its prototype is not an object', () => {
+  it('uses the newTarget realm when its prototype is not an object', () => {
     const interfaceIDL = defineInterface({
       name: 'RealmPrototypeFallback',
       exposed: '*', members: [],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
+    registerDefinitionBindings(first);
+    registerDefinitionBindings(second);
     const newTarget = second.realm.createFunction(
       () => undefined,
       { constructible: true, length: 0, name: 'Derived' },
