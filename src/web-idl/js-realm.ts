@@ -1,6 +1,6 @@
-import type { JavaScriptRealm } from '../js-engine/index';
+import type { JSRealm } from '../js-engine/index';
 
-export type WebIDLRealmHost = JavaScriptRealm & {
+export type WebIDLRealmHost = JSRealm & {
   callbacks: {
     captureContext(): object;
     cleanUpAfterRunningCallback(context: object): void;

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { createRuntimeBuffers, NodeRealm } from '../../src/js-engine/index';
+import {
+  getArrayBufferByteLength, getArrayBufferMaxByteLength,
+  getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset,
+  getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceCopy,
+  getBufferSourceUnderlyingBuffer, getBufferTypeName, getTypedArrayLength,
+  isArrayBufferViewOutOfBounds, isBufferSourceDetached, isDetachedArrayBuffer,
+  isFixedBufferSource, isLengthTrackingArrayBufferView, JSRealm,
+  writeArrayBuffer, writeArrayBufferView,
+} from '../../src/js-engine/index';
 
 describe('Runtime buffer ownership', () => {
   it('allocates final storage and shares it between target-realm views', () => {
@@ -117,7 +125,186 @@ describe('Runtime buffer ownership', () => {
   });
 });
 
+describe('JavaScript ArrayBuffer primitives', () => {
+  it('recognizes fixed buffer sources across realms without accepting impostors', () => {
+    const realm = new JSRealm();
+    const values = realm.evaluate(`(() => {
+      const buffer = new ArrayBuffer(2);
+      const shared = new SharedArrayBuffer(2);
+      return [buffer, shared, new Uint8Array(buffer), new DataView(shared)];
+    })()`, 'fixed-buffer-sources.js') as unknown[];
+
+    for (const value of values) {
+      expect(isFixedBufferSource(value)).toBe(true);
+    }
+    expect(isFixedBufferSource(Object.create(Uint8Array.prototype)))
+      .toBe(false);
+    expect(isFixedBufferSource(new Proxy(new Uint8Array(2), {})))
+      .toBe(false);
+  });
+
+  it('reads ArrayBuffer and view state across realms', () => {
+    const realm = new JSRealm();
+    const values = realm.evaluate(`(() => {
+      const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+      return {
+        buffer,
+        dataView: new DataView(buffer, 1, 3),
+        shared: new SharedArrayBuffer(4, { maxByteLength: 8 }),
+        view: new Uint16Array(buffer, 2, 2),
+      };
+    })()`, 'buffers.js') as {
+      buffer: object;
+      dataView: object;
+      shared: object;
+      view: object;
+    };
+
+    expect(getBufferTypeName(values.buffer)).toBe('ArrayBuffer');
+    expect(getBufferTypeName(values.shared))
+      .toBe('SharedArrayBuffer');
+    expect(getBufferTypeName(values.dataView)).toBe('DataView');
+    expect(getBufferTypeName(values.view)).toBe('Uint16Array');
+    for (const value of Object.values(values)) {
+      expect(isFixedBufferSource(value)).toBe(false);
+    }
+    expect(getBufferTypeName(
+      Object.create(Uint8Array.prototype) as object,
+    )).toBeUndefined();
+
+    expect(getArrayBufferByteLength(values.buffer)).toBe(8);
+    expect(getArrayBufferMaxByteLength(values.buffer)).toBe(16);
+    expect(getArrayBufferMaxByteLength(values.shared)).toBe(8);
+    expect(getArrayBufferViewBuffer(values.view)).toBe(values.buffer);
+    expect(getArrayBufferViewByteOffset(values.view)).toBe(2);
+    expect(getArrayBufferViewByteLength(values.view)).toBe(4);
+    expect(getTypedArrayLength(values.view)).toBe(2);
+    expect(getArrayBufferViewElementSize('Uint16Array')).toBe(2);
+  });
+
+  it('distinguishes fixed and length-tracking resizable views', () => {
+    const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+    const bytes = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+    new Uint8Array(buffer).set(bytes);
+    const fixed = new Uint16Array(buffer, 2, 3);
+    const tracking = new Uint16Array(buffer, 2);
+    const fixedDataView = new DataView(buffer, 2, 6);
+    const trackingDataView = new DataView(buffer, 2);
+
+    expect(isLengthTrackingArrayBufferView(fixed))
+      .toBe(false);
+    expect(isLengthTrackingArrayBufferView(tracking))
+      .toBe(true);
+    expect(isLengthTrackingArrayBufferView(fixedDataView))
+      .toBe(false);
+    expect(isLengthTrackingArrayBufferView(trackingDataView))
+      .toBe(true);
+    expect(buffer.byteLength).toBe(8);
+    expect(new Uint8Array(buffer)).toEqual(bytes);
+  });
+
+  it('reports detached buffers and out-of-bounds views', () => {
+    const resizable = new ArrayBuffer(8, { maxByteLength: 8 });
+    const view = new Uint8Array(resizable, 4, 4);
+    resizable.resize(2);
+    expect(isArrayBufferViewOutOfBounds(view)).toBe(true);
+
+    const detached = new ArrayBuffer(2);
+    const detachedView = new Uint8Array(detached);
+    structuredClone(detached, { transfer: [detached] });
+    expect(isDetachedArrayBuffer(detached)).toBe(true);
+    expect(isFixedBufferSource(detached)).toBe(true);
+    expect(isFixedBufferSource(detachedView)).toBe(true);
+  });
+});
+
+describe('Realm buffer creation and transfer', () => {
+  it('creates and writes target-realm buffers and views', () => {
+    const realm = new JSRealm();
+    const buffer = realm.createArrayBuffer(Uint8Array.from([1, 2, 3, 4]));
+
+    expect(buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
+    expect(getBufferSourceByteLength(buffer)).toBe(4);
+    expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 2, 3, 4]));
+
+    writeArrayBuffer(buffer, [8, 9], 1);
+    expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 8, 9, 4]));
+
+    const view = realm.createArrayBufferView(
+      'Uint16Array',
+      [1, 2, 3, 4],
+    );
+    const Uint16Array_ = realm.intrinsics.bufferSource.views.Uint16Array;
+    if (!Uint16Array_) throw new Error('Missing Uint16Array intrinsic');
+    expect(view).toBeInstanceOf(Uint16Array_);
+    expect(getBufferSourceByteLength(view)).toBe(4);
+    expect(getBufferSourceCopy(view)).toEqual(Uint8Array.from([1, 2, 3, 4]));
+
+    writeArrayBufferView(view, [5, 6], 2);
+    expect(getBufferSourceCopy(view)).toEqual(Uint8Array.from([1, 2, 5, 6]));
+    expect(getBufferSourceByteLength(
+      getBufferSourceUnderlyingBuffer(view),
+    )).toBe(4);
+
+    expect(() => realm.createArrayBufferView('Uint16Array', [1]))
+      .toThrow(/multiple/);
+  });
+
+  it('creates shared buffers and copies their bytes', () => {
+    const realm = new JSRealm();
+    const buffer = realm.createSharedArrayBuffer([1, 2]);
+    const SharedArrayBuffer_ = realm.intrinsics.bufferSource.sharedArrayBuffer;
+
+    if (!SharedArrayBuffer_) throw new Error('Missing SharedArrayBuffer intrinsic');
+    expect(buffer).toBeInstanceOf(SharedArrayBuffer_);
+    expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 2]));
+  });
+
+  it('detects detachment and transfers into the target realm', () => {
+    const firstRealm = new JSRealm();
+    const secondRealm = new JSRealm();
+    const detached = firstRealm.createArrayBuffer([1, 2]);
+
+    firstRealm.detachArrayBuffer(detached);
+    expect(isBufferSourceDetached(detached)).toBe(true);
+    expect(getBufferSourceCopy(detached)).toEqual(new Uint8Array());
+    expect(() => firstRealm.detachArrayBuffer(detached)).not.toThrow();
+
+    const source = firstRealm.createArrayBuffer([3, 4]);
+    const transferred = secondRealm.transferArrayBuffer(source);
+
+    expect(isBufferSourceDetached(source)).toBe(true);
+    expect(transferred).toBeInstanceOf(
+      secondRealm.intrinsics.bufferSource.arrayBuffer,
+    );
+    expect(getBufferSourceCopy(transferred)).toEqual(Uint8Array.from([3, 4]));
+  });
+
+  it.fails('reads the internal byte length of detached views', () => {
+    const realm = new JSRealm();
+    const buffer = realm.createArrayBuffer([1, 2, 3, 4]);
+    const DataView_ = realm.intrinsics.bufferSource.views.DataView;
+    const Uint8Array_ = realm.intrinsics.bufferSource.views.Uint8Array;
+    if (!DataView_ || !Uint8Array_) throw new Error('Missing view intrinsics');
+
+    const views = [
+      Reflect.construct(DataView_, [buffer, 1, 2]) as object,
+      Reflect.construct(Uint8Array_, [buffer, 1, 2]) as object,
+    ];
+    realm.detachArrayBuffer(buffer);
+    const lengths = views.map((view) => {
+      try {
+        return getBufferSourceByteLength(view);
+      } catch {
+        return undefined;
+      }
+    });
+
+    expect(lengths).toEqual([2, 2]);
+  });
+});
+
 function createFixture() {
-  const realm = new NodeRealm();
-  return { realm, buffers: createRuntimeBuffers(realm) };
+  const realm = new JSRealm();
+  return { realm, buffers: realm.createRuntimeBuffers() };
 }

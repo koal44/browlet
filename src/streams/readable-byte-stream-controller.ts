@@ -6,7 +6,7 @@ import {
 import {
   getBufferSourceByteLength,
   getBufferSourceUnderlyingBuffer,
-  type JavaScriptBufferViewName,
+  type JSBufferViewName,
 } from '../js-engine/index';
 import { TypeError } from '../js-engine/simple-exception';
 import {
@@ -204,7 +204,7 @@ export type PullIntoDescriptor = {
   elementSize: number;
   minimumFill: number;
   readerType: 'byob' | 'default' | 'none';
-  viewType: JavaScriptBufferViewName;
+  viewType: JSBufferViewName;
 };
 
 export const readableByteStreamControllerIDL = defineInterface({

@@ -1,10 +1,9 @@
-import { PromiseValue, installPromiseReactions, type Promises } from '../js-engine/index';
+import { PromiseValue, type ByteSequence, type Promises } from '../js-engine/index';
 import type { PlatformObjectRegistry } from './platform-object';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import {
   convertToIDL, convertToJavaScript, createBufferResult, type ConversionContext,
 } from './conversion';
-import type { ByteSequence } from './buffer-source';
 import { idlType, sequence, type WebIDLType } from './declaration/index';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
@@ -62,7 +61,7 @@ export function projectPromise(
     if (source instanceof PromiseValue) {
       context.realm.promises.import(source).observe(onFulfilled, onRejected);
     } else {
-      installPromiseReactions(context.realm, source, onFulfilled, onRejected);
+      context.realm.observePromise(source, onFulfilled, onRejected);
     }
   } catch (error) {
     promise.reject(error);
@@ -179,8 +178,7 @@ export function reactToPromise(
     { length: 1, name: '' },
   );
 
-  installPromiseReactions(
-    promise.realm,
+  promise.realm.observePromise(
     promise.promise,
     onFulfilled,
     onRejected,
@@ -247,8 +245,7 @@ export function waitForAll(
       },
       { length: 1, name: '' },
     );
-    installPromiseReactions(
-      promise.realm,
+    promise.realm.observePromise(
       promise.promise,
       onFulfilled,
       onRejected,
@@ -278,8 +275,7 @@ export function markPromiseAsHandled(promise: IDLPromise): void {
     () => undefined,
     { length: 1, name: '' },
   );
-  installPromiseReactions(
-    promise.realm,
+  promise.realm.observePromise(
     promise.promise,
     undefined,
     onRejected,

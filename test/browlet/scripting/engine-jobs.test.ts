@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
-import { nodeRuntime } from '../../../src/js-engine/index';
+import { jsRuntime } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import {
@@ -11,7 +11,7 @@ import { Duration } from '../../../src/browlet/performance/clock';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import { EventLoop, type Task } from '../../../src/browlet/scripting/event-loop';
 import {
-  installHostHooks, javaScriptEngineTaskSource,
+  installHostHooks, jsEngineTaskSource,
 } from '../../../src/browlet/scripting/host-hooks';
 import { UserAgent } from '../../../src/browlet/user-agent';
 
@@ -87,7 +87,7 @@ describe('HTML generic and timeout jobs', () => {
 function createFixture() {
   installHostHooks();
   const options = {
-    createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
+    createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
     requestEventLoopTurn: vi.fn(),
     unsafeSharedCurrentTime,
   };
@@ -105,6 +105,6 @@ function createFixture() {
   });
   return {
     array, document, loop, observations, options, realm, traversable,
-    jobs: EventLoop.getTaskQueue(loop, javaScriptEngineTaskSource),
+    jobs: EventLoop.getTaskQueue(loop, jsEngineTaskSource),
   };
 }

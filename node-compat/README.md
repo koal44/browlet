@@ -63,7 +63,7 @@ npm.cmd run test:unit
 npm.cmd run test:artifact
 npm.cmd run test:node-compat
 # Test-runner arguments are forwarded unchanged:
-npm.cmd run test:unit -- test/js-engine/node-runtime.test.ts
+npm.cmd run test:unit -- test/js-engine/runtime.test.ts
 ```
 
 The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
@@ -266,7 +266,7 @@ the host-hook policy coexists correctly with the surrounding runtime.
 
 The addon exports createMicrotaskQueue(), createContextHandle(), runInContext()
 and isContext(). Its contexts are native V8 contexts registered with Node,
-not node:vm Contextify objects. NodeRuntime routes evaluation through the
+not node:vm Contextify objects. JSRuntime routes evaluation through the
 selected backend; node:vm itself is not modified.
 
 This supports Browlet's current context creation and script evaluation needs,
@@ -302,7 +302,7 @@ For Window, the chain is Window.prototype -> WindowProperties ->
 EventTarget.prototype -> Object.prototype. Web IDL populates the allocated
 objects. `setPropertyDelegate(object, delegate)` connects the named-properties
 layer to Web IDL's existing algorithms. `setGlobalObject(handle, globalObject)`
-connects native global access to the per-Window target after NodeRealm transfers
+connects native global access to the per-Window target after JSRealm transfers
 the initial global properties. The implementation keeps `WindowImpl.prototype`;
 the native proxy can be reused without rewriting either Window's binding record.
 

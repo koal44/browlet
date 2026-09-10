@@ -1,10 +1,10 @@
-import { createIteratorResultObject, getMethod, installPromiseReactions, isObject } from '../js-engine/index';
+import { getMethod, isObject } from '../js-engine/index';
 import type { PromiseValue } from '../js-engine/promises';
 
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './declaration/index';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import {
   createPromiseValue, type IDLPromise,
 } from './promise-value';
@@ -19,7 +19,7 @@ export type AsyncSequenceValue<T> = {
 export function createAsyncSequenceValue(
   object: object,
   elementType: WebIDLType,
-  method: JavaScriptMethod,
+  method: JSMethod,
   iteratorType: AsyncSequenceIteratorType,
 ): IDLAsyncSequence {
   return {
@@ -108,7 +108,7 @@ export function closeAsyncIterator(
   reason: unknown,
   realm: WebIDLRealmHost,
 ): IDLPromise {
-  let returnMethod: JavaScriptMethod | undefined;
+  let returnMethod: JSMethod | undefined;
   try {
     returnMethod = getMethod(iterator.record.iterator, 'return', realm);
   } catch (exception) {
@@ -147,7 +147,7 @@ export type IDLAsyncSequence = {
   [asyncSequenceBrand]: true;
   elementType: WebIDLType;
   iteratorType: AsyncSequenceIteratorType;
-  method: JavaScriptMethod;
+  method: JSMethod;
   object: object;
 };
 
@@ -166,17 +166,17 @@ type AsyncSequenceIteratorType = 'async' | 'sync';
 
 type IteratorRecord = {
   iterator: object;
-  nextMethod: JavaScriptMethod;
+  nextMethod: JSMethod;
 };
 
-type JavaScriptMethod = (
+type JSMethod = (
   this: unknown,
   ...argumentsList: unknown[]
 ) => unknown;
 
 function getIteratorFromMethod(
   object: object,
-  method: JavaScriptMethod,
+  method: JSMethod,
   realm: WebIDLRealmHost,
 ): IteratorRecord {
   const iterator = Reflect.apply(method, object, []);
@@ -226,14 +226,14 @@ function adaptSyncIteratorResult(
   argumentsList: unknown[],
   realm: WebIDLRealmHost,
 ): IDLPromise {
-  let method: JavaScriptMethod | undefined;
+  let method: JSMethod | undefined;
   try {
     method = operation === 'next'
       ? sync.nextMethod
       : getMethod(sync.iterator, 'return', realm);
     if (!method) {
       return createResolvedPromise(
-        createIteratorResultObject(realm, argumentsList[0], true),
+        realm.createIteratorResultObject(argumentsList[0], true),
         realm,
       );
     }
@@ -248,7 +248,7 @@ function adaptSyncIteratorResult(
       realm,
     );
     return reactToPromise(valuePromise, realm, (value) =>
-      createIteratorResultObject(realm, value, done));
+      realm.createIteratorResultObject(value, done));
   } catch (exception) {
     return createRejectedPromise(exception, realm);
   }
@@ -274,8 +274,7 @@ function reactToPromise(
     (_thisArgument, [reason]) => { result.reject(reason); },
     { length: 1, name: '' },
   );
-  installPromiseReactions(
-    realm,
+  realm.observePromise(
     promise.promise,
     onFulfilled,
     onRejected,

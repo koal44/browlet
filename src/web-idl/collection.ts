@@ -1,6 +1,4 @@
-import {
-  createIteratorResultObject, isObject,
-} from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
@@ -14,10 +12,10 @@ export class CollectionBinding {
   readonly #context: ConversionContext;
   readonly #mapIterators = new WeakMap<object, MaplikeIterator>();
   readonly #mapNativeNext: unknown;
-  readonly #mapNext: JavaScriptFunction;
+  readonly #mapNext: JSFunction;
   readonly #setIterators = new WeakMap<object, SetlikeIterator>();
   readonly #setNativeNext: unknown;
-  readonly #setNext: JavaScriptFunction;
+  readonly #setNext: JSFunction;
 
   constructor(context: ConversionContext) {
     this.#context = context;
@@ -205,7 +203,7 @@ export class CollectionBinding {
   #createSizeGetter(
     interface_: AssembledInterface,
     kind: CollectionKind,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const object = this.#implementationObject(
@@ -227,7 +225,7 @@ export class CollectionBinding {
     declaration: MaplikeMember,
     kind: MapIterationKind,
     name: string,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const object = this.#implementationObject(
@@ -251,7 +249,7 @@ export class CollectionBinding {
     declaration: SetlikeMember,
     kind: SetIterationKind,
     name: string,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const object = this.#implementationObject(
@@ -273,7 +271,7 @@ export class CollectionBinding {
   #createMapForEach(
     interface_: AssembledInterface,
     declaration: MaplikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -307,7 +305,7 @@ export class CollectionBinding {
   #createSetForEach(
     interface_: AssembledInterface,
     declaration: SetlikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -346,7 +344,7 @@ export class CollectionBinding {
   #createMapGet(
     interface_: AssembledInterface,
     declaration: MaplikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -370,7 +368,7 @@ export class CollectionBinding {
   #createMapHas(
     interface_: AssembledInterface,
     declaration: MaplikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -388,7 +386,7 @@ export class CollectionBinding {
   #createMapSet(
     interface_: AssembledInterface,
     declaration: MaplikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -415,7 +413,7 @@ export class CollectionBinding {
   #createMapDelete(
     interface_: AssembledInterface,
     declaration: MaplikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -433,7 +431,7 @@ export class CollectionBinding {
   #createSetHas(
     interface_: AssembledInterface,
     declaration: SetlikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -451,7 +449,7 @@ export class CollectionBinding {
   #createSetAdd(
     interface_: AssembledInterface,
     declaration: SetlikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -475,7 +473,7 @@ export class CollectionBinding {
   #createSetDelete(
     interface_: AssembledInterface,
     declaration: SetlikeMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -493,7 +491,7 @@ export class CollectionBinding {
   #createClear(
     interface_: AssembledInterface,
     kind: CollectionKind,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const object = this.#implementationObject(
@@ -545,7 +543,7 @@ export class CollectionBinding {
 
   #createIteratorShell(
     prototype: object,
-    next: JavaScriptFunction,
+    next: JSFunction,
     nativeNext: unknown,
   ): object {
     const target = this.#context.realm.createOrdinaryObject(prototype);
@@ -568,8 +566,7 @@ export class CollectionBinding {
     if (!record) this.#throwTypeError('Illegal invocation');
     const result = record.iterator.next();
     if (result.done) {
-      return createIteratorResultObject(
-        this.#context.realm,
+      return this.#context.realm.createIteratorResultObject(
         undefined,
         true,
       );
@@ -586,8 +583,7 @@ export class CollectionBinding {
       record.declaration.value,
       this.#context,
     );
-    return createIteratorResultObject(
-      this.#context.realm,
+    return this.#context.realm.createIteratorResultObject(
       record.kind === 'key'
         ? key
         : record.kind === 'value'
@@ -603,8 +599,7 @@ export class CollectionBinding {
     if (!record) this.#throwTypeError('Illegal invocation');
     const result = record.iterator.next();
     if (result.done) {
-      return createIteratorResultObject(
-        this.#context.realm,
+      return this.#context.realm.createIteratorResultObject(
         undefined,
         true,
       );
@@ -615,8 +610,7 @@ export class CollectionBinding {
       record.declaration.value,
       this.#context,
     );
-    return createIteratorResultObject(
-      this.#context.realm,
+    return this.#context.realm.createIteratorResultObject(
       record.kind === 'value'
         ? value
         : createRealmArray(this.#context, [value, value]),
@@ -655,7 +649,7 @@ export type IDLSetEntries = Set<unknown>;
 type CollectionKind = 'map' | 'set';
 type MapIterationKind = 'key' | 'key+value' | 'value';
 type SetIterationKind = 'key+value' | 'value';
-type JavaScriptFunction = ReturnType<
+type JSFunction = ReturnType<
   ConversionContext['realm']['createFunction']
 >;
 

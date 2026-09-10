@@ -87,7 +87,7 @@ consumers. Queue support alone still does not implement them.
 
 | ECMAScript term | Principal HTML consumer | Current Browlet treatment | Status |
 | --- | --- | --- | --- |
-| realm, current realm, `GetFunctionRealm` | HTML §§2.7, 7.2.1, 8.1.3, and 8.1.6.6.4 | `NodeRealm` owns known realms; `NodeRuntime` records object-to-realm evidence and the active `evaluate()` realm. It cannot read arbitrary objects' `[[Realm]]`. | **Bounded** |
+| realm, current realm, `GetFunctionRealm` | HTML §§2.7, 7.2.1, 8.1.3, and 8.1.6.6.4 | `JSRealm` owns known realms; `JSRuntime` records object-to-realm evidence and the active `evaluate()` realm. It cannot read arbitrary objects' `[[Realm]]`. | **Bounded** |
 | active function object and NewTarget | HTML customized built-in element construction | Browlet-created functions receive `newTarget`; the active function object of arbitrary V8 execution is inaccessible. | **Bounded**, consumer deferred |
 | JavaScript execution context, its stack, and the running context | HTML §§8.1.3–8.1.4 and job callbacks | `EventLoop` mirrors controlled entries; custom engine hooks now expose Promise callback/job boundaries. Arbitrary engine frames remain inaccessible. | **Bounded** (`node-v8-execution-contexts`) |
 | `GetActiveScriptOrModule` | HTML §8.1.4.1 active script and module loading | Custom capture exposes V8 host-defined script metadata, including trusted cross-token lookup. It is not an HTML Script record; production Script records and restoration remain deferred. | **Bounded substrate**, HTML consumer deferred |
@@ -190,7 +190,7 @@ The old checkpoint is historical, not the current addon implementation.
 Calling an incumbent native
 query through an ordinary JavaScript helper makes that helper's realm the
 topmost script-having realm. That is correct for author JavaScript, but
-Browlet's current `JavaScriptRealm.createFunction()` also uses JavaScript
+Browlet's current `JSRealm.createFunction()` also uses JavaScript
 helpers to represent Web IDL operation functions. Browser operation functions
 are built-in functions and do not introduce such a script frame. Browlet
 still needs a true built-in-function entry boundary or equivalent transparent
@@ -252,20 +252,18 @@ Most imported operations do not belong on an embedding interface.
 | Family | Browlet rule | Current status |
 | --- | --- | --- |
 | Calls, construction, properties, descriptors, equality, and primitive conversion | Use native syntax, `Reflect`, `Object.hasOwn`, or the captured realm intrinsic where HTML must explicitly perform the operation. | **Available/delegated**; selected shared operations live in `abstract-operations.ts`. |
-| Built-in function and ordinary object creation | Use realm-owned function/object creation only where a specification must choose the realm, prototype, name, length, or constructibility. | **Available** for current Web IDL uses through `JavaScriptRealm`; not a complete reimplementation of the ECMA operations. |
-| ArrayBuffer/view inspection, copying, and detachment | Keep Web IDL/HTML policy above bounded engine-slot probes and realm intrinsics. | **Available/bounded** in `array-buffer-primitives.ts` and Web IDL buffer-source operations. |
-| `ParseScript` and `ScriptEvaluation` | Let V8 parse and execute, while HTML owns Script records, settings, fetch metadata, and error policy. | **Bounded/deferred:** `NodeRealm.evaluate()` is not yet the formal HTML classic-script pipeline. |
+| Built-in function and ordinary object creation | Use realm-owned function/object creation only where a specification must choose the realm, prototype, name, length, or constructibility. | **Available** for current Web IDL uses through `JSRealm`; not a complete reimplementation of the ECMA operations. |
+| ArrayBuffer/view inspection, copying, and detachment | Keep Web IDL/HTML policy above bounded engine-slot probes and realm intrinsics. | **Available/bounded** in `buffers.ts` and the `JSRealm` class. |
+| `ParseScript` and `ScriptEvaluation` | Let V8 parse and execute, while HTML owns Script records, settings, fetch metadata, and error policy. | **Bounded/deferred:** `JSRealm.evaluate()` is not yet the formal HTML classic-script pipeline. |
 | Module parse/link/evaluate operations | Let the engine own module records and evaluation; HTML owns fetching, module maps, and host metadata. | **Deferred:** Node's VM module APIs are not part of Browlet's supported baseline yet. |
 | `NewPromiseReactionJob` and `NewPromiseResolveThenableJob` | V8 creates these jobs; HTML consumes the supplied job and realm. | **Delegated** creation; custom engine/addon delivery is available and adopted for Browlet Promise jobs. |
 | `ClearKeptObjects`, `CleanupFinalizationRegistry`, and `RunJobs` | These require coordination with engine job/checkpoint state, not TypeScript copies. | **Unavailable for direct control**; Node/V8 performs its own lifecycle. |
 | RegExp parsing/execution | Use captured RegExp intrinsics when an HTML algorithm must avoid author overrides. | **Available**, first consumer deferred. |
 
-- TODO: After the current binding cleanup, review buffer-inspection ownership.
-  `ReadableByteStreamController` imports `getBufferSourceByteLength` and
-  `getBufferSourceUnderlyingBuffer` from Web IDL; data-structure inspection
-  belongs in JS Engine, with Web IDL retaining conversion policy. Check existing
-  engine primitives first; consider addon or V8 support only for a demonstrated
-  missing capability. Defer this investigation for now.
+- Buffer-inspection ownership is reconciled: Streams imports engine facts
+  directly, and Web IDL retains conversion. The remaining native-slot gaps,
+  including the detach-key predicate, are recorded in the
+  [engine boundary notes](./README.md).
 
 ## Complete HTML §2.1.9 inventory
 
@@ -303,7 +301,7 @@ add the behavioral probes relevant to an item while investigating that item;
 the probes are evidence, not a separate grab-bag phase.
 
 1. **Microtask-queue integration — complete.** Land and verify
-   `JavaScriptMicrotaskQueue` with explicit and ambient backends. Under
+   `JSMicrotaskQueue` with explicit and ambient backends. Under
    compatible Node, create one explicit queue per HTML EventLoop
    and use it for every associated Realm, HTML microtask enqueue, and
    checkpoint. Preserve stock Node as an explicitly tested ambient fallback

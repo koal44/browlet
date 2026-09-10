@@ -1,4 +1,6 @@
-import { NodeRealm, nodeRuntime, type GlobalObject, type NodeRealmOptions } from '../../js-engine/index';
+import {
+  JSRealm, jsRuntime, type GlobalObject, type JSRealmOptions,
+} from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
@@ -13,13 +15,13 @@ import {
 
 /*
  * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
- * task associations. NodeRealm supplies the lower JS Engine backend.
+ * task associations. JSRealm supplies the lower JS Engine backend.
  */
 export function createRealm(
   agent: Agent,
   customizations: RealmCustomizations,
   options: RealmCreationOptions = {},
-): JavaScriptExecutionContext {
+): JSExecutionContext {
   const realm = new Realm({ ...options, agent });
   const globalObject = customizations.createGlobalObject(realm);
   const globalThis = customizations.createGlobalThisValue
@@ -35,7 +37,7 @@ export function createRealm(
   return { realm };
 }
 
-export class Realm extends NodeRealm implements WebIDLRealmHost {
+export class Realm extends JSRealm implements WebIDLRealmHost {
   readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
@@ -220,7 +222,7 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
   }
 
   static getAssociatedRealm(value: object): Realm | undefined {
-    const realm = nodeRuntime.getAssociatedRealm(value);
+    const realm = jsRuntime.getAssociatedRealm(value);
     return realm instanceof Realm ? realm : undefined;
   }
 
@@ -243,7 +245,7 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
  * its evaluation state and execution-context stack; HTML currently needs us
  * to retain only the Realm component returned by "create a new realm".
  */
-export type JavaScriptExecutionContext = {
+export type JSExecutionContext = {
   realm: Realm;
 };
 
@@ -255,7 +257,7 @@ export type RealmCustomizations = {
 export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
 
 export type RealmOptions = {
-  globalPrototypeChain?: NodeRealmOptions['globalPrototypeChain'];
+  globalPrototypeChain?: JSRealmOptions['globalPrototypeChain'];
   reuseGlobalProxyFrom?: Realm;
   agent?: Agent;
   crossOriginIsolated?: boolean;

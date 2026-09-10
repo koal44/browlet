@@ -27,7 +27,7 @@ import type {
   StringificationBehavior, ValuePairsSteps,
 } from './registry';
 import type { ValuePair } from './iterable';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import { missingArgument } from './overload';
 import { convertToIDL } from './conversion';
 import { projectPromise, toImplementationPromise } from './promise';

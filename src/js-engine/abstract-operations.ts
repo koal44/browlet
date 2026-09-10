@@ -1,4 +1,4 @@
-import type { JavaScriptMethod, JavaScriptRealm } from './realm';
+import type { JSMethod, JSRealm } from './realm';
 import { SyntaxError, TypeError } from './simple-exception';
 
 /** Selected ECMAScript abstract operations shared by higher specifications. */
@@ -9,7 +9,7 @@ export function isObject(value: unknown): value is object {
   );
 }
 
-export function isCallable(value: unknown): value is JavaScriptMethod {
+export function isCallable(value: unknown): value is JSMethod {
   return typeof value === 'function';
 }
 
@@ -77,8 +77,8 @@ export function ordinarySetWithOwnDescriptor(
 export function getMethod(
   value: unknown,
   key: PropertyKey,
-  realm: JavaScriptRealm,
-): JavaScriptMethod | undefined {
+  realm: JSRealm,
+): JSMethod | undefined {
   if (value === undefined || value === null) {
     throw new realm.intrinsics.typeError(
       'Cannot get a method from null or undefined',
@@ -159,21 +159,6 @@ export function toString(value: unknown): string {
     throw new TypeError('Cannot convert a Symbol value to a string');
   }
   return String(primitive);
-}
-
-export function createIteratorResultObject(
-  realm: JavaScriptRealm,
-  value: unknown,
-  done: boolean,
-): object {
-  const result = realm.createOrdinaryObject(realm.intrinsics.objectPrototype);
-  if (
-    !Reflect.defineProperty(result, 'value', dataDescriptor(value)) ||
-    !Reflect.defineProperty(result, 'done', dataDescriptor(done))
-  ) {
-    throw new Error('Could not initialize an iterator result object');
-  }
-  return result;
 }
 
 function dataDescriptor(value: unknown): PropertyDescriptor {

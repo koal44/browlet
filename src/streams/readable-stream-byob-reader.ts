@@ -6,7 +6,7 @@ import {
 } from '../web-idl/declaration/index';
 import {
   getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceUnderlyingBuffer,
-  getBufferTypeName, isBufferSourceDetached, type JavaScriptBufferViewName,
+  getBufferTypeName, isBufferSourceDetached, type JSBufferViewName,
 } from '../js-engine/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
 import type { ReadableStreamReadResult } from './readable-stream-default-reader';
@@ -155,7 +155,7 @@ export const readableStreamBYOBReaderReadOptionsIDL = defineDictionary({
   })],
 });
 
-function requireBufferViewType(view: object): JavaScriptBufferViewName {
+function requireBufferViewType(view: object): JSBufferViewName {
   const type = getBufferTypeName(view);
   if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
     throw new Error('ArrayBuffer view has no recognized view type');

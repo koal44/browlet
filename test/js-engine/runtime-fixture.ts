@@ -1,5 +1,5 @@
-import {
-  createRuntimeBuffers, type AbortControllerCapability, type RuntimeContext,
+import type {
+  AbortControllerCapability, RuntimeContext,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 
@@ -7,7 +7,7 @@ import { TestRealm } from '../web-idl/test-realm';
 export function createRuntime(realm = new TestRealm()): RuntimeContext {
   return {
     promises: realm.promises,
-    buffers: createRuntimeBuffers(realm),
+    buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     fileReading: {
       queueTask(steps) {

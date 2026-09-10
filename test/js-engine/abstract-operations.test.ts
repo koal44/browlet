@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createIteratorResultObject, getMethod, getSimpleExceptionRequest,
-  isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, NodeRealm,
-  ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
+  getMethod, getSimpleExceptionRequest, isAccessorDescriptor, isCallable, isConstructor,
+  isDataDescriptor, isObject, JSRealm, ordinarySetWithOwnDescriptor,
+  toBigInt, toNumber,
+  toPrimitive, toString,
 } from '../../src/js-engine/index';
 
 describe('ECMAScript abstract operations', () => {
@@ -20,7 +21,7 @@ describe('ECMAScript abstract operations', () => {
   });
 
   it('gets methods and realizes errors in the supplied realm', () => {
-    const realm = new NodeRealm();
+    const realm = new JSRealm();
     const method = () => undefined;
     expect(getMethod({ method }, 'method', realm)).toBe(method);
     expect(getMethod({ method: null }, 'method', realm)).toBeUndefined();
@@ -146,18 +147,5 @@ describe('ECMAScript abstract operations', () => {
       }
       expect(getSimpleExceptionRequest(caught)).toMatchObject({ type });
     }
-  });
-
-  it('creates realm-owned ordinary and iterator-result objects', () => {
-    const realm = new NodeRealm();
-    const prototype = realm.createOrdinaryObject(null);
-    const object = realm.createOrdinaryObject(prototype);
-    expect(Reflect.getPrototypeOf(object)).toBe(prototype);
-    expect(realm.runtime.getAssociatedRealm(object)).toBe(realm);
-
-    const result = createIteratorResultObject(realm, 'value', false);
-    expect(result).toEqual({ value: 'value', done: false });
-    expect(Reflect.getPrototypeOf(result))
-      .toBe(realm.intrinsics.objectPrototype);
   });
 });

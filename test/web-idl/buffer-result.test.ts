@@ -5,7 +5,7 @@ import {
 } from '../../src/web-idl/index';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, writeArrayBuffer,
-} from '../../src/web-idl/buffer-source';
+} from '../../src/js-engine/index';
 import { TestRealm } from './test-realm';
 
 describe('Web IDL buffer results', () => {

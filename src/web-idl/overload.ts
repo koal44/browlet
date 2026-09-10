@@ -1,9 +1,8 @@
 import {
-  getMethod, hasStringData, isObject, type JavaScriptMethod,
+  getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
 } from '../js-engine/index';
 import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
-import { getBufferTypeName } from './buffer-source';
 import {
   convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
@@ -109,7 +108,7 @@ export function resolveOverload<Callable extends IDLCallable>(
     i++;
   }
 
-  let method: JavaScriptMethod | undefined;
+  let method: JSMethod | undefined;
   let asyncSequenceMethod: AsyncSequenceMethod | undefined;
   if (i === distinguishingIndex) {
     const resolution = resolveDistinguishingArgument(
@@ -655,11 +654,11 @@ function throwTypeError(
 type DistinguishingResolution<Callable extends IDLCallable> = {
   asyncSequenceMethod?: AsyncSequenceMethod;
   candidates: EffectiveOverloadSetItem<Callable>[];
-  method?: JavaScriptMethod;
+  method?: JSMethod;
 };
 
 type AsyncSequenceMethod = {
-  method: JavaScriptMethod;
+  method: JSMethod;
   type: 'async' | 'sync';
 };
 

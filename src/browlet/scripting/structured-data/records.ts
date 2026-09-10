@@ -144,7 +144,7 @@ export type TransferDataHolder =
 export type ArrayBufferTransferDataHolder = {
   type: 'ArrayBuffer' | 'ResizableArrayBuffer';
   placeholder: TransferPlaceholderSerializedRecord;
-  buffer: object;
+  buffer: ArrayBuffer;
   byteLength: number;
   maxByteLength?: number;
 };

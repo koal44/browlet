@@ -6,7 +6,7 @@ import {
 } from './capability';
 import type { Definition } from './declaration/index';
 import type { HostDefinedInterface } from './conversion';
-import type { WebIDLRealmHost } from './javascript-realm';
+import type { WebIDLRealmHost } from './js-realm';
 import { PlatformObjectRegistry } from './platform-object';
 import {
   registerDefinitionBindings, type BindingContext,

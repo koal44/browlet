@@ -9,9 +9,7 @@ import {
   getReadableStreamReader, isReadableStreamClosed, isReadableStreamDisturbed,
   isReadableStreamLocked, readReadableStreamChunk,
 } from '../../src/streams/index';
-import {
-  createArrayBufferView, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
-} from '../../src/js-engine/index';
+import { getBufferSourceCopy, getBufferSourceUnderlyingBuffer } from '../../src/js-engine/index';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 
 describe('Fetch body cloning', () => {
@@ -88,7 +86,7 @@ describe('Fetch byte sequences as bodies', () => {
     const fixture = createBodyFixture();
     const body = bytesAsBody(Uint8Array.of(1, 2), fixture.runtime);
     const reader = body.stream.getReader({ mode: 'byob' });
-    const view = createArrayBufferView('Uint8Array', [0, 0, 0, 0], fixture.context.realm);
+    const view = fixture.context.realm.createArrayBufferView('Uint8Array', [0, 0, 0, 0]);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     const reading = reader.read(view, { min: 1 });
     fixture.runParallel();
@@ -202,7 +200,7 @@ describe('Fetch incremental body reading', () => {
   it('accepts a Uint8Array from another realm', () => {
     const fixture = createBodyFixture();
     const other = createBodyFixture();
-    const chunk = createArrayBufferView('Uint8Array', [1, 2], other.context.realm);
+    const chunk = other.context.realm.createArrayBufferView('Uint8Array', [1, 2]);
     const body = fixture.createBody([chunk]);
     closeReadableStream(body.stream);
     const process = vi.fn();

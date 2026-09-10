@@ -7,7 +7,10 @@ Documents, Windows, or platform-object projection.
 It also defines the neutral [`RuntimeContext`](./runtime-context.ts) contract
 shared by asynchronous implementations. Browlet composes its task, abort, and
 clone providers; their HTML/DOM policy stays above this layer. Engine-owned
-buffer operations live in [`buffers.ts`](./buffers.ts), while Web IDL retains
+buffer inspection and writes live in [`buffers.ts`](./buffers.ts). Realm-owned
+allocation, view construction, and transfer belong to the
+[`JSRealm`](./realm.ts) class. Its `createRuntimeBuffers()` method supplies
+those operations to implementations without exposing the realm. Web IDL retains
 BufferSource conversion. The composition and lifetime rules are authoritative
 in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md#runtime-context).
 
@@ -37,8 +40,8 @@ The [compatibility addon](../../node-compat/README.md) now supplies explicit
 queues and reusable native context handles on Node 24 and 26. The `with-node`
 launcher chooses the Node base through `NODE_BASE` and enables the addon for
 `NODE_RUNTIME=compat`. It supplies the internal `BROWLET_NODE_ADDON` module path
-to NodeRuntime; embedders can also supply that path directly. NodeRealm delegates
-evaluation to that selected backend. The addon does not
+to `JSRuntime`; embedders can also supply that path directly.
+`JSRealm` delegates evaluation to that selected backend. The addon does not
 make node:vm recognize its handles and does not yet supply post-creation
 prototype immutability. References to stock fallbacks below mean plain Node
 without the addon. References to source-patched Node describe the original
@@ -46,8 +49,8 @@ Node branch. Browlet's Window creation and navigation now use the addon's
 creation-time immutable allocation; they no longer require that branch's
 post-creation immutable-prototype operation.
 
-`JavaScriptRuntime.setHostHooks()` adapts the make/call and three enqueue hooks
-to known `JavaScriptRealm` identities. Context-handle references keep successive
+`JSRuntime.setHostHooks()` adapts the make/call and three enqueue hooks
+to known `JSRealm` identities. Context-handle references keep successive
 realms distinct even when their WindowProxy is reused. The Promise enqueue adapter also
 identifies the realm owning the job's queue, which can differ from the null
 specification realm of a handlerless reaction. HTML owns the settings and task
@@ -102,25 +105,25 @@ observable realm or engine invariant, or removes a meaningful duplicate
 implementation. Otherwise leave the native expression with its caller.
 
 Do not give a partial substitute the name of a complete ECMAScript operation.
-In particular, `NodeRuntime.getAssociatedRealm()` reports the realm evidence
+In particular, `JSRuntime.getAssociatedRealm()` reports the realm evidence
 available to this embedder; it is not a faithful `GetFunctionRealm`. The Web
 IDL iterator state machines likewise remain Web IDL behavior rather than being
 presented as `CreateIteratorFromClosure` until the JavaScript layer can supply
 that operation independently of Web IDL records and conversion policy.
 
-The stable contract uses JavaScript vocabulary. The concrete backend remains
-explicitly Node-shaped:
+The engine has two concrete classes backed by Node and the optional addon:
 
-- `NodeRuntime` is the isolate-scoped owner of engine feature selection and the
-  object-to-realm associations Node cannot expose directly;
-- `NodeRealm` owns one Node VM context, its captured intrinsics, evaluation,
-  function creation, and global-object bridge, and receives the selected
-  microtask queue when its context is created; and
-- Web IDL or HTML hosts subclass `NodeRealm` to add their own policy without
+- [`JSRuntime`](./runtime.ts) owns isolate-wide feature selection and
+  object-to-realm associations. Its module also defines host hooks, job records,
+  and the microtask-queue contract;
+- [`JSRealm`](./realm.ts) owns one Node VM context, its captured intrinsics,
+  evaluation, function creation, and global-object bridge, and receives the
+  selected microtask queue when its context is created; and
+- Web IDL or HTML hosts subclass `JSRealm` to add their own policy without
   introducing a forwarding realm object.
 
-There is one exported `nodeRuntime` instance per module instance. Node workers
-load separate module instances and therefore receive separate runtime owners.
+There is one exported `jsRuntime` instance per module instance. Node
+workers load separate module instances and therefore receive separate runtime owners.
 Do not construct per-Agent, per-AgentCluster, or per-BindingWorld realm maps:
 objects can cross those boundaries synchronously within one isolate.
 
@@ -128,7 +131,7 @@ The JavaScript-facing queue contract is deliberately independent of Node's VM
 handle:
 
 ```ts
-interface JavaScriptMicrotaskQueue {
+interface JSMicrotaskQueue {
   readonly kind: 'explicit' | 'ambient';
   enqueueMicrotask(steps: () => void): void;
   performMicrotaskCheckpoint(): void;
@@ -148,7 +151,7 @@ without importing HTML.
 
 `node-v8-object-realms` records realm associations for objects the host sees
 and follows prototype chains for evaluated objects. It falls back to the realm
-of an active `NodeRealm.evaluate()` call when a Proxy prevents inspection.
+of an active `JSRealm.evaluate()` call when a Proxy prevents inspection.
 Replace the associations and fallback together if Node exposes arbitrary
 objects' `[[Realm]]` or Browlet moves to a direct V8 embedder.
 
@@ -161,7 +164,7 @@ replaceable execution context and a separate `globalProxy` identity. The
 handle can detach that proxy; supplying the detached handle as
 `reuseGlobalProxyFrom` transfers the proxy once to a fresh Realm with fresh
 intrinsics and global state. The handle itself proves provenance, so the
-runtime needs no global proxy registry. `NodeRealm` uses this handle whenever
+runtime needs no global proxy registry. `JSRealm` uses this handle whenever
 compatible context creation is available. The addon allocates the immutable
 Window prototype chain at context creation, then Web IDL projects into those
 objects. Post-creation sealing survives only as historical backend support.
@@ -183,7 +186,7 @@ the ambient backend when the supported stock baseline gains the same complete
 surface—HTML's checkpoint guard and post-checkpoint work remain specification
 behavior in either mode.
 
-`installPromiseReactions()` uses the addon's native `v8::Promise::Then` operation.
+`JSRealm.observePromise()` uses the addon's native `v8::Promise::Then` operation.
 It installs forwarding functions in the observer's realm. Node 26.8.1 and the
 custom engine bypass author `then`, `constructor`, and `@@species`; Node 24.19.0's
 older V8 still consults `constructor`, retained as an expected failure. No
@@ -225,8 +228,8 @@ for choosing its implementation-defined serialized string. Replace the read
 and write operations together if Node exposes Error stack state directly.
 
 ArrayBuffer brands come from Node's `util.types`; captured intrinsic accessors
-read the remaining buffer and view facts. Runtime buffers own allocation,
-copying, and transfer primitives. Web IDL retains conversion and projection;
+read the remaining buffer and view facts. Realm methods provide allocation,
+copying, and transfer through runtime buffers. Web IDL retains conversion and projection;
 HTML retains structured-data records and reconstruction rules.
 
 The custom engine and addon expose `ArrayBufferView::IsLengthTracking()` for
@@ -238,10 +241,14 @@ Growable SharedArrayBuffer views cannot be probed this way because growth is
 irreversible, and retain the existing expected failure only on backends without
 the native query. Remove the probe when every supported backend exposes the
 query. The boundary is covered by
-[`array-buffer-primitives.test.ts`](../../test/js-engine/array-buffer-primitives.test.ts)
+[`buffers.test.ts`](../../test/js-engine/buffers.test.ts)
 and the HTML structured-data tests.
+
+The non-destructive `[[ArrayBufferDetachKey]]` query remains deferred engine
+work. V8's `IsDetachable()` reports a different flag; the actual transfer is
+authoritative until the engine can expose the missing key predicate.
 
 The runtime contracts, explicit-queue behavior, and known ambient fallback
 limits are exercised in
-[`node-realm.test.ts`](../../test/js-engine/node-realm.test.ts) and
-[`node-runtime.test.ts`](../../test/js-engine/node-runtime.test.ts).
+[`realm.test.ts`](../../test/js-engine/realm.test.ts) and
+[`runtime.test.ts`](../../test/js-engine/runtime.test.ts).

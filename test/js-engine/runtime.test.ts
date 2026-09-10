@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { NodeRealm, nodeRuntime } from '../../src/js-engine/index';
+import { JSRealm, jsRuntime } from '../../src/js-engine/index';
 import { itPassesWith } from '../test-runtime';
 
-describe('Node runtime', () => {
+describe('JavaScript runtime', () => {
   itPassesWith('explicitQueues')(
     'reuses a detached global proxy in a replacement Realm',
     () => {
-      const microtaskQueue = nodeRuntime.createMicrotaskQueue();
-      const first = new NodeRealm(microtaskQueue);
+      const microtaskQueue = jsRuntime.createMicrotaskQueue();
+      const first = new JSRealm(microtaskQueue);
       const firstObject = first.intrinsics.object;
       const globalProxy = first.detachGlobal();
-      const second = new NodeRealm(microtaskQueue, {
+      const second = new JSRealm(microtaskQueue, {
         reuseGlobalProxyFrom: first,
       });
 
@@ -23,9 +23,9 @@ describe('Node runtime', () => {
 
   it('drains promise jobs from its VM realms in shared FIFO order', async () => {
     await runInHostTask(() => {
-      const microtaskQueue = nodeRuntime.createMicrotaskQueue();
-      const first = new NodeRealm(microtaskQueue);
-      const second = new NodeRealm(microtaskQueue);
+      const microtaskQueue = jsRuntime.createMicrotaskQueue();
+      const first = new JSRealm(microtaskQueue);
+      const second = new JSRealm(microtaskQueue);
       const order: string[] = [];
       const record = (value: string): void => { order.push(value); };
       Reflect.set(first.global, 'record', record);
@@ -52,7 +52,7 @@ describe('Node runtime', () => {
     'isolates checkpoints from ambient Node next ticks',
     async () => {
       await runInHostTask(() => {
-        const microtaskQueue = nodeRuntime.createMicrotaskQueue();
+        const microtaskQueue = jsRuntime.createMicrotaskQueue();
         const order: string[] = [];
 
         process.nextTick(() => { order.push('ambient next tick'); });
@@ -66,7 +66,7 @@ describe('Node runtime', () => {
 
   itPassesWith('explicitQueues')('drains jobs when entered from a host microtask', async () => {
     await Promise.resolve();
-    const microtaskQueue = nodeRuntime.createMicrotaskQueue();
+    const microtaskQueue = jsRuntime.createMicrotaskQueue();
     const order: string[] = [];
 
     microtaskQueue.enqueueMicrotask(() => { order.push('nested microtask'); });
@@ -80,7 +80,7 @@ describe('Node runtime', () => {
     () => {
       vi.useFakeTimers();
       try {
-        const microtaskQueue = nodeRuntime.createMicrotaskQueue();
+        const microtaskQueue = jsRuntime.createMicrotaskQueue();
         const order: string[] = [];
 
         setImmediate(() => {
@@ -97,10 +97,10 @@ describe('Node runtime', () => {
 
   itPassesWith('explicitQueues')('isolates queues owned by different agents', async () => {
     await runInHostTask(() => {
-      const firstQueue = nodeRuntime.createMicrotaskQueue();
-      const secondQueue = nodeRuntime.createMicrotaskQueue();
-      const first = new NodeRealm(firstQueue);
-      const second = new NodeRealm(secondQueue);
+      const firstQueue = jsRuntime.createMicrotaskQueue();
+      const secondQueue = jsRuntime.createMicrotaskQueue();
+      const first = new JSRealm(firstQueue);
+      const second = new JSRealm(secondQueue);
       const order: string[] = [];
       Reflect.set(first.global, 'order', order);
       Reflect.set(second.global, 'order', order);

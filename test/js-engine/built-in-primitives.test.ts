@@ -4,7 +4,7 @@ import * as JSEngine from '../../src/js-engine/index';
 
 describe('Node/V8 built-in primitives', () => {
   it('recognizes and reads built-in state across realms', () => {
-    const realm = new JSEngine.NodeRealm();
+    const realm = new JSEngine.JSRealm();
     const values = realm.evaluate(`({
       bigint: Object(7n),
       boolean: Object(false),
@@ -83,7 +83,7 @@ describe('Node/V8 built-in primitives', () => {
   });
 
   it('reads and restores V8 Error stacks without author accessors', () => {
-    const realm = new JSEngine.NodeRealm();
+    const realm = new JSEngine.JSRealm();
     const error = realm.evaluate(
       "new Error('failed')",
       'structured-clone-error-stack.js',

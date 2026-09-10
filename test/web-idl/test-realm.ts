@@ -1,16 +1,16 @@
 import {
-  type JavaScriptMicrotaskQueue, NodeRealm, nodeRuntime,
+  type JSMicrotaskQueue, JSRealm, jsRuntime,
 } from '../../src/js-engine/index';
 import type {
   SecurityCheckType, WebIDLRealmHost,
-} from '../../src/web-idl/javascript-realm';
+} from '../../src/web-idl/js-realm';
 
 /*
  * Web IDL's unit tests need a JavaScript realm, not Browlet's HTML callback
  * lifecycle. Keep the boundary honest with the smallest host that satisfies
- * Web IDL while NodeRealm supplies realm identity and JavaScript execution.
+ * Web IDL while JSRealm supplies realm identity and JavaScript execution.
  */
-export class TestRealm extends NodeRealm implements WebIDLRealmHost {
+export class TestRealm extends JSRealm implements WebIDLRealmHost {
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
   readonly globalNames: ReadonlySet<string>;
@@ -30,7 +30,7 @@ export class TestRealm extends NodeRealm implements WebIDLRealmHost {
       cleanUpAfterRunningCallback: () => {},
       cleanUpAfterRunningScript: () => {},
       getAssociatedRealm: (value) => {
-        const realm = nodeRuntime.getAssociatedRealm(value);
+        const realm = jsRuntime.getAssociatedRealm(value);
         return realm instanceof TestRealm ? realm : this;
       },
       prepareToRunCallback: () => {},
@@ -57,7 +57,7 @@ type TestRealmOptions = {
   secureContext?: boolean;
 };
 
-const testMicrotaskQueue: JavaScriptMicrotaskQueue = {
+const testMicrotaskQueue: JSMicrotaskQueue = {
   kind: 'ambient',
   enqueueMicrotask: (steps) => { globalThis.queueMicrotask(steps); },
   performMicrotaskCheckpoint: () => {

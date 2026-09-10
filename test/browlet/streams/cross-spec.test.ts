@@ -19,7 +19,7 @@ import {
   getBufferSourceByteOffset, getBufferSourceCopy,
   getBufferSourceUnderlyingBuffer,
   writeArrayBufferView,
-} from '../../../src/web-idl/buffer-source';
+} from '../../../src/js-engine/index';
 
 describe('Streams operations for other specifications', () => {
   it('drains buffered bytes without recursion or Node microtask scheduling', () => {

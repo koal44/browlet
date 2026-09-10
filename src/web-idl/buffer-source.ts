@@ -45,15 +45,6 @@ export function convertBufferSourceToJavaScript(
   return value;
 }
 
-// Compatibility exports for callers migrating below the Web IDL boundary.
-export {
-  createArrayBuffer, createArrayBufferView, createArrayBufferViewFromBuffer,
-  createSharedArrayBuffer, detachArrayBuffer, getBufferSourceByteLength,
-  getBufferSourceByteOffset, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
-  getBufferTypeName, isBufferSourceDetached, transferArrayBuffer,
-  writeArrayBuffer, writeArrayBufferView, type ByteSequence,
-} from '../js-engine/index';
-
 function isBufferViewTypeName(name: BufferTypeName): name is BufferViewTypeName {
   return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
 }

@@ -1,6 +1,4 @@
-import {
-  createIteratorResultObject, isObject,
-} from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import type { AssembledInterface } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
@@ -109,7 +107,7 @@ export class SynchronousIterableBinding {
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const target = this.#implementationObject(
@@ -135,7 +133,7 @@ export class SynchronousIterableBinding {
   #createForEachMethod(
     interface_: AssembledInterface,
     iterable: IterableMember,
-  ): JavaScriptFunction {
+  ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const object = this.#implementationObject(
@@ -233,8 +231,7 @@ export class SynchronousIterableBinding {
       iterable,
     );
     if (iterator.index >= pairs.length) {
-      return createIteratorResultObject(
-        this.#context.realm,
+      return this.#context.realm.createIteratorResultObject(
         undefined,
         true,
       );
@@ -242,8 +239,7 @@ export class SynchronousIterableBinding {
 
     const pair = pairs[iterator.index]!;
     iterator.index++;
-    return createIteratorResultObject(
-      this.#context.realm,
+    return this.#context.realm.createIteratorResultObject(
       this.#convertPairResult(pair, iterable, iterator.kind),
       false,
     );
@@ -321,7 +317,7 @@ type DefaultIterator = {
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';
-type JavaScriptFunction = ReturnType<
+type JSFunction = ReturnType<
   ConversionContext['realm']['createFunction']
 >;
 

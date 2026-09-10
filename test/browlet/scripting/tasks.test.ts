@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  type JavaScriptMicrotaskQueue,
+  type JSMicrotaskQueue,
 } from '../../../src/js-engine/index';
 import {
   EventLoop, createTaskSource, type EventLoopOptions,
@@ -548,8 +548,8 @@ function createEventLoop(): EventLoop {
 }
 
 function createMicrotaskQueue(
-  overrides: Partial<JavaScriptMicrotaskQueue> = {},
-): JavaScriptMicrotaskQueue {
+  overrides: Partial<JSMicrotaskQueue> = {},
+): JSMicrotaskQueue {
   return {
     kind: overrides.kind ?? 'explicit',
     enqueueMicrotask: vi.fn(overrides.enqueueMicrotask ?? (() => {})),

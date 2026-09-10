@@ -1,4 +1,4 @@
-import { createRuntimeBuffers, type RuntimeContext } from '../../js-engine/index';
+import type { RuntimeContext } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/projection';
 import { WindowImpl } from '../browsing/window/window';
 import { AbortControllerImpl } from '../dom/abort/abort-controller';
@@ -17,7 +17,7 @@ export function createWindowRuntime(
   // Global installation completes after registration. Host operations run later.
   return {
     promises: realm.promises,
-    buffers: createRuntimeBuffers(realm),
+    buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     fileReading: {
       queueTask: (steps) => queueGlobalTask(fileReadingTaskSource, realm.global, steps),

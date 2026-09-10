@@ -3,7 +3,7 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
-import { nodeRuntime } from '../js-engine/index';
+import { jsRuntime } from '../js-engine/index';
 import {
   browletBindings, getRelevantRealm,
 } from './bindings';
@@ -38,7 +38,7 @@ export class Browlet {
     this.#route = config.route;
     this.#userAgent = new UserAgent(
       {
-        createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
+        createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
         requestEventLoopTurn: requestNodeEventLoopTurn,
         unsafeSharedCurrentTime,
       },

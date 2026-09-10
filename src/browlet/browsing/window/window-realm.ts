@@ -1,6 +1,6 @@
 import { browletBindings, projectWindow } from '../../bindings';
 import type { WindowAgent } from '../../scripting/agents';
-import { Realm, type JavaScriptExecutionContext } from '../../scripting/realm';
+import { Realm, type JSExecutionContext } from '../../scripting/realm';
 import type { WindowImpl } from './window';
 import { createWindowRuntime } from '../../integration/runtime';
 import { adoptNativeWindowProxy, createWindowProxy } from './window-proxy';
@@ -13,7 +13,7 @@ export function createWindowRealm(
   agent: WindowAgent,
   window: WindowImpl,
   previousRealm?: Realm,
-): JavaScriptExecutionContext {
+): JSExecutionContext {
   const native = Realm.supportsGlobalPrototypeChain;
   if (native) previousRealm?.detachGlobal();
   const realm = new Realm({

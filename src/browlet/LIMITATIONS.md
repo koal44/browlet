@@ -14,7 +14,7 @@ accommodations.
 
 Stock Node's VM creates an inaccessible global proxy for every context and
 cannot reuse Browlet's WindowProxy as the context's actual global-this. As an
-accommodation, `NodeRealm` keeps that VM global private, points its
+accommodation, `JSRealm` keeps that VM global private, points its
 `globalThis` property at the modeled WindowProxy, and inherits free global
 names through it.
 
@@ -53,7 +53,7 @@ expected-failure test records that mismatch.
 The compatible path resolves those identity/descriptor mismatches through
 native allocation; it does not complete browser origin policy. The engine
 bridge is implemented in
-[`node-realm.ts`](../js-engine/node-realm.ts), below Web IDL; Browlet's
+[`realm.ts`](../js-engine/realm.ts), below Web IDL; Browlet's
 [`realm.ts`](./scripting/realm.ts) retains the HTML global and task
 associations. The current observable mismatches are recorded in
 [`document-lifecycle.test.ts`](../../test/browlet/browsing/document-lifecycle.test.ts)
@@ -72,7 +72,7 @@ result remain for their corresponding HTML machinery.
 ## Node/V8 event-loop integration
 
 The completed integration introduces one
-`JavaScriptMicrotaskQueue` contract with `explicit` and `ambient` backends. A
+`JSMicrotaskQueue` contract with `explicit` and `ambient` backends. A
 Browlet-compatible Node creates one explicit V8 queue for each configured HTML
 EventLoop and gives every Realm of its Agent the same queue. HTML
 microtasks and native Promise jobs then share one FIFO, and a checkpoint drains

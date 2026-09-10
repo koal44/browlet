@@ -328,8 +328,8 @@ queuing strategies, queue-with-sizes, and promise/miscellaneous helpers.
 Eight new markers: the transform and two strategy constructors, the supplied
 controller in transformer setup, two explicit RangeError constructors,
 `CloneAsUint8Array`'s context, and `TransferArrayBuffer`'s realm argument.
-The last marker lives at the shared definition in `src/web-idl/buffer-source.ts`;
-it covers the Streams boundary without extending this into a Web IDL audit.
+The transfer marker was subsequently resolved by making the target realm the
+receiver of `JSRealm.transferArrayBuffer(buffer): ArrayBuffer`.
 
 Transform operations otherwise recover context from their stream. Strategy
 size functions are cached by Binding Context; their allocation/cache helper
@@ -338,7 +338,7 @@ arguments. The local `runPromiseAlgorithm` adapter was later removed by the
 implementation migration recorded in [Streams' owner notes](../streams/PORTING-NOTES.md). MessagePort-backed transfers remain deferred in
 [Streams' owner notes](../streams/PORTING-NOTES.md). `CanTransferArrayBuffer`
 has no implementation; its missing detach-key check is recorded beside
-[the shared transfer helper](../web-idl/buffer-source.ts). No state-machine
+[the engine transfer method](../js-engine/realm.ts). No state-machine
 behavior or context ownership was changed by this pass.
 
 | Follow-up | Scope |

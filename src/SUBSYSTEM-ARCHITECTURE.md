@@ -61,12 +61,13 @@ It must not:
 ### JS Engine
 
 [`js-engine/`](./js-engine/README.md) is the engine substrate beneath Web
-IDL. A `JavaScriptRealm` exposes realm-owned globals, intrinsics, function
-creation, and evaluation. The concrete `NodeRealm` owns one backend context
+IDL. The `JSRealm` class exposes realm-owned globals, intrinsics, function and
+iterator-result creation, buffer allocation/transfer, Promise observation,
+and evaluation. It owns one backend context
 (a `node:vm` context or a native context supplied by the compatibility addon),
-while the isolate-scoped `NodeRuntime` owns feature selection and the
+while the isolate-scoped `JSRuntime` owns feature selection and the
 provisional object-to-realm associations shared across those realms. It also
-supplies `JavaScriptMicrotaskQueue` backends without owning their HTML
+supplies `JSMicrotaskQueue` backends without owning their HTML
 lifecycle: each EventLoop asks the runtime factory for one queue and shares it
 with all Realms of its Agent. The factory selects an explicit queue under
 compatible Node or stock Node plus the addon, or the one ambient fallback queue
@@ -75,6 +76,10 @@ checkpoint operations travel together on that contract so the event loop
 cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
+Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
+allocation and native Promise observation use the selected realm's methods.
+Composition exposes the required operations through `runtime.buffers` and
+`runtime.promises`, without passing a realm into implementation algorithms.
 JS Engine also owns internal simple-exception requests; their realization into
 realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
@@ -106,7 +111,7 @@ it does not discover HTML collaborators from platform objects.
 
 This is a dependency layer, not a fourth platform-object identity. Web IDL
 extends the JavaScript realm contract with binding policy, and Browlet's HTML
-`Realm` subclasses `NodeRealm` to add its Agent, environment settings object,
+`Realm` subclasses `JSRealm` to add its Agent, environment settings object,
 callback lifecycle, and global task associations. The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
@@ -423,7 +428,7 @@ Classify a new dependency in this order:
    Implementation object or in its algorithms.
 2. **Is it stateless and realm-neutral?** Import a shared algorithm directly.
 3. **Is it generic engine behavior tied to a JavaScript realm or runtime?** Use
-   the shared `JavaScriptRealm` or `JavaScriptRuntime` operation.
+   the shared `JSRealm` or `JSRuntime` operation.
 4. **Is it Web IDL behavior tied to the current binding realm?** Put it in the
    declaration or member binding, using the shared Binding Context there.
 5. **Does another specification subsystem own the semantic behavior?** Import

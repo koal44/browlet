@@ -1,6 +1,6 @@
 import { types as nodeTypes } from 'node:util';
 
-import type { JavaScriptRealm } from './realm';
+import type { JSRealm } from './realm';
 
 /**
  * Node/V8 primitives for inspecting built-in data and object kinds.
@@ -113,7 +113,7 @@ export function appendSetData(value: object, entryValue: unknown): void {
  */
 export function readErrorStack(
   value: object,
-  realm: JavaScriptRealm,
+  realm: JSRealm,
 ): unknown {
   const descriptor = Reflect.getOwnPropertyDescriptor(value, 'stack');
   if (!descriptor) return;

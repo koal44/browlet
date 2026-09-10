@@ -14,7 +14,7 @@
   hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,
   Browlet-controlled script entries from §8.1.4.4 and coalesced host wake-ups.
   Browlet integration supplies the Node turn request. The current queue slice
-  gives the loop a lower-level `JavaScriptMicrotaskQueue` for both enqueue and
+  gives the loop a lower-level `JSMicrotaskQueue` for both enqueue and
   checkpoint operations and gives its realms the same queue.
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
@@ -77,7 +77,7 @@ reporting, and FinalizationRegistry cleanup scheduling remain deferred.
   `queueMicrotask()` is only that backend's enqueue primitive, not an event-loop
   wake-up or the complete HTML checkpoint algorithm. Compatible mode instead
   enqueues directly on the EventLoop's explicit V8 queue.
-- `JavaScriptMicrotaskQueue` has one complete consumer-facing contract:
+- `JSMicrotaskQueue` has one complete consumer-facing contract:
   `kind` is `explicit` or `ambient`, `enqueueMicrotask()` adds work, and
   `performMicrotaskCheckpoint()` drains it. Each EventLoop asks the runtime
   factory for one queue and passes it to every Realm belonging to that Agent.
@@ -151,7 +151,7 @@ checkpoint post-processing, rendering, and worker consumers:
 - The conceptual microtask queue must preserve ordering between Promise jobs
   and `queueMicrotask()` jobs. Do not add a second TypeScript queue alongside
   V8's Promise queue. Queueing and synchronous checkpointing enter through the
-  same `JavaScriptMicrotaskQueue`: an explicit per-EventLoop V8 queue under
+  same `JSMicrotaskQueue`: an explicit per-EventLoop V8 queue under
   compatible Node, or the documented ambient fallback under stock Node.
 
 The low-level `queue a task` operation should require an explicit event loop
@@ -266,11 +266,11 @@ without queue suppression and event-loop teardown is not worker shutdown.
    task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
    boundary through a required hook. It is not a blocking `while (true)`.
 4. Give the event loop and all Realms of its Agent the same
-   `JavaScriptMicrotaskQueue`. A Browlet-compatible Node uses a distinct
+   `JSMicrotaskQueue`. A Browlet-compatible Node uses a distinct
    explicit V8 queue per EventLoop; stock Node uses the ambient backend whose
    checkpoint remains the
    feature-detected `_tickCallback()` operation in
-   [`../../js-engine/node-runtime.ts`](../../js-engine/node-runtime.ts).
+   [`../../js-engine/runtime.ts`](../../js-engine/runtime.ts).
    Test exact isolation and FIFO behavior in compatible mode and preserve the
    ambient contamination downgrade explicitly in stock mode.
    Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and

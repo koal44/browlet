@@ -16,7 +16,7 @@ machinery or Web IDL feature is implemented.
   Replace the associations and fallback together if a future runtime API or
   direct V8 embedding exposes that slot; borrowed-operation and callback realm
   tests must continue to determine the result. The accommodation lives in
-  [`node-runtime.ts`](../js-engine/node-runtime.ts), below Web IDL; integrated
+  [`runtime.ts`](../js-engine/runtime.ts), below Web IDL; integrated
   realm behavior is covered by
   [`file-api.test.ts`](../../test/browlet/file-api.test.ts) and
   callback conversion covered by
@@ -46,40 +46,44 @@ machinery or Web IDL feature is implemented.
 
 ## Buffer sources
 
-- **Growable SharedArrayBuffer view length:** Node exposes a view's current
-  numeric length but not its internal fixed-versus-auto length mode. Ordinary
+- **Growable SharedArrayBuffer view length:** The custom engine and addon expose
+  the fixed-versus-auto length mode. Backends without that query expose only
+  a view's current numeric length. Ordinary
   resizable ArrayBuffers permit a reversible intrinsic resize probe; growable
   SharedArrayBuffers cannot shrink back after an equivalent probe. An
   ambiguous fixed-at-end or auto-length shared view therefore remains fixed
-  when structured data reconstructs it.
+  when structured data reconstructs it on those backends.
 - **Detached view byte length:** Web IDL and HTML require a buffer view's
   internal `[[ByteLength]]`, while JavaScript's public view accessors return
   zero or throw after detachment. The original length cannot be recovered for
-  an arbitrary incoming detached view without a native host capability.
+  an arbitrary incoming detached view without native engine support.
 - **Transferability predicate:** JavaScript provides no non-destructive way to
-  inspect `[[ArrayBufferDetachKey]]`. The binding can authoritatively perform a
-  transfer, but cannot expose the Web IDL "is transferable" predicate for an
-  arbitrary incoming buffer without a native host capability. Tracking only
-  buffers created by Browlet would be useful but insufficient by itself.
+  inspect `[[ArrayBufferDetachKey]]`. The engine's transfer operation is
+  authoritative, but the Web IDL "is transferable" predicate needs a separate
+  engine query. V8's `IsDetachable()` reports a different flag. This query is
+  deferred; it does not require a new dependency in implementation constructors.
 
 ## Promises
 
-- **Promise reactions:** JS Engine's `installPromiseReactions()` uses native
-  `v8::Promise::Then`, which bypasses author `then`, `constructor`, and
-  `@@species` properties. V8's public API still allocates an unreachable derived
+- **Promise reactions:** `JSRealm.observePromise()` uses native
+  `v8::Promise::Then` when the addon is available. Node 26.8.1 and the custom
+  engine bypass author `then`, `constructor`, and `@@species` properties.
+  V8's public API still allocates an unreachable derived
   promise; it does not expose the exact no-result-capability form of
   `PerformPromiseThen`. Web IDL separately settles its typed result capability.
   Node 24.19.0's older implementation of the native API still consults
-  `constructor`; its regression remains an ordinary failure on that base.
-  Node 26.8.1 and the custom engine pass.
+  `constructor`; its regression remains an expected failure on that base.
+  Plain stock Node retains the captured `Promise.prototype.then` fallback,
+  including its constructor and species observability; ordinary asynchronous
+  operations still complete.
 - **Handled flag:** JavaScript does not expose `[[PromiseIsHandled]]` directly.
   Attaching a rejection reaction marks the original promise handled while also
   creating one unreachable fulfilled promise.
 
 These substitutions preserve settlement, realm, conversion, and handled-state
-behavior for ordinary promises. Constructor observability now has passing
-regression coverage. Known future consumers include
-Web IDL async iterators and HTML navigation, module, and service-worker promise
+behavior for ordinary promises. Capability-sensitive regressions preserve
+the constructor-observability and queue-isolation requirements. Current
+consumers include Web IDL async iterators; HTML navigation, module, and service-worker promise
 reactions; exact unhandled-rejection tracking and APIs that mark promises
 handled depend on the same inaccessible machinery.
 

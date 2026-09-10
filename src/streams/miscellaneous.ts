@@ -21,7 +21,7 @@ export function isNonNegativeNumber(value: unknown): value is number {
 
 export function cloneAsUint8Array(value: object, runtime: RuntimeContext): Uint8Array<ArrayBuffer> {
   const bytes = runtime.buffers.createView(
-    'Uint8Array', getBufferSourceUnderlyingBuffer(value) as ArrayBuffer,
+    'Uint8Array', getBufferSourceUnderlyingBuffer(value),
     getBufferSourceByteOffset(value), getBufferSourceByteLength(value),
   );
   return runtime.buffers.copyUint8Array(bytes);

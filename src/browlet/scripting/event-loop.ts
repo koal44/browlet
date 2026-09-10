@@ -1,4 +1,4 @@
-import type { JavaScriptMicrotaskQueue } from '../../js-engine/index';
+import type { JSMicrotaskQueue } from '../../js-engine/index';
 import { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';
@@ -14,7 +14,7 @@ export class EventLoop {
   /* HTML §8.1.3.3 — Backup incumbent settings object stack. */
   readonly #backupIncumbentSettingsObjectStack:
   EnvironmentSettingsObject[] = [];
-  readonly #javaScriptExecutionContextStack: TrackedExecutionContext[] = [];
+  readonly #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
@@ -23,7 +23,7 @@ export class EventLoop {
   readonly #taskQueues = new Set<Set<Task>>();
   readonly #taskQueueBySource = new Map<TaskSource, Set<Task>>();
 
-  constructor(readonly microtaskQueue: JavaScriptMicrotaskQueue) {}
+  constructor(readonly microtaskQueue: JSMicrotaskQueue) {}
 
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
@@ -121,7 +121,7 @@ export class EventLoop {
     hostEntrySettings: EnvironmentSettingsObject,
   ): EnvironmentSettingsObject {
     const context = findTopmostScriptHavingExecutionContext(
-      this.#javaScriptExecutionContextStack,
+      this.#jsExecutionContextStack,
     );
     if (
       context !== undefined &&
@@ -150,7 +150,7 @@ export class EventLoop {
 
     this.#backupIncumbentSettingsObjectStack.push(settings);
     const context = findTopmostScriptHavingExecutionContext(
-      this.#javaScriptExecutionContextStack,
+      this.#jsExecutionContextStack,
     );
     if (context !== undefined) context.skipWhenDeterminingIncumbent++;
   }
@@ -158,7 +158,7 @@ export class EventLoop {
   /* HTML §8.1.3.3 — Clean up after running a callback. */
   cleanUpAfterRunningCallback(settings: EnvironmentSettingsObject): void {
     const context = findTopmostScriptHavingExecutionContext(
-      this.#javaScriptExecutionContextStack,
+      this.#jsExecutionContextStack,
     );
     if (context !== undefined) {
       if (context.skipWhenDeterminingIncumbent === 0) {
@@ -187,7 +187,7 @@ export class EventLoop {
      * Promise hook does so. Unsupported engines and uncontrolled host entries
      * still need a nullable task; do not infer that V8's unseen stack is empty.
      */
-    this.#javaScriptExecutionContextStack.push({
+    this.#jsExecutionContextStack.push({
       kind: 'realm',
       settings,
       task,
@@ -197,14 +197,14 @@ export class EventLoop {
 
   /* HTML §8.1.4.4 — Clean up after running script. */
   cleanUpAfterRunningScript(settings: EnvironmentSettingsObject): void {
-    const entry = this.#javaScriptExecutionContextStack.at(-1);
+    const entry = this.#jsExecutionContextStack.at(-1);
     if (
       entry?.kind !== 'realm' ||
       entry.settings !== settings
     ) {
       throw new Error('Script settings were cleaned up out of order');
     }
-    this.#javaScriptExecutionContextStack.pop();
+    this.#jsExecutionContextStack.pop();
 
     /*
      * ACCOMMODATION(node-v8-execution-contexts): A null task means the entry
@@ -212,7 +212,7 @@ export class EventLoop {
      */
     if (
       entry.task !== null &&
-      this.#javaScriptExecutionContextStack.length === 0
+      this.#jsExecutionContextStack.length === 0
     ) {
       this.performMicrotaskCheckpoint();
     }
@@ -241,7 +241,7 @@ export class EventLoop {
         settings,
         skipWhenDeterminingIncumbent: 0,
       };
-      this.#javaScriptExecutionContextStack.push(context);
+      this.#jsExecutionContextStack.push(context);
       try {
         return steps();
       } finally {
@@ -346,10 +346,10 @@ export class EventLoop {
   }
 
   #popScriptExecutionContext(context: ScriptHavingExecutionContext): void {
-    if (this.#javaScriptExecutionContextStack.at(-1) !== context) {
+    if (this.#jsExecutionContextStack.at(-1) !== context) {
       throw new Error('Script execution contexts were cleaned up out of order');
     }
-    this.#javaScriptExecutionContextStack.pop();
+    this.#jsExecutionContextStack.pop();
   }
 
   #finishHostScriptEntry(task: Task): void {
@@ -383,7 +383,7 @@ export class EventLoop {
 }
 
 export type EventLoopOptions = {
-  readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;
+  readonly createMicrotaskQueue: () => JSMicrotaskQueue;
   readonly longTaskReporter?: LongTaskReporter;
   readonly requestEventLoopTurn: (
     this: void,
