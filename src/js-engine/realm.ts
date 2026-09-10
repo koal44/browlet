@@ -1,9 +1,12 @@
+import type { Promises } from './promises';
+
 export type JavaScriptRealm = {
   readonly global: GlobalObject;
   readonly globalObject: GlobalObject;
   readonly globalThis: object;
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime;
+  readonly promises: Promises;
 
   createFunction(
     steps: RealmFunctionSteps,

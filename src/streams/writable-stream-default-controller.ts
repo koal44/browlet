@@ -1,4 +1,4 @@
-import type { InternalPromise } from '../js-engine/internal-promise';
+import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, defineInterface, idlType, impl, op, roAttr, reference,
 } from '../web-idl/declaration/index';
@@ -28,14 +28,14 @@ export class WritableStreamDefaultControllerImpl {
 
 export type WritableStreamDefaultControllerState =
   QueueContainer<unknown> & {
-    abortAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+    abortAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
     abortController: StreamAbortController;
-    closeAlgorithm?: () => InternalPromise<unknown>;
+    closeAlgorithm?: () => PromiseValue<unknown>;
     started: boolean;
     strategyHighWaterMark: number;
     strategySizeAlgorithm?: QueuingStrategySize;
     stream: WritableStreamImpl;
-    writeAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
+    writeAlgorithm?: (chunk: unknown) => PromiseValue<unknown>;
   };
 
 // -- Web IDL ------------------------------------------------------------

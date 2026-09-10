@@ -2,6 +2,7 @@ import { browletBindings, projectWindow } from '../../bindings';
 import type { WindowAgent } from '../../scripting/agents';
 import { Realm, type JavaScriptExecutionContext } from '../../scripting/realm';
 import type { WindowImpl } from './window';
+import { createWindowRuntime } from '../../integration/runtime';
 import { adoptNativeWindowProxy, createWindowProxy } from './window-proxy';
 
 /*
@@ -21,7 +22,9 @@ export function createWindowRealm(
     // Window.prototype -> named properties -> EventTarget.prototype.
     globalPrototypeChain: native ? ['immutable', 'delegated', 'immutable'] : undefined,
   });
-  const bindings = browletBindings.register(realm);
+  const bindings = browletBindings.register(realm, {
+    createRuntime: (context) => createWindowRuntime(realm, window, context),
+  });
   const chain = realm.globalPrototypeChain;
   let globalObject: Window;
   if (chain) {

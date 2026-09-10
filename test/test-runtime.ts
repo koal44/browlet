@@ -2,12 +2,17 @@ import { it } from 'vitest';
 
 import { nodeRuntime } from '../src/js-engine';
 
-/*
- * Plain stock Node is expected to fail tests that require explicit queues
- * and context handles. A backend that supplies explicit queues runs the
- * compatibility expectations normally, exposing any remaining gaps.
- */
-export const itCompatPasses: typeof it.fails =
-  nodeRuntime.hasExplicitMicrotaskQueues
-  ? it
-  : it.fails;
+/** Run normally when every requirement holds; otherwise expect failure. */
+export function itPassesWith(...requirements: RuntimeRequirement[]): typeof it.fails {
+  return requirements.every((requirement) => supported[requirement]) ? it : it.fails;
+}
+
+type RuntimeRequirement = keyof typeof supported;
+
+const nodeMajor = Number(process.versions.node.split('.')[0]);
+const supported = {
+  explicitQueues: nodeRuntime.hasExplicitMicrotaskQueues,
+  hostHooks: nodeRuntime.supportsHostHooks,
+  'v24+': nodeMajor >= 24,
+  'v26+': nodeMajor >= 26,
+};

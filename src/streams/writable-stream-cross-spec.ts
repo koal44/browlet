@@ -1,5 +1,6 @@
-import { InternalPromise, type PromiseReactions } from '../js-engine/internal-promise';
-import type { StreamAbortController, StreamAbortSignal } from './abort';
+import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { PromiseValue } from '../js-engine/promises';
+import type { StreamAbortSignal } from './abort';
 import type { QueuingStrategySize } from './queuing-strategy';
 import {
   acquireWritableStreamDefaultWriter,
@@ -16,23 +17,21 @@ import {
 // SPEC_MISMATCH: WritableStream.set up(stream, writeAlgorithm, closeAlgorithm?, abortAlgorithm?, highWaterMark = 1, sizeAlgorithm?) -> void
 export function createWritableStream(
   // SPEC_MISMATCH: writeAlgorithm(chunk) -> promise
-  writeAlgorithm: (chunk: unknown) => InternalPromise<unknown> | void,
-  closeAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
-  abortAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
+  writeAlgorithm: (chunk: unknown) => PromiseValue<unknown> | void,
+  closeAlgorithm: (() => PromiseValue<unknown> | void) | undefined,
+  abortAlgorithm: ((reason: unknown) => PromiseValue<unknown> | void) | undefined,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
-  abortController: StreamAbortController,
-  reactions: PromiseReactions,
+  runtime: RuntimeContext,
 ): WritableStreamImpl {
   return createWritableStreamFromAlgorithms(
     () => undefined,
-    (chunk) => InternalPromise.try(() => writeAlgorithm(chunk)),
-    () => InternalPromise.try(() => closeAlgorithm?.()),
-    (reason) => InternalPromise.try(() => abortAlgorithm?.(reason)),
+    (chunk) => runtime.promises.try(() => writeAlgorithm(chunk)),
+    () => runtime.promises.try(() => closeAlgorithm?.()),
+    (reason) => runtime.promises.try(() => abortAlgorithm?.(reason)),
     highWaterMark,
     sizeAlgorithm,
-    abortController,
-    reactions,
+    runtime,
   );
 }
 

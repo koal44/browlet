@@ -1,4 +1,4 @@
-import { InternalPromise } from '../../../src/js-engine/internal-promise';
+import { createPromises, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
@@ -10,7 +10,6 @@ import { RangeError, TypeError } from '../../../src/js-engine/simple-exception';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from '../test-runtime';
-import { createTransformStream, observe } from './implementation-fixture';
 
 describe('transform-stream implementation', () => {
   it('validates transformer types before strategy high-water marks', () => {
@@ -90,16 +89,17 @@ describe('transform-stream implementation', () => {
   });
 
   it('runs custom transform and flush algorithms', async () => {
+    const promises = createPromises();
     const transform = vi.fn((
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
       controller.enqueue(String(chunk).toUpperCase());
-      return InternalPromise.resolve(undefined);
+      return promises.resolve(undefined);
     });
     const flush = vi.fn((controller: TransformStreamDefaultControllerImpl) => {
       controller.enqueue('DONE');
-      return InternalPromise.resolve(undefined);
+      return promises.resolve(undefined);
     });
     const stream = createTransformStream({ flush, transform });
     const writer = stream.writable.getWriter();
@@ -119,12 +119,13 @@ describe('transform-stream implementation', () => {
   });
 
   it('holds writes until the readable side pulls', async () => {
+    const promises = createPromises();
     const transform = vi.fn((
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
       controller.enqueue(chunk);
-      return InternalPromise.resolve(undefined);
+      return promises.resolve(undefined);
     });
     const stream = createTransformStream({ transform });
     const writer = stream.writable.getWriter();
@@ -146,10 +147,11 @@ describe('transform-stream implementation', () => {
   });
 
   it('waits for start before invoking a transform', async () => {
-    const start = InternalPromise.withResolvers<void>();
+    const promises = createPromises();
+    const start = promises.withResolvers<void>();
     const transform = vi.fn((chunk: unknown, controller: TransformStreamDefaultControllerImpl) => {
       controller.enqueue(chunk);
-      return InternalPromise.resolve();
+      return promises.resolve();
     });
     const stream = createTransformStream({ start: () => start.promise, transform });
     const reader = stream.readable.getReader();
@@ -166,9 +168,10 @@ describe('transform-stream implementation', () => {
   });
 
   it('errors both sides when transform rejects', async () => {
+    const promises = createPromises();
     const failure = new Error('transform failed');
     const stream = createTransformStream({
-      transform: () => InternalPromise.reject(failure),
+      transform: () => promises.reject(failure),
     });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
@@ -182,8 +185,9 @@ describe('transform-stream implementation', () => {
   });
 
   it('runs the transformer cancel algorithm from either side', async () => {
+    const promises = createPromises();
     const readableReason = new Error('readable cancelled');
-    const readableCancel = vi.fn(() => InternalPromise.resolve(undefined));
+    const readableCancel = vi.fn(() => promises.resolve(undefined));
     const readable = createTransformStream({ cancel: readableCancel });
 
     await expect(observe(readable.readable.cancel(readableReason)))
@@ -191,7 +195,7 @@ describe('transform-stream implementation', () => {
     expect(readableCancel).toHaveBeenCalledWith(readableReason);
 
     const writableReason = new Error('writable aborted');
-    const writableCancel = vi.fn(() => InternalPromise.resolve(undefined));
+    const writableCancel = vi.fn(() => promises.resolve(undefined));
     const writable = createTransformStream({ cancel: writableCancel });
 
     await expect(observe(writable.writable.abort(writableReason)))

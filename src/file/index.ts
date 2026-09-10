@@ -16,8 +16,7 @@ export {
   type BlobReadFailureReason, type BlobSnapshotState,
 } from './blob-data';
 export {
-  fileReading, getFileReading, nativeLineEnding,
-  type FileReadingCapability, type NativeLineEnding,
+  nativeLineEnding, type NativeLineEnding,
 } from './integration';
 export {
   createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,

@@ -1,5 +1,5 @@
 // @rollup-cycle streams-readable
-import { InternalPromise, type InternalPromiseCapability, type PromiseReactions } from '../js-engine/internal-promise';
+import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
 import {
   arg, defineInterfaceMixin, idlType, op, promise, roAttr,
 } from '../web-idl/declaration/index';
@@ -13,15 +13,15 @@ export class ReadableStreamGenericReaderMixin {
   #state?: ReadableStreamGenericReaderState;
 
   // SPEC_MISMATCH: get closed() -> Promise<undefined>
-  get closed(): InternalPromise<void> {
+  get closed(): PromiseValue<void> {
     return ReadableStreamGenericReaderMixin.getState(this).closedPromise.promise;
   }
 
   // SPEC_MISMATCH: cancel(reason?) -> Promise<undefined>
-  cancel(reason?: unknown): InternalPromise<void> {
+  cancel(reason?: unknown): PromiseValue<void> {
     const state = ReadableStreamGenericReaderMixin.getState(this);
     if (!state.stream) {
-      return InternalPromise.reject(new TypeError(
+      return state.promises.reject(new TypeError(
         'Cannot cancel a stream using a released reader',
       ));
     }
@@ -48,8 +48,8 @@ export class ReadableStreamGenericReaderMixin {
 }
 
 export type ReadableStreamGenericReaderState = {
-  readonly reactions: PromiseReactions;
-  closedPromise: InternalPromiseCapability<void>;
+  readonly promises: Promises;
+  closedPromise: PromiseValueCapability<void>;
   stream?: ReadableStreamImpl;
 };
 

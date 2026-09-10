@@ -3,13 +3,16 @@ import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
 import { decode, getEncoding } from '../encoding/hooks';
 import { parseMIMEType } from '../mime/index';
 import { forgivingBase64Encode } from '../infra/index';
+import type { RuntimeContext } from '../js-engine/index';
 
 /** File API §6.3 — Package data. */
+// SPEC_MISMATCH: package data(bytes, type, mimeType, encoding?) -> data
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,
   mimeType: string,
-  encodingLabel?: string,
+  encodingLabel: string | undefined,
+  runtime: RuntimeContext,
 ): string | ArrayBuffer {
   switch (type) {
     case 'DataURL': {
@@ -23,7 +26,7 @@ export function packageData(
     case 'Text':
       return packageText(bytes, mimeType, encodingLabel);
     case 'ArrayBuffer':
-      return new Uint8Array(bytes).buffer;
+      return runtime.buffers.copyArrayBuffer(bytes);
     case 'BinaryString':
       return isomorphicDecode(bytes);
   }

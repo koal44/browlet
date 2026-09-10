@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { performTestMicrotaskCheckpoint } from '../test-runtime';
-import { itCompatPasses } from '../../test-runtime';
+import { itPassesWith } from '../../test-runtime';
 
 describe('WindowOrWorkerGlobalScope', () => {
-  itCompatPasses('shares the Agent queue with Promise jobs', () => {
+  itPassesWith('explicitQueues')('shares the Agent queue with Promise jobs', () => {
     const browlet = createBrowlet();
     const { window } = browlet;
     const order: string[] = [];

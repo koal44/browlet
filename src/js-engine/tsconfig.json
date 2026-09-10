@@ -8,5 +8,6 @@
     "outDir": "../../dist/.typecheck/js-engine",
     "tsBuildInfoFile": "../../dist/.typecheck/js-engine.tsbuildinfo"
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts"],
+  "references": [{ "path": "../infra" }]
 }

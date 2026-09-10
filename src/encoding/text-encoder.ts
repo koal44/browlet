@@ -1,7 +1,7 @@
 import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
 import {
   getBufferSourceByteLength, writeArrayBufferView,
-} from '../web-idl/buffer-source';
+} from '../js-engine/index';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, newBufferResult, op,

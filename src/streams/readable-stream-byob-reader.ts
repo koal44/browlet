@@ -1,5 +1,5 @@
 // @rollup-cycle streams-readable
-import { InternalPromise } from '../js-engine/internal-promise';
+import type { PromiseValue } from '../js-engine/promises';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, op, promise, reference, xattr,
@@ -8,7 +8,7 @@ import {
 import {
   getBufferSourceByteLength, getBufferSourceUnderlyingBuffer,
   getBufferTypeName, isBufferSourceDetached,
-} from '../web-idl/buffer-source';
+} from '../js-engine/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
 import type { ReadableStreamReadResult } from './readable-stream-default-reader';
 import type { ReadableStreamImpl } from './readable-stream';
@@ -29,33 +29,34 @@ export class ReadableStreamBYOBReaderImpl {
   }
 
   // SPEC_MISMATCH: get closed() -> Promise<undefined>
-  get closed(): InternalPromise<void> {
+  get closed(): PromiseValue<void> {
     return ReadableStreamBYOBReaderImpl.getGenericReader(this).closed;
   }
 
   // SPEC_MISMATCH: cancel(reason?) -> Promise<undefined>
-  cancel(reason?: unknown): InternalPromise<void> {
+  cancel(reason?: unknown): PromiseValue<void> {
     return ReadableStreamBYOBReaderImpl.getGenericReader(this).cancel(reason);
   }
 
   // SPEC_MISMATCH: read(view, options = {}) -> Promise<ReadableStreamReadResult>
-  read(view: object, options: ReadableStreamBYOBReaderReadOptions): InternalPromise<ReadableStreamReadResult> {
+  read(view: object, options: ReadableStreamBYOBReaderReadOptions): PromiseValue<ReadableStreamReadResult> {
     const generic = ReadableStreamBYOBReaderImpl.getGenericReader(this);
+    const state = ReadableStreamGenericReaderMixin.getState(generic);
     const viewByteLength = getBufferSourceByteLength(view);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     if (viewByteLength === 0) {
-      return rejectedTypeError('view must have non-zero byteLength');
+      return state.promises.reject(new TypeError('view must have non-zero byteLength'));
     }
     if (getBufferSourceByteLength(buffer) === 0) {
-      return rejectedTypeError(
+      return state.promises.reject(new TypeError(
         'view\'s buffer must have non-zero byteLength',
-      );
+      ));
     }
     if (isBufferSourceDetached(buffer)) {
-      return rejectedTypeError('view\'s buffer is detached');
+      return state.promises.reject(new TypeError('view\'s buffer is detached'));
     }
     if (options.min === 0) {
-      return rejectedTypeError('options.min must be greater than 0');
+      return state.promises.reject(new TypeError('options.min must be greater than 0'));
     }
 
     const type = requireBufferViewType(view);
@@ -64,19 +65,19 @@ export class ReadableStreamBYOBReaderImpl {
       ? viewByteLength
       : viewByteLength / elementSize;
     if (options.min > viewLength) {
-      return InternalPromise.reject(new RangeError(
+      return state.promises.reject(new RangeError(
         `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
         }`,
       ));
     }
-    if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
-      return rejectedTypeError(
+    if (!state.stream) {
+      return state.promises.reject(new TypeError(
         'Cannot read from a stream using a released reader',
-      );
+      ));
     }
 
-    const promise = InternalPromise.withResolvers<ReadableStreamReadResult>();
+    const promise = state.promises.withResolvers<ReadableStreamReadResult>();
     readableStreamBYOBReaderRead(this, view, options.min, {
       chunkSteps: (chunk) => promise.resolve({ value: chunk, done: false }),
       closeSteps: (chunk) => promise.resolve({ value: chunk, done: true }),
@@ -170,12 +171,6 @@ const bufferViewElementSizes = {
   Uint8Array: 1,
   Uint8ClampedArray: 1,
 } as const;
-
-function rejectedTypeError(
-  message: string,
-): InternalPromise<never> {
-  return InternalPromise.reject(new TypeError(message));
-}
 
 function requireBufferViewType(view: object): BufferViewTypeName {
   const type = getBufferTypeName(view);

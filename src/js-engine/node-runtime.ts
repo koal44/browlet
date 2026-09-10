@@ -83,10 +83,18 @@ class NodeRuntime implements JavaScriptRuntime {
     onRejected: JavaScriptFunction | undefined,
   ): void {
     const observe = getNodeMethod('observePromise');
-    if (!observe) throw new Error('Node does not support native Promise observation');
-    Reflect.apply(observe, nodeApi, [
-      promise, realm.intrinsics.promise.constructor, onFulfilled, onRejected,
-    ]);
+    if (observe) {
+      Reflect.apply(observe, nodeApi, [
+        promise, realm.intrinsics.promise.constructor, onFulfilled, onRejected,
+      ]);
+    } else {
+      /*
+       * ACCOMMODATION(node-v8-promise-reactions): Plain Node lacks native
+       * observation. The captured intrinsic bypasses an overridden then, but
+       * still consults constructor/@@species and creates a derived promise.
+       */
+      Reflect.apply(realm.intrinsics.promise.then, promise, [onFulfilled, onRejected]);
+    }
   }
 
   setHostHooks<HostDefined>(hooks: JavaScriptHostHooks<HostDefined>): void {

@@ -71,24 +71,19 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
 });
 
 describe('Fetch tasks on HTML event loops', () => {
-  it('queues networking tasks for the destination Window and its Document', () => {
+  it('runs networking tasks in order on their destination event loops', () => {
     const first = createFetchWindow();
     const second = createFetchWindow();
     const order: string[] = [];
-    const steps = () => order.push('first');
 
-    first.queueTask(steps);
+    first.queueTask(() => order.push('first'));
     second.queueTask(() => order.push('second'));
     first.queueTask(() => order.push('third'));
 
-    const tasks = first.networkingTasks();
-    expect(tasks).toHaveLength(2);
-    expect(tasks[0]!.steps).toBe(steps);
-    expect(tasks.every((task) => task.document === first.document)).toBe(true);
-    expect(second.networkingTasks()).toHaveLength(1);
     expect(order).toEqual([]);
 
     first.runTask();
+    expect(order).toEqual(['first']);
     first.runTask();
     expect(order).toEqual(['first', 'third']);
     second.runTask();

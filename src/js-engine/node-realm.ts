@@ -1,4 +1,5 @@
 import { isObject } from './abstract-operations';
+import { Promises } from './promises';
 import { nodeRuntime, type NodeContext } from './node-runtime';
 import type {
   GlobalObject, JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
@@ -17,6 +18,7 @@ export class NodeRealm implements JavaScriptRealm {
   readonly allocatedGlobalObject: GlobalObject | undefined;
   readonly intrinsics: JavaScriptIntrinsics;
   readonly runtime: JavaScriptRuntime = nodeRuntime;
+  readonly promises: Promises;
   readonly #callableFunctionFactory: RealmFunctionFactory;
   readonly #context: NodeContext;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
@@ -218,6 +220,7 @@ export class NodeRealm implements JavaScriptRealm {
       ) as typeof TypeError,
       uriError: URIError_,
     };
+    this.promises = new Promises(this);
     this.#callableFunctionFactory = nodeRuntime.runInContext(
       callableFunctionFactorySource,
       this.#context,

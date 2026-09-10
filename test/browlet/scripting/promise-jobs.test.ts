@@ -1,11 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 
 describe('HTML Promise jobs', () => {
-  it('runs thenables and reactions as separate HTML microtasks with script cleanup', () => {
+  itPassesWith('hostHooks')('runs thenables and reactions as separate HTML microtasks with script cleanup', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     const loop = realm.agent.eventLoop;
@@ -44,7 +45,7 @@ describe('HTML Promise jobs', () => {
     expect(realm.callbacks.captureContext()).toBe(realm.hostDefined);
   });
 
-  it('queues handlerless propagation without preparing a script realm', () => {
+  itPassesWith('hostHooks')('queues handlerless propagation without preparing a script realm', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     const loop = realm.agent.eventLoop;
@@ -69,7 +70,7 @@ describe('HTML Promise jobs', () => {
       .toEqual(new Set([realm.hostDefined]));
   });
 
-  it('keeps Window queues independent when Node settles their Promises', () => {
+  itPassesWith('explicitQueues')('keeps Window queues independent when Node settles their Promises', () => {
     const observations: number[] = [];
     const entries = [1, 2].map((value) => {
       const browlet = new Browlet({ route: () => '' });

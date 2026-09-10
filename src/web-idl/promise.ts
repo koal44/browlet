@@ -1,6 +1,4 @@
-import {
-  InternalPromise, createPromiseReactions, installPromiseReactions,
-} from '../js-engine/index';
+import { PromiseValue, installPromiseReactions, type Promises } from '../js-engine/index';
 import type { PlatformObjectRegistry } from './platform-object';
 import type { WebIDLRealmHost } from './javascript-realm';
 import {
@@ -28,7 +26,7 @@ export function projectPromise(
   newBufferResult = false,
 ): IDLPromise {
   if (isPromiseValue(value)) return value;
-  const source = value as Promise<unknown> | InternalPromise<unknown>;
+  const source = value as Promise<unknown> | PromiseValue<unknown>;
   let promises = promiseProjections.get(context.platformObjects);
   if (!promises) {
     promises = new WeakMap();
@@ -61,8 +59,8 @@ export function projectPromise(
     promise.reject(reason);
   };
   try {
-    if (source instanceof InternalPromise) {
-      source.observe(onFulfilled, onRejected, createPromiseReactions(context.realm));
+    if (source instanceof PromiseValue) {
+      context.realm.promises.import(source).observe(onFulfilled, onRejected);
     } else {
       installPromiseReactions(context.realm, source, onFulfilled, onRejected);
     }
@@ -77,21 +75,11 @@ export function toImplementationPromise(
   promise: IDLPromise,
   context: ConversionContext,
   convertValue: (value: unknown) => unknown,
-): InternalPromise<unknown> {
+  promises: Promises,
+): PromiseValue<unknown> {
   const conversionContext = withPromiseRealm(context, promise);
-  const result = InternalPromise.withResolvers<unknown>();
-  try {
-    installPromiseReactions(promise.realm, promise.promise, (value) => {
-      try {
-        result.resolve(convertValue(convertToIDL(value, promise.type, conversionContext)));
-      } catch (error) {
-        result.reject(error);
-      }
-    }, result.reject);
-  } catch (error) {
-    result.reject(error);
-  }
-  return result.promise;
+  return promises.import(promise.promise, (value) =>
+    convertValue(convertToIDL(value, promise.type, conversionContext)));
 }
 
 export function createResolvedPromise(
@@ -347,7 +335,7 @@ function isUndefinedType(
 // A retained implementation promise has one projection per result type and
 // realm within a binding world, including when a foreign method is borrowed.
 const promiseProjections = new WeakMap<PlatformObjectRegistry, WeakMap<
-  Promise<unknown> | InternalPromise<unknown>,
+  Promise<unknown> | PromiseValue<unknown>,
   {
     realm: WebIDLRealmHost;
     type: WebIDLType;

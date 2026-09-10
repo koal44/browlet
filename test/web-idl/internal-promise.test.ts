@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InternalPromise } from '../../src/js-engine/index';
+import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/js-engine/index';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
 import { createBindings } from '../../src/web-idl/registration';
 import {
@@ -14,9 +14,9 @@ describe('internal Promise result projection', () => {
     const second = new TestRealm();
     const firstBinding = bindings.register(first);
     const secondBinding = bindings.register(second);
-    const implementation = new ResultOwnerImpl();
+    const implementation = new ResultOwnerImpl(first.promises);
     const owner = firstBinding.context.project(ResultOwnerImpl, implementation);
-    const foreign = secondBinding.context.project(ResultOwnerImpl, new ResultOwnerImpl());
+    const foreign = secondBinding.context.project(ResultOwnerImpl, new ResultOwnerImpl(second.promises));
     const foreignPrototype = Object.getPrototypeOf(foreign) as object;
     const result = Reflect.get(owner, 'result') as Promise<unknown>;
     expect(Reflect.get(foreignPrototype, 'result', owner)).toBe(result);
@@ -35,8 +35,9 @@ describe('internal Promise result projection', () => {
 });
 
 class ResultOwnerImpl {
-  readonly pending = InternalPromise.withResolvers<ResultChildImpl>();
-  get result(): InternalPromise<ResultChildImpl> { return this.pending.promise; }
+  readonly pending: PromiseValueCapability<ResultChildImpl>;
+  constructor(promises: Promises) { this.pending = promises.withResolvers<ResultChildImpl>(); }
+  get result(): PromiseValue<ResultChildImpl> { return this.pending.promise; }
 }
 
 class ResultChildImpl {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
@@ -168,7 +169,7 @@ describe('Web IDL promises', () => {
     expect(argumentCount).toBe(0);
   });
 
-  it('reacts without consulting author-defined Promise constructors', async () => {
+  itPassesWith('v26+', 'explicitQueues')('reacts without consulting author-defined Promise constructors', async () => {
     const { binding } = createBinding();
     const promise = createResolvedPromise(1, idlType.long, binding);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
@@ -241,7 +242,7 @@ describe('Web IDL promises', () => {
     await Promise.resolve();
   });
 
-  it('marks a promise handled without consulting author properties', () => {
+  itPassesWith('v26+', 'explicitQueues')('marks a promise handled without consulting author properties', () => {
     const { binding } = createBinding();
     const promise = createPromise(idlType.undefined, binding);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {

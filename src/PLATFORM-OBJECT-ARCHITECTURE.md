@@ -213,8 +213,10 @@ When a standalone subsystem cannot own or obtain a required facility, classify
 the dependency using
 [the cross-subsystem decision rules](./SUBSYSTEM-ARCHITECTURE.md#decision-rules):
 
-- keep realm intrinsics and generic Web IDL promise machinery in declaration
-  and member bindings, where the shared Binding Context is available;
+- keep conversion, callback adaptation, and projection in declaration/member
+  bindings, where the shared Binding Context is available;
+- supply implementation execution and allocation through the owner's
+  `RuntimeContext`, assembled at realm registration;
 - use a cross-specification capability for AbortController construction, HTML
   task queueing, or HTML structured cloning; and
 - use a Host Port for clocks, I/O, native scheduling, or an engine operation.
@@ -228,7 +230,10 @@ small structural `StreamAbortSignal` contract and directly reads `aborted`,
 `reason`, and `addAlgorithm()`. It does not resolve an author AbortSignal back
 through a capability registry. `createAbortController()` is a narrow
 cross-specification capability because standalone Streams cannot import or
-construct Browlet's implementation.
+construct Browlet's implementation. It is supplied as
+`runtime.createAbortController()`; each writable controller creates its own
+controller during setup. Runtime composition records the controller's realm
+before any callback can expose its signal.
 
 ## Boundary flows
 
@@ -289,37 +294,60 @@ through:
 Repeated references to one implementation must produce one platform object.
 
 Blob's `text()`, `bytes()`, and `arrayBuffer()` share a read-result path using
-JS Engine's `InternalPromise<T>`.
-The record retains native settlement state but exposes explicit observation and
-value mapping instead of `.then` or native `await`. Its reaction destination is
-supplied at the Binding boundary. Shared promise projection consumes this record
+JS Engine's `PromiseValue<T>`.
+The value retains native settlement state and the `Promises` facility from
+the receiver's Runtime Context. It supports `.then()`, `.catch()`, and terminal
+`.observe()` without per-call scheduling arguments. Shared promise projection consumes this value
 through the existing result-type conversion, exception realization, and identity
 cache; it does not add a Blob-specific adapter or another projection cache.
+Capabilities own their settlement flag; stream writers query it instead of
+mirroring it alongside ready/closed promises.
 The byte-result methods retain `newBufferResult()` for their realm-owned
 ArrayBuffer/Uint8Array allocation.
-Streams uses internal records throughout, with a reaction destination retained
+Streams uses these values throughout, with the Runtime Context retained
 at construction and passed to derived streams. The existing dictionary-result
 binding projects each reader's `{ value, done }` fulfillment.
+
+FileReader differs from a fresh method return: it retains one final ArrayBuffer
+created through `runtime.buffers` before firing completion events. Its plain
+getter returns that same object, including after mutation or detachment; there
+is no FileReader-specific projection map. Its error getter realizes the retained
+failure through Binding. Likewise, TextEncoderStream allocates
+its chunks before downstream callbacks can observe their realm. Buffer slot
+inspection, copying, transfer, and allocation live in JS Engine; Web IDL owns
+BufferSource conversion and result-declaration policy.
 
 Unmigrated implementation methods return ordinary `Promise<T>` values. Binding adapts
 their fulfillment through the declared `T` and creates the author-visible
 promise in the receiver's relevant realm. A retained implementation promise
 keeps one projection per result type and realm within its binding world.
+That cache preserves observable identity for `reader.closed`, `writer.ready`,
+and `writer.closed`, including borrowed getters and settlement. It also ensures
+fulfillment conversion happens once. The exception cache separately preserves
+one realm-owned error when the same internal failure reaches multiple results.
 Dictionary results can be ordinary records, including `{ value, done }` from
 stream reads; binding creates the realm-owned result and projects its members.
 
 Declared Promise arguments and Promise-returning callback functions supply
-`InternalPromise<T>` records whose fulfillment has undergone the declared
-conversion. Implementations supply an explicit reaction destination when
-observing or mapping them; neither native `await` nor `.then()` consumes these
-records. Web IDL's
+`PromiseValue<T>` results whose fulfillment has undergone the declared
+conversion. Their continuation destination belongs to the receiving
+implementation, including when its method was borrowed from another realm.
+Argument conversion still uses the operation function's realm. Web IDL's
 PromiseCapability records remain internal to its specification machinery;
-implementations do not create or operate on them. Async sequence arguments
+implementations do not create or operate on them. Binding Context no longer
+re-exports the old create/resolve/react Promise façade; its `promises` facility
+and declared result projection supply that boundary. Async sequence arguments
 supply iteration steps whose internal results carry converted element values.
 The adapter retains dictionary and interface types through each fulfillment.
 
 The fulfillment adapters use native Promise observation in the destination
-realm. Internal reactions receive that destination explicitly; Binding invocation
+realm. A `PromiseValue` chain retains that destination. `Promises.import()`
+selects the consumer's destination when a result crosses between owners;
+adopting another internal result from a `.then()` callback does the same.
+Internal fulfillment values are not subjected to JavaScript thenable adoption.
+Use `Promises.resolve()` when an algorithm explicitly resolves an author value.
+Native `async`/`await` still creates Node promises and is not an implementation
+consumer of this API. Binding invocation
 does not attach an ambient owner to ordinary `.then` or `await` continuations.
 HTML's Promise enqueue hook uses the job's queue realm and leaves Node jobs on
 Node's queue. This also keeps Node instrumentation and rejection reporting
@@ -344,10 +372,6 @@ Binding allocates a fresh buffer and, for a view return type, its view in the
 result realm. A retained promise keeps distinct projections for allocating
 and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.
-
-FileReader's result getter instead retains one projected ArrayBuffer per internal
-result and receiver context. Repeated reads, including a borrowed getter, return
-that same buffer. Its error getter realizes a retained failure at this boundary.
 
 `object` and `any` do not identify a platform interface, so Web IDL cannot infer
 which implementation to project. Do not use either merely to postpone defining
@@ -526,7 +550,7 @@ It records migration work, not permanent architecture.
 | Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Implementation Binding Context removal | Fetch records, Encoding, stream implementations, Blob reading, FileReader, and AbortController no longer accept or retain context; stream callbacks and internal Promise delivery now cross explicit binding/runtime boundaries | Finish byte-result and clone-error projection; move the remaining queuing-strategy and Fetch abort context uses into bindings or integration. Current failures are tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
+| Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Promise bookkeeping and this architecture review are complete for the migrated paths | Move remaining queuing-strategy and Fetch abort context uses into bindings or integration; connect Request/Response body consumption when its slice is reached. Current validation is tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications

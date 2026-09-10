@@ -43,7 +43,7 @@ import { createOpaqueOrigin } from '../../../src/url/origin';
 import {
   parseURL, serializeURL, type URLRecord,
 } from '../../../src/url/url';
-import { itCompatPasses } from '../../test-runtime';
+import { itPassesWith } from '../../test-runtime';
 
 describe('browsing context groups', () => {
   it('keeps the user-agent and browsing-context associations reciprocal', () => {
@@ -120,14 +120,14 @@ describe('browsing context groups', () => {
       .toBeTypeOf('function');
   });
 
-  itCompatPasses('uses the WindowProxy as the VM realm\'s actual global this', () => {
+  itPassesWith('explicitQueues')('uses the WindowProxy as the VM realm\'s actual global this', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.document);
 
     expect(realm.evaluate('this', 'global-this.js')).toBe(browlet.window);
   });
 
-  itCompatPasses('makes the Window realm global prototype immutable', () => {
+  itPassesWith('explicitQueues')('makes the Window realm global prototype immutable', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.document);
 
@@ -339,7 +339,7 @@ describe('environment settings objects', () => {
 });
 
 describe('navigation lifecycle', () => {
-  itCompatPasses('preserves native Window identity and immutability across navigation', async () => {
+  itPassesWith('explicitQueues')('preserves native Window identity and immutability across navigation', async () => {
     const browlet = new Browlet({ route: () => '' });
     const proxy = browlet.window;
     const firstRealm = getRelevantRealm(browlet.document);

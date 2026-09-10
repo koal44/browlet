@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../test-runtime';
 
 import {
   installPromiseReactions, NodeRealm, nodeRuntime,
@@ -27,7 +28,7 @@ describe('JavaScript promise operations', () => {
     expect(values).toEqual(['fulfilled']);
   });
 
-  it('does not consult author-defined promise constructors', () => {
+  itPassesWith('v26+', 'explicitQueues')('does not consult author-defined promise constructors', () => {
     const realm = new NodeRealm();
     const promise = new realm.intrinsics.promise.constructor(() => undefined);
     expect(Reflect.defineProperty(promise, 'constructor', {
@@ -42,7 +43,7 @@ describe('JavaScript promise operations', () => {
     )).not.toThrow();
   });
 
-  it('places native observation of a Node promise on the supplied realm queue', async () => {
+  itPassesWith('v26+', 'explicitQueues')('places native observation of a Node promise on the supplied realm queue', async () => {
     const queue = nodeRuntime.createMicrotaskQueue();
     const realm = new NodeRealm(queue);
     const { promise, resolve } = Promise.withResolvers<string>();

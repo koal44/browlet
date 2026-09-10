@@ -50,8 +50,8 @@ do not move it to the earlier author call or inject Binding Context.
 
 It must not:
 
-- accept or retain a Binding Context; realm handling belongs in declarations
-  and member bindings;
+- accept or retain a Binding Context; conversion and projection belong in
+  declarations and member bindings;
 - wrap or unwrap platform objects;
 - repeat author-facing conversion or overload selection;
 - call an author API in order to recover an internal primitive; or
@@ -78,13 +78,20 @@ the consuming specification retains the decisions it makes from those facts.
 JS Engine also owns internal simple-exception requests; their realization into
 realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
-Blob's shared read-result path and the default stream reader's `read()` use
-JS Engine's `InternalPromise` record.
-Binding supplies the narrow `PromiseReactions` operation for the receiver's
-realm when `text()` needs a decoding reaction. Result conversion and projection
-remain Binding work. Shared Binding also imports declared Promise arguments and
-Promise-returning callback functions' results into these records. The backend read loop and the remaining
-Streams Promise paths have not migrated to this contract.
+Asynchronous implementations receive JS Engine's `Promises` dependency for
+allocation, adoption, and continuation placement. A realm owns one facility;
+Binding supplies it at construction or operation composition. Streams retain it
+and pass it to derived streams; Blob reads receive it per operation. Returned
+`PromiseValue<T>` chains retain that destination, so `.then()` and `.observe()`
+need no scheduling argument. Result conversion and projection remain Binding
+work. Native backend I/O stays outside this implementation contract and hands
+completion back through an explicit task or Promise import.
+
+This is an asynchronous dependency, not a requirement on all stored values.
+Blob/File data can be created by synchronous multipart, cloning, and slicing
+algorithms without a Promise facility. The bound read operation composes the
+facility with its new stream. A consumer that only chains an incoming
+`PromiseValue` also needs no separate stored dependency.
 
 The custom engine's job hooks follow the same division. JS Engine associates
 opaque native context references with its existing realm objects and adapts
@@ -198,10 +205,44 @@ subsystems. If an operation belongs to another owner, use a cross-specification
 capability. If it reaches outside the runtime, use a Host Port.
 
 Existing implementation uses are migration work, not a pattern to extend.
-Move realm handling into declaration bindings; do not replace context with a
-realm parameter, captured context callbacks, or a renamed service bag merely
-to preserve the same coupling. Track the remaining migration in the
+Move conversion and projection into declaration bindings, and supply execution
+dependencies through the Runtime Context below. Track the remaining migration in the
 [platform-object ledger](./PLATFORM-OBJECT-ARCHITECTURE.md#migration-ledger-temporary).
+
+### Runtime Context
+
+`RuntimeContext` groups the facilities composed for one owning realm/global:
+Promises, buffer allocation, microtasks, task delivery, abort-controller
+construction, and cloning. It contains no Binding Context, realm object,
+conversion, callback adaptation, or platform-object registry.
+
+The neutral contract and engine-owned buffer operations live in `js-engine/`.
+HTML task policy, DOM aborting, and HTML cloning retain their implementations in
+Browlet. [`integration/runtime.ts`](browlet/integration/runtime.ts) assembles
+them once during Window realm registration, reusing that realm's existing
+Promise facility. Binding exposes the same object through `context.getRuntime()`;
+the `runtimeContext` declaration value supplies it to constructors or methods.
+
+Implementations keep lifetime dependencies in a final constructor argument and
+pass the same runtime to children they create. Synchronous Blob storage needs
+no runtime; its read operations receive one from the receiver's binding.
+Invocation-specific information, such as Fetch's explicit task destination,
+remains an operation argument. Borrowing another realm's method does not change
+the receiver's runtime.
+
+Allocation is an implementation dependency when a value can reach callbacks or
+be retained before return projection. FileReader stores its final buffer once;
+its getter returns that buffer without a projection cache. TextEncoderStream
+allocates bytes before enqueueing them to downstream callbacks. Binding still
+owns author conversion, platform identity, and exception/result projection.
+
+Prefer allocating final storage directly through `runtime.buffers` when the
+implementation controls its creation. Copying and ownership transfer remain
+distinct operations; see the [engine buffer contract](js-engine/README.md).
+
+Do not introduce subsystem-specific copies of this context or route ordinary
+imports through it. Standalone tests compose real engine facilities with narrow
+task/abort/clone fakes; HTML ownership tests use Browlet's actual composition.
 
 ### Shared algorithm
 
@@ -313,6 +354,7 @@ ambient runtime discovery. A Composition Root assembles:
 
 - Web IDL definitions and binding contributions;
 - Binding Contexts;
+- Runtime Contexts for implementation owners;
 - cross-specification capability registrations;
 - Host Ports; and
 - the globals and implementation roots which consume them.
@@ -321,10 +363,11 @@ Resolve dependencies at one of these explicit integration boundaries.
 Implementation algorithms must not perform ambient discovery of the same
 objects later.
 
-Promise reaction placement follows this rule too. Binding supplies an explicit
-destination for `InternalPromise` observation; HTML task creation selects its
-event loop. Neither establishes ambient ownership over ordinary Node Promise
-continuations. The boundary contract and remaining migration live in
+Promise placement follows this rule too. Binding supplies the receiver's
+Runtime Context with its existing `Promises` facility; HTML task creation selects its event loop. A consumer
+imports another owner's result into its own facility before chaining work on
+it. Neither establishes ambient ownership over ordinary Node Promise
+continuations. The boundary contract lives in
 [return projection](./PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
 
 Browlet's concrete composition root is
@@ -341,8 +384,8 @@ the assembled `browletBindings` singleton to rediscover either.
 
 ```text
 Composition Root(s)
-  |-- Binding Context --------------+--> Implementation
-  |                                 `--> Binding
+  |-- Binding Context -----------------> Binding
+  |-- Runtime Context -----------------> Implementation
   |-- Cross-specification capabilities --> Implementation
   `-- Host Ports -----------------------> Implementation
 
@@ -444,11 +487,11 @@ or capability at the Composition Root.
 
 ### Capability bags
 
-A large object containing buffers, promises, callbacks, dictionaries,
-exceptions, iteration, scheduling, and unrelated host operations is not one
-capability. It is usually a Binding Context partially copied into a subsystem,
-mixed with cross-specification capabilities and Host Ports. Classify and route
-the members independently.
+A context is not one capability merely because its members share an object.
+The Runtime Context deliberately groups facilities sharing an implementation
+owner and lifecycle. Keep the ownership of each facility explicit. Adding
+callbacks, dictionary conversion, projection, or registries would copy Binding
+into it and erase the distinction that the context is meant to preserve.
 
 ### Miniature runtime test doubles
 
@@ -512,7 +555,9 @@ The successful removal sequence was:
    fakes only for the remaining narrow capabilities or Host Ports.
 
 That removed the private façade, but left Binding Context in implementations.
-The current migration moves that realm work into declaration/member bindings.
+The current migration separates runtime execution dependencies from Binding:
+implementations receive Runtime Context, while declaration/member bindings
+retain conversion, callback adaptation, and projection.
 
 ### Refactor acceptance bar
 

@@ -1,13 +1,13 @@
 import {
-  arg, constant, contextValue, ctor, defineInterface, idlType, impl, integer, nullable,
+  arg, constant, ctor, defineInterface, idlType, impl, integer, nullable,
   op, roAttr, reference, union,
 } from '../../../web-idl/declaration/index';
-import { bind, type BindingContext } from '../../../web-idl/projection';
-import { createPromiseReactions, type PromiseReactions } from '../../../js-engine/index';
+import { bind, runtimeContext } from '../../../web-idl/projection';
+import { getBufferSourceCopy, type RuntimeContext } from '../../../js-engine/index';
 import {
-  getBlobStream, getFileReading, packageData, type BlobImpl, type FileReadType,
+  getBlobStream, packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
-import type { TaskHandle, TaskScheduling } from '../../../infra/index';
+import type { TaskHandle } from '../../../infra/index';
 import {
   domExceptionName, throwDOMException,
 } from '../../../web-idl/exceptions/dom-exception-core';
@@ -15,7 +15,6 @@ import {
   cancelReadableStreamReader, getReadableStreamReader,
   readReadableStreamChunk,
 } from '../../../streams/index';
-import { createArrayBuffer, getBufferSourceCopy } from '../../../web-idl/buffer-source';
 import { fireProgressEvent } from '../../dom/events/progress-event';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
@@ -53,7 +52,7 @@ import {
  * };
  */
 export class FileReaderImpl extends EventTargetImpl {
-  readonly #scheduling: TaskScheduling;
+  readonly #runtime: RuntimeContext;
   #state: FileReaderState = 'empty';
   #result: string | ArrayBuffer | null = null;
   #error: DOMException | null = null;
@@ -68,9 +67,9 @@ export class FileReaderImpl extends EventTargetImpl {
   ]);
 
   // SPEC_MISMATCH: FileReader() -> FileReader
-  constructor(scheduling: TaskScheduling, readonly reactions: PromiseReactions) {
+  constructor(runtime: RuntimeContext) {
     super();
-    this.#scheduling = scheduling;
+    this.#runtime = runtime;
   }
 
   readAsArrayBuffer(blob: BlobImpl): void {
@@ -194,13 +193,12 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const fileReading = this.#scheduling;
-    const reader = getReadableStreamReader(getBlobStream(blob, fileReading, this.reactions));
-    const reactions = this.reactions;
+    const { fileReading, promises } = this.#runtime;
+    const reader = getReadableStreamReader(getBlobStream(blob, this.#runtime));
     const operation: FileReadOperation = {
       cancel() {
         const promise = cancelReadableStreamReader(reader, undefined);
-        promise.observe(() => {}, () => {}, reactions);
+        promise.observe(() => {}, () => {});
       },
       loaded: 0,
       tasks: new Set(),
@@ -254,7 +252,7 @@ export class FileReaderImpl extends EventTargetImpl {
               fireProgressEvent('progress', this, transmitted, blob.size);
             });
           }
-          void Promise.resolve().then(readNextChunk);
+          void promises.resolve().then(readNextChunk);
         },
         closeSteps: () => {
           if (this.#operation !== operation) return;
@@ -280,6 +278,7 @@ export class FileReaderImpl extends EventTargetImpl {
                 type,
                 blob.type,
                 encodingLabel,
+                this.#runtime,
               );
               fire('load');
             } catch (error) {
@@ -311,14 +310,14 @@ export class FileReaderImpl extends EventTargetImpl {
 }
 
 // -- Web IDL ------------------------------------------------------------
-// BINDING_INTEGRATION: supply HTML scheduling and materialize retained author results.
+// BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
 
 export const fileReaderIDL = defineInterface({
   name: 'FileReader',
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [contextValue(getFileReading), contextValue((context: BindingContext) => createPromiseReactions(context.realm))],
+    constructWith: [runtimeContext],
   }),
   members: [
     ctor(),
@@ -340,9 +339,7 @@ export const fileReaderIDL = defineInterface({
     constant('LOADING', idlType.unsignedShort, integer(1)),
     constant('DONE', idlType.unsignedShort, integer(2)),
     roAttr('readyState', idlType.unsignedShort),
-    roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer)), bind({
-      get: projectResult,
-    })),
+    roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer))),
     roAttr('error', nullable(reference('DOMException')), bind({
       // BINDING_INTEGRATION: realize a retained failure on its first author observation.
       get(context) {
@@ -358,25 +355,6 @@ export const fileReaderIDL = defineInterface({
     eventHandlerAttr('onloadend'),
   ],
 });
-
-// BINDING_INTEGRATION: repeated result reads share one buffer in the receiver realm.
-function projectResult(this: object | null, context: BindingContext): string | ArrayBuffer | null {
-  const value = (this as FileReaderImpl).result;
-  if (value === null || typeof value === 'string') return value;
-  let buffers = resultBuffers.get(context);
-  if (!buffers) {
-    buffers = new WeakMap();
-    resultBuffers.set(context, buffers);
-  }
-  let buffer = buffers.get(value);
-  if (!buffer) {
-    buffer = createArrayBuffer(new Uint8Array(value), context.realm);
-    buffers.set(value, buffer);
-  }
-  return buffer;
-}
-
-const resultBuffers = new WeakMap<BindingContext, WeakMap<ArrayBuffer, ArrayBuffer>>();
 
 type FileReaderState = 'empty' | 'loading' | 'done';
 

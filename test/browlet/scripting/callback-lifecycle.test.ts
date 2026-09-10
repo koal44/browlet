@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 import { nodeRuntime } from '../../../src/js-engine/index';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 
@@ -33,7 +34,7 @@ import {
 } from '../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
-  it('retains each Promise registration incumbent independently of the callback realm', () => {
+  itPassesWith('hostHooks')('retains each Promise registration incumbent independently of the callback realm', () => {
     installHostHooks();
     const agent = new TestAgent({
       ...createEventLoopOptions(),

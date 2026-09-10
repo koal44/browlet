@@ -24,7 +24,7 @@ import { getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../src/browlet/performance/clock';
-import { itCompatPasses } from '../../test-runtime';
+import { itPassesWith } from '../../test-runtime';
 
 describe('task queues', () => {
   it('defines distinct shared identities for the generic task sources', () => {
@@ -481,7 +481,7 @@ describe('task queues', () => {
     expect(eventLoop.currentlyRunningTask).toBeNull();
   });
 
-  itCompatPasses(
+  itPassesWith('explicitQueues')(
     'does not report an adopted Stream start rejection as unhandled',
     async () => {
       /*

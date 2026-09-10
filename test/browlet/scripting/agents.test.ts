@@ -15,7 +15,7 @@ import {
 } from '../../../src/browlet/performance/clock';
 import type { Domain, Host } from '../../../src/url/host';
 import type { TupleOrigin } from '../../../src/url/origin';
-import { itCompatPasses } from '../../test-runtime';
+import { itPassesWith } from '../../test-runtime';
 
 describe('WindowAgent', () => {
   it('contains window objects and cannot block', () => {
@@ -215,7 +215,7 @@ describe('Realm agent', () => {
     expect(queueMicrotask).toHaveBeenCalledWith(steps, null);
   });
 
-  itCompatPasses(
+  itPassesWith('explicitQueues')(
     'shares one explicit queue between its realms and isolates other agents',
     () => {
       const firstAgent = new WindowAgent(createEventLoopOptions());

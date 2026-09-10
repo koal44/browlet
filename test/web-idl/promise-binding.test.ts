@@ -14,9 +14,7 @@ import {
 } from '../../src/web-idl/declaration/index';
 import { createBindings } from '../../src/web-idl/registration';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
-import {
-  createPromiseReactions, type InternalPromise, type PromiseReactions,
-} from '../../src/js-engine/index';
+import type { PromiseValue } from '../../src/js-engine/index';
 import { registerDefinitionBindings } from '../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
@@ -287,7 +285,7 @@ function createOrdinaryPromiseFixture() {
   const secondBinding = bindings.register(second);
   firstBinding.install(first.global);
   secondBinding.install(second.global);
-  const implementation = new OrdinaryPromiseOwnerImpl(createPromiseReactions(first));
+  const implementation = new OrdinaryPromiseOwnerImpl();
   const owner = firstBinding.context.project(OrdinaryPromiseOwnerImpl, implementation);
   const foreignConstructor = Reflect.get(second.global, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
@@ -298,8 +296,6 @@ class OrdinaryPromiseOwnerImpl {
   received: PromiseChildImpl | undefined;
   returned: unknown;
   readonly visited = new WeakSet<object>();
-
-  constructor(private readonly reactions: PromiseReactions) {}
 
   get result(): Promise<PromiseChildImpl> { return this.pending.promise; }
   read(): Promise<PromiseChildImpl> { return this.pending.promise; }
@@ -321,14 +317,14 @@ class OrdinaryPromiseOwnerImpl {
     return Promise.reject(reason);
   }
 
-  consume(value: InternalPromise<PromiseChildImpl>): InternalPromise<number> {
-    return value.map((child) => {
+  consume(value: PromiseValue<PromiseChildImpl>): PromiseValue<number> {
+    return value.then((child) => {
       this.received = child;
       return child.value;
-    }, this.reactions);
+    });
   }
 
-  invoke(callback: () => InternalPromise<PromiseChildImpl>): InternalPromise<number> {
+  invoke(callback: () => PromiseValue<PromiseChildImpl>): PromiseValue<number> {
     return this.consume(callback());
   }
 }

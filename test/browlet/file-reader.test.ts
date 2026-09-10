@@ -10,15 +10,13 @@ import {
 import {
   EventTargetImpl, fireEvent,
 } from '../../src/browlet/dom/events/event-target';
-import type { ProgressEventImpl } from
-  '../../src/browlet/dom/events/progress-event';
+import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
 import {
-  BlobData, BlobImpl, BlobReadFailure, getFileReading, type BlobByteSource,
+  BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
 import { getBufferSourceCopy } from '../../src/web-idl/buffer-source';
 import { serializeDefinition } from '../../src/web-idl/declaration/index';
 import type { BindingContext } from '../../src/web-idl/projection';
-import { createPromiseReactions } from '../../src/js-engine/index';
 
 describe('File API FileReader foundation', () => {
   it('starts empty with no result, error, or event handlers', () => {
@@ -124,6 +122,11 @@ describe('File API §6.2: FileReader reads', () => {
     expect(result).toBe(reader.result);
     expect(Reflect.apply(getter, reader, [])).toBe(result);
     expect(Array.from(new Uint8Array(result))).toEqual([65, 66, 67]);
+    new Uint8Array(result)[0] = 90;
+    expect(new Uint8Array(reader.result as ArrayBuffer)[0]).toBe(90);
+    Reflect.apply(requireFunction(first.ArrayBuffer.prototype, 'transfer'), result, []);
+    expect(reader.result).toBe(result);
+    expect((Reflect.apply(getter, reader, []) as ArrayBuffer).byteLength).toBe(0);
   });
 
   it('reads every result mode and creates ArrayBuffer in the relevant realm', async () => {
@@ -149,7 +152,10 @@ describe('File API §6.2: FileReader reads', () => {
     const arrayBuffer = await read(context, blob, (reader) => {
       reader.readAsArrayBuffer(blob);
     });
+    expect(arrayBuffer.result)
+      .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
     const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer), 'result') as object;
+    expect(result).toBe(arrayBuffer.result);
     expect(result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
     expect(result)
@@ -500,7 +506,7 @@ function createWindow(): Window & typeof globalThis {
 }
 
 function createReader(context = getContext(createWindow())): FileReaderImpl {
-  return new FileReaderImpl(getFileReading(context), createPromiseReactions(context.realm));
+  return new FileReaderImpl(context.getRuntime());
 }
 
 function getContext(window: object): BindingContext {
