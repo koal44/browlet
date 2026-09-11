@@ -77,6 +77,8 @@ checkpoint operations travel together on that contract so the event loop
 cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
+Collection iterators follow this rule: JS Engine owns native allocation and
+the stock fallback; Web IDL supplies live iteration and per-step conversion.
 Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
 Composition exposes the required operations through `runtime.buffers` and

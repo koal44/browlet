@@ -24,6 +24,7 @@ exports.getFunctionRealm = native.getFunctionRealm;
 exports.observePromise = native.observePromise;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
 exports.createMicrotaskQueue = native.createMicrotaskQueue;
+exports.createCollectionIterator = native.createCollectionIterator;
 exports.createContextHandle = function createContextHandle(options = {}) {
   for (const key of Object.keys(options)) {
     if (key !== 'microtaskQueue' && key !== 'reuseGlobalProxyFrom' && key !== 'globalPrototypeChain') {

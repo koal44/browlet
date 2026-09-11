@@ -201,6 +201,57 @@ describe('JavaScript Realm', () => {
   });
 });
 
+describe('Realm collection iterators', () => {
+  it.each(['map', 'set'] as const)('%s iteration is lazy, branded, and completes once', (kind) => {
+    const realm = new JSRealm();
+    let calls = 0;
+    const first = realm.createIteratorResultObject('first', false);
+    const iterator = realm.createCollectionIterator(kind, () => {
+      ++calls;
+      expect(() => Reflect.apply(next, iterator, []))
+        .toThrow(realm.intrinsics.typeError);
+      return calls === 1 ? first : realm.createIteratorResultObject('ignored', true);
+    });
+    const next = Reflect.get(iterator, 'next') as JSFunction;
+    expect(calls).toBe(0);
+    expect(Reflect.apply(next, iterator, [])).toBe(first);
+    const other = realm.createCollectionIterator(kind, () =>
+      realm.createIteratorResultObject(undefined, true));
+    expect(Reflect.get(other, 'next')).toBe(next);
+    const opposite = realm.createCollectionIterator(kind === 'map' ? 'set' : 'map', () => first);
+    for (const receiver of [{}, new Proxy(iterator, {}), opposite]) {
+      expect(() => Reflect.apply(next, receiver, [])).toThrow(realm.intrinsics.typeError);
+    }
+    for (let i = 0; i < 2; ++i) {
+      const result = Reflect.apply(next, iterator, []) as object;
+      expect(result).toEqual({ value: undefined, done: true });
+      expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
+    }
+    expect(calls).toBe(2);
+  });
+
+  it.each(['map', 'set'] as const)('%s iteration stays completed after a callback throws', (kind) => {
+    const realm = new JSRealm();
+    const failure = new Error('iterator failure');
+    let calls = 0;
+    const iterator = realm.createCollectionIterator(kind, () => {
+      ++calls;
+      throw failure;
+    });
+    const next = Reflect.get(iterator, 'next') as JSFunction;
+    const caught: unknown[] = [];
+    try {
+      Reflect.apply(next, iterator, []);
+    } catch (error) {
+      caught.push(error);
+    }
+    expect(caught).toHaveLength(1);
+    expect(caught[0]).toBe(failure);
+    expect(Reflect.apply(next, iterator, [])).toEqual({ value: undefined, done: true });
+    expect(calls).toBe(1);
+  });
+});
+
 describe('Realm Promise observation', () => {
   it('installs reactions without consulting the promise then property', async () => {
     const microtaskQueue = jsRuntime.createMicrotaskQueue();

@@ -14,6 +14,12 @@ those operations to implementations without exposing the realm. Web IDL retains
 BufferSource conversion. The composition and lifetime rules are authoritative
 in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md#runtime-context).
 
+`JSRealm.createCollectionIterator(kind, next)` allocates a Map/Set iterator;
+Web IDL supplies the live iteration and per-step conversion callback. The
+patched V8 factory provides native `next()` branding and iterator lifecycle.
+Without that factory, the engine layer retains the labeled Proxy fallback for
+ordinary iteration; borrowing native Map/Set `next()` remains unsupported.
+
 `runtime.buffers.allocateArrayBuffer(byteLength)` creates zero-initialized,
 fixed-length storage in the owning realm. `createView(name, buffer, byteOffset?,
 length?)` creates a concrete typed array or DataView over the supplied buffer

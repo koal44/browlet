@@ -11,6 +11,7 @@ type RuntimeRequirement = keyof typeof supported;
 
 const nodeMajor = Number(process.versions.node.split('.')[0]);
 const supported = {
+  collectionIterators: jsRuntime.hasNativeCollectionIterators,
   explicitQueues: jsRuntime.hasExplicitMicrotaskQueues,
   hostHooks: jsRuntime.supportsHostHooks,
   lengthTracking: jsRuntime.isLengthTrackingArrayBufferView(new Uint8Array()) !== undefined,

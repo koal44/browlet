@@ -5,6 +5,7 @@ import {
   type RuntimeBuffers,
 } from './buffers';
 import { Promises } from './promises';
+import { isObject } from './abstract-operations';
 import {
   jsRuntime, type JSMicrotaskQueue,
   type JSRuntime, type NodeContext,
@@ -25,6 +26,8 @@ export class JSRealm {
   readonly #callableFunctionFactory: RealmFunctionFactory;
   readonly #context: NodeContext;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
+  readonly #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
+  readonly #fallbackIterators = new WeakMap<object, FallbackCollectionIterator>();
   #globalObject: GlobalObject;
   #globalThis: object;
   readonly #hostGlobal: RealmGlobal;
@@ -191,7 +194,9 @@ export class JSRealm {
         arrayValues,
         asyncIteratorPrototype,
         iteratorPrototype,
+        mapIteratorNext: Reflect.get(mapIteratorPrototype, 'next') as JSMethod,
         mapIteratorPrototype,
+        setIteratorNext: Reflect.get(setIteratorPrototype, 'next') as JSMethod,
         setIteratorPrototype,
       },
       map: Map_,
@@ -308,6 +313,62 @@ export class JSRealm {
       value: { configurable: true, enumerable: true, value, writable: true },
       done: { configurable: true, enumerable: true, value: done, writable: true },
     });
+  }
+
+  /** Create a Map/Set-branded iterator whose steps supply each IteratorResult. */
+  createCollectionIterator(kind: CollectionIteratorKind, next: () => object): object {
+    const native = jsRuntime.createCollectionIterator(this.#context, kind, next);
+    if (native !== undefined) return native;
+
+    /*
+     * ACCOMMODATION(node-v8-collection-iterators): Unpatched engines cannot
+     * allocate a native collection iterator from custom steps. Preserve the
+     * prototype and ordinary iteration with a Proxy; borrowed native next()
+     * still rejects it. Only this fallback needs JavaScript iterator records.
+     */
+    const prototype = kind === 'map'
+      ? this.intrinsics.iteration.mapIteratorPrototype
+      : this.intrinsics.iteration.setIteratorPrototype;
+    const nativeNext = kind === 'map'
+      ? this.intrinsics.iteration.mapIteratorNext
+      : this.intrinsics.iteration.setIteratorNext;
+    const fallbackNext = this.#fallbackIteratorNext[kind] ??=
+      this.createFunction((receiver) => this.#nextCollectionIterator(receiver, kind),
+        { length: 0, name: 'next' });
+    const target = this.createOrdinaryObject(prototype);
+    const iterator = new Proxy(target, {
+      get(target_, property, receiver): unknown {
+        const value: unknown = Reflect.get(target_, property, receiver);
+        return property === 'next' && !Object.hasOwn(target_, property) && value === nativeNext
+          ? fallbackNext : value;
+      },
+    });
+    this.#fallbackIterators.set(iterator, { kind, next, running: false });
+    return iterator;
+  }
+
+  #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): object {
+    const record = isObject(receiver) ? this.#fallbackIterators.get(receiver) : undefined;
+    if (!record || record.kind !== kind) {
+      throw new this.intrinsics.typeError('Illegal invocation');
+    }
+    if (record.running) throw new this.intrinsics.typeError('Iterator is already running');
+    if (record.next !== undefined) {
+      record.running = true;
+      try {
+        const next = record.next;
+        const result = next();
+        if (!isObject(result)) throw new this.intrinsics.typeError('Iterator result is not an object');
+        if (!Reflect.get(result, 'done')) return result;
+        record.next = undefined;
+      } catch (error) {
+        record.next = undefined;
+        throw error;
+      } finally {
+        record.running = false;
+      }
+    }
+    return this.createIteratorResultObject(undefined, true);
   }
 
   /** Supply realm-owned allocation to implementation producers. */
@@ -495,6 +556,14 @@ export class JSRealm {
   }
 }
 
+export type CollectionIteratorKind = 'map' | 'set';
+
+type FallbackCollectionIterator = {
+  kind: CollectionIteratorKind;
+  next: (() => object) | undefined;
+  running: boolean;
+};
+
 export type JSRealmOptions = {
   reuseGlobalProxyFrom?: JSRealm;
   globalPrototypeChain?: readonly GlobalPrototypeKind[];
@@ -530,7 +599,9 @@ export type JSIntrinsics = {
     arrayValues: JSMethod;
     asyncIteratorPrototype: object;
     iteratorPrototype: object;
+    mapIteratorNext: JSMethod;
     mapIteratorPrototype: object;
+    setIteratorNext: JSMethod;
     setIteratorPrototype: object;
   };
   map: MapConstructor;

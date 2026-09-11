@@ -10,31 +10,9 @@ import { defineDataProperty, defineMethod } from './property';
 
 export class CollectionBinding {
   readonly #context: ConversionContext;
-  readonly #mapIterators = new WeakMap<object, MaplikeIterator>();
-  readonly #mapNativeNext: unknown;
-  readonly #mapNext: JSFunction;
-  readonly #setIterators = new WeakMap<object, SetlikeIterator>();
-  readonly #setNativeNext: unknown;
-  readonly #setNext: JSFunction;
 
   constructor(context: ConversionContext) {
     this.#context = context;
-    this.#mapNativeNext = Reflect.get(
-      context.realm.intrinsics.iteration.mapIteratorPrototype,
-      'next',
-    );
-    this.#mapNext = context.realm.createFunction(
-      (thisArgument) => this.#nextMapIterator(thisArgument),
-      { length: 0, name: 'next' },
-    );
-    this.#setNativeNext = Reflect.get(
-      context.realm.intrinsics.iteration.setIteratorPrototype,
-      'next',
-    );
-    this.#setNext = context.realm.createFunction(
-      (thisArgument) => this.#nextSetIterator(thisArgument),
-      { length: 0, name: 'next' },
-    );
   }
 
   initialize(object: object, interface_: AssembledInterface): void {
@@ -510,17 +488,22 @@ export class CollectionBinding {
     declaration: MaplikeMember,
     kind: MapIterationKind,
   ): object {
-    const iterator = this.#createIteratorShell(
-      this.#context.realm.intrinsics.iteration.mapIteratorPrototype,
-      this.#mapNext,
-      this.#mapNativeNext,
-    );
-    this.#mapIterators.set(iterator, {
-      declaration,
-      iterator: entries.entries(),
-      kind,
+    const iterator = entries.entries();
+    return this.#context.realm.createCollectionIterator('map', () => {
+      const result = iterator.next();
+      if (result.done) {
+        return this.#context.realm.createIteratorResultObject(undefined, true);
+      }
+
+      const [idlKey, idlValue] = result.value;
+      const key = convertToJavaScript(idlKey, declaration.key, this.#context);
+      const value = convertToJavaScript(idlValue, declaration.value, this.#context);
+      return this.#context.realm.createIteratorResultObject(
+        kind === 'key' ? key : kind === 'value' ? value :
+          createRealmArray(this.#context, [key, value]),
+        false,
+      );
     });
-    return iterator;
   }
 
   #createSetIterator(
@@ -528,94 +511,19 @@ export class CollectionBinding {
     declaration: SetlikeMember,
     kind: SetIterationKind,
   ): object {
-    const iterator = this.#createIteratorShell(
-      this.#context.realm.intrinsics.iteration.setIteratorPrototype,
-      this.#setNext,
-      this.#setNativeNext,
-    );
-    this.#setIterators.set(iterator, {
-      declaration,
-      iterator: entries.values(),
-      kind,
-    });
-    return iterator;
-  }
+    const iterator = entries.values();
+    return this.#context.realm.createCollectionIterator('set', () => {
+      const result = iterator.next();
+      if (result.done) {
+        return this.#context.realm.createIteratorResultObject(undefined, true);
+      }
 
-  #createIteratorShell(
-    prototype: object,
-    next: JSFunction,
-    nativeNext: unknown,
-  ): object {
-    const target = this.#context.realm.createOrdinaryObject(prototype);
-    return new Proxy(target, {
-      get(target_, property, receiver): unknown {
-        const value: unknown = Reflect.get(target_, property, receiver);
-        if (
-          property === 'next' &&
-          !Object.hasOwn(target_, property) &&
-          value === nativeNext
-        ) return next;
-        return value;
-      },
-    });
-  }
-
-  #nextMapIterator(thisArgument: unknown): object {
-    if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
-    const record = this.#mapIterators.get(thisArgument);
-    if (!record) this.#throwTypeError('Illegal invocation');
-    const result = record.iterator.next();
-    if (result.done) {
+      const value = convertToJavaScript(result.value, declaration.value, this.#context);
       return this.#context.realm.createIteratorResultObject(
-        undefined,
-        true,
+        kind === 'value' ? value : createRealmArray(this.#context, [value, value]),
+        false,
       );
-    }
-
-    const [idlKey, idlValue] = result.value;
-    const key = convertToJavaScript(
-      idlKey,
-      record.declaration.key,
-      this.#context,
-    );
-    const value = convertToJavaScript(
-      idlValue,
-      record.declaration.value,
-      this.#context,
-    );
-    return this.#context.realm.createIteratorResultObject(
-      record.kind === 'key'
-        ? key
-        : record.kind === 'value'
-          ? value
-          : createRealmArray(this.#context, [key, value]),
-      false,
-    );
-  }
-
-  #nextSetIterator(thisArgument: unknown): object {
-    if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
-    const record = this.#setIterators.get(thisArgument);
-    if (!record) this.#throwTypeError('Illegal invocation');
-    const result = record.iterator.next();
-    if (result.done) {
-      return this.#context.realm.createIteratorResultObject(
-        undefined,
-        true,
-      );
-    }
-
-    const value = convertToJavaScript(
-      result.value,
-      record.declaration.value,
-      this.#context,
-    );
-    return this.#context.realm.createIteratorResultObject(
-      record.kind === 'value'
-        ? value
-        : createRealmArray(this.#context, [value, value]),
-      false,
-    );
+    });
   }
 
   #implementationObject(
@@ -652,18 +560,6 @@ type SetIterationKind = 'key+value' | 'value';
 type JSFunction = ReturnType<
   ConversionContext['realm']['createFunction']
 >;
-
-type MaplikeIterator = {
-  declaration: MaplikeMember;
-  iterator: MapIterator<[unknown, unknown]>;
-  kind: MapIterationKind;
-};
-
-type SetlikeIterator = {
-  declaration: SetlikeMember;
-  iterator: SetIterator<unknown>;
-  kind: SetIterationKind;
-};
 
 function convertCollectionValue(
   value: unknown,
