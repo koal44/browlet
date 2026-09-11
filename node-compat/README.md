@@ -6,6 +6,16 @@ microtask queues and detachable/reusable context handles onto stock Node
 prototypes remain unavailable through the addon. A custom engine containing our
 V8 patches also enables the five host hooks described below.
 
+With the V8 `CollectionIterator::New` patch, the addon also exports
+`createCollectionIterator(contextHandle, kind, next)`, where `kind` is `map` or
+`set`. It creates an iterator in that context, accepted by the corresponding
+native `next()`, including one borrowed from another realm. The callback supplies
+each IteratorResult; it owns value conversion and allocation. V8 handles
+reentrancy, completion, and closing after exceptions. The build detects this API
+in the selected headers; official Node builds leave the export unavailable.
+Callback iterators have no table-backed entries to preview: V8's existing
+`IsMapIterator`/`IsSetIterator` storage queries and Node inspection remain unchanged.
+
 | Facility | Stock Node | Stock + addon | Original source patches |
 | --- | --- | --- | --- |
 | Explicit shared microtask queues | No | Yes | Yes |

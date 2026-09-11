@@ -300,6 +300,38 @@ void Evaluate(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(result);
 }
 
+#ifdef NODE_COMPAT_COLLECTION_ITERATORS
+void CreateCollectionIterator(const FunctionCallbackInfo<Value>& args) {
+  auto isolate = args.GetIsolate();
+  auto handle = Unwrap<ContextHandle>(isolate, args[0], Data(args)->context_key);
+  if (!handle) return;
+  if (handle->state != ContextHandle::kAttached || handle->context.IsEmpty()) {
+    Fail(isolate, "ERR_CONTEXT_NOT_INITIALIZED", "Context handle is detached");
+    return;
+  }
+  CollectionIterator::Kind kind;
+  if (args[1]->StrictEquals(Text(isolate, "map"))) {
+    kind = CollectionIterator::Kind::kMap;
+  } else if (args[1]->StrictEquals(Text(isolate, "set"))) {
+    kind = CollectionIterator::Kind::kSet;
+  } else {
+    Fail(isolate, "ERR_INVALID_ARG_VALUE", "Iterator kind must be map or set");
+    return;
+  }
+  if (!args[2]->IsFunction()) {
+    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Iterator steps must be a function");
+    return;
+  }
+  auto realm = handle->context.Get(isolate);
+  Context::Scope scope(realm);
+  Local<Object> iterator;
+  if (CollectionIterator::New(realm, kind, args[2].As<Function>())
+          .ToLocal(&iterator)) {
+    args.GetReturnValue().Set(iterator);
+  }
+}
+#endif
+
 void IsContext(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
   Local<Value> pointer;
@@ -349,6 +381,9 @@ void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context)
   const struct { const char* name; FunctionCallback callback; } methods[] = {
     {"createMicrotaskQueue", CreateQueue},
     {"createContextHandle", CreateContext},
+#ifdef NODE_COMPAT_COLLECTION_ITERATORS
+    {"createCollectionIterator", CreateCollectionIterator},
+#endif
     {"evaluate", Evaluate},
     {"isContext", IsContext},
     {"setPropertyDelegate", SetPropertyDelegate},

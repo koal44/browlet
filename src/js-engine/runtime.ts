@@ -3,7 +3,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
 import { isObject } from './abstract-operations';
-import type { GlobalPrototypeKind, JSFunction, JSRealm } from './realm';
+import type {
+  CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSRealm,
+} from './realm';
 import { TypeError } from './simple-exception';
 
 /*
@@ -20,6 +22,7 @@ export class JSRuntime {
   readonly hasExplicitMicrotaskQueues =
     nodeCreateMicrotaskQueue !== undefined;
   readonly hasNativeGlobalObjects = getNodeMethod('setGlobalObject') !== undefined;
+  readonly hasNativeCollectionIterators = getNodeMethod('createCollectionIterator') !== undefined;
   readonly supportsHostHooks = Reflect.get(nodeApi, 'supportsHostHooks') === true;
 
   /*
@@ -204,6 +207,17 @@ export class JSRuntime {
     return isNodeContextHandle(context)
       ? context.globalProxy
       : context;
+  }
+
+  /** Undefined when the backend lacks callback-driven native iterator creation. */
+  createCollectionIterator(
+    context: NodeContext,
+    kind: CollectionIteratorKind,
+    next: () => object,
+  ): object | undefined {
+    const create = getNodeMethod('createCollectionIterator');
+    return create === undefined ? undefined :
+      Reflect.apply(create, nodeApi, [context, kind, next]) as object;
   }
 
   getContextPrototypeChain(context: NodeContext): readonly object[] | undefined {
