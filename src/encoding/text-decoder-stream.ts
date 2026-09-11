@@ -1,17 +1,15 @@
 import { isFixedBufferSource, type RuntimeContext } from '../js-engine/index';
 import { runtimeContext } from '../web-idl/projection';
 import {
-  arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
-  impl, reference,
+  arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
+  reference,
 } from '../web-idl/declaration/index';
 import { TypeError } from '../js-engine/simple-exception';
 import {
-  GenericTransformStreamMixin, TransformStreamImpl,
-  type ReadableStreamImpl, type WritableStreamImpl,
+  GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
+  type WritableStreamImpl,
 } from '../streams/index';
-import {
-  TextDecoderCommonMixin, type TextDecoderOptions,
-} from './text-decoder';
+import { TextDecoderCommonMixin, type TextDecoderOptions } from './text-decoder';
 
 /*
  * [Exposed=*]

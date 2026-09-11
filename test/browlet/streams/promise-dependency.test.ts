@@ -2,9 +2,7 @@ import { describe, expect } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
-import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
-import { WritableStreamImpl } from '../../../src/streams/writable-stream';
-import { closeReadableStream, enqueueReadableStream } from '../../../src/streams/readable-stream-cross-spec';
+import { ReadableStreamImpl, WritableStreamImpl } from '../../../src/streams/index';
 
 describe('Streams Promise dependencies', () => {
   itPassesWith('explicitQueues')('reads an iterator result in the consuming stream destination', () => {
@@ -32,8 +30,8 @@ describe('Streams Promise dependencies', () => {
     }, {}, b.runtime);
     a.queue.performMicrotaskCheckpoint();
     b.queue.performMicrotaskCheckpoint();
-    enqueueReadableStream(source, 'chunk');
-    closeReadableStream(source);
+    source.enqueueChunk('chunk');
+    source.close();
     let finished = false;
     source.pipeTo(destination, {
       preventAbort: false, preventCancel: false, preventClose: false,

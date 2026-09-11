@@ -1,26 +1,19 @@
 import { utf8Decode, utf8Encode } from '../encoding/utf-8';
 import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
-import type { PromiseValue, RuntimeContext } from '../js-engine/index';
+import {
+  type PromiseValue, type RuntimeContext, getBufferSourceCopy,
+} from '../js-engine/index';
 import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
+import { ReadableStreamImpl } from '../streams/index';
 import {
-  closeReadableStream, enqueueReadableStream, errorReadableStream,
-  createReadableStreamWithByteReadingSupport, getReadableStreamReader,
-  pipeReadableStreamThrough, readAllBytes, type ReadableStreamImpl,
-} from '../streams/index';
-import { getBufferSourceCopy } from '../js-engine/index';
-import {
-  arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration,
-  defineInterface, defineTypedef, dictMember, emptyDictionary, emptySequence,
-  idlType, impl, invokeWith, newBufferResult, op, promise, reference, roAttr, sequence, union,
-  xattr,
+  arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration, defineInterface,
+  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, impl, invokeWith,
+  newBufferResult, op, promise, reference, roAttr, sequence, union, xattr,
 } from '../web-idl/declaration/index';
 import { runtimeContext, type BindingContext } from '../web-idl/projection';
+import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
 import {
-  BlobData, BlobReadFailure, type BlobSnapshotState,
-} from './blob-data';
-import {
-  nativeLineEnding as nativeLineEndingCapability,
-  type NativeLineEnding,
+  nativeLineEnding as nativeLineEndingCapability, type NativeLineEnding,
 } from './integration';
 
 /*
@@ -106,10 +99,7 @@ export class BlobImpl {
       'utf-8', { fatal: false, ignoreBOM: false }, runtime,
     );
     // SPEC_MISMATCH: File API pipe through(stream, decoder: TextDecoderStream) -> ReadableStream
-    return pipeReadableStreamThrough(
-      stream,
-      TextDecoderStreamImpl.getAssociatedTransform(decoder),
-    );
+    return stream.pipeThroughTransform(TextDecoderStreamImpl.getAssociatedTransform(decoder));
   }
 
   // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
@@ -269,10 +259,11 @@ export function getBlobStream(
 ): ReadableStreamImpl {
   const scheduling = runtime.fileReading;
   let canceled = false;
-  const stream = createReadableStreamWithByteReadingSupport(
+  const stream = ReadableStreamImpl.createWithByteReadingSupport(
     undefined,
     () => { canceled = true; },
-    0, runtime,
+    0,
+    runtime,
   );
 
   // Backend I/O runs outside HTML; only the queued file tasks touch the stream.
@@ -290,23 +281,23 @@ export function getBlobStream(
           if (canceled) return;
           try {
             // Byte-stream enqueue transfers this read's storage into the stream runtime.
-            enqueueReadableStream(stream, bytes);
+            stream.enqueueChunk(bytes);
           } catch (error) {
             canceled = true;
-            errorReadableStream(stream, error);
+            stream.error(error);
           }
         });
       }
       if (!canceled) {
         scheduling.queueTask(() => {
-          if (!canceled) closeReadableStream(stream);
+          if (!canceled) stream.close();
         });
       }
     } catch (error) {
       scheduling.queueTask(() => {
         if (canceled) return;
         canceled = true;
-        errorReadableStream(stream, realizeReadFailure(error));
+        stream.error(realizeReadFailure(error));
       });
     }
   }
@@ -317,9 +308,9 @@ function readBlob(
   runtime: RuntimeContext,
 ): PromiseValue<Uint8Array> {
   const result = runtime.promises.withResolvers<Uint8Array>();
-  const reader = getReadableStreamReader(getBlobStream(blob, runtime));
+  const reader = getBlobStream(blob, runtime).getDefaultReader();
   // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
-  readAllBytes(reader, result.resolve, result.reject);
+  reader.readAllBytes(result.resolve, result.reject);
   return result.promise;
 }
 
@@ -354,7 +345,6 @@ function normalizeBlobType(value: string): string {
 
 // -- Web IDL ------------------------------------------------------------
 // BINDING_INTEGRATION: provide reading dependencies and project promises and fresh buffers.
-
 export const endingTypeIDL = defineEnumeration({
   name: 'EndingType',
   values: ['transparent', 'native'],

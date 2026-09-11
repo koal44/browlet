@@ -1,18 +1,14 @@
 import type { BlobImpl } from '../file/index';
 import { ParallelQueue } from '../infra/parallel-queue';
-import type { GlobalObject, RuntimeContext } from '../js-engine/index';
+import {
+  type GlobalObject, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
+} from '../js-engine/index';
 import { TypeError } from '../js-engine/simple-exception';
-import {
-  closeReadableStream, createReadableStreamWithByteReadingSupport, enqueueReadableStream,
-  getReadableStreamReader, isReadableStreamDisturbed, isReadableStreamErrored,
-  isReadableStreamLocked, readAllBytes, readReadableStreamChunk, teeReadableStream,
-  type ReadableStreamImpl,
-} from '../streams/index';
+import { ReadableStreamImpl } from '../streams/index';
 import type { URLSearchParamsImpl } from '../url/api';
-import { getBufferSourceCopy, getBufferTypeName } from '../js-engine/index';
 import {
-  defineInterfaceMixin, defineTypedef, idlType, nullable, op,
-  promise, reference, roAttr, union, xattr,
+  defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
+  union, xattr,
 } from '../web-idl/declaration/index';
 import type { FormDataImpl } from '../xhr/index';
 import type { RequestRecord } from './request';
@@ -33,7 +29,7 @@ export class BodyRecord {
   }
 
   clone(): BodyRecord {
-    const [out1, out2] = teeReadableStream(this.stream);
+    const [out1, out2] = this.stream.teeWithCloning();
     this.stream = out1;
     const clone = new BodyRecord(out2, this.#runtime);
     clone.source = this.source;
@@ -50,13 +46,13 @@ export class BodyRecord {
   ): void {
     const scheduling = this.#runtime.networking;
     const destination = taskDestination ?? new ParallelQueue(scheduling.runInParallel);
-    const reader = getReadableStreamReader(this.stream);
+    const reader = this.stream.getDefaultReader();
     readLoop();
 
     // The next read starts inside the task that processes this chunk.
     // SPEC_MISMATCH: incrementally-read loop(reader, taskDestination, processBodyChunk, processEndOfBody, processBodyError)
     function readLoop(): void {
-      readReadableStreamChunk(reader, {
+      reader.readChunk({
         chunkSteps(chunk) {
           let continueAlgorithm: () => void;
           if (typeof chunk !== 'object' || chunk === null || getBufferTypeName(chunk) !== 'Uint8Array') {
@@ -88,14 +84,14 @@ export class BodyRecord {
       queueFetchTask(() => processBody(bytes), destination, scheduling.queueGlobalTask);
     const errorSteps = (error?: unknown) =>
       queueFetchTask(() => processBodyError(error), destination, scheduling.queueGlobalTask);
-    let reader: ReturnType<typeof getReadableStreamReader>;
+    let reader: ReturnType<ReadableStreamImpl['getDefaultReader']>;
     try {
-      reader = getReadableStreamReader(this.stream);
+      reader = this.stream.getDefaultReader();
     } catch (error) {
       errorSteps(error);
       return;
     }
-    readAllBytes(reader, successSteps, errorSteps);
+    reader.readAllBytes(successSteps, errorSteps);
   }
 }
 
@@ -110,12 +106,12 @@ export function bytesAsBody(
   runtime: RuntimeContext,
 ): BodyRecord {
   const scheduling = runtime.networking;
-  const stream = createReadableStreamWithByteReadingSupport(undefined, undefined, 0, runtime);
+  const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
   scheduling.runInParallel(() => {
-    if (bytes.length > 0 && !isReadableStreamErrored(stream)) {
-      enqueueReadableStream(stream, runtime.buffers.copyUint8Array(bytes));
+    if (bytes.length > 0 && !stream.isErrored) {
+      stream.enqueueChunk(runtime.buffers.copyUint8Array(bytes));
     }
-    closeReadableStream(stream);
+    stream.close();
   });
   const body = new BodyRecord(stream, runtime);
   body.source = bytes;
@@ -176,12 +172,12 @@ export class BodyMixin {
 
   get bodyUsed(): boolean {
     const body = this.#bodyRecord();
-    return body !== null && isReadableStreamDisturbed(body.stream);
+    return body !== null && body.stream.disturbed;
   }
 
   get unusable(): boolean {
     const body = this.#bodyRecord();
-    return body !== null && (isReadableStreamDisturbed(body.stream) || isReadableStreamLocked(body.stream));
+    return body !== null && (body.stream.disturbed || body.stream.locked);
   }
 
   // Promise-valued operations return Web IDL promise records, as Blob does.
@@ -225,6 +221,7 @@ export class BodyMixin {
 /** Post-conversion BufferSource objects are retained by Web IDL. */
 export type XMLHttpRequestBodyInitValue = BlobImpl | FormDataImpl | URLSearchParamsImpl |
   ArrayBuffer | ArrayBufferView | string;
+
 export type BodyInitValue = ReadableStreamImpl | XMLHttpRequestBodyInitValue;
 
 export const xmlHttpRequestBodyInitIDL = defineTypedef({

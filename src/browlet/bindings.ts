@@ -11,12 +11,10 @@ import {
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import {
-  type WindowImpl, windowEventIDL, windowIDL,
-  windowIncludesWindowOrWorkerGlobalScopeIDL,
+  type WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
 import {
-  isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow,
-  type WindowProxy,
+  isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
 } from './browsing/window/window-proxy';
 import { htmlDocumentIDL } from './dom/nodes/document';
 import { domIDLDefinitions } from './dom/web-idl';
@@ -29,18 +27,13 @@ import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
+import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
-  eventHandlerIDL, eventHandlerNonNullIDL,
-} from './scripting/event-handlers';
-import {
-  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
-  timerHandlerIDL,
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
 } from './scripting/global-scope';
 import { Realm } from './scripting/realm';
-import {
-  structuredSerializeOptionsIDL,
-} from './scripting/structured-data/web-idl';
+import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
 import { svgIDLDefinitions } from './svg/web-idl';
 
 /*

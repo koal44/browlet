@@ -10,13 +10,13 @@ import {
   type CallbackFunctionValue,
 } from './callback-value';
 import {
-  hasExtendedAttribute, idlType, type ArgumentDefinition,
+  hasExtendedAttribute, idlType, reference, type ArgumentDefinition,
   type AsyncIterableMember, type AttributeMember, type IterableMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
   type WebIDLType,
 } from './declaration/definition';
 import type {
-  ArgumentInjectionBinding, CallbackExceptionBehavior, ContextValue,
+  ArgumentInjectionBinding, CallbackExceptionBehavior, ContextValue, FunctionResultBinding,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
   LegacyGetterBinding, LegacyGetterHooks, NewBufferResultBinding,
   PositionedArgument,
@@ -177,9 +177,10 @@ type ContextualSteps<This, Values extends unknown[], Result> = (
 
 type AttributeBindingDefinition = {
   callbackExceptionBehavior?: CallbackExceptionBehavior;
+} & (FunctionResultBinding | {
   get?: ContextualSteps<object | null, [], unknown>;
   set?: ContextualSteps<object | null, [value: unknown], void>;
-};
+});
 
 type ConstructorBindingDefinition =
   | ArgumentInjectionBinding
@@ -435,7 +436,9 @@ function registerDefinedInterface(
   for (const { member } of interface_.members) {
     switch (member.kind) {
       case 'attribute':
-        if (member.binding?.get || member.binding?.set) {
+        if (member.binding && (
+          'functionResult' in member.binding || member.binding.get || member.binding.set
+        )) {
           registerDefinedAttribute(
             registry,
             member,
@@ -724,6 +727,22 @@ function registerDefinedAttribute(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): void {
+  if ('functionResult' in binding) {
+    registry.setAttributeSteps(member, {
+      get() {
+        const ownerContext = getMemberBindingContext(member, this, context, realmBinding);
+        const owner = realmBinding.platformObjects.getRealmBinding(ownerContext.realm);
+        if (!owner) throw new Error('Function result realm has no binding');
+        const { length, steps } = binding.functionResult;
+        return owner.getFunctionResult(
+          interface_, member, length,
+          () => typeof steps === 'function' ? steps : steps.resolve(ownerContext),
+        );
+      },
+    }, interface_);
+    return;
+  }
+
   const steps: AttributeSteps = {
     get() {
       if (!binding.get) {
@@ -1244,6 +1263,14 @@ function toImplementationValue(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): unknown {
+  if (projection.callbackDictionary !== undefined) {
+    const input = value === missingArgument ? undefined : value;
+    const dictionaryType = reference(projection.callbackDictionary);
+    return toImplementationValue(
+      convertToIDL(input, dictionaryType, realmBinding), dictionaryType,
+      { callbackThis: input }, context, realmBinding,
+    );
+  }
   if (value === missingArgument) return undefined;
   if (isAsyncSequence(value)) {
     const iterator = openAsyncSequence(value, realmBinding.realm);
@@ -1278,6 +1305,7 @@ function toImplementationValue(
       projection.callbackExceptionBehavior,
       context,
       realmBinding,
+      projection.callbackThis,
     );
   }
   if (isCallbackInterfaceValue(value)) {
@@ -1338,6 +1366,7 @@ function toImplementationValue(
         callbackExceptionBehavior:
           getMapMemberExceptionBehavior(type, name, realmBinding) ??
           projection.callbackExceptionBehavior,
+        callbackThis: isCallbackFunctionValue(memberValue) ? projection.callbackThis : undefined,
       },
       context,
       realmBinding,
@@ -1347,7 +1376,9 @@ function toImplementationValue(
 }
 
 type ImplementationValueProjection = {
+  readonly callbackDictionary?: string;
   readonly callbackExceptionBehavior?: CallbackExceptionBehavior;
+  readonly callbackThis?: unknown;
   readonly implementations?: readonly ImplementationClass[];
 };
 
@@ -1359,6 +1390,9 @@ function getArgumentProjection(
   if ('callbackExceptionBehavior' in binding) {
     return { callbackExceptionBehavior: binding.callbackExceptionBehavior };
   }
+  if ('callbackDictionary' in binding) {
+    return { callbackDictionary: binding.callbackDictionary };
+  }
   return {
     implementations: binding.implementations,
   };
@@ -1369,6 +1403,7 @@ function projectCallbackFunction(
   exceptionBehavior: CallbackExceptionBehavior | undefined,
   context: BindingContext,
   realmBinding: RealmBinding,
+  callbackThis?: unknown,
 ): CallableFunction {
   const existing = callbackFunctionProjections.get(value);
   if (existing) return existing;
@@ -1378,6 +1413,7 @@ function projectCallbackFunction(
    * callable. Copying the callback record onto the wrapper preserves its
    * Web IDL identity, so returning the callable projects the original
    * JavaScript function rather than exposing this wrapper.
+   * A callback dictionary fixes the receiver to its original input object.
    */
   const adapter = new Proxy(function callback() {}, {
     apply(_target, thisArgument, argumentsList) {
@@ -1385,7 +1421,7 @@ function projectCallbackFunction(
         value,
         argumentsList,
         exceptionBehavior,
-        thisArgument,
+        callbackThis ?? thisArgument,
       );
       return toImplementationValue(
         result, value.definition.returns, {}, context, realmBinding,
@@ -1499,6 +1535,7 @@ function isMemberBindingDefinition(
     'set' in definition ||
     'invoke' in definition ||
     'construct' in definition ||
+    'functionResult' in definition ||
     'newBufferResult' in definition ||
     'getSupportedPropertyIndices' in definition ||
     'getSupportedPropertyNames' in definition;

@@ -2,18 +2,18 @@ import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
-import * as scheduling from '../../../src/browlet/integration/scripting';
 import type { PromiseValue } from '../../../src/js-engine/index';
-import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
-import { ReadableStreamDefaultControllerImpl } from '../../../src/streams/readable-stream-default-controller';
 import {
+  ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
   ReadableStreamDefaultReaderImpl, readableStreamReadResultIDL,
   type ReadableStreamReadResult,
-} from '../../../src/streams/readable-stream-default-reader';
+} from '../../../src/streams/index';
 import {
   arg, defineCallbackFunction, defineInterface, impl, op, promise, reference,
 } from '../../../src/web-idl/declaration/index';
 import { createBindings } from '../../../src/web-idl/registration';
+
+import * as scheduling from '../../../src/browlet/integration/scripting';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -80,7 +80,7 @@ function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
   const stream = new ReadableStreamImpl({}, {}, browletBindings.forRealm(realm).context.getRuntime());
-  const controller = ReadableStreamImpl.getController(stream);
+  const controller = stream.controller;
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
   const reader = browletBindings.forRealm(realm).context.project(ReadableStreamDefaultReaderImpl, implementation);
@@ -106,7 +106,11 @@ function settle(fixture: ReaderFixture, mode: 'chunk' | 'close' | 'error' | 'rel
   else if (mode === 'error') fixture.controller.error(fixture.failure);
 }
 
-function expectResult(fixture: ReaderFixture, result: unknown, mode: 'chunk' | 'close' | 'error'): void {
+function expectResult(
+  fixture: ReaderFixture,
+  result: unknown,
+  mode: 'chunk' | 'close' | 'error',
+): void {
   if (mode === 'error') {
     expect(result).toBe(fixture.failure);
   } else {
@@ -119,18 +123,24 @@ function expectResult(fixture: ReaderFixture, result: unknown, mode: 'chunk' | '
 class ReadConsumerImpl {
   received: ReadableStreamReadResult | undefined;
 
-  consume(result: PromiseValue<ReadableStreamReadResult>): PromiseValue<ReadableStreamReadResult> {
+  consume(
+    result: PromiseValue<ReadableStreamReadResult>,
+  ): PromiseValue<ReadableStreamReadResult> {
     return result.then((value) => { this.received = value; return value; });
   }
 
-  invoke(callback: () => PromiseValue<ReadableStreamReadResult>): PromiseValue<ReadableStreamReadResult> {
+  invoke(
+    callback: () => PromiseValue<ReadableStreamReadResult>,
+  ): PromiseValue<ReadableStreamReadResult> {
     return this.consume(callback());
   }
 }
 
 // callback ReadCallback = Promise<ReadableStreamReadResult>();
 const resultType = promise(reference('ReadableStreamReadResult'));
+
 const callbackIDL = defineCallbackFunction({ name: 'ReadCallback', returns: resultType, arguments: [] });
+
 // interface ReadConsumer {
 //   Promise<ReadableStreamReadResult> consume(Promise<ReadableStreamReadResult> result);
 //   Promise<ReadableStreamReadResult> invoke(ReadCallback callback);

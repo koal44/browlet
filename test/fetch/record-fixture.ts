@@ -1,25 +1,32 @@
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { vi } from 'vitest';
-
-import { BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from '../../src/fetch/body';
-import { HeadersImpl, headersIDL, headersInitIDL, type HeadersGuard } from '../../src/fetch/headers';
 import {
-  RequestImpl, RequestRecord, requestCacheIDL, requestCredentialsIDL, requestDestinationIDL,
-  requestDuplexIDL, requestIDL, requestIncludesBodyIDL, requestInfoIDL, requestInitIDL,
-  requestModeIDL, requestPriorityIDL, requestRedirectIDL,
+  BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
+} from '../../src/fetch/body';
+import {
+  HeadersImpl, headersIDL, headersInitIDL, type HeadersGuard,
+} from '../../src/fetch/headers';
+import {
+  RequestImpl, RequestRecord, requestCacheIDL, requestCredentialsIDL,
+  requestDestinationIDL, requestDuplexIDL, requestIDL, requestIncludesBodyIDL,
+  requestInfoIDL, requestInitIDL, requestModeIDL, requestPriorityIDL, requestRedirectIDL,
 } from '../../src/fetch/request';
 import {
-  ResponseImpl, ResponseRecord, responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL,
+  ResponseImpl, ResponseRecord, responseIDL, responseIncludesBodyIDL, responseInitIDL,
+  responseTypeIDL,
 } from '../../src/fetch/response';
 import { fileIDLDefinitions } from '../../src/file/index';
-import { createReadableStream, streamsIDLDefinitions } from '../../src/streams/index';
+import { streamsIDLDefinitions, ReadableStreamImpl } from '../../src/streams/index';
 import { urlIDLDefinitions } from '../../src/url/api';
 import { parseURL } from '../../src/url/url';
 import { createBindings } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
 
-export function createRequestRecord(url = 'https://example.test/start', client: object | null = null) {
+export function createRequestRecord(
+  url = 'https://example.test/start',
+  client: object | null = null,
+) {
   const parsed = parseURL(url).url;
   if (parsed === null) throw new Error('Invalid fixture URL');
   return new RequestRecord(parsed, client);
@@ -43,7 +50,7 @@ export function createRecordFixture() {
     bindings,
     realm,
     context,
-    createBody: () => new BodyRecord(createReadableStream(undefined, undefined, 1, () => 1, runtime), runtime),
+    createBody: () => new BodyRecord(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime), runtime),
     createRequest: (record: RequestRecord, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new ResponseRecord(), guard: HeadersGuard = 'response') =>

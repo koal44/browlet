@@ -6,10 +6,10 @@ import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
-  arg, atArg, attr, callback as projectCallback, ctor,
+  arg, atArg, attr, callback as projectCallback, callbackDictionary, ctor,
   defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, defineTypedef, dictMember, idlType, contextValue,
-  impl, indexedGetter, iter, namedGetter, nullable, op,
+  functionResult, impl, indexedGetter, iter, namedGetter, nullable, op,
   promise as promiseType, roAttr, record, reference, resolveArgs, sequence,
   stringifier,
   union, constructWith, invokeWith,
@@ -17,8 +17,116 @@ import {
 import { bind, registerDefinitionBindings } from '../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { createBindings } from '../../src/web-idl/registration';
 
 describe('Web IDL implementation registration', () => {
+  it('retains each dictionary input as callback receiver without changing callback identity', () => {
+    type Options = { handler?: (value: unknown) => unknown; raw?: unknown; };
+    class CallbackDictionaryImpl {
+      readonly #options: Options;
+
+      constructor(options: Options) {
+        this.#options = options;
+      }
+
+      get handler() { return this.#options.handler; }
+      get raw() { return this.#options.raw; }
+      run(value: unknown) { return this.#options.handler?.(value); }
+      runFrom(options: Options, value: unknown) { return options.handler?.(value); }
+    }
+    const handlerIDL = defineCallbackFunction({
+      name: 'Handler', returns: idlType.any, arguments: [arg('value', idlType.any)],
+    });
+    const baseIDL = defineDictionary({
+      name: 'CallbackMembers',
+      members: [dictMember('handler', reference('Handler'), projectCallback('rethrow'))],
+    });
+    const optionsIDL = defineDictionary({
+      name: 'CallbackOptions', inherits: baseIDL.name,
+      members: [dictMember('raw', idlType.any)],
+    });
+    const definition = defineInterface({
+      name: 'CallbackDictionary', exposed: '*', implementation: impl(CallbackDictionaryImpl),
+      members: [
+        ctor([arg('options', idlType.object, {
+          optional: true, ...callbackDictionary(optionsIDL.name),
+        })]),
+        roAttr('handler', reference('Function')),
+        roAttr('raw', idlType.any),
+        op('run', idlType.any, [arg('value', idlType.any)]),
+        op('runFrom', idlType.any, [
+          arg('options', idlType.object, callbackDictionary(optionsIDL.name)),
+          arg('value', idlType.any),
+        ]),
+      ],
+    });
+    const realm = new Realm();
+    createBindings([handlerIDL, baseIDL, optionsIDL, definition]).register(realm).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new(input?: object) => {
+      handler: unknown; raw: unknown;
+      run(value: unknown): { receiver: unknown; value: unknown; } | undefined;
+      runFrom(input: object, value: unknown): { receiver: unknown; value: unknown; };
+    };
+    const handler = function(this: unknown, value: unknown) { return { receiver: this, value }; };
+    let reads = 0;
+    const firstInput = { get handler() { reads++; return handler; }, raw: handler };
+    const secondInput = { handler, raw: handler };
+    const first = new Constructor(firstInput);
+    const second = new Constructor(secondInput);
+    const value = {};
+
+    const result = first.run(value);
+    expect(result?.receiver).toBe(firstInput);
+    expect(result?.value).toBe(value);
+    expect(second.run(value)?.receiver).toBe(secondInput);
+    expect(first.runFrom(secondInput, value).receiver).toBe(secondInput);
+    expect(first.handler).toBe(handler);
+    expect(second.handler).toBe(handler);
+    expect(first.raw).toBe(handler);
+    expect(reads).toBe(1);
+    expect(new Constructor().run(value)).toBeUndefined();
+  });
+
+  it('creates shared function-valued attributes with ordinary call behavior', () => {
+    class FunctionResultImpl {}
+    const steps = function(this: unknown, ...args: unknown[]) {
+      return { receiver: this, args };
+    };
+    const definition = defineInterface({
+      name: 'FunctionResult', exposed: '*', implementation: impl(FunctionResultImpl),
+      members: [
+        ctor(),
+        roAttr('first', reference('Function'), functionResult(2, steps)),
+        roAttr('second', reference('Function'), functionResult(2, steps)),
+      ],
+    });
+    const realm = new Realm();
+    const bindings = createBindings([definition]);
+    bindings.register(realm).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => object;
+    const first = new Constructor();
+    const second = new Constructor();
+    const function_ = Reflect.get(first, 'first') as CallableFunction;
+
+    expect(function_).toBe(Reflect.get(first, 'first'));
+    expect(function_).toBe(Reflect.get(second, 'first'));
+    expect(function_).not.toBe(Reflect.get(first, 'second'));
+    expect(function_).toBeInstanceOf(realm.intrinsics.function);
+    expect(function_.name).toBe('first');
+    expect(function_.length).toBe(2);
+    expect(Object.hasOwn(function_, 'prototype')).toBe(false);
+    expect(() => { Reflect.construct(function_, []); }).toThrow(TypeError);
+    const receiver = {};
+    const argument = {};
+    const result = Reflect.apply(function_, receiver, [argument, 7, 'extra']) as {
+      receiver: unknown; args: unknown[];
+    };
+    expect(result.receiver).toBe(receiver);
+    expect(result.args).toEqual([argument, 7, 'extra']);
+    expect(result.args[0]).toBe(argument);
+    expect(Reflect.apply(function_, undefined, [])).toEqual({ receiver: undefined, args: [] });
+  });
+
   it('resolves shared mixin members through each including implementation', () => {
     class FirstImpl {
       readonly #value = 'first';

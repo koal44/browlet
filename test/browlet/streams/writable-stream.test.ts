@@ -2,11 +2,10 @@ import { createRuntime } from '../../js-engine/runtime-fixture';
 import { observe, createWritableStream } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { WritableStreamImpl } from '../../../src/streams/writable-stream';
-import type { WritableStreamDefaultControllerImpl } from '../../../src/streams/writable-stream-default-controller';
 import {
-  observeBrowletPromise, performTestMicrotaskCheckpoint,
-} from '../test-runtime';
+  WritableStreamImpl, type WritableStreamDefaultControllerImpl,
+} from '../../../src/streams/index';
+import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('writable-stream implementation', () => {
   it('keeps writable state per implementation instance', () => {

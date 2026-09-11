@@ -1,15 +1,12 @@
 import { createPromises, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
-  browletBindings, getRelevantRealm,
-} from '../../../src/browlet/bindings';
-import { TransformStreamImpl } from '../../../src/streams/index';
-import type { TransformStreamDefaultControllerImpl } from '../../../src/streams/transform-stream-default-controller';
+  TransformStreamImpl, type TransformStreamDefaultControllerImpl,
+} from '../../../src/streams/index';
 import { RangeError, TypeError } from '../../../src/js-engine/simple-exception';
-import {
-  observeBrowletPromise, performTestMicrotaskCheckpoint,
-} from '../test-runtime';
+import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('transform-stream implementation', () => {
   it('validates transformer types before strategy high-water marks', () => {
