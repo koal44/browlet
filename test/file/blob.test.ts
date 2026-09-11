@@ -2,27 +2,29 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   BlobData, BlobImpl, BlobReadFailure, convertLineEndingsToNative,
-  readBlobBytes, type BlobByteSource,
+  type BlobByteSource,
 } from '../../src/file';
+import { createRuntime } from '../js-engine/runtime-fixture';
 
-const lf = '\n';
 const crlf = '\r\n';
+
+const runtime = createRuntime();
 
 describe('File API §3: Blob', () => {
   it('constructs the empty Blob', async () => {
-    const blob = new BlobImpl();
+    const blob = new BlobImpl([], {}, runtime);
 
     expect(blob.size).toBe(0);
     expect(blob.type).toBe('');
-    expect(await readBlobBytes(blob)).toEqual(new Uint8Array());
+    expect(await blob.data.read()).toEqual(new Uint8Array());
   });
 
   it('copies only the represented BufferSource bytes', async () => {
     const source = Uint8Array.of(0, 1, 2, 3, 4);
-    const blob = new BlobImpl([source.subarray(1, 4)]);
+    const blob = new BlobImpl([source.subarray(1, 4)], {}, runtime);
     source.fill(9);
 
-    expect([...await readBlobBytes(blob)]).toEqual([1, 2, 3]);
+    expect([...await blob.data.read()]).toEqual([1, 2, 3]);
   });
 
   it('normalizes native line endings using the supplied convention', async () => {
@@ -30,44 +32,42 @@ describe('File API §3: Blob', () => {
     const options = { endings: 'native' as const };
 
     expect(new TextDecoder().decode(
-      await readBlobBytes(new BlobImpl(parts, options, lf)),
+      await new BlobImpl(parts, options, runtime).data.read(),
     )).toBe('a\nb\nc\nd');
     expect(new TextDecoder().decode(
-      await readBlobBytes(new BlobImpl(parts, options, crlf)),
+      await new BlobImpl(parts, options, { ...runtime, nativeLineEnding: crlf }).data.read(),
     )).toBe('a\r\nb\r\nc\r\nd');
   });
 
   it('leaves transparent line endings unchanged', async () => {
-    const blob = new BlobImpl(['a\rb\nc\r\nd'], {}, crlf);
+    const blob = new BlobImpl(
+      ['a\rb\nc\r\nd'], {}, { ...runtime, nativeLineEnding: crlf },
+    );
 
-    expect(new TextDecoder().decode(await readBlobBytes(blob)))
+    expect(new TextDecoder().decode(await blob.data.read()))
       .toBe('a\rb\nc\r\nd');
   });
 
   it('normalizes ASCII Blob types and rejects non-ASCII values', () => {
-    expect(new BlobImpl([], { type: 'Text/PLAIN;X=Y' }).type)
+    expect(new BlobImpl([], { type: 'Text/PLAIN;X=Y' }, runtime).type)
       .toBe('text/plain;x=y');
-    expect(new BlobImpl([], { type: 'text/\u007fplain' }).type)
+    expect(new BlobImpl([], { type: 'text/\u007fplain' }, runtime).type)
       .toBe('');
-    expect(new BlobImpl([], { type: 'text/\u001fplain' }).type)
+    expect(new BlobImpl([], { type: 'text/\u001fplain' }, runtime).type)
       .toBe('');
-    expect(new BlobImpl([], { type: 'text/pl\u00e4in' }).type)
+    expect(new BlobImpl([], { type: 'text/pl\u00e4in' }, runtime).type)
       .toBe('');
   });
 
   it('concatenates mixed parts and ignores nested Blob types', async () => {
-    const nested = new BlobImpl(
-      ['bc'],
-      { type: 'text/plain' },
-    );
+    const nested = new BlobImpl(['bc'], { type: 'text/plain' }, runtime);
     const blob = new BlobImpl(
-      ['a', nested, Uint8Array.of(100)],
-      { type: 'Application/Example' },
+      ['a', nested, Uint8Array.of(100)], { type: 'Application/Example' }, runtime,
     );
 
     expect(blob.size).toBe(4);
     expect(blob.type).toBe('application/example');
-    expect(new TextDecoder().decode(await readBlobBytes(blob))).toBe('abcd');
+    expect(new TextDecoder().decode(await blob.data.read())).toBe('abcd');
   });
 
   it('shares a nested Blob source without reading it during construction', async () => {
@@ -79,14 +79,12 @@ describe('File API §3: Blob', () => {
       read,
     };
     const nested = BlobImpl.create(
-      BlobData.fromSource(source),
-      '',
-      source.snapshotState,
+      BlobData.fromSource(source), '', source.snapshotState, runtime,
     );
 
-    const blob = new BlobImpl([nested]);
+    const blob = new BlobImpl([nested], {}, runtime);
     expect(read).not.toHaveBeenCalled();
-    expect([...await readBlobBytes(blob)]).toEqual([10, 11, 12]);
+    expect([...await blob.data.read()]).toEqual([10, 11, 12]);
     expect(read).toHaveBeenCalledOnce();
   });
 });
@@ -94,7 +92,7 @@ describe('File API §3: Blob', () => {
 describe('File API §2: slice blob', () => {
   const blob = new BlobImpl(
     [Uint8Array.from({ length: 10 }, (_, index) => index)],
-    { type: 'application/example' },
+    { type: 'application/example' }, runtime,
   );
 
   for (const [label, start, end, expected] of [
@@ -105,13 +103,13 @@ describe('File API §2: slice blob', () => {
     ['reversed positions', 7, 2, []],
   ] as const) {
     it(`normalizes ${label}`, async () => {
-      expect([...await readBlobBytes(blob.slice(start, end))])
+      expect([...await blob.slice(start, end).data.read()])
         .toEqual(expected);
     });
   }
 
   it('uses the full remaining range when end is omitted', async () => {
-    expect([...await readBlobBytes(blob.slice(7))]).toEqual([7, 8, 9]);
+    expect([...await blob.slice(7).data.read()]).toEqual([7, 8, 9]);
   });
 
   it('normalizes the new type independently from the original', () => {
@@ -131,15 +129,11 @@ describe('File API §2: slice blob', () => {
       snapshotState: undefined,
       read,
     };
-    const original = BlobImpl.create(
-      BlobData.fromSource(source),
-      '',
-      undefined,
-    );
+    const original = BlobImpl.create(BlobData.fromSource(source), '', undefined, runtime);
 
     const slice = original.slice(4, 9);
     expect(read).not.toHaveBeenCalled();
-    expect([...await readBlobBytes(slice)]).toEqual([4, 5, 6, 7, 8]);
+    expect([...await slice.data.read()]).toEqual([4, 5, 6, 7, 8]);
     expect(read).toHaveBeenCalledWith(4, 5);
   });
 });
@@ -152,13 +146,9 @@ describe('File API §7: Blob read failures', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(failure),
     };
-    const blob = BlobImpl.create(
-      BlobData.fromSource(source),
-      '',
-      source.snapshotState,
-    );
+    const blob = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, runtime);
 
-    await expect(readBlobBytes(blob)).rejects.toBe(failure);
+    await expect(blob.data.read()).rejects.toBe(failure);
   });
 
   it('rejects a host source that violates the exact-range contract', async () => {
@@ -167,13 +157,9 @@ describe('File API §7: Blob read failures', () => {
       snapshotState: undefined,
       read: () => Promise.resolve(Uint8Array.of(1)),
     };
-    const blob = BlobImpl.create(
-      BlobData.fromSource(source),
-      '',
-      undefined,
-    );
+    const blob = BlobImpl.create(BlobData.fromSource(source), '', undefined, runtime);
 
-    await expect(readBlobBytes(blob)).rejects.toThrow(RangeError);
+    await expect(blob.data.read()).rejects.toThrow(RangeError);
   });
 });
 
@@ -200,7 +186,9 @@ describe('File API §3: Blob serialization data', () => {
 
 describe('File API §3.1: native line ending conversion', () => {
   it('collapses CRLF into one native ending', () => {
-    expect(convertLineEndingsToNative('\r\n', '\n')).toBe('\n');
-    expect(convertLineEndingsToNative('\r\n', '\r\n')).toBe('\r\n');
+    expect(convertLineEndingsToNative('\r\n', runtime)).toBe('\n');
+    expect(convertLineEndingsToNative('\r\n', {
+      ...runtime, nativeLineEnding: crlf,
+    })).toBe(crlf);
   });
 });

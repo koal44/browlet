@@ -5,6 +5,7 @@ import type { GlobalObject } from './realm';
 
 /** Implementation facilities composed for one owning realm/global. */
 export type RuntimeContext = {
+  readonly nativeLineEnding: '\n' | '\r\n';
   readonly promises: Promises;
   readonly buffers: RuntimeBuffers;
   readonly fileReading: TaskScheduling;

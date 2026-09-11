@@ -12,12 +12,12 @@ describe('File reading implementation', () => {
     { name: 'empty input', text: '' },
     { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
   ])('reads bytes and text for $name', async ({ text }) => {
-    const blob = new BlobImpl([text]);
     const runtime = { ...createRuntime(), fileReading: scheduling };
+    const blob = new BlobImpl([text], {}, runtime);
     const [decoded, bytes, bufferBytes] = await Promise.all([
-      observe(blob.text(runtime)),
-      observe(blob.bytes(runtime)),
-      observe(blob.arrayBuffer(runtime)),
+      observe(blob.text()),
+      observe(blob.bytes()),
+      observe(blob.arrayBuffer()),
     ]);
     expect(decoded).toBe(text);
     expect(bytes).toEqual(new TextEncoder().encode(text));
@@ -30,9 +30,9 @@ describe('File reading implementation', () => {
       snapshotState: null,
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
-    const blob = BlobImpl.create(data, '', null);
     const runtime = { ...createRuntime(), fileReading: scheduling };
-    const result = blob[method](runtime);
+    const blob = BlobImpl.create(data, '', null, runtime);
+    const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
     expect(getDOMExceptionRequest(failure)?.name).toBe('NotFoundError');
   });

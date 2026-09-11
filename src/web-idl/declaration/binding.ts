@@ -46,19 +46,26 @@ export function functionResult(
 }
 
 /**
- * Declare an indexed getter whose implementation supplies the supported
- * property indices while ordinary operation binding supplies invocation.
+ * Declare indexed-property enumeration separately from membership.
+ * An unsupportedValue allows the getter itself to answer support checks;
+ * otherwise supportsIndex tests membership without invoking the getter.
  */
 export function indexedGetter<Implementation extends object>(
   getSupportedPropertyIndices: (
     implementation: Implementation,
-  ) => ReadonlySet<number>,
+  ) => Iterable<number>,
+  support: IndexedPropertySupport<Implementation>,
 ): LegacyGetterOptions {
   return {
     binding: {
       getSupportedPropertyIndices() {
         return getSupportedPropertyIndices(this as Implementation);
       },
+      ...('unsupportedValue' in support ? support : {
+        supportsIndex(index: number) {
+          return support.supportsIndex(this as Implementation, index);
+        },
+      }),
     },
     special: 'getter',
   };
@@ -182,16 +189,26 @@ export type FunctionResultBinding = {
 
 export type FunctionResultSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
 
-export type LegacyGetterHooks = {
-  readonly getSupportedPropertyIndices?: SupportedPropertyIndicesSteps;
-  readonly getSupportedPropertyNames?: SupportedPropertyNamesSteps;
-};
+/**
+ * An unsupportedValue must occur only for missing indices, and the getter must
+ * be safe to invoke for membership checks as well as reads.
+ */
+export type IndexedPropertySupport<Implementation extends object> =
+  | { readonly unsupportedValue: null | undefined; }
+  | {
+    readonly supportsIndex: (implementation: Implementation, index: number) => boolean;
+  };
 
 export type LegacyGetterBinding =
-  | LegacyGetterHooks & {
+  | {
     readonly getSupportedPropertyIndices: SupportedPropertyIndicesSteps;
+    readonly unsupportedValue: null | undefined;
   }
-  | LegacyGetterHooks & {
+  | {
+    readonly getSupportedPropertyIndices: SupportedPropertyIndicesSteps;
+    readonly supportsIndex: SupportsIndexSteps;
+  }
+  | {
     readonly getSupportedPropertyNames: SupportedPropertyNamesSteps;
   };
 
@@ -217,7 +234,13 @@ type LegacyGetterOptions = {
 type SupportedPropertyIndicesSteps = (
   this: object,
   context: unknown,
-) => ReadonlySet<number>;
+) => Iterable<number>;
+
+type SupportsIndexSteps = (
+  this: object,
+  index: number,
+  context: unknown,
+) => boolean;
 
 type SupportedPropertyNamesSteps = (
   this: object,

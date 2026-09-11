@@ -14,7 +14,7 @@ import {
   structuredDeserialize,
 } from '../../src/browlet/scripting/structured-data/deserialize';
 import {
-  structuredSerializeForStorage,
+  structuredSerialize, structuredSerializeForStorage,
 } from '../../src/browlet/scripting/structured-data/serialize';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
@@ -123,6 +123,12 @@ describe('File API Blob projection', () => {
     expect(stream).not.toBeInstanceOf(requireFunction(second, 'ReadableStream'));
     expect(slice).toBeInstanceOf(requireFunction(first, 'Blob'));
     expect(slice).not.toBeInstanceOf(requireFunction(second, 'Blob'));
+
+    const reader = call(call(slice, 'stream') as object, 'getReader') as object;
+    const result = await call(reader, 'read') as ReadableStreamReadResult<Uint8Array>;
+    expect(result.done).toBe(false);
+    expect(result.value).toBeInstanceOf(first.Uint8Array);
+    expect(Array.from(result.value!)).toEqual([65]);
   });
 
   it('preserves the construction realm for a host-created Blob', () => {
@@ -236,11 +242,7 @@ describe('File API Blob projection', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
-    const implementation = BlobImpl.create(
-      BlobData.fromSource(source),
-      '',
-      source.snapshotState,
-    );
+    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, browletBindings.forRealm(getRelevantRealm(window)).context.getRuntime());
     const blob = projectBlob(window, implementation);
 
     await expect(call(blob, 'bytes')).rejects.toMatchObject({
@@ -262,13 +264,16 @@ describe('File API Blob projection', () => {
     await expect(call(clone, 'text')).resolves.toBe('payload');
   });
 
-  it('storage-clones bytes into a Blob in the target realm', async () => {
+  it.each([
+    ['clones', structuredSerialize],
+    ['storage-clones', structuredSerializeForStorage],
+  ] as const)('%s bytes into a Blob in the target realm', async (_, serialize) => {
     const sourceWindow = createWindow();
     const targetWindow = createWindow();
     const sourceRealm = getRelevantRealm(sourceWindow);
     const targetRealm = getRelevantRealm(targetWindow);
     const agentCluster = {};
-    const serialized = structuredSerializeForStorage(
+    const serialized = serialize(
       constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
       {
         agentCluster,
@@ -286,6 +291,12 @@ describe('File API Blob projection', () => {
     expect(clone).not.toBeInstanceOf(requireFunction(sourceWindow, 'Blob'));
     expect(Reflect.get(clone, 'type')).toBe('text/plain');
     await expect(call(clone, 'text')).resolves.toBe('stored');
+
+    const reader = call(call(clone, 'stream') as object, 'getReader') as object;
+    const result = await call(reader, 'read') as ReadableStreamReadResult<Uint8Array>;
+    expect(result.done).toBe(false);
+    expect(result.value).toBeInstanceOf(targetWindow.Uint8Array);
+    expect(Array.from(result.value!)).toEqual([115, 116, 111, 114, 101, 100]);
   });
 });
 
@@ -362,6 +373,15 @@ describe('File API File and FileList projection', () => {
     implementation.add(requireFileImplementation(window, second));
     expect(Reflect.get(platformObject, 'length')).toBe(2);
     expect(Reflect.get(platformObject, '1')).toBe(second);
+    expect(Object.keys(platformObject)).toEqual(['0', '1']);
+
+    implementation.replace([requireFileImplementation(window, second)]);
+    expect(Reflect.get(platformObject, 'length')).toBe(1);
+    expect(Reflect.get(platformObject, '0')).toBe(second);
+    expect(Reflect.get(platformObject, '1')).toBeUndefined();
+    expect(Reflect.has(platformObject, '1')).toBe(false);
+    expect(call(platformObject, 'item', [1])).toBeNull();
+    expect(Object.keys(platformObject)).toEqual(['0']);
   });
 
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {

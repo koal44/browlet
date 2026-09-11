@@ -1,15 +1,14 @@
 import { parseMIMEType } from '../mime/index';
+import type { RuntimeContext } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
 } from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
+import { runtimeContext, type BindingContext } from '../web-idl/projection';
 import {
-  BlobImpl, nativeLineEndingForConstruction, type BlobPart,
-  type BlobPropertyBag,
+  BlobImpl, type BlobPart, type BlobPropertyBag,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
-import type { NativeLineEnding } from './integration';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -29,17 +28,15 @@ export class FileImpl extends BlobImpl {
   #lastModified: number | null;
   #name: string;
 
-  // SPEC_MISMATCH: File(fileBits, fileName, options = {}) -> File
   constructor(
     fileBits: Iterable<BlobPart> = [],
     fileName = '',
     options: FilePropertyBag = {},
-    nativeLineEnding?: NativeLineEnding,
-    readCurrentTime: () => number = Date.now,
+    runtime: RuntimeContext,
   ) {
-    super(fileBits, options, nativeLineEnding);
+    super(fileBits, options, runtime);
     this.#name = fileName;
-    this.#lastModified = options.lastModified ?? readCurrentTime();
+    this.#lastModified = options.lastModified ?? Date.now();
   }
 
   get name(): string {
@@ -51,34 +48,32 @@ export class FileImpl extends BlobImpl {
     return Date.now();
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal operations ----------------------------------------------
 
-  static getFileSerializationState(file: FileImpl): FileSerializationState {
+  getFileSerializationState(): FileSerializationState {
     return {
-      lastModified: file.lastModified,
-      name: file.#name,
+      lastModified: this.lastModified,
+      name: this.#name,
     };
   }
 
-  static setFileSerializationState(
-    file: FileImpl,
+  setFileSerializationState(
     state: FileSerializationState,
   ): void {
-    file.#lastModified = state.lastModified;
-    file.#name = state.name;
+    this.#lastModified = state.lastModified;
+    this.#name = state.name;
   }
 
   static is(value: unknown): value is FileImpl {
     return value !== null && typeof value === 'object' && #name in value;
   }
 
-  static setHostMetadata(
-    file: FileImpl,
+  setHostMetadata(
     name: string,
     lastModified: number | undefined,
   ): void {
-    file.#lastModified = lastModified ?? null;
-    file.#name = name;
+    this.#lastModified = lastModified ?? null;
+    this.#name = name;
   }
 }
 
@@ -111,12 +106,12 @@ export function createFileFromHost(
     metadata.name,
     { lastModified: metadata.lastModified ?? 0, type },
   );
-  BlobImpl.setSerializationState(file, {
+  file.setSerializationState({
     data: BlobData.fromSource(source),
     snapshotState: source.snapshotState,
     type,
   });
-  FileImpl.setHostMetadata(file, metadata.name, metadata.lastModified);
+  file.setHostMetadata(metadata.name, metadata.lastModified);
   return file;
 }
 
@@ -156,7 +151,7 @@ export const fileIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(FileImpl, {
-    constructWith: [atArg(3, nativeLineEndingForConstruction)],
+    constructWith: [atArg(3, runtimeContext)],
   }),
   members: [
     ctor([

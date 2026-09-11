@@ -143,8 +143,15 @@ describe('Browlet DOM binding', () => {
 
     parent.appendChild(second);
 
-    expect(children.length).toBe(2);
     expect(children[1]).toBe(second);
+    expect(children.length).toBe(2);
+    expect(Object.keys(children)).toEqual(['0', '1']);
+
+    second.remove();
+    expect(children[1]).toBeUndefined();
+    expect(children.item(1)).toBeNull();
+    expect(Reflect.has(children, '1')).toBe(false);
+    expect(Object.keys(children)).toEqual(['0']);
   });
 
   it('projects getElementsByTagName results and their elements', () => {
@@ -188,7 +195,11 @@ describe('Browlet DOM binding', () => {
     expect(Reflect.has(attributes, 'UPPER')).toBe(false);
     expect(Object.getOwnPropertyNames(attributes)).not.toContain('UPPER');
     expect(attributes.getNamedItemNS('', 'plain')).toBe(plain);
+    expect(attributes[1]).toBe(plain);
     expect(attributes.removeNamedItemNS('', 'plain')).toBe(plain);
+    expect(attributes[1]).toBeUndefined();
+    expect(attributes.item(1)).toBeNull();
+    expect(Object.hasOwn(attributes, '1')).toBe(false);
   });
 
   it('projects only described Web IDL members onto DOM prototypes', () => {

@@ -2,10 +2,12 @@ import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
 import { describe, expect, it } from 'vitest';
 
 import { parseMultipartFormData } from '../../../src/fetch/multipart/parse';
-import { FileImpl, readBlobBytes } from '../../../src/file/index';
+import { FileImpl } from '../../../src/file/index';
 import { parseMIMEType } from '../../../src/mime/index';
+import { createRuntime } from '../../js-engine/runtime-fixture';
 
 const mimeType = parseMIMEType('multipart/form-data; boundary=Boundary')!;
+const runtime = createRuntime();
 
 describe('Fetch multipart/form-data parsing', () => {
   it('preserves order, repeated names, and empty names and values', () => {
@@ -23,11 +25,11 @@ describe('Fetch multipart/form-data parsing', () => {
       '--Boundary\r\nContent-Disposition: form-data; name="file"; filename="日本.txt"\r\n\r\n' +
       '\ufeffcontent\r\n--Boundary--\r\n',
     );
-    const entries = parseMultipartFormData(bytes, mimeType);
+    const entries = parseMultipartFormData(bytes, mimeType, runtime);
     expect(entries[0]).toEqual(['é💩', '\ufeff日本']);
     const file = entries[1]![1] as FileImpl;
     expect(file.name).toBe('日本.txt');
-    expect(await readBlobBytes(file)).toEqual(new TextEncoder().encode('\ufeffcontent'));
+    expect(await file.data.read()).toEqual(new TextEncoder().encode('\ufeffcontent'));
   });
 
   it('ignores charset declarations and replaces malformed UTF-8 in text', () => {
@@ -45,14 +47,14 @@ describe('Fetch multipart/form-data parsing', () => {
       'Content-Type: Application/Octet-Stream',
       '\0\xff\r\n\x80\n',
     )));
-    const [name, value] = parseMultipartFormData(bytes, mimeType)[0]!;
+    const [name, value] = parseMultipartFormData(bytes, mimeType, runtime)[0]!;
     expect(name).toBe('file');
     expect(value).toBeInstanceOf(FileImpl);
     const file = value as FileImpl;
     expect(file.name).toBe('a.bin');
     expect(file.type).toBe('application/octet-stream');
     bytes.fill(0);
-    expect(await readBlobBytes(file)).toEqual(Uint8Array.of(0, 255, 13, 10, 128, 10));
+    expect(await file.data.read()).toEqual(Uint8Array.of(0, 255, 13, 10, 128, 10));
   });
 
   it.each([
@@ -144,10 +146,10 @@ describe('RFC 2046 multipart framing', () => {
   it('uses the case-sensitive boundary from an already parsed MIME type', () => {
     const type = parseMIMEType('Multipart/Form-Data; boundary="B: a"')!;
     const bytes = Uint8Array.from(isomorphicEncode('--B: a--\r\n'));
-    expect(parseMultipartFormData(bytes, type)).toEqual([]);
+    expect(parseMultipartFormData(bytes, type, runtime)).toEqual([]);
     expect(() => parseMultipartFormData(bytes, {
       ...type, parameters: new Map([['boundary', 'b: a']]),
-    })).toThrow(TypeError);
+    }, runtime)).toThrow(TypeError);
   });
 
   it.each([
@@ -197,14 +199,14 @@ describe('RFC 2046 multipart framing', () => {
         ...mimeType,
         parameters: new Map(boundary === undefined ? [] : [['boundary', boundary]]),
       };
-      expect(() => parseMultipartFormData(new Uint8Array(), type))
+      expect(() => parseMultipartFormData(new Uint8Array(), type, runtime))
         .toThrow(TypeError);
     },
   );
 });
 
 function parse(body: string) {
-  return parseMultipartFormData(Uint8Array.from(isomorphicEncode(body)), mimeType);
+  return parseMultipartFormData(Uint8Array.from(isomorphicEncode(body)), mimeType, runtime);
 }
 
 function part(headers: string, body: string): string {

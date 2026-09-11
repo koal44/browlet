@@ -8,7 +8,8 @@ user-agent lifetime, storage partitions, and browser-selected file sources.
 Fetch and XHR will consume the resulting semantic objects; neither should
 redefine them or substitute Node's similarly named globals.
 
-Slices 1–3 and 5–7 are implemented. Blob and File share immutable segmented
+Slices 1–3 and 5–6 are implemented; Slice 7 is implemented except for shared
+global teardown. Blob and File share immutable segmented
 backing, projected stream and promise reads, realm-correct result objects,
 cancellation and failure routing, and HTML Serializable integration. FileList
 preserves owner-controlled mutation, indexed access, and graph identity.
@@ -18,8 +19,11 @@ and Fetch dependencies exist; §6.5 `FileReaderSync` waits for real workers.
 
 Blob's `text()`, `bytes()`, and `arrayBuffer()` share a runtime-owned Promise
 read-result path, with focused coverage for HTML delivery and binding projection.
-Blob streams deliver buffers through the runtime; FileReader retains its final
-result buffer without a projection copy or separate cache. These paths follow
+Blob and File retain their construction runtime, including native line endings;
+slices keep it and deserialization supplies the destination runtime. Backing
+`BlobData` remains runtime-neutral. Blob streams deliver buffers through the
+Blob's runtime; FileReader retains its final result buffer without a projection
+copy or separate cache. These paths follow
 the [Streams runtime and binding contracts](../streams/README.md#runtime-and-bindings).
 FileReader's event-driven reads and result bindings have focused passing coverage.
 
@@ -200,7 +204,7 @@ File API creates a `TextDecoderStream`, while Streams defines every object
 including `GenericTransformStream` as owning an associated actual
 `TransformStream`. A narrow implementation-only friend operation now exposes
 that association to cross-specification algorithms. `Blob.textStream()` passes
-the actual transform to `pipeReadableStreamThrough()` rather than reconstructing
+the actual transform to `stream.pipeThroughTransform()` rather than reconstructing
 its readable/writable pair or calling the projected author API. The binding
 continues to expose only the public `readable` and `writable` attributes.
 

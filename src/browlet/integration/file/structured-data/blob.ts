@@ -13,13 +13,12 @@ import {
  * File API defines Blob's record fields. HTML owns their registration and
  * execution through the generic Serializable machinery.
  */
-// SPEC_MISMATCH: Blob serialized { [[SnapshotState]], [[ByteSequence]] }
-export const blobSerializable: SerializableSteps = {
+export const blobSerializable = {
   serializationSteps(value, serialized, forStorage) {
     if (!BlobImpl.is(value)) {
       throw new TypeError('Blob serialization requires a Blob implementation');
     }
-    const state = BlobImpl.getSerializationState(value);
+    const state = value.getSerializationState();
     let data = state.data;
     if (forStorage) {
       try {
@@ -34,11 +33,7 @@ export const blobSerializable: SerializableSteps = {
     serialized.set('SnapshotState', state.snapshotState);
     serialized.set('ByteSequence', data);
 
-    /*
-     * The draft lists only [[SnapshotState]] and [[ByteSequence]], while all
-     * browser Blob backends retain MIME metadata with the cloned data handle.
-     * Preserve that observable state explicitly in Browlet's open record.
-     */
+    // Preserve the MIME type, which the draft's listed record fields omit.
     serialized.set('Type', state.type);
   },
 
@@ -46,13 +41,13 @@ export const blobSerializable: SerializableSteps = {
     if (!BlobImpl.is(value)) {
       throw new TypeError('Blob deserialization requires a Blob implementation');
     }
-    BlobImpl.setSerializationState(value, {
+    value.setSerializationState({
       data: requireBlobData(serialized, 'ByteSequence'),
       snapshotState: serialized.get('SnapshotState'),
       type: requireString(serialized, 'Type'),
     });
   },
-};
+} satisfies SerializableSteps;
 
 export const blobSerializableCapabilities = [
   serializable.for(blobIDL, blobSerializable),

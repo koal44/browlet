@@ -66,10 +66,10 @@ operations without creating a platform Blob or a substitute Fetch stream API.
 
 ## Parsing contract
 
-`parseMultipartFormData(bytes, mimeType)` in `parse.ts` consumes a
+`parseMultipartFormData(bytes, mimeType, runtime)` in `parse.ts` consumes a
 complete byte sequence backed by an `ArrayBuffer` and a parsed `MIMEType`.
-It returns `FormDataEntry[]`, constructing realm-neutral `FileImpl` values
-directly. File bytes are copied; text is decoded as UTF-8 without BOM stripping.
+It returns `FormDataEntry[]`, constructing `FileImpl` values directly with the
+consuming runtime. File bytes are copied; text is decoded as UTF-8 without BOM stripping.
 Entry order and repeated names are preserved. Fetch's future Body consumer owns
 FormData construction, File realm ownership, and realization of a parsing
 TypeError in its realm. The required realm tests are recorded in

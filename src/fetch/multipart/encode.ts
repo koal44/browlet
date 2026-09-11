@@ -1,7 +1,7 @@
 import { isomorphicDecode, isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
 
 import { encode } from '../../encoding/hooks';
-import { BlobData, BlobImpl } from '../../file/index';
+import { BlobData } from '../../file/index';
 import { percentEncodeByte } from '../../url/percent-encoding';
 import type { FormDataEntry } from '../../xhr/index';
 
@@ -32,7 +32,7 @@ export function encodeMultipartFormData(
     } else {
       header += `; filename="${escapeName(value.name, encoding)}"\r\n`;
       header += `Content-Type: ${value.type || 'application/octet-stream'}\r\n\r\n`;
-      parts.push(BlobData.fromOwnedBytes(isomorphicEncode(header)), BlobImpl.getData(value));
+      parts.push(BlobData.fromOwnedBytes(isomorphicEncode(header)), value.data);
     }
     parts.push(lineEnding);
   }

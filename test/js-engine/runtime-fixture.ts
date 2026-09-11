@@ -6,6 +6,7 @@ import { TestRealm } from '../web-idl/test-realm';
 /** Real engine facilities; task, abort, and clone effects controlled by the unit host. */
 export function createRuntime(realm = new TestRealm()): RuntimeContext {
   return {
+    nativeLineEnding: '\n',
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },

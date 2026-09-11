@@ -68,10 +68,6 @@ export class NamedNodeMapImpl
     return names;
   }
 
-  getSupportedPropertyIndices(): ReadonlySet<number> {
-    return new Set(this.keys());
-  }
-
   // -- Friends ----------------------------------------------------------
 
   static associateElement(
@@ -160,12 +156,13 @@ export const namedNodeMapIDL = defineInterface({
     op('removeNamedItem', reference('Attr'), [
       arg('qualifiedName', idlType.DOMString),
     ], xattr('CEReactions')),
-    op('item', nullable(reference('Attr')), [
-      arg('index', idlType.unsignedLong),
-    ], indexedGetter(
-      (attributes: NamedNodeMapImpl) =>
-        attributes.getSupportedPropertyIndices(),
-    )),
+    op('item', nullable(reference('Attr')),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter(
+        (attributes: NamedNodeMapImpl) => attributes.keys(),
+        { unsupportedValue: null },
+      ),
+    ),
     op('getNamedItemNS', nullable(reference('Attr')), [
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),

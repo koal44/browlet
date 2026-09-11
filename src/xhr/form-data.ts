@@ -1,12 +1,13 @@
 import type { BlobImpl } from '../file/blob';
 import type { FileImpl } from '../file/file';
 import type { ScalarValueString } from '../infra/index';
+import type { RuntimeContext } from '../js-engine/index';
 import { defineCapability } from '../web-idl/capability';
 import {
-  arg, contextValue, ctor, defineInterface, defineTypedef, idlType, impl, iter,
+  arg, atArg, contextValue, ctor, defineInterface, defineTypedef, idlType, impl, iter,
   nullable, op, reference, sequence, union,
 } from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
+import { runtimeContext, type BindingContext } from '../web-idl/projection';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
 export type FormDataEntry = readonly [
@@ -17,7 +18,8 @@ export type FormDataEntry = readonly [
 export type CreateFormDataEntry = (
   name: string,
   value: BlobImpl | string,
-  filename?: ScalarValueString,
+  filename: ScalarValueString | undefined,
+  runtime: RuntimeContext,
 ) => FormDataEntry;
 
 /* HTML supplies its create-an-entry algorithm to XHR's FormData. */
@@ -50,10 +52,17 @@ export const createFormDataEntry =
 export class FormDataImpl {
   readonly #createEntry: CreateFormDataEntry;
   readonly #entryList: FormDataEntry[] = [];
+  readonly #runtime: RuntimeContext;
 
   // SPEC_MISMATCH: FormData(form?, submitter = null) -> FormData
-  constructor(createEntry: CreateFormDataEntry, form?: object) {
+  constructor(
+    form: object | undefined = undefined,
+    _submitter: object | null = null,
+    createEntry: CreateFormDataEntry,
+    runtime: RuntimeContext,
+  ) {
     this.#createEntry = createEntry;
+    this.#runtime = runtime;
 
     /*
      * XHR §4 delegates this branch to HTML's construct-the-entry-list
@@ -75,7 +84,7 @@ export class FormDataImpl {
     filename?: ScalarValueString,
   ): void {
     this.#entryList.push(
-      this.#createEntry(name, value, filename),
+      this.#createEntry(name, value, filename, this.#runtime),
     );
   }
 
@@ -104,7 +113,7 @@ export class FormDataImpl {
     value: BlobImpl | ScalarValueString,
     filename?: ScalarValueString,
   ): void {
-    const entry = this.#createEntry(name, value, filename);
+    const entry = this.#createEntry(name, value, filename, this.#runtime);
     const first = this.#entryList.findIndex((candidate) =>
       candidate[0] === name);
 
@@ -141,7 +150,7 @@ export const formDataIDL = defineInterface({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {
-    constructWith: [contextValue(getCreateEntry)],
+    constructWith: [atArg(2, contextValue(getCreateEntry)), atArg(3, runtimeContext)],
   }),
   members: [
     /*

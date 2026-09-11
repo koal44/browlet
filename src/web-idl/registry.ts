@@ -383,11 +383,19 @@ export type StringificationBehavior = (
   this: object,
 ) => unknown;
 
-export type IndexedPropertySteps = {
-  getSupportedPropertyIndices(this: object): ReadonlySet<number>;
-  setExisting?(this: object, index: number, value: unknown): void;
-  setNew?(this: object, index: number, value: unknown): void;
-};
+export type IndexedPropertySteps =
+  | {
+    getSupportedPropertyIndices(this: object): Iterable<number>;
+    readonly unsupportedValue: null | undefined;
+    setExisting?(this: object, index: number, value: unknown): void;
+    setNew?(this: object, index: number, value: unknown): void;
+  }
+  | {
+    getSupportedPropertyIndices(this: object): Iterable<number>;
+    supportsIndex(this: object, index: number): boolean;
+    setExisting?(this: object, index: number, value: unknown): void;
+    setNew?(this: object, index: number, value: unknown): void;
+  };
 
 export type NamedPropertySteps = {
   deleteExisting?(this: object, name: string): boolean;

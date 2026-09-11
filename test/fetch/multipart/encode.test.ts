@@ -2,16 +2,19 @@ import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import { encodeMultipartFormData } from '../../../src/fetch/multipart/encode';
-import { BlobData, BlobImpl, FileImpl, readBlobBytes } from '../../../src/file/index';
+import { BlobData, FileImpl } from '../../../src/file/index';
 import { toScalarValueString } from '../../../src/infra/index';
 import { parseMIMEType } from '../../../src/mime/index';
 import type { FormDataEntry } from '../../../src/xhr/index';
+import { createRuntime } from '../../js-engine/runtime-fixture';
+
+const runtime = createRuntime();
 
 describe('HTML multipart/form-data encoding', () => {
   it('leaves File byte sources unread when preparing the body', async () => {
     const read = vi.fn(() => Promise.resolve(Uint8Array.of(7)));
-    const file = new FileImpl([], 'deferred.bin');
-    BlobImpl.setSerializationState(file, {
+    const file = new FileImpl([], 'deferred.bin', {}, runtime);
+    file.setSerializationState({
       data: BlobData.fromSource({ size: 1, snapshotState: undefined, read }),
       type: '', snapshotState: undefined,
     });
@@ -73,7 +76,7 @@ describe('HTML multipart/form-data encoding', () => {
     ['a"b', 'a%22b'],
     ['a\\b%0A +\0', 'a\\b%0A +\0'],
   ])('escapes filename %j without normalizing its line endings', async (name, expectedName) => {
-    const file = new FileImpl([], name, { type: 'text/plain' });
+    const file = new FileImpl([], name, { type: 'text/plain' }, runtime);
     const { boundary, bytes } = await readEncoding([entry('file', file)]);
     expect(bytes).toEqual(isomorphicEncode(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
@@ -93,7 +96,7 @@ describe('HTML multipart/form-data encoding', () => {
   });
 
   it('encodes names, filenames, and text as UTF-8 without stripping a BOM', async () => {
-    const entries = [entry('é', '\ufeff💩'), entry('file', new FileImpl([], '日本.txt'))];
+    const entries = [entry('é', '\ufeff💩'), entry('file', new FileImpl([], '日本.txt', {}, runtime))];
     const { boundary, bytes } = await readEncoding(entries);
     expect(bytes).toEqual(new TextEncoder().encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="é"\r\n\r\n\ufeff💩\r\n` +
@@ -103,7 +106,7 @@ describe('HTML multipart/form-data encoding', () => {
   });
 
   it('uses the chosen legacy encoding and character references for names and values', async () => {
-    const entries = [entry('é€💩', 'é€💩%80'), entry('file', new FileImpl([], 'é💩.txt'))];
+    const entries = [entry('é€💩', 'é€💩%80'), entry('file', new FileImpl([], 'é💩.txt', {}, runtime))];
     const { boundary, bytes } = await readEncoding(entries, 'windows-1252');
     expect(bytes).toEqual(isomorphicEncode(
       `--${boundary}\r\nContent-Disposition: form-data; name="\xe9\x80&#128169;"\r\n\r\n` +
@@ -115,8 +118,8 @@ describe('HTML multipart/form-data encoding', () => {
 
   it('keeps multiple files as separate parts with unchanged binary contents', async () => {
     const data = new Uint8Array([0, 0xff, 13, 10, 13, 34, 0x25]);
-    const first = new FileImpl([data], 'one.bin', { type: 'Application/Example' });
-    const second = new FileImpl([], 'two.bin');
+    const first = new FileImpl([data], 'one.bin', { type: 'Application/Example' }, runtime);
+    const second = new FileImpl([], 'two.bin', {}, runtime);
     const { boundary, bytes } = await readEncoding([
       entry('files', first), entry('files', second),
     ]);
@@ -129,14 +132,14 @@ describe('HTML multipart/form-data encoding', () => {
       `Content-Type: application/octet-stream\r\n\r\n\r\n--${boundary}--\r\n`,
     );
     expect(bytes).toEqual(new Uint8Array([...prefix, ...data, ...suffix]));
-    await expect(readBlobBytes(first)).resolves.toEqual(data);
+    await expect(first.data.read()).resolves.toEqual(data);
   });
 
   it('captures entries, file metadata, and byte sources during encoding', async () => {
     let finishRead!: (bytes: Uint8Array) => void;
     const pending = new Promise<Uint8Array>((resolve) => { finishRead = resolve; });
-    const file = new FileImpl([], 'before.txt', { type: 'text/plain' });
-    BlobImpl.setSerializationState(file, {
+    const file = new FileImpl([], 'before.txt', { type: 'text/plain' }, runtime);
+    file.setSerializationState({
       data: BlobData.fromSource({ size: 3, snapshotState: undefined, read: () => pending }),
       type: file.type, snapshotState: undefined,
     });
@@ -144,8 +147,8 @@ describe('HTML multipart/form-data encoding', () => {
     const { boundary, data } = encodeMultipartFormData(entries, 'UTF-8');
     entries[1] = entry('replacement', 'different');
     entries.push(entry('later', 'entry'));
-    FileImpl.setHostMetadata(file, 'after.txt', 123);
-    BlobImpl.setSerializationState(file, {
+    file.setHostMetadata('after.txt', 123);
+    file.setSerializationState({
       data: BlobData.fromBytes(isomorphicEncode('replacement')),
       type: 'text/html', snapshotState: undefined,
     });
@@ -161,8 +164,8 @@ describe('HTML multipart/form-data encoding', () => {
 
   it('propagates a file failure when reading the encoded body', async () => {
     const failure = new Error('file snapshot unavailable');
-    const file = new FileImpl([], 'broken');
-    BlobImpl.setSerializationState(file, {
+    const file = new FileImpl([], 'broken', {}, runtime);
+    file.setSerializationState({
       data: BlobData.fromSource({
         size: 1, snapshotState: undefined, read: () => Promise.reject(failure),
       }),

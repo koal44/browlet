@@ -26,10 +26,6 @@ export class FileListImpl {
     return this.#files[index] ?? null;
   }
 
-  getSupportedPropertyIndices(): ReadonlySet<number> {
-    return new Set(this.#files.keys());
-  }
-
   [Symbol.iterator](): Iterator<FileImpl> {
     return this.#files[Symbol.iterator]();
   }
@@ -57,11 +53,15 @@ export const fileListIDL = defineInterface({
   ...xattr('Serializable'),
   implementation: impl(FileListImpl),
   members: [
-    op('item', nullable(reference('File')), [
-      arg('index', idlType.unsignedLong),
-    ], indexedGetter(
-      (list: FileListImpl) => list.getSupportedPropertyIndices(),
-    )),
+    op('item', nullable(reference('File')),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter(
+        function* (list: FileListImpl) {
+          for (let index = 0; index < list.length; index++) yield index;
+        },
+        { unsupportedValue: null },
+      ),
+    ),
     roAttr('length', idlType.unsignedLong),
   ],
 });

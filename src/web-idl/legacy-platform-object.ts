@@ -200,16 +200,11 @@ export class LegacyPlatformObjectBinding {
     properties: IndexedProperties,
   ): PropertyDescriptor | undefined {
     const index = toArrayIndex(property);
-    if (!this.#getSupportedIndices(target, properties).has(index)) return;
+    const { steps } = properties;
+    if ('supportsIndex' in steps && !this.#supportsIndex(target, index, properties)) return;
 
-    const steps = this.#implementations.getOperationSteps(
-      properties.getter,
-      properties.interface_,
-    );
-    if (!steps) {
-      throw new Error('Missing indexed property getter implementation');
-    }
-    const value = Reflect.apply(steps, target, [index]);
+    const value = this.#getIndexedValue(target, index, properties);
+    if ('unsupportedValue' in steps && value === steps.unsupportedValue) return;
     return {
       configurable: true,
       enumerable: true,
@@ -359,10 +354,11 @@ export class LegacyPlatformObjectBinding {
       typeof property === 'string' &&
       isArrayIndex(property)
     ) {
-      return !this.#getSupportedIndices(
+      return !this.#supportsIndex(
         implementation,
+        toArrayIndex(property),
         properties.indexed,
-      ).has(toArrayIndex(property));
+      );
     }
     if (
       properties.named &&
@@ -433,10 +429,11 @@ export class LegacyPlatformObjectBinding {
     if (!setter) throw new Error('Indexed property has no setter');
 
     const index = toArrayIndex(property);
-    const creating = !this.#getSupportedIndices(
+    const creating = !this.#supportsIndex(
       target,
+      index,
       properties,
-    ).has(index);
+    );
     const converted = this.#convertSetterValue(setter, value);
 
     if (setter.name) {
@@ -562,10 +559,34 @@ export class LegacyPlatformObjectBinding {
     return true;
   }
 
+  #getIndexedValue(
+    implementation: object,
+    index: number,
+    properties: IndexedProperties,
+  ): unknown {
+    const steps = this.#implementations.getOperationSteps(
+      properties.getter,
+      properties.interface_,
+    );
+    if (!steps) throw new Error('Missing indexed property getter implementation');
+    return Reflect.apply(steps, implementation, [index]);
+  }
+
+  #supportsIndex(
+    implementation: object,
+    index: number,
+    properties: IndexedProperties,
+  ): boolean {
+    const { steps } = properties;
+    return 'supportsIndex' in steps ?
+      Reflect.apply(steps.supportsIndex, implementation, [index]) :
+      this.#getIndexedValue(implementation, index, properties) !== steps.unsupportedValue;
+  }
+
   #getSupportedIndices(
     target: object,
     properties: IndexedProperties,
-  ): ReadonlySet<number> {
+  ): Iterable<number> {
     return Reflect.apply(
       // eslint-disable-next-line @typescript-eslint/unbound-method -- supported-index steps use the implementation as their specified this value
       properties.steps.getSupportedPropertyIndices,

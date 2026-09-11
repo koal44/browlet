@@ -95,8 +95,10 @@ Because the implementation and platform object are distinct identities,
 implementation state does not need a sidecar map merely to hide it from an
 author. Prefer direct implementation-owned fields when cross-module algorithms
 need that state, and use type-only reverse imports to keep the runtime module
-graph acyclic. Retain private fields or static friends only when their internal
-boundary is independently useful.
+graph acyclic. Prefer instance methods for operations on one implementation,
+private methods for work confined to that class, and statics for factories,
+predicates, or class-level algorithms. An internal operation does not need to be
+static merely to distinguish it from the declared platform API.
 
 ### Binding layer
 
@@ -300,8 +302,11 @@ through:
 
 Repeated references to one implementation must produce one platform object.
 
-Blob's `text()`, `bytes()`, and `arrayBuffer()` share a read-result path using
-JS Engine's `PromiseValue<T>`.
+Blob retains its Runtime Context at construction. Its `stream()` and private
+read operation use that context; `text()`, `bytes()`, and `arrayBuffer()` share
+the read result through JS Engine's `PromiseValue<T>`. Backing `BlobData` remains
+runtime-neutral. Slices retain the source runtime, while deserialization creates
+an implementation with the destination runtime before restoring its data.
 The value retains native settlement state and the `Promises` facility from
 the receiver's Runtime Context. It supports `.then()`, `.catch()`, and terminal
 `.observe()` without per-call scheduling arguments. Shared promise projection consumes this value
@@ -461,7 +466,11 @@ The ordinary two-object path is the default. Exceptions must be explicit.
 
 - **Legacy platform objects:** indexed and named Proxy behavior belongs to the
   platform object's Proxy target. The implementation supplies the supported
-  names, indices, and implementation values.
+  names, indices, and implementation values. Indexed-property declarations
+  separate iterable enumeration from membership. Declare a support predicate,
+  or explicitly identify `null` or `undefined` as an unsupported getter result
+  when that getter is safe to call for support checks. Neither a nullable return
+  type nor `length` implies which indices are supported.
 - **Global objects:** with the compatibility addon, Window has a separate
   native platform object and retains `WindowImpl.prototype` on its implementation.
   The plain-Node fallback still uses the implementation as its global target
@@ -573,7 +582,7 @@ It records migration work, not permanent architecture.
 | Binding-world ownership | Browlet's composition root owns one main `BindingWorld` spanning its Node VM realms; it is neither Agent- nor AgentCluster-owned | Add explicit additional worlds only with an isolated-world or separate-runtime consumer |
 | Post-conversion implementation types | AbortSignal and the EventTarget signal path retain `AbortSignalImpl` | Remove remaining ambient platform types which reappear inside implementation algorithms |
 | Ambient `implements` and stubs | Removed from Window, EventTarget, Event, and CustomEvent | Audit `asDocument`, `Document & DocumentImpl`, factory overload intersections, and similar type fictions |
-| Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
+| Static friends | Separate platform objects remove the need to use statics to hide or label internal operations. Blob and File use instance members for data access and serialization state | Prefer instance members for operations on one implementation; keep predicates, factories, cross-instance algorithms, and specification-level static operations. Review existing friends in bounded passes. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
 | Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Queuing-strategy size functions use shared declarative bindings. Promise bookkeeping and this architecture review are complete for the migrated paths | Move remaining Fetch abort context uses into bindings or integration; connect Request/Response body consumption when its slice is reached. Streams' current contracts and deferred integrations are described in [README.md](./streams/README.md) |

@@ -2,6 +2,7 @@ import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
 
 import { utf8DecodeWithoutBOM } from '../../encoding/utf-8';
 import { FileImpl } from '../../file/index';
+import type { RuntimeContext } from '../../js-engine/index';
 import { toScalarValueString } from '../../infra/index';
 import type { MIMEType } from '../../mime/index';
 import { TextCursor } from '../../infra/text-cursor';
@@ -11,13 +12,14 @@ import type { FormDataEntry } from '../../xhr/index';
  * Fetch §5.3, formData() multipart branch; RFC 7578 and RFC 2046 §5.1.1.
  * https://fetch.spec.whatwg.org/#dom-body-formdata
  *
- * Parse a complete body into entries with realm-neutral File implementations.
+ * Parse a complete body into entries whose Files retain the consuming runtime.
  * Fetch's Body integration owns FormData creation, projection, and rejection.
  */
 // SPEC_MISMATCH: Body.formData() -> Promise<FormData>
 export function parseMultipartFormData(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: MIMEType,
+  runtime: RuntimeContext,
 ): FormDataEntry[] {
   const boundary = mimeType.parameters.get('boundary');
   if (
@@ -66,7 +68,7 @@ export function parseMultipartFormData(
       ? toScalarValueString(utf8DecodeWithoutBOM(body))
       : new FileImpl([body], filename, {
         type: contentType ?? 'text/plain',
-      });
+      }, runtime);
     entries.push([toScalarValueString(name), value]);
     position = nextDelimiter + 2;
   }
