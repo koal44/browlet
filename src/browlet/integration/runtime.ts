@@ -1,3 +1,5 @@
+import { EOL } from 'node:os';
+
 import type { RuntimeContext } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/projection';
 import { WindowImpl } from '../browsing/window/window';
@@ -16,6 +18,7 @@ export function createWindowRuntime(
 ): RuntimeContext {
   // Global installation completes after registration. Host operations run later.
   return {
+    nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },

@@ -1,14 +1,13 @@
-import { FileImpl } from '../../../file/file';
+import { FileImpl } from '../../../file/index';
 import { toScalarValueString } from '../../../infra/index';
 import type { CreateFormDataEntry } from '../../../xhr/form-data';
 
 /**
  * HTML §4.10.22.4, create an entry.
  *
- * The returned File implementation is realm-neutral until Web IDL projects it
- * as an operation result.
+ * New Files retain the FormData owner's runtime; an unchanged File keeps its owner.
  */
-export const createEntry: CreateFormDataEntry = (name, value, filename) => {
+export const createEntry: CreateFormDataEntry = (name, value, filename, runtime) => {
   const entryName = toScalarValueString(name);
   if (typeof value === 'string') {
     return [entryName, toScalarValueString(value)];
@@ -24,6 +23,7 @@ export const createEntry: CreateFormDataEntry = (name, value, filename) => {
       [value],
       filename ?? toScalarValueString('blob'),
       { lastModified, type: value.type },
+      runtime,
     ),
   ];
 };

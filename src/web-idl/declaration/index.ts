@@ -53,8 +53,8 @@ export type {
   ArgumentBinding, ArgumentInjectionBinding, CallbackExceptionBehavior,
   ContextValue, FunctionResultBinding, FunctionResultSteps,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
-  ImplementationDeclaration, ImplementationOptions, LegacyGetterBinding,
-  LegacyGetterHooks, NewBufferResultBinding, PositionedArgument,
+  ImplementationDeclaration, ImplementationOptions, IndexedPropertySupport,
+  LegacyGetterBinding, NewBufferResultBinding, PositionedArgument,
 } from './binding';
 export type {
   AnnotatedType,

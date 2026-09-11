@@ -7,17 +7,14 @@ import { fileListIDL } from './file-list';
 
 export {
   blobIDL, blobPartIDL, blobPropertyBagIDL, BlobImpl,
-  convertLineEndingsToNative, endingTypeIDL, getBlobStream, processBlobParts,
-  readBlobBytes, sliceBlob, type BlobPart, type BlobPropertyBag,
+  convertLineEndingsToNative, endingTypeIDL, processBlobParts,
+  type BlobPart, type BlobPropertyBag,
   type BlobSerializationState, type EndingType,
 } from './blob';
 export {
   BlobData, BlobReadFailure, type BlobByteSource,
   type BlobReadFailureReason, type BlobSnapshotState,
 } from './blob-data';
-export {
-  nativeLineEnding, type NativeLineEnding,
-} from './integration';
 export {
   createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,

@@ -381,9 +381,9 @@ exception tests with no network transport installed and no Node public object
 escaping.
 
 - [ ] **Multipart File realm ownership:** exercise `Request.formData()` and
-  `Response.formData()` with multipart bodies. The parser returns realm-neutral
-  `FileImpl` values; integration must give the FormData and its Files the
-  producing Request/Response's realm. Verify first File exposure through
+  `Response.formData()` with multipart bodies. The parser receives the consuming
+  runtime and constructs `FileImpl` values with it; integration must give the
+  FormData and its Files the producing Request/Response's realm. Verify first File exposure through
   `get()`, `getAll()`, and iteration, including methods borrowed from another
   realm, and stable File identity across repeated access. This replaces the
   parser's early-origin test; byte-parser tests do not prove this integration.

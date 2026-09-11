@@ -28,11 +28,6 @@ export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl>
     return this[index] ?? null;
   }
 
-  getSupportedPropertyIndices(): ReadonlySet<number> {
-    this.refresh();
-    return new Set(this.keys());
-  }
-
   getSupportedPropertyNames(): ReadonlySet<string> {
     const names = new Set<string>();
     this.refresh();
@@ -95,12 +90,16 @@ export const htmlCollectionIDL = defineInterface({
         return collection.length;
       },
     })),
-    op('item', nullable(reference('Element')), [
-      arg('index', idlType.unsignedLong),
-    ], indexedGetter(
-      (collection: HTMLCollectionImpl) =>
-        collection.getSupportedPropertyIndices(),
-    )),
+    op('item', nullable(reference('Element')),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter(
+        (collection: HTMLCollectionImpl) => {
+          collection.refresh();
+          return collection.keys();
+        },
+        { unsupportedValue: null },
+      ),
+    ),
     op('namedItem', nullable(reference('Element')), [
       arg('name', idlType.DOMString),
     ], namedGetter(

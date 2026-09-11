@@ -11,7 +11,6 @@ import {
  * the list and elsewhere in the graph retains one deserialized identity.
  */
 const fileListSerializable: SerializableSteps = {
-  // SPEC_MISMATCH: serialization steps(value, serialized, forStorage)
   serializationSteps(value, serialized, _forStorage, context) {
     if (!FileListImpl.is(value)) {
       throw new TypeError(
@@ -23,7 +22,6 @@ const fileListSerializable: SerializableSteps = {
     serialized.set('Files', files);
   },
 
-  // SPEC_MISMATCH: deserialization steps(serialized, value, targetRealm)
   deserializationSteps(serialized, value, _targetRealm, context) {
     if (!FileListImpl.is(value)) {
       throw new TypeError(

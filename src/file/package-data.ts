@@ -6,7 +6,6 @@ import { forgivingBase64Encode } from '../infra/index';
 import type { RuntimeContext } from '../js-engine/index';
 
 /** File API §6.3 — Package data. */
-// SPEC_MISMATCH: package data(bytes, type, mimeType, encoding?) -> data
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,

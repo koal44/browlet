@@ -6,15 +6,12 @@ import {
 import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import { ReadableStreamImpl } from '../streams/index';
 import {
-  arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration, defineInterface,
-  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, impl, invokeWith,
+  arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface,
+  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, impl,
   newBufferResult, op, promise, reference, roAttr, sequence, union, xattr,
 } from '../web-idl/declaration/index';
-import { runtimeContext, type BindingContext } from '../web-idl/projection';
+import { runtimeContext } from '../web-idl/projection';
 import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
-import {
-  nativeLineEnding as nativeLineEndingCapability, type NativeLineEnding,
-} from './integration';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -47,16 +44,17 @@ import {
  */
 export class BlobImpl {
   #data: BlobData;
+  readonly #runtime: RuntimeContext;
   #snapshotState: BlobSnapshotState;
   #type: string;
 
-  // SPEC_MISMATCH: Blob(blobParts?, options = {}) -> Blob
   constructor(
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
-    nativeLineEnding?: NativeLineEnding,
+    runtime: RuntimeContext,
   ) {
-    this.#data = processBlobParts(blobParts, options, nativeLineEnding);
+    this.#runtime = runtime;
+    this.#data = processBlobParts(blobParts, options, runtime);
     this.#snapshotState = this.#data.captureSnapshotState();
     this.#type = normalizeBlobType(options.type ?? '');
   }
@@ -69,81 +67,135 @@ export class BlobImpl {
     return this.#type;
   }
 
+  /** File API §2, slice blob. */
   slice(
     start?: number,
     end?: number,
     contentType?: string,
   ): BlobImpl {
-    return sliceBlob(this, start, end, contentType);
-  }
-
-  stream(runtime: RuntimeContext): ReadableStreamImpl {
-    return getBlobStream(this, runtime);
-  }
-
-  // SPEC_MISMATCH: Blob.text() -> Promise<USVString>
-  text(runtime: RuntimeContext): PromiseValue<string> {
-    return readBlob(this, runtime).then(utf8Decode);
-  }
-
-  // SPEC_MISMATCH: Blob.arrayBuffer() -> Promise<ArrayBuffer>
-  arrayBuffer(runtime: RuntimeContext): PromiseValue<Uint8Array> {
-    return readBlob(this, runtime);
-  }
-
-  textStream(
-    runtime: RuntimeContext,
-  ): ReadableStreamImpl {
-    const stream = getBlobStream(this, runtime);
-    const decoder = new TextDecoderStreamImpl(
-      'utf-8', { fatal: false, ignoreBOM: false }, runtime,
+    const relativeStart = normalizeSlicePosition(start, this.size, 0);
+    const relativeEnd = normalizeSlicePosition(end, this.size, this.size);
+    const span = Math.max(relativeEnd - relativeStart, 0);
+    return BlobImpl.create(
+      this.#data.slice(relativeStart, span),
+      normalizeBlobType(contentType ?? ''),
+      this.#snapshotState,
+      this.#runtime,
     );
-    // SPEC_MISMATCH: File API pipe through(stream, decoder: TextDecoderStream) -> ReadableStream
+  }
+
+  /** File API §3, get stream. */
+  stream(): ReadableStreamImpl {
+    const scheduling = this.#runtime.fileReading;
+    const data = this.#data;
+    let canceled = false;
+    const stream = ReadableStreamImpl.createWithByteReadingSupport(
+      undefined,
+      () => { canceled = true; },
+      0,
+      this.#runtime,
+    );
+
+    // Backend I/O runs outside HTML; only the queued file tasks touch the stream.
+    scheduling.runInParallel(() => { void readChunks(); });
+    return stream;
+
+    async function readChunks(): Promise<void> {
+      let offset = 0;
+      try {
+        while (!canceled && offset < data.size) {
+          const byteLength = Math.min(data.size - offset, blobReadChunkSize);
+          const bytes = await data.read(offset, byteLength);
+          offset += bytes.length;
+          scheduling.queueTask(() => {
+            if (canceled) return;
+            try {
+              // Byte-stream enqueue transfers this read's storage into the stream runtime.
+              stream.enqueueChunk(bytes);
+            } catch (error) {
+              canceled = true;
+              stream.error(error);
+            }
+          });
+        }
+        if (!canceled) {
+          scheduling.queueTask(() => {
+            if (!canceled) stream.close();
+          });
+        }
+      } catch (error) {
+        scheduling.queueTask(() => {
+          if (canceled) return;
+          canceled = true;
+          stream.error(realizeReadFailure(error));
+        });
+      }
+    }
+  }
+
+  text(): PromiseValue<string> {
+    return this.#read().then(utf8Decode);
+  }
+
+  /** File API §3.3.4; the binding allocates the result ArrayBuffer from these bytes. */
+  arrayBuffer(): PromiseValue<Uint8Array> {
+    return this.#read();
+  }
+
+  /** File API §3.3.6, pipe through the decoder's associated transform. */
+  textStream(): ReadableStreamImpl {
+    const stream = this.stream();
+    const decoder = new TextDecoderStreamImpl(
+      'utf-8', { fatal: false, ignoreBOM: false }, this.#runtime,
+    );
     return stream.pipeThroughTransform(TextDecoderStreamImpl.getAssociatedTransform(decoder));
   }
 
-  // SPEC_MISMATCH: Blob.bytes() -> Promise<Uint8Array>
-  bytes(runtime: RuntimeContext): PromiseValue<Uint8Array> {
-    return readBlob(this, runtime);
+  bytes(): PromiseValue<Uint8Array> {
+    return this.#read();
   }
 
-  // -- Friends ----------------------------------------------------------
+  /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
+  #read(): PromiseValue<Uint8Array> {
+    const result = this.#runtime.promises.withResolvers<Uint8Array>();
+    const reader = this.stream().getDefaultReader();
+    reader.readAllBytes(result.resolve, result.reject);
+    return result.promise;
+  }
+
+  // -- Internal operations ----------------------------------------------
+
+  get data(): BlobData {
+    return this.#data;
+  }
 
   static create(
     data: BlobData,
     type: string,
     snapshotState: BlobSnapshotState,
+    runtime: RuntimeContext,
   ): BlobImpl {
-    const blob = new BlobImpl();
+    const blob = new BlobImpl([], {}, runtime);
     blob.#data = data;
     blob.#snapshotState = snapshotState;
     blob.#type = type;
     return blob;
   }
 
-  static getData(blob: BlobImpl): BlobData {
-    return blob.#data;
-  }
-
-  static getSnapshotState(blob: BlobImpl): BlobSnapshotState {
-    return blob.#snapshotState;
-  }
-
-  static getSerializationState(blob: BlobImpl): BlobSerializationState {
+  getSerializationState(): BlobSerializationState {
     return {
-      data: blob.#data,
-      snapshotState: blob.#snapshotState,
-      type: blob.#type,
+      data: this.#data,
+      snapshotState: this.#snapshotState,
+      type: this.#type,
     };
   }
 
-  static setSerializationState(
-    blob: BlobImpl,
+  setSerializationState(
     state: BlobSerializationState,
   ): void {
-    blob.#data = state.data;
-    blob.#snapshotState = state.snapshotState;
-    blob.#type = state.type;
+    this.#data = state.data;
+    this.#snapshotState = state.snapshotState;
+    this.#type = state.type;
   }
 
   static is(value: unknown): value is BlobImpl {
@@ -166,25 +218,21 @@ export type BlobSerializationState = {
   type: string;
 };
 
-/** File API §3.1, process blob parts. */
-// SPEC_MISMATCH: (parts, options) -> bytes
+/** File API §3.1, process blob parts into immutable backing segments. */
 export function processBlobParts(
   parts: Iterable<BlobPart>,
   options: BlobPropertyBag,
-  nativeLineEnding?: NativeLineEnding,
+  runtime: RuntimeContext,
 ): BlobData {
   const data: BlobData[] = [];
   for (const element of parts) {
     if (typeof element === 'string') {
       const string = options.endings === 'native'
-        ? convertLineEndingsToNative(
-          element,
-          requireNativeLineEnding(nativeLineEnding),
-        )
+        ? convertLineEndingsToNative(element, runtime)
         : element;
       data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
     } else if (BlobImpl.is(element)) {
-      data.push(BlobImpl.getData(element));
+      data.push(element.data);
     } else {
       data.push(BlobData.fromOwnedBytes(getBufferSourceCopy(element)));
     }
@@ -193,125 +241,11 @@ export function processBlobParts(
 }
 
 /** File API §3.1, convert line endings to native. */
-// SPEC_MISMATCH: (s) -> string
 export function convertLineEndingsToNative(
   value: string,
-  nativeLineEnding: '\n' | '\r\n',
+  runtime: RuntimeContext,
 ): string {
-  return value.replace(/\r\n|\r|\n/g, nativeLineEnding);
-}
-
-// BINDING_INTEGRATION: supply platform line-ending policy at Blob/File construction.
-function getNativeLineEnding(context: BindingContext): NativeLineEnding {
-  const value = context.getCapability(blobIDL, nativeLineEndingCapability);
-  if (value === undefined) {
-    throw new Error('Blob has no native line-ending capability');
-  }
-  return value;
-}
-
-function requireNativeLineEnding(
-  value: NativeLineEnding | undefined,
-): NativeLineEnding {
-  if (value === undefined) {
-    throw new Error('Native Blob line ending was not supplied');
-  }
-  return value;
-}
-
-export const nativeLineEndingForConstruction = contextValue(
-  getNativeLineEnding,
-);
-
-/** File API §2, slice blob. */
-// SPEC_MISMATCH: (blob, start: number | null, end: number | null, contentType: string | null) -> Blob
-export function sliceBlob(
-  blob: BlobImpl,
-  start?: number,
-  end?: number,
-  contentType?: string,
-): BlobImpl {
-  const originalSize = blob.size;
-  const relativeStart = normalizeSlicePosition(start, originalSize, 0);
-  const relativeEnd = normalizeSlicePosition(end, originalSize, originalSize);
-  const span = Math.max(relativeEnd - relativeStart, 0);
-
-  return BlobImpl.create(
-    BlobImpl.getData(blob).slice(relativeStart, span),
-    normalizeBlobType(contentType ?? ''),
-    BlobImpl.getSnapshotState(blob),
-  );
-}
-
-/** Read an exact Blob byte range into fresh storage that the caller can transfer. */
-export function readBlobBytes(
-  blob: BlobImpl,
-  start = 0,
-  length = blob.size - start,
-): Promise<Uint8Array> {
-  return BlobImpl.getData(blob).read(start, length);
-}
-
-/** File API §3, get stream. */
-export function getBlobStream(
-  blob: BlobImpl,
-  runtime: RuntimeContext,
-): ReadableStreamImpl {
-  const scheduling = runtime.fileReading;
-  let canceled = false;
-  const stream = ReadableStreamImpl.createWithByteReadingSupport(
-    undefined,
-    () => { canceled = true; },
-    0,
-    runtime,
-  );
-
-  // Backend I/O runs outside HTML; only the queued file tasks touch the stream.
-  scheduling.runInParallel(() => { void readChunks(); });
-  return stream;
-
-  async function readChunks(): Promise<void> {
-    let offset = 0;
-    try {
-      while (!canceled && offset < blob.size) {
-        const byteLength = Math.min(blob.size - offset, blobReadChunkSize);
-        const bytes = await readBlobBytes(blob, offset, byteLength);
-        offset += bytes.length;
-        scheduling.queueTask(() => {
-          if (canceled) return;
-          try {
-            // Byte-stream enqueue transfers this read's storage into the stream runtime.
-            stream.enqueueChunk(bytes);
-          } catch (error) {
-            canceled = true;
-            stream.error(error);
-          }
-        });
-      }
-      if (!canceled) {
-        scheduling.queueTask(() => {
-          if (!canceled) stream.close();
-        });
-      }
-    } catch (error) {
-      scheduling.queueTask(() => {
-        if (canceled) return;
-        canceled = true;
-        stream.error(realizeReadFailure(error));
-      });
-    }
-  }
-}
-
-function readBlob(
-  blob: BlobImpl,
-  runtime: RuntimeContext,
-): PromiseValue<Uint8Array> {
-  const result = runtime.promises.withResolvers<Uint8Array>();
-  const reader = getBlobStream(blob, runtime).getDefaultReader();
-  // SPEC_MISMATCH: File API read all bytes(stream, reader) -> promise
-  reader.readAllBytes(result.resolve, result.reject);
-  return result.promise;
+  return value.replace(/\r\n|\r|\n/g, runtime.nativeLineEnding);
 }
 
 function realizeReadFailure(error: unknown): unknown {
@@ -344,7 +278,7 @@ function normalizeBlobType(value: string): string {
 }
 
 // -- Web IDL ------------------------------------------------------------
-// BINDING_INTEGRATION: provide reading dependencies and project promises and fresh buffers.
+// BINDING_INTEGRATION: supply the construction runtime and project promises and fresh buffers.
 export const endingTypeIDL = defineEnumeration({
   name: 'EndingType',
   values: ['transparent', 'native'],
@@ -374,7 +308,7 @@ export const blobIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(BlobImpl, {
-    constructWith: [atArg(2, nativeLineEndingForConstruction)],
+    constructWith: [atArg(2, runtimeContext)],
   }),
   members: [
     ctor([
@@ -401,31 +335,21 @@ export const blobIDL = defineInterface({
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
     op('stream', reference('ReadableStream'), [], {
-      ...invokeWith(runtimeContext), ...xattr('NewObject'),
+      ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
-      ...invokeWith(
-        runtimeContext,
-      ),
       ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
       ...xattr('NewObject'),
-      binding: {
-        ...invokeWith(runtimeContext).binding,
-        ...newBufferResult().binding,
-      },
+      ...newBufferResult(),
     }),
     op('textStream', reference('ReadableStream'), [], {
       ...xattr('NewObject'),
-      ...invokeWith(runtimeContext),
     }),
     op('bytes', promise(idlType.Uint8Array), [], {
       ...xattr('NewObject'),
-      binding: {
-        ...invokeWith(runtimeContext).binding,
-        ...newBufferResult().binding,
-      },
+      ...newBufferResult(),
     }),
   ],
 });

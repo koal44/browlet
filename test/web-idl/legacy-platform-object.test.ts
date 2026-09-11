@@ -31,8 +31,9 @@ describe('Web IDL legacy platform objects', () => {
     });
     implementations.setIndexedPropertySteps(getter, {
       getSupportedPropertyIndices() {
-        return new Set(values.get(this)?.keys());
+        return values.get(this)?.keys() ?? [];
       },
+      unsupportedValue: undefined,
     });
     implementations.setOperationSteps(getter, function(index) {
       return values.get(this as object)?.[index as number];
@@ -99,7 +100,10 @@ describe('Web IDL legacy platform objects', () => {
     });
     implementations.setIndexedPropertySteps(getter, {
       getSupportedPropertyIndices() {
-        return new Set(values.get(this)?.keys());
+        return values.get(this)?.keys() ?? [];
+      },
+      supportsIndex(index) {
+        return values.get(this)?.has(index) ?? false;
       },
     });
     implementations.setOperationSteps(getter, function(index) {
@@ -154,8 +158,9 @@ describe('Web IDL legacy platform objects', () => {
     });
     implementations.setIndexedPropertySteps(getter, {
       getSupportedPropertyIndices() {
-        return new Set(values.get(this)?.keys());
+        return values.get(this)?.keys() ?? [];
       },
+      unsupportedValue: undefined,
       setExisting(index, value) {
         invocations.push(`existing:${String(index)}`);
         values.get(this)?.set(index, value as string);
@@ -190,10 +195,12 @@ describe('Web IDL legacy platform objects', () => {
     const implementations = new ImplementationRegistry();
     implementations.setConstructorSteps(constructor, () => undefined);
     implementations.setIndexedPropertySteps(baseGetter, {
-      getSupportedPropertyIndices: () => new Set([0]),
+      getSupportedPropertyIndices: () => [0],
+      supportsIndex: (index) => index === 0,
     });
     implementations.setIndexedPropertySteps(derivedGetter, {
-      getSupportedPropertyIndices: () => new Set([1]),
+      getSupportedPropertyIndices: () => [1],
+      supportsIndex: (index) => index === 1,
     });
     implementations.setOperationSteps(baseGetter, () => 'base');
     implementations.setOperationSteps(derivedGetter, () => 'derived');
@@ -510,7 +517,10 @@ describe('Web IDL legacy platform objects', () => {
     });
     implementations.setIndexedPropertySteps(indexGetter, {
       getSupportedPropertyIndices() {
-        return new Set(indices.get(this)?.keys());
+        return indices.get(this)?.keys() ?? [];
+      },
+      supportsIndex(index) {
+        return indices.get(this)?.has(index) ?? false;
       },
     });
     implementations.setNamedPropertySteps(nameGetter, {

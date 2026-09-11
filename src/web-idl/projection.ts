@@ -18,8 +18,7 @@ import {
 import type {
   ArgumentInjectionBinding, CallbackExceptionBehavior, ContextValue, FunctionResultBinding,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
-  LegacyGetterBinding, LegacyGetterHooks, NewBufferResultBinding,
-  PositionedArgument,
+  LegacyGetterBinding, NewBufferResultBinding, PositionedArgument,
 } from './declaration/binding';
 import type {
   AsyncIteratorSteps, AttributeSteps, ConstructorSteps,
@@ -189,11 +188,12 @@ type ConstructorBindingDefinition =
 
 type OperationBindingDefinition =
   | ArgumentInjectionBinding
-  | (LegacyGetterHooks & {
-    invoke: ContextualSteps<object | null, unknown[], unknown>;
-  })
-  | (LegacyGetterHooks & NewBufferResultBinding)
-  | LegacyGetterBinding;
+  | NewBufferResultBinding
+  | { invoke: ContextualSteps<object | null, unknown[], unknown>; }
+  | LegacyGetterBinding & {
+    invoke?: ContextualSteps<object | null, unknown[], unknown>;
+    newBufferResult?: true;
+  };
 
 type StringifierBindingDefinition = {
   invoke: ContextualSteps<object, [], unknown>;
@@ -529,7 +529,7 @@ function registerDefinedInterface(
               member.binding.dependencies,
             );
           } else {
-            if ('invoke' in member.binding) {
+            if ('invoke' in member.binding && member.binding.invoke) {
               registry.setOperationSteps(
                 member,
                 createDefinedOperationSteps(
@@ -554,12 +554,22 @@ function registerDefinedInterface(
                 realmBinding,
               );
             }
-            const getSupportedPropertyNames =
-              member.binding.getSupportedPropertyNames;
-            const getSupportedPropertyIndices =
-              member.binding.getSupportedPropertyIndices;
-            if (getSupportedPropertyIndices) {
+            const getterBinding = member.binding;
+            if ('getSupportedPropertyIndices' in getterBinding) {
+              const { getSupportedPropertyIndices } = getterBinding;
               registry.setIndexedPropertySteps(member, {
+                ...('unsupportedValue' in getterBinding ? {
+                  unsupportedValue: getterBinding.unsupportedValue,
+                } : {
+                  supportsIndex(index: number) {
+                    return callImplementation(
+                      getterBinding.supportsIndex,
+                      this,
+                      [index, context],
+                      realmBinding,
+                    );
+                  },
+                }),
                 getSupportedPropertyIndices() {
                   return callImplementation(
                     getSupportedPropertyIndices,
@@ -570,7 +580,8 @@ function registerDefinedInterface(
                 },
               });
             }
-            if (getSupportedPropertyNames) {
+            if ('getSupportedPropertyNames' in getterBinding) {
+              const { getSupportedPropertyNames } = getterBinding;
               registry.setNamedPropertySteps(member, {
                 getSupportedPropertyNames() {
                   return callImplementation(

@@ -88,17 +88,19 @@ realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exce
 
 Asynchronous implementations receive JS Engine's `Promises` dependency for
 allocation, adoption, and continuation placement. A realm owns one facility;
-Binding supplies it at construction or operation composition. Streams retain it
-and pass it to derived streams; Blob reads receive it per operation. Returned
+Binding supplies it through Runtime Context at construction or operation
+composition. Streams and Blobs retain that context and pass it to derived
+streams and slices. Returned
 `PromiseValue<T>` chains retain that destination, so `.then()` and `.observe()`
 need no scheduling argument. Result conversion and projection remain Binding
 work. Native backend I/O stays outside this implementation contract and hands
 completion back through an explicit task or Promise import.
 
 This is an asynchronous dependency, not a requirement on all stored values.
-Blob/File data can be created by synchronous multipart, cloning, and slicing
-algorithms without a Promise facility. The bound read operation composes the
-facility with its new stream. A consumer that only chains an incoming
+`BlobData` is runtime-neutral backing storage. A Blob or File implementation
+retains a runtime for reading that storage, including when constructed by
+multipart parsing or FormData. Deserialization supplies the destination runtime
+without transferring the source object's runtime. A consumer that only chains an incoming
 `PromiseValue` also needs no separate stored dependency.
 
 The custom engine's job hooks follow the same division. JS Engine associates
@@ -221,7 +223,8 @@ dependencies through the Runtime Context below. Track the remaining migration in
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
 Promises, buffer allocation, microtasks, task delivery, abort-controller
-construction, and cloning. It contains no Binding Context, realm object,
+construction, cloning, and immutable native-line-ending configuration.
+It contains no Binding Context, realm object,
 conversion, callback adaptation, or platform-object registry.
 
 The neutral contract and engine-owned buffer operations live in `js-engine/`.
@@ -232,8 +235,10 @@ Promise facility. Binding exposes the same object through `context.getRuntime()`
 the `runtimeContext` declaration value supplies it to constructors or methods.
 
 Implementations keep lifetime dependencies in a final constructor argument and
-pass the same runtime to children they create. Synchronous Blob storage needs
-no runtime; its read operations receive one from the receiver's binding.
+pass the same runtime to children they create. Blob slices retain their source
+runtime; deserialized Blobs receive the destination runtime while sharing or
+copying `BlobData` as serialization requires. FileReader obtains a stream from
+the Blob, while retaining its own runtime for result allocation and event tasks.
 Invocation-specific information, such as Fetch's explicit task destination,
 remains an operation argument. Borrowing another realm's method does not change
 the receiver's runtime.
@@ -329,7 +334,7 @@ HTML scheduling capability. Once integration selects the global and task source,
 consumers use Infra's shared `TaskScheduling` and removable `TaskHandle` contracts.
 FileReader retains that dependency; EventTarget owns synchronous dispatch, not
 task scheduling. The underlying platform's native line ending is
-an immutable composition value, while File's wall-clock default is the
+an immutable Runtime Context value, while File's wall-clock default is the
 directly available ECMAScript `Date.now()` operation. Neither needs a
 subsystem-wide host facade.
 

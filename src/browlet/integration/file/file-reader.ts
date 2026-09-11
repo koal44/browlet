@@ -5,7 +5,7 @@ import {
 import { bind, runtimeContext } from '../../../web-idl/projection';
 import { getBufferSourceCopy, type RuntimeContext } from '../../../js-engine/index';
 import {
-  getBlobStream, packageData, type BlobImpl, type FileReadType,
+  packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
 import type { TaskHandle } from '../../../infra/index';
 import {
@@ -60,7 +60,6 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
-  // SPEC_MISMATCH: FileReader() -> FileReader
   constructor(runtime: RuntimeContext) {
     super();
     this.#runtime = runtime;
@@ -188,7 +187,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#error = null;
 
     const { fileReading, promises } = this.#runtime;
-    const reader = getBlobStream(blob, this.#runtime).getDefaultReader();
+    const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
         const promise = reader.cancelInternal(undefined);
