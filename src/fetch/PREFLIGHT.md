@@ -108,6 +108,12 @@ their remaining multipart and Blob URL work has the owners linked above.
 **Status:** Slices 1–10 and the deeper Streams pass below are marked as of
 2026-09-07. The planned signature audit is complete. Investigation and fixes
 come later.
+
+The coverage ledger retains filenames from the audit. The readable and writable
+operations, cross-specification entry points, controllers, and readers now live
+on their classes in [`readable-stream.ts`](../streams/readable-stream.ts) and
+[`writable-stream.ts`](../streams/writable-stream.ts).
+
 Review the callable shapes of existing
 implementations, including unmarked differences; searching `SPEC_MISMATCH`
 alone cannot establish coverage. JS Engine is outside this audit. The completed
@@ -334,9 +340,10 @@ receiver of `JSRealm.transferArrayBuffer(buffer): ArrayBuffer`.
 Transform operations otherwise recover context from their stream. Strategy
 size functions are cached by Binding Context; their allocation/cache helper
 signatures are local, and the generated size functions keep their specified
-arguments. The local `runPromiseAlgorithm` adapter was later removed by the
-implementation migration recorded in [Streams' owner notes](../streams/PORTING-NOTES.md). MessagePort-backed transfers remain deferred in
-[Streams' owner notes](../streams/PORTING-NOTES.md). `CanTransferArrayBuffer`
+arguments. The local `runPromiseAlgorithm` adapter was later removed; current
+[Streams contracts](../streams/README.md#runtime-and-bindings) retain explicit
+Promise ownership. [MessagePort-backed transfers](../streams/README.md#remaining-work)
+remain deferred. `CanTransferArrayBuffer`
 has no implementation; its missing detach-key check is recorded beside
 [the engine transfer method](../js-engine/realm.ts). No state-machine
 behavior or context ownership was changed by this pass.

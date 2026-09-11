@@ -227,7 +227,7 @@ current adapter. It must not recreate a second object model around values Web
 IDL has already converted.
 
 The Streams/Abort integration is the controlling example. Streams accepts a
-small structural `StreamAbortSignal` contract and directly reads `aborted`,
+small structural `AbortSignalCapability` contract and directly reads `aborted`,
 `reason`, and `addAlgorithm()`. It does not resolve an author AbortSignal back
 through a capability registry. `createAbortController()` is a narrow
 cross-specification capability because standalone Streams cannot import or
@@ -382,6 +382,16 @@ A retained promise keeps distinct projections for allocating
 and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.
 
+Function-valued attributes can declare `functionResult(length, steps)` to return
+one built-in function per member and receiver realm, named after the attribute.
+Binding retains it alongside the getter in its existing member cache. The
+function receives ordinary JavaScript arguments and `this`; it is not an
+interface operation and performs no receiver-brand check. The attribute getter
+still validates its receiver, and borrowing it selects that receiver's realm.
+When the function's steps need that realm, declare them with `contextValue()`.
+Binding resolves the factory once when creating the cached function, using the
+receiver's Binding Context.
+
 `object` and `any` do not identify a platform interface, so Web IDL cannot infer
 which implementation to project. Do not use either merely to postpone defining
 a known platform interface. If the specification genuinely declares `object`
@@ -403,13 +413,20 @@ with a platform object. A direct implementation test can invoke converted
 callbacks with implementation values, but that is not a substitute for a
 projected callback test.
 
-Streams constructor bindings explicitly convert their source, sink, or
-transformer dictionary after ordinary argument conversion. They retain the
-original callback receiver and pass converted steps to ordinary implementation
-constructors. Shared callback binding supplies controller platform objects and
-imports Promise results; start's `any` result is adopted at that boundary too.
-A constructor's `bind({ construct })` supplies creation steps when conversion
-must precede implementation allocation. It returns the implementation; ordinary
+An object argument can declare `callbackDictionary(name)` to convert to that
+dictionary after ordinary IDL argument conversion. Its callback-function members,
+including inherited members, use the original input object as `this`. The
+existing callback adapter retains this receiver and preserves the original
+function when projected back to JavaScript. Ordinary dictionary conversion
+does not select this receiver policy.
+
+Streams declares this on its source, sink, and transformer arguments. Automatic
+construction supplies converted records and the runtime dependency. Shared
+callback binding supplies controller platform objects and imports declared
+Promise results; the implementation adopts start's `any` result through its runtime.
+
+A constructor's `bind({ construct })` supplies custom implementation creation
+steps. It returns the implementation; ordinary
 binding still owns platform allocation, subclass prototypes, and association.
 
 ### Exceptions
@@ -559,7 +576,7 @@ It records migration work, not permanent architecture.
 | Static friends | Separate platform objects remove the need to use statics merely to hide operations from an author prototype, but a static friend can still usefully announce internal-only access and reach private state | Evaluate receiver-taking friends case by case rather than mechanically converting them. Prefer an instance member for a natural implementation capability; retain a static friend when its internal-only signal or lexical private access clarifies the boundary. Retain predicates, factories, cross-instance algorithms, and specification-level static operations. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Promise bookkeeping and this architecture review are complete for the migrated paths | Move remaining queuing-strategy and Fetch abort context uses into bindings or integration; connect Request/Response body consumption when its slice is reached. Current validation is tracked in [PORTING-NOTES.md](./streams/PORTING-NOTES.md#implementation-migration-checkpoint) |
+| Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Queuing-strategy size functions use shared declarative bindings. Promise bookkeeping and this architecture review are complete for the migrated paths | Move remaining Fetch abort context uses into bindings or integration; connect Request/Response body consumption when its slice is reached. Streams' current contracts and deferred integrations are described in [README.md](./streams/README.md) |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications

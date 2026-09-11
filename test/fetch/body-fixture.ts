@@ -1,11 +1,8 @@
 import { vi } from 'vitest';
-
 import { BodyRecord } from '../../src/fetch/body';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
-import {
-  createReadableStream, enqueueReadableStream, getReadableStreamReader, readAllBytes,
-} from '../../src/streams/index';
 import { createTestContext } from '../browlet/streams/environment';
+import { ReadableStreamImpl } from '../../src/streams/index';
 
 export function createBodyFixture() {
   const context = createTestContext();
@@ -24,8 +21,8 @@ export function createBodyFixture() {
     parallelSteps,
     global: context.realm.global,
     createBody: (chunks: readonly unknown[] = []) => {
-      const stream = createReadableStream(undefined, undefined, 1, () => 1, runtime);
-      for (const chunk of chunks) enqueueReadableStream(stream, chunk);
+      const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime);
+      for (const chunk of chunks) stream.enqueueChunk(chunk);
       return new BodyRecord(stream, runtime);
     },
     createParallelQueue: () => new ParallelQueue(scheduling.runInParallel),
@@ -36,6 +33,6 @@ export function createBodyFixture() {
 
 export function readBodyBytes(body: BodyRecord): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    readAllBytes(getReadableStreamReader(body.stream), resolve, reject);
+    body.stream.getDefaultReader().readAllBytes(resolve, reject);
   });
 }

@@ -79,20 +79,26 @@ export function getMethod(
   key: PropertyKey,
   realm: JSRealm,
 ): JSMethod | undefined {
-  if (value === undefined || value === null) {
-    throw new realm.intrinsics.typeError(
-      'Cannot get a method from null or undefined',
-    );
-  }
-  const object: object = isObject(value)
-    ? value
-    : realm.intrinsics.object(value) as object;
-  const method = Reflect.get(object, key, value) as unknown;
+  const method = getV(value, key, realm);
   if (method === undefined || method === null) return;
   if (!isCallable(method)) {
     throw new realm.intrinsics.typeError(`${String(key)} is not callable`);
   }
   return method;
+}
+
+/** ECMAScript GetV, with primitive boxing in the supplied realm. */
+// SPEC_MISMATCH: GetV(V, P) -> any
+export function getV(value: unknown, key: PropertyKey, realm: JSRealm): unknown {
+  if (value === undefined || value === null) {
+    throw new realm.intrinsics.typeError(
+      'Cannot get a property from null or undefined',
+    );
+  }
+  const object: object = isObject(value)
+    ? value
+    : realm.intrinsics.object(value) as object;
+  return Reflect.get(object, key, value) as unknown;
 }
 
 export function toPrimitive(

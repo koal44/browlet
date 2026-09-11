@@ -1,18 +1,15 @@
 import { createRuntime } from '../../js-engine/runtime-fixture';
 import type { PromiseValue } from '../../../src/js-engine/index';
 import { TestRealm } from '../../web-idl/test-realm';
-import type { QueuingStrategy } from '../../../src/streams/queuing-strategy';
 import {
-  TransformStreamImpl, type TransformerRecord,
-} from '../../../src/streams/transform-stream';
-import {
+  type QueuingStrategyRecord, TransformStreamImpl, type TransformerRecord,
   WritableStreamImpl, type UnderlyingSink,
-} from '../../../src/streams/writable-stream';
+} from '../../../src/streams/index';
 
 export function createTransformStream(
   transformer: TransformerRecord | null = {},
-  writableStrategy: QueuingStrategy = {},
-  readableStrategy: QueuingStrategy = {},
+  writableStrategy: QueuingStrategyRecord = {},
+  readableStrategy: QueuingStrategyRecord = {},
 ): TransformStreamImpl {
   return new TransformStreamImpl(
     transformer, writableStrategy, readableStrategy, createRuntime(),
@@ -21,7 +18,7 @@ export function createTransformStream(
 
 export function createWritableStream(
   sink: UnderlyingSink | null = {},
-  strategy: QueuingStrategy = {},
+  strategy: QueuingStrategyRecord = {},
 ): WritableStreamImpl {
   return new WritableStreamImpl(sink, strategy, createRuntime());
 }

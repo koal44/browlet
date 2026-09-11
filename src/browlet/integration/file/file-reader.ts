@@ -1,6 +1,6 @@
 import {
-  arg, constant, ctor, defineInterface, idlType, impl, integer, nullable,
-  op, roAttr, reference, union,
+  arg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
+  reference, union,
 } from '../../../web-idl/declaration/index';
 import { bind, runtimeContext } from '../../../web-idl/projection';
 import { getBufferSourceCopy, type RuntimeContext } from '../../../js-engine/index';
@@ -11,18 +11,12 @@ import type { TaskHandle } from '../../../infra/index';
 import {
   domExceptionName, throwDOMException,
 } from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  cancelReadableStreamReader, getReadableStreamReader,
-  readReadableStreamChunk,
-} from '../../../streams/index';
 import { fireProgressEvent } from '../../dom/events/progress-event';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
 import { EventTargetImpl } from '../../dom/events/event-target';
-import {
-  unsafeSharedCurrentTime,
-} from '../../performance/high-resolution-time';
+import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
 
 /*
  * File API §6.2 — The FileReader API
@@ -194,10 +188,10 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#error = null;
 
     const { fileReading, promises } = this.#runtime;
-    const reader = getReadableStreamReader(getBlobStream(blob, this.#runtime));
+    const reader = getBlobStream(blob, this.#runtime).getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
-        const promise = cancelReadableStreamReader(reader, undefined);
+        const promise = reader.cancelInternal(undefined);
         promise.observe(() => {}, () => {});
       },
       loaded: 0,
@@ -233,7 +227,7 @@ export class FileReaderImpl extends EventTargetImpl {
 
     const readNextChunk = (): void => {
       if (this.#operation !== operation) return;
-      readReadableStreamChunk(reader, {
+      reader.readChunk({
         chunkSteps: (chunk) => {
           if (this.#operation !== operation) return;
           noteFirstChunk();
@@ -311,7 +305,6 @@ export class FileReaderImpl extends EventTargetImpl {
 
 // -- Web IDL ------------------------------------------------------------
 // BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
-
 export const fileReaderIDL = defineInterface({
   name: 'FileReader',
   inherits: 'EventTarget',

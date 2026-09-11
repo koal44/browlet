@@ -59,7 +59,6 @@ export class TextDecoderImpl {
  *   readonly attribute boolean ignoreBOM;
  * };
  */
-/** Shared TextDecoder and TextDecoderStream state. */
 export class TextDecoderCommonMixin {
   readonly #decoder: InstanceType<typeof ExodusTextDecoder>;
 

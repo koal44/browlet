@@ -1,16 +1,15 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../test-runtime';
-
 import { BodyRecord, bytesAsBody } from '../../src/fetch/body';
 import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
 import {
-  createReadableStream, enqueueReadableStream, errorReadableStream, getReadableStreamReader,
-} from '../../src/streams/index';
-import { defineInterface, idlType, impl, op, promise } from '../../src/web-idl/declaration/index';
+  defineInterface, idlType, impl, op, promise,
+} from '../../src/web-idl/declaration/index';
 import { createBindings } from '../../src/web-idl/registration';
 import { createFetchWindow } from './fetch-fixture';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
+import { ReadableStreamImpl } from '../../src/streams/index';
 
 describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
@@ -76,12 +75,12 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     const owner = createFetchWindow();
     const other = createFetchWindow();
     const runtime = owner.context.getRuntime();
-    const stream = createReadableStream(undefined, undefined, 1, () => 1, runtime);
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime);
     const body = new BodyRecord(stream, runtime);
     const authorError = new other.realm.intrinsics.typeError('author failure');
-    if (failure === 'locked') getReadableStreamReader(stream);
-    else if (failure === 'non-byte') enqueueReadableStream(stream, 'not bytes');
-    else errorReadableStream(stream, authorError);
+    if (failure === 'locked') stream.getDefaultReader();
+    else if (failure === 'non-byte') stream.enqueueChunk('not bytes');
+    else stream.error(authorError);
 
     const bindings = createBindings([bodyConsumerIDL]);
     const ownerBinding = bindings.register(owner.realm).context;

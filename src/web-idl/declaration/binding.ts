@@ -35,6 +35,17 @@ export function newBufferResult(): { readonly binding: NewBufferResultBinding; }
 }
 
 /**
+ * Return one built-in function per attribute and receiver realm, named after the attribute.
+ * Use contextValue() when its steps need that realm's binding context.
+ */
+export function functionResult(
+  length: number,
+  steps: FunctionResultBinding['functionResult']['steps'],
+): { readonly binding: FunctionResultBinding; } {
+  return { binding: { functionResult: { length, steps } } };
+}
+
+/**
  * Declare an indexed getter whose implementation supplies the supported
  * property indices while ordinary operation binding supplies invocation.
  */
@@ -72,7 +83,7 @@ export function namedGetter<Implementation extends object>(
   };
 }
 
-/** Resolve a semantic constructor dependency from the active binding context. */
+/** Resolve a value from the active binding context. */
 export function contextValue<Context, Value>(
   resolve: (context: Context) => Value,
 ): ContextValue<Value> {
@@ -103,6 +114,16 @@ export function callback(
 }
 
 /**
+ * Convert an object argument to a dictionary after ordinary IDL argument conversion.
+ * Its callback-function members use the original input object as their receiver.
+ */
+export function callbackDictionary(
+  name: string,
+): { readonly binding: CallbackDictionaryBinding; } {
+  return { binding: { callbackDictionary: name } };
+}
+
+/**
  * Resolve an argument to one of the listed implementations, while
  * preserving values which implement none of them.
  */
@@ -114,6 +135,7 @@ export function resolveArgs(
 
 export type ArgumentBinding =
   | CallbackArgumentBinding
+  | CallbackDictionaryBinding
   | ImplementationArgumentBinding;
 
 export type ImplementationDeclaration = {
@@ -151,6 +173,15 @@ export type NewBufferResultBinding = {
   readonly newBufferResult: true;
 };
 
+export type FunctionResultBinding = {
+  readonly functionResult: {
+    readonly length: number;
+    readonly steps: FunctionResultSteps | ContextValue<FunctionResultSteps>;
+  };
+};
+
+export type FunctionResultSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
+
 export type LegacyGetterHooks = {
   readonly getSupportedPropertyIndices?: SupportedPropertyIndicesSteps;
   readonly getSupportedPropertyNames?: SupportedPropertyNamesSteps;
@@ -166,6 +197,10 @@ export type LegacyGetterBinding =
 
 type CallbackArgumentBinding = {
   readonly callbackExceptionBehavior: CallbackExceptionBehavior;
+};
+
+type CallbackDictionaryBinding = {
+  readonly callbackDictionary: string;
 };
 
 type ImplementationArgumentBinding = {

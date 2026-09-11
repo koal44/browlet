@@ -5,21 +5,12 @@ import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
+import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
-  browletBindings, getRelevantRealm,
-} from '../../../src/browlet/bindings';
-import { ReadableStreamDefaultControllerImpl } from '../../../src/streams/readable-stream-default-controller';
-import type { ReadableByteStreamControllerImpl } from '../../../src/streams/readable-byte-stream-controller';
-import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
-import {
-  readableStreamDefaultTee,
-} from '../../../src/streams/readable-stream-operations';
-import {
-  enqueueReadableStream,
-} from '../../../src/streams/readable-stream-cross-spec';
-import {
-  observeBrowletPromise, performTestMicrotaskCheckpoint,
-} from '../test-runtime';
+  ReadableStreamDefaultControllerImpl, type ReadableByteStreamControllerImpl,
+  ReadableStreamImpl,
+} from '../../../src/streams/index';
+import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('ordinary readable-stream implementation', () => {
   it('creates a stream from an acquired async iterator', async () => {
@@ -58,7 +49,7 @@ describe('ordinary readable-stream implementation', () => {
     const { stream } = createReadableStream();
     const reader = stream.getReader({});
 
-    enqueueReadableStream(stream, 'chunk');
+    stream.enqueueChunk('chunk');
 
     await expect(observe(reader.read())).resolves
       .toEqual(readResult('chunk', false));
@@ -92,7 +83,7 @@ describe('ordinary readable-stream implementation', () => {
     const { promises } = runtime;
     const source = new ReadableStreamImpl({}, {}, runtime);
     const controller = requireDefaultController(
-      ReadableStreamImpl.getState(source).controller,
+      source.state.controller,
     );
     const write = vi.fn(() => promises.resolve(undefined));
     const close = vi.fn(() => promises.resolve(undefined));
@@ -140,7 +131,7 @@ describe('ordinary readable-stream implementation', () => {
     const { promises } = runtime;
     const source = new ReadableStreamImpl({}, {}, runtime);
     const controller = requireDefaultController(
-      ReadableStreamImpl.getState(source).controller,
+      source.state.controller,
     );
     const abort = vi.fn(() => promises.resolve(undefined));
     const destination = createWritableStream({ abort });
@@ -176,7 +167,7 @@ describe('ordinary readable-stream implementation', () => {
 
   it('clones the second branch for cross-specification teeing', async () => {
     const { controller, stream } = createReadableStream();
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const [branch1, branch2] = stream.teeDefault(true);
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
     const read1 = observe(reader1.read());
@@ -201,10 +192,10 @@ describe('ordinary readable-stream implementation', () => {
     const cancel = vi.fn(() => promises.resolve(undefined));
     const stream = new ReadableStreamImpl({ cancel }, {}, runtime);
     const controller = requireDefaultController(
-      ReadableStreamImpl.getState(stream).controller,
+      stream.state.controller,
     );
     vi.spyOn(runtime, 'clone').mockImplementation(() => { throw error; });
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const [branch1, branch2] = stream.teeDefault(true);
     const read1 = observe(branch1.getReader({}).read());
     const read2 = observe(branch2.getReader({}).read());
 
@@ -278,7 +269,7 @@ describe('readable-stream projection', () => {
       throw new Error('ReadableStream did not resolve to its implementation');
     }
     const stream = resolved.implementation as ReadableStreamImpl;
-    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const [branch1, branch2] = stream.teeDefault(true);
     const branch1Object = bindings.context.project(ReadableStreamImpl, branch1);
     const branch2Object = bindings.context.project(ReadableStreamImpl, branch2);
     const read1 = observeBrowletPromise(
@@ -290,7 +281,7 @@ describe('readable-stream projection', () => {
       readProjectedStream(branch2Object),
     );
     const controller = requireDefaultController(
-      ReadableStreamImpl.getState(stream).controller,
+      stream.state.controller,
     );
 
     controller.enqueue(() => undefined);
@@ -532,7 +523,7 @@ describe('readable byte-stream implementation', () => {
 
     expect(transfer).not.toHaveBeenCalled();
     expect(supplied.buffer.detached).toBe(true);
-    const controller = ReadableStreamImpl.getController(stream);
+    const controller = stream.controller;
     const request = requireByteController(controller as ReadableByteStreamControllerImpl).byobRequest;
     if (!request?.view) throw new Error('Missing BYOB request');
     (request.view as Uint8Array).set([9]);
@@ -689,7 +680,7 @@ function createReadableStream(
   stream: ReadableStreamImpl;
 } {
   const stream = new ReadableStreamImpl(source, {}, createRuntime());
-  const controller = ReadableStreamImpl.getState(stream).controller;
+  const controller = stream.state.controller;
   if (!ReadableStreamDefaultControllerImpl.is(controller)) {
     throw new Error('Readable stream has no default controller');
   }

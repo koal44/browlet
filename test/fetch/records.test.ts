@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
-
 import { BodyMixin } from '../../src/fetch/body';
 import { FetchParams } from '../../src/fetch/params';
 import { RequestImpl, RequestRecord } from '../../src/fetch/request';
 import { ResponseImpl, ResponseRecord } from '../../src/fetch/response';
 import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
-import {
-  getReadableStreamReader, readReadableStreamChunk, releaseReadableStreamReader,
-} from '../../src/streams/index';
 import { parseURL } from '../../src/url/url';
 import type { BindingContext } from '../../src/web-idl/projection';
 import { TestRealm } from '../web-idl/test-realm';
@@ -160,12 +156,12 @@ describe('Fetch record/API sharing', () => {
     expect(first.length).toBeNull();
     record.body = first;
     expect(response.body).toBe(first.stream);
-    const reader = getReadableStreamReader(first.stream);
+    const reader = first.stream.getDefaultReader();
     expect(mixin.unusable).toBe(true);
     expect(response.bodyUsed).toBe(false);
-    readReadableStreamChunk(reader, { chunkSteps() {}, closeSteps() {}, errorSteps() {} });
+    reader.readChunk({ chunkSteps() {}, closeSteps() {}, errorSteps() {} });
     expect(response.bodyUsed).toBe(true);
-    releaseReadableStreamReader(reader);
+    reader.release();
     const second = fixture.createBody();
     record.body = second;
     expect(response.body).toBe(second.stream);

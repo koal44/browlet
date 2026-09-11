@@ -1,76 +1,45 @@
 import type { Definition } from '../web-idl/declaration/index';
 import {
-  byteLengthQueuingStrategyIDL,
-} from './byte-length-queuing-strategy';
-import { countQueuingStrategyIDL } from './count-queuing-strategy';
-import { genericTransformStreamIDL } from './generic-transform-stream';
-import {
-  queuingStrategyIDL, queuingStrategyInitIDL, queuingStrategySizeIDL,
+  byteLengthQueuingStrategyIDL, countQueuingStrategyIDL, queuingStrategyIDL,
+  queuingStrategyInitIDL, queuingStrategySizeIDL,
 } from './queuing-strategy';
-import { readableByteStreamControllerIDL } from './readable-byte-stream-controller';
 import {
-  readableStreamBYOBReaderIDL,
+  readableByteStreamControllerIDL, readableStreamBYOBReaderIDL,
   readableStreamBYOBReaderIncludesGenericReaderIDL,
-  readableStreamBYOBReaderReadOptionsIDL,
-} from './readable-stream-byob-reader';
-import { readableStreamBYOBRequestIDL } from './readable-stream-byob-request';
-import { readableStreamDefaultControllerIDL } from './readable-stream-default-controller';
-import {
-  readableStreamDefaultReaderIDL,
-  readableStreamDefaultReaderIncludesGenericReaderIDL,
-  readableStreamReadResultIDL,
-} from './readable-stream-default-reader';
-import { readableStreamGenericReaderIDL } from './readable-stream-generic-reader';
-import {
-  readableStreamControllerIDL, readableStreamGetReaderOptionsIDL,
-  readableStreamIDL, readableStreamIteratorOptionsIDL,
-  readableStreamReaderIDL, readableStreamReaderModeIDL,
-  readableStreamTypeIDL, readableWritablePairIDL, streamPipeOptionsIDL,
-  underlyingSourceCancelCallbackIDL, underlyingSourceIDL,
-  underlyingSourcePullCallbackIDL, underlyingSourceStartCallbackIDL,
+  readableStreamBYOBReaderReadOptionsIDL, readableStreamBYOBRequestIDL,
+  readableStreamDefaultControllerIDL, readableStreamDefaultReaderIDL,
+  readableStreamDefaultReaderIncludesGenericReaderIDL, readableStreamReadResultIDL,
+  readableStreamGenericReaderIDL, readableStreamControllerIDL,
+  readableStreamGetReaderOptionsIDL, readableStreamIDL, readableStreamIteratorOptionsIDL,
+  readableStreamReaderIDL, readableStreamReaderModeIDL, readableStreamTypeIDL,
+  readableWritablePairIDL, streamPipeOptionsIDL, underlyingSourceCancelCallbackIDL,
+  underlyingSourceIDL, underlyingSourcePullCallbackIDL, underlyingSourceStartCallbackIDL,
 } from './readable-stream';
-import { transformStreamDefaultControllerIDL } from './transform-stream-default-controller';
 import {
   transformerCancelCallbackIDL, transformerFlushCallbackIDL, transformerIDL,
-  transformerStartCallbackIDL, transformerTransformCallbackIDL,
-  transformStreamIDL,
+  transformerStartCallbackIDL, transformerTransformCallbackIDL, transformStreamIDL,
+  transformStreamDefaultControllerIDL, genericTransformStreamIDL,
 } from './transform-stream';
 import {
-  underlyingSinkAbortCallbackIDL, underlyingSinkCloseCallbackIDL,
-  underlyingSinkIDL, underlyingSinkStartCallbackIDL,
-  underlyingSinkWriteCallbackIDL, writableStreamIDL,
+  underlyingSinkAbortCallbackIDL, underlyingSinkCloseCallbackIDL, underlyingSinkIDL,
+  underlyingSinkStartCallbackIDL, underlyingSinkWriteCallbackIDL, writableStreamIDL,
+  writableStreamDefaultControllerIDL, writableStreamDefaultWriterIDL,
 } from './writable-stream';
-import {
-  writableStreamDefaultControllerIDL,
-} from './writable-stream-default-controller';
-import {
-  writableStreamDefaultWriterIDL,
-} from './writable-stream-default-writer';
 
 export {
-  cancelReadableStream, cancelReadableStreamReader, closeReadableStream,
-  createReadableStream, createReadableStreamFromAsyncSequence,
-  createReadableStreamProxy, createReadableStreamWithByteReadingSupport,
-  enqueueReadableStream, errorReadableStream,
-  getReadableStreamBYOBRequestView, getReadableStreamDesiredSize,
-  getReadableStreamReader, isReadableStreamClosed,
-  isReadableStreamDisturbed, isReadableStreamErrored,
-  isReadableStreamLocked, isReadableStreamReadable,
-  pipeReadableStreamThrough, pipeReadableStreamTo,
-  pullReadableStreamFromBytes, readAllBytes, readableStreamNeedsMoreData,
-  readReadableStreamChunk, releaseReadableStreamReader,
-  setUpReadableStreamReader, teeReadableStream,
-} from './readable-stream-cross-spec';
-export type { ReadableStreamImpl } from './readable-stream';
-export { GenericTransformStreamMixin } from './generic-transform-stream';
-export { TransformStreamImpl } from './transform-stream';
+  extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategyRecord,
+} from './queuing-strategy';
 export {
-  abortWritableStream, closeWritableStream, createWritableStream,
-  errorWritableStream, getWritableStreamSignal, getWritableStreamWriter,
-  releaseWritableStreamWriter, setUpWritableStreamWriter,
-  writeWritableStreamChunk,
-} from './writable-stream-cross-spec';
-export type { WritableStreamImpl } from './writable-stream';
+  ReadableStreamImpl, ReadableStreamDefaultControllerImpl, ReadableStreamDefaultReaderImpl,
+  readableStreamReadResultIDL, type ReadableByteStreamControllerImpl, type ReadableStreamReadResult,
+} from './readable-stream';
+export {
+  GenericTransformStreamMixin, TransformStreamImpl, createReadableStreamProxy, type TransformerRecord,
+  type TransformStreamDefaultControllerImpl,
+} from './transform-stream';
+export {
+  WritableStreamImpl, type UnderlyingSink, type WritableStreamDefaultControllerImpl,
+} from './writable-stream';
 
 export const streamsIDLDefinitions: Definition[] = [
   queuingStrategySizeIDL,

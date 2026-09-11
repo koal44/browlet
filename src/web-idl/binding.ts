@@ -37,6 +37,7 @@ import type {
 import { createRejectedPromise, projectPromise } from './promise';
 import { getUnannotatedType } from './types';
 import { CapabilityRegistry } from './capability';
+import type { FunctionResultSteps } from './declaration/binding';
 
 export class RealmBinding {
   readonly definitions: DefinitionAssembly;
@@ -420,6 +421,28 @@ export class RealmBinding {
     });
     (initial.legacyFactoryFunctions ??= new Map()).set(id, function_);
     return function_;
+  }
+
+  /** Retain an attribute's returned function alongside its getter in this realm. */
+  getFunctionResult(
+    interface_: AssembledInterface,
+    attribute: AttributeMember,
+    length: number,
+    createSteps: () => FunctionResultSteps,
+  ): JSFunction {
+    return this.#getOrCreateMemberInitialObject(
+      'functionResult', interface_.definition, attribute,
+      () => {
+        const steps = createSteps();
+        return this.realm.createFunction((thisArgument, argumentsList) => {
+          try {
+            return Reflect.apply(steps, thisArgument, argumentsList);
+          } catch (exception) {
+            throw this.realizeException(exception);
+          }
+        }, { length, name: attribute.name });
+      },
+    );
   }
 
   getNamespaceObject(
@@ -1822,7 +1845,7 @@ type DefinitionInitialObjects = {
   unforgeablesObject?: object;
 };
 type MemberInitialObjects = Partial<Record<
-  'getter' | 'operation' | 'setter' | 'stringifier',
+  'functionResult' | 'getter' | 'operation' | 'setter' | 'stringifier',
   JSFunction
 >>;
 type StringifierEntry = AssembledInterfaceMember & {
