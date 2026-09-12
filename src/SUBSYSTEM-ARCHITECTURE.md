@@ -96,6 +96,30 @@ need no scheduling argument. Result conversion and projection remain Binding
 work. Native backend I/O stays outside this implementation contract and hands
 completion back through an explicit task or Promise import.
 
+`Promises` itself accepts a Promise constructor and a native settlement
+observer. It does not import JSRealm or JSRuntime; JSRealm composes it with its
+own observation operation. Standalone hosts can reuse the same small internal
+Promise implementation with native scheduling.
+
+Stylelet's options contain `document`, `element`, `tree`, and `runtime`
+capabilities. Its document `StyleletContext` normalizes DOM callbacks and
+retains the selected `RuntimeCaps` for promises, deferred execution, and DOM
+exception creation; it does not retain the options object. Standalone construction
+selects one complete native runtime provider when none is supplied. Cascades and
+stylesheets receive that existing context instead of a separate runtime argument;
+declarations and media lists receive the owner's runtime capabilities directly.
+Browlet composes it from the Document owner's existing Promise facility, HTML's
+cooperative parallel scheduling, and neutral DOMException requests. Initial,
+navigated, and author-constructed Documents supply those capabilities at construction.
+This embedding contract does not expose Binding Context or require standalone
+hosts to implement Browlet's unrelated runtime facilities.
+
+The HTML document parser receives its EventLoop and Runtime Context explicitly.
+Node stream completion only queues an HTML networking task; parser waits and
+load completion use `PromiseValue`. The public `Browlet.navigate()` bridges the
+finished internal operation to a native Promise for its Node caller. That
+outer Promise does not schedule the DOM lifecycle.
+
 This is an asynchronous dependency, not a requirement on all stored values.
 `BlobData` is runtime-neutral backing storage. A Blob or File implementation
 retains a runtime for reading that storage, including when constructed by

@@ -5,12 +5,10 @@ import {
 import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
-import type { Snapshot } from '../snapshot';
-import {
-  createDOMException, domExceptionName, throwDOMException,
-} from '../../web-idl/exceptions/dom-exception-core';
+import type { StyleletContext } from '../context';
+import type { PromiseValue, RuntimeCaps } from '../stylelet';
 import { CSSRuleListImpl } from './rule-list';
-import { SelectletCSSStyleRule } from './rules';
+import { CSSStyleRuleImpl } from './rules';
 import { StyleSheetImpl } from './stylesheet';
 import type { CSSOMString } from './string';
 
@@ -36,7 +34,6 @@ import type { CSSOMString } from './string';
  */
 export class CSSStyleSheetImpl
   extends StyleSheetImpl
-  implements CSSStyleSheet
 {
   readonly #rules: CSSRuleListImpl;
   #interpretedStyleSheet: InterpretedStyleSheet;
@@ -52,12 +49,12 @@ export class CSSStyleSheetImpl
   #disallowModification: boolean;
 
   constructor(
-    snapshot: Snapshot,
+    context: StyleletContext,
     options: CSSStyleSheetInit = {},
   ) {
-    super();
+    super(context.runtime);
 
-    const document = snapshot.document;
+    const document = context.document;
     const location = new URL(document.baseURI);
     this.#rules = new CSSRuleListImpl();
     this.#interpretedStyleSheet = { location, rules: [] };
@@ -86,12 +83,12 @@ export class CSSStyleSheetImpl
     this.setDisabled(disabled);
   }
 
-  static __create(
-    snapshot: Snapshot,
+  static create(
+    context: StyleletContext,
     properties: CSSStyleSheetProperties,
     rules?: InterpretedStyleSheet,
   ): CSSStyleSheetImpl {
-    const sheet = new CSSStyleSheetImpl(snapshot);
+    const sheet = new CSSStyleSheetImpl(context);
 
     sheet.setLocation(properties.location);
     sheet.setParentStyleSheet(properties.parentStyleSheet);
@@ -123,25 +120,25 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index > this.#rules.length) {
-      throwDOMException(
-        domExceptionName.indexSize,
+      throw this.runtime.createDOMException(
+        'IndexSizeError',
         `Index ${index} exceeds the rule-list length.`,
       );
     }
 
     const parsedRule = parseRule(rule);
     if (parsedRule === null || isImportRule(parsedRule)) {
-      throwDOMException(
-        domExceptionName.syntax,
+      throw this.runtime.createDOMException(
+        'SyntaxError',
         `Failed to parse the rule: ${rule}`,
       );
     }
 
-    const rulePair = createCSSRule(parsedRule);
+    const rulePair = createCSSRule(parsedRule, this.runtime);
     if (rulePair === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
-      throwDOMException(
-        domExceptionName.notSupported,
+      throw this.runtime.createDOMException(
+        'NotSupportedError',
         `The parsed rule is not supported: ${rule}`,
       );
     }
@@ -156,8 +153,8 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index >= this.#rules.length) {
-      throwDOMException(
-        domExceptionName.indexSize,
+      throw this.runtime.createDOMException(
+        'IndexSizeError',
         `Index ${index} does not identify a rule.`,
       );
     }
@@ -166,28 +163,34 @@ export class CSSStyleSheetImpl
     this.#rules.remove(index);
   }
 
-  replace(text: string): Promise<CSSStyleSheetImpl> {
+  replace(text: string): PromiseValue<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return Promise.reject(createDOMException(
-        domExceptionName.notAllowed,
+      return this.runtime.promises.reject(this.runtime.createDOMException(
+        'NotAllowedError',
         'This stylesheet cannot be replaced.',
       ));
     }
 
     this.#disallowModification = true;
 
-    return Promise.resolve().then(() => {
-      this.replaceRules(text);
-      return this;
-    }).finally(() => {
-      this.#disallowModification = false;
+    const result = this.runtime.promises.withResolvers<CSSStyleSheetImpl>();
+    this.runtime.runInParallel(() => {
+      try {
+        this.replaceRules(text);
+        result.resolve(this);
+      } catch (error) {
+        result.reject(error);
+      } finally {
+        this.#disallowModification = false;
+      }
     });
+    return result.promise;
   }
 
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
-      throwDOMException(
-        domExceptionName.notAllowed,
+      throw this.runtime.createDOMException(
+        'NotAllowedError',
         'This stylesheet cannot be replaced.',
       );
     }
@@ -197,29 +200,29 @@ export class CSSStyleSheetImpl
 
   // Internal operations ----------------------------------------------------
 
-  get __interpretedStyleSheet(): InterpretedStyleSheet {
+  get interpretedStyleSheet(): InterpretedStyleSheet {
     return this.#interpretedStyleSheet;
   }
 
-  __isAlternate(): boolean {
+  isAlternate(): boolean {
     return this.#alternate;
   }
 
-  __isConstructedFor(document: Document): boolean {
+  isConstructedFor(document: Document): boolean {
     return this.#constructed && this.#constructorDocument === document;
   }
 
-  __clearAssociation(): void {
+  clearAssociation(): void {
     this.setParentStyleSheet(null);
     this.setOwnerNode(null);
     this.#ownerRule = null;
   }
 
-  __setAssociatedMedia(media: CSSOMString): void {
+  setAssociatedMedia(media: CSSOMString): void {
     this.setMedia(media);
   }
 
-  __setAssociatedTitle(title: string): void {
+  setAssociatedTitle(title: string): void {
     this.setTitle(title);
   }
 
@@ -263,13 +266,13 @@ export class CSSStyleSheetImpl
     styleSheet: InterpretedStyleSheet,
   ): void {
     this.#interpretedStyleSheet = styleSheet;
-    this.#rules.replace(buildCSSRules(styleSheet));
+    this.#rules.replace(buildCSSRules(styleSheet, this.runtime));
   }
 
   private assertOriginClean(): void {
     if (!this.#originClean) {
-      throwDOMException(
-        domExceptionName.security,
+      throw this.runtime.createDOMException(
+        'SecurityError',
         'The stylesheet is not origin-clean.',
       );
     }
@@ -277,8 +280,8 @@ export class CSSStyleSheetImpl
 
   private assertModificationAllowed(): void {
     if (this.#disallowModification) {
-      throwDOMException(
-        domExceptionName.notAllowed,
+      throw this.runtime.createDOMException(
+        'NotAllowedError',
         'The stylesheet cannot currently be modified.',
       );
     }
@@ -296,25 +299,25 @@ type CSSStyleSheetProperties = {
   originClean: boolean;
 };
 
-function buildCSSRules(sheet: InterpretedStyleSheet): CSSRule[] {
+function buildCSSRules(sheet: InterpretedStyleSheet, runtime: RuntimeCaps): CSSRule[] {
   return sheet.rules.flatMap((rule) => {
-    const cssRule = createCSSRuleFromInterpretedRule(rule);
+    const cssRule = createCSSRuleFromInterpretedRule(rule, runtime);
     return cssRule === null ? [] : [cssRule];
   });
 }
 
-function createCSSRule(rule: SyntaxRule): RulePair | null {
+function createCSSRule(rule: SyntaxRule, runtime: RuntimeCaps): RulePair | null {
   const sheet = interpretStylesheet({ rules: [rule] });
   const interpretedRule = sheet.rules[0];
   if (interpretedRule === undefined) return null;
 
-  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule);
+  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, runtime);
   return cssRule === null ? null : { cssRule, interpretedRule };
 }
 
-function createCSSRuleFromInterpretedRule(rule: InterpretedRule): CSSRule | null {
+function createCSSRuleFromInterpretedRule(rule: InterpretedRule, runtime: RuntimeCaps): CSSRule | null {
   switch (rule.type) {
-    case 'style-rule': return new SelectletCSSStyleRule(rule);
+    case 'style-rule': return new CSSStyleRuleImpl(rule, runtime);
     case 'property-rule': return null;
   }
 }

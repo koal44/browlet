@@ -3,18 +3,27 @@ import { isText, type NodeImpl } from '../dom/nodes/node';
 import { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../../stylelet/engine/tree-scope';
+import type { RuntimeCaps as StyleletRuntimeCaps } from '../../stylelet/stylelet';
+import type { RuntimeContext } from '../../js-engine/runtime-context';
+import { createDOMException } from '../../web-idl/exceptions/dom-exception-core';
+import { runInParallel } from '../integration/scripting';
+
+/** Compose Stylelet with this owner's Promise queue and neutral exception requests. */
+export function createStyleletRuntime(runtime: RuntimeContext): StyleletRuntimeCaps {
+  return { promises: runtime.promises, runInParallel, createDOMException };
+}
 
 export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 
-  constructor(element: Element) {
+  constructor(element: ElementImpl, runtime: StyleletRuntimeCaps) {
     this.style = new CSSStyleDeclarationImpl({
       ownerNode: element,
-    });
+    }, runtime);
   }
 
   attributeChanged(value: string | null): void {
-    this.style.__attributeChanged('style', value);
+    this.style.attributeChanged('style', value);
   }
 }
 
@@ -47,7 +56,7 @@ export class LinkStyleMixin {
     this.#treeScopeResolver = treeScopeResolver;
   }
 
-  get sheet(): CSSStyleSheet | null {
+  get sheet(): CSSStyleSheetImpl | null {
     return this.#sheet;
   }
 
@@ -71,14 +80,14 @@ export class LinkStyleMixin {
 
     if (this.#sheet) {
       if (qualifiedName === 'media') {
-        this.#sheet.__setAssociatedMedia(
+        this.#sheet.setAssociatedMedia(
           this.#owner.getAttribute('media') ?? '',
         );
         return;
       }
 
       if (qualifiedName === 'title') {
-        this.#sheet.__setAssociatedTitle(
+        this.#sheet.setAssociatedTitle(
           this.#owner.getAttribute('title') ?? '',
         );
         return;

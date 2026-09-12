@@ -512,6 +512,13 @@ Stylelet to DOM objects. Browlet must not patch individual raw CSSOM returns,
 and Stylelet must not import Browlet implementations merely to manufacture
 platform objects.
 
+Exporting CSSOM implementations is intentional. Their `replace()` results are
+internal `PromiseValue` objects; hosts adapt them when exposing a platform API.
+Stylelet's runtime capabilities supply exception creation. Browlet supplies neutral
+exception requests so the active binding still selects the observable exception
+realm, including for borrowed methods. Standalone Stylelet uses native exceptions.
+Incomplete CSSOM projection does not prevent implementation/runtime integration.
+
 ## Type names at the boundary
 
 Name a platform interface's implementation `FooImpl`. Do not use `FooImpl` for

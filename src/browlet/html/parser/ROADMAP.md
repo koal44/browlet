@@ -5,8 +5,11 @@
 - `parse.ts` is the synchronous parse convenience over an existing or newly
   constructed Browlet Document.
 - `tree-adapter.ts` maps parse5 tree operations to Browlet DOM algorithms.
-- `document-parser.ts` owns streaming, parser-blocking scripts, `document.write`,
-  and style-sheet blocking at the host boundary.
+- `document-parser.ts` enters and resumes parsing through HTML networking tasks.
+  It retains the supplied EventLoop and Runtime Context; stylesheet waits and
+  script-handler completion use `PromiseValue`. Node's stream-finished callback
+  only queues document finalization back into HTML. `Browlet.navigate()` keeps
+  a native Promise at its outer Node API boundary.
 
 This is enough for Browlet's current document shell, but it is not yet a
 general HTML parser integration. In particular, the tree adapter's
@@ -96,14 +99,20 @@ runs. With no active speculative parser, it first performs a microtask
 checkpoint when the JavaScript execution-context stack is empty. Only after
 preparing the script does it spin the event loop when a style sheet blocks
 scripts or the script is not ready.
-`document-parser.ts` currently conflates those boundaries by unconditionally
-awaiting its style-sheet promise. Do not make the no-blocker path synchronous
-merely to avoid Node's nested-checkpoint rejection artifact. The future
-`script-runner.ts` must issue the explicit checkpoint under the specified
-condition, then suspend through a separate continuation only when blocking or
-readiness requires it. This is incomplete parser integration, not a Node
-accommodation; correcting it will not by itself reveal whether parsing was
-entered from an otherwise invisible V8 Promise job.
+`document-parser.ts` now explicitly requests the conditional checkpoint and
+resumes synchronous handlers in the current task. A blocked stylesheet wait or
+an internal asynchronous script result resumes through a later networking task.
+The stylesheet condition is checked again before execution, since a new blocker
+can appear before the continuation runs. Parsing starts in an HTML task rather
+than a Node Promise job; this does not expose arbitrary V8 execution contexts.
+
+The future `script-runner.ts` still needs the complete script-preparation and
+readiness model, parser nesting and abort handling, and the separate preparation
+point after restoring the insertion mode. Parse5 provides one script callback
+before popping the script element, where the checkpoint belongs. Actual external
+stylesheet loading is not connected to the Document's blocker set yet. CSSOM's constructed-sheet
+`replace()` is a separate operation, not that loading gate. These remain
+incomplete HTML integration, not Node accommodations.
 
 ## Removal condition
 

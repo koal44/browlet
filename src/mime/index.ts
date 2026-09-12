@@ -17,6 +17,7 @@ export {
   serializeMIMEType,
   serializeMIMETypeToBytes,
   type MIMEType,
+  type MIMETypeEssence,
   type SupportsMIMEType,
 } from './mime-type';
 

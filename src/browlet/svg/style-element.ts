@@ -8,6 +8,7 @@ import {
 import { impl } from '../../web-idl/index';
 import { withSVGStyleElementStub } from '../stubs';
 import { isSVGElement, SVGElementImpl } from './element';
+import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
 
 /*
  * [Exposed=Window]
@@ -21,7 +22,6 @@ import { isSVGElement, SVGElementImpl } from './element';
  */
 export class SVGStyleElementImpl
   extends withSVGStyleElementStub(SVGElementImpl)
-  implements SVGStyleElement
 {
   static readonly #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
@@ -38,7 +38,7 @@ export class SVGStyleElementImpl
     );
   }
 
-  get sheet(): CSSStyleSheet | null {
+  get sheet(): CSSStyleSheetImpl | null {
     return ElementImpl.getStyleSheet(this);
   }
 }

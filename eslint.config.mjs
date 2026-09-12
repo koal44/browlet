@@ -182,8 +182,8 @@ export default defineConfig(
   },
 
   {
-    files: ['src/streams/**/*.ts', 'src/encoding/**/*.ts', 'src/fetch/**/*.ts',
-      'src/browlet/integration/file/file-reader.ts'],
+    files: ['src/**/*.{ts,js,mjs,cjs}'],
+    ignores: ['src/**/scripts/**'],
     rules: {
       'no-restricted-globals': ['error',
         { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
@@ -199,6 +199,13 @@ export default defineConfig(
           message: 'Use the supplied Promise or task scheduling dependency.',
         },
       ],
+    },
+  },
+
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/scripts/**'],
+    rules: {
       '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true, checkThenables: true }],
     },
   },
@@ -212,7 +219,7 @@ export default defineConfig(
   },
 
   {
-    files: ['scripts/**/*.{js,mjs}', 'src/encoding/scripts/*.mjs', 'node-compat/**/*.mjs'],
+    files: ['scripts/**/*.{js,mjs}', 'src/**/scripts/**/*.{js,mjs}', 'node-compat/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

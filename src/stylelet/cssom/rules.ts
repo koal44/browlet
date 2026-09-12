@@ -1,9 +1,9 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
-import type { CSSStyleSheetImpl } from './css-stylesheet';
+import type { RuntimeCaps } from '../stylelet';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 
-export class SelectletCSSStyleRule implements CSSStyleRule {
+export class CSSStyleRuleImpl implements CSSStyleRule {
   readonly STYLE_RULE = 1 as const;
   readonly CHARSET_RULE = 2 as const;
   readonly IMPORT_RULE = 3 as const;
@@ -20,21 +20,21 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
 
   selectorText = '';
 
-  private _style: CSSStyleDeclarationImpl;
-  private _cssRules = new CSSRuleListImpl();
+  readonly #style: CSSStyleDeclarationImpl;
+  readonly #cssRules = new CSSRuleListImpl();
 
-  constructor(rule?: StyleRule) {
-    this._style = new CSSStyleDeclarationImpl({
+  constructor(rule: StyleRule | undefined, runtime: RuntimeCaps) {
+    this.#style = new CSSStyleDeclarationImpl({
       declarations: declarationBlock(rule?.block),
       parentRule: this,
       onChange: (declarations) => {
         if (rule) rule.block = [...declarations];
       },
-    });
+    }, runtime);
   }
 
   get cssRules(): CSSRuleListImpl {
-    return this._cssRules;
+    return this.#cssRules;
   }
 
   insertRule(_rule: string, _index?: number): number {
@@ -57,7 +57,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
     return null;
   }
 
-  get parentStyleSheet(): CSSStyleSheetImpl | null {
+  get parentStyleSheet(): null {
     return null;
   }
 
@@ -66,7 +66,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
   }
 
   get style(): CSSStyleDeclarationImpl {
-    return this._style;
+    return this.#style;
   }
 
   get styleMap(): StylePropertyMap {

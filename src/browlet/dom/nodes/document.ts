@@ -1,6 +1,15 @@
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
-import { Stylelet } from '../../../stylelet/stylelet';
-import type { TreeScopeResolver } from '../../style/integration';
+import type {
+  PromiseValue, PromiseValueCapability, RuntimeContext,
+} from '../../../js-engine/index';
+import {
+  defaultRuntimeCaps as defaultStyleletRuntimeCaps, Stylelet,
+  type RuntimeCaps as StyleletRuntimeCaps,
+} from '../../../stylelet/stylelet';
+import type { HTMLCollectionImpl } from './collections';
+import { createStyleletRuntime, type TreeScopeResolver } from '../../style/integration';
+import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
+import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
 import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
@@ -61,11 +70,12 @@ export function createDocument(
   options: DocumentConstructionOptions = {},
 ): DocumentImpl {
   const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
-  return nodeFactory.constructNode(DocumentImpl, [nodeFactory]);
+  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, options.styleletRuntime]);
 }
 
 export type DocumentConstructionOptions = {
   readonly nodeFactory?: DOMNodeFactory;
+  readonly styleletRuntime?: StyleletRuntimeCaps;
 };
 
 /*
@@ -155,19 +165,20 @@ export class DocumentImpl
   #readyForPostLoadTasks = false;
   #referrer = '';
   #stylelet: Stylelet | undefined;
+  readonly styleletRuntime: StyleletRuntimeCaps;
   readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   readonly #parentNodeMixin: ParentNodeMixin;
   readonly #treeScopeResolver: TreeScopeResolver;
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
   readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
-  #scriptBlockingStyleSheetsReady = Promise.resolve();
-  #resolveScriptBlockingStyleSheets: (() => void) | null = null;
+  #scriptBlockingStyleSheetsReady: PromiseValueCapability<void> | null = null;
   readonly #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
+    styleletRuntime: StyleletRuntimeCaps = defaultStyleletRuntimeCaps,
   ) {
     super(
       NodeType.Document,
@@ -179,6 +190,7 @@ export class DocumentImpl
     );
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
+    this.styleletRuntime = styleletRuntime;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => this.#customElementRegistry,
@@ -292,19 +304,19 @@ export class DocumentImpl
     return null;
   }
 
-  get styleSheets(): StyleSheetList {
+  get styleSheets(): StyleSheetListImpl {
     return this.#documentOrShadowRootMixin.styleSheets;
   }
 
-  get adoptedStyleSheets(): CSSStyleSheet[] {
+  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
-  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
-  get children(): HTMLCollectionOf<ElementImpl> {
+  get children(): HTMLCollectionImpl<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 
@@ -748,7 +760,7 @@ export class DocumentImpl
   }
 
   static getCSSEngine(document: DocumentImpl): Stylelet {
-    return document.#stylelet ??= new Stylelet(asDocument(document));
+    return document.#stylelet ??= new Stylelet(asDocument(document), { runtime: document.styleletRuntime });
   }
 
   static getTreeScopeResolver(
@@ -832,14 +844,6 @@ export class DocumentImpl
     document: DocumentImpl,
     ownerNode: ElementImpl,
   ): void {
-    if (document.#scriptBlockingStyleSheets.has(ownerNode)) return;
-
-    if (document.#scriptBlockingStyleSheets.size === 0) {
-      document.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
-        document.#resolveScriptBlockingStyleSheets = resolve;
-      });
-    }
-
     document.#scriptBlockingStyleSheets.add(ownerNode);
   }
 
@@ -850,16 +854,27 @@ export class DocumentImpl
     if (!document.#scriptBlockingStyleSheets.delete(ownerNode)) return;
     if (document.#scriptBlockingStyleSheets.size > 0) return;
 
-    document.#resolveScriptBlockingStyleSheets?.();
-    document.#resolveScriptBlockingStyleSheets = null;
+    const ready = document.#scriptBlockingStyleSheetsReady;
+    document.#scriptBlockingStyleSheetsReady = null;
+    ready?.resolve(undefined);
   }
 
-  static async waitForScriptBlockingStyleSheets(
+  static hasScriptBlockingStyleSheets(document: DocumentImpl): boolean {
+    return document.#scriptBlockingStyleSheets.size > 0;
+  }
+
+  static waitForScriptBlockingStyleSheets(
     document: DocumentImpl,
-  ): Promise<void> {
-    while (document.#scriptBlockingStyleSheets.size > 0) {
-      await document.#scriptBlockingStyleSheetsReady;
-    }
+    runtime: RuntimeContext,
+  ): PromiseValue<void> {
+    return runtime.promises.try(() => {
+      if (document.#scriptBlockingStyleSheets.size === 0) return;
+      const ready = document.#scriptBlockingStyleSheetsReady ??=
+        runtime.promises.withResolvers<void>();
+      return ready.promise.then(() =>
+        DocumentImpl.waitForScriptBlockingStyleSheets(document, runtime),
+      );
+    });
   }
 
 }
@@ -876,7 +891,9 @@ export const documentIDL = defineInterface({
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentImpl, {
-    constructWith: [nodeFactory],
+    constructWith: [nodeFactory, contextValue(
+      (context: { getRuntime(): RuntimeContext; }) => createStyleletRuntime(context.getRuntime()),
+    )],
   }),
   members: [
     ctor(),

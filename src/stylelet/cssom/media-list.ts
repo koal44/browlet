@@ -2,9 +2,7 @@ import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,
 } from '../values/media-query';
-import {
-  domExceptionName, throwDOMException,
-} from '../../web-idl/exceptions/dom-exception-core';
+import type { RuntimeCaps } from '../stylelet';
 import type { CSSOMString } from './string';
 
 /*
@@ -22,8 +20,10 @@ export class MediaListImpl implements MediaList {
 
   #queries: MediaQuery[] = [];
   #indexedLength = 0;
+  readonly #runtime: RuntimeCaps;
 
-  constructor(text: CSSOMString | null = '') {
+  constructor(text: CSSOMString | null, runtime: RuntimeCaps) {
+    this.#runtime = runtime;
     this.mediaText = text;
   }
 
@@ -65,8 +65,8 @@ export class MediaListImpl implements MediaList {
     this.#queries = this.#queries.filter((item) => !mediaQueriesEqual(item, query));
 
     if (this.#queries.length === length) {
-      throwDOMException(
-        domExceptionName.notFound,
+      throw this.#runtime.createDOMException(
+        'NotFoundError',
         `"${medium}" was not found in the media list.`,
       );
     }

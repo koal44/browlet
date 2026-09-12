@@ -6,6 +6,9 @@ import {
 import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
+import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
+import type { CSSStyleDeclarationImpl } from '../../../stylelet/cssom/declaration';
+import type { HTMLCollectionImpl } from './collections';
 import {
   ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
@@ -125,7 +128,7 @@ export class ElementImpl
     return this.#namespaceURI;
   }
 
-  get children(): HTMLCollectionOf<ElementImpl> {
+  get children(): HTMLCollectionImpl<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 
@@ -331,12 +334,12 @@ export class ElementImpl
     element.#attributeChanged(attribute.localName, null, attribute.value);
   }
 
-  static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
+  static getInlineStyle(element: ElementImpl): CSSStyleDeclarationImpl {
     return (element.#inlineStyleMixin ??=
-      new ElementCSSInlineStyleMixin(element)).style;
+      new ElementCSSInlineStyleMixin(element, NodeImpl.getNodeDocument(element)!.styleletRuntime)).style;
   }
 
-  static getStyleSheet(element: ElementImpl): CSSStyleSheet | null {
+  static getStyleSheet(element: ElementImpl): CSSStyleSheetImpl | null {
     return element.#linkStyleMixin?.sheet ?? null;
   }
 

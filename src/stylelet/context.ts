@@ -1,11 +1,13 @@
 import { escapeRegExp } from '../infra/strings';
 import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
+import { Promises } from '../js-engine/promises';
+import type { RuntimeCaps, StyleletOptions } from './stylelet';
 
-export class Snapshot {
+export class StyleletContext {
   readonly document: Document;
   readonly isHtml: boolean;
-  readonly options: Readonly<SnapshotOptions>;
+  readonly runtime: RuntimeCaps;
 
   readonly documentDesignMode: (document: Document) => string | undefined;
   readonly treeVersion: (root: Node) => number | undefined;
@@ -43,15 +45,14 @@ export class Snapshot {
   readonly #caseSensitiveTokenRegexes = new Map<string, RegExp>();
   readonly #caseInsensitiveTokenRegexes = new Map<string, RegExp>();
 
-  constructor(document: Document, options: SnapshotOptions = {}) {
-    const { caps = {} } = options;
-    const documentCaps = caps.document;
-    const elementCaps = caps.element;
-    const treeCaps = caps.tree;
+  constructor(document: Document, options: StyleletOptions = {}) {
+    const documentCaps = options.document;
+    const elementCaps = options.element;
+    const treeCaps = options.tree;
 
     this.document = document;
     this.isHtml = document.contentType.includes('/html');
-    this.options = options;
+    this.runtime = options.runtime ?? defaultRuntimeCaps;
 
     this.documentDesignMode = documentCaps?.designMode ?? defaultDocumentDesignMode;
     this.treeVersion = treeCaps?.version ?? defaultTreeVersion;
@@ -131,42 +132,19 @@ export class Snapshot {
   }
 }
 
-export type SnapshotOptions = {
-  caps?: StyleletCaps;
-};
-
-export type StyleletCaps = {
-  document?: DocumentCaps;
-  element?: ElementCaps;
-  tree?: TreeCaps;
-};
-
-export type DocumentCaps = {
-  designMode?: (document: Document) => string | undefined;
-};
-
-export type ElementCaps = {
-  getId?: (element: Element) => string;
-  getClass?: (element: Element) => string;
-  getLocalName?: (element: Element) => string;
-  getNamespaceURI?: (element: Element) => string | null;
-  getAttribute?: (element: Element, name: string) => string | null;
-  getAttributeNS?: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => string | null;
-  hasAttribute?: (element: Element, name: string) => boolean;
-  hasAttributeNS?: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => boolean;
-  hasCustomState?: (element: Element, name: string) => boolean;
-};
-
-export type TreeCaps = {
-  version?: (root: Node) => number | undefined;
+/*
+ * Standalone Stylelet uses the native environment's queue. StyleletContext selects
+ * this complete provider when no runtime is supplied at construction.
+ */
+export const defaultRuntimeCaps: RuntimeCaps = {
+  // eslint-disable-next-line no-restricted-globals -- This provider deliberately uses native Promise allocation and scheduling.
+  promises: new Promises(Promise, (promise, fulfilled, rejected) => {
+    void promise.then(fulfilled, rejected).catch((error: unknown) => {
+      setTimeout(() => { throw error; }, 0);
+    });
+  }),
+  runInParallel: (steps) => { setTimeout(steps, 0); },
+  createDOMException: (name, message = '') => new DOMException(message, name),
 };
 
 function getOrCreateRegex(

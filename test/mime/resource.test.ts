@@ -1,4 +1,10 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
+
+import { jsRuntime, type PromiseValue } from '../../src/js-engine/index';
+import { createBindings } from '../../src/web-idl/index';
+import { createRuntime } from '../js-engine/runtime-fixture';
+import { TestRealm } from '../web-idl/test-realm';
 
 import {
   createResourceMetadata,
@@ -12,6 +18,7 @@ import {
 } from '../../src/mime';
 
 const encoder = new TextEncoder();
+const runtime = createRuntime();
 
 describe('MIME Sniffing §5.2: interpreting resource metadata', () => {
   for (const value of [
@@ -95,15 +102,58 @@ describe('MIME Sniffing §5.2: interpreting resource metadata', () => {
 });
 
 describe('MIME Sniffing §5.3: reading the resource header', () => {
+  it('completes collection through the supplied runtime queue', async () => {
+    const queue = jsRuntime.createMicrotaskQueue();
+    const runtime = createRuntime(new TestRealm({ microtaskQueue: queue }));
+    const source = runtime.promises.withResolvers<Uint8Array | null>();
+    const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
+    const bytes = Uint8Array.of(4, 5);
+    const headers: Uint8Array[] = [];
+    const errors: unknown[] = [];
+    const readBytes = vi.fn<ReadResourceBytes>()
+      .mockReturnValueOnce(source.promise)
+      .mockImplementation(() => runtime.promises.resolve(null));
+
+    void readResourceHeader(metadata, readBytes, runtime).then(
+      (header) => { headers.push(header); },
+      (error: unknown) => { errors.push(error); },
+    );
+    source.resolve(bytes);
+    expect(metadata.resourceHeader).toBeUndefined();
+    queue.performMicrotaskCheckpoint();
+    // Stock Node's ambient backend may finish after control returns to Node.
+    if (queue.kind === 'ambient') await nextTurn();
+
+    expect(errors).toEqual([]);
+    expect(headers).toEqual([bytes]);
+    expect(metadata.resourceHeader).toBe(headers[0]);
+  });
+
+  it('realizes invalid-reader failures in the binding realm', async () => {
+    const realm = new TestRealm();
+    const context = createBindings([]).register(realm).context;
+    const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
+    const runtime = createRuntime(realm);
+    const failure = await observe(readResourceHeader(
+      metadata,
+      () => runtime.promises.resolve(new Uint8Array()),
+      runtime,
+    )).catch((error: unknown) => context.realizeException(error));
+
+    expect(failure).toBeInstanceOf(realm.intrinsics.rangeError);
+    expect(failure).toHaveProperty('message',
+      'A resource byte source must return between 1 and the requested number of bytes');
+  });
+
   it('reads incrementally through end-of-resource', async () => {
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
     const reads = [Uint8Array.of(1, 2), Uint8Array.of(3), null];
     const maximums: number[] = [];
 
-    const header = await readResourceHeader(metadata, (max) => {
+    const header = await observe(readResourceHeader(metadata, (max) => {
       maximums.push(max);
-      return Promise.resolve(reads.shift() ?? null);
-    });
+      return runtime.promises.resolve(reads.shift() ?? null);
+    }, runtime));
 
     expect([...header]).toEqual([1, 2, 3]);
     expect(maximums).toEqual([1445, 1443, 1442]);
@@ -120,13 +170,13 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
     let offset = 0;
     const readBytes = vi.fn<ReadResourceBytes>((max) => {
       const length = Math.min(max, 127, source.length - offset);
-      if (length === 0) return Promise.resolve(null);
+      if (length === 0) return runtime.promises.resolve(null);
       const chunk = source.slice(offset, offset + length);
       offset += length;
-      return Promise.resolve(chunk);
+      return runtime.promises.resolve(chunk);
     });
 
-    const header = await readResourceHeader(metadata, readBytes);
+    const header = await observe(readResourceHeader(metadata, readBytes, runtime));
 
     expect(header).toEqual(source.slice(0, maximumResourceHeaderLength));
     expect(offset).toBe(maximumResourceHeaderLength);
@@ -136,10 +186,10 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
   it('lets the host close the read window before end-of-resource', async () => {
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
     const readBytes = vi.fn<ReadResourceBytes>()
-      .mockResolvedValueOnce(Uint8Array.of(1, 2, 3))
-      .mockResolvedValueOnce(null);
+      .mockReturnValueOnce(runtime.promises.resolve(Uint8Array.of(1, 2, 3)))
+      .mockReturnValueOnce(runtime.promises.resolve(null));
 
-    expect([...await readResourceHeader(metadata, readBytes)])
+    expect([...await observe(readResourceHeader(metadata, readBytes, runtime))])
       .toEqual([1, 2, 3]);
     expect(readBytes).toHaveBeenCalledTimes(2);
   });
@@ -147,14 +197,15 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
   it('determines and reuses the resource header only once', async () => {
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
     const readBytes = vi.fn<ReadResourceBytes>()
-      .mockResolvedValueOnce(Uint8Array.of(1))
-      .mockResolvedValueOnce(null);
+      .mockReturnValueOnce(runtime.promises.resolve(Uint8Array.of(1)))
+      .mockReturnValueOnce(runtime.promises.resolve(null));
 
-    const first = await readResourceHeader(metadata, readBytes);
-    const second = await readResourceHeader(
+    const first = await observe(readResourceHeader(metadata, readBytes, runtime));
+    const second = await observe(readResourceHeader(
       metadata,
-      () => Promise.reject(new Error('the source must not be read again')),
-    );
+      () => runtime.promises.reject(new Error('the source must not be read again')),
+      runtime,
+    ));
 
     expect(second).toBe(first);
     expect(readBytes).toHaveBeenCalledTimes(2);
@@ -165,10 +216,11 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
     const chunk = Uint8Array.of(1, 2, 3);
     const reads = [chunk, null];
 
-    const header = await readResourceHeader(
+    const header = await observe(readResourceHeader(
       metadata,
-      () => Promise.resolve(reads.shift() ?? null),
-    );
+      () => runtime.promises.resolve(reads.shift() ?? null),
+      runtime,
+    ));
     chunk[0] = 9;
 
     expect([...header]).toEqual([1, 2, 3]);
@@ -178,10 +230,22 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
     const cancellation = new Error('cancelled');
 
-    await expect(readResourceHeader(
+    await expect(observe(readResourceHeader(
       metadata,
-      () => Promise.reject(cancellation),
-    )).rejects.toBe(cancellation);
+      () => runtime.promises.reject(cancellation),
+      runtime,
+    ))).rejects.toBe(cancellation);
+    expect(metadata.resourceHeader).toBeUndefined();
+  });
+
+  it.each(['first', 'later'] as const)('rejects when the %s source read throws synchronously', async (which) => {
+    const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
+    const failure = new Error('source failed');
+    const readBytes = vi.fn<ReadResourceBytes>(() => { throw failure; });
+    if (which === 'later') readBytes.mockReturnValueOnce(runtime.promises.resolve(Uint8Array.of(1)));
+
+    const result = readResourceHeader(metadata, readBytes, runtime);
+    await expect(observe(result)).rejects.toBe(failure);
     expect(metadata.resourceHeader).toBeUndefined();
   });
 
@@ -190,21 +254,27 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
       kind: 'other',
       mimeType: undefined,
     });
-    await expect(readResourceHeader(
+    await expect(observe(readResourceHeader(
       emptyMetadata,
-      () => Promise.resolve(new Uint8Array()),
-    )).rejects.toThrow(RangeError);
+      () => runtime.promises.resolve(new Uint8Array()),
+      runtime,
+    ))).rejects.toThrow(RangeError);
 
     const oversizedMetadata = createResourceMetadata({
       kind: 'other',
       mimeType: undefined,
     });
-    await expect(readResourceHeader(
+    await expect(observe(readResourceHeader(
       oversizedMetadata,
-      (max) => Promise.resolve(new Uint8Array(max + 1)),
-    )).rejects.toThrow(RangeError);
+      (max) => runtime.promises.resolve(new Uint8Array(max + 1)),
+      runtime,
+    ))).rejects.toThrow(RangeError);
   });
 });
+
+function observe<T>(value: PromiseValue<T>): Promise<T> {
+  return new Promise((resolve, reject) => { value.observe(resolve, reject); });
+}
 
 function requiredMIMEType(input: string): MIMEType {
   const mimeType = parseMIMEType(input);

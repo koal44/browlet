@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
-import { Stylelet } from '../../../../src/stylelet/stylelet';
+import {
+  defaultRuntimeCaps, Stylelet, type PromiseValue,
+} from '../../../../src/stylelet/stylelet';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('StyleSheetImpl', () => {
@@ -17,7 +19,7 @@ describe('StyleSheetImpl', () => {
 
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
-    const media = new MediaListImpl('screen');
+    const media = new MediaListImpl('screen', defaultRuntimeCaps);
     const sheet = createStyleSheet({
       baseURL: 'https://example.com/css/',
       media,
@@ -46,7 +48,7 @@ describe('CSSStyleSheetImpl', () => {
   it('creates a stylesheet from specified properties', () => {
     const document = createBrowletDocument();
     const stylelet = new Stylelet(document);
-    const sheet = CSSStyleSheetImpl.__create(stylelet.snapshot, {
+    const sheet = CSSStyleSheetImpl.create(stylelet.context, {
       location: 'https://example.com/style.css',
       parentStyleSheet: null,
       ownerNode: null,
@@ -183,18 +185,22 @@ describe('CSSStyleSheetImpl', () => {
     const replacement = sheet.replace('.example {}');
 
     expect(() => sheet.insertRule('.other {}')).toThrowError(DOMException);
-    await expect(replacement).resolves.toBe(sheet);
+    await expect(observe(replacement)).resolves.toBe(sheet);
     expect(sheet.cssRules).toHaveLength(1);
   });
 });
 
 function createStyleSheet(
   options: CSSStyleSheetInit = {},
-): CSSStyleSheet {
+): CSSStyleSheetImpl {
   const document = createBrowletDocument();
   Object.defineProperty(document, 'baseURI', {
     value: 'https://example.com/document/',
   });
 
   return new Stylelet(document).createStyleSheet(options);
+}
+
+function observe<T>(value: PromiseValue<T>): Promise<T> {
+  return new Promise((resolve, reject) => { value.observe(resolve, reject); });
 }

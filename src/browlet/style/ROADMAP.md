@@ -8,6 +8,11 @@
 - Stylelet exports those mixins' neutral declarations through
   `styleletIDLDefinitions`; Browlet contributes only their host behavior and
   assembles the declarations into its Web IDL bindings.
+- Documents supply Stylelet's `RuntimeCaps` at construction; `StyleletContext`
+  retains them alongside its normalized DOM access hooks. CSSOM replacement uses the
+  owner's Promise facility and HTML's cooperative parallel scheduling; all
+  Stylelet DOM exceptions use the host's factory. The standalone host uses
+  native scheduling and DOMException without loading Browlet's engine runtime.
 
 ## Next boundary change
 
@@ -20,7 +25,9 @@
   HTML; keep semantic sheet/declaration mutation in Stylelet.
 - [ ] Finish projecting `CSSStyleSheet` and the CSSOM objects it exposes through
   the active host's Web IDL binding. Stylelet retains their implementation
-  state and mutation behavior.
+  state and mutation behavior. Verify the declared API surface as well as
+  behavior: ambient `implements` clauses do not check the implementation's
+  converted values, and declarations alone do not establish conformance.
 - [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets` once
   those platform objects exist. Web IDL already supports observable arrays;
   `TreeScope` should retain only the backing collection and CSSOM mutation
@@ -28,9 +35,9 @@
   factory into Web IDL and remove `src/infra/observable-array.ts`.
 - [ ] Exercise CSSOM exception and promise boundaries through the projected
   APIs, including borrowed cross-realm calls. Realize requested DOMExceptions
-  in the operation's realm and preserve author-thrown exceptions. Reassess
-  direct native error and promise creation as each interface is bound; the
-  generic Web IDL exception-request helpers can remain where needed.
+  in the operation's realm and preserve author-thrown exceptions. The runtime
+  and exception-request providers are connected; complete CSSOM projection is
+  still required to exercise this author-facing boundary.
 
 The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
 style/link processing rather than one WHATWG HTML section. This file records

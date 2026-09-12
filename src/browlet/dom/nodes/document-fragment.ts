@@ -7,6 +7,7 @@ import { NodeImpl, NodeType } from './node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
+import type { HTMLCollectionImpl } from './collections';
 
 /*
  * [Exposed=Window]
@@ -35,7 +36,7 @@ export class DocumentFragmentImpl
     this.#host = host;
   }
 
-  get children(): HTMLCollectionOf<ElementImpl> {
+  get children(): HTMLCollectionImpl<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 

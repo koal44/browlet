@@ -8,6 +8,7 @@ import {
 import { impl } from '../../../../web-idl/index';
 import { withHTMLStyleElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
+import type { CSSStyleSheetImpl } from '../../../../stylelet/cssom/css-stylesheet';
 
 /*
  * [Exposed=Window]
@@ -24,7 +25,6 @@ import { HTMLElementImpl } from '../html-element';
  */
 export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
-  implements HTMLStyleElement
 {
   static readonly #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
@@ -41,7 +41,7 @@ export class HTMLStyleElementImpl
     );
   }
 
-  get sheet(): CSSStyleSheet | null {
+  get sheet(): CSSStyleSheetImpl | null {
     return ElementImpl.getStyleSheet(this);
   }
 }

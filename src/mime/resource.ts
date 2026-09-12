@@ -1,4 +1,7 @@
 import { isomorphicDecode } from '../js-engine/byte-string';
+import type { PromiseValue } from '../js-engine/promises';
+import type { RuntimeContext } from '../js-engine/runtime-context';
+import { RangeError } from '../js-engine/simple-exception';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
 
@@ -36,10 +39,11 @@ export type ResourceMetadataOptions = {
  * Read up to max bytes from the resource without consuming bytes beyond
  * that bound. Resolve null when the resource ends or the host's reasonable
  * read interval elapses. Reject to propagate cancellation or a source error.
+ * The loader imports native I/O results through its runtime's promise facility.
  */
 export type ReadResourceBytes = (
   max: number,
-) => Promise<Uint8Array | null>;
+) => PromiseValue<Uint8Array | null>;
 
 export function createResourceMetadata(
   source: SuppliedMIMETypeSource,
@@ -99,34 +103,42 @@ export function detectSuppliedMIMEType(
  * The source controls end-of-input and the user agent's reasonable-time
  * decision by resolving null. The maximum passed to each read prevents the
  * MIME layer from consuming body bytes beyond the 1445-byte header.
+ * Collection continuations use the supplied runtime's promise queue.
  *
  * https://mimesniff.spec.whatwg.org/#read-the-resource-header
  */
 // SPEC_MISMATCH: read the resource header(resource) -> void
-export async function readResourceHeader(
+export function readResourceHeader(
   metadata: ResourceMetadata,
   readBytes: ReadResourceBytes,
-): Promise<Uint8Array> {
-  if (metadata.resourceHeader !== undefined) return metadata.resourceHeader;
+  runtime: RuntimeContext,
+): PromiseValue<Uint8Array> {
+  return runtime.promises.try(() => {
+    if (metadata.resourceHeader !== undefined) return metadata.resourceHeader;
 
-  const buffer = new Uint8Array(maximumResourceHeaderLength);
-  let length = 0;
+    const buffer = new Uint8Array(maximumResourceHeaderLength);
+    let length = 0;
+    return readNext();
 
-  while (length < buffer.length) {
-    const max = buffer.length - length;
-    const chunk = await readBytes(max);
-    if (chunk === null) break;
-    if (chunk.length === 0 || chunk.length > max) {
-      throw new RangeError(
-        'A resource byte source must return between 1 and the requested number of bytes',
-      );
+    function readNext(): PromiseValue<Uint8Array> {
+      const max = buffer.length - length;
+      return runtime.promises.try(() => readBytes(max)).then((chunk) => {
+        if (chunk !== null) {
+          if (chunk.length === 0 || chunk.length > max) {
+            throw new RangeError(
+              'A resource byte source must return between 1 and the requested number of bytes',
+            );
+          }
+          buffer.set(chunk, length);
+          length += chunk.length;
+          if (length < buffer.length) return readNext();
+        }
+
+        metadata.resourceHeader = buffer.slice(0, length);
+        return metadata.resourceHeader;
+      });
     }
-    buffer.set(chunk, length);
-    length += chunk.length;
-  }
-
-  metadata.resourceHeader = buffer.slice(0, length);
-  return metadata.resourceHeader;
+  });
 }
 
 export const maximumResourceHeaderLength = 1445;

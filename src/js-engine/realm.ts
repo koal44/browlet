@@ -230,7 +230,10 @@ export class JSRealm {
       ) as typeof TypeError,
       uriError: URIError_,
     };
-    this.promises = new Promises(this);
+    this.promises = new Promises(
+      this.intrinsics.promise.constructor,
+      (promise, fulfilled, rejected) => { this.observePromise(promise, fulfilled, rejected); },
+    );
     this.#callableFunctionFactory = jsRuntime.runInContext(
       callableFunctionFactorySource,
       this.#context,

@@ -79,6 +79,7 @@ export class BlobData {
     return new BlobData(segments);
   }
 
+  // eslint-disable-next-line no-restricted-syntax -- Backing I/O uses Node's queue; Blob.stream() queues delivery to the owning runtime.
   async read(start = 0, length = this.#size - start): Promise<Uint8Array> {
     requireRange(this.#size, start, length);
     const bytes = new Uint8Array(length);
@@ -95,6 +96,7 @@ export class BlobData {
       if (overlapStart < overlapEnd) {
         const sourceStart = segment.start + overlapStart - position;
         const sourceLength = overlapEnd - overlapStart;
+        // eslint-disable-next-line no-restricted-syntax -- Byte assembly stays on Node's queue without updating platform state.
         const chunk = await segment.source.read(sourceStart, sourceLength);
         if (chunk.length !== sourceLength) {
           throw new RangeError(
@@ -197,6 +199,7 @@ class MemoryBlobByteSource implements BlobByteSource {
 
   read(start: number, length: number): Promise<Uint8Array> {
     requireRange(this.size, start, length);
+    // eslint-disable-next-line no-restricted-globals -- Memory reads share the native Promise contract of asynchronous backing sources.
     return Promise.resolve(this.#bytes.slice(start, start + length));
   }
 }

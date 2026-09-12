@@ -9,7 +9,7 @@ import {
   type FormStateElement,
 } from '../../infra/selector-dom';
 import { XML_NAMESPACE } from '../../infra/index';
-import type { Snapshot } from '../snapshot';
+import type { StyleletContext } from '../context';
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,
 } from './runtimeCache';
@@ -29,18 +29,18 @@ export function nextDescendant(root: Element, node: Element): Element | null {
   return null;
 }
 
-export function checkId(e: Element, id: string, snap: Snapshot): boolean {
-  return snap.getId(e) === id;
+export function checkId(e: Element, id: string, context: StyleletContext): boolean {
+  return context.getId(e) === id;
 }
 
-export function checkClass(e: Element, cls: string, snap: Snapshot): boolean {
-  return snap.getClassRegex(cls).test(snap.getClass(e));
+export function checkClass(e: Element, cls: string, context: StyleletContext): boolean {
+  return context.getClassRegex(cls).test(context.getClass(e));
 }
 
-export function checkTag(e: Element, lowerTag: string, tag: string, snap: Snapshot): boolean {
+export function checkTag(e: Element, lowerTag: string, tag: string, context: StyleletContext): boolean {
   // perf if lowerTag==tag, but only caller already checks, so no null lowerTag case here
-  const localName = snap.getLocalName(e);
-  return snap.isHtml && snap.isHtmlElement(e) ? localName === lowerTag : localName === tag;
+  const localName = context.getLocalName(e);
+  return context.isHtml && context.isHtmlElement(e) ? localName === lowerTag : localName === tag;
 }
 
 export function hasAttr(
@@ -49,15 +49,15 @@ export function hasAttr(
   name: string,
   htmlName: string | null, // null implies same as name
   hasColonName: boolean,
-  snap: Snapshot
+  context: StyleletContext
 ): boolean {
   // Fast path for non-namespaced attributes without colons, which are common in HTML and SVG
   if (namespaceURI === null && !hasColonName) {
-    return snap.hasAttribute(e, name);
+    return context.hasAttribute(e, name);
   }
 
   const attrs = e.attributes;
-  const expected = htmlName !== null && snap.isHtml && snap.isHtmlElement(e) ? htmlName : name;
+  const expected = htmlName !== null && context.isHtml && context.isHtmlElement(e) ? htmlName : name;
 
   if (namespaceURI === undefined) {
     for (const attr of attrs) {
@@ -88,22 +88,22 @@ export function matchAttribute(
   expected: string,
   htmlExpected: string,
   sensitivity: number,
-  snap: Snapshot
+  context: StyleletContext
 ): boolean {
   if (namespaceURI === null && !hasColonName) {
-    const attrValue = snap.getAttribute(e, name);
+    const attrValue = context.getAttribute(e, name);
 
-    const insensitive = sensitivity === 1 || (sensitivity === 2 && snap.isHtml && snap.isHtmlElement(e));
+    const insensitive = sensitivity === 1 || (sensitivity === 2 && context.isHtml && context.isHtmlElement(e));
     return attrValue !== null &&
-      matchAttrValueOp(attrValue, pattern, expected, htmlExpected, insensitive, snap);
+      matchAttrValueOp(attrValue, pattern, expected, htmlExpected, insensitive, context);
   }
 
   let expectedName = name;
   let insensitive = sensitivity === 1;
 
   const needsHtmlInfo = htmlName !== null || sensitivity === 2;
-  if (needsHtmlInfo && snap.isHtml) {
-    const isHtml = snap.isHtmlElement(e);
+  if (needsHtmlInfo && context.isHtml) {
+    const isHtml = context.isHtmlElement(e);
 
     if (isHtml) {
       if (htmlName !== null) expectedName = htmlName;
@@ -117,7 +117,7 @@ export function matchAttribute(
     for (const attr of attrs) {
       if (
         attr.localName === expectedName &&
-        matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
+        matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, context)
       ) {
         return true;
       }
@@ -130,7 +130,7 @@ export function matchAttribute(
     if (
       attr.localName === expectedName &&
       attr.namespaceURI === namespaceURI &&
-      matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
+      matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, context)
     ) {
       return true;
     }
@@ -145,7 +145,7 @@ function matchAttrValueOp(
   expected: string,
   htmlExpected: string,
   insensitive: boolean,
-  snap: Snapshot
+  context: StyleletContext
 ): boolean {
   // For ASCII-insensitive matching, avoid asciiLower(attrValue) in the hot path.
   if (insensitive) {
@@ -156,8 +156,8 @@ function matchAttrValueOp(
       case '|': return asciiDashMatch(attrValue, htmlExpected);
       case '*': return asciiIncludes(attrValue, htmlExpected);
       case '~': return hasAsciiWhitespaceToken(attrValue, htmlExpected);
-      case '~R': return snap.getCssTokenRegex(expected, true).test(attrValue);
-      default: return snap.getCachedRegex(pattern, true /* ignoreCase */).test(attrValue);
+      case '~R': return context.getCssTokenRegex(expected, true).test(attrValue);
+      default: return context.getCachedRegex(pattern, true /* ignoreCase */).test(attrValue);
     }
   }
 
@@ -167,7 +167,7 @@ function matchAttrValueOp(
     case '$': return attrValue.endsWith(expected);
     case '*': return attrValue.includes(expected);
     case '~': return hasWhitespaceToken(attrValue, expected);
-    case '~R': return snap.getCssTokenRegex(expected, false).test(attrValue);
+    case '~R': return context.getCssTokenRegex(expected, false).test(attrValue);
     case '|':
       return attrValue === expected ||
         (
@@ -176,24 +176,24 @@ function matchAttrValueOp(
           attrValue.startsWith(expected)
         );
 
-    default: return snap.getCachedRegex(pattern, false /* ignoreCase */).test(attrValue);
+    default: return context.getCachedRegex(pattern, false /* ignoreCase */).test(attrValue);
   }
 }
 
 // :scope
-export function isScope(e: Element, snap: Snapshot): boolean {
+export function isScope(e: Element, context: StyleletContext): boolean {
   // This is the default for matching without an explicit scoping root. A
   // future match context must override it for @scope and shadow-tree matching.
-  return e === snap.root;
+  return e === context.root;
 }
 
 // :root
-export function isRoot(e: Element, snap: Snapshot): boolean {
-  return e === snap.root;
+export function isRoot(e: Element, context: StyleletContext): boolean {
+  return e === context.root;
 }
 
 // :empty
-export function isEmpty(e: Element, _snap: Snapshot): boolean {
+export function isEmpty(e: Element, _context: StyleletContext): boolean {
   let n = e.firstChild;
 
   while (n && n.nodeType !== 1 && n.nodeType !== 3) {
@@ -204,28 +204,28 @@ export function isEmpty(e: Element, _snap: Snapshot): boolean {
 }
 
 // :first-child
-export function isFirstChild(e: Element, _snap: Snapshot): boolean {
+export function isFirstChild(e: Element, _context: StyleletContext): boolean {
   return !e.previousElementSibling;
 }
 
 // :last-child
-export function isLastChild(e: Element, _snap: Snapshot): boolean {
+export function isLastChild(e: Element, _context: StyleletContext): boolean {
   return !e.nextElementSibling;
 }
 
 // :only-child
-export function isOnlyChild(e: Element, _snap: Snapshot): boolean {
+export function isOnlyChild(e: Element, _context: StyleletContext): boolean {
   return !e.previousElementSibling && !e.nextElementSibling;
 }
 
 // :first-of-type
-export function isFirstOfType(e: Element, snap: Snapshot): boolean {
-  const localName = snap.getLocalName(e);
-  const namespaceURI = snap.getNamespaceURI(e);
+export function isFirstOfType(e: Element, context: StyleletContext): boolean {
+  const localName = context.getLocalName(e);
+  const namespaceURI = context.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.previousElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
+  while ((n = n.previousElementSibling) && (context.getLocalName(n) !== localName || context.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -233,13 +233,13 @@ export function isFirstOfType(e: Element, snap: Snapshot): boolean {
 }
 
 // :last-of-type
-export function isLastOfType(e: Element, snap: Snapshot): boolean {
-  const localName = snap.getLocalName(e);
-  const namespaceURI = snap.getNamespaceURI(e);
+export function isLastOfType(e: Element, context: StyleletContext): boolean {
+  const localName = context.getLocalName(e);
+  const namespaceURI = context.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.nextElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
+  while ((n = n.nextElementSibling) && (context.getLocalName(n) !== localName || context.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -247,13 +247,13 @@ export function isLastOfType(e: Element, snap: Snapshot): boolean {
 }
 
 // :only-of-type
-export function isOnlyOfType(e: Element, snap: Snapshot): boolean {
-  const localName = snap.getLocalName(e);
-  const namespaceURI = snap.getNamespaceURI(e);
+export function isOnlyOfType(e: Element, context: StyleletContext): boolean {
+  const localName = context.getLocalName(e);
+  const namespaceURI = context.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.nextElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
+  while ((n = n.nextElementSibling) && (context.getLocalName(n) !== localName || context.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -261,14 +261,14 @@ export function isOnlyOfType(e: Element, snap: Snapshot): boolean {
 
   n = e;
 
-  while ((n = n.previousElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
+  while ((n = n.previousElementSibling) && (context.getLocalName(n) !== localName || context.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
   return !n;
 }
 
-export function matchesNthIndex(n: number, step: number, absStep: number, offset: number, _snap: Snapshot): boolean {
+export function matchesNthIndex(n: number, step: number, absStep: number, offset: number, _context: StyleletContext): boolean {
   if (step === 0) {
     throw new Error(`Invalid nth-child step value: ${step}; should have been handled earlier`);
   }
@@ -281,7 +281,7 @@ export function matchesNthIndex(n: number, step: number, absStep: number, offset
 
 // fast resolver for :nth-child() and :nth-last-child()
 // use cache if available to get the 1-based index of element among its siblings
-export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache | null, _snap: Snapshot): number {
+export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache | null, _context: StyleletContext): number {
   if (!rc) return nthElementLocal(element, fromLast);
 
   const parent = element.parentNode;
@@ -321,14 +321,14 @@ function nthElementLocal(element: Element, fromLast: boolean): number {
 
 // fast resolver for :nth-of-type() and :nth-last-of-type()
 // use cache if available to get the 1-based index of element among same-type siblings
-export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): number {
-  if (!rc) return nthOfTypeLocal(element, fromLast, snap);
+export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null, context: StyleletContext): number {
+  if (!rc) return nthOfTypeLocal(element, fromLast, context);
 
   const parent = element.parentNode;
   if (!parent) return 1;
 
-  const namespaceURI = snap.getNamespaceURI(element);
-  const localName = snap.getLocalName(element);
+  const namespaceURI = context.getNamespaceURI(element);
+  const localName = context.getLocalName(element);
   const typeKey = `${namespaceURI ?? ''}\x00${localName}`;
 
   const cache = rc.nthOfType ??= new WeakMap<ParentNode, NthOfTypeParentMap>();
@@ -345,7 +345,7 @@ export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache 
 
     let index = 0;
     for (let n = parent.firstElementChild; n; n = n.nextElementSibling) {
-      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
+      if (context.getLocalName(n) === localName && context.getNamespaceURI(n) === namespaceURI) {
         indexMap.set(n, index++);
       }
     }
@@ -362,14 +362,14 @@ export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache 
   return fromLast ? entry.length - index : index + 1;
 }
 
-function nthOfTypeLocal(element: Element, fromLast: boolean, snap: Snapshot): number {
-  const namespaceURI = snap.getNamespaceURI(element);
-  const localName = snap.getLocalName(element);
+function nthOfTypeLocal(element: Element, fromLast: boolean, context: StyleletContext): number {
+  const namespaceURI = context.getNamespaceURI(element);
+  const localName = context.getLocalName(element);
   let n = 1;
   let e: Element | null = element;
 
   while ((e = fromLast ? e.nextElementSibling : e.previousElementSibling)) {
-    if (snap.getLocalName(e) === localName && snap.getNamespaceURI(e) === namespaceURI) {
+    if (context.getLocalName(e) === localName && context.getNamespaceURI(e) === namespaceURI) {
       n++;
     }
   }
@@ -377,14 +377,14 @@ function nthOfTypeLocal(element: Element, fromLast: boolean, snap: Snapshot): nu
   return n;
 }
 
-export function isNthElement(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): boolean {
+export function isNthElement(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, context: StyleletContext): boolean {
   if (!rc) return isNthElementLocal(element, index, fromLast);
-  return nthElement(element, fromLast, rc, snap) === index;
+  return nthElement(element, fromLast, rc, context) === index;
 }
 
-export function isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): boolean {
-  if (!rc) return isNthOfTypeLocal(element, index, fromLast, snap);
-  return nthOfType(element, fromLast, rc, snap) === index;
+export function isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, context: StyleletContext): boolean {
+  if (!rc) return isNthOfTypeLocal(element, index, fromLast, context);
+  return nthOfType(element, fromLast, rc, context) === index;
 }
 
 function isNthElementLocal(element: Element, target: number, fromLast: boolean): boolean {
@@ -417,7 +417,7 @@ function isNthElementLocal(element: Element, target: number, fromLast: boolean):
   return node === element;
 }
 
-function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, snap: Snapshot): boolean {
+function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, context: StyleletContext): boolean {
   if (target < 1) {
     throw new Error(`Invalid nth-of-type index: ${target}`);
   }
@@ -425,14 +425,14 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, s
   const parent = element.parentNode;
   if (!parent) return target === 1;
 
-  const namespaceURI = snap.getNamespaceURI(element);
-  const localName = snap.getLocalName(element);
+  const namespaceURI = context.getNamespaceURI(element);
+  const localName = context.getLocalName(element);
 
   let index = 0;
 
   if (!fromLast) {
     for (let n = parent.firstElementChild; n; n = n.nextElementSibling) {
-      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
+      if (context.getLocalName(n) === localName && context.getNamespaceURI(n) === namespaceURI) {
         ++index;
         if (n === element) return index === target;
         if (index >= target) return false;
@@ -440,7 +440,7 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, s
     }
   } else {
     for (let n = parent.lastElementChild; n; n = n.previousElementSibling) {
-      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
+      if (context.getLocalName(n) === localName && context.getNamespaceURI(n) === namespaceURI) {
         ++index;
         if (n === element) return index === target;
         if (index >= target) return false;
@@ -451,22 +451,22 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, s
   return false;
 }
 
-export function isFocused(el: Element, snap: Snapshot): boolean {
+export function isFocused(el: Element, context: StyleletContext): boolean {
   const doc = el.ownerDocument;
   if (isIFrame(el)) return false;
 
   if (el === doc.body || el === doc.documentElement) {
-    return el === snap.focusTarget && doc.hasFocus();
+    return el === context.focusTarget && doc.hasFocus();
   }
 
   return el === doc.activeElement && doc.hasFocus();
 }
 
-export function matchLang(wanted: string, element: Element, snap: Snapshot): boolean {
+export function matchLang(wanted: string, element: Element, context: StyleletContext): boolean {
   wanted = asciiLower(wanted);
 
   for (let node: Element | null = element; node; node = langParent(node)) {
-    const actual = elementLanguage(node, snap);
+    const actual = elementLanguage(node, context);
 
     if (actual !== null) {
       if (actual === '') return false;
@@ -533,59 +533,59 @@ function langParent(element: Element): Element | null {
   return null;
 }
 
-function elementLanguage(element: Element, snap: Snapshot): string | null {
-  const lang = snap.getAttribute(element, 'lang');
+function elementLanguage(element: Element, context: StyleletContext): string | null {
+  const lang = context.getAttribute(element, 'lang');
   if (lang !== null) return lang;
 
-  return snap.getAttributeNS(element, XML_NAMESPACE, 'lang');
+  return context.getAttributeNS(element, XML_NAMESPACE, 'lang');
 }
 
-export function matchDir(wanted: string, element: Element, snap: Snapshot): boolean {
-  return elementDir(element, snap) === wanted;
+export function matchDir(wanted: string, element: Element, context: StyleletContext): boolean {
+  return elementDir(element, context) === wanted;
 }
 
-function elementDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
-  const local = snap.getLocalName(element);
+function elementDir(element: Element, context: StyleletContext): 'ltr' | 'rtl' {
+  const local = context.getLocalName(element);
 
-  if (snap.isHtmlElement(element)) {
-    if (local === 'input') return inputDir(element as HTMLInputElement, snap);
-    if (local === 'textarea') return textareaDir(element as HTMLTextAreaElement, snap);
-    if (local === 'bdi') return bdiDir(element, snap);
+  if (context.isHtmlElement(element)) {
+    if (local === 'input') return inputDir(element as HTMLInputElement, context);
+    if (local === 'textarea') return textareaDir(element as HTMLTextAreaElement, context);
+    if (local === 'bdi') return bdiDir(element, context);
   }
 
-  return attrDir(element, snap);
+  return attrDir(element, context);
 }
 
-function attrDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
-  const attr = snap.getAttribute(element, 'dir');
+function attrDir(element: Element, context: StyleletContext): 'ltr' | 'rtl' {
+  const attr = context.getAttribute(element, 'dir');
 
   if (attr) {
     const dir = attr.toLowerCase();
 
     if (dir === 'ltr' || dir === 'rtl') return dir;
-    if (dir === 'auto') return autoDirFromElement(element, snap) ?? 'ltr';
+    if (dir === 'auto') return autoDirFromElement(element, context) ?? 'ltr';
   }
 
   const parent = element.parentElement;
-  return parent ? elementDir(parent, snap) : 'ltr';
+  return parent ? elementDir(parent, context) : 'ltr';
 }
 
-function bdiDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
-  const attr = snap.getAttribute(element, 'dir');
+function bdiDir(element: Element, context: StyleletContext): 'ltr' | 'rtl' {
+  const attr = context.getAttribute(element, 'dir');
 
   if (attr) {
     const dir = attr.toLowerCase();
 
     if (dir === 'ltr' || dir === 'rtl') return dir;
-    if (dir === 'auto') return autoDirFromElement(element, snap) ?? 'ltr';
+    if (dir === 'auto') return autoDirFromElement(element, context) ?? 'ltr';
   }
 
   // <bdi> defaults to auto directionality.
-  return autoDirFromElement(element, snap) ?? 'ltr';
+  return autoDirFromElement(element, context) ?? 'ltr';
 }
 
-function textareaDir(textarea: HTMLTextAreaElement, snap: Snapshot): 'ltr' | 'rtl' {
-  const attr = snap.getAttribute(textarea, 'dir');
+function textareaDir(textarea: HTMLTextAreaElement, context: StyleletContext): 'ltr' | 'rtl' {
+  const attr = context.getAttribute(textarea, 'dir');
 
   if (attr) {
     const dir = attr.toLowerCase();
@@ -595,15 +595,15 @@ function textareaDir(textarea: HTMLTextAreaElement, snap: Snapshot): 'ltr' | 'rt
   }
 
   const parent = textarea.parentElement;
-  return parent ? elementDir(parent, snap) : 'ltr';
+  return parent ? elementDir(parent, context) : 'ltr';
 }
 
 const inputValueDirTypes = new Set([
   'hidden', 'text', 'search', 'tel', 'url', 'email', 'password', 'submit', 'reset', 'button',
 ]);
 
-function inputDir(input: HTMLInputElement, snap: Snapshot): 'ltr' | 'rtl' {
-  const attr = snap.getAttribute(input, 'dir');
+function inputDir(input: HTMLInputElement, context: StyleletContext): 'ltr' | 'rtl' {
+  const attr = context.getAttribute(input, 'dir');
   const type = input.type;
 
   if (attr) {
@@ -621,14 +621,14 @@ function inputDir(input: HTMLInputElement, snap: Snapshot): 'ltr' | 'rtl' {
   if (type === 'tel') return 'ltr';
 
   const parent = input.parentElement;
-  return parent ? elementDir(parent, snap) : 'ltr';
+  return parent ? elementDir(parent, context) : 'ltr';
 }
 
-function autoDirFromElement(element: Element, snap: Snapshot): 'ltr' | 'rtl' | null {
-  return autoDirFromChildren(element, snap);
+function autoDirFromElement(element: Element, context: StyleletContext): 'ltr' | 'rtl' | null {
+  return autoDirFromChildren(element, context);
 }
 
-function autoDirFromChildren(node: Node, snap: Snapshot): 'ltr' | 'rtl' | null {
+function autoDirFromChildren(node: Node, context: StyleletContext): 'ltr' | 'rtl' | null {
   for (let child = node.firstChild; child; child = child.nextSibling) {
     if (child.nodeType === 3) {
       const dir = autoDir(child.textContent || '');
@@ -640,19 +640,19 @@ function autoDirFromChildren(node: Node, snap: Snapshot): 'ltr' | 'rtl' | null {
 
     const el = child as Element;
 
-    if (isDirBoundary(el, snap)) {
+    if (isDirBoundary(el, context)) {
       continue;
     }
 
-    const dir = autoDirFromChildren(el, snap);
+    const dir = autoDirFromChildren(el, context);
     if (dir) return dir;
   }
 
   return null;
 }
 
-function isDirBoundary(element: Element, snap: Snapshot): boolean {
-  const attr = snap.getAttribute(element, 'dir');
+function isDirBoundary(element: Element, context: StyleletContext): boolean {
+  const attr = context.getAttribute(element, 'dir');
 
   if (attr) {
     const dir = attr.toLowerCase();
@@ -661,7 +661,7 @@ function isDirBoundary(element: Element, snap: Snapshot): boolean {
 
   // <bdi> has default auto directionality, so it should also isolate its text
   // from ancestor dir=auto scans even without an explicit dir attribute.
-  return snap.isHtmlElement(element) && snap.getLocalName(element) === 'bdi';
+  return context.isHtmlElement(element) && context.getLocalName(element) === 'bdi';
 }
 
 // TODO: cover more Unicode bidi edge cases.
@@ -692,26 +692,26 @@ function autoDir(text: string): 'ltr' | 'rtl' | null {
 }
 
 // :any-link / :link
-export function isAnyLink(e: Element, snap: Snapshot): boolean {
-  const localName = snap.getLocalName(e);
+export function isAnyLink(e: Element, context: StyleletContext): boolean {
+  const localName = context.getLocalName(e);
 
   if (localName !== 'a' && localName !== 'area') {
     const lower = localName.toLowerCase();
     if (lower !== 'a' && lower !== 'area') return false;
   }
 
-  return snap.hasAttribute(e, 'href');
+  return context.hasAttribute(e, 'href');
 }
 
 // :target
-export function isTarget(e: Element, snap: Snapshot): boolean {
-  const hash = snap.document.location.hash;
-  return hash.length > 1 && snap.getId(e) === hash.slice(1) && !!(snap.document.compareDocumentPosition(e) & 16);
+export function isTarget(e: Element, context: StyleletContext): boolean {
+  const hash = context.document.location.hash;
+  return hash.length > 1 && context.getId(e) === hash.slice(1) && !!(context.document.compareDocumentPosition(e) & 16);
 }
 
 // :hover
-export function isHovered(e: Element, snap: Snapshot): boolean {
-  for (let n = snap.hoverTarget; n; n = n.parentElement) {
+export function isHovered(e: Element, context: StyleletContext): boolean {
+  for (let n = context.hoverTarget; n; n = n.parentElement) {
     if (n === e) return true;
   }
 
@@ -719,8 +719,8 @@ export function isHovered(e: Element, snap: Snapshot): boolean {
 }
 
 // :active
-export function isActive(e: Element, snap: Snapshot): boolean {
-  for (let n = snap.activeTarget; n; n = n.parentElement) {
+export function isActive(e: Element, context: StyleletContext): boolean {
+  for (let n = context.activeTarget; n; n = n.parentElement) {
     if (n === e) return true;
   }
 
@@ -728,8 +728,8 @@ export function isActive(e: Element, snap: Snapshot): boolean {
 }
 
 // :focus-within
-export function isFocusWithin(e: Element, snap: Snapshot): boolean {
-  const active = snap.document.activeElement;
+export function isFocusWithin(e: Element, context: StyleletContext): boolean {
+  const active = context.document.activeElement;
   return !!active && (e === active || e.contains(active));
 }
 
@@ -746,29 +746,29 @@ function isPotentialCustomElementName(name: string): boolean {
     !CUSTOM_ELEMENT_NAME_BLACKLIST.has(name);
 }
 
-export function isDefined(element: Element, snap: Snapshot): boolean {
-  if (!snap.isHtmlElement(element)) return true;
+export function isDefined(element: Element, context: StyleletContext): boolean {
+  if (!context.isHtmlElement(element)) return true;
 
-  const name = snap.getLocalName(element);
+  const name = context.getLocalName(element);
   if (!isPotentialCustomElementName(name)) return true;
 
-  return !!snap.document.defaultView?.customElements.get(name);
+  return !!context.document.defaultView?.customElements.get(name);
 }
 
-export function isDisabled(e: Element, snap: Snapshot): boolean {
-  return isFormStateElement(e) && isDisabledFormStateElement(e, snap);
+export function isDisabled(e: Element, context: StyleletContext): boolean {
+  return isFormStateElement(e) && isDisabledFormStateElement(e, context);
 }
 
-export function isEnabled(e: Element, snap: Snapshot): boolean {
-  return isFormStateElement(e) && !isDisabledFormStateElement(e, snap);
+export function isEnabled(e: Element, context: StyleletContext): boolean {
+  return isFormStateElement(e) && !isDisabledFormStateElement(e, context);
 }
 
-function isDisabledFormStateElement(e: FormStateElement, snap: Snapshot): boolean {
-  if (snap.hasAttribute(e, 'disabled')) return true;
+function isDisabledFormStateElement(e: FormStateElement, context: StyleletContext): boolean {
+  if (context.hasAttribute(e, 'disabled')) return true;
 
   if (isHtmlOption(e)) {
     const parent = e.parentElement;
-    return !!parent && isHtmlOptGroup(parent) && snap.hasAttribute(parent, 'disabled');
+    return !!parent && isHtmlOptGroup(parent) && context.hasAttribute(parent, 'disabled');
   }
 
   if (isHtmlOptGroup(e)) return false;
@@ -776,7 +776,7 @@ function isDisabledFormStateElement(e: FormStateElement, snap: Snapshot): boolea
   // Ancestor disabled fieldsets may disable form controls, unless the control is
   // inside that fieldset's first legend child.
   for (let n = e.parentElement; n; n = n.parentElement) {
-    if (!isHtmlFieldSet(n) || !snap.hasAttribute(n, 'disabled')) continue;
+    if (!isHtmlFieldSet(n) || !context.hasAttribute(n, 'disabled')) continue;
 
     let exempt = false;
 
@@ -795,20 +795,20 @@ function isDisabledFormStateElement(e: FormStateElement, snap: Snapshot): boolea
 
 // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-read-only
 const READONLY_APPLIES_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
-export function isReadWrite(e: Element, snap: Snapshot): boolean {
+export function isReadWrite(e: Element, context: StyleletContext): boolean {
   if (isHtmlInput(e)) {
-    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !snap.hasAttribute(e, 'readonly') && !isDisabled(e, snap);
+    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !context.hasAttribute(e, 'readonly') && !isDisabled(e, context);
   }
-  if (isHtmlTextArea(e)) return !snap.hasAttribute(e, 'readonly') && !isDisabled(e, snap);
-  return isEditingHostOrEditable(e, snap);
+  if (isHtmlTextArea(e)) return !context.hasAttribute(e, 'readonly') && !isDisabled(e, context);
+  return isEditingHostOrEditable(e, context);
 }
 
-function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
+function isEditingHostOrEditable(e: Element, context: StyleletContext): boolean {
   if (!isHtmlSvgOrMathElement(e)) return false;
 
   // Editing host: HTML element with contenteditable in the true or plaintext-only state.
-  const attr = snap.getAttribute(e, 'contenteditable')?.toLowerCase();
-  if (snap.isHtmlElement(e) && (attr === '' || attr === 'true' || attr === 'plaintext-only')) {
+  const attr = context.getAttribute(e, 'contenteditable')?.toLowerCase();
+  if (context.isHtmlElement(e) && (attr === '' || attr === 'true' || attr === 'plaintext-only')) {
     return true;
   }
 
@@ -819,10 +819,10 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
 
   // Editing host: child HTML element of a Document whose designMode is enabled.
   // DesignMode: eligible descendants of a designMode document are editable unless blocked.
-  const designMode = snap.documentDesignMode(e.ownerDocument);
+  const designMode = context.documentDesignMode(e.ownerDocument);
   if (designMode?.toLowerCase() === 'on') {
     for (let n: Element | null = e; n; n = n.parentElement) {
-      if (snap.getAttribute(n, 'contenteditable')?.toLowerCase() === 'false') {
+      if (context.getAttribute(n, 'contenteditable')?.toLowerCase() === 'false') {
         return false;
       }
     }
@@ -833,13 +833,13 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
   // Editable: not an editing host, does not have contenteditable=false,
   // parent is an editing host or editable, and the element is HTML/SVG/Math.
   for (let n: Element | null = e.parentElement; n; n = n.parentElement) {
-    const parentAttr = snap.getAttribute(n, 'contenteditable')?.toLowerCase();
+    const parentAttr = context.getAttribute(n, 'contenteditable')?.toLowerCase();
 
     if (parentAttr === 'false') {
       return false;
     }
 
-    if (snap.isHtmlElement(n) && (parentAttr === '' || parentAttr === 'true' || parentAttr === 'plaintext-only')) {
+    if (context.isHtmlElement(n) && (parentAttr === '' || parentAttr === 'true' || parentAttr === 'plaintext-only')) {
       return true;
     }
   }
@@ -849,8 +849,8 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
 
 const PLACEHOLDER_INPUT_TYPES = new Set(['email', 'number', 'password', 'search', 'tel', 'text', 'url']);
 
-export function isPlaceholderShown(e: Element, snap: Snapshot): boolean {
-  if (!snap.hasAttribute(e, 'placeholder')) return false;
+export function isPlaceholderShown(e: Element, context: StyleletContext): boolean {
+  if (!context.hasAttribute(e, 'placeholder')) return false;
 
   if (isHtmlTextArea(e)) {
     return e.value === '';
@@ -865,12 +865,12 @@ export function isPlaceholderShown(e: Element, snap: Snapshot): boolean {
 
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
-export function isDefault(e: Element, snap: Snapshot): boolean {
-  if (isHtmlOption(e)) return snap.hasAttribute(e, 'selected');
+export function isDefault(e: Element, context: StyleletContext): boolean {
+  if (isHtmlOption(e)) return context.hasAttribute(e, 'selected');
 
   const isInput = isHtmlInput(e);
   if (isInput && (e.type === 'checkbox' || e.type === 'radio')) {
-    return snap.hasAttribute(e, 'checked');
+    return context.hasAttribute(e, 'checked');
   }
 
   const isButton = isHtmlButton(e);
@@ -914,15 +914,15 @@ export function isDefault(e: Element, snap: Snapshot): boolean {
   return firstSubmit === e;
 }
 
-export function isChecked(e: Element, _snap: Snapshot): boolean {
+export function isChecked(e: Element, _context: StyleletContext): boolean {
   if (isHtmlInput(e)) return (e.type === 'checkbox' || e.type === 'radio') && e.checked;
   if (isHtmlOption(e)) return e.selected;
   return false;
 }
 
-export function isIndeterminate(e: Element, snap: Snapshot): boolean {
+export function isIndeterminate(e: Element, context: StyleletContext): boolean {
   // progress elements with no value content attribute
-  if (isHtmlProgress(e)) return !snap.hasAttribute(e, 'value');
+  if (isHtmlProgress(e)) return !context.hasAttribute(e, 'value');
 
   if (!isHtmlInput(e)) return false;
 
@@ -938,7 +938,7 @@ export function isIndeterminate(e: Element, snap: Snapshot): boolean {
 
   // Radio groups require a non-empty name attribute; an unnamed unchecked radio is alone,
   // so its group contains no checked input.
-  const name = snap.getAttribute(e, 'name');
+  const name = context.getAttribute(e, 'name');
   if (!name) return true;
 
   const root = e.getRootNode();
@@ -952,7 +952,7 @@ export function isIndeterminate(e: Element, snap: Snapshot): boolean {
       input.type === 'radio' &&
       input.form === e.form &&
       input.getRootNode() === root &&
-      snap.getAttribute(input, 'name') === name &&
+      context.getAttribute(input, 'name') === name &&
       input.checked
     ) {
       return false;
@@ -968,27 +968,27 @@ const REQUIRED_INPUT_TYPES = new Set([
   // 'color' for webkit?
 ]);
 
-export function isRequired(e: Element, snap: Snapshot): boolean {
+export function isRequired(e: Element, context: StyleletContext): boolean {
   if (isHtmlSelect(e) || isHtmlTextArea(e)) {
-    return snap.hasAttribute(e, 'required');
+    return context.hasAttribute(e, 'required');
   }
 
   if (isHtmlInput(e)) {
-    return REQUIRED_INPUT_TYPES.has(e.type) && snap.hasAttribute(e, 'required');
+    return REQUIRED_INPUT_TYPES.has(e.type) && context.hasAttribute(e, 'required');
   }
 
   return false;
 }
 
-export function isOptional(e: Element, snap: Snapshot): boolean {
-  return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e, snap);
+export function isOptional(e: Element, context: StyleletContext): boolean {
+  return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e, context);
 }
 
-export function isInvalid(e: Element, snap: Snapshot): boolean {
+export function isInvalid(e: Element, context: StyleletContext): boolean {
   if (isHtmlForm(e)) return !e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return hasInvalidDescendant(e, snap);
+    return hasInvalidDescendant(e, context);
   }
 
   if (isValidityElement(e)) {
@@ -998,11 +998,11 @@ export function isInvalid(e: Element, snap: Snapshot): boolean {
   return false;
 }
 
-export function isValid(e: Element, snap: Snapshot): boolean {
+export function isValid(e: Element, context: StyleletContext): boolean {
   if (isHtmlForm(e)) return e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return !hasInvalidDescendant(e, snap);
+    return !hasInvalidDescendant(e, context);
   }
 
   if (isValidityElement(e)) {
@@ -1012,14 +1012,14 @@ export function isValid(e: Element, snap: Snapshot): boolean {
   return false;
 }
 
-function hasInvalidDescendant(root: Element, snap: Snapshot): boolean {
+function hasInvalidDescendant(root: Element, context: StyleletContext): boolean {
   for (let node = root.firstElementChild; node; node = nextDescendant(root, node)) {
-    if (isInvalid(node, snap)) return true;
+    if (isInvalid(node, context)) return true;
   }
   return false;
 }
 
-function isRangeInput(e: Element, snap: Snapshot): e is HTMLInputElement {
+function isRangeInput(e: Element, context: StyleletContext): e is HTMLInputElement {
   if (!isHtmlInput(e)) return false;
 
   switch (e.type) {
@@ -1027,22 +1027,22 @@ function isRangeInput(e: Element, snap: Snapshot): e is HTMLInputElement {
       return true;
 
     case 'date': case 'datetime-local': case 'month': case 'number': case 'time': case 'week':
-      return snap.hasAttribute(e, 'min') || snap.hasAttribute(e, 'max');
+      return context.hasAttribute(e, 'min') || context.hasAttribute(e, 'max');
 
     default:
       return false;
   }
 }
 
-export function isInRange(e: Element, snap: Snapshot): boolean {
-  if (!isRangeInput(e, snap) || !e.willValidate) return false;
+export function isInRange(e: Element, context: StyleletContext): boolean {
+  if (!isRangeInput(e, context) || !e.willValidate) return false;
 
   const validity = e.validity;
   return !validity.rangeUnderflow && !validity.rangeOverflow;
 }
 
-export function isOutOfRange(e: Element, snap: Snapshot): boolean {
-  if (!isRangeInput(e, snap) || !e.willValidate) return false;
+export function isOutOfRange(e: Element, context: StyleletContext): boolean {
+  if (!isRangeInput(e, context) || !e.willValidate) return false;
 
   const validity = e.validity;
   return validity.rangeUnderflow || validity.rangeOverflow;
@@ -1054,22 +1054,22 @@ function getMediaElement(e: Element): HTMLMediaElement | null {
   return parent && isHtmlMediaElement(parent) ? parent : null;
 }
 
-export function isPlaying(e: Element, _snap: Snapshot): boolean {
+export function isPlaying(e: Element, _context: StyleletContext): boolean {
   const media = getMediaElement(e);
   return !!media && media.currentTime > 0 && !media.paused && !media.ended && media.readyState > 2;
 }
 
-export function isPaused(e: Element, _snap: Snapshot): boolean {
+export function isPaused(e: Element, _context: StyleletContext): boolean {
   const media = getMediaElement(e);
   return !!media && media.paused;
 }
 
-export function isSeeking(e: Element, _snap: Snapshot): boolean {
+export function isSeeking(e: Element, _context: StyleletContext): boolean {
   const media = getMediaElement(e);
   return !!media && media.seeking;
 }
 
-export function isMuted(e: Element, _snap: Snapshot): boolean {
+export function isMuted(e: Element, _context: StyleletContext): boolean {
   const media = getMediaElement(e);
   return !!media && media.muted;
 }

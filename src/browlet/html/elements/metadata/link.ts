@@ -8,6 +8,7 @@ import {
 import { impl } from '../../../../web-idl/index';
 import { withHTMLLinkElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
+import type { CSSStyleSheetImpl } from '../../../../stylelet/cssom/css-stylesheet';
 
 /*
  * [Exposed=Window]
@@ -37,7 +38,6 @@ import { HTMLElementImpl } from '../html-element';
  */
 export class HTMLLinkElementImpl
   extends withHTMLLinkElementStub(HTMLElementImpl)
-  implements HTMLLinkElement
 {
   static readonly #linkStyleOptions = {
     attributes: new Set([
@@ -56,7 +56,7 @@ export class HTMLLinkElementImpl
     );
   }
 
-  get sheet(): CSSStyleSheet | null {
+  get sheet(): CSSStyleSheetImpl | null {
     return ElementImpl.getStyleSheet(this);
   }
 }

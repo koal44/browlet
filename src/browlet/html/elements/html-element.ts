@@ -8,6 +8,7 @@ import {
 } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
 import { withHTMLElementStub } from '../../stubs';
+import type { CSSStyleDeclarationImpl } from '../../../stylelet/cssom/declaration';
 
 /*
  * [Exposed=Window]
@@ -61,7 +62,7 @@ export class HTMLElementImpl
     super(context, linkStyle);
   }
 
-  get style(): CSSStyleDeclaration {
+  get style(): CSSStyleDeclarationImpl {
     return ElementImpl.getInlineStyle(this);
   }
 }

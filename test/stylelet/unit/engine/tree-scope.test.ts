@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
-import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('tree scope', () => {
@@ -83,17 +83,17 @@ describe('tree scope', () => {
     scope.addTreeStyleSheet(beta);
     scope.addTreeStyleSheet(persistent);
 
-    scope.__changePreferredStyleSheetSetName('beta');
+    scope.changePreferredStyleSheetSetName('beta');
     expect([alpha.disabled, beta.disabled, persistent.disabled])
       .toEqual([true, false, false]);
 
-    scope.__selectStyleSheetSet('alpha');
-    scope.__changePreferredStyleSheetSetName('beta');
+    scope.selectStyleSheetSet('alpha');
+    scope.changePreferredStyleSheetSetName('beta');
     expect([alpha.disabled, beta.disabled, persistent.disabled])
       .toEqual([false, true, false]);
 
-    scope.__selectStyleSheetSet('');
-    scope.__changePreferredStyleSheetSetName('alpha');
+    scope.selectStyleSheetSet('');
+    scope.changePreferredStyleSheetSetName('alpha');
     expect([alpha.disabled, beta.disabled, persistent.disabled])
       .toEqual([true, true, false]);
   });
@@ -123,8 +123,8 @@ function createTreeScope(): {
   scope: TreeScope;
 } {
   const document = createBrowletDocument();
-  const snapshot = new Snapshot(document);
-  const cascade = new CascadeEngine({ snapshot });
+  const context = new StyleletContext(document);
+  const cascade = new CascadeEngine({ context });
   return { document, scope: new TreeScope(document, cascade) };
 }
 
@@ -137,8 +137,8 @@ function createStyleSheet(
     title = '',
   }: StyleSheetOptions = {},
 ): CSSStyleSheetImpl {
-  const styleSheet = CSSStyleSheetImpl.__create(
-    scope.cascade.snapshot,
+  const styleSheet = CSSStyleSheetImpl.create(
+    scope.cascade.context,
     {
       location: null,
       parentStyleSheet: null,
@@ -149,6 +149,7 @@ function createStyleSheet(
       alternate,
       originClean: true,
     },
+    undefined,
   );
   styleSheet.disabled = disabled;
   return styleSheet;

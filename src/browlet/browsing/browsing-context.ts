@@ -2,6 +2,7 @@ import type {
   AgentCluster, AgentClusterKey, CrossOriginIsolationMode,
 } from '../scripting/agents';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
+import { createStyleletRuntime } from '../style/integration';
 import {
   browletBindings, getRelevantRealm,
 } from '../bindings';
@@ -157,6 +158,7 @@ export function createNewBrowsingContextAndDocument(
   ).milliseconds);
   const document = createDocument({
     nodeFactory: createProjectedDOMNodeFactory(bindings.context),
+    styleletRuntime: createStyleletRuntime(bindings.context.getRuntime()),
   });
 
   DocumentImpl.setType(document, 'html');

@@ -448,7 +448,6 @@ export class LegacyPlatformObjectBinding {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- indexed setter steps use the implementation as their specified this value
     const steps = creating ? properties.steps.setNew : properties.steps.setExisting;
     if (!steps) {
       throw new Error(
@@ -579,6 +578,7 @@ export class LegacyPlatformObjectBinding {
   ): boolean {
     const { steps } = properties;
     return 'supportsIndex' in steps ?
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- support steps use the implementation as their specified this value
       Reflect.apply(steps.supportsIndex, implementation, [index]) :
       this.#getIndexedValue(implementation, index, properties) !== steps.unsupportedValue;
   }
@@ -588,7 +588,6 @@ export class LegacyPlatformObjectBinding {
     properties: IndexedProperties,
   ): Iterable<number> {
     return Reflect.apply(
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- supported-index steps use the implementation as their specified this value
       properties.steps.getSupportedPropertyIndices,
       target,
       [],

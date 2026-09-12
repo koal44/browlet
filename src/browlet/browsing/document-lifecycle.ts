@@ -1,4 +1,6 @@
 import { fireEvent } from '../dom/events/event-target';
+import type { RealmBindings } from '../../web-idl/index';
+import { createStyleletRuntime } from '../style/integration';
 import {
   createDocument, createProjectedDOMNodeFactory, DocumentImpl,
   type DocumentLoadTimingInfo,
@@ -41,7 +43,7 @@ export function createAndInitializeDocument(
   }
 
   let window: WindowImpl;
-  let bindings: ReturnType<typeof browletBindings.register>;
+  let bindings: RealmBindings;
   if (
     DocumentImpl.isInitialAboutBlank(activeDocument) &&
     areSameOriginDomain(
@@ -87,6 +89,7 @@ export function createAndInitializeDocument(
 
   const document = createDocument({
     nodeFactory: createProjectedDOMNodeFactory(bindings.context),
+    styleletRuntime: createStyleletRuntime(bindings.context.getRuntime()),
   });
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,

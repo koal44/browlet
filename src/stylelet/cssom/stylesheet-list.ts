@@ -1,3 +1,5 @@
+import type { CSSStyleSheetImpl } from './css-stylesheet';
+
 /*
  * [Exposed=Window]
  * interface StyleSheetList {
@@ -6,8 +8,8 @@
  * };
  */
 export class StyleSheetListImpl<
-  T extends CSSStyleSheet = CSSStyleSheet,
-> implements StyleSheetList {
+  T extends CSSStyleSheetImpl = CSSStyleSheetImpl,
+> {
   [index: number]: T;
 
   readonly #styleSheets: T[] = [];
@@ -24,12 +26,12 @@ export class StyleSheetListImpl<
     return this.#styleSheets[Symbol.iterator]();
   }
 
-  __insert(index: number, styleSheet: T): void {
+  insert(index: number, styleSheet: T): void {
     this.#styleSheets.splice(index, 0, styleSheet);
     this.#defineIndex(this.#styleSheets.length - 1);
   }
 
-  __remove(styleSheet: T): boolean {
+  remove(styleSheet: T): boolean {
     const index = this.#styleSheets.indexOf(styleSheet);
     if (index < 0) return false;
 
