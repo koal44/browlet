@@ -1,5 +1,5 @@
-import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
 import { toString, type RuntimeContext } from '../js-engine/index';
+import { utf8Encode } from './codecs/utf-8';
 import { runtimeContext } from '../web-idl/projection';
 import { ctor, defineIncludes, defineInterface, impl } from '../web-idl/declaration/index';
 import {
@@ -16,25 +16,21 @@ import {
  * TextEncoderStream includes GenericTransformStream;
  */
 export class TextEncoderStreamImpl {
-  readonly #encoder = new ExodusTextEncoder();
   readonly #generic: GenericTransformStreamMixin;
+  readonly #runtime: RuntimeContext;
+  readonly #transform: TransformStreamImpl;
   #leadingSurrogate = '';
 
   constructor(runtime: RuntimeContext) {
-    const transform = new TransformStreamImpl(null, {}, {}, runtime);
-    const enqueue = (bytes: Uint8Array): void => {
-      transform.enqueue(runtime.buffers.copyUint8Array(bytes));
-    };
+    this.#runtime = runtime;
+    const transform = this.#transform = new TransformStreamImpl(null, {}, {}, runtime);
     transform.setUp(
       (chunk) => {
-        this.#encodeAndEnqueue(
-          toString(chunk),
-          enqueue,
-        );
+        this.#encodeAndEnqueue(toString(chunk));
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        enqueue(this.#encoder.encode('\uFFFD'));
+        transform.enqueue(utf8Encode('\uFFFD', runtime));
         this.#leadingSurrogate = '';
       },
     );
@@ -55,11 +51,8 @@ export class TextEncoderStreamImpl {
     return this.#generic.writable;
   }
 
-  // SPEC_MISMATCH: encode and enqueue a chunk(encoder, chunk) -> void
-  #encodeAndEnqueue(
-    chunk: string,
-    enqueue: (value: Uint8Array) => void,
-  ): void {
+  /** §7.6 — Encode and enqueue a converted DOMString chunk. */
+  #encodeAndEnqueue(chunk: string): void {
     let input = this.#leadingSurrogate + chunk;
     this.#leadingSurrogate = '';
     if (input === '') return;
@@ -69,9 +62,11 @@ export class TextEncoderStreamImpl {
       this.#leadingSurrogate = input.at(-1) ?? '';
       input = input.slice(0, -1);
     }
-    if (input !== '') enqueue(this.#encoder.encode(input));
+    if (input !== '') this.#transform.enqueue(utf8Encode(input, this.#runtime));
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
 
 export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',

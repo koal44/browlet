@@ -16,7 +16,17 @@ import {
   textEncoderStreamIncludesGenericTransformStreamIDL,
 } from './text-encoder-stream';
 
-export { decode, encode, getEncoding } from './hooks';
+export {
+  type Encoding, type OutputEncoding,
+  bomSniff, decode, decodeQueue, encode, encodeQueue, encodeOrFail, encodeOrFailSync,
+  getDecoder, getEncoder, getEncoding, getOutputEncoding,
+} from './encodings';
+export { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
+export { getSingleByteCodec } from './codecs/single-byte';
+export {
+  UTF8Decoder, UTF8Encoder, utf8DecodeQueue, utf8DecodeWithoutBOMQueue,
+  utf8DecodeWithoutBOMOrFailQueue, utf8EncodeQueue,
+} from './codecs/utf-8';
 
 export const encodingIDLDefinitions: Definition[] = [
   textDecoderCommonIDL,

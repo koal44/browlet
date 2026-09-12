@@ -1,7 +1,9 @@
-import '@exodus/bytes/encoding.js';
 import {
-  percentEncodeAfterEncoding as encodeAfterEncoding,
-} from '@exodus/bytes/whatwg.js';
+  encodeOrFailSync, getEncoder, getEncoding,
+} from '../encoding/encodings';
+import { IOQueue } from '../encoding/io-queue';
+import { utf8Encode } from '../encoding/codecs/utf-8';
+import { RangeError } from '../js-engine/simple-exception';
 
 /*
  * Percent-encoded bytes.
@@ -50,7 +52,7 @@ export function percentDecodeBytes(input: ArrayLike<number>): number[] {
 }
 
 export function percentDecodeString(input: string): number[] {
-  return percentDecodeBytes(textEncoder.encode(input));
+  return percentDecodeBytes(utf8Encode(input));
 }
 
 export function percentEncodeAfterEncoding(
@@ -58,15 +60,26 @@ export function percentEncodeAfterEncoding(
   input: string,
   percentEncodeSet: PercentEncodeSet,
 ): string {
-  const additionalASCII = String.fromCodePoint(
-    ...additionalASCIIPercentEncodeCodePoints[percentEncodeSet],
-  );
-  return encodeAfterEncoding(
-    encoding,
-    input,
-    additionalASCII,
-    percentEncodeSet === 'form_urlencoded',
-  );
+  const name = getEncoding(encoding);
+  if (name === null) throw new RangeError(`Unknown encoding: ${encoding}`);
+  const encoder = getEncoder(name);
+  const inputQueue = IOQueue.from(input);
+  const additionalASCII = additionalASCIIPercentEncodeCodePoints[percentEncodeSet];
+  const spaceAsPlus = percentEncodeSet === 'form_urlencoded';
+  let output = '';
+  for (;;) {
+    const bytes = new IOQueue<Uint8Array>();
+    const error = encodeOrFailSync(inputQueue, encoder, bytes);
+    for (const byte of bytes.takeBytes()) {
+      if (spaceAsPlus && byte === 0x20) output += '+';
+      else if (byte < 0x20 || byte > 0x7e || additionalASCII.includes(byte)) output += percentEncodeByte(byte);
+      else output += String.fromCharCode(byte);
+    }
+    if (error === null) return output;
+    // URL's error references are always escaped, regardless of the selected
+    // set, and are not passed through the retained ISO-2022-JP encoder.
+    output += `%26%23${error}%3B`;
+  }
 }
 
 export function utf8PercentEncode(
@@ -75,8 +88,6 @@ export function utf8PercentEncode(
 ): string {
   return percentEncodeAfterEncoding('UTF-8', input, percentEncodeSet);
 }
-
-const textEncoder = new TextEncoder();
 
 const additionalASCIIPercentEncodeCodePoints: Record<
   PercentEncodeSet,

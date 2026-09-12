@@ -91,11 +91,10 @@ outside this slice.
   in names/filenames; literal percent signs, backslashes, and non-ASCII bytes
   remain. Non-file parts have no Content-Type header. These rules govern
   browser output instead of applying the RFC's general encoding suggestions.
-- **Missing Encoding hook, supplied here.** HTML calls Encoding §6.2's
-  `encode` operation with HTML error handling. Our wrapper lacked it, and the
-  installed library exposes that behavior indirectly. The small adapter and
-  its replacement condition are documented in
-  [Encoding's implementation notes](../../encoding/LIMITATIONS.md).
+- **HTML error handling belongs to Encoding.** Multipart serialization uses
+  Encoding §6.2's `encode` operation, which emits decimal references for
+  unencodable scalars. The operation is implemented directly by Browlet's
+  [Encoding subsystem](../../encoding/README.md#operations-and-ownership).
 - **Empty bodies are underspecified by the referenced grammar.** RFC 2046
   §5.1.1 requires a first body-part, while an HTML FormData entry list can be
   empty. We emit only `--boundary--\r\n`, matching all three browser engines:

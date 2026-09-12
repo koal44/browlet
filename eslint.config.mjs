@@ -212,7 +212,7 @@ export default defineConfig(
   },
 
   {
-    files: ['scripts/**/*.{js,mjs}', 'node-compat/**/*.mjs'],
+    files: ['scripts/**/*.{js,mjs}', 'src/encoding/scripts/*.mjs', 'node-compat/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

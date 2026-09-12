@@ -1,6 +1,6 @@
 import {
   isomorphicDecode, isomorphicEncode,
-} from '@exodus/bytes/encoding-lite.js';
+} from '../js-engine/byte-string';
 
 import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/syntax';
 import { TextCursor } from '../infra/text-cursor';

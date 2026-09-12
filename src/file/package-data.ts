@@ -1,6 +1,6 @@
-import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicDecode } from '../js-engine/byte-string';
 
-import { decode, getEncoding } from '../encoding/hooks';
+import { decode, getEncoding } from '../encoding/encodings';
 import { parseMIMEType } from '../mime/index';
 import { forgivingBase64Encode } from '../infra/index';
 import type { RuntimeContext } from '../js-engine/index';

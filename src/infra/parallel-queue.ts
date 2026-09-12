@@ -12,7 +12,6 @@ export class ParallelQueue {
   #drainScheduled = false;
   #scheduleDrain: ScheduleParallelQueueDrain;
 
-  // SPEC_MISMATCH: start a new parallel queue() -> parallel queue
   constructor(scheduleDrain: ScheduleParallelQueueDrain) {
     this.#scheduleDrain = scheduleDrain;
   }

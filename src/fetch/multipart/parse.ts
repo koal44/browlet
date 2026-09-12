@@ -1,6 +1,6 @@
-import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicDecode } from '../../js-engine/byte-string';
 
-import { utf8DecodeWithoutBOM } from '../../encoding/utf-8';
+import { utf8DecodeWithoutBOM } from '../../encoding/codecs/utf-8';
 import { FileImpl } from '../../file/index';
 import type { RuntimeContext } from '../../js-engine/index';
 import { toScalarValueString } from '../../infra/index';

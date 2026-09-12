@@ -47,7 +47,7 @@ imports one of its terms.
 
 | Wave | Specifications | Browlet decision or first consumer |
 | --- | --- | --- |
-| Delegated substrate | Infra; JavaScript, Intl, and core WebAssembly; Unicode and Encoding | Translate Infra notation directly into TypeScript; use the host JavaScript engine; retain `@exodus/bytes` for Encoding algorithms and APIs instead of creating parallel implementations |
+| Substrate | Infra; JavaScript, Intl, and core WebAssembly; Unicode and Encoding | Translate Infra notation directly into TypeScript; use the host JavaScript engine; use Browlet's Encoding codecs, queues, and APIs with published WHATWG mapping data; see [Encoding](../encoding/README.md) |
 | Implemented foundations | DOM, Web IDL, URL | Continue document-order audits as consumers reveal gaps; these are foundational because nearly every public object and algorithm crosses them |
 | Additional document syntax | XML and its namespace/style-sheet-processing specifications; later XPath and XSLT | Keep the DOM namespace-aware; qualify a strict evented XML 1.0 engine against W3C conformance, §14 fragments, and bounded entity processing before character-input DOMParser work, then add byte-oriented XML navigation through the loader. Qualify XPath/XSLT engines separately; Browlet owns their DOM/Web IDL adapters, result objects, mutation integration, and HTML-specific behavior rather than another parser/evaluator by default |
 | Execution and loading kernel | High Resolution Time; Fetch; HTTP; MIME Sniffing; Streams and the Blob subset of File API; cookies | Implement timing first, then Fetch records/APIs and an Undici-backed transport; connect loader/parser/document lifecycle without absorbing browser policy into the transport |

@@ -1,11 +1,12 @@
-import { TextDecoder as ExodusTextDecoder } from '@exodus/bytes/encoding.js';
-import { getBufferSourceCopy } from '../js-engine/index';
+import { getBufferSourceView, getBufferTypeName } from '../js-engine/index';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
 } from '../web-idl/declaration/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
+import { type Encoding, getDecoder, getEncoding } from './encodings';
+import { endOfQueue, IOQueue, type Decoder } from './io-queue';
 
 /*
  * dictionary TextDecoderOptions {
@@ -60,35 +61,69 @@ export class TextDecoderImpl {
  * };
  */
 export class TextDecoderCommonMixin {
-  readonly #decoder: InstanceType<typeof ExodusTextDecoder>;
+  readonly #encoding: Encoding;
+  readonly #fatal: boolean;
+  readonly #ignoreBOM: boolean;
+  // The first decode initializes these through the same branch as a later reset.
+  #decoder!: Decoder;
+  #input!: IOQueue<Uint8Array>;
+  #doNotFlush = false;
+  #BOMSeen = false;
 
   constructor(label: string, options: TextDecoderOptions) {
-    try {
-      this.#decoder = new ExodusTextDecoder(label, options);
-    } catch (error) {
-      rethrowEncodingError(error);
+    const encoding = getEncoding(label);
+    if (encoding === null || encoding === 'replacement') {
+      throw new RangeError(`Unsupported encoding label: ${label}`);
     }
+    this.#encoding = encoding;
+    this.#fatal = options.fatal;
+    this.#ignoreBOM = options.ignoreBOM;
   }
 
   get encoding(): string {
-    return this.#decoder.encoding;
+    return this.#encoding.toLowerCase();
   }
 
   get fatal(): boolean {
-    return this.#decoder.fatal;
+    return this.#fatal;
   }
 
   get ignoreBOM(): boolean {
-    return this.#decoder.ignoreBOM;
+    return this.#ignoreBOM;
   }
 
   decode(input?: object, stream = false): string {
-    const bytes = input === undefined ? undefined : getBufferSourceCopy(input);
-    try {
-      return this.#decoder.decode(bytes, { stream });
-    } catch (error) {
-      rethrowEncodingError(error);
+    let bytes = input === undefined ? undefined : getBufferSourceView(input);
+    // Replacement mode consumes the input synchronously, retaining only numeric
+    // decoder state. Shared memory and unread input after fatal errors need a copy.
+    if (bytes && (this.#fatal || getBufferTypeName(bytes.buffer) === 'SharedArrayBuffer')) {
+      bytes = new Uint8Array(bytes);
     }
+    // §7.2: do not reset a streaming decoder after an error. The restored
+    // byte and the copied, unread suffix still belong to this input queue.
+    if (!this.#doNotFlush) {
+      this.#decoder = getDecoder(this.#encoding);
+      this.#input = new IOQueue<Uint8Array>();
+      this.#BOMSeen = false;
+    }
+    this.#doNotFlush = stream;
+    if (bytes) this.#input.push(bytes);
+    if (!stream) this.#input.push(endOfQueue);
+    const output = new IOQueue<string>();
+    const result = this.#decoder.decode(this.#input, output, this.#fatal ? 'fatal' : 'replacement');
+    if (typeof result === 'object') throw new TypeError(`Invalid ${this.#encoding} data`);
+    return this.#serialize(output);
+  }
+
+  /** §7.1 — Serialize an I/O queue, omitting at most one initial Unicode BOM. */
+  #serialize(output: IOQueue<string>): string {
+    const text = output.takeString();
+    if ((this.#encoding === 'UTF-8' || this.#encoding === 'UTF-16LE' || this.#encoding === 'UTF-16BE') &&
+      !this.#ignoreBOM && !this.#BOMSeen && text !== '') {
+      this.#BOMSeen = true;
+      if (text.charCodeAt(0) === 0xfeff) return text.slice(1);
+    }
+    return text;
   }
 }
 
@@ -100,6 +135,8 @@ export type TextDecoderOptions = {
 export type TextDecodeOptions = {
   stream: boolean;
 };
+
+// -- Web IDL ------------------------------------------------------------
 
 export const textDecoderCommonIDL = defineInterfaceMixin({
   name: 'TextDecoderCommon',
@@ -154,13 +191,3 @@ export const textDecodeOptionsIDL = defineDictionary({
     dictMember('stream', idlType.boolean, { default: false }),
   ],
 });
-
-function rethrowEncodingError(error: unknown): never {
-  if (error instanceof globalThis.RangeError) {
-    throw new RangeError(error.message);
-  }
-  if (error instanceof globalThis.TypeError) {
-    throw new TypeError(error.message);
-  }
-  throw error;
-}

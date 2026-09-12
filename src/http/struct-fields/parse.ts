@@ -1,6 +1,6 @@
-import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicDecode } from '../../js-engine/byte-string';
 
-import { utf8DecodeWithoutBOMOrFail } from '../../encoding/utf-8';
+import { utf8DecodeWithoutBOMOrFail } from '../../encoding/codecs/utf-8';
 import { forgivingBase64Decode } from '../../infra/base64';
 import { TextCursor } from '../../infra/text-cursor';
 

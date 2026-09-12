@@ -133,6 +133,12 @@ The active engine patches are on `v8-patches` in that checkout. The addon build
 detects the required hook APIs in the target headers; selecting `custom` alone
 does not imply that the engine supplies them.
 
+The custom engine also carries two Node-level `TextEncoder.encodeInto()` sizing
+corrections in `src/encoding_binding.cc`. These require an engine rebuild, not
+a new addon API. JS Engine checks both defects once before selecting native
+encoding; affected official Node 26 builds retain the scalar writer, while
+Node 24 and corrected builds use the builtin with or without the addon.
+
 The unused opaque Promise-job handle and saved-data API is preserved on
 `codex/promise-job-handles` at `f79760c4a`. The active branch uses the earlier
 callable-job API. Rebuild the engine and addon together when switching between
