@@ -94,6 +94,27 @@ describe('TextEncoderStream byte production', () => {
     expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(239, 191, 189));
     expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
   });
+
+  it.each([
+    [['\uD83D', '', '\uDE00'], '😀'],
+    [['\uD83D', '', 'A'], '\ufffdA'],
+    [['\uDC00', '\uD800', '\uD800', '\uDC00'], '\ufffd\ufffd\u{10000}'],
+    [['A\uD800', ''], 'A\ufffd'],
+  ] as const)('encodes code-unit chunks %j with replacement and flush handling', async (chunks, text) => {
+    const { reader, writer } = createEncoder();
+    const bytes: number[] = [];
+    const reading = (async () => {
+      for (;;) {
+        const result = await observe(reader.read());
+        if (result.done) return;
+        bytes.push(...getBufferSourceCopy(result.value as object));
+      }
+    })();
+    for (const chunk of chunks) await observe(writer.write(chunk));
+    await observe(writer.close());
+    await reading;
+    expect(bytes).toEqual(Array.from(new TextEncoder().encode(text)));
+  });
 });
 
 function createEncoder() {

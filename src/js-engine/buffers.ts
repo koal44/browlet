@@ -205,15 +205,16 @@ export function isLengthTrackingArrayBufferView(
 }
 
 export function getBufferSourceCopy(value: object): Uint8Array {
+  return Uint8Array.from(getBufferSourceView(value));
+}
+
+/** Borrow the actual byte range; subsequent changes to the source remain visible. */
+export function getBufferSourceView(value: object): Uint8Array {
   const buffer = getBufferSourceUnderlyingBuffer(value);
   if (isDetachedArrayBuffer(buffer)) return new Uint8Array();
   const offset = getBufferSourceByteOffset(value);
   const length = getBufferSourceByteLength(value);
-  return Uint8Array.from(new Uint8Array(
-    buffer,
-    offset,
-    length,
-  ));
+  return new Uint8Array(buffer, offset, length);
 }
 
 export function getBufferSourceByteLength(value: object): number {

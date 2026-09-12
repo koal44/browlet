@@ -1,6 +1,6 @@
-import { isomorphicDecode, isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicDecode, isomorphicEncode } from '../../js-engine/byte-string';
 
-import { encode } from '../../encoding/hooks';
+import { type Encoding, encode } from '../../encoding/encodings';
 import { BlobData } from '../../file/index';
 import { percentEncodeByte } from '../../url/percent-encoding';
 import type { FormDataEntry } from '../../xhr/index';
@@ -16,7 +16,7 @@ import type { FormDataEntry } from '../../xhr/index';
 // SPEC_MISMATCH: (entries, encoding) -> bytes
 export function encodeMultipartFormData(
   entries: readonly FormDataEntry[],
-  encoding: string,
+  encoding: Encoding,
 ): MultipartEncoding {
   const boundary = crypto.randomUUID();
   const lineEnding = BlobData.fromOwnedBytes(isomorphicEncode('\r\n'));
@@ -45,7 +45,7 @@ export type MultipartEncoding = {
   data: BlobData;
 };
 
-function escapeName(value: string, encoding: string): string {
+function escapeName(value: string, encoding: Encoding): string {
   return isomorphicDecode(encode(value, encoding)).replace(/[\r\n"]/g,
     (char) => percentEncodeByte(char.charCodeAt(0)));
 }

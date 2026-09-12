@@ -23,7 +23,6 @@ export class TextDecoderStreamImpl {
   readonly #common: TextDecoderCommonMixin;
   readonly #generic: GenericTransformStreamMixin;
 
-  // SPEC_MISMATCH: TextDecoderStream(label = "utf-8", options = {}) -> TextDecoderStream
   constructor(
     label: string,
     options: TextDecoderOptions,
@@ -69,14 +68,12 @@ export class TextDecoderStreamImpl {
     return this.#generic.writable;
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static getAssociatedTransform(
-    stream: TextDecoderStreamImpl,
-  ): TransformStreamImpl {
-    return GenericTransformStreamMixin.getAssociatedTransform(stream.#generic);
+  getAssociatedTransform(): TransformStreamImpl {
+    return GenericTransformStreamMixin.getAssociatedTransform(this.#generic);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
 
 export const textDecoderStreamIDL = defineInterface({
   name: 'TextDecoderStream',

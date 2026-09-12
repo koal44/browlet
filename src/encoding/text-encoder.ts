@@ -1,18 +1,13 @@
-import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
 import {
-  getBufferSourceByteLength, writeArrayBufferView,
+  getBufferSourceByteLength, getBufferSourceByteOffset, getBufferSourceUnderlyingBuffer,
 } from '../js-engine/index';
+import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, newBufferResult, op,
   roAttr, reference, xattr,
 } from '../web-idl/declaration/index';
 
-/*
- * interface mixin TextEncoderCommon {
- *   readonly attribute DOMString encoding;
- * };
- */
 /*
  * dictionary TextEncoderEncodeIntoResult {
  *   unsigned long long read;
@@ -26,30 +21,33 @@ import {
  *   [NewObject] Uint8Array encode(optional USVString input = "");
  *   TextEncoderEncodeIntoResult encodeInto(USVString source, [AllowShared] Uint8Array destination);
  * };
+ *
  * TextEncoder includes TextEncoderCommon;
+ *
+ * interface mixin TextEncoderCommon {
+ *   readonly attribute DOMString encoding;
+ * };
  */
 export class TextEncoderImpl {
-  readonly #encoder = new ExodusTextEncoder();
-
   get encoding(): string {
     return 'utf-8';
   }
 
   /** Encode bytes; the member binding allocates the returned typed array. */
   encode(input: string): Uint8Array {
-    return this.#encoder.encode(input);
+    return utf8Encode(input);
   }
 
   encodeInto(
     source: string,
-    destination: object,
+    destination: Uint8Array,
   ): Map<keyof TextEncoderEncodeIntoResult, number> {
-    const bytes = new Uint8Array(getBufferSourceByteLength(destination));
-    const result = this.#encoder.encodeInto(source, bytes);
-    writeArrayBufferView(
-      destination,
-      bytes.subarray(0, result.written),
+    // An internal view of the same storage bypasses author-shadowed properties.
+    const bytes = new Uint8Array(
+      getBufferSourceUnderlyingBuffer(destination), getBufferSourceByteOffset(destination),
+      getBufferSourceByteLength(destination),
     );
+    const result = utf8EncodeInto(source, bytes);
     return new Map([
       ['read', result.read],
       ['written', result.written],
@@ -61,6 +59,8 @@ export type TextEncoderEncodeIntoResult = {
   read: number;
   written: number;
 };
+
+// -- Web IDL ------------------------------------------------------------
 
 export const textEncoderCommonIDL = defineInterfaceMixin({
   name: 'TextEncoderCommon',

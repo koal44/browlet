@@ -1,4 +1,4 @@
-import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicDecode } from '../js-engine/byte-string';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
 

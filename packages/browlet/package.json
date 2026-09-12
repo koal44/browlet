@@ -50,7 +50,6 @@
     "prepack": "node --run build"
   },
   "dependencies": {
-    "@exodus/bytes": "^1.15.1",
     "parse5": "^8.0.1",
     "parse5-parser-stream": "^8.0.0",
     "tldts": "^7.4.10",

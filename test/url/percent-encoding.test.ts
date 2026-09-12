@@ -34,6 +34,12 @@ describe('URL Standard section 1.3: percent-encoded bytes', () => {
     ['Shift_JIS', '≡', 'special_query', '%81%DF'],
     ['Shift_JIS', '‽', 'special_query', '%26%238253%3B'],
     ['ISO-2022-JP', '¥', 'special_query', '%1B(J\\%1B(B'],
+    ['ISO-2022-JP', '¥😀¥', 'special_query', '%1B(J\\%26%23128512%3B\\%1B(B'],
+    ['ISO-2022-JP', 'あ😀あ', 'special_query', '%1B$B$%22%1B(B%26%23128512%3B%1B$B$%22%1B(B'],
+    ['ISO-2022-JP', '\x0e\x0f\x1b', 'special_query', '%26%2365533%3B%26%2365533%3B%26%2365533%3B'],
+    ['x-user-defined', '\uf780\uf7ff\u0080', 'special_query', '%80%FF%26%23128%3B'],
+    ['gb18030', '😀', 'special_query', '%949%FC6'],
+    ['GBK', '😀', 'special_query', '%26%23128512%3B'],
     [
       'Shift_JIS', '1+1 ≡ 2%20‽', 'form_urlencoded',
       '1%2B1+%81%DF+2%2520%26%238253%3B',

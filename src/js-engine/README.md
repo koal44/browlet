@@ -157,6 +157,13 @@ without importing HTML.
 
 ## Node/V8 accommodations
 
+`node-utf8-encode-into` checks native `TextEncoder.encodeInto()` once for the
+two sizing defects present in Node 26.8.1. Node 24.19.0 and our corrected custom
+engine use the native writer. Affected builds retain the scalar writer behind
+the same `writeUTF8Into` operation; both report consumed UTF-16 code units and
+written bytes. No addon is required. Remove the probe and scalar fallback when
+every supported Node build contains both corrections.
+
 With the addon, function lookup uses V8's public proxy-target, bound-target, and
 creation-context APIs without invoking author traps. Other objects use explicit
 host associations or V8's creation context. Evaluating a foreign value does not

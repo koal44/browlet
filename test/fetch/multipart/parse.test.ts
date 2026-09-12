@@ -1,4 +1,4 @@
-import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicEncode } from '../../../src/js-engine/byte-string';
 import { describe, expect, it } from 'vitest';
 
 import { parseMultipartFormData } from '../../../src/fetch/multipart/parse';

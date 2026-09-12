@@ -18,7 +18,6 @@ export class AbortControllerImpl
 {
   readonly #signal: AbortSignalImpl;
 
-  // SPEC_MISMATCH: AbortController() -> AbortController
   constructor(signal: AbortSignalImpl) {
     this.#signal = signal;
   }

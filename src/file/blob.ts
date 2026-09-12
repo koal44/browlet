@@ -1,4 +1,4 @@
-import { utf8Decode, utf8Encode } from '../encoding/utf-8';
+import { utf8Decode, utf8Encode } from '../encoding/codecs/utf-8';
 import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
 import {
   type PromiseValue, type RuntimeContext, getBufferSourceCopy,
@@ -148,7 +148,7 @@ export class BlobImpl {
     const decoder = new TextDecoderStreamImpl(
       'utf-8', { fatal: false, ignoreBOM: false }, this.#runtime,
     );
-    return stream.pipeThroughTransform(TextDecoderStreamImpl.getAssociatedTransform(decoder));
+    return stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
 
   bytes(): PromiseValue<Uint8Array> {

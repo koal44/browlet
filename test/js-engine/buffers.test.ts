@@ -4,13 +4,28 @@ import {
   getArrayBufferByteLength, getArrayBufferMaxByteLength,
   getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset,
   getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceCopy,
-  getBufferSourceUnderlyingBuffer, getBufferTypeName, getTypedArrayLength,
+  getBufferSourceUnderlyingBuffer, getBufferSourceView, getBufferTypeName, getTypedArrayLength,
   isArrayBufferViewOutOfBounds, isBufferSourceDetached, isDetachedArrayBuffer,
   isFixedBufferSource, isLengthTrackingArrayBufferView, JSRealm,
   writeArrayBuffer, writeArrayBufferView,
 } from '../../src/js-engine/index';
 
 describe('Runtime buffer ownership', () => {
+  it.each([false, true])('borrows the selected byte range while copies stay independent (shared=%s)', (shared) => {
+    const buffer = shared ? new SharedArrayBuffer(4) : new ArrayBuffer(4);
+    const source = new Uint8Array(buffer);
+    source.set([90, 1, 2, 91]);
+    const input = new DataView(buffer, 1, 2);
+    const view = getBufferSourceView(input);
+    const copy = getBufferSourceCopy(input);
+
+    source[1] = 7;
+    expect(Array.from(view)).toEqual([7, 2]);
+    expect(Array.from(copy)).toEqual([1, 2]);
+    view[1] = 8;
+    expect(Array.from(source)).toEqual([90, 7, 8, 91]);
+  });
+
   it('allocates final storage and shares it between target-realm views', () => {
     const { realm, buffers } = createFixture();
     const buffer = buffers.allocateArrayBuffer(8);

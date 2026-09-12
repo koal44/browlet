@@ -1,6 +1,7 @@
-import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicEncode } from '../../../src/js-engine/byte-string';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Encoding } from '../../../src/encoding/encodings';
 import { encodeMultipartFormData } from '../../../src/fetch/multipart/encode';
 import { BlobData, FileImpl } from '../../../src/file/index';
 import { toScalarValueString } from '../../../src/infra/index';
@@ -189,7 +190,7 @@ describe('RFC 2046 §5.1.1: multipart boundaries', () => {
   });
 });
 
-async function readEncoding(entries: FormDataEntry[], encoding = 'UTF-8') {
+async function readEncoding(entries: FormDataEntry[], encoding: Encoding = 'UTF-8') {
   const { boundary, data } = encodeMultipartFormData(entries, encoding);
   return { boundary, bytes: await data.read() };
 }

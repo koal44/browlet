@@ -65,7 +65,6 @@ function callJobCallback(
 }
 
 /* HTML §8.1.6 — HostEnqueuePromiseJob. */
-// SPEC_MISMATCH: (job, realm) -> void
 function enqueuePromiseJob(
   job: () => void,
   realm: JSRealm | null,

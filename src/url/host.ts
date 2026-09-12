@@ -1,5 +1,6 @@
 import { getDomain, getPublicSuffix } from 'tldts';
 import { toASCII, toUnicode } from 'tr46';
+import { utf8Decode } from '../encoding/codecs/utf-8';
 
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';
 import { percentDecodeString, utf8PercentEncode } from './percent-encoding';
@@ -98,7 +99,7 @@ export function parseHost(input: string, isOpaque = false): HostParseResult {
       validationErrors.push('domain-percent-encoded');
     }
 
-    const domain = textDecoder.decode(Uint8Array.from(percentDecodeString(input)));
+    const domain = utf8Decode(Uint8Array.from(percentDecodeString(input)));
     const asciiDomain = parseDomain(domain, false, validationErrors);
 
     if (asciiDomain === null) {
@@ -419,8 +420,6 @@ function parseOpaqueHost(
   const value = utf8PercentEncode(input, 'c0_control');
   return value === '' ? { kind: 'empty' } : { kind: 'opaque', value };
 }
-
-const textDecoder = new TextDecoder('utf-8');
 
 const publicSuffixOptions = {
   allowPrivateDomains: true,

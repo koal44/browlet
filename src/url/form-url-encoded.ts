@@ -1,4 +1,6 @@
-import { normalizeEncoding } from '@exodus/bytes/encoding.js';
+import { getEncoding, getOutputEncoding } from '../encoding/encodings';
+import { utf8DecodeWithoutBOM, utf8Encode } from '../encoding/codecs/utf-8';
+import { RangeError } from '../js-engine/simple-exception';
 
 import {
   percentDecodeBytes, percentEncodeAfterEncoding,
@@ -32,7 +34,7 @@ export function parseFormUrlEncoded(
  * https://url.spec.whatwg.org/#concept-urlencoded-string-parser
  */
 export function parseFormUrlEncodedString(input: string): FormTuple[] {
-  return parseFormUrlEncoded(textEncoder.encode(input));
+  return parseFormUrlEncoded(utf8Encode(input));
 }
 
 /*
@@ -44,17 +46,11 @@ export function serializeFormUrlEncoded(
   tuples: FormTuple[],
   encoding = 'UTF-8',
 ): string {
-  let outputEncoding = normalizeEncoding(encoding);
-  if (outputEncoding === null) {
+  const name = getEncoding(encoding);
+  if (name === null) {
     throw new RangeError(`Unknown encoding: ${encoding}`);
   }
-  if (
-    outputEncoding === 'replacement' ||
-    outputEncoding === 'utf-16be' ||
-    outputEncoding === 'utf-16le'
-  ) {
-    outputEncoding = 'utf-8';
-  }
+  const outputEncoding = getOutputEncoding(name);
   const output: string[] = [];
 
   for (const [tupleName, tupleValue] of tuples) {
@@ -73,9 +69,6 @@ export function serializeFormUrlEncoded(
 
   return output.join('&');
 }
-
-const textEncoder = new TextEncoder();
-const utf8DecoderWithoutBOM = new TextDecoder('UTF-8', { ignoreBOM: true });
 
 function parseTuple(
   input: ArrayLike<number>,
@@ -106,7 +99,7 @@ function copyReplacingPlus(
 }
 
 function decodeFormBytes(input: number[]): string {
-  return utf8DecoderWithoutBOM.decode(
+  return utf8DecodeWithoutBOM(
     Uint8Array.from(percentDecodeBytes(input)),
   );
 }

@@ -88,7 +88,6 @@ export function getMethod(
 }
 
 /** ECMAScript GetV, with primitive boxing in the supplied realm. */
-// SPEC_MISMATCH: GetV(V, P) -> any
 export function getV(value: unknown, key: PropertyKey, realm: JSRealm): unknown {
   if (value === undefined || value === null) {
     throw new realm.intrinsics.typeError(

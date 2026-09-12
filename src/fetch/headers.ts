@@ -1,4 +1,4 @@
-import { isomorphicEncode } from '@exodus/bytes/encoding-lite.js';
+import { isomorphicEncode } from '../js-engine/byte-string';
 
 import { getMIMETypeEssence, parseMIMEType } from '../mime/index';
 import { collectHTTPQuotedString, isHTTPToken } from '../http/syntax';
