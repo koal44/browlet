@@ -6,9 +6,7 @@ import {
 import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
-import {
-  domExceptionName, throwDOMException,
-} from '../../web-idl/exceptions/dom-exception-core';
+import type { RuntimeCaps } from '../stylelet';
 import { withCSSStyleDeclaration } from './stubs/extensions';
 
 /*
@@ -48,6 +46,7 @@ export class CSSStyleDeclarationImpl
     declarations: readonly PropertyDeclaration[],
   ) => void;
   #updating = false;
+  readonly #runtime: RuntimeCaps;
 
   constructor({
     declarations = [],
@@ -56,8 +55,9 @@ export class CSSStyleDeclarationImpl
     parentRule = null,
     ownerNode = null,
     onChange = () => {},
-  }: CSSStyleDeclarationOptions = {}) {
+  }: CSSStyleDeclarationOptions, runtime: RuntimeCaps) {
     super();
+    this.#runtime = runtime;
     this.#computed = computed;
     this.#readonly = readonly;
     this.#parentRule = parentRule;
@@ -158,11 +158,11 @@ export class CSSStyleDeclarationImpl
     return this.#declarations.map(({ name }) => name)[Symbol.iterator]();
   }
 
-  get __declarations(): readonly PropertyDeclaration[] {
+  get declarations(): readonly PropertyDeclaration[] {
     return this.#declarations;
   }
 
-  __attributeChanged(
+  attributeChanged(
     localName: string,
     value: string | null,
     namespace: string | null = null,
@@ -258,8 +258,8 @@ export class CSSStyleDeclarationImpl
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throwDOMException(
-      domExceptionName.noModificationAllowed,
+    throw this.#runtime.createDOMException(
+      'NoModificationAllowedError',
       'The CSS declaration block is read-only.',
     );
   }

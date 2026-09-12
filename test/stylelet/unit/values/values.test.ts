@@ -10,7 +10,7 @@ import {
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
-import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { StyleletContext } from '../../../../src/stylelet/context';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
@@ -911,8 +911,8 @@ function createUrlTreeScopes(): {
   const document = new JSDOM('<main></main>', {
     url: 'https://example.com/',
   }).window.document;
-  const snapshot = new Snapshot(document);
-  const cascade = new CascadeEngine({ snapshot });
+  const context = new StyleletContext(document);
+  const cascade = new CascadeEngine({ context });
   const shadowRoot = document.querySelector('main')!
     .attachShadow({ mode: 'open' });
 

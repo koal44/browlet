@@ -1,18 +1,13 @@
-import type { JSFunction, JSRealm } from './realm';
 import { TypeError } from './simple-exception';
 
 /** Promise allocation, adoption, and observation in one supplied destination. */
 export class Promises {
   readonly #Promise: PromiseConstructor;
-  readonly observeNative: (
-    promise: Promise<unknown>, fulfilled: JSFunction, rejected: JSFunction,
-  ) => void;
+  readonly observeNative: NativePromiseObserver;
 
-  constructor(realm: JSRealm) {
-    this.#Promise = realm.intrinsics.promise.constructor;
-    this.observeNative = (promise, fulfilled, rejected) => {
-      realm.observePromise(promise, fulfilled, rejected);
-    };
+  constructor(promiseConstructor: PromiseConstructor, observeNative: NativePromiseObserver) {
+    this.#Promise = promiseConstructor;
+    this.observeNative = observeNative;
   }
 
   /** Settle an internal value without JavaScript thenable adoption. */
@@ -82,6 +77,11 @@ export class Promises {
     return PromiseValue.import(source, this, convert);
   }
 }
+
+/** The host selects where native settlement callbacks execute. */
+export type NativePromiseObserver = (
+  promise: Promise<unknown>, fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void,
+) => void;
 
 /** Internal chains retain their destination. Native async/await is not an internal consumer. */
 export class PromiseValue<T> {
@@ -154,4 +154,5 @@ export type PromiseValueCapability<T> = {
   reject: (reason: unknown) => void;
 };
 
+// eslint-disable-next-line no-restricted-syntax -- Native backing storage; Promises routes observation through the selected realm.
 const NativePromise = globalThis.Promise;

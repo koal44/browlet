@@ -255,6 +255,13 @@ export class EventLoop {
     }
   }
 
+  /** Conditional checkpoint at a Browlet-controlled parser entry. */
+  performMicrotaskCheckpointIfStackEmpty(): void {
+    if (this.#jsExecutionContextStack.length === 0) {
+      this.performMicrotaskCheckpoint();
+    }
+  }
+
   performMicrotaskCheckpoint(): void {
     if (this.#performingMicrotaskCheckpoint) return;
 

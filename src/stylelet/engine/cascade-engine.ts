@@ -4,7 +4,7 @@ import type {
 } from '../css/property';
 import type { CSSStyleDeclarationImpl } from '../cssom/declaration';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import type { Snapshot } from '../snapshot';
+import type { StyleletContext } from '../context';
 import { computeStyle } from './computed-style';
 import {
   getCascadedProperty as findCascadedProperty, type CascadedProperty,
@@ -23,16 +23,16 @@ export class CascadeEngine {
   // engine. It is the final fallback for resolving stylesheet resource URLs.
   readonly environmentBaseUrl: URL | undefined;
 
-  readonly snapshot: Snapshot;
+  readonly context: StyleletContext;
 
   constructor(options: CascadeEngineOptions) {
     this.registeredPropertySet = options.registeredPropertySet ?? new Map();
     this.environmentBaseUrl = options.environmentBaseUrl;
-    this.snapshot = options.snapshot;
+    this.context = options.context;
   }
 
   createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheetImpl {
-    return new CSSStyleSheetImpl(this.snapshot, options);
+    return new CSSStyleSheetImpl(this.context, options);
   }
 
   *getActiveStyleSheets(
@@ -72,7 +72,7 @@ export class CascadeEngine {
 
   getPropertyContext(property: CascadedProperty): PropertyContext {
     const { styleSheet, scope } = property;
-    const interpretedStyleSheet = styleSheet.__interpretedStyleSheet;
+    const interpretedStyleSheet = styleSheet.interpretedStyleSheet;
     const baseUrl = interpretedStyleSheet.baseUrl ??
       interpretedStyleSheet.location ??
       this.environmentBaseUrl;
@@ -94,5 +94,5 @@ export class CascadeEngine {
 export type CascadeEngineOptions = {
   environmentBaseUrl?: URL;
   registeredPropertySet?: CustomPropertyRegistry;
-  snapshot: Snapshot;
+  context: StyleletContext;
 };

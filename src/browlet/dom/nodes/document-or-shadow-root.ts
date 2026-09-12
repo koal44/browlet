@@ -2,6 +2,8 @@ import {
   defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
+import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
+import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 
 /*
@@ -22,15 +24,15 @@ export class DocumentOrShadowRootMixin {
     return this.#options.getCustomElementRegistry();
   }
 
-  get styleSheets(): StyleSheetList {
+  get styleSheets(): StyleSheetListImpl {
     return this.#options.getStyleScope().styleSheets;
   }
 
-  get adoptedStyleSheets(): CSSStyleSheet[] {
+  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#options.getStyleScope().adoptedStyleSheets;
   }
 
-  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
     this.#options.getStyleScope().setAdoptedStyleSheets(styleSheets);
   }
 }

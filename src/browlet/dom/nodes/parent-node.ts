@@ -31,7 +31,7 @@ export class ParentNodeMixin {
     this.#children = new HTMLCollectionImpl(() => collectChildren(node));
   }
 
-  get children(): HTMLCollectionOf<ElementImpl> {
+  get children(): HTMLCollectionImpl<ElementImpl> {
     this.#children.refresh();
     return this.#children;
   }

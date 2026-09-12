@@ -3,7 +3,7 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
-import { jsRuntime } from '../js-engine/index';
+import { jsRuntime, type PromiseValue } from '../js-engine/index';
 import {
   browletBindings, getRelevantRealm,
 } from './bindings';
@@ -85,7 +85,16 @@ export class Browlet {
     });
   }
 
-  async navigate(url: string | URL): Promise<WindowProxy> {
+  navigate(url: string | URL): Promise<WindowProxy> {
+    // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through PromiseValue before this host promise settles.
+    return new Promise((resolve, reject) => {
+      this.navigateDocument(url).observe(resolve, reject);
+    });
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  private navigateDocument(url: string | URL): PromiseValue<WindowProxy> {
     const documentURL = new URL(url);
     const source = this.getRouteSource(documentURL);
     const documentURLRecord = requireURLRecord(documentURL.href);
@@ -105,6 +114,7 @@ export class Browlet {
       navigationParams,
     );
     const realm = getRelevantRealm(document);
+    const runtime = browletBindings.forRealm(realm).context.getRuntime();
     this.installExposures(realm.globalObject);
     const historyEntry = createNavigationHistoryEntry(
       document,
@@ -128,14 +138,15 @@ export class Browlet {
           realm,
         );
       },
+      realm.agent.eventLoop,
+      runtime,
     );
 
-    await parser.parse(source);
-    completelyFinishLoading(document);
-    return this.window;
+    return parser.parse(source).then(() => {
+      completelyFinishLoading(document);
+      return this.window;
+    });
   }
-
-  // -- Private ----------------------------------------------------------
 
   private executeScript(
     element: ElementImpl,

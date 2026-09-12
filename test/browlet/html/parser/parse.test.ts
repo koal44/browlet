@@ -33,9 +33,9 @@ describe('DOM document construction', () => {
     const cssEngine = DocumentImpl.getCSSEngine(document);
 
     expect(DocumentImpl.getCSSEngine(document)).toBe(cssEngine);
-    expect(cssEngine.snapshot.document).toBe(document);
-    expect(cssEngine.snapshot.root).toBe(document.documentElement);
-    expect(cssEngine.snapshot.isQuirksMode).toBe(true);
+    expect(cssEngine.context.document).toBe(document);
+    expect(cssEngine.context.root).toBe(document.documentElement);
+    expect(cssEngine.context.isQuirksMode).toBe(true);
     expect(cssEngine.version).toBe('stylelet-__VERSION__');
     expect(document.documentElement.localName).toBe('html');
     expect(document.getElementById('target')?.localName).toBe('main');

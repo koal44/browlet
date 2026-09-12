@@ -616,9 +616,11 @@ export function installBrowserHelpers(): void {
     }
   }
 
+  type CssomSheet = Pick<CSSStyleSheet, 'cssRules'>;
+
   type CssomReadFrom =
     | { kind: 'sheet'; }
-    | { kind: 'styleText'; createSheet: (source: string) => CSSStyleSheet; };
+    | { kind: 'styleText'; createSheet: (source: string) => CssomSheet; };
 
   function readCssom(cssom: CssomProbe, ctx: QueryContext, from: CssomReadFrom): unknown {
     const sheet = from.kind === 'sheet'
@@ -628,7 +630,7 @@ export function installBrowserHelpers(): void {
     return readCssomSheet(cssom, sheet);
   }
 
-  function readCssomSheet(cssom: CssomProbe, sheet: CSSStyleSheet): unknown {
+  function readCssomSheet(cssom: CssomProbe, sheet: CssomSheet): unknown {
     switch (cssom.target) {
       case 'sheet.cssRules':
         return ruleListToArray(sheet.cssRules).map((rule) => inspectObject(rule));
@@ -683,7 +685,7 @@ export function installBrowserHelpers(): void {
     return rules;
   }
 
-  function resolveCssomSheet(ctx: QueryContext, index = 0): CSSStyleSheet {
+  function resolveCssomSheet(ctx: QueryContext, index = 0): CssomSheet {
     if (isDocument(ctx)) {
       const sheet = ctx.styleSheets[index];
       if (!sheet) throw new Error(`No stylesheet at index ${index}`);
@@ -699,7 +701,7 @@ export function installBrowserHelpers(): void {
     throw new Error(`Context for 'cssom' sheet read must be a Document, <style>, or <link>`);
   }
 
-  function createCssomSheetFromStyleText(cssom: CssomProbe, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CSSStyleSheet {
+  function createCssomSheetFromStyleText(cssom: CssomProbe, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CssomSheet {
     const source = resolveCssomStyleText(ctx, cssom.sheet ?? 0);
     return from.createSheet(source);
   }
@@ -828,7 +830,7 @@ export function installBrowserHelpers(): void {
     return out;
   }
 
-  function getStyleRule(sheet: CSSStyleSheet, index: number): CSSStyleRule {
+  function getStyleRule(sheet: CssomSheet, index: number): CSSStyleRule {
     const rule = getRule(sheet, index);
     if (rule.type !== CSSRule.STYLE_RULE) {
       throw new Error(`CSS rule at index ${index} is not a style rule`);
@@ -837,7 +839,7 @@ export function installBrowserHelpers(): void {
     return rule as CSSStyleRule;
   }
 
-  function getRule(sheet: CSSStyleSheet, index: number): CSSRule {
+  function getRule(sheet: CssomSheet, index: number): CSSRule {
     const rule = sheet.cssRules[index];
     if (!rule) throw new Error(`No CSS rule at index ${index}`);
     return rule;

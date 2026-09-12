@@ -10,7 +10,7 @@ import {
   CascadeEngine, type CascadeEngineOptions,
 } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
-import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('cascade engine', () => {
@@ -94,7 +94,7 @@ describe('cascade engine', () => {
     Object.defineProperty(document, 'baseURI', { value: location.href });
     const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
-      snapshot: new Snapshot(document),
+      context: new StyleletContext(document),
     });
     const styleSheet = engine.createStyleSheet();
     styleSheet.replaceSync('* { color: red }');
@@ -111,7 +111,7 @@ describe('cascade engine', () => {
     Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
     const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
-      snapshot: new Snapshot(document),
+      context: new StyleletContext(document),
     });
     const ownerNode = document.createElement('style');
     scope.createStyleElementStyleSheet(ownerNode, '* { color: red }');
@@ -127,7 +127,7 @@ describe('cascade engine', () => {
     }).window.document;
     const shadowRoot = document.querySelector('main')!
       .attachShadow({ mode: 'open' });
-    const { engine } = createCascade({ snapshot: new Snapshot(document) });
+    const { engine } = createCascade({ context: new StyleletContext(document) });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
     const styleSheet = engine.createStyleSheet();
@@ -180,7 +180,7 @@ describe('cascade engine', () => {
     );
     const target = document.getElementById('target')!;
     const { engine, scope } = createCascade({
-      snapshot: new Snapshot(document),
+      context: new StyleletContext(document),
     });
     addStyleSheet(scope, `
       .target { color: red !important }
@@ -203,12 +203,12 @@ describe('cascade engine', () => {
 });
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createBrowletDocument());
-  const engine = new CascadeEngine({ ...options, snapshot });
+  const context = options.context ?? new StyleletContext(createBrowletDocument());
+  const engine = new CascadeEngine({ ...options, context });
 
   return {
     engine,
-    scope: new TreeScope(snapshot.document, engine),
+    scope: new TreeScope(context.document, engine),
   };
 }
 
@@ -217,8 +217,8 @@ function addStyleSheet(
   source: string,
   options: StyleSheetOptions = {},
 ): CSSStyleSheetImpl {
-  const styleSheet = CSSStyleSheetImpl.__create(
-    scope.cascade.snapshot,
+  const styleSheet = CSSStyleSheetImpl.create(
+    scope.cascade.context,
     {
       location: options.location?.href ?? null,
       parentStyleSheet: null,

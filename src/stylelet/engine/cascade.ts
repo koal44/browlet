@@ -24,12 +24,12 @@ export function getCascadedProperty(
   let resultSpecificity: Specificity | null = null;
 
   for (const styleSheet of engine.getActiveStyleSheets(scope)) {
-    for (const rule of styleSheet.__interpretedStyleSheet.rules) {
+    for (const rule of styleSheet.interpretedStyleSheet.rules) {
       if (rule.type !== 'style-rule') continue;
 
       const specificity = element === undefined
         ? ZERO_SPECIFICITY
-        : matchSelectorList(rule.selectors, element, engine.snapshot);
+        : matchSelectorList(rule.selectors, element, engine.context);
       if (specificity === null) continue;
 
       for (const item of rule.block) {

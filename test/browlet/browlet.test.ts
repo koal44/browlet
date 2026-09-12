@@ -468,6 +468,24 @@ describe('Browlet', () => {
     expect(browlet.window.document).toBe(browlet.document);
   });
 
+  it('runs script microtasks before parsing the following markup', async () => {
+    const observations: unknown[] = [];
+    const browlet = new Browlet({
+      route: () => [
+        '<script>',
+        'Promise.resolve().then(() => observe(document.getElementById("after")));',
+        '</script>',
+        '<main id="after"></main>',
+      ].join(''),
+    });
+    browlet.expose('observe', (value: unknown) => observations.push(value));
+
+    await browlet.navigate('https://example.test/page');
+
+    expect(observations).toEqual([null]);
+    expect(browlet.document.getElementById('after')).not.toBeNull();
+  });
+
   it('routes and executes external scripts before parsing continues', async () => {
     const requests: string[] = [];
     const observations: unknown[] = [];

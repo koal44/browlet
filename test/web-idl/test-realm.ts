@@ -19,7 +19,7 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
 
   constructor(options: TestRealmOptions = {}) {
     /* Vitest owns this unit harness's asynchronous lifecycle. */
-    super(testMicrotaskQueue);
+    super(options.microtaskQueue ?? testMicrotaskQueue);
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
@@ -51,6 +51,7 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
 }
 
 type TestRealmOptions = {
+  microtaskQueue?: JSMicrotaskQueue;
   crossOriginIsolated?: boolean;
   globalNames?: readonly string[];
   isGlobalPrototypeChainMutable?: boolean;

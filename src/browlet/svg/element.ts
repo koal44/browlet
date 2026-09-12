@@ -8,6 +8,7 @@ import {
 } from '../../web-idl/declaration/index';
 import { impl } from '../../web-idl/index';
 import { withSVGElementStub } from '../stubs';
+import type { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
 
 /*
  * [Exposed=Window]
@@ -32,7 +33,7 @@ export class SVGElementImpl
     super(context, linkStyle);
   }
 
-  get style(): CSSStyleDeclaration {
+  get style(): CSSStyleDeclarationImpl {
     return ElementImpl.getInlineStyle(this);
   }
 }

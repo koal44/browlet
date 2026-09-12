@@ -1,9 +1,10 @@
+import { defaultRuntimeCaps } from '../../../../src/stylelet/stylelet';
 import { describe, expect, it } from 'vitest';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 
 describe('MediaListImpl', () => {
   it('parses and serializes mediaText', () => {
-    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ');
+    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ', defaultRuntimeCaps);
 
     expect(list.mediaText).toBe('screen, (width >= 10px)');
     expect(list.length).toBe(2);
@@ -18,7 +19,7 @@ describe('MediaListImpl', () => {
   });
 
   it('replaces the collection and treats null as the empty string', () => {
-    const list = new MediaListImpl('screen, print');
+    const list = new MediaListImpl('screen, print', defaultRuntimeCaps);
 
     list.mediaText = 'speech';
     expect(list.mediaText).toBe('speech');
@@ -32,7 +33,7 @@ describe('MediaListImpl', () => {
   });
 
   it('converts item indices to Web IDL unsigned longs', () => {
-    const list = new MediaListImpl('screen, print');
+    const list = new MediaListImpl('screen, print', defaultRuntimeCaps);
 
     expect(list.item(1.9)).toBe('print');
     expect(list.item(-1)).toBeNull();
@@ -41,13 +42,13 @@ describe('MediaListImpl', () => {
   });
 
   it('represents an invalid list entry as not all', () => {
-    const list = new MediaListImpl('screen, &, print');
+    const list = new MediaListImpl('screen, &, print', defaultRuntimeCaps);
 
     expect(list.mediaText).toBe('screen, not all, print');
   });
 
   it('appends one query and ignores an equivalent query', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', defaultRuntimeCaps);
 
     list.appendMedium('PRINT');
     list.appendMedium('print');
@@ -57,7 +58,7 @@ describe('MediaListImpl', () => {
   });
 
   it('treats the empty query before a lone comma as not all', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', defaultRuntimeCaps);
 
     list.appendMedium(',');
     expect(list.mediaText).toBe('screen, not all');
@@ -67,7 +68,7 @@ describe('MediaListImpl', () => {
   });
 
   it('deletes every equivalent query', () => {
-    const list = new MediaListImpl('screen, SCREEN, print');
+    const list = new MediaListImpl('screen, SCREEN, print', defaultRuntimeCaps);
 
     list.deleteMedium('screen');
 
@@ -75,7 +76,7 @@ describe('MediaListImpl', () => {
   });
 
   it('throws NotFoundError when no query is removed', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', defaultRuntimeCaps);
     let error: unknown;
 
     try {

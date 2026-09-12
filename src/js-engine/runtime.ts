@@ -33,6 +33,7 @@ export class JSRuntime {
    */
   readonly #ambientMicrotaskQueue: JSMicrotaskQueue = {
     kind: 'ambient',
+    // eslint-disable-next-line no-restricted-syntax -- Stock Node queue backend, used only when explicit queues are unavailable.
     enqueueMicrotask: (steps) => { globalThis.queueMicrotask(steps); },
     performMicrotaskCheckpoint: () => { this.#getTickCallback()(); },
   };

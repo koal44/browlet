@@ -17,7 +17,7 @@ export function computeStyle(
 ): CSSStyleDeclarationImpl {
   const declarations = 'style' in element &&
     element.style instanceof CSSStyleDeclarationImpl
-    ? element.style.__declarations
+    ? element.style.declarations
     : parseDeclarationBlock(element.getAttribute('style') ?? '');
   const computed: PropertyDeclaration[] = [];
 
@@ -59,5 +59,5 @@ export function computeStyle(
     computed: true,
     declarations: computed,
     readonly: true,
-  });
+  }, engine.context.runtime);
 }

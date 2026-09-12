@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { StyleletContext } from '../../../../src/stylelet/context';
 import {
   compileSelectorList, matchSelectorList,
 } from '../../../../src/stylelet/selector/match';
@@ -205,13 +205,13 @@ describe('selector matching', () => {
     const document = createBrowletDocument('<main id="target"></main>');
     const target = document.getElementById('target')!;
     const version = vi.fn(() => 1);
-    const snapshot = new Snapshot(document, {
-      caps: { tree: { version } },
+    const context = new StyleletContext(document, {
+      tree: { version },
     });
     const simpleSelectors = parseSelectorList('#target')!;
     const structuralSelectors = parseSelectorList(':nth-child(1)')!;
-    const simple = compileSelectorList(simpleSelectors, snapshot);
-    const structural = compileSelectorList(structuralSelectors, snapshot);
+    const simple = compileSelectorList(simpleSelectors, context);
+    const structural = compileSelectorList(structuralSelectors, context);
 
     expect(simple.arms[0]).toMatchObject({
       cost: 1,
@@ -226,27 +226,27 @@ describe('selector matching', () => {
     });
     expect(structural.usesCache).toBe(true);
 
-    matchSelectorList(simpleSelectors, target, snapshot);
+    matchSelectorList(simpleSelectors, target, context);
     expect(version).not.toHaveBeenCalled();
 
-    matchSelectorList(structuralSelectors, target, snapshot);
+    matchSelectorList(structuralSelectors, target, context);
     expect(version).toHaveBeenCalledOnce();
     expect(version).toHaveBeenCalledWith(document);
   });
 
   it('uses tri matching only for host and pseudo-element selectors', () => {
     const document = createBrowletDocument('<main></main>');
-    const snapshot = new Snapshot(document);
+    const context = new StyleletContext(document);
 
-    const simple = compileSelectorList(parseSelectorList('main')!, snapshot);
-    const host = compileSelectorList(parseSelectorList(':host')!, snapshot);
+    const simple = compileSelectorList(parseSelectorList('main')!, context);
+    const host = compileSelectorList(parseSelectorList(':host')!, context);
     const nestedHost = compileSelectorList(
       parseSelectorList(':is(.item, :host)')!,
-      snapshot,
+      context,
     );
     const pseudoElement = compileSelectorList(
       parseSelectorList('main::before')!,
-      snapshot,
+      context,
     );
 
     expect(simple.usesTriMatch).toBe(false);

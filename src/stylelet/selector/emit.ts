@@ -5,7 +5,7 @@ import {
 } from '../syntax/selector';
 import { asciiLower } from '../../infra/ascii';
 import { assertNever } from '../../infra/util';
-import type { Snapshot } from '../snapshot';
+import type { StyleletContext } from '../context';
 import {
   checkClass, checkId, checkTag, hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -26,21 +26,21 @@ const FALSE_PREDICATE: CandidateElementPredicate = () => false;
 
 export function emitMatcher(
   selector: SimpleSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
   compiledArgument?: CompiledMatcher,
 ): CompiledMatcher {
   switch (selector.kind) {
     // Without a parent selector expansion, `&` behaves like :scope.
-    case SelectorKind.NestingSelector: return emitScopePseudoTest(snapshot);
-    case SelectorKind.TypeSelector: return emitTypeTest(selector, snapshot);
-    case SelectorKind.IdSelector: return emitIdTest(selector, snapshot);
-    case SelectorKind.ClassSelector: return emitClassTest(selector, snapshot);
+    case SelectorKind.NestingSelector: return emitScopePseudoTest(context);
+    case SelectorKind.TypeSelector: return emitTypeTest(selector, context);
+    case SelectorKind.IdSelector: return emitIdTest(selector, context);
+    case SelectorKind.ClassSelector: return emitClassTest(selector, context);
     case SelectorKind.AttributeSelector:
-      return emitAttributeTest(selector, snapshot);
+      return emitAttributeTest(selector, context);
     case SelectorKind.PseudoClassSelector:
       return emitPseudoClassTest(
         selector,
-        snapshot,
+        context,
         compiledArgument,
       );
     default: return assertNever(selector);
@@ -49,52 +49,52 @@ export function emitMatcher(
 
 function emitIdTest(
   selector: IdSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   return createMatcher(
-    (element) => checkId(element, selector.name, snapshot),
+    (element) => checkId(element, selector.name, context),
     1,
   );
 }
 
 function emitClassTest(
   selector: ClassSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   if (/[\t\n\f\r ]/.test(selector.name)) {
     return FALSE_MATCHER;
   }
 
   return createMatcher(
-    (element) => checkClass(element, selector.name, snapshot),
+    (element) => checkClass(element, selector.name, context),
     2,
   );
 }
 
 function emitTypeTest(
   selector: TypeSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const localName = selector.name;
   const lowerName = asciiLower(localName);
-  const testName: (element: Element, snapshot: Snapshot) => boolean = localName === '*'
+  const testName: (element: Element, context: StyleletContext) => boolean = localName === '*'
     ? () => true
-    : (element, snapshot) =>
-      checkTag(element, lowerName, localName, snapshot);
+    : (element, context) =>
+      checkTag(element, lowerName, localName, context);
 
   const namespaceURI = selector.namespaceURI;
   const element: CandidateElementPredicate = namespaceURI === undefined
-    ? (candidate) => testName(candidate, snapshot)
+    ? (candidate) => testName(candidate, context)
     : (candidate) =>
-      snapshot.getNamespaceURI(candidate) === namespaceURI &&
-      testName(candidate, snapshot);
+      context.getNamespaceURI(candidate) === namespaceURI &&
+      testName(candidate, context);
 
   return createMatcher(element, localName === '*' ? 0 : 2);
 }
 
 function emitPseudoClassTest(
   selector: PseudoClassSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
   compiledArgument?: CompiledMatcher,
 ): CompiledMatcher {
   const argument = selector.argument;
@@ -114,15 +114,15 @@ function emitPseudoClassTest(
         : emitNoMatchPseudoTest();
     case 'host-context':
       return emitHostContextPseudoTest(compiledArgument);
-    case 'scope': return emitScopePseudoTest(snapshot);
-    case 'root': return emitRootPseudoTest(snapshot);
-    case 'empty': return emitEmptyPseudoTest(snapshot);
-    case 'first-child': return emitFirstChildPseudoTest(snapshot);
-    case 'last-child': return emitLastChildPseudoTest(snapshot);
-    case 'only-child': return emitOnlyChildPseudoTest(snapshot);
-    case 'first-of-type': return emitFirstOfTypePseudoTest(snapshot);
-    case 'last-of-type': return emitLastOfTypePseudoTest(snapshot);
-    case 'only-of-type': return emitOnlyOfTypePseudoTest(snapshot);
+    case 'scope': return emitScopePseudoTest(context);
+    case 'root': return emitRootPseudoTest(context);
+    case 'empty': return emitEmptyPseudoTest(context);
+    case 'first-child': return emitFirstChildPseudoTest(context);
+    case 'last-child': return emitLastChildPseudoTest(context);
+    case 'only-child': return emitOnlyChildPseudoTest(context);
+    case 'first-of-type': return emitFirstOfTypePseudoTest(context);
+    case 'last-of-type': return emitLastOfTypePseudoTest(context);
+    case 'only-of-type': return emitOnlyOfTypePseudoTest(context);
     case 'nth-child':
     case 'nth-last-child':
       if (argument?.kind !== PseudoArgumentKind.NthChild || argument.of !== null) {
@@ -131,7 +131,7 @@ function emitPseudoClassTest(
       return emitNthPseudoTest(
         { step: argument.formula.a, offset: argument.formula.b },
         { ofType: false, last: selector.name === 'nth-last-child' },
-        snapshot,
+        context,
       );
     case 'nth-of-type':
     case 'nth-last-of-type':
@@ -139,51 +139,51 @@ function emitPseudoClassTest(
         ? emitNthPseudoTest(
           { step: argument.a, offset: argument.b },
           { ofType: true, last: selector.name === 'nth-last-of-type' },
-          snapshot,
+          context,
         )
         : emitNoMatchPseudoTest();
     case 'dir':
       return argument?.kind === PseudoArgumentKind.Direction
-        ? emitDirPseudoTest(argument.value, snapshot)
+        ? emitDirPseudoTest(argument.value, context)
         : emitNoMatchPseudoTest();
     case 'lang':
       return argument?.kind === PseudoArgumentKind.LanguageRangeList
-        ? emitLanguageRangesPseudoTest(argument.ranges, snapshot)
+        ? emitLanguageRangesPseudoTest(argument.ranges, context)
         : emitNoMatchPseudoTest();
-    case 'any-link': return emitAnyLinkPseudoTest(snapshot);
-    case 'link': return emitLinkPseudoTest(snapshot);
+    case 'any-link': return emitAnyLinkPseudoTest(context);
+    case 'link': return emitLinkPseudoTest(context);
     case 'visited': return emitVisitedPseudoTest();
-    case 'target': return emitTargetPseudoTest(snapshot);
-    case 'defined': return emitDefinedPseudoTest(snapshot);
-    case 'hover': return emitHoverPseudoTest(snapshot);
-    case 'active': return emitActivePseudoTest(snapshot);
-    case 'focus': return emitFocusPseudoTest(snapshot);
-    case 'focus-visible': return emitFocusVisiblePseudoTest(snapshot);
-    case 'focus-within': return emitFocusWithinPseudoTest(snapshot);
-    case 'enabled': return emitEnabledPseudoTest(snapshot);
-    case 'disabled': return emitDisabledPseudoTest(snapshot);
-    case 'read-only': return emitReadOnlyPseudoTest(snapshot);
-    case 'read-write': return emitReadWritePseudoTest(snapshot);
-    case 'placeholder-shown': return emitPlaceholderShownPseudoTest(snapshot);
-    case 'default': return emitDefaultPseudoTest(snapshot);
-    case 'checked': return emitCheckedPseudoTest(snapshot);
-    case 'indeterminate': return emitIndeterminatePseudoTest(snapshot);
-    case 'required': return emitRequiredPseudoTest(snapshot);
-    case 'optional': return emitOptionalPseudoTest(snapshot);
-    case 'invalid': return emitInvalidPseudoTest(snapshot);
-    case 'valid': return emitValidPseudoTest(snapshot);
-    case 'in-range': return emitInRangePseudoTest(snapshot);
-    case 'out-of-range': return emitOutOfRangePseudoTest(snapshot);
-    case 'playing': return emitPlayingPseudoTest(snapshot);
-    case 'paused': return emitPausedPseudoTest(snapshot);
-    case 'seeking': return emitSeekingPseudoTest(snapshot);
+    case 'target': return emitTargetPseudoTest(context);
+    case 'defined': return emitDefinedPseudoTest(context);
+    case 'hover': return emitHoverPseudoTest(context);
+    case 'active': return emitActivePseudoTest(context);
+    case 'focus': return emitFocusPseudoTest(context);
+    case 'focus-visible': return emitFocusVisiblePseudoTest(context);
+    case 'focus-within': return emitFocusWithinPseudoTest(context);
+    case 'enabled': return emitEnabledPseudoTest(context);
+    case 'disabled': return emitDisabledPseudoTest(context);
+    case 'read-only': return emitReadOnlyPseudoTest(context);
+    case 'read-write': return emitReadWritePseudoTest(context);
+    case 'placeholder-shown': return emitPlaceholderShownPseudoTest(context);
+    case 'default': return emitDefaultPseudoTest(context);
+    case 'checked': return emitCheckedPseudoTest(context);
+    case 'indeterminate': return emitIndeterminatePseudoTest(context);
+    case 'required': return emitRequiredPseudoTest(context);
+    case 'optional': return emitOptionalPseudoTest(context);
+    case 'invalid': return emitInvalidPseudoTest(context);
+    case 'valid': return emitValidPseudoTest(context);
+    case 'in-range': return emitInRangePseudoTest(context);
+    case 'out-of-range': return emitOutOfRangePseudoTest(context);
+    case 'playing': return emitPlayingPseudoTest(context);
+    case 'paused': return emitPausedPseudoTest(context);
+    case 'seeking': return emitSeekingPseudoTest(context);
     case 'buffering': return emitBufferingPseudoTest();
     case 'stalled': return emitStalledPseudoTest();
-    case 'muted': return emitMutedPseudoTest(snapshot);
+    case 'muted': return emitMutedPseudoTest(context);
     case 'volume-locked': return emitVolumeLockedPseudoTest();
     case 'state':
       return argument?.kind === PseudoArgumentKind.Ident
-        ? emitStatePseudoTest(argument.value, snapshot)
+        ? emitStatePseudoTest(argument.value, context)
         : emitNoMatchPseudoTest();
     default:
       return emitNoMatchPseudoTest();
@@ -193,7 +193,7 @@ function emitPseudoClassTest(
 // [attr], [attr=value], [ns|attr op value flag]
 function emitAttributeTest(
   attr: AttributeSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const namespaceURI = attr.wqName.namespaceURI;
 
@@ -212,7 +212,7 @@ function emitAttributeTest(
         localName,
         htmlNameOrNull,
         hasColonName,
-        snapshot,
+        context,
       ),
       3,
     );
@@ -282,7 +282,7 @@ function emitAttributeTest(
       attrVal,
       htmlValue,
       sensitivity,
-      snapshot,
+      context,
     ),
     cost,
   );
@@ -397,55 +397,55 @@ function emitHostContextPseudoTest(
 }
 
 // :scope
-function emitScopePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isScope(element, snapshot), 2);
+function emitScopePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isScope(element, context), 2);
 }
 
 // :root
-function emitRootPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isRoot(element, snapshot), 1);
+function emitRootPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isRoot(element, context), 1);
 }
 
 // :empty
-function emitEmptyPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isEmpty(element, snapshot), 2);
+function emitEmptyPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isEmpty(element, context), 2);
 }
 
 // :first-child
-function emitFirstChildPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isFirstChild(element, snapshot), 3);
+function emitFirstChildPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isFirstChild(element, context), 3);
 }
 
 // :last-child
-function emitLastChildPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isLastChild(element, snapshot), 3);
+function emitLastChildPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isLastChild(element, context), 3);
 }
 
 // :only-child
-function emitOnlyChildPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isOnlyChild(element, snapshot), 4);
+function emitOnlyChildPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isOnlyChild(element, context), 4);
 }
 
 // :first-of-type
-function emitFirstOfTypePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isFirstOfType(element, snapshot), 3);
+function emitFirstOfTypePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isFirstOfType(element, context), 3);
 }
 
 // :last-of-type
-function emitLastOfTypePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isLastOfType(element, snapshot), 4);
+function emitLastOfTypePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isLastOfType(element, context), 4);
 }
 
 // :only-of-type
-function emitOnlyOfTypePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isOnlyOfType(element, snapshot), 4);
+function emitOnlyOfTypePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isOnlyOfType(element, context), 4);
 }
 
 // :nth-child(), :nth-of-type(), :nth-last-child(), :nth-last-of-type()
 function emitNthPseudoTest(
   nth: NthArgs,
   meta: { ofType: boolean; last: boolean; },
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const { step, offset } = nth;
   const { ofType, last } = meta;
@@ -459,8 +459,8 @@ function emitNthPseudoTest(
   if (step === 0) {
     return createMatcher(
       (element, runtimeCache) => ofType
-        ? isNthOfType(element, offset, last, runtimeCache, snapshot)
-        : isNthElement(element, offset, last, runtimeCache, snapshot),
+        ? isNthOfType(element, offset, last, runtimeCache, context)
+        : isNthElement(element, offset, last, runtimeCache, context),
       cost,
       true,
     );
@@ -472,8 +472,8 @@ function emitNthPseudoTest(
     return createMatcher(
       (element, runtimeCache) => {
         const index = ofType
-          ? nthOfType(element, last, runtimeCache, snapshot)
-          : nthElement(element, last, runtimeCache, snapshot);
+          ? nthOfType(element, last, runtimeCache, context)
+          : nthElement(element, last, runtimeCache, context);
         return step > 0 ? index >= offset : index <= offset;
       },
       cost,
@@ -485,8 +485,8 @@ function emitNthPseudoTest(
     return createMatcher(
       (element, runtimeCache) => {
         const index = ofType
-          ? nthOfType(element, last, runtimeCache, snapshot)
-          : nthElement(element, last, runtimeCache, snapshot);
+          ? nthOfType(element, last, runtimeCache, context)
+          : nthElement(element, last, runtimeCache, context);
         return index % 2 === 0;
       },
       cost,
@@ -498,8 +498,8 @@ function emitNthPseudoTest(
     return createMatcher(
       (element, runtimeCache) => {
         const index = ofType
-          ? nthOfType(element, last, runtimeCache, snapshot)
-          : nthElement(element, last, runtimeCache, snapshot);
+          ? nthOfType(element, last, runtimeCache, context)
+          : nthElement(element, last, runtimeCache, context);
         return index % 2 === 1;
       },
       cost,
@@ -510,9 +510,9 @@ function emitNthPseudoTest(
   return createMatcher(
     (element, runtimeCache) => {
       const index = ofType
-        ? nthOfType(element, last, runtimeCache, snapshot)
-        : nthElement(element, last, runtimeCache, snapshot);
-      return matchesNthIndex(index, step, absStep, offset, snapshot);
+        ? nthOfType(element, last, runtimeCache, context)
+        : nthElement(element, last, runtimeCache, context);
+      return matchesNthIndex(index, step, absStep, offset, context);
     },
     cost,
     true,
@@ -522,7 +522,7 @@ function emitNthPseudoTest(
 // :dir()
 function emitDirPseudoTest(
   argument: string,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const dir = asciiLower(argument);
 
@@ -530,28 +530,28 @@ function emitDirPseudoTest(
     return FALSE_MATCHER;
   }
 
-  return createMatcher((element) => matchDir(dir, element, snapshot), 4);
+  return createMatcher((element) => matchDir(dir, element, context), 4);
 }
 
 function emitLanguageRangesPseudoTest(
   ranges: readonly string[],
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   return createMatcher(
     (element) => ranges.some((range) =>
-      matchLang(range, element, snapshot)),
+      matchLang(range, element, context)),
     4 * ranges.length,
   );
 }
 
 // :any-link
-function emitAnyLinkPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isAnyLink(element, snapshot), 3);
+function emitAnyLinkPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isAnyLink(element, context), 3);
 }
 
 // :link
-function emitLinkPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isAnyLink(element, snapshot), 3);
+function emitLinkPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isAnyLink(element, context), 3);
 }
 
 // :visited
@@ -561,127 +561,127 @@ function emitVisitedPseudoTest(): CompiledMatcher {
 }
 
 // :target
-function emitTargetPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isTarget(element, snapshot), 2);
+function emitTargetPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isTarget(element, context), 2);
 }
 
 // :defined
-function emitDefinedPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isDefined(element, snapshot), 10);
+function emitDefinedPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isDefined(element, context), 10);
 }
 
 // :hover
-function emitHoverPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isHovered(element, snapshot), 3);
+function emitHoverPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isHovered(element, context), 3);
 }
 
 // :active
-function emitActivePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isActive(element, snapshot), 3);
+function emitActivePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isActive(element, context), 3);
 }
 
 // :focus
-function emitFocusPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isFocused(element, snapshot), 16);
+function emitFocusPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isFocused(element, context), 16);
 }
 
 // :focus-visible
-function emitFocusVisiblePseudoTest(snapshot: Snapshot): CompiledMatcher {
+function emitFocusVisiblePseudoTest(context: StyleletContext): CompiledMatcher {
   // TODO: distinguish :focus-visible from :focus
-  return createMatcher((element) => isFocused(element, snapshot), 16);
+  return createMatcher((element) => isFocused(element, context), 16);
 }
 
 // :focus-within
-function emitFocusWithinPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isFocusWithin(element, snapshot), 12);
+function emitFocusWithinPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isFocusWithin(element, context), 12);
 }
 
 // :enabled
-function emitEnabledPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isEnabled(element, snapshot), 5);
+function emitEnabledPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isEnabled(element, context), 5);
 }
 
 // :disabled
-function emitDisabledPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isDisabled(element, snapshot), 3);
+function emitDisabledPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isDisabled(element, context), 3);
 }
 
 // :read-only
-function emitReadOnlyPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => !isReadWrite(element, snapshot), 8);
+function emitReadOnlyPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => !isReadWrite(element, context), 8);
 }
 
 // :read-write
-function emitReadWritePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isReadWrite(element, snapshot), 8);
+function emitReadWritePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isReadWrite(element, context), 8);
 }
 
 // :placeholder-shown
-function emitPlaceholderShownPseudoTest(snapshot: Snapshot): CompiledMatcher {
+function emitPlaceholderShownPseudoTest(context: StyleletContext): CompiledMatcher {
   return createMatcher(
-    (element) => isPlaceholderShown(element, snapshot),
+    (element) => isPlaceholderShown(element, context),
     5,
   );
 }
 
 // :default
-function emitDefaultPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isDefault(element, snapshot), 2);
+function emitDefaultPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isDefault(element, context), 2);
 }
 
 // :checked
-function emitCheckedPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isChecked(element, snapshot), 4);
+function emitCheckedPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isChecked(element, context), 4);
 }
 
 // :indeterminate
-function emitIndeterminatePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isIndeterminate(element, snapshot), 2);
+function emitIndeterminatePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isIndeterminate(element, context), 2);
 }
 
 // :required
-function emitRequiredPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isRequired(element, snapshot), 3);
+function emitRequiredPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isRequired(element, context), 3);
 }
 
 // :optional
-function emitOptionalPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isOptional(element, snapshot), 5);
+function emitOptionalPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isOptional(element, context), 5);
 }
 
 // :invalid
-function emitInvalidPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isInvalid(element, snapshot), 30);
+function emitInvalidPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isInvalid(element, context), 30);
 }
 
 // :valid
-function emitValidPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isValid(element, snapshot), 30);
+function emitValidPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isValid(element, context), 30);
 }
 
 // :in-range
-function emitInRangePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isInRange(element, snapshot), 28);
+function emitInRangePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isInRange(element, context), 28);
 }
 
 // :out-of-range
-function emitOutOfRangePseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isOutOfRange(element, snapshot), 28);
+function emitOutOfRangePseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isOutOfRange(element, context), 28);
 }
 
 // :playing
-function emitPlayingPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isPlaying(element, snapshot), 2);
+function emitPlayingPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isPlaying(element, context), 2);
 }
 
 // :paused
-function emitPausedPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isPaused(element, snapshot), 2);
+function emitPausedPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isPaused(element, context), 2);
 }
 
 // :seeking
-function emitSeekingPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isSeeking(element, snapshot), 2);
+function emitSeekingPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isSeeking(element, context), 2);
 }
 
 // :buffering
@@ -695,8 +695,8 @@ function emitStalledPseudoTest(): CompiledMatcher {
 }
 
 // :muted
-function emitMutedPseudoTest(snapshot: Snapshot): CompiledMatcher {
-  return createMatcher((element) => isMuted(element, snapshot), 2);
+function emitMutedPseudoTest(context: StyleletContext): CompiledMatcher {
+  return createMatcher((element) => isMuted(element, context), 2);
 }
 
 // :volume-locked
@@ -712,10 +712,10 @@ function emitNoMatchPseudoTest(): CompiledMatcher {
 // :state() pseudo-class
 function emitStatePseudoTest(
   state: string,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   return createMatcher(
-    (element) => snapshot.hasCustomState(element, state),
+    (element) => context.hasCustomState(element, state),
     1,
   );
 }

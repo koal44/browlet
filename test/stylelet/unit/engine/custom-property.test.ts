@@ -13,7 +13,7 @@ import {
   CascadeEngine, type CascadeEngineOptions,
 } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
-import { Snapshot } from '../../../../src/stylelet/snapshot';
+import { StyleletContext } from '../../../../src/stylelet/context';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
@@ -136,7 +136,7 @@ describe('custom property registration', () => {
       .attachShadow({ mode: 'open' });
     const { engine } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
-      snapshot: new Snapshot(document),
+      context: new StyleletContext(document),
     });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
@@ -312,12 +312,12 @@ function styleSheet(
 }
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createBrowletDocument());
-  const engine = new CascadeEngine({ ...options, snapshot });
+  const context = options.context ?? new StyleletContext(createBrowletDocument());
+  const engine = new CascadeEngine({ ...options, context });
 
   return {
     engine,
-    scope: new TreeScope(snapshot.document, engine),
+    scope: new TreeScope(context.document, engine),
   };
 }
 
@@ -325,8 +325,8 @@ function addStyleSheet(
   scope: TreeScope,
   sheet: InterpretedStyleSheet,
 ): CSSStyleSheetImpl {
-  const styleSheet = CSSStyleSheetImpl.__create(
-    scope.cascade.snapshot,
+  const styleSheet = CSSStyleSheetImpl.create(
+    scope.cascade.context,
     {
       location: sheet.location?.href ?? null,
       parentStyleSheet: null,

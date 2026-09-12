@@ -10,6 +10,8 @@ import {
   DocumentFragmentImpl,
 } from './document-fragment';
 import type { ElementImpl } from './element';
+import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
+import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { NodeImpl } from './node';
 import {
@@ -47,7 +49,6 @@ export const slotAssignmentModeIDL = defineEnumeration({
  */
 export class ShadowRootImpl
   extends withShadowRootStub(DocumentFragmentImpl)
-  implements ShadowRoot
 {
   readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   readonly #mode: ShadowRootMode;
@@ -98,15 +99,15 @@ export class ShadowRootImpl
     return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
-  get styleSheets(): StyleSheetList {
+  get styleSheets(): StyleSheetListImpl {
     return this.#documentOrShadowRootMixin.styleSheets;
   }
 
-  get adoptedStyleSheets(): CSSStyleSheet[] {
+  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
-  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 

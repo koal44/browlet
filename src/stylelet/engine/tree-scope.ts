@@ -1,8 +1,5 @@
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import {
-  domExceptionName, throwDOMException,
-} from '../../web-idl/exceptions/dom-exception-core';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
 import {
   createObservableArray, type ObservableArrayHandle,
@@ -24,9 +21,9 @@ export class TreeScope {
     this.#adoptedStyleSheets = createObservableArray({
       convert: toCSSStyleSheet,
       set(styleSheet) {
-        if (styleSheet.__isConstructedFor(document)) return;
-        throwDOMException(
-          domExceptionName.notAllowed,
+        if (styleSheet.isConstructedFor(document)) return;
+        throw cascade.context.runtime.createDOMException(
+          'NotAllowedError',
           'The stylesheet was not constructed for this document.',
         );
       },
@@ -51,7 +48,7 @@ export class TreeScope {
   }
 
   addHeaderStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    this.#styleSheets.__insert(this.#headerStyleSheetCount, styleSheet);
+    this.#styleSheets.insert(this.#headerStyleSheetCount, styleSheet);
     this.#headerStyleSheetCount++;
     this.#configureAddedStyleSheet(styleSheet);
   }
@@ -62,7 +59,7 @@ export class TreeScope {
       ? this.#styleSheets.length
       : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode);
 
-    this.#styleSheets.__insert(index, styleSheet);
+    this.#styleSheets.insert(index, styleSheet);
     this.#configureAddedStyleSheet(styleSheet);
   }
 
@@ -74,10 +71,10 @@ export class TreeScope {
       title = '',
     }: StyleElementStyleSheetOptions = {},
   ): CSSStyleSheetImpl {
-    const snapshot = this.cascade.snapshot;
+    const context = this.cascade.context;
 
-    const styleSheet = CSSStyleSheetImpl.__create(
-      snapshot,
+    const styleSheet = CSSStyleSheetImpl.create(
+      context,
       {
         location: null,
         parentStyleSheet: null,
@@ -103,18 +100,18 @@ export class TreeScope {
     if (index < this.#headerStyleSheetCount) {
       this.#headerStyleSheetCount--;
     }
-    if (!this.#styleSheets.__remove(styleSheet)) return;
-    styleSheet.__clearAssociation();
+    if (!this.#styleSheets.remove(styleSheet)) return;
+    styleSheet.clearAssociation();
   }
 
   // Internal operations ----------------------------------------------------
 
-  __selectStyleSheetSet(name: string): void {
+  selectStyleSheetSet(name: string): void {
     this.#enableStyleSheetSet(name);
     this.#lastStyleSheetSetName = name;
   }
 
-  __changePreferredStyleSheetSetName(name: string): void {
+  changePreferredStyleSheetSetName(name: string): void {
     const prev = this.#preferredStyleSheetSetName;
     this.#preferredStyleSheetSetName = name;
 
@@ -131,10 +128,10 @@ export class TreeScope {
     const title = styleSheet.title ?? '';
     if (
       title !== '' &&
-      !styleSheet.__isAlternate() &&
+      !styleSheet.isAlternate() &&
       this.#preferredStyleSheetSetName === ''
     ) {
-      this.__changePreferredStyleSheetSetName(title);
+      this.changePreferredStyleSheetSetName(title);
     }
 
     const matchesPreferred =

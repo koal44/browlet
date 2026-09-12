@@ -96,15 +96,18 @@ export class BlobImpl {
       this.#runtime,
     );
 
-    // Backend I/O runs outside HTML; only the queued file tasks touch the stream.
+    // Backend awaits resume on Node's microtask queue. File-reading tasks deliver
+    // bytes, completion, and failure to the stream's owning HTML event loop.
     scheduling.runInParallel(() => { void readChunks(); });
     return stream;
 
+    // eslint-disable-next-line no-restricted-syntax -- Node schedules backing reads; queueTask controls delivery to the stream.
     async function readChunks(): Promise<void> {
       let offset = 0;
       try {
         while (!canceled && offset < data.size) {
           const byteLength = Math.min(data.size - offset, blobReadChunkSize);
+          // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
           const bytes = await data.read(offset, byteLength);
           offset += bytes.length;
           scheduling.queueTask(() => {

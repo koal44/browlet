@@ -309,7 +309,7 @@ describe('stylesheet integration', () => {
     expect(() => document.adoptedStyleSheets.push(foreign))
       .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
     expect(() => document.adoptedStyleSheets.push(
-      'not a stylesheet' as unknown as CSSStyleSheet,
+      'not a stylesheet' as never,
     )).toThrow(TypeError);
     expect(document.adoptedStyleSheets).toHaveLength(0);
   });

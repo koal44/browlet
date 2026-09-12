@@ -16,6 +16,8 @@ export type MIMEType = {
   readonly parameters: Map<string, string>;
 };
 
+export type MIMETypeEssence = `${string}/${string}`;
+
 export type SupportsMIMEType = (mimeType: MIMEType) => boolean;
 
 /*
@@ -23,7 +25,7 @@ export type SupportsMIMEType = (mimeType: MIMEType) => boolean;
  *
  * https://mimesniff.spec.whatwg.org/#mime-type-essence
  */
-export function getMIMETypeEssence(mimeType: MIMEType): string {
+export function getMIMETypeEssence(mimeType: MIMEType): MIMETypeEssence {
   return `${mimeType.type}/${mimeType.subtype}`;
 }
 
@@ -36,11 +38,10 @@ export function getMIMETypeEssence(mimeType: MIMEType): string {
  *
  * https://mimesniff.spec.whatwg.org/#minimize-a-supported-mime-type
  */
-// SPEC_MISMATCH: (mimeType) -> ASCII string
 export function minimizeSupportedMIMEType(
   mimeType: MIMEType,
   isSupportedByUserAgent: SupportsMIMEType,
-): string {
+): MIMETypeEssence | '' {
   if (isJavaScriptMIMEType(mimeType)) return 'text/javascript';
   if (isJSONMIMEType(mimeType)) return 'application/json';
 
@@ -56,7 +57,6 @@ export function minimizeSupportedMIMEType(
  *
  * https://mimesniff.spec.whatwg.org/#parse-a-mime-type
  */
-// SPEC_MISMATCH: (input: string) -> MIME type or failure
 export function parseMIMEType(input: string): MIMEType | null {
   input = trimHTTPWhitespace(input);
   const position = new TextCursor(input);
@@ -122,7 +122,6 @@ export function parseMIMEType(input: string): MIMEType | null {
  *
  * https://mimesniff.spec.whatwg.org/#parse-a-mime-type-from-bytes
  */
-// SPEC_MISMATCH: (input: byte sequence) -> MIME type or failure
 export function parseMIMETypeFromBytes(input: Uint8Array): MIMEType | null {
   return parseMIMEType(isomorphicDecode(input));
 }
@@ -133,7 +132,7 @@ export function parseMIMETypeFromBytes(input: Uint8Array): MIMEType | null {
  * https://mimesniff.spec.whatwg.org/#serialize-a-mime-type
  */
 export function serializeMIMEType(mimeType: MIMEType): string {
-  let serialization = getMIMETypeEssence(mimeType);
+  let serialization: string = getMIMETypeEssence(mimeType);
 
   for (const [name, parameter] of mimeType.parameters) {
     let value = parameter;

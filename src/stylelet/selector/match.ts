@@ -1,4 +1,4 @@
-import { Snapshot } from '../snapshot';
+import { StyleletContext } from '../context';
 import { assertNever } from '../../infra/util';
 import {
   PseudoArgumentKind, SelectorKind,
@@ -29,11 +29,11 @@ type MatchSelector = ComplexSelector | ComplexRealSelector;
 export function matchSelectorList(
   selectors: SelectorList,
   element: Element,
-  snapshot: Snapshot = new Snapshot(element.ownerDocument),
+  context: StyleletContext = new StyleletContext(element.ownerDocument),
 ): Specificity | null {
-  const compiled = compileSelectorList(selectors, snapshot);
+  const compiled = compileSelectorList(selectors, context);
   const runtimeCache = compiled.usesCache
-    ? snapshot.syncRuntimeCache(snapshot.document)
+    ? context.syncRuntimeCache(context.document)
     : null;
   let result: Specificity | null = null;
 
@@ -50,13 +50,13 @@ export function matchSelectorList(
 
 export function compileSelectorList(
   selectors: SelectorList,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledSelectorList {
-  const cached = snapshot.getCompiledSelector<CompiledSelectorList>(selectors);
+  const cached = context.getCompiledSelector<CompiledSelectorList>(selectors);
   if (cached !== undefined) return cached;
 
   const arms = selectors.arms.map((selector): CompiledSelectorArm => {
-    const matcher = compileComplexSelector(selector, snapshot);
+    const matcher = compileComplexSelector(selector, context);
 
     return {
       match: matcher.usesTriMatch
@@ -75,7 +75,7 @@ export function compileSelectorList(
     usesTriMatch: arms.some((arm) => arm.usesTriMatch),
   };
 
-  return snapshot.setCompiledSelector(selectors, compiled);
+  return context.setCompiledSelector(selectors, compiled);
 }
 
 type CompiledSelectorList = {
@@ -98,25 +98,25 @@ function compareSpecificity(left: Specificity, right: Specificity): number {
 
 function compileSelectorListMatcher(
   selectors: MatchSelectorList,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   return buildSelectorListMatcher(
     selectors.arms.flatMap((selector) =>
       selector.kind === SelectorKind.UnparsedSelector
         ? []
-        : compileComplexSelector(selector, snapshot)),
+        : compileComplexSelector(selector, context)),
   );
 }
 
 function compileComplexSelector(
   selector: MatchSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const parts: CompiledPart[] = selector.parts.map((part) => ({
     combinator: part.combinator,
     matcher: 'unit' in part
-      ? compileComplexUnit(part.unit, snapshot)
-      : compileCompound(part.compound, snapshot),
+      ? compileComplexUnit(part.unit, context)
+      : compileCompound(part.compound, context),
   }));
 
   return buildComplexMatcher(parts, costComplex(selector.parts));
@@ -124,12 +124,12 @@ function compileComplexSelector(
 
 function compileComplexUnit(
   unit: ComplexSelectorUnit,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const matchers: CompiledMatcher[] = [];
 
   if (unit.compound !== null) {
-    matchers.push(compileCompound(unit.compound, snapshot));
+    matchers.push(compileCompound(unit.compound, context));
   }
 
   if (unit.pseudoCompounds.length > 0) {
@@ -141,23 +141,23 @@ function compileComplexUnit(
 
 function compileCompound(
   compound: CompoundSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const matchers: CompiledMatcher[] = [];
 
   if (compound.typeSelector !== null) {
-    matchers.push(emitMatcher(compound.typeSelector, snapshot));
+    matchers.push(emitMatcher(compound.typeSelector, context));
   }
 
   for (const selector of compound.subclasses) {
     matchers.push(
       selector.kind === SelectorKind.NestingSelector
         ? selector.expanded === null
-          ? emitMatcher(selector, snapshot)
-          : compilePseudoClass(selector.expanded, snapshot)
+          ? emitMatcher(selector, context)
+          : compilePseudoClass(selector.expanded, context)
         : selector.kind === SelectorKind.PseudoClassSelector
-          ? compilePseudoClass(selector, snapshot)
-          : emitMatcher(selector, snapshot),
+          ? compilePseudoClass(selector, context)
+          : emitMatcher(selector, context),
     );
   }
 
@@ -166,7 +166,7 @@ function compileCompound(
 
 function compilePseudoClass(
   selector: PseudoClassSelector,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const argument = selector.argument;
   let compiledArgument: CompiledMatcher | undefined;
@@ -175,39 +175,39 @@ function compilePseudoClass(
     case 'is':
     case 'where':
       compiledArgument = argument?.kind === PseudoArgumentKind.ForgivingSelectorList
-        ? compileSelectorListMatcher(argument.selectors, snapshot)
+        ? compileSelectorListMatcher(argument.selectors, context)
         : undefined;
       break;
     case 'not':
       compiledArgument = argument?.kind === PseudoArgumentKind.ComplexRealSelectorList
-        ? compileSelectorListMatcher(argument.selectors, snapshot)
+        ? compileSelectorListMatcher(argument.selectors, context)
         : undefined;
       break;
     case 'has':
       compiledArgument = argument?.kind === PseudoArgumentKind.RelativeSelectorList
-        ? compileRelativeSelectorList(argument.selectors, snapshot)
+        ? compileRelativeSelectorList(argument.selectors, context)
         : undefined;
       break;
     case 'host':
       compiledArgument = argument?.kind === PseudoArgumentKind.CompoundSelector
-        ? compileCompound(argument.selector, snapshot)
+        ? compileCompound(argument.selector, context)
         : undefined;
       break;
     case 'host-context':
       compiledArgument = argument?.kind === PseudoArgumentKind.CompoundSelector
-        ? compileCompound(argument.selector, snapshot)
+        ? compileCompound(argument.selector, context)
         : undefined;
       break;
     default:
       compiledArgument = undefined;
   }
 
-  return emitMatcher(selector, snapshot, compiledArgument);
+  return emitMatcher(selector, context, compiledArgument);
 }
 
 function compileRelativeSelectorList(
   selectors: RelativeSelectorList,
-  snapshot: Snapshot,
+  context: StyleletContext,
 ): CompiledMatcher {
   const arms: CompiledRelativeArm[] = selectors.arms.map((arm) =>
     arm.selector.parts.map((part, index) => {
@@ -224,7 +224,7 @@ function compileRelativeSelectorList(
 
       return {
         combinator,
-        matcher: compileComplexUnit(part.unit, snapshot),
+        matcher: compileComplexUnit(part.unit, context),
       };
     }));
 
