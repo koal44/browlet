@@ -6,8 +6,9 @@ import { RealmBinding } from '../../src/web-idl/binding';
 import {
   defineCallbackFunction, defineEnumeration, defineInterface, defineTypedef,
   idlType, observableArray, type AttributeMember, type MaplikeMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { BindingContext } from '../../src/web-idl/binding-context';
 import { registerDefinitionBindings } from '../../src/web-idl/projection';
 
 describe('Web IDL JavaScript binding foundation', () => {
@@ -136,8 +137,8 @@ describe('Web IDL JavaScript binding foundation', () => {
       exposed: '*', members: [],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
-    registerDefinitionBindings(first);
-    registerDefinitionBindings(second);
+    registerDefinitionBindings(first, new BindingContext(first));
+    registerDefinitionBindings(second, new BindingContext(second));
     const newTarget = second.realm.createFunction(
       () => undefined,
       { constructible: true, length: 0, name: 'Derived' },

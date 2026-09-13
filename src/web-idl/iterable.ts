@@ -1,11 +1,11 @@
 import { isObject } from '../js-engine/index';
-import type { AssembledInterface } from './assembly';
+import type { AssembledInterfaceDefinition } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { reference, type IterableMember } from './declaration/index';
+import { reference, type IterableMember } from './core/index';
 import { defineDataProperty, defineMethod } from './property';
 import type { ImplementationRegistry } from './registry';
 
@@ -20,6 +20,7 @@ export class SynchronousIterableBinding {
   readonly #implementations: ImplementationRegistry;
   readonly #iterators = new WeakMap<object, DefaultIterator>();
 
+  // Project helper: retain the conversion context, implementations, and iterator-prototype factory.
   constructor(
     context: ConversionContext,
     implementations: ImplementationRegistry,
@@ -30,9 +31,10 @@ export class SynchronousIterableBinding {
     this.#implementations = implementations;
   }
 
+  // Web IDL §3.7.9 Iterable declarations — define the iteration methods.
   defineMethods(
     target: object,
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     if (iterable.key === undefined) {
@@ -44,8 +46,9 @@ export class SynchronousIterableBinding {
     this.#definePairIterationMethods(target, interface_, iterable);
   }
 
+  // Project helper: initialize the pair iterator's prototype before installing methods.
   initializePrototype(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     if (iterable.key !== undefined) {
@@ -53,6 +56,8 @@ export class SynchronousIterableBinding {
     }
   }
 
+  // Extracted from Web IDL §3.7.9 Iterable declarations — install Array iteration methods for indexed
+  // properties.
   defineIndexedMethods(target: object, valueIterable: boolean): void {
     const { iteration } = this.#context.realm.intrinsics;
     defineMethod(target, Symbol.iterator, iteration.arrayValues, false);
@@ -64,9 +69,10 @@ export class SynchronousIterableBinding {
     defineDataProperty(target, 'forEach', iteration.arrayForEach);
   }
 
+  // Extracted from Web IDL §3.7.9 Iterable declarations — install pair iteration methods.
   #definePairIterationMethods(
     target: object,
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     const entries = this.#createIteratorMethod(
@@ -101,8 +107,9 @@ export class SynchronousIterableBinding {
     );
   }
 
+  // Project factory for the entries, keys, and values functions in Web IDL §3.7.9 Iterable declarations.
   #createIteratorMethod(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
     kind: IterationKind,
     name: string,
@@ -110,7 +117,7 @@ export class SynchronousIterableBinding {
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
-        const target = this.#implementationObject(
+        const target = this.#unwrapReceiver(
           thisArgument,
           interface_,
           securityIdentifier,
@@ -130,13 +137,14 @@ export class SynchronousIterableBinding {
     );
   }
 
+  // Project factory for the forEach function in Web IDL §3.7.9 Iterable declarations.
   #createForEachMethod(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const object = this.#implementationObject(
+        const object = this.#unwrapReceiver(
           thisArgument,
           interface_,
           'forEach',
@@ -184,8 +192,9 @@ export class SynchronousIterableBinding {
     );
   }
 
+  // Project cache for Web IDL §3.7.9.2 Iterator prototype object.
   #getIteratorPrototypeObject(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): object {
     return this.#getIteratorPrototype(interface_, () => {
@@ -207,8 +216,9 @@ export class SynchronousIterableBinding {
     });
   }
 
+  // Web IDL §3.7.9.2 Iterator prototype object — next steps.
   #next(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
     thisArgument: unknown,
   ): object {
@@ -245,6 +255,7 @@ export class SynchronousIterableBinding {
     );
   }
 
+  // Extracted from Web IDL §3.7.9.2 Iterator prototype object — iterator result: select and convert the value.
   #convertPairResult(
     pair: ValuePair,
     iterable: IterableMember,
@@ -266,9 +277,10 @@ export class SynchronousIterableBinding {
     return result;
   }
 
+  // Project delegate to Web IDL §2.5.9 Iterable declarations — the interface's value pairs to iterate over.
   #getValuePairs(
     object: object,
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): readonly ValuePair[] {
     const steps = this.#implementations.getValuePairsSteps(iterable);
@@ -280,9 +292,10 @@ export class SynchronousIterableBinding {
     return Reflect.apply(steps, object, []);
   }
 
-  #implementationObject(
+  // Project adapter for the receiver and security checks in Web IDL §3.7.9 Iterable declarations.
+  #unwrapReceiver(
     value: unknown,
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     identifier: string,
   ): object {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
@@ -299,19 +312,20 @@ export class SynchronousIterableBinding {
     return record.implementation;
   }
 
+  // Project helper: throw a TypeError allocated in this binding's realm.
   #throwTypeError(message: string): never {
     throw new this.#context.realm.intrinsics.typeError(message);
   }
 }
 
 type IteratorPrototypeFactory = (
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
   create: () => object,
 ) => object;
 
 type DefaultIterator = {
   index: number;
-  interface: AssembledInterface;
+  interface: AssembledInterfaceDefinition;
   kind: IterationKind;
   target: object;
 };

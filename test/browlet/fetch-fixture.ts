@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import {
   createNewTopLevelTraversable,
 } from '../../src/browlet/browsing/navigable';
@@ -15,14 +15,14 @@ import { AgentCluster } from '../../src/browlet/scripting/agents';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { queueFetchTask } from '../../src/fetch/tasks';
-import { createBindings, type BindingContext } from '../../src/web-idl/index';
+import { createBindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/control-fixture';
 import { createRuntime } from '../js-engine/runtime-fixture';
 
 export function createFetchWindow() {
   const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
-  const context = getRealmBindings(realm).context;
+  const context = getBindingContext(realm);
   const eventLoop = realm.agent.eventLoop;
   return {
     ...createFetchRealmFixture(context),
@@ -46,19 +46,19 @@ export function createFetchWindow() {
 export function createIsolatedFetchRealm() {
   const realm = new Realm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = createBindings([], {
+  const registration = createBindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   }).register(realm, {
     createRuntime: (context) => ({
       ...createRuntime(realm),
-      ...createRuntimeSerialization(realm, context),
+      ...createRuntimeSerialization(context),
     }),
   });
   registration.install(realm.global);
-  return createFetchRealmFixture(registration.context);
+  return createFetchRealmFixture(registration);
 }
 
-function createFetchRealmFixture(context: BindingContext) {
+function createFetchRealmFixture(context: BindingContext<Realm>) {
   return {
     ...createControllerFixture(context.getRuntime()),
     context,

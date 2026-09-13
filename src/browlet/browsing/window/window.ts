@@ -7,8 +7,7 @@ import {
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
   impl, roAttr, reference, union, xattr,
-} from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+} from '../../../web-idl/index';
 import { LocationImpl } from './location';
 import type { WindowProxy } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
@@ -303,7 +302,8 @@ export const windowIDL = defineInterface({
     // automatically, and Window supplies its dynamic supported-name set.
     op(undefined, idlType.object,
       [arg('name', idlType.DOMString)],
-      bind({
+      {
+        special: 'getter',
         getSupportedPropertyNames() {
           return (this as WindowImpl).getSupportedPropertyNames();
         },
@@ -313,9 +313,7 @@ export const windowIDL = defineInterface({
             (this as WindowImpl).getNamedProperty(name as string),
           );
         },
-      }, {
-        special: 'getter',
-      }),
+      },
     ),
   ],
 });

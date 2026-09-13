@@ -1,67 +1,66 @@
 import { assembleDefinitions, type DefinitionAssembly } from './assembly';
-import { RealmBinding, type GlobalObjectAllocation } from './binding';
+import { RealmBinding } from './binding';
+import { BindingContext } from './binding-context';
 import { webIDLCommonDefinitions } from './common-definitions';
 import {
-  type CapabilityRegistration, CapabilityRegistry,
+  CapabilityRegistry, type CapabilityRegistration,
 } from './capability';
-import type { Definition } from './declaration/index';
+import type { Definition } from './core/index';
 import type { HostDefinedInterface } from './conversion';
 import type { WebIDLRealmHost } from './js-realm';
 import { PlatformObjectRegistry } from './platform-object';
-import {
-  registerDefinitionBindings, type BindingContext,
-} from './projection';
+import { registerDefinitionBindings } from './projection';
 import { ImplementationRegistry } from './registry';
 import type { RuntimeContext } from '../js-engine/runtime-context';
 
+// Project helper: create a binding world for the supplied definitions.
 /*
  * Create one binding world for a specification contribution. A binding world
  * owns platform-object identity across its registered realms while each realm
- * registration owns its initial objects and implementation steps.
+ * binding owns its initial objects and implementation steps.
  */
-export function createBindings(
-  definitions: readonly Definition[],
-  options: BindingOptions = {},
-): BindingWorld {
+export function createBindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost>(
+  definitions: readonly Definition<Realm>[],
+  options: BindingWorldOptions = {},
+): BindingWorld<Realm> {
   return new BindingWorld(
-    getDefinitionAssembly(definitions),
+    definitions,
     options,
   );
 }
 
-export type BindingOptions = {
+export type BindingWorldOptions = {
   readonly capabilities?: readonly CapabilityRegistration[];
   readonly hostDefinedInterfaces?: readonly HostDefinedInterface[];
 };
 
-export type RealmBindingOptions = {
-  readonly createRuntime?: (context: BindingContext) => RuntimeContext;
+export type RealmRegistrationOptions<Realm extends WebIDLRealmHost = WebIDLRealmHost> = {
+  readonly createRuntime?: (ctx: BindingContext<Realm>) => RuntimeContext;
 };
 
-export class BindingWorld {
+export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   readonly #definitions: DefinitionAssembly;
   readonly #hostDefinedInterfaces: readonly HostDefinedInterface[];
   readonly #capabilities: CapabilityRegistry;
   readonly #platformObjects = new PlatformObjectRegistry();
-  readonly #realms = new WeakMap<
-    WebIDLRealmHost,
-    RealmBindings
-  >();
+  readonly #realms = new WeakMap<Realm, BindingContext<Realm>>();
 
+  // Project helper: compose shared definition, capability, and platform-object registries.
   constructor(
-    definitions: DefinitionAssembly,
-    options: BindingOptions,
+    definitions: readonly Definition<Realm>[],
+    options: BindingWorldOptions,
   ) {
-    this.#definitions = definitions;
+    this.#definitions = getDefinitionAssembly(definitions);
     this.#hostDefinedInterfaces = options.hostDefinedInterfaces ?? [];
     this.#capabilities = new CapabilityRegistry(
-      definitions,
+      this.#definitions,
       options.capabilities ?? [],
     );
   }
 
-  register(realm: WebIDLRealmHost, options: RealmBindingOptions = {}): RealmBindings {
-    let registered = this.#realms.get(realm);
+  /** Register a realm in this world, returning its shared binding context. */
+  register(realm: Realm, options: RealmRegistrationOptions<Realm> = {}): BindingContext<Realm> {
+    const registered = this.#realms.get(realm);
     if (registered) return registered;
 
     const binding = new RealmBinding(
@@ -72,29 +71,31 @@ export class BindingWorld {
       [...this.#hostDefinedInterfaces],
       this.#capabilities,
     );
-    const context = registerDefinitionBindings(binding, options.createRuntime);
-    registered = new RealmBindings(binding, context);
-    this.#realms.set(realm, registered);
-    return registered;
+    const context = new BindingContext(binding, options.createRuntime);
+    registerDefinitionBindings(binding, context);
+    this.#realms.set(realm, context);
+    return context;
   }
 
-  forRealm(
-    realm: WebIDLRealmHost,
-  ): RealmBindings | undefined {
+  /** Find a realm's binding context in this world without registering it. */
+  forRealm(realm: Realm): BindingContext<Realm> | undefined {
     return this.#realms.get(realm);
   }
 
-  getImplementationObject(value: object): object | undefined {
+  // Project helper: retrieve the implementation paired with a platform object in this world.
+  unwrap(value: object): object | undefined {
     return this.#platformObjects.getImplementationObject(value);
   }
 
-  getPlatformObject(value: object): object | undefined {
+  // Project helper: retrieve an implementation's platform object, projecting its recorded origin if needed.
+  project(value: object): object | undefined {
     return this.#platformObjects.getPlatformObject(value) ??
       (this.#platformObjects.getImplementationOrigin(value)
-        ? this.#platformObjects.projectImplementationOrigin(value)
+        ? this.#platformObjects.projectFromOrigin(value)
         : undefined);
   }
 
+  // Project helper: retrieve the realm from a platform record or implementation origin.
   getRealm(value: object): WebIDLRealmHost | undefined {
     return (
       this.#platformObjects.getRecord(value) ??
@@ -104,41 +105,19 @@ export class BindingWorld {
   }
 }
 
-export class RealmBindings {
-  readonly context: BindingContext;
-  readonly #binding: RealmBinding;
+const assemblies = new WeakMap<readonly Definition<never>[], DefinitionAssembly>();
 
-  constructor(
-    binding: RealmBinding,
-    context: BindingContext,
-  ) {
-    this.#binding = binding;
-    this.context = context;
-  }
-
-  install(target: object): void {
-    this.#binding.install(target);
-  }
-
-  projectGlobalObject(
-    value: object,
-    interfaceName: string,
-    allocation?: GlobalObjectAllocation,
-  ): object {
-    return this.#binding.projectGlobalObject(value, interfaceName, allocation).platformObject;
-  }
-}
-
-const assemblies = new WeakMap<readonly Definition[], DefinitionAssembly>();
-
-function getDefinitionAssembly(
-  definitions: readonly Definition[],
+// Project helper: cache assembled definitions with the common Web IDL definitions included.
+function getDefinitionAssembly<Realm extends WebIDLRealmHost>(
+  definitions: readonly Definition<Realm>[],
 ): DefinitionAssembly {
   let assembly = assemblies.get(definitions);
   if (!assembly) {
     assembly = assembleDefinitions([
       ...webIDLCommonDefinitions,
-      ...definitions,
+      // BindingWorld restricts registration to the realm required by these callbacks.
+      // Assembly itself only combines declarations; it does not invoke the callbacks.
+      ...(definitions as readonly Definition[]),
     ]);
     assemblies.set(definitions, assembly);
   }

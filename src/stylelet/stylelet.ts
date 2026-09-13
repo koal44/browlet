@@ -4,7 +4,7 @@ import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { StyleletContext } from './context';
 import type { Promises } from '../js-engine/promises';
-import type { DOMExceptionName } from '../web-idl/exceptions/dom-exception-core';
+import type { DOMExceptionName } from '../web-idl/core/index';
 
 export class Stylelet {
   readonly version = 'stylelet-__VERSION__';
@@ -80,4 +80,4 @@ export type RuntimeCaps = {
 export { defaultRuntimeCaps, StyleletContext } from './context';
 export { Promises } from '../js-engine/promises';
 export type { NativePromiseObserver, PromiseValue } from '../js-engine/promises';
-export type { DOMExceptionName } from '../web-idl/exceptions/dom-exception-core';
+export type { DOMExceptionName };

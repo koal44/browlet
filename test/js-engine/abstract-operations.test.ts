@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getMethod, getSimpleExceptionRequest, isAccessorDescriptor, isCallable, isConstructor,
+  getMethod, isAccessorDescriptor, isCallable, isConstructor,
   isDataDescriptor, isObject, JSRealm, ordinarySetWithOwnDescriptor,
   toBigInt, toNumber,
-  toPrimitive, toString,
+  toPrimitive, toString, SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
 } from '../../src/js-engine/index';
 
 describe('ECMAScript abstract operations', () => {
@@ -131,13 +131,13 @@ describe('ECMAScript abstract operations', () => {
   });
 
   it('requests errors for invalid primitive conversions', () => {
-    for (const [convert, type] of [
-      [() => toPrimitive({ [Symbol.toPrimitive]: () => ({}) }), 'typeError'],
-      [() => toNumber(1n), 'typeError'],
-      [() => toNumber(Symbol()), 'typeError'],
-      [() => toString(Symbol()), 'typeError'],
-      [() => toBigInt(1), 'typeError'],
-      [() => toBigInt('not an integer'), 'syntaxError'],
+    for (const [convert, Exception] of [
+      [() => toPrimitive({ [Symbol.toPrimitive]: () => ({}) }), InternalTypeError],
+      [() => toNumber(1n), InternalTypeError],
+      [() => toNumber(Symbol()), InternalTypeError],
+      [() => toString(Symbol()), InternalTypeError],
+      [() => toBigInt(1), InternalTypeError],
+      [() => toBigInt('not an integer'), InternalSyntaxError],
     ] as const) {
       let caught: unknown;
       try {
@@ -145,7 +145,7 @@ describe('ECMAScript abstract operations', () => {
       } catch (error) {
         caught = error;
       }
-      expect(getSimpleExceptionRequest(caught)).toMatchObject({ type });
+      expect(Exception.is(caught)).toBe(true);
     }
   });
 });

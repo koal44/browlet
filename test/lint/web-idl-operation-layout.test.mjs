@@ -6,7 +6,7 @@ import rule from '../../scripts/eslint/web-idl-operation-layout.mjs';
 RuleTester.describe = describe;
 RuleTester.it = it;
 
-const declarationImport = "import { op } from '../../src/web-idl/declaration/index';\n";
+const declarationImport = "import { op } from '../../src/web-idl/core/index';\n";
 const preferred = `op('item', nullable(reference('File')),
   [arg('index', idlType.unsignedLong)],
   indexedGetter(
@@ -31,6 +31,10 @@ const tester = new RuleTester({
 tester.run('web-idl-operation-layout', rule, {
   valid: [
     { name: 'FileList layout', code: declarationImport + preferred },
+    {
+      name: 'static operation layout',
+      code: declarationImport.replace('{ op }', '{ staticOp }') + preferred.replace('op(', 'staticOp('),
+    },
     {
       name: 'compact declaration',
       code: declarationImport + "op('item', type, [arg('index', type)], indexedGetter(indices));",
@@ -71,6 +75,11 @@ tester.run('web-idl-operation-layout', rule, {
   ],
   invalid: [
     {
+      name: 'full Web IDL entry',
+      code: "import { op } from '../../src/web-idl/index';\n" + flattened,
+      errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
+    },
+    {
       name: 'flattened FileList layout',
       code: declarationImport + flattened,
       errors: [
@@ -81,7 +90,13 @@ tester.run('web-idl-operation-layout', rule, {
     },
     {
       name: 'aliased op import',
-      code: "import { op as operation } from '../../src/web-idl/declaration/index.js';\n" +
+      code: "import { op as operation } from '../../src/web-idl/core/index.js';\n" +
+        flattened.replace('op(', 'operation('),
+      errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
+    },
+    {
+      name: 'aliased staticOp import',
+      code: "import { staticOp as operation } from '../../src/web-idl/core/index.js';\n" +
         flattened.replace('op(', 'operation('),
       errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
     },

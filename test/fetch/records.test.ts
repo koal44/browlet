@@ -5,7 +5,7 @@ import { RequestImpl, RequestRecord } from '../../src/fetch/request';
 import { ResponseImpl, ResponseRecord } from '../../src/fetch/response';
 import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
 import { parseURL } from '../../src/url/url';
-import type { BindingContext } from '../../src/web-idl/projection';
+import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createRecordFixture, createRequestRecord } from './record-fixture';
 
@@ -132,7 +132,7 @@ describe('Fetch record/API sharing', () => {
       ? context.project(RequestImpl, context.construct(RequestImpl, createRequestRecord(), 'request', {}))
       : context.project(ResponseImpl, context.construct(ResponseImpl, new ResponseRecord(), 'response'));
     const receiver = createObject(fixture.context);
-    const foreignReceiver = createObject(foreign.context);
+    const foreignReceiver = createObject(foreign);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowing the getter is the behavior under test.
     const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreignReceiver), 'headers')?.get;
     if (!getter) throw new Error('Missing Headers getter');

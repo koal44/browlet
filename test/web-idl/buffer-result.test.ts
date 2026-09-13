@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arg, createBindings, ctor, defineInterface, idlType, impl, newBufferResult,
+  arg, createBindingWorld, ctor, defineInterface, idlType, impl, newBufferResult,
   op, promise, type WebIDLType,
 } from '../../src/web-idl/index';
 import {
@@ -30,8 +30,8 @@ describe('Web IDL buffer results', () => {
     expect(getBufferSourceCopy(second)).toEqual(Uint8Array.of(1, 2, 3, 4));
   });
 
-  it('preserves existing view and buffer identities without the declaration', () => {
-    const { call, foreignRealm } = createFixture(idlType.Uint8Array);
+  it.each([undefined, false])('preserves existing identities with newBufferResult = %s', (policy) => {
+    const { call, foreignRealm } = createFixture(idlType.Uint8Array, policy);
     const value = foreignRealm.evaluate(
       'new Uint8Array(new ArrayBuffer(8), 2, 3)',
       'existing-buffer-result.js',
@@ -63,7 +63,7 @@ describe('Web IDL buffer results', () => {
   });
 });
 
-function createFixture(type: WebIDLType) {
+function createFixture(type: WebIDLType, existingResultPolicy?: boolean) {
   const definition = defineInterface({
     name: 'BufferResult',
     exposed: '*',
@@ -71,19 +71,22 @@ function createFixture(type: WebIDLType) {
     members: [
       ctor(),
       op('create', type, [], newBufferResult()),
-      op('existing', idlType.Uint8Array, [arg('value', idlType.Uint8Array)]),
+      op('existing', idlType.Uint8Array,
+        [arg('value', idlType.Uint8Array)],
+        { newBufferResult: existingResultPolicy },
+      ),
       op('createAsync', promise(idlType.Uint8Array), [], newBufferResult()),
       op('existingAsync', promise(idlType.Uint8Array)),
     ],
   });
-  const bindings = createBindings([definition]);
+  const bindings = createBindingWorld([definition]);
   const realm = new TestRealm();
   const foreignRealm = new TestRealm();
   bindings.register(realm).install(realm.global);
   bindings.register(foreignRealm).install(foreignRealm.global);
   const Constructor = Reflect.get(realm.global, definition.name) as new() => object;
   const receiver = new Constructor();
-  const implementation = bindings.getImplementationObject(receiver) as BufferResultImpl;
+  const implementation = bindings.unwrap(receiver) as BufferResultImpl;
   const ForeignConstructor = Reflect.get(foreignRealm.global, definition.name) as {
     prototype: object;
   };

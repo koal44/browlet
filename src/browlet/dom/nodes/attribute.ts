@@ -1,8 +1,7 @@
 import { withAttrStub } from '../../stubs';
 import {
-  attr, defineInterface, idlType, nullable, roAttr, reference, xattr,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  attr, defineInterface, idlType, impl, nullable, reference, roAttr, xattr,
+} from '../../../web-idl/index';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';

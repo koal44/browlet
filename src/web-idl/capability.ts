@@ -1,6 +1,7 @@
 import type { DefinitionAssembly } from './assembly';
-import type { InterfaceDefinition } from './declaration/definition';
+import type { InterfaceDefinition } from './core/definitions/interface';
 
+// Project helper: declare a typed key for behavior supplied by another subsystem.
 /**
  * Define a typed capability which specifications can implement for exact
  * primary interface definitions.
@@ -14,7 +15,8 @@ export function defineCapability<Value>(
   options: CapabilityOptions = {},
 ): Capability<Value> {
   const capability: Capability<Value> = Object.freeze({
-    for(interface_: InterfaceDefinition, value: Value) {
+    // Project helper: associate a capability value with an interface definition.
+    for(interface_: InterfaceDefinition<never>, value: Value) {
       options.validate?.(interface_);
       return { capability, interface_, value };
     },
@@ -26,28 +28,30 @@ export function defineCapability<Value>(
 export type Capability<Value> = {
   readonly name: string;
   for(
-    interface_: InterfaceDefinition,
+    interface_: InterfaceDefinition<never>,
     value: Value,
   ): CapabilityRegistration;
   readonly [capabilityValueType]: Value;
 };
 
+// The definition is an identity key; capability lookup never invokes its callbacks.
 export type CapabilityRegistration = {
   readonly capability: Capability<unknown>;
-  readonly interface_: InterfaceDefinition;
+  readonly interface_: InterfaceDefinition<never>;
   readonly value: unknown;
 };
 
 export type CapabilityOptions = {
-  readonly validate?: (interface_: InterfaceDefinition) => void;
+  readonly validate?: (interface_: InterfaceDefinition<never>) => void;
 };
 
 export class CapabilityRegistry {
   readonly #values = new WeakMap<
-    InterfaceDefinition,
+    InterfaceDefinition<never>,
     Map<Capability<unknown>, unknown>
   >();
 
+  // Project helper: validate and index capability registrations.
   constructor(
     definitions: DefinitionAssembly,
     registrations: readonly CapabilityRegistration[],
@@ -78,8 +82,9 @@ export class CapabilityRegistry {
     }
   }
 
+  // Project helper: retrieve a capability value by interface and capability identity.
   get<Value>(
-    interface_: InterfaceDefinition,
+    interface_: InterfaceDefinition<never>,
     capability: Capability<Value>,
   ): Value | undefined {
     return this.#values.get(interface_)?.get(capability) as Value | undefined;

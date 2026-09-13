@@ -1,8 +1,9 @@
 import {
-  arg, atArg, attr, constant, contextValue, ctor, defineDictionary,
+  arg, atArg, attr, constant, ctor, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl,
   integer, nullable, op, roAttr, reference, sequence, xattr,
-} from '../../../web-idl/declaration/index';
+} from '../../../web-idl/index';
+import type { Realm } from '../../scripting/realm';
 import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
@@ -398,16 +399,11 @@ export class EventImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const eventTimeStamp = contextValue(
-  (context: { readonly realm: EventRealm; }) =>
-    context.realm.eventTimeStamp(),
-);
-
-export const eventIDL = defineInterface({
+export const eventIDL = defineInterface<Realm>({
   name: 'Event',
   exposed: '*',
   implementation: impl(EventImpl, {
-    constructWith: [atArg(2, eventTimeStamp)],
+    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
   }),
   members: [
     ctor([
@@ -509,12 +505,12 @@ export class CustomEventImpl<T = unknown>
 
 // -- Web IDL ------------------------------------------------------------
 
-export const customEventIDL = defineInterface({
+export const customEventIDL = defineInterface<Realm>({
   name: 'CustomEvent',
   inherits: 'Event',
   exposed: '*',
   implementation: impl(CustomEventImpl, {
-    constructWith: [atArg(2, eventTimeStamp)],
+    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
   }),
   members: [
     ctor([
@@ -551,8 +547,4 @@ export type EventPathItem = {
   readonly touchTargetList: readonly (EventTargetImpl | null)[];
   readonly rootOfClosedTree: boolean;
   readonly slotInClosedTree: boolean;
-};
-
-type EventRealm = {
-  eventTimeStamp(): DOMHighResTimeStamp;
 };

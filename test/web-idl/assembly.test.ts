@@ -6,7 +6,7 @@ import {
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, idlType,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 
 describe('Web IDL definition assembly', () => {
   it('resolves inheritance and partial interfaces independently of order', () => {

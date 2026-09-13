@@ -3,7 +3,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, packageData,
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
-import { getDOMExceptionRequest } from '../../src/web-idl/exceptions/dom-exception-core';
+import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception-core';
 import type { PromiseValue } from '../../src/js-engine/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
 
@@ -34,7 +34,8 @@ describe('File reading implementation', () => {
     const blob = BlobImpl.create(data, '', null, runtime);
     const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
-    expect(getDOMExceptionRequest(failure)?.name).toBe('NotFoundError');
+    expect(InternalDOMException.is(failure)).toBe(true);
+    expect(failure).toHaveProperty('name', 'NotFoundError');
   });
 
   it('packages bytes without a binding context and preserves the source', () => {

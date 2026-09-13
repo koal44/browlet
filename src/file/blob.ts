@@ -3,14 +3,12 @@ import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
 import {
   type PromiseValue, type RuntimeContext, getBufferSourceCopy,
 } from '../js-engine/index';
-import { domExceptionName, createDOMException } from '../web-idl/exceptions/dom-exception-core';
 import { ReadableStreamImpl } from '../streams/index';
 import {
-  arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface,
-  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, impl,
-  newBufferResult, op, promise, reference, roAttr, sequence, union, xattr,
-} from '../web-idl/declaration/index';
-import { runtimeContext } from '../web-idl/projection';
+  arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
+  dictMember, emptyDictionary, emptySequence, idlType, impl, newBufferResult, op, promise,
+  reference, roAttr, sequence, union, xattr, DOMExceptionNames, createDOMException,
+} from '../web-idl/index';
 import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
 
 /*
@@ -256,10 +254,10 @@ function realizeReadFailure(error: unknown): unknown {
 
   const failure = error;
   const name = failure.reason === 'NotFound'
-    ? domExceptionName.notFound
+    ? DOMExceptionNames.notFound
     : failure.reason === 'UnsafeFile' || failure.reason === 'TooManyReads'
-      ? domExceptionName.security
-      : domExceptionName.notReadable;
+      ? DOMExceptionNames.security
+      : DOMExceptionNames.notReadable;
   return createDOMException(name, failure.message);
 }
 
@@ -311,7 +309,7 @@ export const blobIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(BlobImpl, {
-    constructWith: [atArg(2, runtimeContext)],
+    constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
   }),
   members: [
     ctor([

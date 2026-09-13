@@ -46,9 +46,9 @@ algorithms themselves.
   interfaces do not each run independent hooks; a derived interface's steps
   explicitly reuse inherited steps when its specification says to do so.
 - `[Serializable]` and `[Transferable]` remain normative declaration metadata.
-  Executable hooks are binding behavior. A concise registration helper is
-  appropriate, but eliminating `bind()` is not a goal and callbacks must not
-  be hidden inside the raw extended-attribute syntax tree.
+  Executable hooks are binding behavior. Declare them through the relevant
+  capability or interface options; callbacks must not be hidden inside the raw
+  extended-attribute syntax tree.
 - Internal Web IDL object creation is distinct from invoking an author-facing
   IDL constructor. Deserialization must never depend on an interface being
   publicly constructible.

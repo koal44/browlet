@@ -4,8 +4,8 @@ import { assembleDefinitions } from '../../src/web-idl/assembly';
 import {
   annotated, defineTypedef, idlType, nullable, reference, sequence, union,
   xattr,
-} from '../../src/web-idl/declaration/index';
-import { serializeType } from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
+import { serializeType } from '../../src/web-idl/core/index';
 import {
   getFlattenedMemberTypes, getNumberOfNullableMemberTypes,
   includesNullableType, includesUndefined,

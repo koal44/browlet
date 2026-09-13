@@ -4,9 +4,8 @@ import { itPassesWith } from '../test-runtime';
 import { BodyRecord } from '../../src/fetch/body';
 import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
 import {
-  defineInterface, idlType, impl, op, promise,
-} from '../../src/web-idl/declaration/index';
-import { createBindings } from '../../src/web-idl/registration';
+  defineInterface, idlType, impl, op, promise, createBindingWorld,
+} from '../../src/web-idl/index';
 import { createFetchWindow } from './fetch-fixture';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
 import { ReadableStreamImpl } from '../../src/streams/index';
@@ -82,8 +81,8 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     else if (failure === 'non-byte') stream.enqueueChunk('not bytes');
     else stream.error(authorError);
 
-    const bindings = createBindings([bodyConsumerIDL]);
-    const ownerBinding = bindings.register(owner.realm).context;
+    const bindings = createBindingWorld([bodyConsumerIDL]);
+    const ownerBinding = bindings.register(owner.realm);
     bindings.register(other.realm).install(other.realm.global);
     const consumer = ownerBinding.project(
       BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, runtime),

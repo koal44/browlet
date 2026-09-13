@@ -1,8 +1,7 @@
 import {
-  arg, callback, contextValue, ctor, defineCallbackFunction, defineDictionary, defineInterface,
-  dictMember, functionResult, idlType, impl, roAttr, reference,
-} from '../web-idl/declaration/index';
-import type { BindingContext } from '../web-idl/projection';
+  arg, attrFn, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface,
+  dictMember, idlType, impl, roAttr, reference,
+} from '../web-idl/index';
 import { getV } from '../js-engine/index';
 import { RangeError } from '../js-engine/simple-exception';
 
@@ -70,7 +69,7 @@ export const queuingStrategyIDL = defineDictionary({
     dictMember(
       'size',
       reference('QueuingStrategySize'),
-      callback('rethrow'),
+      onError('rethrow'),
     ),
   ],
 });
@@ -117,9 +116,11 @@ export const byteLengthQueuingStrategyIDL = defineInterface({
     ctor([arg('init', reference('QueuingStrategyInit'))]),
     roAttr('highWaterMark', idlType.unrestrictedDouble),
     // BINDING_INTEGRATION: primitive chunks use the size function's owning realm.
-    roAttr('size', reference('Function'), functionResult(1, contextValue(
-      ({ realm }: BindingContext) => (chunk: unknown) => getV(chunk, 'byteLength', realm),
-    ))),
+    roAttr('size', reference('Function'), attrFn(({ realm }) => {
+      return function size(chunk: unknown) {
+        return getV(chunk, 'byteLength', realm);
+      };
+    })),
   ],
 });
 
@@ -157,6 +158,8 @@ export const countQueuingStrategyIDL = defineInterface({
   members: [
     ctor([arg('init', reference('QueuingStrategyInit'))]),
     roAttr('highWaterMark', idlType.unrestrictedDouble),
-    roAttr('size', reference('Function'), functionResult(0, () => 1)),
+    roAttr('size', reference('Function'), attrFn(() => {
+      return function size() { return 1; };
+    })),
   ],
 });

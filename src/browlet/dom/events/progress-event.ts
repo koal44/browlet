@@ -1,8 +1,9 @@
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
-} from '../../../web-idl/declaration/index';
-import { EventImpl, eventTimeStamp } from './event';
+} from '../../../web-idl/index';
+import { EventImpl } from './event';
+import type { Realm } from '../../scripting/realm';
 import { type EventTargetImpl, fireEvent } from './event-target';
 
 /*
@@ -80,12 +81,12 @@ export function fireProgressEvent(
 
 // -- Web IDL ------------------------------------------------------------
 
-export const progressEventIDL = defineInterface({
+export const progressEventIDL = defineInterface<Realm>({
   name: 'ProgressEvent',
   inherits: 'Event',
   exposed: ['Window', 'Worker'],
   implementation: impl(ProgressEventImpl, {
-    constructWith: [atArg(2, eventTimeStamp)],
+    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
   }),
   members: [
     ctor([

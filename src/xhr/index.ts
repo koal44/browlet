@@ -1,4 +1,4 @@
-import type { Definition } from '../web-idl/declaration/index';
+import type { Definition } from '../web-idl/index';
 import {
   formDataEntryValueIDL, formDataIDL,
 } from './form-data';

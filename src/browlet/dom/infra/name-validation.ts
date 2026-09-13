@@ -1,8 +1,8 @@
 // DOM §1.4 Name validation
 
 import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
+  DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../../infra/index';
@@ -45,7 +45,7 @@ export function validateAndExtract(
 
     if (!isValidNamespacePrefix(prefix)) {
       throwDOMException(
-        domExceptionName.invalidCharacter,
+        DOMExceptionNames.invalidCharacter,
         `Invalid namespace prefix ${JSON.stringify(prefix)}`,
       );
     }
@@ -57,7 +57,7 @@ export function validateAndExtract(
 
   if (!validLocalName) {
     throwDOMException(
-      domExceptionName.invalidCharacter,
+      DOMExceptionNames.invalidCharacter,
       `Invalid ${context} local name ${JSON.stringify(localName)}`,
     );
   }
@@ -93,7 +93,7 @@ function throwNamespaceError(
   namespace: string | null,
 ): never {
   throwDOMException(
-    domExceptionName.namespace,
+    DOMExceptionNames.namespace,
     `Qualified name ${JSON.stringify(qualifiedName)} is not valid for namespace ${JSON.stringify(namespace)}`,
   );
 }

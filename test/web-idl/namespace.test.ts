@@ -5,7 +5,7 @@ import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
@@ -92,7 +92,7 @@ describe('Web IDL namespace objects', () => {
     expect(Reflect.get(tools, 'READY')).toBe(7);
     expect(Reflect.has(tools, 'hidden')).toBe(false);
     expect(Reflect.has(realm.global, 'Nested')).toBe(false);
-    expect(Nested).toBe(binding.getInterfaceObject('Nested'));
+    expect(Reflect.get(binding.getInterfacePrototypeObject('Nested'), 'constructor')).toBe(Nested);
     expect(Object.prototype.toString.call(
       requireObject(Reflect.get(Nested, 'prototype')),
     )).toBe('[object Tools.Nested]');

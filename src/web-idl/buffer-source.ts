@@ -2,9 +2,10 @@ import * as JSEngine from '../js-engine/index';
 import {
   hasExtendedAttribute, type BufferTypeName, type BufferViewTypeName,
   type ExtendedAttribute,
-} from './declaration/definition';
+} from './core/definition';
 import { TypeError } from '../js-engine/simple-exception';
 
+// Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.
 export function convertBufferSourceToIDL(
   value: unknown,
   name: BufferTypeName,
@@ -35,6 +36,7 @@ export function convertBufferSourceToIDL(
   return value;
 }
 
+// Web IDL §3.2.26 Buffer source types — convert a buffer source to a JavaScript value.
 export function convertBufferSourceToJavaScript(
   value: unknown,
   name: BufferTypeName,
@@ -45,6 +47,7 @@ export function convertBufferSourceToJavaScript(
   return value;
 }
 
+// Project helper: distinguish buffer views from ArrayBuffer and SharedArrayBuffer.
 function isBufferViewTypeName(name: BufferTypeName): name is BufferViewTypeName {
   return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
 }

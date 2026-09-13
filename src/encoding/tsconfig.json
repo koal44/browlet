@@ -12,7 +12,7 @@
   "references": [
     { "path": "../infra" },
     { "path": "../js-engine" },
-    { "path": "../web-idl/declaration" },
+    { "path": "../web-idl/core" },
     { "path": "../web-idl" },
     { "path": "../streams" }
   ]

@@ -1,11 +1,9 @@
 import {
-  createDOMException, domExceptionName, type DOMExceptionName,
-} from '../../../web-idl/exceptions/dom-exception-core';
-import { impl } from '../../../web-idl/index';
-import {
-  arg, defineInterface, idlType, op, roAttr, reference, resolveArgs,
+  arg, atArg, defineInterface, idlType, op, staticOp, roAttr, reference,
   sequence, invokeWith, xattr,
-} from '../../../web-idl/declaration/index';
+  impl,
+  createDOMException, DOMExceptionNames, type DOMExceptionName,
+} from '../../../web-idl/index';
 import { queueGlobalTask } from '../../scripting/tasks';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
@@ -76,7 +74,7 @@ export class AbortSignalImpl extends EventTargetImpl
         queueGlobalTask(
           timerTaskSource,
           signal.#global,
-          () => signal.signalAbort(signal.#createException(domExceptionName.timeout)),
+          () => signal.signalAbort(signal.#createException(DOMExceptionNames.timeout)),
         );
       },
     );
@@ -177,7 +175,7 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   #createAbortError(): DOMException {
-    return this.#createException(domExceptionName.abort);
+    return this.#createException(DOMExceptionNames.abort);
   }
 
   #createException(
@@ -237,30 +235,27 @@ export const abortSignalIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: '*',
   implementation: impl(AbortSignalImpl, {
-    constructWith: ['current-global'],
+    constructWith: [atArg(0, (ctx) => ctx.realm.global)],
   }),
   members: [
-    op('abort', reference('AbortSignal'),
+    staticOp('abort', reference('AbortSignal'),
       [arg('reason', idlType.any, { optional: true })],
       {
-        ...invokeWith(AbortSignalImpl),
-        static: true,
+        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
         ...xattr('NewObject'),
       },
     ),
-    op('timeout', reference('AbortSignal'),
+    staticOp('timeout', reference('AbortSignal'),
       [arg('milliseconds', idlType.unsignedLongLong, xattr('EnforceRange'))],
       {
-        ...invokeWith(AbortSignalImpl),
-        static: true,
+        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
         ...xattr(['Exposed', ['Window', 'Worker']], 'NewObject'),
       },
     ),
-    op('any', reference('AbortSignal'),
-      [arg('signals', sequence(reference('AbortSignal')), resolveArgs(AbortSignalImpl))],
+    staticOp('any', reference('AbortSignal'),
+      [arg('signals', sequence(reference('AbortSignal')))],
       {
-        ...invokeWith(AbortSignalImpl),
-        static: true,
+        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
         ...xattr('NewObject'),
       },
     ),

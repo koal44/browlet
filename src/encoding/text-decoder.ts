@@ -3,7 +3,7 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
 import { type Encoding, getDecoder, getEncoding } from './encodings';
 import { endOfQueue, IOQueue, type Decoder } from './io-queue';

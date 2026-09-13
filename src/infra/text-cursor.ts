@@ -1,5 +1,3 @@
-export type CharPred = (ch: string) => boolean;
-
 export class TextCursor {
   constructor(
     public readonly input: string,
@@ -48,7 +46,7 @@ export class TextCursor {
     return this.i - start;
   }
 
-  consumeWhile(p: CharPred): number {
+  consumeWhile(p: (ch: string) => boolean): number {
     const input = this.input;
     const n = input.length;
     const start = this.i;

@@ -18,18 +18,18 @@ document describes the wider dependency graph around that boundary.
 
 ## One object model, several dependency roles
 
-Browlet has three object-model layers:
+Browlet has two object-model layers:
 
 | Layer | Owns |
 | --- | --- |
 | **Implementation** | Specification state, internal relationships, and algorithms |
-| **Binding** | Web IDL conversion, realm selection, identity, and projection |
 | **Platform** | The realm-owned JavaScript objects visible to authors |
 
-The flow is **Implementation -> Binding -> Platform**. Cross-specification
-capabilities and Host Ports supply implementation dependencies at a Composition
-Root. Binding Context stays in Binding code. None of these creates an additional
-object-model layer.
+Binding connects **Implementation** and **Platform** through Web IDL conversion,
+realm selection, identity, and projection. Cross-specification capabilities and
+Host Ports supply implementation dependencies at a Composition Root. Binding
+Context stays in Binding code. These are machinery and dependency roles within
+the two-layer object model.
 
 That distinction matters. A dependency edge explains how an existing
 implementation obtains work it does not own. It must not manufacture another
@@ -85,6 +85,12 @@ Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
 Collection iterators follow this rule: JS Engine owns native allocation and
 the stock fallback; Web IDL supplies live iteration and per-step conversion.
+For asynchronous iterable declarations, the providing subsystem creates an
+internal iterator that owns its traversal state. Streams' `ReadableStreamIterator`
+owns the reader and cancellation policy. The declaration names the implementation
+factory and whether to expose `return()`. Web IDL adapts the internal iterator's
+methods and owns author identity, call ordering, and result projection; it has
+no dependency on Streams.
 Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
 Composition exposes the required operations through `runtime.buffers` and
@@ -150,6 +156,9 @@ extends the JavaScript realm contract with binding policy, and Browlet's HTML
 callback lifecycle, and global task associations. The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
+Web IDL's `BindingContext<Realm>` preserves that concrete host type through
+declaration callbacks and realm registration without extending the minimal
+Web IDL host contract with HTML-specific methods.
 
 Window creation and navigation with the addon follow that division: the engine
 allocates immutable objects and forwards native property operations; Binding
@@ -164,7 +173,7 @@ for the current adoption boundary.
 
 ### Binding
 
-The Binding layer owns the Web IDL boundary:
+Binding machinery owns the Web IDL boundary:
 
 - receiver and argument conversion;
 - overload selection and dictionary defaults;
@@ -225,9 +234,16 @@ dependency that still needs removal or a boundary awaiting design review.
 An `integration.ts` file is a useful home for capability resolution, but its
 name does not justify passing Binding Context through implementation algorithms.
 
-The concrete type is `BindingContext`, created once for each registered Web IDL
-realm. Its `realm` property identifies that realm; Binding assembles and owns
-the rest of the operations on the context.
+The `BindingContext` class in `web-idl/binding-context.ts` is instantiated once
+per realm within a Binding World. `world.register(realm)` returns that context
+directly. It retains the realm's binding and composed runtime, and provides
+installation, conversion, construction, and projection methods. Browlet's
+`getBindingContext(realm)` selects its main world's context; a realm can have
+different contexts in different worlds.
+
+Structured-data operations receive `BindingContext<Realm>` directly. They use
+`ctx.realm` for allocation and `ctx.realm.agent.agentCluster` for shared-memory
+identity; no separate structured-data environment duplicates that ownership.
 
 The exact TypeScript shape may evolve. The important property is its identity:
 one shared context describes one binding realm. Several Binding Contexts can
@@ -559,7 +575,7 @@ into it and erase the distinction that the context is meant to preserve.
 Do not make every subsystem test reconstruct a private Web IDL runtime. Test
 implementations with post-conversion values and narrow capability or Host Port
 fakes; test projection, realm behavior, and author-facing conversion through
-the real Binding layer.
+the real Binding machinery.
 
 ## Lessons from removing `StreamEnvironment`
 

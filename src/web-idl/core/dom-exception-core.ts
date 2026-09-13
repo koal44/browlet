@@ -1,6 +1,6 @@
 // Web IDL §2.8 Exceptions and §2.8.1 Base DOMException error names
 
-export const domExceptionName = {
+export const DOMExceptionNames = {
   indexSize: 'IndexSizeError',
   hierarchyRequest: 'HierarchyRequestError',
   wrongDocument: 'WrongDocumentError',
@@ -36,7 +36,7 @@ export const domExceptionName = {
   optOut: 'OptOutError',
 } as const;
 
-export const domExceptionCode = {
+export const DOMExceptionCodes = {
   indexSize: 1,
   hierarchyRequest: 3,
   wrongDocument: 4,
@@ -70,31 +70,27 @@ export const domExceptionCode = {
   operation: 0,
   notAllowed: 0,
   optOut: 0,
-} as const satisfies Record<keyof typeof domExceptionName, number>;
+} as const satisfies Record<keyof typeof DOMExceptionNames, number>;
 
-export type DOMExceptionName = typeof domExceptionName[
-  keyof typeof domExceptionName
+export type DOMExceptionName = typeof DOMExceptionNames[
+  keyof typeof DOMExceptionNames
 ];
-
-type DOMExceptionRequest = {
-  message: string;
-  name: DOMExceptionName;
-};
-
-/*
- * Keep one request table across specification implementations and every realm
- * binding in this runtime. A per-realm table would break borrowed cross-realm
- * calls; moving ownership to a host would require injecting that same table
- * into every implementation package that can request a DOMException.
- */
-const domExceptionRequests = new WeakMap<object, DOMExceptionRequest>();
 
 /*
  * Keep specification-requested DOMExceptions distinguishable from arbitrary
- * exceptions thrown by implementation or author code. An unbound caller still
- * receives a native DOMException; a Web IDL binding can use the invisible
- * request record to recreate it in the function's current realm.
+ * exceptions thrown by implementation or author code. The binding uses this
+ * native exception's name and message to create the realm-owned platform object.
  */
+export class DOMException extends globalThis.DOMException {
+  #brand: undefined;
+
+  static is(value: unknown): value is DOMException {
+    return typeof value === 'object' && value !== null && #brand in value;
+  }
+}
+
+// Project adapter: throw an internal DOMException for later realm realization.
+// Supports Web IDL §3.14.3 Creating and throwing exceptions.
 export function throwDOMException(
   name: DOMExceptionName,
   message = '',
@@ -102,23 +98,11 @@ export function throwDOMException(
   throw createDOMException(name, message);
 }
 
-export function throwDataCloneError(): never {
-  return throwDOMException(domExceptionName.dataClone);
-}
-
+// Project adapter: create a distinguishable native DOMException subclass.
+// Supports Web IDL §3.14.3 Creating and throwing exceptions; realm realization occurs at the binding boundary.
 export function createDOMException(
   name: DOMExceptionName,
   message = '',
 ): DOMException {
-  const exception = new DOMException(message, name);
-  domExceptionRequests.set(exception, { message, name });
-  return exception;
-}
-
-export function getDOMExceptionRequest(
-  value: unknown,
-): DOMExceptionRequest | undefined {
-  return typeof value === 'object' && value !== null
-    ? domExceptionRequests.get(value)
-    : undefined;
+  return new DOMException(message, name);
 }

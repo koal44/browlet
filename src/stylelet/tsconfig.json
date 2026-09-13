@@ -11,7 +11,6 @@
   "references": [
     { "path": "../infra" },
     { "path": "../js-engine" },
-    { "path": "../web-idl/declaration" },
-    { "path": "../web-idl/exceptions" }
+    { "path": "../web-idl/core" }
   ]
 }

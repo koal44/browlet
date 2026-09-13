@@ -9,7 +9,7 @@ import type { URLSearchParamsImpl } from '../url/api';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
   union, xattr,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 import type { FormDataImpl } from '../xhr/index';
 import type { RequestRecord } from './request';
 import type { ResponseRecord } from './response';

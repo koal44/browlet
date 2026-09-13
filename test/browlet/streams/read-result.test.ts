@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import type { PromiseValue } from '../../../src/js-engine/index';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
@@ -9,9 +9,8 @@ import {
   type ReadableStreamReadResult,
 } from '../../../src/streams/index';
 import {
-  arg, defineCallbackFunction, defineInterface, impl, op, promise, reference,
-} from '../../../src/web-idl/declaration/index';
-import { createBindings } from '../../../src/web-idl/registration';
+  arg, defineCallbackFunction, defineInterface, impl, op, promise, reference, createBindingWorld,
+} from '../../../src/web-idl/index';
 
 import * as scheduling from '../../../src/browlet/integration/scripting';
 
@@ -40,10 +39,10 @@ describe('stream read Promise boundaries', () => {
   itPassesWith('explicitQueues').each(['consume', 'invoke'] as const)(
     'imports a real stream read through %s without crossing independent queues', (method) => {
       const { first, second } = createFixture();
-      const bindings = createBindings([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
+      const bindings = createBindingWorld([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
       const entries = [first, second].map((fixture) => {
         const consumer = new ReadConsumerImpl();
-        const object = bindings.register(fixture.realm).context.project(ReadConsumerImpl, consumer);
+        const object = bindings.register(fixture.realm).project(ReadConsumerImpl, consumer);
         fixture.browlet.expose('reader', fixture.reader);
         const callback = fixture.realm.evaluate('() => reader.read()', 'read-callback.js') as () => Promise<unknown>;
         const argument = method === 'invoke' ? callback : callback();
@@ -79,11 +78,11 @@ function createFixture() {
 function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
-  const stream = new ReadableStreamImpl({}, {}, getRealmBindings(realm).context.getRuntime());
+  const stream = new ReadableStreamImpl({}, {}, getBindingContext(realm).getRuntime());
   const controller = stream.controller;
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
-  const reader = getRealmBindings(realm).context.project(ReadableStreamDefaultReaderImpl, implementation);
+  const reader = getBindingContext(realm).project(ReadableStreamDefaultReaderImpl, implementation);
   const failure = new realm.intrinsics.typeError('source failed');
   return { browlet, realm, controller, implementation, reader, failure };
 }

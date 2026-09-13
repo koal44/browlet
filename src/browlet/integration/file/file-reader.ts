@@ -1,16 +1,12 @@
 import {
-  arg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
-  reference, union,
-} from '../../../web-idl/declaration/index';
-import { bind, runtimeContext } from '../../../web-idl/projection';
+  arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
+  reference, union, DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import { getBufferSourceCopy, type RuntimeContext } from '../../../js-engine/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
 import type { TaskHandle } from '../../../infra/index';
-import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
 import { fireProgressEvent } from '../../dom/events/progress-event';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
@@ -179,7 +175,7 @@ export class FileReaderImpl extends EventTargetImpl {
     encodingLabel?: string,
   ): void {
     if (this.#isLoading()) {
-      throwDOMException(domExceptionName.invalidState);
+      throwDOMException(DOMExceptionNames.invalidState);
     }
 
     this.#state = 'loading';
@@ -309,7 +305,7 @@ export const fileReaderIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [runtimeContext],
+    constructWith: [atArg(0, (ctx) => ctx.getRuntime())],
   }),
   members: [
     ctor(),
@@ -332,13 +328,13 @@ export const fileReaderIDL = defineInterface({
     constant('DONE', idlType.unsignedShort, integer(2)),
     roAttr('readyState', idlType.unsignedShort),
     roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer))),
-    roAttr('error', nullable(reference('DOMException')), bind({
+    roAttr('error', nullable(reference('DOMException')), {
       // BINDING_INTEGRATION: realize a retained failure on its first author observation.
       get(context) {
         const error = context.realizeException((this as FileReaderImpl).error);
-        return context.convert(error, nullable(reference('DOMException')));
+        return context.convertToImpl(error, nullable(reference('DOMException')));
       },
-    })),
+    }),
     eventHandlerAttr('onloadstart'),
     eventHandlerAttr('onprogress'),
     eventHandlerAttr('onload'),

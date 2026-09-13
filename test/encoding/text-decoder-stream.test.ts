@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
-import { getSimpleExceptionRequest } from '../../src/js-engine/simple-exception';
+import { TypeError as InternalTypeError } from '../../src/js-engine/simple-exception';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([
@@ -44,7 +44,7 @@ describe('TextDecoderStream chunk conversion', () => {
     const writing = observe(writer.write(createChunk())).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
-    expect(getSimpleExceptionRequest(error)?.type).toBe('typeError');
+    expect(InternalTypeError.is(error)).toBe(true);
     expect(await reading).toBe(error);
   });
 

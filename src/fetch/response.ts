@@ -3,9 +3,8 @@ import { serializeURL, type URLRecord } from '../url/url';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
-  roAttr, xattr,
-} from '../web-idl/declaration/index';
-import { bind } from '../web-idl/projection';
+  roAttr, staticOp, xattr,
+} from '../web-idl/index';
 import { BodyMixin, type BodyRecord } from './body';
 import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
@@ -169,21 +168,21 @@ export const responseIDL = defineInterface({
     ctor([
       arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),
       arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
-    ], bind({ invoke() { throw new Error('Response construction from BodyInit is not implemented'); } })),
-    op('error', reference('Response'), [], { static: true, ...xattr('NewObject') }),
-    op('redirect', reference('Response'),
+    ], { invoke() { throw new Error('Response construction from BodyInit is not implemented'); } }),
+    staticOp('error', reference('Response'), [], xattr('NewObject')),
+    staticOp('redirect', reference('Response'),
       [
         arg('url', idlType.USVString),
         arg('status', idlType.unsignedShort, { optional: true, default: integer(302) }),
       ],
-      { static: true, ...xattr('NewObject') },
+      xattr('NewObject'),
     ),
-    op('json', reference('Response'),
+    staticOp('json', reference('Response'),
       [
         arg('data', idlType.any),
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
-      { static: true, ...xattr('NewObject') },
+      xattr('NewObject'),
     ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),

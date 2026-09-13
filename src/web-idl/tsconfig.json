@@ -10,8 +10,7 @@
   "include": ["./*.ts"],
   "references": [
     { "path": "../js-engine" },
-    { "path": "./declaration" },
-    { "path": "./exceptions" },
+    { "path": "./core" },
     { "path": "../infra" }
   ]
 }

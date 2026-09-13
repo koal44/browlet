@@ -1,11 +1,8 @@
 import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
-import { bind } from '../../../web-idl/index';
-import {
   arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
-  dictMember, emptyDictionary, idlType, nullable, op, reference, union,
-} from '../../../web-idl/declaration/index';
+  dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
+  DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import { EventImpl, type EventPathItem } from './event';
 import { MouseEventImpl } from './ui-event';
 import {
@@ -95,7 +92,7 @@ export class EventTargetImpl {
 
   dispatchEvent(event: EventImpl): boolean {
     if (event.isDispatching() || !event.isInitialized()) {
-      throwDOMException(domExceptionName.invalidState);
+      throwDOMException(DOMExceptionNames.invalidState);
     }
 
     event.setTrusted(false);
@@ -366,7 +363,7 @@ export const eventTargetIDL = defineInterface({
   exposed: '*',
   // Projection supplies the realm-correct trusted-event factory to every
   // implementation whose primary interface inherits EventTarget.
-  implementation: bind(EventTargetImpl, {
+  implementation: impl(EventTargetImpl, {
     initializeImplementation(context, value) {
       (value as EventTargetImpl).setEventFactory((EventConstructor = EventImpl) => {
         const event = context.construct(EventConstructor, '', {});
@@ -411,7 +408,7 @@ export const eventListenerIDL = defineCallbackInterface({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
-  adapter: bind({
+  adapter: {
     adapt(_context, callback) {
       return new EventListenerValue(
         callback.object,
@@ -425,7 +422,7 @@ export const eventListenerIDL = defineCallbackInterface({
         },
       );
     },
-  }),
+  },
   members: [
     op('handleEvent', idlType.undefined, [arg('event', reference('Event'))]),
   ],

@@ -1,22 +1,22 @@
 import { PromiseValue, type ByteSequence, type Promises } from '../js-engine/index';
-import type { PlatformObjectRegistry } from './platform-object';
-import type { WebIDLRealmHost } from './js-realm';
 import {
   convertToIDL, convertToJavaScript, createBufferResult, type ConversionContext,
 } from './conversion';
-import { idlType, sequence, type WebIDLType } from './declaration/index';
+import { idlType, sequence, type WebIDLType } from './core/index';
 import {
-  createPromiseValue, isPromiseValue, type IDLPromise,
+  createIDLPromise, isIDLPromise, type IDLPromise,
 } from './promise-value';
 import { getUnannotatedType } from './types';
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — create a new promise.
 export function createPromise(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromise {
-  return createPromiseValue(type, context.realm, context.realizeException);
+  return createIDLPromise(type, context.realm, context.realizeException);
 }
 
+// Project adapter: preserve projected promise identity and convert fulfillment values into the target realm.
 /** Adapt an implementation promise to the declared result type and realm. */
 export function projectPromise(
   value: unknown,
@@ -24,13 +24,9 @@ export function projectPromise(
   context: ConversionContext,
   newBufferResult = false,
 ): IDLPromise {
-  if (isPromiseValue(value)) return value;
+  if (isIDLPromise(value)) return value;
   const source = value as Promise<unknown> | PromiseValue<unknown>;
-  let promises = promiseProjections.get(context.platformObjects);
-  if (!promises) {
-    promises = new WeakMap();
-    promiseProjections.set(context.platformObjects, promises);
-  }
+  const promises = context.platformObjects.promiseProjections ??= new WeakMap();
   let projections = promises.get(source);
   const existing = projections?.find((entry) =>
     entry.realm === context.realm && entry.type === type &&
@@ -69,6 +65,7 @@ export function projectPromise(
   return promise;
 }
 
+// Project adapter: convert author fulfillment values for an implementation's promise queue.
 /** Convert author fulfillment values before supplying an implementation promise. */
 export function toImplementationPromise(
   promise: IDLPromise,
@@ -81,6 +78,7 @@ export function toImplementationPromise(
     convertValue(convertToIDL(value, promise.type, conversionContext)));
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — create a resolved promise.
 export function createResolvedPromise(
   value: unknown,
   type: WebIDLType,
@@ -91,6 +89,7 @@ export function createResolvedPromise(
   return promise;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — create a rejected promise.
 export function createRejectedPromise(
   reason: unknown,
   type: WebIDLType,
@@ -101,6 +100,7 @@ export function createRejectedPromise(
   return promise;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — resolve.
 export function resolvePromise(
   promise: IDLPromise,
   value: unknown,
@@ -113,6 +113,7 @@ export function resolvePromise(
   ));
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — reject.
 export function rejectPromise(
   promise: IDLPromise,
   reason: unknown,
@@ -120,10 +121,12 @@ export function rejectPromise(
   promise.reject(reason);
 }
 
+// Project helper: inspect whether either resolving function has been accepted.
 export function isPromiseUnresolved(promise: IDLPromise): boolean {
   return !promise.resolved;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — react.
 export function reactToPromise(
   promise: IDLPromise,
   resultType: WebIDLType,
@@ -186,6 +189,7 @@ export function reactToPromise(
   return resultPromise;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — upon fulfillment.
 export function uponPromiseFulfillment(
   promise: IDLPromise,
   steps: (value: unknown) => void,
@@ -199,6 +203,7 @@ export function uponPromiseFulfillment(
   );
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — upon rejection.
 export function uponPromiseRejection(
   promise: IDLPromise,
   steps: (reason: unknown) => void,
@@ -212,6 +217,7 @@ export function uponPromiseRejection(
   );
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — wait for all.
 export function waitForAll(
   promises: readonly IDLPromise[],
   successSteps: (values: unknown[]) => void,
@@ -253,6 +259,7 @@ export function waitForAll(
   });
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — get a promise for waiting for all.
 export function getPromiseForWaitingForAll(
   promises: readonly IDLPromise[],
   type: WebIDLType,
@@ -268,6 +275,7 @@ export function getPromiseForWaitingForAll(
   return promise;
 }
 
+// Project implementation of Web IDL §3.2.24.1 Creating and manipulating Promises — mark as handled.
 export function markPromiseAsHandled(promise: IDLPromise): void {
   // ECMAScript does not expose [[PromiseIsHandled]]. Attaching a rejection
   // reaction performs the same state transition on the original promise.
@@ -287,6 +295,7 @@ export type PromiseReactionSteps = {
   rejected?(this: void, reason: unknown): unknown;
 };
 
+// Project helper: project a reaction result before resolving its result promise.
 function settleReaction(
   result: unknown,
   promise: IDLPromise,
@@ -296,16 +305,18 @@ function settleReaction(
   promise.resolve(toPromiseResolution(result, resultType, context));
 }
 
+// Project helper: unwrap an IDL promise or project an ordinary resolution value.
 function toPromiseResolution(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
 ): unknown {
-  return isPromiseValue(value)
+  return isIDLPromise(value)
     ? value.promise
     : convertToJavaScript(value, type, context);
 }
 
+// Project helper: select the promise's realm for value conversion.
 function withPromiseRealm(
   context: ConversionContext,
   promise: IDLPromise,
@@ -320,6 +331,7 @@ function withPromiseRealm(
   };
 }
 
+// Project helper: identify Promise<undefined> reactions that receive no fulfillment argument.
 function isUndefinedType(
   type: WebIDLType,
   context: ConversionContext,
@@ -327,15 +339,3 @@ function isUndefinedType(
   const resolved = getUnannotatedType(type, context.definitions);
   return resolved.kind === 'simple' && resolved.name === 'undefined';
 }
-
-// A retained implementation promise has one projection per result type and
-// realm within a binding world, including when a foreign method is borrowed.
-const promiseProjections = new WeakMap<PlatformObjectRegistry, WeakMap<
-  Promise<unknown> | PromiseValue<unknown>,
-  {
-    realm: WebIDLRealmHost;
-    type: WebIDLType;
-    promise: IDLPromise;
-    newBufferResult: boolean;
-  }[]
->>();

@@ -1,12 +1,20 @@
+import type { CallbackInterfaceDefinition } from './core/definitions/callback-interface';
+import type { Definition } from './core/definition';
 import type {
-  CallbackInterfaceDefinition, Definition, DictionaryDefinition,
-  DictionaryMember, IncludesDefinition, InterfaceDefinition,
-  InterfaceMember, InterfaceMixinDefinition, MixinMember,
-  NamespaceDefinition, NamespaceMember,
-  PartialDictionaryDefinition, PartialInterfaceDefinition,
-  PartialInterfaceMixinDefinition, PartialNamespaceDefinition,
-} from './declaration/definition';
+  DictionaryDefinition, DictionaryMember, PartialDictionaryDefinition,
+} from './core/definitions/dictionary';
+import type { IncludesDefinition } from './core/definitions/includes';
+import type {
+  InterfaceDefinition, InterfaceMember, PartialInterfaceDefinition,
+} from './core/definitions/interface';
+import type {
+  InterfaceMixinDefinition, MixinMember, PartialInterfaceMixinDefinition,
+} from './core/definitions/interface-mixin';
+import type {
+  NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
+} from './core/definitions/namespace';
 
+// Project helper: build our indexed representation of IDL definitions.
 export function assembleDefinitions(
   definitions: Definition[],
 ): DefinitionAssembly {
@@ -20,11 +28,12 @@ export class DefinitionAssembly {
   #namespacePartials = new Map<string, PartialNamespaceDefinition[]>();
   #dictionaryPartials = new Map<string, PartialDictionaryDefinition[]>();
   #includes = new Map<string, IncludesDefinition[]>();
-  #interfaces = new Map<string, AssembledInterface>();
-  #mixins = new Map<string, AssembledInterfaceMixin>();
-  #namespaces = new Map<string, AssembledNamespace>();
-  #dictionaries = new Map<string, AssembledDictionary>();
+  #interfaces = new Map<string, AssembledInterfaceDefinition>();
+  #mixins = new Map<string, AssembledInterfaceMixinDefinition>();
+  #namespaces = new Map<string, AssembledNamespaceDefinition>();
+  #dictionaries = new Map<string, AssembledDictionaryDefinition>();
 
+  // Project helper: index primary definitions, partials, and includes statements.
   constructor(definitions: Definition[]) {
     for (const definition of definitions) {
       switch (definition.kind) {
@@ -49,12 +58,14 @@ export class DefinitionAssembly {
     }
   }
 
+  // Project helper: look up a primary definition by name.
   getDefinition(name: string): PrimaryDefinition | undefined {
     return this.#definitions.get(name);
   }
 
-  getInterfaces(): AssembledInterface[] {
-    const interfaces: AssembledInterface[] = [];
+  // Project helper: enumerate assembled interfaces.
+  getInterfaces(): AssembledInterfaceDefinition[] {
+    const interfaces: AssembledInterfaceDefinition[] = [];
     for (const definition of this.#definitions.values()) {
       if (definition.kind !== 'interface') continue;
       const interface_ = this.getInterface(definition.name);
@@ -63,14 +74,16 @@ export class DefinitionAssembly {
     return interfaces;
   }
 
-  getInterface(name: string): AssembledInterface | undefined {
+  // Project helper: assemble inheritance, partials, and included mixins.
+  // Web IDL §2.2 Interfaces; §2.3 Interface mixins.
+  getInterface(name: string): AssembledInterfaceDefinition | undefined {
     const existing = this.#interfaces.get(name);
     if (existing) return existing;
 
     const definition = this.#definitions.get(name);
     if (definition?.kind !== 'interface') return;
 
-    const assembled: AssembledInterface = {
+    const assembled: AssembledInterfaceDefinition = {
       definition,
       includes: [],
       members: [],
@@ -107,7 +120,9 @@ export class DefinitionAssembly {
     return assembled;
   }
 
-  getInterfaceMixin(name: string): AssembledInterfaceMixin | undefined {
+  // Project helper: collect a mixin and its partials.
+  // Web IDL §2.3 Interface mixins.
+  getInterfaceMixin(name: string): AssembledInterfaceMixinDefinition | undefined {
     const existing = this.#mixins.get(name);
     if (existing) return existing;
 
@@ -122,11 +137,13 @@ export class DefinitionAssembly {
     return assembled;
   }
 
+  // Project helper: look up a callback interface definition.
   getCallbackInterface(name: string): CallbackInterfaceDefinition | undefined {
     const definition = this.#definitions.get(name);
     return definition?.kind === 'callback-interface' ? definition : undefined;
   }
 
+  // Project helper: enumerate callback interface definitions.
   getCallbackInterfaces(): CallbackInterfaceDefinition[] {
     const interfaces: CallbackInterfaceDefinition[] = [];
     for (const definition of this.#definitions.values()) {
@@ -137,7 +154,9 @@ export class DefinitionAssembly {
     return interfaces;
   }
 
-  getNamespace(name: string): AssembledNamespace | undefined {
+  // Project helper: combine namespace members and retain their source definitions.
+  // Web IDL §2.6 Namespaces — partial namespace definitions.
+  getNamespace(name: string): AssembledNamespaceDefinition | undefined {
     const existing = this.#namespaces.get(name);
     if (existing) return existing;
 
@@ -145,7 +164,7 @@ export class DefinitionAssembly {
     if (definition?.kind !== 'namespace') return;
 
     const partials = [...(this.#namespacePartials.get(name) ?? [])];
-    const assembled: AssembledNamespace = {
+    const assembled: AssembledNamespaceDefinition = {
       definition,
       members: [],
       partials,
@@ -166,8 +185,9 @@ export class DefinitionAssembly {
     return assembled;
   }
 
-  getNamespaces(): AssembledNamespace[] {
-    const namespaces: AssembledNamespace[] = [];
+  // Project helper: enumerate assembled namespaces.
+  getNamespaces(): AssembledNamespaceDefinition[] {
+    const namespaces: AssembledNamespaceDefinition[] = [];
     for (const definition of this.#definitions.values()) {
       if (definition.kind !== 'namespace') continue;
       const namespace = this.getNamespace(definition.name);
@@ -176,7 +196,9 @@ export class DefinitionAssembly {
     return namespaces;
   }
 
-  getDictionary(name: string): AssembledDictionary | undefined {
+  // Project helper: assemble dictionary members in specification order.
+  // Web IDL §2.7 Dictionaries — inherited members first, then sorted own and partial members.
+  getDictionary(name: string): AssembledDictionaryDefinition | undefined {
     const existing = this.#dictionaries.get(name);
     if (existing) return existing;
 
@@ -184,7 +206,7 @@ export class DefinitionAssembly {
     if (definition?.kind !== 'dictionary') return;
 
     const partials = [...(this.#dictionaryPartials.get(name) ?? [])];
-    const assembled: AssembledDictionary = {
+    const assembled: AssembledDictionaryDefinition = {
       definition,
       members: [],
       parent: undefined,
@@ -208,9 +230,9 @@ export class DefinitionAssembly {
   }
 }
 
-export type AssembledInterface = {
+export type AssembledInterfaceDefinition = {
   definition: InterfaceDefinition;
-  parent: AssembledInterface | undefined;
+  parent: AssembledInterfaceDefinition | undefined;
   partials: PartialInterfaceDefinition[];
   includes: IncludedMixin[];
   members: AssembledInterfaceMember[];
@@ -226,16 +248,16 @@ export type AssembledInterfaceMember = {
 };
 
 export type IncludedMixin = {
-  mixin: AssembledInterfaceMixin | undefined;
+  mixin: AssembledInterfaceMixinDefinition | undefined;
   statement: IncludesDefinition;
 };
 
-export type AssembledInterfaceMixin = {
+export type AssembledInterfaceMixinDefinition = {
   definition: InterfaceMixinDefinition;
   partials: PartialInterfaceMixinDefinition[];
 };
 
-export type AssembledNamespace = {
+export type AssembledNamespaceDefinition = {
   definition: NamespaceDefinition;
   partials: PartialNamespaceDefinition[];
   members: AssembledNamespaceMember[];
@@ -246,9 +268,9 @@ export type AssembledNamespaceMember = {
   source: NamespaceDefinition | PartialNamespaceDefinition;
 };
 
-export type AssembledDictionary = {
+export type AssembledDictionaryDefinition = {
   definition: DictionaryDefinition;
-  parent: AssembledDictionary | undefined;
+  parent: AssembledDictionaryDefinition | undefined;
   partials: PartialDictionaryDefinition[];
   members: DictionaryMember[];
 };
@@ -262,6 +284,7 @@ export type PrimaryDefinition = Exclude<
   | IncludesDefinition
 >;
 
+// Project helper for Web IDL §2.7 Dictionaries — lexicographic dictionary member order.
 function compareDictionaryMembers(
   left: DictionaryMember,
   right: DictionaryMember,
@@ -272,6 +295,7 @@ function compareDictionaryMembers(
   return 0;
 }
 
+// Project helper: append a definition to a named group.
 function append<Value>(
   values: Map<string, Value[]>,
   name: string,
@@ -282,6 +306,7 @@ function append<Value>(
   else values.set(name, [value]);
 }
 
+// Project helper: retain the source definition alongside each interface member.
 function appendInterfaceMembers(
   target: AssembledInterfaceMember[],
   members: (InterfaceMember | MixinMember)[],
@@ -290,6 +315,7 @@ function appendInterfaceMembers(
   for (const member of members) target.push({ member, source });
 }
 
+// Project helper: retain the source definition alongside each namespace member.
 function appendNamespaceMembers(
   target: AssembledNamespaceMember[],
   members: NamespaceMember[],

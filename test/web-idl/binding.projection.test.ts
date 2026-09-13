@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TestRealm as Realm } from './test-realm';
+import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
@@ -11,7 +11,7 @@ import {
   defineInterfaceMixin, definePartialInterface, frozenArray, idlType, integer,
   negativeInfinity, notANumber, positiveInfinity, reference,
   type AttributeMember, type ConstructorMember, type OperationMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { RealmBinding } from '../../src/web-idl/binding';
 import type { SecurityCheckType } from '../../src/web-idl/js-realm';
@@ -114,8 +114,8 @@ describe('Web IDL ordinary interface projection', () => {
       implementations,
     );
     const installed = binding.install();
-    const Base = binding.getInterfaceObject('ProjectionBase');
-    const Derived = binding.getInterfaceObject('ProjectionDerived');
+    const Base = getInstalledInterface(installed, 'ProjectionBase');
+    const Derived = getInstalledInterface(installed, 'ProjectionDerived');
 
     const instance = construct(Derived, [4.8]);
     const prototype = Derived.prototype;
@@ -192,8 +192,9 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const First = binding.getInterfaceObject('FirstHost');
-    const Second = binding.getInterfaceObject('SecondHost');
+    const installed = binding.install();
+    const First = getInstalledInterface(installed, 'FirstHost');
+    const Second = getInstalledInterface(installed, 'SecondHost');
     const firstPrototype = getPrototype(First);
     const secondPrototype = getPrototype(Second);
     const firstObject = construct(First, []);
@@ -270,7 +271,7 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       new ImplementationRegistry(),
     );
-    const Constants = binding.getInterfaceObject('ConstantValues');
+    const Constants = getInstalledInterface(binding.install(), 'ConstantValues');
 
     expect(Reflect.get(Constants, 'MAX_SIGNED'))
       .toBe(Number(9223372036854775807n));
@@ -311,8 +312,8 @@ describe('Web IDL ordinary interface projection', () => {
       platformObjects,
       implementations,
     );
-    const First = first.getInterfaceObject('CrossRealmInterface');
-    const Second = second.getInterfaceObject('CrossRealmInterface');
+    const First = getInstalledInterface(first.install(), 'CrossRealmInterface');
+    const Second = getInstalledInterface(second.install(), 'CrossRealmInterface');
     const foreignObject = construct(Second, []);
     const firstPrototype = First.prototype;
 
@@ -435,7 +436,7 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const Interface = binding.getInterfaceObject('JSONDerived');
+    const Interface = getInstalledInterface(binding.install(), 'JSONDerived');
     const object = construct(Interface, []);
     const json = call(Interface.prototype, 'toJSON', object);
 
@@ -524,7 +525,7 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const Interface = binding.getInterfaceObject('FrozenArrayInterface');
+    const Interface = getInstalledInterface(binding.install(), 'FrozenArrayInterface');
     const object = construct(Interface, []);
     const source = Object.freeze(['1', 2]);
 
@@ -561,7 +562,7 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const Interface = binding.getInterfaceObject('BufferSourceInterface');
+    const Interface = getInstalledInterface(binding.install(), 'BufferSourceInterface');
     const object = construct(Interface, []);
     const view = new Uint8Array([1, 2]);
 
@@ -635,7 +636,7 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const Interface = binding.getInterfaceObject('ExtendedInterface');
+    const Interface = getInstalledInterface(binding.install(), 'ExtendedInterface');
     const prototype = Interface.prototype;
     const first = construct(Interface, []);
     const second = construct(Interface, []);

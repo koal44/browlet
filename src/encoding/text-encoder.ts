@@ -6,7 +6,7 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, newBufferResult, op,
   roAttr, reference, xattr,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 
 /*
  * dictionary TextEncoderEncodeIntoResult {

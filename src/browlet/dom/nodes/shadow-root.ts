@@ -2,10 +2,8 @@ import type { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../../stubs';
 import {
-  defineEnumeration, defineIncludes, defineInterface, idlType,
-  roAttr, reference,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
+} from '../../../web-idl/index';
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';

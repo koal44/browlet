@@ -1,59 +1,45 @@
 import {
-  domExceptionIDL, getDOMExceptionSerializationState,
-  getQuotaExceededErrorSerializationState, quotaExceededErrorIDL,
-  setDOMExceptionSerializationState,
-  setQuotaExceededErrorSerializationState,
-} from '../../web-idl/dom-exception';
+  domExceptionIDL, quotaExceededErrorIDL,
+  type DOMExceptionImpl, type QuotaExceededErrorImpl,
+} from '../../web-idl/index';
 import type { StructuredDataRecord } from '../scripting/structured-data/records';
 import {
   serializable, type SerializableSteps,
 } from '../scripting/structured-data/serializable';
 
 /*
- * Web IDL owns DOMException's semantic state. This HTML integration owns the
+ * Web IDL owns DOMException's implementation state. This HTML integration owns the
  * Serializable capability contract and its realm-independent record fields.
  */
-const domExceptionSerializable: SerializableSteps = {
-  serializationSteps(value, serialized) {
-    const state = getDOMExceptionSerializationState(value);
-    serialized.set('Name', state.name);
-    serialized.set('Message', state.message);
+const domExceptionSerializable = {
+  serializationSteps(value: DOMExceptionImpl, serialized) {
+    serialized.set('Name', value.name);
+    serialized.set('Message', value.message);
   },
 
-  deserializationSteps(serialized, value) {
-    setDOMExceptionSerializationState(value, {
-      message: requireString(serialized, 'Message'),
-      name: requireString(serialized, 'Name'),
-    });
-  },
-};
-
-const quotaExceededErrorSerializable: SerializableSteps = {
-  serializationSteps(value, serialized, forStorage, context) {
-    domExceptionSerializable.serializationSteps(
-      value,
-      serialized,
-      forStorage,
-      context,
+  deserializationSteps(serialized, value: DOMExceptionImpl) {
+    value.setExceptionState(
+      requireString(serialized, 'Message'),
+      requireString(serialized, 'Name'),
     );
-    const state = getQuotaExceededErrorSerializationState(value);
-    serialized.set('Quota', state.quota);
-    serialized.set('Requested', state.requested);
+  },
+} satisfies SerializableSteps;
+
+const quotaExceededErrorSerializable = {
+  serializationSteps(value: QuotaExceededErrorImpl, serialized) {
+    domExceptionSerializable.serializationSteps(value, serialized);
+    serialized.set('Quota', value.quota);
+    serialized.set('Requested', value.requested);
   },
 
-  deserializationSteps(serialized, value, targetRealm, context) {
-    domExceptionSerializable.deserializationSteps(
-      serialized,
-      value,
-      targetRealm,
-      context,
+  deserializationSteps(serialized, value: QuotaExceededErrorImpl) {
+    domExceptionSerializable.deserializationSteps(serialized, value);
+    value.setQuotaState(
+      requireNullableNumber(serialized, 'Quota'),
+      requireNullableNumber(serialized, 'Requested'),
     );
-    setQuotaExceededErrorSerializationState(value, {
-      quota: requireNullableNumber(serialized, 'Quota'),
-      requested: requireNullableNumber(serialized, 'Requested'),
-    });
   },
-};
+} satisfies SerializableSteps;
 
 export const domExceptionCapabilities = [
   serializable.for(domExceptionIDL, domExceptionSerializable),

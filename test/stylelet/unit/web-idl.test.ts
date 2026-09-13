@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { styleletIDLDefinitions } from '../../../src/stylelet/web-idl';
-import { serializeDefinitions } from '../../../src/web-idl/declaration/index';
+import { serializeDefinitions } from '../../../src/web-idl/core/index';
 
 describe('Stylelet Web IDL declarations', () => {
   it('exports its host-neutral CSSOM mixin contribution', () => {

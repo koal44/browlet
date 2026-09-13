@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
   type OperationMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
@@ -13,7 +13,7 @@ import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../src/web-idl/overload';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { serializeType } from '../../src/web-idl/declaration/index';
+import { serializeType } from '../../src/web-idl/core/index';
 
 describe('Web IDL effective overload sets', () => {
   it('expands optional and variadic operation arguments', () => {

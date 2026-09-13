@@ -1,7 +1,6 @@
 import {
-  arg, attr, defineInterface, idlType, op, roAttr, xattr,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
+} from '../../../web-idl/index';
 import { withLocationStub } from '../../stubs';
 
 /*

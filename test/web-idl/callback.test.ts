@@ -8,16 +8,16 @@ import {
   convertWebIDLArguments, invokeCallbackFunction, missingArgument,
 } from '../../src/web-idl/callback';
 import {
-  isCallbackFunctionValue, isCallbackInterfaceValue,
+  isCallbackFunctionValue, isCallbackInterfaceRecord,
 } from '../../src/web-idl/callback-value';
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
   integer, nullable, promise as promiseType, reference,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { isPromiseValue } from '../../src/web-idl/promise-value';
+import { isIDLPromise } from '../../src/web-idl/promise-value';
 
 describe('Web IDL callbacks', () => {
   it('captures callback context and invokes functions in their associated realm', () => {
@@ -89,7 +89,7 @@ describe('Web IDL callbacks', () => {
       reference('NumberHandler'),
       binding,
     );
-    if (!isCallbackInterfaceValue(value)) {
+    if (!isCallbackInterfaceRecord(value)) {
       throw new Error('NumberHandler did not convert to a callback value');
     }
 
@@ -127,7 +127,7 @@ describe('Web IDL callbacks', () => {
       reference('NumberHandler'),
       binding,
     );
-    if (!isCallbackInterfaceValue(objectValue)) {
+    if (!isCallbackInterfaceRecord(objectValue)) {
       throw new Error('NumberHandler did not convert to a callback value');
     }
 
@@ -150,7 +150,7 @@ describe('Web IDL callbacks', () => {
       reference('NumberHandler'),
       binding,
     );
-    if (!isCallbackInterfaceValue(callbackValue)) {
+    if (!isCallbackInterfaceRecord(callbackValue)) {
       throw new Error('Callable NumberHandler did not convert');
     }
     expect(callUserObjectOperation(
@@ -243,7 +243,7 @@ describe('Web IDL callbacks', () => {
       }, "PromiseHandler")`,
       'promise-callback-interface.js',
     );
-    if (!isCallbackInterfaceValue(interfaceValue)) {
+    if (!isCallbackInterfaceRecord(interfaceValue)) {
       throw new Error('PromiseHandler did not convert to a callback value');
     }
 
@@ -257,7 +257,7 @@ describe('Web IDL callbacks', () => {
       'handleEvent',
       [],
     );
-    if (!isPromiseValue(functionResult) || !isPromiseValue(interfaceResult)) {
+    if (!isIDLPromise(functionResult) || !isIDLPromise(interfaceResult)) {
       throw new Error('Promise callback did not return an IDL promise');
     }
     const functionPromise = convertToJavaScript(

@@ -1,13 +1,13 @@
+import { RangeError } from '../js-engine/simple-exception';
 import {
-  domExceptionCode, domExceptionName,
-} from './exceptions/dom-exception-core';
+  DOMExceptionCodes, DOMExceptionNames,
+} from './core/dom-exception-core';
 import {
-  arg, constant, contextValue, ctor, defineDictionary, defineInterface,
-  dictMember, emptyDictionary, idlType, integer, nullable,
+  arg, constant, ctor, defineDictionary, defineInterface,
+  dictMember, emptyDictionary, idlType, impl, integer, nullable,
   roAttr, reference, xattr,
-} from './declaration/index';
-import type { WebIDLRealmHost } from './js-realm';
-import { bind, type BindingContext } from './projection';
+} from './core/index';
+import type { BindingContext } from './binding-context';
 
 /*
  * [Exposed=*,
@@ -46,39 +46,48 @@ import { bind, type BindingContext } from './projection';
  * };
  */
 
-class DOMExceptionImpl {
-  constructor(
-    _realm: WebIDLRealmHost,
-    message = '',
-    name = 'Error',
-  ) {
-    domExceptionStates.set(this, { message, name });
+export class DOMExceptionImpl {
+  #message: string;
+  #name: string;
+
+  // Web IDL §4.4 DOMException — constructor steps.
+  constructor(message = '', name = 'Error') {
+    this.#message = message;
+    this.#name = name;
   }
 
+  // Web IDL §4.4 DOMException — name getter steps.
   get name(): string {
-    return getDOMExceptionState(this).name;
+    return this.#name;
   }
 
+  // Web IDL §4.4 DOMException — message getter steps.
   get message(): string {
-    return getDOMExceptionState(this).message;
+    return this.#message;
   }
 
+  // Web IDL §4.4 DOMException — code getter steps.
   get code(): number {
-    return legacyCodesByName.get(getDOMExceptionState(this).name) ?? 0;
+    return legacyCodesByName.get(this.#name) ?? 0;
+  }
+
+  // -- Internal methods ------------------------------------------------
+
+  // Project helper: restore the implementation's name and message.
+  setExceptionState(message: string, name: string): void {
+    this.#message = message;
+    this.#name = name;
   }
 }
 
-const bindingRealm = contextValue(
-  (context: { readonly realm: WebIDLRealmHost; }) => context.realm,
-);
+// -- Web IDL ------------------------------------------------------------
 
 export const domExceptionIDL = defineInterface({
   name: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  implementation: bind(DOMExceptionImpl, {
+  implementation: impl(DOMExceptionImpl, {
     allocatePlatformObject: allocateErrorPlatformObject,
-    constructWith: [bindingRealm],
   }),
   members: [
     ctor([
@@ -138,52 +147,64 @@ export const domExceptionIDL = defineInterface({
  * };
  */
 
-class QuotaExceededErrorImpl extends DOMExceptionImpl {
+export class QuotaExceededErrorImpl extends DOMExceptionImpl {
+  #quota: number | null;
+  #requested: number | null;
+
+  // Web IDL §2.8.3 Predefined DOMException derived interfaces — QuotaExceededError constructor steps.
   constructor(
-    realm: WebIDLRealmHost,
     message = '',
     options: QuotaExceededErrorOptions = {},
   ) {
-    super(realm, message, 'QuotaExceededError');
+    super(message, 'QuotaExceededError');
 
     const { quota, requested } = options;
     if (quota !== undefined && quota < 0) {
-      throw new realm.intrinsics.rangeError();
+      throw new RangeError();
     }
     if (requested !== undefined && requested < 0) {
-      throw new realm.intrinsics.rangeError();
+      throw new RangeError();
     }
     if (
       quota !== undefined &&
       requested !== undefined &&
       requested < quota
     ) {
-      throw new realm.intrinsics.rangeError();
+      throw new RangeError();
     }
 
-    quotaExceededErrorStates.set(this, {
-      quota: quota ?? null,
-      requested: requested ?? null,
-    });
+    this.#quota = quota ?? null;
+    this.#requested = requested ?? null;
   }
 
+  // Web IDL §2.8.3 Predefined DOMException derived interfaces — quota getter steps.
   get quota(): number | null {
-    return getQuotaExceededErrorState(this).quota;
+    return this.#quota;
   }
 
+  // Web IDL §2.8.3 Predefined DOMException derived interfaces — requested getter steps.
   get requested(): number | null {
-    return getQuotaExceededErrorState(this).requested;
+    return this.#requested;
+  }
+
+  // -- Internal methods ------------------------------------------------
+
+  // Project helper: restore the implementation's quota and requested values.
+  setQuotaState(quota: number | null, requested: number | null): void {
+    this.#quota = quota;
+    this.#requested = requested;
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
 
 export const quotaExceededErrorIDL = defineInterface({
   name: 'QuotaExceededError',
   inherits: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  implementation: bind(QuotaExceededErrorImpl, {
+  implementation: impl(QuotaExceededErrorImpl, {
     allocatePlatformObject: allocateErrorPlatformObject,
-    constructWith: [bindingRealm],
   }),
   members: [
     ctor([
@@ -207,97 +228,20 @@ export const quotaExceededErrorOptionsIDL = defineDictionary({
   ],
 });
 
-/*
- * Web IDL defines DOMException's structured-data algorithms, while HTML owns
- * the records and graph which carry this state. These friends expose only the
- * semantic state needed by that integration boundary.
- */
-export function getDOMExceptionSerializationState(
-  value: object,
-): DOMExceptionSerializationState {
-  const state = getDOMExceptionState(value);
-  return {
-    message: state.message,
-    name: state.name,
-  };
-}
-
-export function setDOMExceptionSerializationState(
-  value: object,
-  state: DOMExceptionSerializationState,
-): void {
-  domExceptionStates.set(value, {
-    message: state.message,
-    name: state.name,
-  });
-}
-
-export function getQuotaExceededErrorSerializationState(
-  value: object,
-): QuotaExceededErrorSerializationState {
-  return { ...getQuotaExceededErrorState(value) };
-}
-
-export function setQuotaExceededErrorSerializationState(
-  value: object,
-  state: QuotaExceededErrorSerializationState,
-): void {
-  quotaExceededErrorStates.set(value, { ...state });
-}
-
-export type DOMExceptionSerializationState = {
-  message: string;
-  name: string;
-};
-
-export type QuotaExceededErrorSerializationState = {
-  quota: number | null;
-  requested: number | null;
-};
-
-type DOMExceptionState = {
-  message: string;
-  name: string;
-};
-
-type QuotaExceededErrorState = {
-  quota: number | null;
-  requested: number | null;
-};
-
 type QuotaExceededErrorOptions = {
   quota?: number;
   requested?: number;
 };
 
-const domExceptionStates = new WeakMap<object, DOMExceptionState>();
-const quotaExceededErrorStates = new WeakMap<
-  object,
-  QuotaExceededErrorState
->();
 const legacyCodesByName = new Map<string, number>(
-  Object.keys(domExceptionName).map((key) => [
-    domExceptionName[key as keyof typeof domExceptionName],
-    domExceptionCode[key as keyof typeof domExceptionCode],
+  Object.keys(DOMExceptionNames).map((key) => [
+    DOMExceptionNames[key as keyof typeof DOMExceptionNames],
+    DOMExceptionCodes[key as keyof typeof DOMExceptionCodes],
   ]),
 );
 
-function getDOMExceptionState(value: object | null): DOMExceptionState {
-  const state = value && domExceptionStates.get(value);
-  if (!state) throw new TypeError('DOMException implementation state is missing');
-  return state;
-}
-
-function getQuotaExceededErrorState(
-  value: object | null,
-): QuotaExceededErrorState {
-  const state = value && quotaExceededErrorStates.get(value);
-  if (!state) {
-    throw new TypeError('QuotaExceededError implementation state is missing');
-  }
-  return state;
-}
-
+// Project allocator for Web IDL §3.14.1 DOMException custom bindings — native Error backing for DOMException
+// platform objects.
 function allocateErrorPlatformObject(
   context: BindingContext,
   prototype: object,

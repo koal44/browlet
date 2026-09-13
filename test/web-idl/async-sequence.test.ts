@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { createBindings } from '../../src/web-idl/registration';
+import { createBindingWorld } from '../../src/web-idl/registration';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import {
   closeAsyncIterator, convertAsyncSequenceToJavaScript, endOfIteration,
-  getAsyncIteratorNextValue, isAsyncSequence, openAsyncSequence,
+  getAsyncIteratorNextValue, isIDLAsyncSequence, openAsyncSequence,
   type AsyncSequenceValue, type IDLAsyncIterator, type IDLAsyncSequence,
 } from '../../src/web-idl/async-sequence';
 import { RealmBinding } from '../../src/web-idl/binding';
@@ -13,7 +13,7 @@ import { convertToIDL } from '../../src/web-idl/conversion';
 import {
   asyncSequence, defineDictionary, defineInterface, dictMember, idlType,
   reference, type OperationMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
@@ -24,10 +24,10 @@ describe('Web IDL async sequences', () => {
       name: 'Entry', members: [dictMember('name', idlType.DOMString)],
     });
     const realm = new Realm();
-    const { context } = createBindings([entryIDL]).register(realm);
+    const context = createBindingWorld([entryIDL]).register(realm);
     let conversions = 0;
     const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
-    const sequence = context.convert(entries, asyncSequence(reference('Entry'))) as
+    const sequence = context.convertToImpl(entries, asyncSequence(reference('Entry'))) as
       AsyncSequenceValue<{ name: string; }>;
     const first = Promise.withResolvers<unknown>();
     sequence.next().observe(first.resolve, first.reject);
@@ -209,7 +209,7 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
 function requireAsyncSequence(
   value: unknown,
 ): IDLAsyncSequence {
-  if (!isAsyncSequence(value)) throw new Error('Value is not an async sequence');
+  if (!isIDLAsyncSequence(value)) throw new Error('Value is not an async sequence');
   return value;
 }
 

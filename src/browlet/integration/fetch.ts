@@ -1,7 +1,7 @@
 import {
   deserializeAbortReason, type FetchTaskScheduling, type QueueGlobalFetchTask,
 } from '../../fetch/index';
-import type { BindingContext } from '../../web-idl/projection';
+import type { BindingContext } from '../../web-idl/index';
 import { networkingTaskSource, queueGlobalTask } from '../scripting/tasks';
 import { runInParallel } from './scripting';
 

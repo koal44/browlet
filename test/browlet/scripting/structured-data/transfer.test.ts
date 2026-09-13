@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDOMExceptionRequest } from '../../../../src/web-idl/exceptions/dom-exception-core';
 import {
-  createBindings, defineInterface, impl, xattr,
+  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
 import { Realm } from '../../../../src/browlet/scripting/realm';
-import type { StructuredDataEnvironment } from '../../../../src/browlet/scripting/structured-data/environment';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
@@ -18,7 +17,7 @@ import {
 
 describe('HTML structured transfer', () => {
   it('transfers ArrayBuffers into the target realm with graph identity', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const buffer = sourceRealm.evaluate(`(() => {
       const value = new ArrayBuffer(4);
       new Uint8Array(value).set([1, 2, 3, 4]);
@@ -49,7 +48,7 @@ describe('HTML structured transfer', () => {
   });
 
   it('transfers the backing buffer referenced by an ArrayBuffer view', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const view = sourceRealm.evaluate(`(() => {
       const value = new Uint8Array([1, 2, 3, 4]);
       return value.subarray(1, 3);
@@ -74,7 +73,7 @@ describe('HTML structured transfer', () => {
   });
 
   it('preserves resizable ArrayBuffer bounds while transferring', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const buffer = sourceRealm.evaluate(`(() => {
       const value = new ArrayBuffer(4, { maxByteLength: 8 });
       new Uint8Array(value).set([5, 6, 7, 8]);
@@ -107,7 +106,7 @@ describe('HTML structured transfer', () => {
   });
 
   it('validates the whole transfer-list shape before mutation', () => {
-    const { source, sourceRealm } = createEnvironments();
+    const { source, sourceRealm } = createContexts();
     const buffer = sourceRealm.evaluate(
       'new ArrayBuffer(2)',
       'structured-transfer-validation-buffer.js',
@@ -146,7 +145,7 @@ describe('HTML structured transfer', () => {
   });
 
   it('serializes the graph before performing irreversible transfers', () => {
-    const { source, sourceRealm } = createEnvironments();
+    const { source, sourceRealm } = createContexts();
     const buffer = sourceRealm.evaluate(
       'new ArrayBuffer(2)',
       'structured-transfer-atomic-buffer.js',
@@ -168,7 +167,7 @@ describe('HTML structured transfer', () => {
   // for all-ArrayBuffer lists and none guarantees mixed-list atomicity; retain
   // the literal order pending the standards resolution recorded in ROADMAP.md.
   it('retains the specification\'s sequential detached-buffer behavior', () => {
-    const { source, sourceRealm } = createEnvironments();
+    const { source, sourceRealm } = createContexts();
     const first = sourceRealm.evaluate(
       'new ArrayBuffer(2)',
       'structured-transfer-first-buffer.js',
@@ -208,23 +207,12 @@ describe('HTML structured transfer', () => {
         (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
       },
     })];
-    const bindings = createBindings([transferBoxIDL], { capabilities });
+    const bindings = createBindingWorld<Realm>([transferBoxIDL], { capabilities });
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
-    const sourceRegistration = bindings.register(sourceRealm);
-    const targetRegistration = bindings.register(targetRealm);
-    const agentCluster = {};
-    const source: StructuredDataEnvironment = {
-      agentCluster,
-      context: sourceRegistration.context,
-      realm: sourceRealm,
-    };
-    const target: StructuredDataEnvironment = {
-      agentCluster,
-      context: targetRegistration.context,
-      realm: targetRealm,
-    };
-    const original = sourceRegistration.context.createPlatformObject(transferBoxIDL);
+    const source = bindings.register(sourceRealm);
+    const target = bindings.register(targetRealm);
+    const original = source.createPlatformObject(transferBoxIDL);
     (original.implementation as TransferBoxImpl).value = 'transferred';
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
@@ -243,7 +231,7 @@ describe('HTML structured transfer', () => {
 
     const result = structuredDeserializeWithTransfer(serialized, target);
     const transferred = result.transferredValues[0];
-    const resolved = targetRegistration.context.resolvePlatformObject(transferred);
+    const resolved = target.getObjectRecord(transferred);
     expect(result.deserialized).toBe(transferred);
     expect(resolved?.primaryInterface.definition).toBe(transferBoxIDL);
     expect((resolved?.implementation as TransferBoxImpl).value)
@@ -251,13 +239,8 @@ describe('HTML structured transfer', () => {
     expect(isTransferableDetached(resolved!.implementation)).toBe(false);
 
     const hiddenRealm = new Realm({ globalNames: ['Worker'] });
-    const hiddenRegistration = bindings.register(hiddenRealm);
-    const hiddenTarget: StructuredDataEnvironment = {
-      agentCluster,
-      context: hiddenRegistration.context,
-      realm: hiddenRealm,
-    };
-    const hiddenOriginal = sourceRegistration.context.createPlatformObject(transferBoxIDL);
+    const hiddenTarget = bindings.register(hiddenRealm);
+    const hiddenOriginal = source.createPlatformObject(transferBoxIDL);
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
       [hiddenOriginal.platformObject],
@@ -270,30 +253,21 @@ describe('HTML structured transfer', () => {
   });
 });
 
-function createEnvironments(): {
-  source: StructuredDataEnvironment;
+function createContexts(): {
+  source: BindingContext<Realm>;
   sourceRealm: Realm;
-  target: StructuredDataEnvironment;
+  target: BindingContext<Realm>;
   targetRealm: Realm;
 } {
-  const bindings = createBindings([]);
+  const bindings = createBindingWorld<Realm>([]);
   const sourceRealm = new Realm();
   const targetRealm = new Realm();
-  const sourceRegistration = bindings.register(sourceRealm);
-  const targetRegistration = bindings.register(targetRealm);
-  const agentCluster = {};
+  const source = bindings.register(sourceRealm);
+  const target = bindings.register(targetRealm);
   return {
-    source: {
-      agentCluster,
-      context: sourceRegistration.context,
-      realm: sourceRealm,
-    },
+    source,
     sourceRealm,
-    target: {
-      agentCluster,
-      context: targetRegistration.context,
-      realm: targetRealm,
-    },
+    target,
     targetRealm,
   };
 }
@@ -302,7 +276,8 @@ function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(getDOMExceptionRequest(error)).toEqual({
+    expect(InternalDOMException.is(error)).toBe(true);
+    expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',
     });

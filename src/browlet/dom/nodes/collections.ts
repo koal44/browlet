@@ -1,8 +1,7 @@
 import {
-  arg, defineInterface, idlType, indexedGetter, namedGetter, nullable, op,
-  roAttr, reference, xattr,
-} from '../../../web-idl/declaration/index';
-import { bind, impl } from '../../../web-idl/index';
+  arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
+  roAttr, xattr,
+} from '../../../web-idl/index';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import type { ElementImpl } from './element';
 
@@ -80,13 +79,13 @@ export const htmlCollectionIDL = defineInterface({
   ...xattr('LegacyUnenumerableNamedProperties'),
   implementation: impl(HTMLCollectionImpl),
   members: [
-    roAttr('length', idlType.unsignedLong, bind({
+    roAttr('length', idlType.unsignedLong, {
       get() {
         const collection = this as HTMLCollectionImpl;
         collection.refresh();
         return collection.length;
       },
-    })),
+    }),
     op('item', nullable(reference('Element')),
       [arg('index', idlType.unsignedLong)],
       indexedGetter(

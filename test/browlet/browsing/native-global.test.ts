@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createDocument, createStructuredClone, createWindowRealm, getImplementation,
-  getPlatformObject, retargetWindowProxy,
+  createDocument, createStructuredClone, createWindowRealm, unwrap,
+  project, retargetWindowProxy,
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
@@ -22,13 +22,13 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     const proxy = context.windowProxy;
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
-    expect(getImplementation(platformWindow)).toBe(window);
+    expect(unwrap(platformWindow)).toBe(window);
     expect(realm.evaluate('this === window && window === globalThis', 'identity.js')).toBe(true);
     expect(realm.evaluate('this.document === document', 'document.js')).toBe(true);
     expect(realm.evaluate('Object.getPrototypeOf(this) === Window.prototype', 'prototype.js')).toBe(true);
     expect(realm.evaluate('Object.hasOwn(this, "document")', 'own-document.js')).toBe(true);
     expect(realm.evaluate('Object.prototype.toString.call(this)', 'tag.js')).toBe('[object Window]');
-    expect(getImplementation(proxy.document)).toBe(document);
+    expect(unwrap(proxy.document)).toBe(document);
     expect(realm.evaluate(`
       globalThis.trace = [];
       this.addEventListener('probe', event => trace.push(event.type));
@@ -63,14 +63,14 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     expect(second.platformWindow).not.toBe(first.platformWindow);
     expect(second.realm.intrinsics.object).not.toBe(first.realm.intrinsics.object);
     expect(oldClosure()).toBe(42);
-    expect(getImplementation(oldDocument()) === first.document).toBe(true);
+    expect(unwrap(oldDocument()) === first.document).toBe(true);
     expect(oldState()).toEqual([2, proxy]);
     expect(second.realm.evaluate('typeof pageState', 'new-state.js')).toBe('undefined');
-    expect(getImplementation(first.platformWindow)).toBe(first.window);
-    expect(getImplementation(second.platformWindow)).toBe(second.window);
-    expect(getImplementation(Reflect.apply(firstDocumentGetter, proxy, [])))
+    expect(unwrap(first.platformWindow)).toBe(first.window);
+    expect(unwrap(second.platformWindow)).toBe(second.window);
+    expect(unwrap(Reflect.apply(firstDocumentGetter, proxy, [])))
       .toBe(second.document);
-    expect(getImplementation(Reflect.apply(firstDocumentGetter, first.platformWindow, [])))
+    expect(unwrap(Reflect.apply(firstDocumentGetter, first.platformWindow, [])))
       .toBe(first.document);
     expect(second.realm.evaluate('this === window && !Reflect.setPrototypeOf(this, {})', 'new.js'))
       .toBe(true);
@@ -150,7 +150,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const { realm } = createWindowRealm(agent, window, previous?.realm);
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
-  const platformWindow = getPlatformObject(window) as Window;
+  const platformWindow = project(window) as Window;
   const document = createDocument(realm);
   document.setBrowsingContext(context);
   window.setAssociatedDocument(document);

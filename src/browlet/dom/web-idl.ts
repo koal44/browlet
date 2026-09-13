@@ -1,4 +1,5 @@
-import type { Definition } from '../../web-idl/declaration/index';
+import type { Definition } from '../../web-idl/index';
+import type { Realm } from '../scripting/realm';
 import { abortControllerIDL } from './abort/abort-controller';
 import { abortSignalIDL } from './abort/abort-signal';
 import {
@@ -46,7 +47,7 @@ import {
 } from './nodes/shadow-root';
 import { textIDL } from './nodes/text';
 
-export const domIDLDefinitions: Definition[] = [
+export const domIDLDefinitions: Definition<Realm>[] = [
   eventIDL,
   eventInitIDL,
   customEventIDL,

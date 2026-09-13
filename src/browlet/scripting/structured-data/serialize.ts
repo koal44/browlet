@@ -13,11 +13,8 @@ import {
   isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
-import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import type {
-  WebIDLRealmHost,
-} from '../../../web-idl/index';
-import type { StructuredDataEnvironment } from './environment';
+import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, isSerializedErrorName,
   type ArrayBufferSerializedRecord,
@@ -31,22 +28,20 @@ import {
 import { serializable } from './serializable';
 import { isTransferableDetached } from './transferable';
 
-export type StructuredSerializationEnvironment = StructuredDataEnvironment;
-
 /** HTML §2.7.4, StructuredSerialize. */
 export function structuredSerialize(
   value: unknown,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
 ): SerializedRecord {
-  return structuredSerializeInternal(value, false, environment);
+  return structuredSerializeInternal(value, false, ctx);
 }
 
 /** HTML §2.7.5, StructuredSerializeForStorage. */
 export function structuredSerializeForStorage(
   value: unknown,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
 ): SerializedRecord {
-  return structuredSerializeInternal(value, true, environment);
+  return structuredSerializeInternal(value, true, ctx);
 }
 
 /** HTML §2.7.3, StructuredSerializeInternal. */
@@ -54,17 +49,17 @@ export function structuredSerializeForStorage(
 export function structuredSerializeInternal(
   value: unknown,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory = new Map(),
 ): SerializedRecord {
   if (memory.has(value)) return memory.get(value)!;
 
   if (isPrimitive(value)) return { type: 'primitive', value };
-  if (typeof value === 'symbol') return throwDataCloneError();
+  if (typeof value === 'symbol') return throwDOMException('DataCloneError');
 
-  const platformObject = environment.context.resolvePlatformObject(value);
+  const platformObject = ctx.getObjectRecord(value);
   if (!platformObject && isProxyObject(value)) {
-    return throwDataCloneError();
+    return throwDOMException('DataCloneError');
   }
   let serialized: SerializedRecord;
   let deep = false;
@@ -90,7 +85,7 @@ export function structuredSerializeInternal(
       value: getStringData(value),
     };
   } else if (hasSymbolData(value)) {
-    return throwDataCloneError();
+    return throwDOMException('DataCloneError');
   } else if (hasDateValue(value)) {
     serialized = {
       type: 'Date',
@@ -110,16 +105,16 @@ export function structuredSerializeInternal(
         value,
         bufferType,
         forStorage,
-        environment,
+        ctx,
       );
     } else if (bufferType !== undefined) {
       if (isArrayBufferViewOutOfBounds(value)) {
-        return throwDataCloneError();
+        return throwDOMException('DataCloneError');
       }
       const bufferSerialized = structuredSerializeInternal(
         getBufferSourceUnderlyingBuffer(value),
         forStorage,
-        environment,
+        ctx,
         memory,
       );
       if (!isBufferSerializedRecord(bufferSerialized) &&
@@ -141,16 +136,16 @@ export function structuredSerializeInternal(
       deep = true;
     } else if (hasErrorData(value) &&
       !platformObject) {
-      serialized = serializeError(value, environment.realm);
+      serialized = serializeError(value, ctx.realm);
       deep = true;
     } else if (platformObject) {
-      const steps = environment.context.getCapability(
+      const steps = ctx.getCapability(
         platformObject.primaryInterface.definition,
         serializable,
       );
-      if (!steps) return throwDataCloneError();
+      if (!steps) return throwDOMException('DataCloneError');
       if (isTransferableDetached(platformObject.implementation)) {
-        return throwDataCloneError();
+        return throwDOMException('DataCloneError');
       }
       serialized = {
         type: 'platform-object',
@@ -166,10 +161,10 @@ export function structuredSerializeInternal(
       serialized = { type: 'Array', length, properties: [] };
       deep = true;
     } else if (typeof value === 'function') {
-      return throwDataCloneError();
+      return throwDOMException('DataCloneError');
     } else if (hasUnsupportedInternalSlots(value) ||
       nativeCloneRejectsPropertylessObject(value)) {
-      return throwDataCloneError();
+      return throwDOMException('DataCloneError');
     } else {
       serialized = { type: 'Object', properties: [] };
       deep = true;
@@ -180,15 +175,15 @@ export function structuredSerializeInternal(
   if (!deep) return serialized;
 
   if (serialized.type === 'Map') {
-    serializeMapData(value, serialized, forStorage, environment, memory);
+    serializeMapData(value, serialized, forStorage, ctx, memory);
   } else if (serialized.type === 'Set') {
-    serializeSetData(value, serialized, forStorage, environment, memory);
+    serializeSetData(value, serialized, forStorage, ctx, memory);
   } else if (serialized.type === 'platform-object') {
     serializePlatformObject(
       value,
       serialized,
       forStorage,
-      environment,
+      ctx,
       memory,
     );
   } else if (serialized.type === 'Error') {
@@ -196,7 +191,7 @@ export function structuredSerializeInternal(
       value,
       serialized,
       forStorage,
-      environment,
+      ctx,
       memory,
     );
   } else if (serialized.type === 'Array' || serialized.type === 'Object') {
@@ -204,7 +199,7 @@ export function structuredSerializeInternal(
       value,
       serialized,
       forStorage,
-      environment,
+      ctx,
       memory,
     );
   } else {
@@ -237,32 +232,34 @@ function serializeBuffer(
   value: object,
   type: 'ArrayBuffer' | 'SharedArrayBuffer',
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
   const byteLength = getBufferSourceByteLength(value);
   const maxByteLength = getArrayBufferMaxByteLength(value);
 
   if (type === 'SharedArrayBuffer') {
-    if (!environment.realm.crossOriginIsolated || forStorage) {
-      return throwDataCloneError();
+    if (!ctx.realm.crossOriginIsolated || forStorage) {
+      return throwDOMException('DataCloneError');
     }
+    const agentCluster = ctx.realm.agent.agentCluster;
+    if (!agentCluster) throw new Error('Realm agent has no agent cluster');
     return maxByteLength === undefined
       ? {
         type: 'SharedArrayBuffer',
         buffer: value,
         byteLength,
-        agentCluster: environment.agentCluster,
+        agentCluster,
       }
       : {
         type: 'GrowableSharedArrayBuffer',
         buffer: value,
         byteLength,
         maxByteLength,
-        agentCluster: environment.agentCluster,
+        agentCluster,
       };
   }
 
-  if (isBufferSourceDetached(value)) return throwDataCloneError();
+  if (isBufferSourceDetached(value)) return throwDOMException('DataCloneError');
   const bytes = getBufferSourceCopy(value);
   return maxByteLength === undefined
     ? { type: 'ArrayBuffer', bytes, byteLength }
@@ -279,17 +276,17 @@ function serializeMapData(
   value: object,
   serialized: MapSerializedRecord,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory,
 ): void {
   const copiedEntries = copyMapData(value);
   for (const [key, entryValue] of copiedEntries) {
     serialized.entries.push({
-      key: structuredSerializeInternal(key, forStorage, environment, memory),
+      key: structuredSerializeInternal(key, forStorage, ctx, memory),
       value: structuredSerializeInternal(
         entryValue,
         forStorage,
-        environment,
+        ctx,
         memory,
       ),
     });
@@ -301,7 +298,7 @@ function serializeSetData(
   value: object,
   serialized: SetSerializedRecord,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory,
 ): void {
   const copiedEntries = copySetData(value);
@@ -309,7 +306,7 @@ function serializeSetData(
     serialized.entries.push(structuredSerializeInternal(
       entry,
       forStorage,
-      environment,
+      ctx,
       memory,
     ));
   }
@@ -321,14 +318,14 @@ function serializePlatformObject(
   value: object,
   serialized: PlatformObjectSerializedRecord,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory,
 ): void {
-  const platformObject = environment.context.resolvePlatformObject(value);
+  const platformObject = ctx.getObjectRecord(value);
   if (!platformObject) {
     throw new Error('A resolved platform object became unavailable');
   }
-  const steps = environment.context.getCapability(
+  const steps = ctx.getCapability(
     platformObject.primaryInterface.definition,
     serializable,
   );
@@ -341,13 +338,13 @@ function serializePlatformObject(
     forStorage,
     {
       subserialize: (subValue) => {
-        const platformObject = environment.context.resolvePlatformObject(
+        const platformObject = ctx.getObjectRecord(
           subValue,
         )?.platformObject ?? subValue;
         return structuredSerializeInternal(
           platformObject,
           forStorage,
-          environment,
+          ctx,
           memory,
         );
       },
@@ -362,7 +359,7 @@ function serializeProperties(
     type: 'Array';
   }>,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory,
 ): void {
   const keys = Object.keys(value);
@@ -374,7 +371,7 @@ function serializeProperties(
       value: structuredSerializeInternal(
         inputValue,
         forStorage,
-        environment,
+        ctx,
         memory,
       ),
     });
@@ -384,7 +381,7 @@ function serializeProperties(
 /** HTML §2.7.3, the [[ErrorData]] branch. */
 function serializeError(
   value: object,
-  realm: WebIDLRealmHost,
+  realm: Realm,
 ): ErrorSerializedRecord {
   const candidateName = Reflect.get(value, 'name', value) as unknown;
   const name = isSerializedErrorName(candidateName)
@@ -404,7 +401,7 @@ function serializeErrorCause(
   value: object,
   serialized: ErrorSerializedRecord,
   forStorage: boolean,
-  environment: StructuredSerializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory,
 ): void {
   const descriptor = Reflect.getOwnPropertyDescriptor(value, 'cause');
@@ -412,7 +409,7 @@ function serializeErrorCause(
   serialized.cause = structuredSerializeInternal(
     descriptor.value,
     forStorage,
-    environment,
+    ctx,
     memory,
   );
 }

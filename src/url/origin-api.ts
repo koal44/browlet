@@ -1,7 +1,6 @@
 import {
-  arg, ctor, defineInterface, idlType, op, roAttr, reference,
-} from '../web-idl/declaration/index';
-import { impl, resolveArgs } from '../web-idl/index';
+  arg, ctor, defineInterface, idlType, impl, op, reference, unwrapArg, roAttr, staticOp,
+} from '../web-idl/index';
 import { URLImpl } from './api';
 import {
   areSameOrigin, areSameSite, createOpaqueOrigin, type Origin,
@@ -64,11 +63,10 @@ export const originIDL = defineInterface({
   implementation: impl(OriginImpl),
   members: [
     ctor(),
-    op('from', reference('Origin'),
+    staticOp('from', reference('Origin'),
       [
-        arg('value', idlType.any, resolveArgs(OriginImpl, URLImpl)),
+        arg('value', idlType.any, unwrapArg(OriginImpl, URLImpl)),
       ],
-      { static: true },
     ),
     roAttr('opaque', idlType.boolean),
     op('isSameOrigin', idlType.boolean, [

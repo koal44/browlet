@@ -5,7 +5,7 @@ import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../../stylelet/engine/tree-scope';
 import type { RuntimeCaps as StyleletRuntimeCaps } from '../../stylelet/stylelet';
 import type { RuntimeContext } from '../../js-engine/runtime-context';
-import { createDOMException } from '../../web-idl/exceptions/dom-exception-core';
+import { createDOMException } from '../../web-idl/index';
 import { runInParallel } from '../integration/scripting';
 
 /** Compose Stylelet with this owner's Promise queue and neutral exception requests. */

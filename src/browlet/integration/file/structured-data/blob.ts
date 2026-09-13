@@ -2,8 +2,8 @@ import {
   blobIDL, BlobData, BlobImpl,
 } from '../../../../file/index';
 import {
-  domExceptionName, throwDOMException,
-} from '../../../../web-idl/exceptions/dom-exception-core';
+  DOMExceptionNames, throwDOMException,
+} from '../../../../web-idl/index';
 import type { StructuredDataRecord } from '../../../scripting/structured-data/records';
 import {
   serializable, type SerializableSteps,
@@ -25,7 +25,7 @@ export const blobSerializable = {
         data = data.cloneForStorage();
       } catch {
         return throwDOMException(
-          domExceptionName.dataClone,
+          DOMExceptionNames.dataClone,
           'The Blob byte source cannot be serialized for storage',
         );
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getImplementation, getPlatformObject } from '../../src/browlet/bindings';
+import { unwrap, project } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 
 const errorIsErrorTest = typeof Reflect.get(Error, 'isError') === 'function'
@@ -16,14 +16,14 @@ describe('Browlet DOMException binding', () => {
     );
     const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
     const exception = new DOMException_('failed', 'SyntaxError');
-    const implementation = getImplementation(exception);
+    const implementation = unwrap(exception);
 
     expect(exception).toBeInstanceOf(DOMException_);
     expect(exception).toBeInstanceOf(Error_);
     expect(exception).not.toBeInstanceOf(DOMException);
     expect(implementation).not.toBe(exception);
     expect(implementation).not.toBeInstanceOf(Error_);
-    expect(getPlatformObject(implementation)).toBe(exception);
+    expect(project(implementation)).toBe(exception);
     expect(exception.name).toBe('SyntaxError');
     expect(exception.message).toBe('failed');
     expect(exception.code).toBe(12);

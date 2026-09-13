@@ -1,8 +1,7 @@
 import {
-  arg, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
-  emptyDictionary, idlType, integer, op, roAttr, reference, union, xattr,
-} from '../../web-idl/declaration/index';
-import { callback } from '../../web-idl/index';
+  arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
+  emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr,
+} from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
 import type { EnvironmentTiming } from '../performance/high-resolution-time';
 import type { DocumentImpl } from '../dom/nodes/document';
@@ -134,7 +133,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
     op('setTimeout', idlType.long, [
-      arg('handler', reference('TimerHandler'), callback('report')),
+      arg('handler', reference('TimerHandler'), onError('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),
       arg('arguments', idlType.any, { variadic: true }),
     ]),
@@ -142,7 +141,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
       arg('id', idlType.long, { default: integer(0), optional: true }),
     ]),
     op('setInterval', idlType.long, [
-      arg('handler', reference('TimerHandler'), callback('report')),
+      arg('handler', reference('TimerHandler'), onError('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),
       arg('arguments', idlType.any, { variadic: true }),
     ]),
@@ -152,7 +151,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
     op(
       'queueMicrotask',
       idlType.undefined,
-      [arg('callback', reference('VoidFunction'), callback('report'))],
+      [arg('callback', reference('VoidFunction'), onError('report'))],
     ),
     // HTML §2.7.10 contributes the structured-cloning API to this mixin.
     op('structuredClone', idlType.any, [

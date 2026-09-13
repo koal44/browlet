@@ -3,14 +3,13 @@ import type {
 } from '../js-engine/runtime-context';
 import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
 import {
-  arg, atArg, asyncIter, asyncSequence, callback, callbackDictionary, ctor, defineCallbackFunction,
-  defineDictionary, defineEnumeration, defineInterface, defineTypedef, dictMember,
-  emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr, reference, sequence,
-  union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
-} from '../web-idl/declaration/index';
+  arg, atArg, asyncIter, asyncSequence, onError, callbackDictionary, ctor,
+  defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
+  dictMember, emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr, reference,
+  sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
+  endOfIteration, type AsyncSequenceValue,
+} from '../web-idl/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
-import { runtimeContext } from '../web-idl/projection';
-import { type AsyncSequenceValue, endOfIteration } from '../web-idl/async-sequence';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
@@ -410,52 +409,8 @@ export class ReadableStreamImpl {
   }
 
   /** Streams §4.2.5, asynchronous iterator initialization steps. */
-  initializeAsyncIterator(iterator: object, options: ReadableStreamIteratorOptions): void {
-    readableStreamAsyncIterators.set(iterator, {
-      preventCancel: options.preventCancel,
-      reader: this.getDefaultReader(),
-    });
-  }
-
-  /** Streams §4.2.5, get the next iteration result. */
-  getNextIterationResult(iterator: object): PromiseValue<unknown> {
-    const state = this.getAsyncIteratorState(iterator);
-    const generic = state.reader.genericReaderMixin;
-    if (!generic.state.stream) {
-      throw new Error('Readable stream async iterator reader was released');
-    }
-
-    const promise = this.runtime.promises.withResolvers<unknown>();
-    state.reader.readChunk({
-      chunkSteps: (chunk) => promise.resolve(chunk),
-      closeSteps() {
-        state.reader.release();
-        promise.resolve(endOfIteration);
-      },
-      errorSteps(reason) {
-        state.reader.release();
-        promise.reject(reason);
-      },
-    });
-    return promise.promise;
-  }
-
-  /** Streams §4.2.5, asynchronous iterator return. */
-  returnAsyncIterator(iterator: object, value: unknown): PromiseValue<void> {
-    const state = this.getAsyncIteratorState(iterator);
-    const generic = state.reader.genericReaderMixin;
-    if (!generic.state.stream) {
-      throw new Error('Readable stream async iterator reader was released');
-    }
-
-    if (!state.preventCancel) {
-      const result = generic.cancelInternal(value);
-      state.reader.release();
-      return result;
-    }
-
-    state.reader.release();
-    return this.runtime.promises.resolve(undefined);
+  createAsyncIterator(options: ReadableStreamIteratorOptions): ReadableStreamIterator {
+    return new ReadableStreamIterator(this.getDefaultReader(), options.preventCancel);
   }
 
   /** Streams §4.9.1, ReadableStreamPipeTo. */
@@ -831,15 +786,6 @@ export class ReadableStreamImpl {
       reader.resetReadIntoRequests();
       for (const request of requests) request.errorSteps(error);
     }
-  }
-
-  /** RequireAsyncIteratorState. */
-  getAsyncIteratorState(iterator: object): ReadableStreamAsyncIteratorState {
-    const state = readableStreamAsyncIterators.get(iterator);
-    if (!state || state.reader.genericReaderMixin.state.stream !== this) {
-      throw new Error('Readable stream async iterator is not initialized');
-    }
-    return state;
   }
 
   /** AcquireReadableStreamBYOBReader. */
@@ -1329,7 +1275,7 @@ export const readableStreamIDL = defineInterface({
   exposed: '*',
   ...xattr('Transferable'),
   implementation: impl(ReadableStreamImpl, {
-    constructWith: [atArg(2, runtimeContext)],
+    constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
   }),
   members: [
     ctor([
@@ -1342,9 +1288,9 @@ export const readableStreamIDL = defineInterface({
         optional: true,
       }),
     ]),
-    op('from', reference('ReadableStream'),
+    staticOp('from', reference('ReadableStream'),
       [arg('asyncIterable', asyncSequence(idlType.any))],
-      { ...invokeWith(atArg(1, runtimeContext)), static: true }
+      invokeWith(atArg(1, (ctx) => ctx.getRuntime())),
     ),
     roAttr('locked', idlType.boolean),
     op('cancel', promise(idlType.undefined), [
@@ -1377,17 +1323,8 @@ export const readableStreamIDL = defineInterface({
         reference('ReadableStreamIteratorOptions'),
         { default: emptyDictionary, optional: true },
       )],
-      binding: {
-        getNext: (target, iterator) => (target as ReadableStreamImpl).getNextIterationResult(iterator),
-        initialize(target, iterator, [options]) {
-          (target as ReadableStreamImpl).initializeAsyncIterator(
-            iterator,
-            options as ReadableStreamIteratorOptions,
-          );
-        },
-        return: (target, iterator, value) =>
-          (target as ReadableStreamImpl).returnAsyncIterator(iterator, value),
-      },
+      create: 'createAsyncIterator',
+      return: true,
     }),
   ],
 });
@@ -1489,7 +1426,7 @@ export const underlyingSourceIDL = defineDictionary({
   name: 'UnderlyingSource',
   members: [
     dictMember('start', reference('UnderlyingSourceStartCallback'),
-      callback('rethrow')),
+      onError('rethrow')),
     dictMember('pull', reference('UnderlyingSourcePullCallback')),
     dictMember('cancel', reference('UnderlyingSourceCancelCallback')),
     dictMember('type', reference('ReadableStreamType')),
@@ -1498,6 +1435,49 @@ export const underlyingSourceIDL = defineDictionary({
     }),
   ],
 });
+
+// =============================================================================
+// ReadableStreamIterator
+// =============================================================================
+
+class ReadableStreamIterator {
+  readonly #reader: ReadableStreamDefaultReaderImpl;
+  readonly #preventCancel: boolean;
+
+  constructor(reader: ReadableStreamDefaultReaderImpl, preventCancel: boolean) {
+    this.#reader = reader;
+    this.#preventCancel = preventCancel;
+  }
+
+  /** Streams §4.2.5, get the next iteration result. */
+  next(): PromiseValue<unknown> {
+    const reader = this.#reader;
+    const promise = reader.genericReaderMixin.state.promises.withResolvers<unknown>();
+    reader.readChunk({
+      chunkSteps: (chunk) => promise.resolve(chunk),
+      closeSteps() {
+        reader.release();
+        promise.resolve(endOfIteration);
+      },
+      errorSteps(reason) {
+        reader.release();
+        promise.reject(reason);
+      },
+    });
+    return promise.promise;
+  }
+
+  /** Streams §4.2.5, asynchronous iterator return. */
+  return(value: unknown): PromiseValue<void> {
+    const reader = this.#reader;
+    const generic = reader.genericReaderMixin;
+    const result = this.#preventCancel
+      ? generic.state.promises.resolve(undefined)
+      : generic.cancelInternal(value);
+    reader.release();
+    return result;
+  }
+}
 
 // =============================================================================
 // ReadableStreamDefaultController
@@ -3243,20 +3223,6 @@ export const readableStreamBYOBRequestIDL = defineInterface({
     ]),
   ],
 });
-
-// =============================================================================
-// Internal records
-// =============================================================================
-
-type ReadableStreamAsyncIteratorState = {
-  readonly preventCancel: boolean;
-  readonly reader: ReadableStreamDefaultReaderImpl;
-};
-
-const readableStreamAsyncIterators = new WeakMap<
-  object,
-  ReadableStreamAsyncIteratorState
->();
 
 // =============================================================================
 // Shared helpers

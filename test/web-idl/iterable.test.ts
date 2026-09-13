@@ -6,7 +6,7 @@ import { RealmBinding } from '../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, reference, type IterableMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import type { ValuePair } from '../../src/web-idl/iterable';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';

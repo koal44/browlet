@@ -1,6 +1,6 @@
 import {
   defineDictionary, dictMember, emptySequence, idlType, sequence,
-} from '../../../web-idl/declaration/index';
+} from '../../../web-idl/index';
 
 /*
  * dictionary StructuredSerializeOptions {

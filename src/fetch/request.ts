@@ -5,8 +5,7 @@ import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
-} from '../web-idl/declaration/index';
-import { bind } from '../web-idl/projection';
+} from '../web-idl/index';
 import { BodyMixin, type BodyInitValue, type BodyRecord } from './body';
 import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
 
@@ -273,7 +272,7 @@ export const requestIDL = defineInterface({
     ctor([
       arg('input', reference('RequestInfo')),
       arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
-    ], bind({ invoke() { throw new Error('Request construction from RequestInfo is not implemented'); } })),
+    ], { invoke() { throw new Error('Request construction from RequestInfo is not implemented'); } }),
     roAttr('method', idlType.ByteString),
     roAttr('url', idlType.USVString),
     roAttr('headers', reference('Headers'), xattr('SameObject')),

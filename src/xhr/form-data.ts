@@ -2,12 +2,10 @@ import type { BlobImpl } from '../file/blob';
 import type { FileImpl } from '../file/file';
 import type { ScalarValueString } from '../infra/index';
 import type { RuntimeContext } from '../js-engine/index';
-import { defineCapability } from '../web-idl/capability';
 import {
-  arg, atArg, contextValue, ctor, defineInterface, defineTypedef, idlType, impl, iter,
-  nullable, op, reference, sequence, union,
-} from '../web-idl/declaration/index';
-import { runtimeContext, type BindingContext } from '../web-idl/projection';
+  arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
+  reference, sequence, union, defineCapability, type InterfaceDefinition,
+} from '../web-idl/index';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
 export type FormDataEntry = readonly [
@@ -148,11 +146,18 @@ export const formDataEntryValueIDL = defineTypedef({
   type: union(reference('File'), idlType.USVString),
 });
 
-export const formDataIDL = defineInterface({
+export const formDataIDL: InterfaceDefinition = defineInterface({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {
-    constructWith: [atArg(2, contextValue(getCreateEntry)), atArg(3, runtimeContext)],
+    constructWith: [
+      atArg(2, (ctx) => {
+        const createEntry = ctx.getCapability(formDataIDL, createFormDataEntry);
+        if (!createEntry) throw new Error('FormData has no HTML create-an-entry capability');
+        return createEntry;
+      }),
+      atArg(3, (ctx) => ctx.getRuntime()),
+    ],
   }),
   members: [
     /*
@@ -202,15 +207,3 @@ export const formDataIDL = defineInterface({
     }),
   ],
 });
-
-// BINDING_INTEGRATION: supply HTML's entry-creation algorithm to the FormData constructor.
-function getCreateEntry(context: BindingContext): CreateFormDataEntry {
-  const createEntry = context.getCapability(
-    formDataIDL,
-    createFormDataEntry,
-  );
-  if (!createEntry) {
-    throw new Error('FormData has no HTML create-an-entry capability');
-  }
-  return createEntry;
-}

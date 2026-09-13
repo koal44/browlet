@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import * as declaration from '../../src/web-idl/declaration/index';
+import * as core from '../../src/web-idl/core/index';
 import * as webIDL from '../../src/web-idl/index';
 
 describe('Web IDL package surface', () => {
-  it('exposes declarations, binding metadata, and binding seams', () => {
+  it('exposes declarations, binding entry points, exceptions, and async-sequence values', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
-      ...Object.keys(declaration),
-      'bind',
-      'bindingContext',
-      'createBindings',
+      ...Object.keys(core),
+      'DOMExceptionImpl',
+      'QuotaExceededErrorImpl',
+      'createBindingWorld',
       'defineCapability',
-      'runtimeContext',
+      'domExceptionIDL',
+      'endOfIteration',
+      'quotaExceededErrorIDL',
+      'quotaExceededErrorOptionsIDL',
     ].sort());
   });
 });

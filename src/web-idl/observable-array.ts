@@ -7,13 +7,14 @@ import {
 } from './conversion';
 import {
   idlType, sequence, type AttributeMember, type WebIDLType,
-} from './declaration/index';
+} from './core/index';
 import type { ImplementationRegistry } from './registry';
 
 export class ObservableArrayBinding {
   readonly #context: ConversionContext;
   readonly #implementations: ImplementationRegistry;
 
+  // Project helper: retain the conversion context and implementation registry.
   constructor(
     context: ConversionContext,
     implementations: ImplementationRegistry,
@@ -22,6 +23,7 @@ export class ObservableArrayBinding {
     this.#implementations = implementations;
   }
 
+  // Project helper: retrieve the platform value for an observable-array attribute.
   get(
     object: object,
     attribute: AttributeMember,
@@ -30,6 +32,7 @@ export class ObservableArrayBinding {
     return this.#getHandle(object, attribute, elementType).value;
   }
 
+  // Project helper: retrieve the observable-array attribute's retained backing list.
   getBackingList(
     object: object,
     attribute: AttributeMember,
@@ -38,6 +41,7 @@ export class ObservableArrayBinding {
     return this.#getHandle(object, attribute, elementType).backingList;
   }
 
+  // Extracted from Web IDL §3.7.6 Attributes — replace an observable array's contents in an attribute setter.
   replace(
     object: object,
     attribute: AttributeMember,
@@ -52,6 +56,8 @@ export class ObservableArrayBinding {
     this.#getHandle(object, attribute, elementType).replaceValues(values);
   }
 
+  // Project adapter for Web IDL §3.10 Observable array exotic objects — compose conversion and mutation hooks
+  // with Infra's backing list.
   #getHandle(
     object: object,
     attribute: AttributeMember,

@@ -15,12 +15,12 @@ import {
   isTransferableDetached, markTransferableDetached, transferable,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
-  createBindings, defineInterface, xattr,
+  createBindingWorld, defineInterface, xattr,
 } from '../../../../src/web-idl/index';
 
 describe('HTML structured-data platform contracts', () => {
   it('runs DOMException steps across realms through exact interface metadata', () => {
-    const domain = createBindings([], {
+    const domain = createBindingWorld([], {
       capabilities: domExceptionCapabilities,
     });
     const firstRealm = new Realm();
@@ -39,9 +39,9 @@ describe('HTML structured-data platform contracts', () => {
     ) as typeof DOMException;
     const source = new FirstDOMException('some message', 'IndexSizeError');
     Reflect.set(source, 'custom', 'not serialized');
-    const sourceBinding = first.context.resolvePlatformObject(source);
+    const sourceBinding = first.getObjectRecord(source);
     if (!sourceBinding) throw new Error('DOMException was not projected');
-    const steps = first.context.getCapability(
+    const steps = first.getCapability(
       sourceBinding.primaryInterface.definition,
       serializable,
     );
@@ -54,7 +54,7 @@ describe('HTML structured-data platform contracts', () => {
       false,
       unusedSerializationContext,
     );
-    const targetBinding = second.context.createPlatformObject(
+    const targetBinding = second.createPlatformObject(
       sourceBinding.primaryInterface.definition,
     );
     steps.deserializationSteps(
@@ -75,7 +75,7 @@ describe('HTML structured-data platform contracts', () => {
   });
 
   it('gives derived serializable interfaces standalone inherited-state steps', () => {
-    const domain = createBindings([], {
+    const domain = createBindingWorld([], {
       capabilities: domExceptionCapabilities,
     });
     const realm = new Realm();
@@ -89,9 +89,9 @@ describe('HTML structured-data platform contracts', () => {
       quota: 12,
       requested: 20,
     });
-    const sourceBinding = registration.context.resolvePlatformObject(source);
+    const sourceBinding = registration.getObjectRecord(source);
     if (!sourceBinding) throw new Error('QuotaExceededError was not projected');
-    const steps = registration.context.getCapability(
+    const steps = registration.getCapability(
       sourceBinding.primaryInterface.definition,
       serializable,
     );
@@ -106,7 +106,7 @@ describe('HTML structured-data platform contracts', () => {
       true,
       unusedSerializationContext,
     );
-    const targetBinding = registration.context.createPlatformObject(
+    const targetBinding = registration.createPlatformObject(
       sourceBinding.primaryInterface.definition,
     );
     steps.deserializationSteps(

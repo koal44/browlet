@@ -1,13 +1,13 @@
 import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
-import type { AssembledInterface, DefinitionAssembly } from './assembly';
+import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import {
   hasExtendedAttribute, type OperationMember,
-} from './declaration/definition';
+} from './core/definition';
 import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
@@ -20,6 +20,7 @@ export class LegacyPlatformObjectBinding {
   readonly #context: ConversionContext;
   readonly #implementations: ImplementationRegistry;
 
+  // Project helper: retain the conversion context and implementation registry.
   constructor(
     context: ConversionContext,
     implementations: ImplementationRegistry,
@@ -28,10 +29,11 @@ export class LegacyPlatformObjectBinding {
     this.#implementations = implementations;
   }
 
+  // Project adapter for Web IDL §3.9 Legacy platform objects — install the internal methods as Proxy traps.
   createObject(
     target: object,
     implementation: object,
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
   ): object {
     const properties = this.#getLegacyProperties(interface_);
     if (!properties) return target;
@@ -63,6 +65,7 @@ export class LegacyPlatformObjectBinding {
           receiver,
           properties,
         ),
+        // Web IDL §3.9.1 [[GetOwnProperty]] delegates to LegacyPlatformObjectGetOwnProperty.
         getOwnPropertyDescriptor: (
           target: object,
           property: string | symbol,
@@ -79,6 +82,7 @@ export class LegacyPlatformObjectBinding {
           implementation,
           properties,
         ),
+        // Web IDL §3.9.5 [[PreventExtensions]].
         preventExtensions: () => false,
         set: (
           target: object,
@@ -98,7 +102,8 @@ export class LegacyPlatformObjectBinding {
     return new Proxy(target, handler);
   }
 
-  supportsIndexedProperties(interface_: AssembledInterface): boolean {
+  // Project predicate: find an indexed getter on the assembled interface.
+  supportsIndexedProperties(interface_: AssembledInterfaceDefinition): boolean {
     return findDerivedSpecialOperation(
       interface_,
       'getter',
@@ -107,6 +112,7 @@ export class LegacyPlatformObjectBinding {
     ) !== undefined;
   }
 
+  // Project predicate: select indexed and named operations supported by this binding.
   supportsSpecialOperation(operation: OperationMember): boolean {
     if (operation.special === 'deleter') {
       return isNamedOperation(operation, this.#context.definitions);
@@ -115,6 +121,7 @@ export class LegacyPlatformObjectBinding {
       isNamedOperation(operation, this.#context.definitions);
   }
 
+  // Project Proxy adapter for ECMAScript §10.1.8.1 OrdinaryGet with legacy [[GetOwnProperty]].
   #get(
     target: object,
     implementation: object,
@@ -138,6 +145,7 @@ export class LegacyPlatformObjectBinding {
     return Reflect.apply(descriptor.get, receiver, []);
   }
 
+  // Project Proxy adapter for ECMAScript §10.1.7.1 OrdinaryHasProperty with legacy [[GetOwnProperty]].
   #has(
     target: object,
     implementation: object,
@@ -155,6 +163,7 @@ export class LegacyPlatformObjectBinding {
     return parent ? Reflect.has(parent, property) : false;
   }
 
+  // Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty.
   #getOwnProperty(
     target: object,
     implementation: object,
@@ -194,6 +203,8 @@ export class LegacyPlatformObjectBinding {
     return Reflect.getOwnPropertyDescriptor(target, property);
   }
 
+  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: indexed property
+  // steps.
   #getIndexedProperty(
     target: object,
     property: string,
@@ -217,6 +228,8 @@ export class LegacyPlatformObjectBinding {
     };
   }
 
+  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: named property
+  // steps.
   #getNamedProperty(
     target: object,
     property: string,
@@ -242,6 +255,7 @@ export class LegacyPlatformObjectBinding {
     };
   }
 
+  // Web IDL §3.9.2 [[Set]].
   #set(
     target: object,
     implementation: object,
@@ -289,6 +303,7 @@ export class LegacyPlatformObjectBinding {
     );
   }
 
+  // Web IDL §3.9.3 [[DefineOwnProperty]].
   #defineOwnProperty(
     target: object,
     implementation: object,
@@ -343,6 +358,7 @@ export class LegacyPlatformObjectBinding {
     return Reflect.defineProperty(target, property, descriptor);
   }
 
+  // Web IDL §3.9.4 [[Delete]].
   #delete(
     target: object,
     implementation: object,
@@ -380,6 +396,7 @@ export class LegacyPlatformObjectBinding {
     return Reflect.deleteProperty(target, property);
   }
 
+  // Web IDL §3.9.6 [[OwnPropertyKeys]].
   #ownPropertyKeys(
     target: object,
     implementation: object,
@@ -419,6 +436,7 @@ export class LegacyPlatformObjectBinding {
     return [...keys];
   }
 
+  // Web IDL §3.9.7 Abstract operations — invoke an indexed property setter.
   #invokeIndexedSetter(
     target: object,
     property: string,
@@ -457,6 +475,7 @@ export class LegacyPlatformObjectBinding {
     Reflect.apply(steps, target, [index, converted]);
   }
 
+  // Web IDL §3.9.7 Abstract operations — invoke a named property setter.
   #invokeNamedSetter(
     target: object,
     property: string,
@@ -490,6 +509,8 @@ export class LegacyPlatformObjectBinding {
     Reflect.apply(steps, target, [property, converted]);
   }
 
+  // Extracted from Web IDL §3.9.7 Abstract operations — convert the value for an indexed or named property
+  // setter.
   #convertSetterValue(setter: OperationMember, value: unknown): unknown {
     const valueArgument = setter.arguments[1];
     if (!valueArgument) {
@@ -505,6 +526,7 @@ export class LegacyPlatformObjectBinding {
     );
   }
 
+  // Extracted from Web IDL §3.9.4 [[Delete]] — invoke the named property deleter.
   #invokeNamedDeleter(
     target: object,
     property: string,
@@ -536,6 +558,7 @@ export class LegacyPlatformObjectBinding {
       result !== false;
   }
 
+  // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
   #namedPropertyVisible(
     target: object,
     implementation: object,
@@ -558,6 +581,7 @@ export class LegacyPlatformObjectBinding {
     return true;
   }
 
+  // Project delegate to Web IDL §2.5.6.1 Indexed properties — determine the value of an indexed property.
   #getIndexedValue(
     implementation: object,
     index: number,
@@ -571,6 +595,7 @@ export class LegacyPlatformObjectBinding {
     return Reflect.apply(steps, implementation, [index]);
   }
 
+  // Project adapter for Web IDL §2.5.6.1 Indexed properties — query the interface's supported property indices.
   #supportsIndex(
     implementation: object,
     index: number,
@@ -583,6 +608,7 @@ export class LegacyPlatformObjectBinding {
       this.#getIndexedValue(implementation, index, properties) !== steps.unsupportedValue;
   }
 
+  // Project delegate to Web IDL §2.5.6.1 Indexed properties — enumerate supported property indices.
   #getSupportedIndices(
     target: object,
     properties: IndexedProperties,
@@ -594,6 +620,7 @@ export class LegacyPlatformObjectBinding {
     );
   }
 
+  // Project delegate to Web IDL §2.5.6.2 Named properties — the interface's supported property names.
   #getSupportedNames(
     target: object,
     properties: NamedProperties,
@@ -606,8 +633,9 @@ export class LegacyPlatformObjectBinding {
     );
   }
 
+  // Project helper: assemble inherited indexed and named property declarations and implementation steps.
   #getLegacyProperties(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
   ): LegacyProperties | undefined {
     const indexedGetter = findDerivedSpecialOperation(
       interface_,
@@ -686,7 +714,7 @@ type LegacyProperties = {
 
 type IndexedProperties = {
   getter: OperationMember;
-  interface_: AssembledInterface;
+  interface_: AssembledInterfaceDefinition;
   setter: OperationMember | undefined;
   steps: IndexedPropertySteps;
 };
@@ -694,7 +722,7 @@ type IndexedProperties = {
 type NamedProperties = {
   deleter: OperationMember | undefined;
   getter: OperationMember;
-  interface_: AssembledInterface;
+  interface_: AssembledInterfaceDefinition;
   overrideBuiltIns: boolean;
   setter: OperationMember | undefined;
   steps: NamedPropertySteps;
@@ -702,13 +730,14 @@ type NamedProperties = {
   unforgeableNames: Set<string>;
 };
 
+// Project helper: locate the most-derived matching special operation.
 function findDerivedSpecialOperation(
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
   special: 'deleter' | 'getter' | 'setter',
   predicate: SpecialOperationPredicate,
   definitions: DefinitionAssembly,
 ): OperationMember | undefined {
-  let current: AssembledInterface | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = interface_;
   while (current) {
     const operation = current.members.find(({ member }) =>
       member.kind === 'operation' &&
@@ -725,6 +754,7 @@ type SpecialOperationPredicate = (
   definitions: DefinitionAssembly,
 ) => boolean;
 
+// Project predicate for Web IDL §2.5.6.1 Indexed properties — an unsigned long property-index argument.
 function isIndexedOperation(
   operation: OperationMember,
   definitions: DefinitionAssembly,
@@ -732,6 +762,7 @@ function isIndexedOperation(
   return hasKeyType(operation, 'unsigned long', definitions);
 }
 
+// Project predicate for Web IDL §2.5.6.2 Named properties — a DOMString property-name argument.
 function isNamedOperation(
   operation: OperationMember,
   definitions: DefinitionAssembly,
@@ -739,6 +770,7 @@ function isNamedOperation(
   return hasKeyType(operation, 'DOMString', definitions);
 }
 
+// Project helper: compare the first argument's resolved IDL type with the property-key type.
 function hasKeyType(
   operation: OperationMember,
   name: 'DOMString' | 'unsigned long',
@@ -750,11 +782,12 @@ function hasKeyType(
   return type.kind === 'simple' && type.name === name;
 }
 
+// Project helper: search inherited interfaces and partial declarations for an extended attribute.
 function implementsExtendedAttribute(
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
   name: string,
 ): boolean {
-  let current: AssembledInterface | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = interface_;
   while (current) {
     if (
       hasExtendedAttribute(current.definition.extendedAttributes, name) ||
@@ -766,11 +799,12 @@ function implementsExtendedAttribute(
   return false;
 }
 
+// Project helper: collect [LegacyUnforgeable] member names across interface inheritance.
 function getUnforgeablePropertyNames(
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
 ): Set<string> {
   const names = new Set<string>();
-  let current: AssembledInterface | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = interface_;
   while (current) {
     for (const { member } of current.members) {
       if (!hasExtendedAttribute(
@@ -791,11 +825,13 @@ function getUnforgeablePropertyNames(
   return names;
 }
 
+// Web IDL §3.9.7 Abstract operations — determine if a property name is an array index.
 function isArrayIndex(property: string): boolean {
   const index = toArrayIndex(property);
   return index !== 2 ** 32 - 1 && String(index) === property;
 }
 
+// Project delegate to ECMAScript §7.1.9 ToUint32 for an array-index property name.
 function toArrayIndex(property: string): number {
   return Number(property) >>> 0;
 }

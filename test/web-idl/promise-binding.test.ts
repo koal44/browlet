@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { createDOMException } from '../../src/web-idl/exceptions/dom-exception-core';
+import { createDOMException } from '../../src/web-idl/core/dom-exception-core';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { endOfIteration } from '../../src/web-idl/async-sequence';
 import { RealmBinding } from '../../src/web-idl/binding';
@@ -11,10 +11,11 @@ import {
   idlType, impl, op, promise as promiseType,
   reference, roAttr,
   type AttributeMember, type OperationMember,
-} from '../../src/web-idl/declaration/index';
-import { createBindings } from '../../src/web-idl/registration';
+} from '../../src/web-idl/core/index';
+import { createBindingWorld } from '../../src/web-idl/registration';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
 import type { PromiseValue } from '../../src/js-engine/index';
+import { BindingContext } from '../../src/web-idl/binding-context';
 import { registerDefinitionBindings } from '../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
@@ -40,7 +41,7 @@ describe('Web IDL promise member binding', () => {
     expect(result).toBe(ownResult);
     expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
     expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
-    expect(projected).toBe(fixture.bindings.getPlatformObject(child));
+    expect(projected).toBe(fixture.bindings.project(child));
     expect(projected).toBeInstanceOf(Reflect.get(first.global, 'PromiseChild'));
   });
 
@@ -69,7 +70,7 @@ describe('Web IDL promise member binding', () => {
   it.each(['promise', 'thenable'] as const)('imports %s arguments and callback results as internal promises', async (kind) => {
     const fixture = createOrdinaryPromiseFixture();
     const child = new PromiseChildImpl();
-    const projected = fixture.firstBinding.context.project(PromiseChildImpl, child);
+    const projected = fixture.firstBinding.project(PromiseChildImpl, child);
 
     const input = () => kind === 'promise'
       ? Promise.resolve(projected)
@@ -97,27 +98,59 @@ describe('Web IDL promise member binding', () => {
     const record = await result;
 
     expect(Object.getPrototypeOf(record)).toBe(fixture.first.intrinsics.objectPrototype);
-    expect(Reflect.get(record, 'value')).toBe(fixture.bindings.getPlatformObject(child));
+    expect(Reflect.get(record, 'value')).toBe(fixture.bindings.project(child));
     expect(Reflect.get(record, 'value')).toBeInstanceOf(Reflect.get(fixture.first.global, 'PromiseChild'));
     expect(record).toHaveProperty('done', false);
     expect(record).toHaveProperty('optional', undefined);
     expect(Object.hasOwn(record, 'absent')).toBe(false);
   });
 
-  it('adapts ordinary promises from async iterator next and return steps', async () => {
+  it.each([false, true])('adapts promises from async iterator steps (borrowed: %s)', async (borrowed) => {
     const fixture = createOrdinaryPromiseFixture();
     const child = new PromiseChildImpl();
     const iterator = call(fixture.owner, 'values') as object;
+    const methodOwner = borrowed ? Reflect.apply(
+      Reflect.get(fixture.foreignPrototype, 'values') as CallableFunction, fixture.owner, [],
+    ) as object : iterator;
+    const next = Reflect.get(methodOwner, 'next') as CallableFunction;
+    const return_ = Reflect.get(methodOwner, 'return') as CallableFunction;
+    const methodRealm = borrowed ? fixture.second : fixture.first;
     fixture.implementation.pending.resolve(child);
 
-    const first = await call(iterator, 'next') as IteratorResult<object>;
+    const pending = Reflect.apply(next, iterator, []) as Promise<IteratorResult<object>>;
+    expect(pending).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+    const first = await pending;
+    expect(Object.getPrototypeOf(first)).toBe(methodRealm.intrinsics.objectPrototype);
     expect(first.done).toBe(false);
-    expect(first.value).toBe(fixture.bindings.getPlatformObject(child));
-    await expect(call(iterator, 'next')).resolves.toEqual({ done: true, value: undefined });
+    expect(first.value).toBe(fixture.bindings.project(child));
+    await expect(Reflect.apply(next, iterator, [])).resolves.toEqual({ done: true, value: undefined });
 
     const other = call(fixture.owner, 'values') as object;
-    await expect(call(other, 'return', 'stop')).resolves.toEqual({ done: true, value: 'stop' });
+    await expect(Reflect.apply(return_, other, ['stop'])).resolves.toEqual({ done: true, value: 'stop' });
     expect(fixture.implementation.returned).toBe('stop');
+  });
+
+  it('omits iterator return unless the declaration requests it', async () => {
+    const interface_ = defineInterface({
+      name: 'AsyncValues',
+      exposed: '*',
+      implementation: impl(OrdinaryPromiseOwnerImpl),
+      members: [asyncIter(childType, { create: 'createIterator' })],
+    });
+    const binding = createBindingWorld([interface_, promiseChildIDL]).register(new Realm());
+    const implementation = new OrdinaryPromiseOwnerImpl();
+    const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation);
+    const iterator = call(owner, 'values') as object;
+    const child = new PromiseChildImpl();
+
+    expect('return' in iterator).toBe(false);
+    expect('createIterator' in owner).toBe(false);
+    implementation.pending.resolve(child);
+    await expect(call(iterator, 'next')).resolves.toEqual({
+      done: false,
+      value: binding.project(PromiseChildImpl, child),
+    });
+    await expect(call(iterator, 'next')).resolves.toEqual({ done: true, value: undefined });
   });
 
   it('projects promise-valued attributes and operations into their realm', async () => {
@@ -224,7 +257,7 @@ describe('Web IDL promise member binding', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    registerDefinitionBindings(binding);
+    registerDefinitionBindings(binding, new BindingContext(binding));
     implementations.setOperationSteps(reject, () => createRejectedPromise(
       createDOMException('NotAllowedError', 'requested rejection'),
       idlType.undefined,
@@ -241,16 +274,13 @@ describe('Web IDL promise member binding', () => {
     );
     const object = binding.createPlatformObject('PromiseExceptionSource');
     const promise = call(object, 'reject') as Promise<unknown>;
-    const DOMException_ = binding.getInterfaceObject(
-      'DOMException',
-    ) as unknown as typeof DOMException;
 
     expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
     await expect(promise).rejects.toMatchObject({
       message: 'requested rejection',
       name: 'NotAllowedError',
     });
-    await expect(promise).rejects.toBeInstanceOf(DOMException_);
+    await expect(promise).rejects.toBeInstanceOf(binding.DOMException);
     await expect(call(object, 'rejectArbitrary')).rejects.toBe(arbitraryReason);
   });
 });
@@ -276,7 +306,7 @@ function call(object: object, name: string, ...args: unknown[]): unknown {
 }
 
 function createOrdinaryPromiseFixture() {
-  const bindings = createBindings([
+  const bindings = createBindingWorld([
     promiseOwnerIDL, promiseChildIDL, promiseCallbackIDL, promiseResultIDL,
   ]);
   const first = new Realm();
@@ -286,7 +316,7 @@ function createOrdinaryPromiseFixture() {
   firstBinding.install(first.global);
   secondBinding.install(second.global);
   const implementation = new OrdinaryPromiseOwnerImpl();
-  const owner = firstBinding.context.project(OrdinaryPromiseOwnerImpl, implementation);
+  const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation);
   const foreignConstructor = Reflect.get(second.global, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
 }
@@ -295,17 +325,22 @@ class OrdinaryPromiseOwnerImpl {
   readonly pending = Promise.withResolvers<PromiseChildImpl>();
   received: PromiseChildImpl | undefined;
   returned: unknown;
-  readonly visited = new WeakSet<object>();
 
   get result(): Promise<PromiseChildImpl> { return this.pending.promise; }
   read(): Promise<PromiseChildImpl> { return this.pending.promise; }
   readRecord(): Promise<{ value: PromiseChildImpl; done: boolean; optional: undefined; }> {
     return this.pending.promise.then((value) => ({ value, done: false, optional: undefined }));
   }
-  next(iterator: object): Promise<PromiseChildImpl | typeof endOfIteration> {
-    if (this.visited.has(iterator)) return Promise.resolve(endOfIteration);
-    this.visited.add(iterator);
-    return this.pending.promise;
+  createIterator(): OrdinaryPromiseIterator {
+    let visited = false;
+    return {
+      next: () => {
+        if (visited) return Promise.resolve(endOfIteration);
+        visited = true;
+        return this.pending.promise;
+      },
+      return: (value) => this.close(value),
+    };
   }
 
   close(value: unknown): Promise<void> {
@@ -333,6 +368,11 @@ class PromiseChildImpl {
   get value(): number { return 7; }
 }
 
+type OrdinaryPromiseIterator = {
+  next(): Promise<PromiseChildImpl | typeof endOfIteration>;
+  return(value: unknown): Promise<void>;
+};
+
 const childType = reference('PromiseChild');
 const promiseChildIDL = defineInterface({
   name: 'PromiseChild', exposed: '*', implementation: impl(PromiseChildImpl),
@@ -358,10 +398,8 @@ const promiseOwnerIDL = defineInterface({
     op('consume', promiseType(idlType.long), [arg('value', promiseType(childType))]),
     op('invoke', promiseType(idlType.long), [arg('callback', reference('PromiseCallback'))]),
     asyncIter(childType, {
-      binding: {
-        getNext: (target, iterator) => (target as OrdinaryPromiseOwnerImpl).next(iterator),
-        return: (target, _iterator, value) => (target as OrdinaryPromiseOwnerImpl).close(value),
-      },
+      create: 'createIterator',
+      return: true,
     }),
   ],
 });

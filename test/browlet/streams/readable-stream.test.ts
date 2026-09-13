@@ -1,11 +1,11 @@
 import { createRuntime } from '../../js-engine/runtime-fixture';
 import type { PromiseValue } from '../../../src/js-engine/promises';
-import { endOfIteration } from '../../../src/web-idl/async-sequence';
+import { endOfIteration } from '../../../src/web-idl/index';
 import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
-import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   ReadableStreamDefaultControllerImpl, type ReadableByteStreamControllerImpl,
   ReadableStreamImpl,
@@ -258,20 +258,47 @@ describe('ordinary readable-stream implementation', () => {
 });
 
 describe('readable-stream projection', () => {
+  it('shares a realm-owned pipe failure between cancellation and rejection', async () => {
+    const window = new Browlet({ route: () => '' }).window;
+    let cancellationReason: unknown;
+    const source = Reflect.construct(requireFunction(window, 'ReadableStream'), [{
+      cancel(reason: unknown) {
+        cancellationReason = reason;
+        Reflect.set(reason as object, 'message', 'changed by cancel');
+      },
+    }]) as object;
+    const destination = Reflect.construct(requireFunction(window, 'WritableStream'), []) as object;
+    const close = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(destination, 'close'), destination, [],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
+    await close;
+
+    const piping = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(source, 'pipeTo'), source, [destination],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
+    const error = await piping.catch((reason: unknown) => reason);
+
+    expect(cancellationReason).toBeInstanceOf(requireFunction(window, 'TypeError'));
+    expect(error).toBe(cancellationReason);
+    expect(error).toHaveProperty('message', 'changed by cancel');
+  });
+
   it('realizes cross-specification clone failures in the stream realm', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const realm = getRelevantRealm(window);
-    const bindings = getRealmBindings(realm);
+    const bindings = getBindingContext(realm);
     const ReadableStream_ = requireFunction(window, 'ReadableStream');
     const projected = Reflect.construct(ReadableStream_, []) as object;
-    const resolved = bindings.context.resolvePlatformObject(projected);
+    const resolved = bindings.getObjectRecord(projected);
     if (resolved?.primaryInterface.definition.name !== 'ReadableStream') {
       throw new Error('ReadableStream did not resolve to its implementation');
     }
     const stream = resolved.implementation as ReadableStreamImpl;
     const [branch1, branch2] = stream.teeDefault(true);
-    const branch1Object = bindings.context.project(ReadableStreamImpl, branch1);
-    const branch2Object = bindings.context.project(ReadableStreamImpl, branch2);
+    const branch1Object = bindings.project(ReadableStreamImpl, branch1);
+    const branch2Object = bindings.project(ReadableStreamImpl, branch2);
     const read1 = observeBrowletPromise(
       window,
       readProjectedStream(branch1Object),
@@ -342,7 +369,7 @@ describe('readable-stream projection', () => {
     ) as object;
     const signal = Reflect.get(controller, 'signal') as object;
     const realm = getRelevantRealm(window);
-    const resolved = getRealmBindings(realm).context.resolvePlatformObject(signal);
+    const resolved = getBindingContext(realm).getObjectRecord(signal);
     if (resolved?.primaryInterface.definition.name !== 'AbortSignal') {
       throw new Error('AbortSignal did not resolve to its implementation');
     }
@@ -457,6 +484,37 @@ describe('readable-stream projection', () => {
       expect(read).rejects.toBe(error),
       expect(closed).rejects.toBe(error),
     ]);
+  });
+
+  it('keeps a returned iterator finished when another iterator acquires the stream', async () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const ReadableStream_ = requireFunction(window, 'ReadableStream');
+    const stream = Reflect.apply(
+      requireFunction(ReadableStream_, 'from'), ReadableStream_, [['kept']],
+    ) as object;
+    const iterator = Reflect.apply(
+      requireFunction(stream, 'values'), stream, [{ preventCancel: true }],
+    ) as object;
+    const returned = observeBrowletPromise(window, callIterator(iterator, 'return'));
+    performTestMicrotaskCheckpoint(window);
+    await expect(returned).resolves.toEqual({ done: true, value: undefined });
+    expect(Reflect.get(stream, 'locked')).toBe(false);
+
+    const replacement = Reflect.apply(requireFunction(stream, 'values'), stream, []) as object;
+    const oldNext = observeBrowletPromise(window, callIterator(iterator, 'next'));
+    const oldReturn = observeBrowletPromise(window, callIterator(iterator, 'return', ['stop']));
+    performTestMicrotaskCheckpoint(window);
+    await expect(oldNext).resolves.toEqual({ done: true, value: undefined });
+    await expect(oldReturn).resolves.toEqual({ done: true, value: 'stop' });
+    expect(Reflect.get(stream, 'locked')).toBe(true);
+
+    const next = observeBrowletPromise(window, callIterator(replacement, 'next'));
+    performTestMicrotaskCheckpoint(window);
+    await expect(next).resolves.toEqual({ done: false, value: 'kept' });
+    const finished = observeBrowletPromise(window, callIterator(replacement, 'next'));
+    performTestMicrotaskCheckpoint(window);
+    await expect(finished).resolves.toEqual({ done: true, value: undefined });
+    expect(Reflect.get(stream, 'locked')).toBe(false);
   });
 
   it('cancels iteration unless preventCancel is true', async () => {

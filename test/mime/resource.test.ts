@@ -2,7 +2,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createMicrotaskQueue, type PromiseValue } from '../../src/js-engine/index';
-import { createBindings } from '../../src/web-idl/index';
+import { createBindingWorld } from '../../src/web-idl/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { TestRealm } from '../web-idl/test-realm';
 
@@ -131,7 +131,7 @@ describe('MIME Sniffing §5.3: reading the resource header', () => {
 
   it('realizes invalid-reader failures in the binding realm', async () => {
     const realm = new TestRealm();
-    const context = createBindings([]).register(realm).context;
+    const context = createBindingWorld([]).register(realm);
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });
     const runtime = createRuntime(realm);
     const failure = await observe(readResourceHeader(

@@ -14,10 +14,9 @@ import {
   type TreeScopeResolver,
 } from '../../style/integration';
 import {
-  arg, defineIncludes, defineInterface, idlType, nullable, op, reference,
-  roAttr, type InterfaceDefinition, xattr,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
+  type InterfaceDefinition,
+} from '../../../web-idl/index';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../infra/index';

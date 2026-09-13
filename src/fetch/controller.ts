@@ -1,5 +1,5 @@
 import type { RuntimeContext } from '../js-engine/index';
-import { createDOMException } from '../web-idl/exceptions/dom-exception-core';
+import { createDOMException } from '../web-idl/index';
 import type { FetchTimingInfo } from './timing';
 
 /** Fetch §2, fetch controller and its operations. */

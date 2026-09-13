@@ -1,13 +1,13 @@
 import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
-import type { AssembledInterface, DefinitionAssembly } from './assembly';
+import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembly';
 import {
   convertToJavaScript, type ConversionContext,
 } from './conversion';
 import {
   hasExtendedAttribute, type OperationMember,
-} from './declaration/definition';
+} from './core/definition';
 import type {
   ImplementationRegistry, NamedPropertySteps,
 } from './registry';
@@ -16,6 +16,7 @@ import { getUnannotatedType } from './types';
 // The Web IDL object kind is shared across realms and binding instances.
 const namedPropertiesObjects = new WeakSet<object>();
 
+// Project predicate: recognize named properties objects allocated by this binding.
 export function isNamedPropertiesObject(object: object): boolean {
   return namedPropertiesObjects.has(object);
 }
@@ -24,6 +25,7 @@ export class GlobalPlatformObjectBinding {
   readonly #context: ConversionContext;
   readonly #implementations: ImplementationRegistry;
 
+  // Project helper: retain the conversion context and implementation registry.
   constructor(
     context: ConversionContext,
     implementations: ImplementationRegistry,
@@ -32,12 +34,14 @@ export class GlobalPlatformObjectBinding {
     this.#implementations = implementations;
   }
 
+  // Project adapter for Web IDL §3.8.1 [[SetPrototypeOf]] on global platform objects.
   createObject(target: object): object {
     return this.#withPrototypeBehavior(target);
   }
 
+  // Project adapter for Web IDL §3.7.4 Named properties object — allocation and internal methods.
   createNamedPropertiesObject(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
     prototype: object,
     getGlobalObject: () => object | undefined,
     allocation?: { object: object; setDelegate(delegate: object): void; },
@@ -57,6 +61,7 @@ export class GlobalPlatformObjectBinding {
       writable: false,
     });
 
+    // Web IDL §3.7.4.1 [[GetOwnProperty]] of a named properties object.
     const ownDescriptor = (property: PropertyKey) => {
       const global = getGlobalObject();
       if (
@@ -69,8 +74,11 @@ export class GlobalPlatformObjectBinding {
       return Reflect.getOwnPropertyDescriptor(target, property);
     };
     const object = new Proxy(target, {
+      // Web IDL §3.7.4.2 [[DefineOwnProperty]].
       defineProperty: () => false,
+      // Web IDL §3.7.4.3 [[Delete]].
       deleteProperty: () => false,
+      // Project Proxy adapter for ECMAScript §10.1.8.1 OrdinaryGet with named [[GetOwnProperty]].
       get: (target_, property, receiver) => {
         const descriptor = ownDescriptor(property);
         if (!descriptor) {
@@ -82,9 +90,12 @@ export class GlobalPlatformObjectBinding {
         return Reflect.apply(getter, receiver, []) as unknown;
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),
+      // Project Proxy adapter for ECMAScript §10.1.7.1 OrdinaryHasProperty with named [[GetOwnProperty]].
       has: (target_, property) =>
         ownDescriptor(property) !== undefined || Reflect.has(target_, property),
+      // Web IDL §3.7.4.5 [[PreventExtensions]].
       preventExtensions: () => false,
+      // Project delegate to ECMAScript §10.1.9.2 OrdinarySetWithOwnDescriptor.
       set: (target_, property, value, receiver) =>
         ordinarySetWithOwnDescriptor(
           target_,
@@ -107,19 +118,22 @@ export class GlobalPlatformObjectBinding {
     return platformObject;
   }
 
+  // Project allocator for Web IDL §3.7.3 Interface prototype object — global prototype-chain behavior.
   createPrototypeObject(prototype: object): object {
     return this.#withPrototypeBehavior(
       this.#context.realm.createOrdinaryObject(prototype),
     );
   }
 
-  supportsNamedProperties(interface_: AssembledInterface): boolean {
+  // Project predicate: find an inherited or directly declared named property getter.
+  supportsNamedProperties(interface_: AssembledInterfaceDefinition): boolean {
     return findNamedGetter(
       interface_,
       this.#context.definitions,
     ) !== undefined;
   }
 
+  // Project adapter: supply global prototype behavior through a Proxy when needed.
   #withPrototypeBehavior(target: object): object {
     if (this.#context.realm.isGlobalPrototypeChainMutable) return target;
     return new Proxy(target, {
@@ -128,12 +142,14 @@ export class GlobalPlatformObjectBinding {
     });
   }
 
+  // Web IDL §3.8.1 [[SetPrototypeOf]] and §3.7.4.4 [[SetPrototypeOf]] — global and named properties objects.
   #setPrototypeOf(target: object, value: object | null): boolean {
     return this.#context.realm.isGlobalPrototypeChainMutable
       ? Reflect.setPrototypeOf(target, value)
       : Reflect.getPrototypeOf(target) === value;
   }
 
+  // Extracted from Web IDL §3.7.4.1 [[GetOwnProperty]] — invoke the named getter and build its descriptor.
   #getNamedProperty(
     global: object,
     property: string,
@@ -161,6 +177,7 @@ export class GlobalPlatformObjectBinding {
     };
   }
 
+  // Web IDL §3.9.7 Abstract operations — named property visibility algorithm, applied to a global object.
   #namedPropertyVisible(
     global: object,
     property: string,
@@ -184,6 +201,7 @@ export class GlobalPlatformObjectBinding {
     return true;
   }
 
+  // Project delegate to Web IDL §2.5.6.2 Named properties — the interface's supported property names.
   #getSupportedNames(
     target: object,
     properties: NamedProperties,
@@ -196,8 +214,9 @@ export class GlobalPlatformObjectBinding {
     );
   }
 
+  // Project helper: collect the named getter, supported-name steps, and enumerability flag.
   #getNamedProperties(
-    interface_: AssembledInterface,
+    interface_: AssembledInterfaceDefinition,
   ): NamedProperties | undefined {
     const getter = findNamedGetter(interface_, this.#context.definitions);
     if (!getter) return;
@@ -219,16 +238,17 @@ export class GlobalPlatformObjectBinding {
 
 type NamedProperties = {
   getter: OperationMember;
-  interface_: AssembledInterface;
+  interface_: AssembledInterfaceDefinition;
   steps: NamedPropertySteps;
   unenumerable: boolean;
 };
 
+// Project helper: search inherited interfaces and partial declarations for an extended attribute.
 function implementsExtendedAttribute(
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
   name: string,
 ): boolean {
-  let current: AssembledInterface | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = interface_;
   while (current) {
     if (hasExtendedAttribute(current.definition.extendedAttributes, name)) {
       return true;
@@ -238,11 +258,12 @@ function implementsExtendedAttribute(
   return false;
 }
 
+// Project helper: locate the most-derived named property getter.
 function findNamedGetter(
-  interface_: AssembledInterface,
+  interface_: AssembledInterfaceDefinition,
   definitions: DefinitionAssembly,
 ): OperationMember | undefined {
-  let current: AssembledInterface | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = interface_;
   while (current) {
     const operation = current.members.find(({ member }) =>
       member.kind === 'operation' &&
@@ -254,6 +275,7 @@ function findNamedGetter(
   return;
 }
 
+// Project predicate for Web IDL §2.5.6.2 Named properties — a DOMString property-name argument.
 function isNamedOperation(
   operation: OperationMember,
   definitions: DefinitionAssembly,

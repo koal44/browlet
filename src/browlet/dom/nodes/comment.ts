@@ -1,6 +1,5 @@
 import { withCommentStub } from '../../stubs';
-import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+import { arg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
 import { NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
