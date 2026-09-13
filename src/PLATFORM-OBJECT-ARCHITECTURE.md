@@ -492,13 +492,21 @@ while each Window retains its own platform-object record in the same binding
 world. `Realm` retains its Window implementation explicitly for settings and
 callback lifecycle work.
 
-`createWindowRealm` composes that allocation with the Window binding. A browsing
-context receives its proxy once the initial realm exists; later realms reuse
-that identity. Internal task scheduling retains the Window implementation's
-task destination as well as the author-facing objects' associations.
+`createWindowRealm()` in Browlet's composition root combines that allocation
+with the Window binding. A browsing context receives its proxy once the initial realm exists;
+later realms reuse that identity. Internal task scheduling retains the Window
+implementation's task destination as well as the author-facing objects' associations.
 The Node 24 API dependency and remaining limitations are described in
 [`node-compat/README.md`](../node-compat/README.md#native-global-integration).
 Cross-origin access checks and history traversal remain separate work.
+
+The composition root's named functions also supply the selected realm's
+Document and structured-clone steps. Document creation uses its existing
+Web IDL construction declaration to supply dependencies. HTML lifecycle code
+initializes Document state and the global-scope mixin; it does not assemble node projection
+or retain a realm binding for cloning. Internal Document/node construction
+continues to project eagerly, including EventTarget's realm-owned event-factory
+initialization.
 
 ## Cross-specification declarations
 

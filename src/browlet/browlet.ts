@@ -4,9 +4,7 @@ import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
 import { jsRuntime, type PromiseValue } from '../js-engine/index';
-import {
-  browletBindings, getRelevantRealm,
-} from './bindings';
+import { getPlatformObject, getRealmBindings, getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
 } from './browsing/document-lifecycle';
@@ -61,7 +59,7 @@ export class Browlet {
     if (document === null) {
       throw new Error('Top-level traversable has no active Document');
     }
-    return browletBindings.getPlatformObject(document) as Document;
+    return getPlatformObject(document) as Document;
   }
 
   get window(): WindowProxy {
@@ -114,7 +112,7 @@ export class Browlet {
       navigationParams,
     );
     const realm = getRelevantRealm(document);
-    const runtime = browletBindings.forRealm(realm).context.getRuntime();
+    const runtime = getRealmBindings(realm).context.getRuntime();
     this.installExposures(realm.globalObject);
     const historyEntry = createNavigationHistoryEntry(
       document,

@@ -14,25 +14,30 @@ import {
   type WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
 import {
-  isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
+  adoptNativeWindowProxy, createWindowProxy, isWindowProxy,
+  resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
 } from './browsing/window/window-proxy';
-import { htmlDocumentIDL } from './dom/nodes/document';
+import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
 import { domIDLDefinitions } from './dom/web-idl';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
 import { fileReaderIDL } from './integration/file/file-reader';
+import {
+  createStructuredClone as createStructuredCloneSteps, createWindowRuntime,
+} from './integration/runtime';
 import { xhrCapabilities } from './integration/xhr';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
+import type { WindowAgent } from './scripting/agents';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
   highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
-  windowOrWorkerGlobalScopeIDL,
+  windowOrWorkerGlobalScopeIDL, type StructuredCloneSteps,
 } from './scripting/global-scope';
-import { Realm } from './scripting/realm';
+import { Realm, type JSExecutionContext } from './scripting/realm';
 import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
 import { svgIDLDefinitions } from './svg/web-idl';
 
@@ -42,8 +47,49 @@ import { svgIDLDefinitions } from './svg/web-idl';
  * Browlet decides which contributions coexist and which initial objects are
  * installed on its Window environment. One main binding world spans the realms
  * hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
+ * These named entry points forward to the module's main BrowletBindings instance.
  */
-export class BrowletBindings {
+export function createWindowRealm(
+  agent: WindowAgent,
+  window: WindowImpl,
+  previousRealm?: Realm,
+): JSExecutionContext {
+  return browletBindings.createWindowRealm(agent, window, previousRealm);
+}
+
+export function createDocument(realm: Realm): DocumentImpl {
+  return browletBindings.createDocument(realm);
+}
+
+export function createStructuredClone(realm: Realm): StructuredCloneSteps {
+  return browletBindings.createStructuredClone(realm);
+}
+
+export function retargetWindowProxy(windowProxy: WindowProxy, window: WindowImpl): void {
+  browletBindings.retargetWindowProxy(windowProxy, window);
+}
+
+export function getRelevantRealm(value: object): Realm {
+  return browletBindings.getRelevantRealm(value);
+}
+
+export function getPlatformObject(value: object): object {
+  return browletBindings.getPlatformObject(value);
+}
+
+export function getImplementation<Value extends object>(value: object): Value {
+  return browletBindings.getImplementation<Value>(value);
+}
+
+export function registerRealm(realm: Realm, options?: RealmBindingOptions): RealmBindings {
+  return browletBindings.register(realm, options);
+}
+
+export function getRealmBindings(realm: Realm): RealmBindings {
+  return browletBindings.forRealm(realm);
+}
+
+class BrowletBindings {
   readonly #world: BindingWorld;
 
   constructor() {
@@ -64,6 +110,64 @@ export class BrowletBindings {
     const bindings = this.#world.forRealm(realm);
     if (!bindings) throw new Error('Realm has no Browlet binding');
     return bindings;
+  }
+
+  /* Compose engine allocation and bindings for the Window selected by HTML. */
+  createWindowRealm(
+    agent: WindowAgent,
+    window: WindowImpl,
+    previousRealm?: Realm,
+  ): JSExecutionContext {
+    const native = Realm.supportsGlobalPrototypeChain;
+    if (native) previousRealm?.detachGlobal();
+    const realm = new Realm({
+      agent,
+      reuseGlobalProxyFrom: native ? previousRealm : undefined,
+      // Window.prototype -> named properties -> EventTarget.prototype.
+      globalPrototypeChain: native ? ['immutable', 'delegated', 'immutable'] : undefined,
+    });
+    const bindings = this.register(realm, {
+      createRuntime: (context) => createWindowRuntime(realm, window, context),
+    });
+    const chain = realm.globalPrototypeChain;
+    let globalObject: Window;
+    if (chain) {
+      const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
+      const object = realm.allocatedGlobalObject;
+      if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
+        throw new Error('Incomplete native Window allocation');
+      }
+      globalObject = projectWindow(bindings, window, {
+        object,
+        prototypes: new Map([
+          ['Window', windowPrototype],
+          ['EventTarget', eventTargetPrototype],
+        ]),
+        namedProperties: {
+          object: namedProperties,
+          setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
+        },
+      });
+    } else {
+      globalObject = projectWindow(bindings, window);
+    }
+    const globalThis = native
+      ? adoptNativeWindowProxy(realm.globalThis)
+      : previousRealm?.globalThis ?? createWindowProxy();
+    Realm.setGlobalObjects(realm, globalObject, globalThis, window);
+    return { realm };
+  }
+
+  createDocument(realm: Realm): DocumentImpl {
+    const { context } = this.forRealm(realm);
+    const document = context.construct(DocumentImpl);
+    // Eager projection also installs EventTarget's realm-owned event factory.
+    context.project(DocumentImpl, document);
+    return document;
+  }
+
+  createStructuredClone(realm: Realm): StructuredCloneSteps {
+    return createStructuredCloneSteps(realm, this.forRealm(realm).context);
   }
 
   retargetWindowProxy(
@@ -101,7 +205,7 @@ export class BrowletBindings {
   }
 }
 
-export function projectWindow(
+function projectWindow(
   bindings: RealmBindings,
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
@@ -116,10 +220,6 @@ export function projectWindow(
     value: window.getComputedStyle,
   });
   return object;
-}
-
-export function getRelevantRealm(value: object): Realm {
-  return browletBindings.getRelevantRealm(value);
 }
 
 const hostDefinedInterfaces = [{
@@ -163,4 +263,4 @@ const browletDefinitions = [
   ...urlIDLDefinitions,
 ];
 
-export const browletBindings = new BrowletBindings();
+const browletBindings = new BrowletBindings();

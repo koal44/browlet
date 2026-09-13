@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  browletBindings, getRelevantRealm,
-} from '../../src/browlet/bindings';
+import { getImplementation, getRelevantRealm, registerRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
@@ -176,7 +174,7 @@ describe('Browlet DOM binding', () => {
     const document = browlet.document;
     const element = document.createElement('main');
     const attributes = element.attributes;
-    const elementImpl = browletBindings.getImplementation<ElementImpl>(element);
+    const elementImpl = getImplementation<ElementImpl>(element);
     const uppercase = new AttrImpl(
       'UPPER',
       '',
@@ -431,7 +429,7 @@ describe('Browlet DOM binding', () => {
 
   it('filters DOM constructors for the host exposure set', () => {
     const realm = new Realm({ globalNames: ['Worker'] });
-    const bindings = browletBindings.register(realm);
+    const bindings = registerRealm(realm);
 
     bindings.install(realm.global);
 
@@ -460,7 +458,7 @@ describe('Browlet DOM binding', () => {
   it('takes constructed event timestamps from the owning realm', () => {
     const realm = new Realm();
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123.5);
-    const bindings = browletBindings.register(realm);
+    const bindings = registerRealm(realm);
     bindings.install(realm.global);
     const Event_ = Reflect.get(realm.global, 'Event') as typeof Event;
     const CustomEvent_ = Reflect.get(

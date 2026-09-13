@@ -6,9 +6,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, createFileFromHost, FileImpl,
   FileListImpl, type BlobByteSource,
 } from '../../src/file/index';
-import {
-  browletBindings, getRelevantRealm,
-} from '../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import {
   structuredDeserialize,
@@ -134,7 +132,7 @@ describe('File API Blob projection', () => {
   it('preserves the construction realm for a host-created Blob', () => {
     const first = createWindow();
     const second = createWindow();
-    const context = browletBindings.forRealm(getRelevantRealm(first)).context;
+    const context = getRealmBindings(getRelevantRealm(first)).context;
     const blob = projectBlob(
       first,
       context.construct(BlobImpl, ['A']),
@@ -242,7 +240,7 @@ describe('File API Blob projection', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
-    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, browletBindings.forRealm(getRelevantRealm(window)).context.getRuntime());
+    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getRealmBindings(getRelevantRealm(window)).context.getRuntime());
     const blob = projectBlob(window, implementation);
 
     await expect(call(blob, 'bytes')).rejects.toMatchObject({
@@ -277,13 +275,13 @@ describe('File API Blob projection', () => {
       constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
       {
         agentCluster,
-        context: browletBindings.forRealm(sourceRealm).context,
+        context: getRealmBindings(sourceRealm).context,
         realm: sourceRealm,
       },
     );
     const clone = structuredDeserialize(serialized, {
       agentCluster,
-      context: browletBindings.forRealm(targetRealm).context,
+      context: getRealmBindings(targetRealm).context,
       realm: targetRealm,
     }) as object;
 
@@ -386,7 +384,7 @@ describe('File API File and FileList projection', () => {
 
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {
     const window = createWindow();
-    const context = browletBindings.forRealm(getRelevantRealm(window)).context;
+    const context = getRealmBindings(getRelevantRealm(window)).context;
     const source: BlobByteSource = {
       size: 3,
       snapshotState: { version: 1 },
@@ -448,13 +446,13 @@ describe('File API File and FileList projection', () => {
       { file, list },
       {
         agentCluster,
-        context: browletBindings.forRealm(sourceRealm).context,
+        context: getRealmBindings(sourceRealm).context,
         realm: sourceRealm,
       },
     );
     const clone = structuredDeserialize(serialized, {
       agentCluster,
-      context: browletBindings.forRealm(targetRealm).context,
+      context: getRealmBindings(targetRealm).context,
       realm: targetRealm,
     }) as Record<string, object>;
     const clonedFile = clone.file!;
@@ -503,7 +501,7 @@ function createFileList(
   window: object,
   files: object[],
 ): { implementation: FileListImpl; platformObject: object; } {
-  const context = browletBindings.forRealm(getRelevantRealm(window)).context;
+  const context = getRealmBindings(getRelevantRealm(window)).context;
   const implementation = context.construct(
     FileListImpl,
     files.map((file) => requireFileImplementation(window, file)),
@@ -515,7 +513,7 @@ function createFileList(
 }
 
 function requireFileImplementation(window: object, file: object): FileImpl {
-  const context = browletBindings.forRealm(getRelevantRealm(window)).context;
+  const context = getRealmBindings(getRelevantRealm(window)).context;
   const implementation = context.getImplementation(file, FileImpl);
   if (!implementation) throw new Error('Value is not a File');
   return implementation;
@@ -523,7 +521,7 @@ function requireFileImplementation(window: object, file: object): FileImpl {
 
 function projectBlob(window: object, implementation: BlobImpl): object {
   const realm = getRelevantRealm(window);
-  return browletBindings.forRealm(realm).context.project(
+  return getRealmBindings(realm).context.project(
     BlobImpl,
     implementation,
   );

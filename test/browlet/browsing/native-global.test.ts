@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { browletBindings } from '../../../src/browlet/bindings';
+import {
+  createDocument, createStructuredClone, createWindowRealm, getImplementation,
+  getPlatformObject, retargetWindowProxy,
+} from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
-import { createWindowRealm } from '../../../src/browlet/browsing/window/window-realm';
-import {
-  createDocument, createProjectedDOMNodeFactory, DocumentImpl,
-} from '../../../src/browlet/dom/nodes/document';
+import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import type { Realm } from '../../../src/browlet/scripting/realm';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
@@ -22,13 +22,13 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     const proxy = context.windowProxy;
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
-    expect(browletBindings.getImplementation(platformWindow)).toBe(window);
+    expect(getImplementation(platformWindow)).toBe(window);
     expect(realm.evaluate('this === window && window === globalThis', 'identity.js')).toBe(true);
     expect(realm.evaluate('this.document === document', 'document.js')).toBe(true);
     expect(realm.evaluate('Object.getPrototypeOf(this) === Window.prototype', 'prototype.js')).toBe(true);
     expect(realm.evaluate('Object.hasOwn(this, "document")', 'own-document.js')).toBe(true);
     expect(realm.evaluate('Object.prototype.toString.call(this)', 'tag.js')).toBe('[object Window]');
-    expect(browletBindings.getImplementation(proxy.document)).toBe(document);
+    expect(getImplementation(proxy.document)).toBe(document);
     expect(realm.evaluate(`
       globalThis.trace = [];
       this.addEventListener('probe', event => trace.push(event.type));
@@ -63,14 +63,14 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     expect(second.platformWindow).not.toBe(first.platformWindow);
     expect(second.realm.intrinsics.object).not.toBe(first.realm.intrinsics.object);
     expect(oldClosure()).toBe(42);
-    expect(browletBindings.getImplementation(oldDocument()) === first.document).toBe(true);
+    expect(getImplementation(oldDocument()) === first.document).toBe(true);
     expect(oldState()).toEqual([2, proxy]);
     expect(second.realm.evaluate('typeof pageState', 'new-state.js')).toBe('undefined');
-    expect(browletBindings.getImplementation(first.platformWindow)).toBe(first.window);
-    expect(browletBindings.getImplementation(second.platformWindow)).toBe(second.window);
-    expect(browletBindings.getImplementation(Reflect.apply(firstDocumentGetter, proxy, [])))
+    expect(getImplementation(first.platformWindow)).toBe(first.window);
+    expect(getImplementation(second.platformWindow)).toBe(second.window);
+    expect(getImplementation(Reflect.apply(firstDocumentGetter, proxy, [])))
       .toBe(second.document);
-    expect(browletBindings.getImplementation(Reflect.apply(firstDocumentGetter, first.platformWindow, [])))
+    expect(getImplementation(Reflect.apply(firstDocumentGetter, first.platformWindow, [])))
       .toBe(first.document);
     expect(second.realm.evaluate('this === window && !Reflect.setPrototypeOf(this, {})', 'new.js'))
       .toBe(true);
@@ -150,17 +150,15 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const { realm } = createWindowRealm(agent, window, previous?.realm);
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
-  const bindings = browletBindings.forRealm(realm);
-  const platformWindow = browletBindings.getPlatformObject(window) as Window;
-  const document = createDocument({
-    nodeFactory: createProjectedDOMNodeFactory(bindings.context),
-  });
+  const platformWindow = getPlatformObject(window) as Window;
+  const document = createDocument(realm);
   DocumentImpl.setBrowsingContext(document, context);
   WindowImpl.setAssociatedDocument(window, document);
   const url = parseURL('https://example.test/').url;
   if (!url) throw new Error('Fixture URL missing');
-  setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(), bindings);
-  browletBindings.retargetWindowProxy(proxy, window);
+  setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(),
+    createStructuredClone(realm));
+  retargetWindowProxy(proxy, window);
   return { agent, realm, window, platformWindow, document, context };
 }
 

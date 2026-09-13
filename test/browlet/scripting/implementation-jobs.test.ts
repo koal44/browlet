@@ -6,15 +6,15 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
-import { createWindowRealm } from '../../../src/browlet/browsing/window/window-realm';
+import {
+  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
+} from '../../../src/browlet/bindings';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
 import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
-import { createDocument, createProjectedDOMNodeFactory } from '../../../src/browlet/dom/nodes/document';
 import { createBindings } from '../../../src/web-idl/registration';
 import type { BindingContext } from '../../../src/web-idl/projection';
 import type { Promises, PromiseValue } from '../../../src/js-engine/index';
@@ -202,11 +202,10 @@ function createSiblingWindow(first: Browlet): Window {
   if (!(agent instanceof WindowAgent) || !settings) throw new Error('Expected a Window agent');
   const window = new WindowImpl(new URL('about:blank'));
   const execution = createWindowRealm(agent, window);
-  const bindings = browletBindings.forRealm(execution.realm);
-  const document = createDocument({ nodeFactory: createProjectedDOMNodeFactory(bindings.context) });
+  const document = createDocument(execution.realm);
   WindowImpl.setAssociatedDocument(window, document);
   setupWindowEnvironmentSettingsObject(settings.creationURL, execution, null,
-    settings.creationURL, settings.origin, bindings);
+    settings.creationURL, settings.origin, createStructuredClone(execution.realm));
   return execution.realm.globalThis as Window;
 }
 

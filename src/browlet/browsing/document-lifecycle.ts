@@ -1,16 +1,13 @@
 import { fireEvent } from '../dom/events/event-target';
-import type { RealmBindings } from '../../web-idl/index';
-import { createStyleletRuntime } from '../style/integration';
 import {
-  createDocument, createProjectedDOMNodeFactory, DocumentImpl,
-  type DocumentLoadTimingInfo,
+  DocumentImpl, type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
 import { areSameOriginDomain } from '../../url/origin';
 import { serializeURL } from '../../url/url';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
-  browletBindings, getRelevantRealm,
+  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
 } from '../bindings';
 import type { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
@@ -19,7 +16,6 @@ import type {
   NavigationParams, NavigationRequest, NavigationResponse,
 } from './navigation/navigation';
 import { TopLevelTraversable } from './navigable';
-import { createWindowRealm } from './window/window-realm';
 import { WindowImpl } from './window/window';
 import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
 import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
@@ -43,7 +39,6 @@ export function createAndInitializeDocument(
   }
 
   let window: WindowImpl;
-  let bindings: RealmBindings;
   if (
     DocumentImpl.isInitialAboutBlank(activeDocument) &&
     areSameOriginDomain(
@@ -56,7 +51,6 @@ export function createAndInitializeDocument(
       throw new Error('Navigation browsing context has no active Window');
     }
     window = activeWindow;
-    bindings = browletBindings.forRealm(getRelevantRealm(window));
   } else {
     const group = browsingContext.group;
     if (group === null) {
@@ -76,21 +70,17 @@ export function createAndInitializeDocument(
       window,
       getRelevantRealm(activeDocument),
     );
-    bindings = browletBindings.forRealm(realmExecutionContext.realm);
     setupWindowEnvironmentSettingsObject(
       creationURL,
       realmExecutionContext,
       navigationParams.reservedEnvironment,
       creationURL,
       navigationParams.origin,
-      bindings,
+      createStructuredClone(realmExecutionContext.realm),
     );
   }
 
-  const document = createDocument({
-    nodeFactory: createProjectedDOMNodeFactory(bindings.context),
-    styleletRuntime: createStyleletRuntime(bindings.context.getRuntime()),
-  });
+  const document = createDocument(getRelevantRealm(window));
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,
   );

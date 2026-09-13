@@ -150,9 +150,9 @@ allocates immutable objects and forwards native property operations; Binding
 supplies interface members and Web IDL named-property behavior; HTML associates
 the native WindowProxy with the current Window. The allocation passed into
 Binding is a one-time construction input, not another environment or registry.
-`createWindowRealm` is the HTML composition point for this allocation and its
-binding; it does not put Window policy in the engine or construct Window
-implementation state inside Binding.
+`createWindowRealm()` in Browlet's composition root is the entry point for this
+allocation and its binding; it does not put Window policy in the engine or
+construct Window implementation state inside Binding.
 See the [global-object notes](./PLATFORM-OBJECT-ARCHITECTURE.md#special-object-categories)
 for the current adoption boundary.
 
@@ -415,7 +415,17 @@ implementation that satisfies it. They may also complete a platform
 implementation which cannot remain host-neutral, as FileReader does with DOM
 events and HTML tasks. Integrations must remain acyclic: they consume the
 Binding Context or global passed by the calling algorithm and must not import
-the assembled `browletBindings` singleton to rediscover either.
+the assembled `browletBindings` singleton or use its forwarding functions to
+rediscover either.
+
+Initial-document and navigation algorithms select their Window and retain HTML
+state initialization. Named functions on the composition-root module delegate
+to its main binding world. Document creation reuses the dependencies declared
+for its Web IDL constructor; the root also prepares structured-clone steps
+through `integration/runtime.ts`. Environment-settings setup accepts those steps and
+constructs its global-scope mixin without receiving a realm binding. The
+Document retains its node factory, and creation still projects eagerly to
+initialize its realm-owned event factory.
 
 ## Composition map
 

@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-import { browletBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
 import {
   createNewTopLevelTraversable,
 } from '../../src/browlet/browsing/navigable';
@@ -23,7 +23,7 @@ import { createControllerFixture } from '../fetch/control-fixture';
 export function createFetchWindow() {
   const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
-  const context = browletBindings.forRealm(realm).context;
+  const context = getRealmBindings(realm).context;
   const eventLoop = realm.agent.eventLoop;
   return {
     ...createFetchRealmFixture({

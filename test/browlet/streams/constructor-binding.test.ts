@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import {
+  createStructuredClone, createWindowRealm, getRelevantRealm, retargetWindowProxy,
+} from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
-import { createWindowRealm } from '../../../src/browlet/browsing/window/window-realm';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
@@ -132,8 +133,8 @@ function createRelatedWindow(first: Window): WindowProxy {
   WindowImpl.setAssociatedDocument(window, document);
   setupWindowEnvironmentSettingsObject(
     settings.creationURL, executionContext, null, settings.creationURL,
-    settings.origin, browletBindings.forRealm(realm),
+    settings.origin, createStructuredClone(realm),
   );
-  browletBindings.retargetWindowProxy(proxy, window);
+  retargetWindowProxy(proxy, window);
   return proxy;
 }

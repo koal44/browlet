@@ -5,6 +5,8 @@ import type { BindingContext } from '../../web-idl/projection';
 import { WindowImpl } from '../browsing/window/window';
 import { AbortControllerImpl } from '../dom/abort/abort-controller';
 import type { Realm } from '../scripting/realm';
+import type { StructuredCloneSteps } from '../scripting/global-scope';
+import { structuredClone } from '../scripting/structured-data/structured-clone';
 import { queueGlobalTask } from '../scripting/tasks';
 import { fetchTaskScheduling } from './fetch';
 import { createTaskSource } from '../scripting/event-loop';
@@ -29,6 +31,18 @@ export function createWindowRuntime(
     networking: fetchTaskScheduling,
     createAbortController: () => context.construct(AbortControllerImpl),
     clone: (value) => WindowImpl.getWindowOrWorkerGlobalScopeMixin(window).structuredClone(value),
+  };
+}
+
+/** Supply HTML cloning with the destination realm and its platform bindings. */
+export function createStructuredClone(
+  realm: Realm,
+  context: BindingContext,
+): StructuredCloneSteps {
+  return (value, transferList) => {
+    const agentCluster = realm.agent.agentCluster;
+    if (!agentCluster) throw new Error('Realm agent has no agent cluster');
+    return structuredClone(value, transferList, { agentCluster, context, realm });
   };
 }
 

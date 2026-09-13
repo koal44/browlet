@@ -2,9 +2,9 @@ import type {
   AgentCluster, AgentClusterKey, CrossOriginIsolationMode,
 } from '../scripting/agents';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
-import { createStyleletRuntime } from '../style/integration';
 import {
-  browletBindings, getRelevantRealm,
+  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
+  retargetWindowProxy,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
@@ -16,9 +16,8 @@ import {
   type WindowProxy,
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
-import { createWindowRealm } from './window/window-realm';
 import {
-  createDocument, createProjectedDOMNodeFactory, DocumentImpl, DocumentMode,
+  DocumentImpl, DocumentMode,
   type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
@@ -143,23 +142,19 @@ export function createNewBrowsingContextAndDocument(
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
-  const bindings = browletBindings.forRealm(realmExecutionContext.realm);
   const settings = setupWindowEnvironmentSettingsObject(
     aboutBlankURL,
     realmExecutionContext,
     null,
     topLevelCreationURL,
     topLevelOrigin,
-    bindings,
+    createStructuredClone(realmExecutionContext.realm),
   );
   const loadTimingInfo = createDocumentLoadTimingInfo(coarsenTime(
     unsafeContextCreationTime,
     settings.crossOriginIsolatedCapability,
   ).milliseconds);
-  const document = createDocument({
-    nodeFactory: createProjectedDOMNodeFactory(bindings.context),
-    styleletRuntime: createStyleletRuntime(bindings.context.getRuntime()),
-  });
+  const document = createDocument(realmExecutionContext.realm);
 
   DocumentImpl.setType(document, 'html');
   DocumentImpl.setContentType(document, 'text/html');
@@ -437,7 +432,7 @@ function makeActive(
     throw new Error('Document has no browsing context');
   }
 
-  browletBindings.retargetWindowProxy(browsingContext.windowProxy, window);
+  retargetWindowProxy(browsingContext.windowProxy, window);
   const settings = realm.hostDefined;
   if (settings === null) throw new Error('Window has no environment settings');
   settings.markExecutionReady();
