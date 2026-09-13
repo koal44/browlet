@@ -51,9 +51,7 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 export class WindowOrWorkerGlobalScopeMixin {
   readonly #eventLoop: EventLoop;
   readonly #performance: PerformanceImpl;
-  readonly #structuredClone: WindowOrWorkerGlobalScopeInitialization[
-    'structuredClone'
-  ];
+  readonly #structuredClone: StructuredCloneSteps;
   readonly #timers: GlobalTimers;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
@@ -115,12 +113,14 @@ export class WindowOrWorkerGlobalScopeMixin {
 export type WindowOrWorkerGlobalScopeInitialization = {
   readonly eventLoop: EventLoop;
   readonly global: object;
-  readonly structuredClone: (
-    value: unknown,
-    transferList: readonly object[],
-  ) => unknown;
+  readonly structuredClone: StructuredCloneSteps;
   readonly timing: EnvironmentTiming;
 };
+
+export type StructuredCloneSteps = (
+  value: unknown,
+  transferList: readonly object[],
+) => unknown;
 
 // -- Web IDL ------------------------------------------------------------
 

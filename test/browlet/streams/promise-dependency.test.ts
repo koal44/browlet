@@ -1,7 +1,7 @@
 import { describe, expect } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import { ReadableStreamImpl, WritableStreamImpl } from '../../../src/streams/index';
 
 describe('Streams Promise dependencies', () => {
@@ -53,6 +53,6 @@ describe('Streams Promise dependencies', () => {
 function createOwner() {
   const { window } = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(window);
-  const runtime = browletBindings.forRealm(realm).context.getRuntime();
+  const runtime = getRealmBindings(realm).context.getRuntime();
   return { queue: realm.agent.eventLoop, promises: runtime.promises, runtime };
 }

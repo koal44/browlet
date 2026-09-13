@@ -1,7 +1,7 @@
 import { createPromises, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
 } from '../../../src/streams/index';
@@ -222,7 +222,7 @@ describe('transform-stream implementation', () => {
 describe('transform-stream projection', () => {
   it('projects a cross-specification transform at the binding boundary', () => {
     const window = new Browlet({ route: () => '' }).window;
-    const bindings = browletBindings.forRealm(getRelevantRealm(window));
+    const bindings = getRealmBindings(getRelevantRealm(window));
     const stream = createTransformStream(null);
     stream.setUp(() => undefined);
 

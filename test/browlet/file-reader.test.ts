@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../src/browlet/browlet';
-import {
-  browletBindings, getRelevantRealm,
-} from '../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
 import {
   FileReaderImpl, fileReaderIDL,
 } from '../../src/browlet/integration/file/file-reader';
@@ -559,7 +557,7 @@ function createReader(context = getContext(createWindow())): FileReaderImpl {
 }
 
 function getContext(window: object): BindingContext {
-  return browletBindings.forRealm(getRelevantRealm(window)).context;
+  return getRealmBindings(getRelevantRealm(window)).context;
 }
 
 async function read(

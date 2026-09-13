@@ -5,7 +5,7 @@ import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   ReadableStreamDefaultControllerImpl, type ReadableByteStreamControllerImpl,
   ReadableStreamImpl,
@@ -261,7 +261,7 @@ describe('readable-stream projection', () => {
   it('realizes cross-specification clone failures in the stream realm', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const realm = getRelevantRealm(window);
-    const bindings = browletBindings.forRealm(realm);
+    const bindings = getRealmBindings(realm);
     const ReadableStream_ = requireFunction(window, 'ReadableStream');
     const projected = Reflect.construct(ReadableStream_, []) as object;
     const resolved = bindings.context.resolvePlatformObject(projected);
@@ -342,7 +342,7 @@ describe('readable-stream projection', () => {
     ) as object;
     const signal = Reflect.get(controller, 'signal') as object;
     const realm = getRelevantRealm(window);
-    const resolved = browletBindings.forRealm(realm).context.resolvePlatformObject(signal);
+    const resolved = getRealmBindings(realm).context.resolvePlatformObject(signal);
     if (resolved?.primaryInterface.definition.name !== 'AbortSignal') {
       throw new Error('AbortSignal did not resolve to its implementation');
     }

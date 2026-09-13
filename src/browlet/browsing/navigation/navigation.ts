@@ -8,9 +8,7 @@ import {
 import type { SandboxingFlagSet } from '../policy/sandbox';
 import { areSameOrigin, type Origin } from '../../../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
-import {
-  browletBindings, getRelevantRealm,
-} from '../../bindings';
+import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
 import type { Environment } from '../../scripting/environment';
 import {
   TopLevelTraversable, type Navigable, type TraversableNavigable,
@@ -246,7 +244,7 @@ function applyPushOrReplaceHistoryStep(
   navigable.currentSessionHistoryEntry = historyEntry;
   navigable.activeSessionHistoryEntry = historyEntry;
   traversable.currentSessionHistoryStep = targetStep;
-  browletBindings.retargetWindowProxy(
+  retargetWindowProxy(
     browsingContext.windowProxy,
     window,
   );

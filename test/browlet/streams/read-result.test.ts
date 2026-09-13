@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { browletBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
 import type { PromiseValue } from '../../../src/js-engine/index';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
@@ -79,11 +79,11 @@ function createFixture() {
 function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
-  const stream = new ReadableStreamImpl({}, {}, browletBindings.forRealm(realm).context.getRuntime());
+  const stream = new ReadableStreamImpl({}, {}, getRealmBindings(realm).context.getRuntime());
   const controller = stream.controller;
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
-  const reader = browletBindings.forRealm(realm).context.project(ReadableStreamDefaultReaderImpl, implementation);
+  const reader = getRealmBindings(realm).context.project(ReadableStreamDefaultReaderImpl, implementation);
   const failure = new realm.intrinsics.typeError('source failed');
   return { browlet, realm, controller, implementation, reader, failure };
 }

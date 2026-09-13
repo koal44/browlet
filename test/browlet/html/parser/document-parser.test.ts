@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { browletBindings, getRelevantRealm } from '../../../../src/browlet/bindings';
+import { getRealmBindings, getRelevantRealm } from '../../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
 import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/high-resolution-time';
 import { networkingTaskSource, queueGlobalTask } from '../../../../src/browlet/scripting/tasks';
@@ -196,7 +196,7 @@ function createParserDocument() {
   if (document === null) throw new Error('Expected an active document');
   while (document.firstChild) TreeNode.remove(document.firstChild);
   const realm = getRelevantRealm(document);
-  const runtime = browletBindings.forRealm(realm).context.getRuntime();
+  const runtime = getRealmBindings(realm).context.getRuntime();
   const options = {
     createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
     requestEventLoopTurn: () => {},
