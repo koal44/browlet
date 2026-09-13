@@ -65,8 +65,14 @@ IDL. The `JSRealm` class exposes realm-owned globals, intrinsics, function and
 iterator-result creation, buffer allocation/transfer, Promise observation,
 and evaluation. It owns one backend context
 (a `node:vm` context or a native context supplied by the compatibility addon),
-while the isolate-scoped `JSRuntime` owns feature selection and native
-context-to-realm mapping. Explicit host-object associations remain available;
+while the private, isolate-scoped `JSRuntime` owns realm associations, the active
+evaluation realm, and the shared ambient queue. Its module exposes named operations.
+[`NodeAPI`](./js-engine/node-addons.ts) loads and types the optional backend methods;
+the shared `addon` instance exposes typed calls and `getMethod(name)` for availability.
+Direct calls to unavailable add-on operations throw; runtime operations choose
+their documented stock-Node fallbacks before making those calls.
+Operations that do not use isolate state are implemented directly as module
+functions. Explicit host-object associations remain available;
 plain Node uses provisional prototype evidence when native lookup is absent. It also
 supplies `JSMicrotaskQueue` backends without owning their HTML
 lifecycle: each EventLoop asks the runtime factory for one queue and shares it

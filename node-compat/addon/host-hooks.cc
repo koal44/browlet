@@ -271,11 +271,10 @@ v8::Local<v8::Object> GetRealmReference(v8::Local<v8::Context> context) {
 void InitializeHostHooks(v8::Local<v8::Object> exports,
                          v8::Local<v8::Context> context) {
   using namespace v8;
-  auto isolate = Isolate::GetCurrent();
   Set(context, exports, "getRealm", Function::New(context, GetRealm).ToLocalChecked());
   Set(context, exports, "getFunctionRealm", Function::New(context, GetFunctionRealm).ToLocalChecked());
 #ifdef NODE_COMPAT_HOST_HOOKS
-  Set(context, exports, "supportsHostHooks", True(isolate));
+  auto isolate = Isolate::GetCurrent();
   auto state = new HookState{isolate};
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     auto state = static_cast<HookState*>(pointer);
@@ -297,8 +296,6 @@ void InitializeHostHooks(v8::Local<v8::Object> exports,
   Set(context, exports, "installHostHooks", Function::New(context, InstallHooks, data).ToLocalChecked());
   Set(context, exports, "getContinuationData",
       Function::New(context, GetContinuationData).ToLocalChecked());
-#else
-  Set(context, exports, "supportsHostHooks", False(isolate));
 #endif
 }
 

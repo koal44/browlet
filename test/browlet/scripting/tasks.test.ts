@@ -24,7 +24,6 @@ import { getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../src/browlet/performance/clock';
-import { itPassesWith } from '../../test-runtime';
 
 describe('task queues', () => {
   it('defines distinct shared identities for the generic task sources', () => {
@@ -481,13 +480,13 @@ describe('task queues', () => {
     expect(eventLoop.currentlyRunningTask).toBeNull();
   });
 
-  itPassesWith('explicitQueues')(
+  it(
     'does not report an adopted Stream start rejection as unhandled',
     async () => {
       /*
-       * The parser enters this script from a host Promise job. V8 declines the
-       * nested checkpoint, but Node's `_tickCallback` still reports rejected
-       * promises before the Stream's adoption handles them.
+       * Parsing enters through an HTML task. Entering from a Node Promise job
+       * previously let a nested checkpoint report this rejection before the
+       * stream's adoption ran.
        */
       const unhandled = vi.fn();
       const handled = vi.fn();

@@ -1,5 +1,6 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
+import { addon } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions } from '../url/api';
@@ -118,13 +119,16 @@ class BrowletBindings {
     window: WindowImpl,
     previousRealm?: Realm,
   ): JSExecutionContext {
-    const native = Realm.supportsGlobalPrototypeChain;
-    if (native) previousRealm?.detachGlobal();
+    const useAddonGlobals = !!(
+      addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
+      addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
+    );
+    if (useAddonGlobals) previousRealm?.detachGlobal();
     const realm = new Realm({
       agent,
-      reuseGlobalProxyFrom: native ? previousRealm : undefined,
+      reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
       // Window.prototype -> named properties -> EventTarget.prototype.
-      globalPrototypeChain: native ? ['immutable', 'delegated', 'immutable'] : undefined,
+      globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
     });
     const bindings = this.register(realm, {
       createRuntime: (context) => createWindowRuntime(realm, window, context),
@@ -151,7 +155,7 @@ class BrowletBindings {
     } else {
       globalObject = projectWindow(bindings, window);
     }
-    const globalThis = native
+    const globalThis = useAddonGlobals
       ? adoptNativeWindowProxy(realm.globalThis)
       : previousRealm?.globalThis ?? createWindowProxy();
     Realm.setGlobalObjects(realm, globalObject, globalThis, window);

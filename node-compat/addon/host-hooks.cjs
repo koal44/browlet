@@ -5,10 +5,6 @@ const names = ['makeJobCallback', 'callJobCallback', 'enqueuePromiseJob',
   'enqueueGenericJob', 'enqueueTimeoutJob'];
 
 module.exports = native => function setHostHooks(hooks) {
-  if (!native.supportsHostHooks) {
-    throw Object.assign(new Error('Host hooks require a Node engine with the V8 host-hook patches'),
-      { code: 'ERR_HOST_HOOKS_UNAVAILABLE' });
-  }
   if (hooks === null || typeof hooks !== 'object') throw new TypeError('Expected host hooks');
   for (const key of Object.keys(hooks)) {
     if (!names.includes(key)) throw new TypeError('Unknown host hook: ' + key);

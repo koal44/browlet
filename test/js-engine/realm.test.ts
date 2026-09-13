@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import {
-  JSRealm, type JSFunction, jsRuntime,
+  JSRealm, type JSFunction, createMicrotaskQueue, getAssociatedRealm,
 } from '../../src/js-engine/index';
 
 describe('JavaScript Realm', () => {
@@ -104,13 +104,13 @@ describe('JavaScript Realm', () => {
     });
     const foreign = second.evaluate('({})', 'foreign.js') as object;
 
-    expect(jsRuntime.getAssociatedRealm(container.nested)).toBe(first);
-    expect(jsRuntime.getAssociatedRealm(function_)).toBe(first);
-    expect(jsRuntime.getAssociatedRealm(foreign)).toBe(second);
-    expect(jsRuntime.getAssociatedRealm({})).toBeUndefined();
+    expect(getAssociatedRealm(container.nested)).toBe(first);
+    expect(getAssociatedRealm(function_)).toBe(first);
+    expect(getAssociatedRealm(foreign)).toBe(second);
+    expect(getAssociatedRealm({})).toBeUndefined();
 
     Reflect.set(first.global, 'hasActiveRealm', (value: object) =>
-      jsRuntime.getAssociatedRealm(value) === first);
+      getAssociatedRealm(value) === first);
     expect(first.evaluate(`
       hasActiveRealm(new Proxy({}, {
         getPrototypeOf() { throw new Error('hidden prototype'); }
@@ -129,21 +129,21 @@ describe('JavaScript Realm', () => {
     expect(Reflect.get(globalObject, 'globalThis')).toBe(globalThis);
     expect(realm.evaluate('globalThis', 'global-this.js')).toBe(globalThis);
     expect(realm.evaluate('answer', 'free-name.js')).toBe(42);
-    expect(jsRuntime.getAssociatedRealm(globalObject)).toBe(realm);
-    expect(jsRuntime.getAssociatedRealm(globalThis)).toBe(realm);
+    expect(getAssociatedRealm(globalObject)).toBe(realm);
+    expect(getAssociatedRealm(globalThis)).toBe(realm);
     expect(() => realm.setGlobalObjects({}, {})).toThrow(
       'Realm global objects are already initialized',
     );
   });
 
-  it('keeps a function realm after its prototype chain changes', () => {
+  itPassesWith('functionRealms')('keeps a function realm after its prototype chain changes', () => {
     const first = new JSRealm();
     const second = new JSRealm();
     second.evaluate('globalThis.target = function () {}; undefined;', 'target.js');
     const target = Reflect.get(second.global, 'target') as object;
     Reflect.setPrototypeOf(target, first.intrinsics.functionPrototype);
 
-    expect(jsRuntime.getAssociatedRealm(target)).toBe(second);
+    expect(getAssociatedRealm(target)).toBe(second);
   });
 
   it('does not assign a foreign function to the realm that returns it', () => {
@@ -153,7 +153,7 @@ describe('JavaScript Realm', () => {
     Reflect.set(first.global, 'foreignTarget', target);
 
     expect(first.evaluate('foreignTarget', 'return-target.js')).toBe(target);
-    expect(jsRuntime.getAssociatedRealm(target)).toBe(second);
+    expect(getAssociatedRealm(target)).toBe(second);
   });
 
   it('retains the realm of evaluated values without prototype evidence', () => {
@@ -164,11 +164,11 @@ describe('JavaScript Realm', () => {
       'new Proxy(function () {}, { getPrototypeOf() { throw new Error("hidden"); } })',
     ]) {
       const value = realm.evaluate(source, 'no-prototype.js') as object;
-      expect(jsRuntime.getAssociatedRealm(value)).toBe(realm);
+      expect(getAssociatedRealm(value)).toBe(realm);
     }
   });
 
-  it('recognizes a callable proxy without invoking its getPrototypeOf trap', () => {
+  itPassesWith('functionRealms')('recognizes a callable proxy without invoking its getPrototypeOf trap', () => {
     const first = new JSRealm();
     const second = new JSRealm();
     const target = second.evaluate('(function () {})', 'target.js') as object;
@@ -182,7 +182,7 @@ describe('JavaScript Realm', () => {
       undefined;
     `, 'proxy.js');
 
-    const realm = jsRuntime.getAssociatedRealm(Reflect.get(first.global, 'proxy') as object);
+    const realm = getAssociatedRealm(Reflect.get(first.global, 'proxy') as object);
     expect(calls).toEqual([]);
     expect(realm).toBe(second);
   });
@@ -192,7 +192,7 @@ describe('JavaScript Realm', () => {
     const prototype = realm.createOrdinaryObject(null);
     const object = realm.createOrdinaryObject(prototype);
     expect(Reflect.getPrototypeOf(object)).toBe(prototype);
-    expect(realm.runtime.getAssociatedRealm(object)).toBe(realm);
+    expect(getAssociatedRealm(object)).toBe(realm);
 
     const result = realm.createIteratorResultObject('value', false);
     expect(result).toEqual({ value: 'value', done: false });
@@ -254,7 +254,7 @@ describe('Realm collection iterators', () => {
 
 describe('Realm Promise observation', () => {
   it('installs reactions without consulting the promise then property', async () => {
-    const microtaskQueue = jsRuntime.createMicrotaskQueue();
+    const microtaskQueue = createMicrotaskQueue();
     const realm = new JSRealm(microtaskQueue);
     const promise = new realm.intrinsics.promise.constructor((resolve) => {
       resolve('fulfilled');
@@ -290,7 +290,7 @@ describe('Realm Promise observation', () => {
   });
 
   itPassesWith('v26+', 'explicitQueues')('places native observation of a Node promise on the supplied realm queue', async () => {
-    const queue = jsRuntime.createMicrotaskQueue();
+    const queue = createMicrotaskQueue();
     const realm = new JSRealm(queue);
     const { promise, resolve } = Promise.withResolvers<string>();
     const seen: unknown[] = [];

@@ -1,7 +1,7 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
-import { JSRealm, jsRuntime, type PromiseValue } from '../../src/js-engine/index';
+import { JSRealm, createMicrotaskQueue, type PromiseValue } from '../../src/js-engine/index';
 
 describe('Promise dependencies', () => {
   it('eventually delivers fulfillment and recovery through the selected queue backend', async () => {
@@ -207,7 +207,7 @@ describe('internal Promise results', () => {
 });
 
 function createTarget() {
-  const queue = jsRuntime.createMicrotaskQueue();
+  const queue = createMicrotaskQueue();
   const realm = new JSRealm(queue);
   return { queue, realm, promises: realm.promises };
 }

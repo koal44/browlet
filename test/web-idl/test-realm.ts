@@ -1,6 +1,4 @@
-import {
-  type JSMicrotaskQueue, JSRealm, jsRuntime,
-} from '../../src/js-engine/index';
+import { type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../../src/web-idl/js-realm';
@@ -30,7 +28,7 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
       cleanUpAfterRunningCallback: () => {},
       cleanUpAfterRunningScript: () => {},
       getAssociatedRealm: (value) => {
-        const realm = jsRuntime.getAssociatedRealm(value);
+        const realm = getAssociatedRealm(value);
         return realm instanceof TestRealm ? realm : this;
       },
       prepareToRunCallback: () => {},

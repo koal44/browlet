@@ -168,10 +168,9 @@ remains an expected failure. The addon does not work around that older engine
 behavior. The operation returns V8's derived promise; Browlet's internal
 observation boundary discards that result.
 
-`supportsHostHooks` reports whether the addon was built with the required V8
-APIs. Official Node 24.19.0 and 26.8.1 support the existing context/queue APIs but
-return false here. Calling `setHostHooks()` on those bases throws
-`ERR_HOST_HOOKS_UNAVAILABLE`.
+The addon exports `setHostHooks` only when built with the required V8 APIs.
+Check the method directly before calling it. Official Node 24.19.0 and 26.8.1
+keep the existing context/queue APIs but omit this method.
 
 `setHostHooks(hooks)` installs any combination of the following callbacks and
 returns nothing. The configuration lasts until the owning Node environment

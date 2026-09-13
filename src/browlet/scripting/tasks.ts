@@ -1,4 +1,4 @@
-import type { GlobalObject, JSRealm } from '../../js-engine/index';
+import { bindAsyncContext, type GlobalObject } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import {
   createTaskSource, EventLoop, queueTask, type TaskCreationOptions,
@@ -53,7 +53,7 @@ export function queueGlobalTask(
     source,
     destination.eventLoop,
     destination.getDocument(),
-    destination.realm.runtime.bindAsyncContext(steps),
+    bindAsyncContext(steps),
     options,
   );
   return {
@@ -66,7 +66,6 @@ export type QueuedTaskHandle = {
 };
 
 export type GlobalTaskDestination = {
-  readonly realm: JSRealm;
   readonly eventLoop: EventLoop;
   readonly getDocument: () => DocumentImpl | null;
 };

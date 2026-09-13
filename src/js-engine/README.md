@@ -46,7 +46,7 @@ The [compatibility addon](../../node-compat/README.md) now supplies explicit
 queues and reusable native context handles on Node 24 and 26. The `with-node`
 launcher chooses the Node base through `NODE_BASE` and enables the addon for
 `NODE_RUNTIME=compat`. It supplies the internal `BROWLET_NODE_ADDON` module path
-to `JSRuntime`; embedders can also supply that path directly.
+to the runtime module; embedders can also supply that path directly.
 `JSRealm` delegates evaluation to that selected backend. The addon does not
 make node:vm recognize its handles and does not yet supply post-creation
 prototype immutability. References to stock fallbacks below mean plain Node
@@ -55,14 +55,15 @@ Node branch. Browlet's Window creation and navigation now use the addon's
 creation-time immutable allocation; they no longer require that branch's
 post-creation immutable-prototype operation.
 
-`JSRuntime.setHostHooks()` adapts the make/call and three enqueue hooks
+`setHostHooks()` adapts the make/call and three enqueue hooks
 to known `JSRealm` identities. Context-handle references keep successive
 realms distinct even when their WindowProxy is reused. The Promise enqueue adapter also
 identifies the realm owning the job's queue, which can differ from the null
 specification realm of a handlerless reaction. HTML owns the settings and task
 policy. Returning false from Promise enqueue retains its native V8 queue;
 generic and timeout enqueue always transfer scheduling to the host. Unknown
-realm references map to null. `supportsHostHooks` is false on official engines.
+realm references map to null. `setHostHooks` is absent when the backend cannot
+install the hooks; callers check the function directly.
 
 Promise routing uses the job's queue realm, without an ambient execution owner
 or a saved-continuation-data lookup. Node reactions, including runtime diagnostics,
@@ -111,7 +112,7 @@ observable realm or engine invariant, or removes a meaningful duplicate
 implementation. Otherwise leave the native expression with its caller.
 
 Do not give a partial substitute the name of a complete ECMAScript operation.
-In particular, `JSRuntime.getAssociatedRealm()` reports the realm evidence
+In particular, `getAssociatedRealm()` reports the realm evidence
 available to this embedder. With the addon it follows ordinary, bound, and proxy
 function targets through V8; plain Node still uses incomplete prototype evidence.
 It returns only realms registered with this runtime. The Web
@@ -119,19 +120,34 @@ IDL iterator state machines likewise remain Web IDL behavior rather than being
 presented as `CreateIteratorFromClosure` until the JavaScript layer can supply
 that operation independently of Web IDL records and conversion policy.
 
-The engine has two concrete classes backed by Node and the optional addon:
+The engine's realm and isolate state are backed by Node and the optional addon:
 
-- [`JSRuntime`](./runtime.ts) owns isolate-wide feature selection and
-  object-to-realm associations. Its module also defines host hooks, job records,
-  and the microtask-queue contract;
+- The private [`JSRuntime`](./runtime.ts) owns object-to-realm associations,
+  the active evaluation realm, and the shared ambient queue. Its module exposes
+  named operations and defines host hooks, job records, and the microtask-queue
+  contract;
 - [`JSRealm`](./realm.ts) owns one Node VM context, its captured intrinsics,
   evaluation, function creation, and global-object bridge, and receives the
   selected microtask queue when its context is created; and
 - Web IDL or HTML hosts subclass `JSRealm` to add their own policy without
   introducing a forwarding realm object.
 
-There is one exported `jsRuntime` instance per module instance. Node
-workers load separate module instances and therefore receive separate runtime owners.
+There is one private `jsRuntime` instance per module instance. Consumers call
+`createMicrotaskQueue()`, `getAssociatedRealm()`, and the other runtime functions
+directly. Only operations that use isolate state forward to `jsRuntime`; the
+remaining operations are implemented directly as module functions.
+Realm-owned operations remain on `JSRealm`. The engine initializes
+independently of Browlet. Node workers load separate module instances and
+therefore receive separate runtime owners.
+
+[`NodeAPI`](./node-addons.ts) loads the backend and binds each available method
+once. The `addon` instance exposes typed calls such as `addon.getRealm(value)`;
+calling an unavailable operation throws an error naming it. Callers and tests
+use `addon.getMethod(name)` to get a supplied method or `undefined`. Availability
+is checked per operation. Runtime operations such as
+`createMicrotaskQueue()` remain available on plain Node through their documented
+fallbacks. The realm-adapting `setHostHooks` operation is itself optional because
+there is no fallback for installing engine hooks.
 Do not construct per-Agent, per-AgentCluster, or per-BindingWorld realm maps:
 objects can cross those boundaries synchronously within one isolate.
 
@@ -155,6 +171,10 @@ accommodation below under stock Node. The upper layer owns the queue according t
 its lifecycle; the JS Engine project supplies its engine implementation
 without importing HTML.
 
+The private `AddonMicrotaskQueue` implementation retains its native handle
+directly. Context creation uses that handle to attach the same V8 queue; there
+is no separate queue-handle registry.
+
 ## Node/V8 accommodations
 
 `node-utf8-encode-into` checks native `TextEncoder.encodeInto()` once for the
@@ -175,7 +195,8 @@ the first evaluation association for returned values, including null-prototype
 objects, without overwriting known origins or inspecting author properties.
 These are incomplete clues: an unseen foreign result can still be assigned to
 the returning realm, and hidden bound/proxy targets cannot be inspected. The
-constructor-realm regressions retain these stock-Node failures.
+constructor-realm regressions expect failure when native function-realm lookup
+is unavailable, using the `functionRealms` test requirement.
 
 Constructible functions use a realm-owned Proxy construction entry so Binding
 performs allocation and reads `newTarget.prototype` once. Construction steps
