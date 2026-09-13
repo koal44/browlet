@@ -25,7 +25,7 @@ describe('EventTargetImpl', () => {
     const liveSignal = new AbortSignalImpl(globalThis);
     const abortedSignal = new AbortSignalImpl(globalThis);
     const callback = vi.fn();
-    AbortSignalImpl.signalAbort(abortedSignal);
+    abortedSignal.signalAbort();
 
     target.addEventListener('null', null, {
       signal: liveSignal,
@@ -54,7 +54,7 @@ describe('EventTargetImpl', () => {
     target.addEventListener('ready', callback, {
       signal: duplicateSignal,
     });
-    AbortSignalImpl.signalAbort(duplicateSignal);
+    duplicateSignal.signalAbort();
     target.dispatchEvent(new EventImpl('ready'));
 
     expect(callback).toHaveBeenCalledOnce();
@@ -114,15 +114,15 @@ describe('EventTargetImpl', () => {
       legacyCanceledActivationBehavior: () => activation.push('canceled'),
     });
 
-    expect(EventTargetImpl.getParent(target, event)).toBe(parent);
-    expect(EventTargetImpl.hasActivationBehavior(target)).toBe(true);
-    expect(EventTargetImpl.hasLegacyPreActivationBehavior(target)).toBe(true);
-    expect(EventTargetImpl.hasLegacyCanceledActivationBehavior(target))
+    expect(target.getParent(event)).toBe(parent);
+    expect(target.hasActivationBehavior()).toBe(true);
+    expect(target.hasLegacyPreActivationBehavior()).toBe(true);
+    expect(target.hasLegacyCanceledActivationBehavior())
       .toBe(true);
 
-    EventTargetImpl.runLegacyPreActivationBehavior(target);
-    EventTargetImpl.runActivationBehavior(target, event);
-    EventTargetImpl.runLegacyCanceledActivationBehavior(target);
+    target.runLegacyPreActivationBehavior();
+    target.runActivationBehavior(event);
+    target.runLegacyCanceledActivationBehavior();
 
     expect(activation).toEqual(['pre', 'activation', 'canceled']);
   });
@@ -246,7 +246,7 @@ describe('EventTargetImpl', () => {
     target.addEventListener('ready', callback, {
       signal,
     });
-    AbortSignalImpl.signalAbort(signal);
+    signal.signalAbort();
     target.dispatchEvent(new EventImpl('ready'));
 
     expect(callback).not.toHaveBeenCalled();

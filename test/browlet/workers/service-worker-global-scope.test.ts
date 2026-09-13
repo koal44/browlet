@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  legacyObtainServiceWorkerFetchEventListenerCallbacks,
   ServiceWorkerGlobalScopeImpl,
 } from '../../../src/browlet/workers/service-worker-global-scope';
 
@@ -64,7 +63,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
     worker.addEventListener('install', ignored);
     worker.addEventListener('fetch', second);
 
-    expect(legacyObtainServiceWorkerFetchEventListenerCallbacks(worker))
+    expect(worker.getFetchEventListenerCallbacks())
       .toEqual([first, second]);
   });
 });

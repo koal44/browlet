@@ -1,4 +1,18 @@
-import * as JSEngine from '../../../js-engine/index';
+import {
+  type JSBufferViewName, copyMapData, copySetData, getArrayBufferMaxByteLength,
+  getBigIntData, getBooleanData, getBufferSourceByteLength,
+  getBufferSourceByteOffset, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
+  getBufferTypeName, getDateValue, getNumberData, getRegExpData, getStringData,
+  getTypedArrayLength, hasBigIntData, hasBooleanData, hasDateValue, hasErrorData,
+  hasMapData, hasNumberData, hasRegExpMatcher, hasSetData, hasStringData,
+  hasSymbolData, isArgumentsObject, isArrayBufferViewOutOfBounds,
+  isBufferSourceDetached, isCryptoKeyObject, isExternalObject,
+  isFinalizationRegistryObject, isGeneratorObject, isKeyObject,
+  isLengthTrackingArrayBufferView, isMapIteratorObject, isModuleNamespaceObject,
+  isPromiseObject, isProxyObject, isSetIteratorObject, isWeakMapObject,
+  isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
+  readErrorStack, toString,
+} from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
 import type {
   WebIDLRealmHost,
@@ -49,48 +63,48 @@ export function structuredSerializeInternal(
   if (typeof value === 'symbol') return throwDataCloneError();
 
   const platformObject = environment.context.resolvePlatformObject(value);
-  if (!platformObject && JSEngine.isProxyObject(value)) {
+  if (!platformObject && isProxyObject(value)) {
     return throwDataCloneError();
   }
   let serialized: SerializedRecord;
   let deep = false;
 
-  if (JSEngine.hasBooleanData(value)) {
+  if (hasBooleanData(value)) {
     serialized = {
       type: 'Boolean',
-      value: JSEngine.getBooleanData(value),
+      value: getBooleanData(value),
     };
-  } else if (JSEngine.hasNumberData(value)) {
+  } else if (hasNumberData(value)) {
     serialized = {
       type: 'Number',
-      value: JSEngine.getNumberData(value),
+      value: getNumberData(value),
     };
-  } else if (JSEngine.hasBigIntData(value)) {
+  } else if (hasBigIntData(value)) {
     serialized = {
       type: 'BigInt',
-      value: JSEngine.getBigIntData(value),
+      value: getBigIntData(value),
     };
-  } else if (JSEngine.hasStringData(value)) {
+  } else if (hasStringData(value)) {
     serialized = {
       type: 'String',
-      value: JSEngine.getStringData(value),
+      value: getStringData(value),
     };
-  } else if (JSEngine.hasSymbolData(value)) {
+  } else if (hasSymbolData(value)) {
     return throwDataCloneError();
-  } else if (JSEngine.hasDateValue(value)) {
+  } else if (hasDateValue(value)) {
     serialized = {
       type: 'Date',
-      value: JSEngine.getDateValue(value),
+      value: getDateValue(value),
     };
-  } else if (JSEngine.hasRegExpMatcher(value)) {
-    const { flags, source } = JSEngine.getRegExpData(value);
+  } else if (hasRegExpMatcher(value)) {
+    const { flags, source } = getRegExpData(value);
     serialized = {
       type: 'RegExp',
       source,
       flags,
     };
   } else {
-    const bufferType = JSEngine.getBufferTypeName(value);
+    const bufferType = getBufferTypeName(value);
     if (bufferType === 'ArrayBuffer' || bufferType === 'SharedArrayBuffer') {
       serialized = serializeBuffer(
         value,
@@ -99,11 +113,11 @@ export function structuredSerializeInternal(
         environment,
       );
     } else if (bufferType !== undefined) {
-      if (JSEngine.isArrayBufferViewOutOfBounds(value)) {
+      if (isArrayBufferViewOutOfBounds(value)) {
         return throwDataCloneError();
       }
       const bufferSerialized = structuredSerializeInternal(
-        JSEngine.getBufferSourceUnderlyingBuffer(value),
+        getBufferSourceUnderlyingBuffer(value),
         forStorage,
         environment,
         memory,
@@ -116,16 +130,16 @@ export function structuredSerializeInternal(
         type: 'ArrayBufferView',
         constructor: bufferType,
         buffer: bufferSerialized,
-        byteOffset: JSEngine.getBufferSourceByteOffset(value),
+        byteOffset: getBufferSourceByteOffset(value),
         ...serializeArrayBufferViewLengths(value, bufferType),
       };
-    } else if (JSEngine.hasMapData(value)) {
+    } else if (hasMapData(value)) {
       serialized = { type: 'Map', entries: [] };
       deep = true;
-    } else if (JSEngine.hasSetData(value)) {
+    } else if (hasSetData(value)) {
       serialized = { type: 'Set', entries: [] };
       deep = true;
-    } else if (JSEngine.hasErrorData(value) &&
+    } else if (hasErrorData(value) &&
       !platformObject) {
       serialized = serializeError(value, environment.realm);
       deep = true;
@@ -154,7 +168,7 @@ export function structuredSerializeInternal(
     } else if (typeof value === 'function') {
       return throwDataCloneError();
     } else if (hasUnsupportedInternalSlots(value) ||
-      JSEngine.nativeCloneRejectsPropertylessObject(value)) {
+      nativeCloneRejectsPropertylessObject(value)) {
       return throwDataCloneError();
     } else {
       serialized = { type: 'Object', properties: [] };
@@ -203,18 +217,18 @@ export function structuredSerializeInternal(
 /** HTML §2.7.3, ArrayBufferView [[ByteLength]] and [[ArrayLength]]. */
 function serializeArrayBufferViewLengths(
   value: object,
-  type: JSEngine.JSBufferViewName,
+  type: JSBufferViewName,
 ): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
-  if (JSEngine.isLengthTrackingArrayBufferView(value)) {
+  if (isLengthTrackingArrayBufferView(value)) {
     return type === 'DataView'
       ? { byteLength: 'auto' }
       : { arrayLength: 'auto', byteLength: 'auto' };
   }
   return type === 'DataView'
-    ? { byteLength: JSEngine.getBufferSourceByteLength(value) }
+    ? { byteLength: getBufferSourceByteLength(value) }
     : {
-      arrayLength: JSEngine.getTypedArrayLength(value),
-      byteLength: JSEngine.getBufferSourceByteLength(value),
+      arrayLength: getTypedArrayLength(value),
+      byteLength: getBufferSourceByteLength(value),
     };
 }
 
@@ -225,8 +239,8 @@ function serializeBuffer(
   forStorage: boolean,
   environment: StructuredSerializationEnvironment,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
-  const byteLength = JSEngine.getBufferSourceByteLength(value);
-  const maxByteLength = JSEngine.getArrayBufferMaxByteLength(value);
+  const byteLength = getBufferSourceByteLength(value);
+  const maxByteLength = getArrayBufferMaxByteLength(value);
 
   if (type === 'SharedArrayBuffer') {
     if (!environment.realm.crossOriginIsolated || forStorage) {
@@ -248,8 +262,8 @@ function serializeBuffer(
       };
   }
 
-  if (JSEngine.isBufferSourceDetached(value)) return throwDataCloneError();
-  const bytes = JSEngine.getBufferSourceCopy(value);
+  if (isBufferSourceDetached(value)) return throwDataCloneError();
+  const bytes = getBufferSourceCopy(value);
   return maxByteLength === undefined
     ? { type: 'ArrayBuffer', bytes, byteLength }
     : {
@@ -268,7 +282,7 @@ function serializeMapData(
   environment: StructuredSerializationEnvironment,
   memory: StructuredSerializeMemory,
 ): void {
-  const copiedEntries = JSEngine.copyMapData(value);
+  const copiedEntries = copyMapData(value);
   for (const [key, entryValue] of copiedEntries) {
     serialized.entries.push({
       key: structuredSerializeInternal(key, forStorage, environment, memory),
@@ -290,7 +304,7 @@ function serializeSetData(
   environment: StructuredSerializationEnvironment,
   memory: StructuredSerializeMemory,
 ): void {
-  const copiedEntries = JSEngine.copySetData(value);
+  const copiedEntries = copySetData(value);
   for (const entry of copiedEntries) {
     serialized.entries.push(structuredSerializeInternal(
       entry,
@@ -378,9 +392,9 @@ function serializeError(
     : 'Error';
   const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
   const message = messageDescriptor && 'value' in messageDescriptor
-    ? JSEngine.toString(messageDescriptor.value)
+    ? toString(messageDescriptor.value)
     : undefined;
-  const stackValue = JSEngine.readErrorStack(value, realm);
+  const stackValue = readErrorStack(value, realm);
   const stack = typeof stackValue === 'string' ? stackValue : '';
   return { type: 'Error', name, message, stack };
 }
@@ -404,19 +418,19 @@ function serializeErrorCause(
 }
 
 function hasUnsupportedInternalSlots(value: object): boolean {
-  return JSEngine.isArgumentsObject(value) ||
-    JSEngine.isCryptoKeyObject(value) ||
-    JSEngine.isExternalObject(value) ||
-    JSEngine.isGeneratorObject(value) ||
-    JSEngine.isKeyObject(value) ||
-    JSEngine.isMapIteratorObject(value) ||
-    JSEngine.isModuleNamespaceObject(value) ||
-    JSEngine.isPromiseObject(value) ||
-    JSEngine.isSetIteratorObject(value) ||
-    JSEngine.isWeakMapObject(value) ||
-    JSEngine.isWeakSetObject(value) ||
-    JSEngine.isWeakRefObject(value) ||
-    JSEngine.isFinalizationRegistryObject(value);
+  return isArgumentsObject(value) ||
+    isCryptoKeyObject(value) ||
+    isExternalObject(value) ||
+    isGeneratorObject(value) ||
+    isKeyObject(value) ||
+    isMapIteratorObject(value) ||
+    isModuleNamespaceObject(value) ||
+    isPromiseObject(value) ||
+    isSetIteratorObject(value) ||
+    isWeakMapObject(value) ||
+    isWeakSetObject(value) ||
+    isWeakRefObject(value) ||
+    isFinalizationRegistryObject(value);
 }
 
 function isBufferSerializedRecord(

@@ -115,7 +115,9 @@ export class ResponseImpl {
   text(): object { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
-  static getResponse(response: ResponseImpl): ResponseRecord { return response.#response; }
+  // -- Internal ---------------------------------------------------------
+
+  getResponse(): ResponseRecord { return this.#response; }
 }
 
 /**
@@ -143,6 +145,8 @@ export type ResponseInitRecord = {
   headers?: HeadersInitValue;
 };
 
+// -- Web IDL ------------------------------------------------------------
+
 export const responseInitIDL = defineDictionary({
   name: 'ResponseInit',
   members: [
@@ -167,14 +171,20 @@ export const responseIDL = defineInterface({
       arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
     ], bind({ invoke() { throw new Error('Response construction from BodyInit is not implemented'); } })),
     op('error', reference('Response'), [], { static: true, ...xattr('NewObject') }),
-    op('redirect', reference('Response'), [
-      arg('url', idlType.USVString),
-      arg('status', idlType.unsignedShort, { optional: true, default: integer(302) }),
-    ], { static: true, ...xattr('NewObject') }),
-    op('json', reference('Response'), [
-      arg('data', idlType.any),
-      arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
-    ], { static: true, ...xattr('NewObject') }),
+    op('redirect', reference('Response'),
+      [
+        arg('url', idlType.USVString),
+        arg('status', idlType.unsignedShort, { optional: true, default: integer(302) }),
+      ],
+      { static: true, ...xattr('NewObject') },
+    ),
+    op('json', reference('Response'),
+      [
+        arg('data', idlType.any),
+        arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
+      ],
+      { static: true, ...xattr('NewObject') },
+    ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),
     roAttr('redirected', idlType.boolean),

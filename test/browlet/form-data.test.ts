@@ -180,7 +180,7 @@ describe('XMLHttpRequest FormData projection', () => {
     const context = getRealmBindings(getRelevantRealm(window)).context;
     const implementation = context.getImplementation(formData, FormDataImpl);
     if (!implementation) throw new Error('Value is not FormData');
-    const entries = FormDataImpl.getEntryList(implementation);
+    const entries = implementation.getEntryList();
 
     expect(entries).toHaveLength(1);
     expect(entries[0]![0]).toBe('file');

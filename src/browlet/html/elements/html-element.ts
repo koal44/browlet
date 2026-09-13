@@ -1,7 +1,4 @@
-import {
-  defineElementInterface, type ElementCreationContext, ElementImpl,
-  type LinkStyleInit,
-} from '../../dom/nodes/element';
+import { defineElementInterface, ElementImpl } from '../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   defineIncludes, defineInterface,
@@ -53,17 +50,9 @@ import type { CSSStyleDeclarationImpl } from '../../../stylelet/cssom/declaratio
  */
 export class HTMLElementImpl
   extends withHTMLElementStub(ElementImpl)
-  implements HTMLElement
 {
-  constructor(
-    context: ElementCreationContext,
-    linkStyle?: LinkStyleInit,
-  ) {
-    super(context, linkStyle);
-  }
-
   get style(): CSSStyleDeclarationImpl {
-    return ElementImpl.getInlineStyle(this);
+    return this.getInlineStyle();
   }
 }
 

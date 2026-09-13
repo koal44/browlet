@@ -4,13 +4,44 @@ import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import {
-  defineInterface, definePartialInterface, idlType, integer,
+  defineInterface, definePartialInterface, idlType, impl, integer,
   type AttributeMember, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/declaration/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { createBindings } from '../../src/web-idl/registration';
 
 describe('Web IDL global platform objects', () => {
+  it('lets projected operations call inherited internal instance methods', () => {
+    class Base {
+      #value = 0;
+
+      nextValue(): number {
+        return ++this.#value;
+      }
+    }
+
+    class TestGlobalImpl extends Base {
+      read(): number {
+        return this.nextValue();
+      }
+    }
+
+    const definition = defineInterface({
+      name: 'TestGlobal',
+      exposed: ['Window'],
+      extendedAttributes: [identifier('Global', 'TestGlobal')],
+      implementation: impl(TestGlobalImpl),
+      members: [operation('read', idlType.long)],
+    });
+    const binding = createBindings([definition]).register(new Realm());
+    const global = binding.projectGlobalObject(new TestGlobalImpl(), 'TestGlobal');
+
+    expect(call(global, 'read', global)).toBe(1);
+    expect(call(global, 'read', global)).toBe(2);
+    expect(Reflect.has(global, 'nextValue')).toBe(false);
+  });
+
   it('projects members and named properties at their specified levels', () => {
     const baseMethod = operation('baseMethod', idlType.DOMString);
     const title = {

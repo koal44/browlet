@@ -30,7 +30,7 @@ export class FileListImpl {
     return this.#files[Symbol.iterator]();
   }
 
-  // Owner operations. These are not members of the projected FileList.
+  // -- Internal operations ----------------------------------------------
 
   add(file: FileImpl): void {
     this.#files.push(file);

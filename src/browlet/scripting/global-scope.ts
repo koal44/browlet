@@ -100,13 +100,10 @@ export class WindowOrWorkerGlobalScopeMixin {
     return this.#structuredClone(value, options.transfer ?? []);
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static setAssociatedDocument(
-    mixin: WindowOrWorkerGlobalScopeMixin,
-    document: DocumentImpl,
-  ): void {
-    mixin.#timers.setAssociatedDocument(document);
+  setAssociatedDocument(document: DocumentImpl): void {
+    this.#timers.setAssociatedDocument(document);
   }
 }
 

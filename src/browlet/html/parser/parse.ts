@@ -1,5 +1,5 @@
 import {
-  createDocument, type DocumentConstructionOptions, DocumentImpl,
+  createDocument, type DocumentImpl, type DocumentConstructionOptions,
 } from '../../dom/nodes/document';
 import { asDocument } from '../../stubs';
 import { HTMLTreeAdapter } from './tree-adapter';
@@ -9,7 +9,7 @@ export function parseHTMLDocument(
   options: DocumentConstructionOptions = {},
 ): DocumentImpl & Document {
   const document = createDocument(options);
-  DocumentImpl.setType(document, 'html');
-  DocumentImpl.setContentType(document, 'text/html');
+  document.setType('html');
+  document.setContentType('text/html');
   return asDocument(new HTMLTreeAdapter(document).parse(source));
 }

@@ -9,6 +9,7 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: [
+            'test/lint/**/*.test.mjs',
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/**/*.test.ts',
             'test/js-engine/**/*.test.ts',

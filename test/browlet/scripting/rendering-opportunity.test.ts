@@ -6,9 +6,7 @@ import {
 import {
   createNewTopLevelTraversable, type Navigable,
 } from '../../../src/browlet/browsing/navigable';
-import {
-  EventLoop, type EventLoopOptions,
-} from '../../../src/browlet/scripting/event-loop';
+import { type EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
 import {
   type RenderingOpportunityHost, type RenderingUpdateHooks,
   type RenderingUpdatePhase, renderingUpdatePhases, WindowRenderingProducer,
@@ -53,8 +51,7 @@ describe('Window rendering producer', () => {
 
     expect(phases).toEqual([]);
     expect(agent.eventLoop.lastRenderOpportunityTime).toBe(frameTimestamp);
-    expect(EventLoop.getTaskQueue(
-      agent.eventLoop,
+    expect(agent.eventLoop.getTaskQueue(
       renderingTaskSource,
     ).size).toBe(1);
 
@@ -128,8 +125,7 @@ describe('Window rendering producer', () => {
     producer.stop();
     manualHost.signal([navigable]);
 
-    expect(EventLoop.getTaskQueue(
-      agent.eventLoop,
+    expect(agent.eventLoop.getTaskQueue(
       renderingTaskSource,
     ).size).toBe(0);
   });

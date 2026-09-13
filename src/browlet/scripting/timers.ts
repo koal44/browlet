@@ -1,8 +1,6 @@
-import { DocumentImpl } from '../dom/nodes/document';
+import type { DocumentImpl } from '../dom/nodes/document';
 import type { Duration } from '../performance/clock';
-import {
-  createTaskSource, EventLoop, type Task,
-} from './event-loop';
+import { createTaskSource, type EventLoop, type Task } from './event-loop';
 import { queueGlobalTask } from './tasks';
 
 export const timerTaskSource = createTaskSource('timer');
@@ -55,11 +53,10 @@ export class GlobalTimers {
     this.#stopObservingDocument?.();
     this.#stopObservingDocument = null;
     this.#setFullyActive(false);
-    this.#stopObservingDocument = DocumentImpl.observeFullyActiveState(
-      document,
+    this.#stopObservingDocument = document.observeFullyActiveState(
       (fullyActive) => { this.#setFullyActive(fullyActive); },
     );
-    this.#setFullyActive(DocumentImpl.isFullyActive(document));
+    this.#setFullyActive(document.isFullyActive());
   }
 
   runStepsAfterTimeout(
@@ -204,7 +201,7 @@ export class GlobalTimers {
       }
       this.#schedule(timer);
     }
-    EventLoop.notifyTaskRunnabilityChanged(this.#eventLoop);
+    this.#eventLoop.notifyTaskRunnabilityChanged();
   }
 
   #schedule(timer: ActiveTimer): void {

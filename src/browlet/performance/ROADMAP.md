@@ -6,10 +6,11 @@ observability feature.
 ## Present
 
 - `clock.ts` owns the wall and monotonic clocks, unsafe and coarsened moments,
-  clock-neutral durations, and their arithmetic (High Resolution Time §3).
-- `high-resolution-time.ts` owns isolation-sensitive coarsening, the estimated
-  monotonic Unix epoch, relative and shared time, and environment-settings
-  time origins (High Resolution Time §§4–6).
+  clock-neutral durations, and their arithmetic. Unsafe moments coarsen into
+  Moments; arithmetic returns new values and never moves an existing moment.
+- `high-resolution-time.ts` owns the estimated monotonic Unix epoch, relative
+  and shared time, and environment-settings time origins. It selects the
+  isolation capability passed to `UnsafeMoment.coarsen()`.
 - `performance.ts` owns the `DOMHighResTimeStamp` and `EpochTimeStamp`
   declarations, `Performance`, and the `WindowOrWorkerGlobalScope`
   `performance` contribution (High Resolution Time §§5–8).

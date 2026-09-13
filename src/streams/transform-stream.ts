@@ -554,12 +554,10 @@ export class GenericTransformStreamMixin {
     return this.#transform.writable;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal methods -------------------------------------------------
 
-  static getAssociatedTransform(
-    stream: GenericTransformStreamMixin,
-  ): TransformStreamImpl {
-    return stream.#transform;
+  getAssociatedTransform(): TransformStreamImpl {
+    return this.#transform;
   }
 }
 

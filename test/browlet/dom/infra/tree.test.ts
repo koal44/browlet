@@ -68,7 +68,7 @@ describe('TreeNode', () => {
     expect(moved.previousSibling).toBe(before);
     expect(moved.nextSibling).toBeNull();
 
-    TreeNode.remove(moved);
+    moved.removeFromTree();
 
     expect(moved.parent).toBeNull();
     expect(moved.previousSibling).toBeNull();

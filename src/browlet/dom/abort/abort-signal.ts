@@ -53,6 +53,44 @@ export class AbortSignalImpl extends EventTargetImpl
     this.#retention = getAbortSignalRetention(global);
   }
 
+  // Binding supplies each static factory with a fresh signal in its realm.
+  static abort(
+    signal: AbortSignalImpl,
+    reason: unknown = undefined,
+  ): AbortSignalImpl {
+    signal.#setAbortReason(
+      reason === undefined ? signal.#createAbortError() : reason,
+    );
+    return signal;
+  }
+
+  static timeout(
+    signal: AbortSignalImpl,
+    milliseconds: number,
+  ): AbortSignalImpl {
+    runStepsAfterTimeout(
+      signal.#global,
+      'AbortSignal-timeout',
+      milliseconds,
+      () => {
+        queueGlobalTask(
+          timerTaskSource,
+          signal.#global,
+          () => signal.signalAbort(signal.#createException(domExceptionName.timeout)),
+        );
+      },
+    );
+    return signal;
+  }
+
+  static any(
+    signal: AbortSignalImpl,
+    signals: readonly AbortSignalImpl[],
+  ): AbortSignalImpl {
+    signal.#initializeDependent(signals);
+    return signal;
+  }
+
   get aborted(): boolean {
     return this.#reason !== undefined;
   }
@@ -70,17 +108,19 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   throwIfAborted(): void {
-    if (this.#isAborted()) throw this.#reason;
+    if (this.aborted) throw this.#reason;
   }
+
+  // -- Internal methods -------------------------------------------------
 
   addAlgorithm(
     algorithm: () => void,
   ): AbortAlgorithmHandle | null {
-    if (this.#isAborted()) return null;
+    if (this.aborted) return null;
 
     const handle = new AbortAlgorithmHandleImpl(this, algorithm);
     this.#abortAlgorithms.add(handle);
-    this.#updateRetention();
+    this.updateRetention();
     return handle;
   }
 
@@ -88,111 +128,52 @@ export class AbortSignalImpl extends EventTargetImpl
     if (!this.#abortAlgorithms.delete(handle)) return;
 
     handle.detach();
-    this.#updateRetention();
+    this.updateRetention();
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static abort(
-    signal: AbortSignalImpl,
-    reason: unknown = undefined,
-  ): AbortSignalImpl {
-    AbortSignalImpl.createAborted(signal, reason);
-    return signal;
+  updateRetention(): void {
+    this.#retention.update(this, this.#shouldRetain());
   }
 
-  static timeout(
-    signal: AbortSignalImpl,
-    milliseconds: number,
-  ): AbortSignalImpl {
-    runStepsAfterTimeout(
-      signal.#global,
-      'AbortSignal-timeout',
-      milliseconds,
-      () => {
-        queueGlobalTask(
-          timerTaskSource,
-          signal.#global,
-          () => AbortSignalImpl.signalTimeout(signal),
-        );
-      },
-    );
-    return signal;
-  }
+  signalAbort(reason: unknown = undefined): void {
+    if (this.aborted) return;
 
-  static any(
-    signal: AbortSignalImpl,
-    signals: readonly AbortSignalImpl[],
-  ): AbortSignalImpl {
-    return AbortSignalImpl.createDependent(signals, () => signal);
-  }
-
-  static createDependent(
-    signals: readonly AbortSignalImpl[],
-    create: () => AbortSignalImpl,
-  ): AbortSignalImpl {
-    const result = create();
-
-    for (const signal of signals) {
-      if (signal.#isAborted()) {
-        result.#setAbortReason(signal.#reason);
-        return result;
-      }
-    }
-
-    result.#dependent = true;
-    for (const signal of signals) {
-      if (signal.#dependent) {
-        for (const source of signal.#sourceSignals.values()) {
-          result.#dependOn(source);
-        }
-      } else {
-        result.#dependOn(signal);
-      }
-    }
-    result.#updateRetention();
-    return result;
-  }
-
-  static createAborted(
-    signal: AbortSignalImpl,
-    reason: unknown,
-  ): void {
-    signal.#setAbortReason(
-      reason === undefined ? signal.#createAbortError() : reason,
-    );
-  }
-
-  static updateRetention(signal: AbortSignalImpl): void {
-    signal.#updateRetention();
-  }
-
-  static signalAbort(
-    signal: AbortSignalImpl,
-    reason: unknown = undefined,
-  ): void {
-    if (signal.#isAborted()) return;
-
-    signal.#setAbortReason(
-      reason === undefined ? signal.#createAbortError() : reason,
+    this.#setAbortReason(
+      reason === undefined ? this.#createAbortError() : reason,
     );
     const dependents: AbortSignalImpl[] = [];
-    for (const dependent of signal.#dependentSignals.values()) {
-      if (dependent.#isAborted()) continue;
+    for (const dependent of this.#dependentSignals.values()) {
+      if (dependent.aborted) continue;
 
-      dependent.#setAbortReason(signal.#reason);
+      dependent.#setAbortReason(this.#reason);
       dependents.push(dependent);
     }
 
-    signal.#runAbortSteps();
+    this.#runAbortSteps();
     for (const dependent of dependents) dependent.#runAbortSteps();
   }
 
-  static signalTimeout(signal: AbortSignalImpl): void {
-    AbortSignalImpl.signalAbort(
-      signal,
-      signal.#createException(domExceptionName.timeout),
-    );
+  // -- Private ----------------------------------------------------------
+
+  #initializeDependent(signals: readonly AbortSignalImpl[]): void {
+    for (const signal of signals) {
+      if (signal.aborted) {
+        this.#setAbortReason(signal.#reason);
+        return;
+      }
+    }
+
+    this.#dependent = true;
+    for (const signal of signals) {
+      if (signal.#dependent) {
+        for (const source of signal.#sourceSignals.values()) {
+          this.#dependOn(source);
+        }
+      } else {
+        this.#dependOn(signal);
+      }
+    }
+    this.updateRetention();
   }
 
   #createAbortError(): DOMException {
@@ -214,10 +195,6 @@ export class AbortSignalImpl extends EventTargetImpl
     source.#dependentSignals.add(this);
   }
 
-  #isAborted(): boolean {
-    return this.#reason !== undefined;
-  }
-
   #runAbortSteps(): void {
     for (const handle of [...this.#abortAlgorithms]) {
       if (this.#abortAlgorithms.has(handle)) handle.run();
@@ -230,7 +207,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
   #setAbortReason(reason: unknown): void {
     this.#reason = reason;
-    this.#updateRetention();
+    this.updateRetention();
   }
 
   #settle(): void {
@@ -239,21 +216,17 @@ export class AbortSignalImpl extends EventTargetImpl
     }
     this.#sourceSignals.clear();
     this.#dependentSignals.clear();
-    this.#updateRetention();
+    this.updateRetention();
   }
 
   #shouldRetain(): boolean {
-    return !this.#isAborted() &&
+    return !this.aborted &&
       this.#dependent &&
       this.#sourceSignals.hasValue() &&
       (
         this.#abortAlgorithms.size > 0 ||
-        EventTargetImpl.hasEventListener(this, 'abort')
+        this.hasEventListener('abort')
       );
-  }
-
-  #updateRetention(): void {
-    this.#retention.update(this, this.#shouldRetain());
   }
 }
 
@@ -267,38 +240,30 @@ export const abortSignalIDL = defineInterface({
     constructWith: ['current-global'],
   }),
   members: [
-    op('abort', reference('AbortSignal'), [
-      arg('reason', idlType.any, { optional: true }),
-    ], {
-      ...invokeWith(AbortSignalImpl),
-      static: true,
-      ...xattr('NewObject'),
-    }),
-    op('timeout', reference('AbortSignal'), [
-      arg(
-        'milliseconds',
-        idlType.unsignedLongLong,
-        xattr('EnforceRange'),
-      ),
-    ], {
-      ...invokeWith(AbortSignalImpl),
-      static: true,
-      ...xattr(
-        ['Exposed', ['Window', 'Worker']],
-        'NewObject',
-      ),
-    }),
-    op('any', reference('AbortSignal'), [
-      arg(
-        'signals',
-        sequence(reference('AbortSignal')),
-        resolveArgs(AbortSignalImpl),
-      ),
-    ], {
-      ...invokeWith(AbortSignalImpl),
-      static: true,
-      ...xattr('NewObject'),
-    }),
+    op('abort', reference('AbortSignal'),
+      [arg('reason', idlType.any, { optional: true })],
+      {
+        ...invokeWith(AbortSignalImpl),
+        static: true,
+        ...xattr('NewObject'),
+      },
+    ),
+    op('timeout', reference('AbortSignal'),
+      [arg('milliseconds', idlType.unsignedLongLong, xattr('EnforceRange'))],
+      {
+        ...invokeWith(AbortSignalImpl),
+        static: true,
+        ...xattr(['Exposed', ['Window', 'Worker']], 'NewObject'),
+      },
+    ),
+    op('any', reference('AbortSignal'),
+      [arg('signals', sequence(reference('AbortSignal')), resolveArgs(AbortSignalImpl))],
+      {
+        ...invokeWith(AbortSignalImpl),
+        static: true,
+        ...xattr('NewObject'),
+      },
+    ),
     roAttr('aborted', idlType.boolean),
     roAttr('reason', idlType.any),
     op('throwIfAborted', idlType.undefined),
@@ -398,7 +363,7 @@ function getAbortSignalRetention(
 const abortSignalEventTargetVirtuals: EventTargetVirtuals = {
   eventListenerListChanged(target, type) {
     if (type === 'abort') {
-      AbortSignalImpl.updateRetention(target as AbortSignalImpl);
+      (target as AbortSignalImpl).updateRetention();
     }
   },
 };

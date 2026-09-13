@@ -6,14 +6,7 @@ import { bind, impl } from '../../../web-idl/index';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import type { ElementImpl } from './element';
 
-export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl>
-  extends Array<T>
-  implements HTMLCollectionOf<T>
-{
-  static get [Symbol.species](): ArrayConstructor {
-    return Array;
-  }
-
+export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl> extends Array<T> {
   readonly #collect: (() => Iterable<T>) | undefined;
   #refreshing = false;
 
@@ -21,6 +14,10 @@ export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl>
     super();
     this.#collect = collect;
     this.refresh();
+  }
+
+  static get [Symbol.species](): ArrayConstructor {
+    return Array;
   }
 
   item(index: number): T | null {
@@ -100,12 +97,12 @@ export const htmlCollectionIDL = defineInterface({
         { unsupportedValue: null },
       ),
     ),
-    op('namedItem', nullable(reference('Element')), [
-      arg('name', idlType.DOMString),
-    ], namedGetter(
-      (collection: HTMLCollectionImpl) =>
-        collection.getSupportedPropertyNames(),
-    )),
+    op('namedItem', nullable(reference('Element')),
+      [arg('name', idlType.DOMString)],
+      namedGetter(
+        (collection: HTMLCollectionImpl) => collection.getSupportedPropertyNames(),
+      ),
+    ),
   ],
 });
 

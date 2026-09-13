@@ -1,6 +1,6 @@
-import { DocumentImpl } from '../dom/nodes/document';
+import type { DocumentImpl } from '../dom/nodes/document';
 import {
-  BrowsingContext, createNewTopLevelBrowsingContextAndDocument,
+  createNewTopLevelBrowsingContextAndDocument, type BrowsingContext,
 } from './browsing-context';
 import {
   createDocumentState, createSessionHistoryEntry, type DocumentState,
@@ -32,12 +32,12 @@ export class Navigable {
     if (document === null) {
       this.#activeSessionHistoryEntry = entry;
       if (previousDocument !== null) {
-        DocumentImpl.notifyFullyActiveStateChanged(previousDocument);
+        previousDocument.notifyFullyActiveStateChanged();
       }
       return;
     }
 
-    const browsingContext = DocumentImpl.getBrowsingContext(document);
+    const browsingContext = document.getBrowsingContext();
     if (browsingContext === null) {
       throw new Error('An active Document needs a browsing context');
     }
@@ -49,12 +49,12 @@ export class Navigable {
     }
 
     this.#activeSessionHistoryEntry = entry;
-    BrowsingContext.setNavigable(browsingContext, this);
+    browsingContext.setNavigable(this);
     if (previousDocument !== document) {
       if (previousDocument !== null) {
-        DocumentImpl.notifyFullyActiveStateChanged(previousDocument);
+        previousDocument.notifyFullyActiveStateChanged();
       }
-      DocumentImpl.notifyFullyActiveStateChanged(document);
+      document.notifyFullyActiveStateChanged();
     }
   }
 
@@ -65,11 +65,28 @@ export class Navigable {
   get activeBrowsingContext(): BrowsingContext | null {
     const document = this.activeDocument;
     if (document === null) return null;
-    return DocumentImpl.getBrowsingContext(document);
+    return document.getBrowsingContext();
   }
 
   get activeWindow(): WindowImpl | null {
     return this.activeBrowsingContext?.activeWindow ?? null;
+  }
+
+  initialize(documentState: DocumentState, parent: Navigable | null = null): void {
+    if (documentState.document === null) {
+      throw new Error('A navigable must be initialized with a Document');
+    }
+    if (this instanceof TopLevelTraversable && parent !== null) {
+      throw new Error('A top-level traversable must have a null parent');
+    }
+
+    const entry = createSessionHistoryEntry(documentState);
+    this.currentSessionHistoryEntry = entry;
+    this.activeSessionHistoryEntry = entry;
+    this.parent = parent;
+
+    // TODO(HTML page visibility): Set the Document's initial visibility state
+    // to the traversable navigable's system visibility state.
   }
 
   allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
@@ -97,27 +114,6 @@ export class TopLevelTraversable extends TraversableNavigable {
  */
 export class SessionHistoryTraversalQueue {}
 
-export function initializeNavigable(
-  navigable: Navigable,
-  documentState: DocumentState,
-  parent: Navigable | null = null,
-): void {
-  if (documentState.document === null) {
-    throw new Error('A navigable must be initialized with a Document');
-  }
-  if (navigable instanceof TopLevelTraversable && parent !== null) {
-    throw new Error('A top-level traversable must have a null parent');
-  }
-
-  const entry = createSessionHistoryEntry(documentState);
-  navigable.currentSessionHistoryEntry = entry;
-  navigable.activeSessionHistoryEntry = entry;
-  navigable.parent = parent;
-
-  // TODO(HTML page visibility): Set the Document's initial visibility state
-  // to the traversable navigable's system visibility state.
-}
-
 export function createNewTopLevelTraversable(
   userAgent: UserAgent,
   opener: BrowsingContext | null,
@@ -135,13 +131,13 @@ export function createNewTopLevelTraversable(
   const documentState = createDocumentState(document);
   documentState.initiatorOrigin = opener === null
     ? null
-    : DocumentImpl.getOrigin(document);
-  documentState.origin = DocumentImpl.getOrigin(document);
+    : document.getOrigin();
+  documentState.origin = document.getOrigin();
   documentState.navigableTargetName = targetName;
-  documentState.aboutBaseURL = DocumentImpl.getAboutBaseURL(document);
+  documentState.aboutBaseURL = document.getAboutBaseURL();
 
   const traversable = new TopLevelTraversable();
-  initializeNavigable(traversable, documentState);
+  traversable.initialize(documentState);
   const initialHistoryEntry = traversable.activeSessionHistoryEntry;
   initialHistoryEntry.step = 0;
   traversable.sessionHistoryEntries.push(initialHistoryEntry);

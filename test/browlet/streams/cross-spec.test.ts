@@ -48,8 +48,7 @@ describe('Streams operations for other specifications', () => {
     transform.setUp(() => undefined);
     const generic = new GenericTransformStreamMixin(transform);
 
-    expect(GenericTransformStreamMixin.getAssociatedTransform(generic))
-      .toBe(transform);
+    expect(generic.getAssociatedTransform()).toBe(transform);
     expect(generic.readable).toBe(transform.readable);
     expect(generic.writable).toBe(transform.writable);
   });

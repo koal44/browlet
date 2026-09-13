@@ -44,6 +44,23 @@ describe('Browlet URL bindings', () => {
     expect([...sequence]).toEqual([['1', '2']]);
   });
 
+  it('exposes pathname and search as live URL attributes', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const URL_ = getConstructor(browlet, 'URL') as unknown as typeof URL;
+    const url = new URL_('https://example.test/before?a=1');
+
+    expect(url.pathname).toBe('/before');
+    expect(url.search).toBe('?a=1');
+
+    url.pathname = '/after';
+    url.search = '?b=2';
+
+    expect(url.pathname).toBe('/after');
+    expect(url.search).toBe('?b=2');
+    expect(url.href).toBe('https://example.test/after?b=2');
+    expect([...url.searchParams]).toEqual([['b', '2']]);
+  });
+
   it('keeps the same projected searchParams object while URLs mutate', () => {
     const browlet = new Browlet({ route: () => '' });
     const URL_ = getConstructor(browlet, 'URL') as unknown as typeof URL;

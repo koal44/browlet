@@ -132,19 +132,15 @@ export const locationIDL = defineInterface({
       stringifier: true,
     }),
     roAttr('origin', idlType.USVString, xattr('LegacyUnforgeable')),
-    ...[
-      'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash',
-    ].map((name) => attr(
-      name,
-      idlType.USVString,
-      xattr('LegacyUnforgeable'),
-    )),
-    ...['assign', 'replace'].map((name) => op(
-      name,
-      idlType.undefined,
-      [arg('url', idlType.USVString)],
-      xattr('LegacyUnforgeable'),
-    )),
+    attr('protocol', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('host', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('hostname', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('port', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('pathname', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('search', idlType.USVString, xattr('LegacyUnforgeable')),
+    attr('hash', idlType.USVString, xattr('LegacyUnforgeable')),
+    op('assign', idlType.undefined, [arg('url', idlType.USVString)], xattr('LegacyUnforgeable')),
+    op('replace', idlType.undefined, [arg('url', idlType.USVString)], xattr('LegacyUnforgeable')),
     op('reload', idlType.undefined, [], xattr('LegacyUnforgeable')),
   ],
 });

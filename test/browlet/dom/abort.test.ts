@@ -418,7 +418,7 @@ describe('AbortSignal internal algorithms', () => {
     later = signal.addAlgorithm(() => { order.push('later'); });
     signal.addEventListener('abort', () => { order.push('event'); });
 
-    AbortSignalImpl.signalAbort(signal, 'reason');
+    signal.signalAbort('reason');
 
     expect(order).toEqual(['first', 'event']);
   });

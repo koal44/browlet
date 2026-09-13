@@ -1,7 +1,4 @@
-import {
-  defineElementInterface, type ElementCreationContext, ElementImpl,
-  type LinkStyleInit,
-} from '../dom/nodes/element';
+import { defineElementInterface, ElementImpl } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
 import {
   defineIncludes, defineInterface,
@@ -22,19 +19,9 @@ import type { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
  * SVGElement includes SVGElementInstance;
  * SVGElement includes HTMLOrSVGElement;
  */
-export class SVGElementImpl
-  extends withSVGElementStub(ElementImpl)
-  implements SVGElement
-{
-  constructor(
-    context: ElementCreationContext,
-    linkStyle?: LinkStyleInit,
-  ) {
-    super(context, linkStyle);
-  }
-
+export class SVGElementImpl extends withSVGElementStub(ElementImpl) {
   get style(): CSSStyleDeclarationImpl {
-    return ElementImpl.getInlineStyle(this);
+    return this.getInlineStyle();
   }
 }
 

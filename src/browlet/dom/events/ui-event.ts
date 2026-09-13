@@ -8,8 +8,6 @@ export abstract class UIEventImpl extends EventImpl {}
 export abstract class MouseEventImpl extends UIEventImpl {
   #mouseEvent = true;
 
-  // -- Friends ----------------------------------------------------------
-
   static is(value: unknown): value is MouseEventImpl {
     return EventImpl.is(value) && #mouseEvent in value;
   }

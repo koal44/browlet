@@ -1,5 +1,4 @@
 import { isomorphicDecode } from '../../js-engine/byte-string';
-
 import { utf8DecodeWithoutBOM } from '../../encoding/codecs/utf-8';
 import { FileImpl } from '../../file/index';
 import type { RuntimeContext } from '../../js-engine/index';
@@ -153,6 +152,7 @@ function isMIMETokenCharacter(character: string): boolean {
     !'()<>@,;:\\"/[]?='.includes(character);
 }
 
+/** RFC 822 §§3.3–3.4, linear whitespace and nested comments. */
 function skipWhitespaceAndComments(cursor: TextCursor): void {
   while (true) {
     cursor.consumeWhile((character) => character === ' ' || character === '\t');

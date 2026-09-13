@@ -148,7 +148,7 @@ describe('HTML multipart/form-data encoding', () => {
     const { boundary, data } = encodeMultipartFormData(entries, 'UTF-8');
     entries[1] = entry('replacement', 'different');
     entries.push(entry('later', 'entry'));
-    file.setHostMetadata('after.txt', 123);
+    file.setFileSerializationState({ name: 'after.txt', lastModified: 123 });
     file.setSerializationState({
       data: BlobData.fromBytes(isomorphicEncode('replacement')),
       type: 'text/html', snapshotState: undefined,

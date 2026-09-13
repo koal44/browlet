@@ -7,7 +7,7 @@ import {
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import type { Realm } from '../../../src/browlet/scripting/realm';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
@@ -152,8 +152,8 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = getPlatformObject(window) as Window;
   const document = createDocument(realm);
-  DocumentImpl.setBrowsingContext(document, context);
-  WindowImpl.setAssociatedDocument(window, document);
+  document.setBrowsingContext(context);
+  window.setAssociatedDocument(document);
   const url = parseURL('https://example.test/').url;
   if (!url) throw new Error('Fixture URL missing');
   setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(),

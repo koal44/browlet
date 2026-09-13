@@ -5,7 +5,6 @@ import {
 } from '../../web-idl/declaration/index';
 import { impl } from '../../web-idl/index';
 import type { EnvironmentTiming } from './high-resolution-time';
-import { implicitlyConvertDurationToTimestamp } from './clock';
 
 /*
  * typedef double DOMHighResTimeStamp;
@@ -20,7 +19,6 @@ import { implicitlyConvertDurationToTimestamp } from './clock';
  */
 export class PerformanceImpl
   extends withPerformanceStub(EventTargetImpl)
-  implements Performance
 {
   readonly #timing: EnvironmentTiming;
 
@@ -30,15 +28,11 @@ export class PerformanceImpl
   }
 
   now(): DOMHighResTimeStamp {
-    return implicitlyConvertDurationToTimestamp(
-      this.#timing.currentHighResolutionTime(),
-    );
+    return this.#timing.currentHighResolutionTime().toTimestamp();
   }
 
   get timeOrigin(): DOMHighResTimeStamp {
-    return implicitlyConvertDurationToTimestamp(
-      this.#timing.getTimeOriginTimestamp(),
-    );
+    return this.#timing.getTimeOriginTimestamp().toTimestamp();
   }
 }
 

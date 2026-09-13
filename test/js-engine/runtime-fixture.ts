@@ -1,9 +1,11 @@
+import { deserialize, serialize } from 'node:v8';
+
 import type {
   AbortControllerCapability, RuntimeContext,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 
-/** Real engine facilities; task, abort, and clone effects controlled by the unit host. */
+/** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
 export function createRuntime(realm = new TestRealm()): RuntimeContext {
   return {
     nativeLineEnding: '\n',
@@ -23,6 +25,8 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
     },
     createAbortController,
     clone: structuredClone,
+    serialize,
+    deserialize: (record): unknown => deserialize(record as Uint8Array),
   };
 }
 

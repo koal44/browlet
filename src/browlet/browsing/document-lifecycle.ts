@@ -1,6 +1,6 @@
 import { fireEvent } from '../dom/events/event-target';
-import {
-  DocumentImpl, type DocumentLoadTimingInfo,
+import type {
+  DocumentImpl, DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
 import { areSameOriginDomain } from '../../url/origin';
@@ -17,7 +17,6 @@ import type {
 } from './navigation/navigation';
 import { TopLevelTraversable } from './navigable';
 import { WindowImpl } from './window/window';
-import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
 import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
 
 export function createAndInitializeDocument(
@@ -40,9 +39,9 @@ export function createAndInitializeDocument(
 
   let window: WindowImpl;
   if (
-    DocumentImpl.isInitialAboutBlank(activeDocument) &&
+    activeDocument.isInitialAboutBlank() &&
     areSameOriginDomain(
-      DocumentImpl.getOrigin(activeDocument),
+      activeDocument.getOrigin(),
       navigationParams.origin,
     )
   ) {
@@ -85,36 +84,26 @@ export function createAndInitializeDocument(
     navigationParams.response.timingInfo.startTime,
   );
 
-  DocumentImpl.setType(document, type);
-  DocumentImpl.setContentType(document, contentType);
-  DocumentImpl.setOrigin(document, navigationParams.origin);
-  DocumentImpl.setBrowsingContext(document, browsingContext);
-  DocumentImpl.setPolicyContainer(
-    document,
-    navigationParams.policyContainer,
-  );
-  DocumentImpl.setPermissionsPolicy(document, permissionsPolicy);
-  DocumentImpl.setActiveSandboxingFlagSet(
-    document,
-    navigationParams.finalSandboxingFlagSet,
-  );
-  DocumentImpl.setOpenerPolicy(document, navigationParams.openerPolicy);
-  DocumentImpl.setLoadTimingInfo(document, loadTimingInfo);
-  DocumentImpl.setWasCreatedViaCrossOriginRedirects(
-    document,
+  document.setType(type);
+  document.setContentType(contentType);
+  document.setOrigin(navigationParams.origin);
+  document.setBrowsingContext(browsingContext);
+  document.setPolicyContainer(navigationParams.policyContainer);
+  document.setPermissionsPolicy(permissionsPolicy);
+  document.setActiveSandboxingFlagSet(navigationParams.finalSandboxingFlagSet);
+  document.setOpenerPolicy(navigationParams.openerPolicy);
+  document.setLoadTimingInfo(loadTimingInfo);
+  document.setWasCreatedViaCrossOriginRedirects(
     navigationParams.response.hasCrossOriginRedirects,
   );
-  DocumentImpl.setDuringLoadingNavigationID(document, navigationParams.id);
-  DocumentImpl.setURL(document, creationURL);
-  DocumentImpl.setCurrentDocumentReadiness(document, 'loading');
-  DocumentImpl.setAboutBaseURL(document, navigationParams.aboutBaseURL);
-  DocumentImpl.setAllowsDeclarativeShadowRoots(document, true);
-  DocumentImpl.setCustomElementRegistry(
-    document,
-    new CustomElementRegistryImpl(),
-  );
+  document.setDuringLoadingNavigationID(navigationParams.id);
+  document.setURL(creationURL);
+  document.setCurrentDocumentReadiness('loading');
+  document.setAboutBaseURL(navigationParams.aboutBaseURL);
+  document.setAllowsDeclarativeShadowRoots(true);
+  document.setCustomElementRegistry(new CustomElementRegistryImpl());
 
-  WindowImpl.setAssociatedDocument(window, document);
+  window.setAssociatedDocument(document);
   initializeDocumentAncestry(document, navigationParams);
   initializeDocumentCSP(document);
   initializeDocumentReferrer(document, navigationParams.request);
@@ -126,12 +115,12 @@ export function createAndInitializeDocument(
 export function completelyFinishLoading(
   document: DocumentImpl,
 ): void {
-  const browsingContext = DocumentImpl.getBrowsingContext(document);
+  const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
     throw new Error('A completely loaded Document needs a browsing context');
   }
   const window = browsingContext.activeWindow;
-  if (!window || WindowImpl.getAssociatedDocument(window) !== document) {
+  if (!window || window.getAssociatedDocument() !== document) {
     throw new Error('Only an active Document can finish loading');
   }
 
@@ -140,25 +129,18 @@ export function completelyFinishLoading(
   if (settings === null) {
     throw new Error('Active Window has no environment settings object');
   }
-  const now = implicitlyConvertDurationToTimestamp(
-    settings.timing.currentHighResolutionTime(),
-  );
-  const timing = DocumentImpl.getLoadTimingInfo(document);
+  const now = settings.timing.currentHighResolutionTime().toTimestamp();
+  const timing = document.getLoadTimingInfo();
   timing.domInteractiveTime = now;
   timing.domContentLoadedEventStartTime = now;
   timing.domContentLoadedEventEndTime = now;
   timing.domCompleteTime = now;
   timing.loadEventStartTime = now;
-  DocumentImpl.setCurrentDocumentReadiness(document, 'complete');
-  DocumentImpl.markReadyForPostLoadTasks(document);
+  document.setCurrentDocumentReadiness('complete');
+  document.markReadyForPostLoadTasks();
   fireEvent('load', window);
-  timing.loadEventEndTime = implicitlyConvertDurationToTimestamp(
-    settings.timing.currentHighResolutionTime(),
-  );
-  DocumentImpl.setCompletelyLoadedTime(
-    document,
-    currentCoarsenedWallTime().milliseconds,
-  );
+  timing.loadEventEndTime = settings.timing.currentHighResolutionTime().toTimestamp();
+  document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
 }
 
 function obtainBrowsingContextForNavigationResponse(
@@ -205,8 +187,8 @@ function initializeDocumentAncestry(
   // A top-level Document has no ancestor origins, so its iframe referrer
   // policy cannot affect either list.
   void navigationParams.iframeReferrerPolicy;
-  DocumentImpl.setInternalAncestorOriginObjectsList(document, []);
-  DocumentImpl.setAncestorOriginsList(document, []);
+  document.setInternalAncestorOriginObjectsList([]);
+  document.setAncestorOriginsList([]);
 }
 
 function initializeDocumentCSP(_document: DocumentImpl): void {
@@ -219,8 +201,7 @@ function initializeDocumentReferrer(
   request: NavigationRequest | null,
 ): void {
   if (request === null) return;
-  DocumentImpl.setReferrer(
-    document,
+  document.setReferrer(
     request.referrer === 'no-referrer'
       ? ''
       : serializeURL(request.referrer),

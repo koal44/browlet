@@ -9,15 +9,6 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
 {
   protected abstract readonly scriptResourceHasEverBeenEvaluated: boolean;
   protected abstract readonly eventTypesToHandle: ReadonlySet<string>;
-  protected abstract isServiceWorkerEventType(type: string): boolean;
-  protected abstract reportWarning(message: string): void;
-
-  constructor() {
-    super(ServiceWorkerGlobalScopeImpl.#eventTargetVirtuals);
-  }
-
-  // -- Virtual ----------------------------------------------------------
-
   static readonly #eventTargetVirtuals: EventTargetVirtuals = {
     addingEventListener: (target, type) => {
       (target as ServiceWorkerGlobalScopeImpl).#addingEventListener(type);
@@ -26,6 +17,20 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
       (target as ServiceWorkerGlobalScopeImpl).#removingEventListener(type);
     },
   };
+
+  constructor() {
+    super(ServiceWorkerGlobalScopeImpl.#eventTargetVirtuals);
+  }
+
+  protected abstract isServiceWorkerEventType(type: string): boolean;
+  protected abstract reportWarning(message: string): void;
+
+  // -- Internal ---------------------------------------------------------
+
+  /** DOM §2.8, legacy-obtain service worker fetch event listener callbacks. */
+  getFetchEventListenerCallbacks(): EventListenerOrEventListenerObject[] {
+    return this.getEventListenerCallbacks('fetch');
+  }
 
   // -- Private ----------------------------------------------------------
 
@@ -47,11 +52,4 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
       );
     }
   }
-}
-
-// DOM section 2.8.
-export function legacyObtainServiceWorkerFetchEventListenerCallbacks(
-  global: ServiceWorkerGlobalScopeImpl,
-): EventListenerOrEventListenerObject[] {
-  return EventTargetImpl.getEventListenerCallbacks(global, 'fetch');
 }

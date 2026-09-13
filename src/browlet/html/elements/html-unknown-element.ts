@@ -1,7 +1,5 @@
 import { HTML_NAMESPACE } from '../../../infra/index';
-import {
-  defineElementInterface, type ElementCreationContext,
-} from '../../dom/nodes/element';
+import { defineElementInterface } from '../../dom/nodes/element';
 import { defineInterface } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
 import { withHTMLUnknownElementStub } from '../../stubs';
@@ -14,13 +12,7 @@ import { HTMLElementImpl } from './html-element';
  * };
  */
 export class HTMLUnknownElementImpl
-  extends withHTMLUnknownElementStub(HTMLElementImpl)
-  implements HTMLUnknownElement
-{
-  constructor(context: ElementCreationContext) {
-    super(context);
-  }
-}
+  extends withHTMLUnknownElementStub(HTMLElementImpl) {}
 
 // -- Web IDL ------------------------------------------------------------
 

@@ -3,6 +3,7 @@ import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
+import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs';
 
 export default defineConfig(
   {
@@ -38,11 +39,15 @@ export default defineConfig(
     plugins: {
       '@typescript-eslint': tseslint.plugin,
       '@stylistic': stylistic,
+      browlet: {
+        rules: { 'web-idl-operation-layout': webIDLOperationLayout },
+      },
     },
     rules: {
       'no-console': 'off',
       'no-debugger': 'warn',
       'no-unused-vars': 'off',
+      'browlet/web-idl-operation-layout': 'error',
 
       '@typescript-eslint/no-unused-vars': [
         'error',

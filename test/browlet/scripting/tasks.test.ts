@@ -11,9 +11,8 @@ import {
   type LongTaskReporter, Task, type TaskTimingHooks,
 } from '../../../src/browlet/scripting/event-loop';
 import {
-  domManipulationTaskSource, navigationAndTraversalTaskSource,
-  networkingTaskSource, queueGlobalTask, queueTask, renderingTaskSource,
-  userInteractionTaskSource,
+  domManipulationTaskSource, navigationAndTraversalTaskSource, networkingTaskSource,
+  queueGlobalTask, renderingTaskSource, userInteractionTaskSource,
 } from '../../../src/browlet/scripting/tasks';
 import {
   createNewTopLevelTraversable,
@@ -51,10 +50,10 @@ describe('task queues', () => {
     const first = vi.fn();
     const second = vi.fn();
 
-    queueTask(source, eventLoop, null, first);
-    queueTask(source, eventLoop, null, second);
+    eventLoop.queueTask(source, null, first);
+    eventLoop.queueTask(source, null, second);
 
-    const tasks = [...EventLoop.getTaskQueue(eventLoop, source)];
+    const tasks = [...eventLoop.getTaskQueue(source)];
     expect(tasks.every((task) => task instanceof Task)).toBe(true);
     expect(tasks.map((task) => task.steps)).toEqual([first, second]);
     expect(tasks.map((task) => task.source)).toEqual([source, source]);
@@ -94,14 +93,14 @@ describe('task queues', () => {
     const firstSource = createTaskSource('same diagnostic name');
     const secondSource = createTaskSource('same diagnostic name');
 
-    queueTask(firstSource, firstLoop, null, vi.fn());
-    queueTask(secondSource, firstLoop, null, vi.fn());
-    queueTask(firstSource, secondLoop, null, vi.fn());
+    firstLoop.queueTask(firstSource, null, vi.fn());
+    firstLoop.queueTask(secondSource, null, vi.fn());
+    secondLoop.queueTask(firstSource, null, vi.fn());
 
-    expect(EventLoop.getTaskQueues(firstLoop).size).toBe(2);
-    expect(EventLoop.getTaskQueues(secondLoop).size).toBe(1);
-    expect(EventLoop.getTaskQueue(firstLoop, firstSource)).not.toBe(
-      EventLoop.getTaskQueue(secondLoop, firstSource),
+    expect(firstLoop.getTaskQueues().size).toBe(2);
+    expect(secondLoop.getTaskQueues().size).toBe(1);
+    expect(firstLoop.getTaskQueue(firstSource)).not.toBe(
+      secondLoop.getTaskQueue(firstSource),
     );
   });
 
@@ -143,14 +142,14 @@ describe('task queues', () => {
     });
     const eventLoopOptions = createEventLoopOptions();
 
-    queueTask(source, eventLoop, inactiveDocument, inactiveSteps);
-    queueTask(source, eventLoop, null, runnableSteps);
+    eventLoop.queueTask(source, inactiveDocument, inactiveSteps);
+    eventLoop.queueTask(source, null, runnableSteps);
 
     expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(true);
 
     expect(order).toEqual(['task', 'checkpoint']);
     expect(inactiveSteps).not.toHaveBeenCalled();
-    expect([...EventLoop.getTaskQueue(eventLoop, source)]
+    expect([...eventLoop.getTaskQueue(source)]
       .map((task) => task.steps)).toEqual([inactiveSteps]);
   });
 
@@ -160,14 +159,14 @@ describe('task queues', () => {
     const secondSource = createTaskSource('second');
     const first = vi.fn();
     const second = vi.fn();
-    const firstQueue = EventLoop.getTaskQueue(eventLoop, firstSource);
-    const secondQueue = EventLoop.getTaskQueue(eventLoop, secondSource);
+    const firstQueue = eventLoop.getTaskQueue(firstSource);
+    const secondQueue = eventLoop.getTaskQueue(secondSource);
     const selectTaskQueue = vi.fn(
       (queues: readonly ReadonlySet<Task>[]) => queues[1]!,
     );
 
-    queueTask(firstSource, eventLoop, null, first);
-    queueTask(secondSource, eventLoop, null, second);
+    eventLoop.queueTask(firstSource, null, first);
+    eventLoop.queueTask(secondSource, null, second);
 
     eventLoop.runTaskTurn({
       ...createEventLoopOptions(),
@@ -189,12 +188,12 @@ describe('task queues', () => {
     const steps = vi.fn();
     const eventLoopOptions = createEventLoopOptions();
 
-    queueTask(source, eventLoop, new DocumentImpl(), steps);
+    eventLoop.queueTask(source, new DocumentImpl(), steps);
 
     expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(false);
     expect(steps).not.toHaveBeenCalled();
     expect(checkpoint).not.toHaveBeenCalled();
-    expect(EventLoop.getTaskQueue(eventLoop, source).size).toBe(1);
+    expect(eventLoop.getTaskQueue(source).size).toBe(1);
   });
 
   it('clears the current task and checkpoints when task steps throw', () => {
@@ -208,7 +207,7 @@ describe('task queues', () => {
     const eventLoopOptions = createEventLoopOptions();
     const longTaskReporter = createLongTaskReporter();
 
-    queueTask(source, eventLoop, null, () => { throw error; });
+    eventLoop.queueTask(source, null, () => { throw error; });
 
     expect(() => eventLoop.runTaskTurn({
       ...eventLoopOptions,
@@ -245,8 +244,8 @@ describe('task queues', () => {
         return time;
       },
     });
-    queueTask(source, eventLoop, document, () => { order.push('task'); });
-    const [task] = EventLoop.getTaskQueue(eventLoop, source);
+    eventLoop.queueTask(source, document, () => { order.push('task'); });
+    const [task] = eventLoop.getTaskQueue(source);
     const taskTiming: TaskTimingHooks = {
       recordTaskStartTime(time, taskDocument) {
         expect(time).toBe(startTime);
@@ -286,7 +285,7 @@ describe('task queues', () => {
     const longTaskReporter = createLongTaskReporter();
     const taskTiming = createTaskTimingHooks();
 
-    queueTask(source, eventLoop, null, vi.fn());
+    eventLoop.queueTask(source, null, vi.fn());
     eventLoop.runTaskTurn({
       ...createEventLoopOptions(),
       longTaskReporter,
@@ -310,8 +309,8 @@ describe('task queues', () => {
       requestEventLoopTurn(steps) { turns.push(steps); },
     });
 
-    queueTask(source, eventLoop, null, () => { order.push('first'); });
-    queueTask(source, eventLoop, null, () => { order.push('second'); });
+    eventLoop.queueTask(source, null, () => { order.push('first'); });
+    eventLoop.queueTask(source, null, () => { order.push('second'); });
     eventLoop.start(eventLoopOptions);
 
     expect(turns).toHaveLength(1);
@@ -336,8 +335,8 @@ describe('task queues', () => {
     eventLoop.start(eventLoopOptions);
     expect(turns).toEqual([]);
 
-    queueTask(source, eventLoop, null, vi.fn());
-    queueTask(source, eventLoop, null, vi.fn());
+    eventLoop.queueTask(source, null, vi.fn());
+    eventLoop.queueTask(source, null, vi.fn());
     expect(turns).toHaveLength(1);
   });
 
@@ -347,7 +346,7 @@ describe('task queues', () => {
     const eventLoopOptions = createEventLoopOptions();
 
     eventLoop.start(eventLoopOptions);
-    queueTask(source, eventLoop, new DocumentImpl(), vi.fn());
+    eventLoop.queueTask(source, new DocumentImpl(), vi.fn());
 
     expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
   });
@@ -358,17 +357,17 @@ describe('task queues', () => {
     const options = createEventLoopOptions();
     const second = vi.fn();
 
-    queueTask(source, eventLoop, null, () => {
+    eventLoop.queueTask(source, null, () => {
       expect(() => eventLoop.runTaskTurn(options)).toThrow(
         'An event loop cannot run a task reentrantly',
       );
     });
-    queueTask(source, eventLoop, null, second);
+    eventLoop.queueTask(source, null, second);
 
     eventLoop.runTaskTurn(options);
 
     expect(second).not.toHaveBeenCalled();
-    expect(EventLoop.getTaskQueue(eventLoop, source).size).toBe(1);
+    expect(eventLoop.getTaskQueue(source).size).toBe(1);
   });
 
   it('derives a Window task destination and Document from its Realm', () => {
@@ -386,7 +385,7 @@ describe('task queues', () => {
 
     queueGlobalTask(source, window, vi.fn());
 
-    const [task] = EventLoop.getTaskQueue(requireEventLoop(window), source);
+    const [task] = requireEventLoop(window).getTaskQueue(source);
     expect(task!.document).toBe(document);
   });
 
@@ -473,7 +472,7 @@ describe('task queues', () => {
       expect(eventLoop.currentlyRunningTask).toBeNull();
     });
 
-    queueTask(source, eventLoop, null, outer);
+    eventLoop.queueTask(source, null, outer);
     eventLoop.runTaskTurn(createEventLoopOptions());
 
     expect(microtask).toHaveBeenCalledOnce();
@@ -526,7 +525,7 @@ describe('task queues', () => {
       throw new Error('Expected a complete top-level traversable');
     }
     const inactiveDocument = new DocumentImpl();
-    DocumentImpl.setBrowsingContext(inactiveDocument, browsingContext);
+    inactiveDocument.setBrowsingContext(browsingContext);
 
     expect(createTask(null).isRunnable).toBe(true);
     expect(createTask(activeDocument).isRunnable).toBe(true);

@@ -1,5 +1,4 @@
 import { isomorphicDecode, isomorphicEncode } from '../../js-engine/byte-string';
-
 import { type Encoding, encode } from '../../encoding/encodings';
 import { BlobData } from '../../file/index';
 import { percentEncodeByte } from '../../url/percent-encoding';

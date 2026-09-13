@@ -16,10 +16,7 @@ import type { HTMLCollectionImpl } from './collections';
  * };
  * DocumentFragment includes ParentNode;
  */
-export class DocumentFragmentImpl
-  extends withDocumentFragmentStub(NodeImpl)
-  implements DocumentFragment
-{
+export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
   readonly #host: ElementImpl | null;
   readonly #parentNodeMixin = new ParentNodeMixin(this);
 
@@ -52,10 +49,10 @@ export class DocumentFragmentImpl
     return this.#parentNodeMixin.childElementCount;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static getHost(fragment: DocumentFragmentImpl): ElementImpl | null {
-    return fragment.#host;
+  getHost(): ElementImpl | null {
+    return this.#host;
   }
 }
 

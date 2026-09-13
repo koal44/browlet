@@ -1,10 +1,5 @@
-import {
-  Moment, UnsafeMoment, durationFrom, monotonicClock, wallClock,
-} from './clock';
-import type { Clock, Duration } from './clock';
-
-const COARSE_RESOLUTION_MICROSECONDS = 100;
-const FINE_RESOLUTION_MICROSECONDS = 5;
+import { UnsafeMoment, monotonicClock, wallClock } from './clock';
+import type { Clock, Duration, Moment } from './clock';
 
 export class EnvironmentTiming {
   readonly #host: EnvironmentTimingHost;
@@ -21,42 +16,35 @@ export class EnvironmentTiming {
   }
 
   currentRelativeTimestamp(): Duration {
-    return durationFrom(
-      this.#host.timeOrigin,
-      this.currentMonotonicTime(),
-    );
+    return this.#host.timeOrigin.durationUntil(this.currentMonotonicTime());
   }
 
   currentMonotonicTime(): Moment {
-    return coarsenTime(
-      unsafeSharedCurrentTime(),
+    return unsafeSharedCurrentTime().coarsen(
       this.#host.crossOriginIsolatedCapability,
     );
   }
 
   currentWallTime(): Moment {
-    return coarsenTime(
-      wallClock.unsafeCurrentTime(),
+    return wallClock.unsafeCurrentTime().coarsen(
       this.#host.crossOriginIsolatedCapability,
     );
   }
 
   getTimeOriginTimestamp(): Duration {
-    return durationFrom(
-      this.#estimatedMonotonicTimeOfUnixEpoch,
+    return this.#estimatedMonotonicTimeOfUnixEpoch.durationUntil(
       this.#host.timeOrigin,
     );
   }
 
   relativeHighResolutionTime(time: UnsafeMoment): Duration {
-    return this.relativeHighResolutionCoarseTime(coarsenTime(
-      time,
+    return this.relativeHighResolutionCoarseTime(time.coarsen(
       this.#host.crossOriginIsolatedCapability,
     ));
   }
 
   relativeHighResolutionCoarseTime(coarseTime: Moment): Duration {
-    return durationFrom(this.#host.timeOrigin, coarseTime);
+    return this.#host.timeOrigin.durationUntil(coarseTime);
   }
 
   currentHighResolutionTime(): Duration {
@@ -65,7 +53,7 @@ export class EnvironmentTiming {
 }
 
 export function currentCoarsenedWallTime(): Moment {
-  return coarsenTime(wallClock.unsafeCurrentTime());
+  return wallClock.unsafeCurrentTime().coarsen();
 }
 
 export function initializeEstimatedMonotonicTimeOfUnixEpoch(
@@ -79,30 +67,13 @@ export function initializeEstimatedMonotonicTimeOfUnixEpoch(
     monotonicTime.milliseconds - wallTime.milliseconds,
   );
 
-  return coarsenTime(epochTime);
-}
-
-export function coarsenTime(
-  timestamp: UnsafeMoment,
-  crossOriginIsolatedCapability = false,
-): Moment {
-  const resolution = crossOriginIsolatedCapability
-    ? FINE_RESOLUTION_MICROSECONDS
-    : COARSE_RESOLUTION_MICROSECONDS;
-  const microseconds = timestamp.milliseconds * 1_000;
-  const coarseMicroseconds = Math.trunc(microseconds / resolution) *
-    resolution;
-
-  return new Moment(timestamp.clock, coarseMicroseconds / 1_000);
+  return epochTime.coarsen();
 }
 
 export function coarsenedSharedCurrentTime(
   crossOriginIsolatedCapability = false,
 ): Moment {
-  return coarsenTime(
-    unsafeSharedCurrentTime(),
-    crossOriginIsolatedCapability,
-  );
+  return unsafeSharedCurrentTime().coarsen(crossOriginIsolatedCapability);
 }
 
 export function unsafeSharedCurrentTime(): UnsafeMoment {

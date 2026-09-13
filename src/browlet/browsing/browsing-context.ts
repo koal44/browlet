@@ -17,8 +17,7 @@ import {
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
 import {
-  DocumentImpl, DocumentMode,
-  type DocumentLoadTimingInfo,
+  DocumentMode, type DocumentImpl, type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
@@ -29,7 +28,7 @@ import {
 } from '../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import {
-  coarsenTime, currentCoarsenedWallTime, unsafeSharedCurrentTime,
+  currentCoarsenedWallTime, unsafeSharedCurrentTime,
 } from '../performance/high-resolution-time';
 
 /*
@@ -77,32 +76,24 @@ export class BrowsingContext {
 
   get activeDocument(): DocumentImpl | null {
     const window = this.activeWindow;
-    return window ? WindowImpl.getAssociatedDocument(window) : null;
+    return window ? window.getAssociatedDocument() : null;
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static initializeWindowProxy(context: BrowsingContext, proxy: WindowProxy): void {
-    if (context.#windowProxy) throw new Error('Browsing context already has a WindowProxy');
-    context.#windowProxy = proxy;
+  initializeWindowProxy(proxy: WindowProxy): void {
+    if (this.#windowProxy) throw new Error('Browsing context already has a WindowProxy');
+    this.#windowProxy = proxy;
   }
 
-  static setGroup(
-    browsingContext: BrowsingContext,
-    group: BrowsingContextGroup | null,
-  ): void {
-    browsingContext.#group = group;
+  setGroup(group: BrowsingContextGroup | null): void {
+    this.#group = group;
   }
 
-  static setNavigable(
-    browsingContext: BrowsingContext,
-    navigable: Navigable,
-  ): void {
-    const existing = browsingContext.#navigable;
+  setNavigable(navigable: Navigable): void {
+    const existing = this.#navigable;
     if (existing !== null && existing !== navigable) {
       throw new Error('A browsing context cannot belong to two navigables');
     }
-    browsingContext.#navigable = navigable;
+    this.#navigable = navigable;
   }
 }
 
@@ -117,7 +108,7 @@ export function createNewBrowsingContextAndDocument(
   let creatorBaseURL: URLRecord | null = null;
 
   if (creator !== null) {
-    creatorOrigin = DocumentImpl.getOrigin(creator);
+    creatorOrigin = creator.getOrigin();
     creatorBaseURL = requireURLRecord(creator.baseURI);
     inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
   }
@@ -132,8 +123,7 @@ export function createNewBrowsingContextAndDocument(
   const window = new WindowImpl(new URL('about:blank'));
   const aboutBlankURL = requireURLRecord('about:blank');
   const realmExecutionContext = createWindowRealm(agent, window);
-  BrowsingContext.initializeWindowProxy(
-    browsingContext,
+  browsingContext.initializeWindowProxy(
     realmExecutionContext.realm.globalThis as WindowProxy,
   );
   const topLevelCreationURL = embedder === null
@@ -150,55 +140,43 @@ export function createNewBrowsingContextAndDocument(
     topLevelOrigin,
     createStructuredClone(realmExecutionContext.realm),
   );
-  const loadTimingInfo = createDocumentLoadTimingInfo(coarsenTime(
-    unsafeContextCreationTime,
-    settings.crossOriginIsolatedCapability,
-  ).milliseconds);
+  const loadTimingInfo = createDocumentLoadTimingInfo(
+    unsafeContextCreationTime.coarsen(settings.crossOriginIsolatedCapability).milliseconds,
+  );
   const document = createDocument(realmExecutionContext.realm);
 
-  DocumentImpl.setType(document, 'html');
-  DocumentImpl.setContentType(document, 'text/html');
-  DocumentImpl.setMode(document, DocumentMode.Quirks);
-  DocumentImpl.setOrigin(document, origin);
-  DocumentImpl.setBrowsingContext(document, browsingContext);
-  DocumentImpl.setPermissionsPolicy(document, permissionsPolicy);
-  DocumentImpl.setActiveSandboxingFlagSet(document, sandboxFlags);
-  DocumentImpl.setLoadTimingInfo(document, loadTimingInfo);
-  DocumentImpl.setIsInitialAboutBlank(document, true);
-  DocumentImpl.setAboutBaseURL(document, creatorBaseURL);
-  DocumentImpl.setAllowsDeclarativeShadowRoots(document, true);
-  DocumentImpl.setCustomElementRegistry(
-    document,
-    new CustomElementRegistryImpl(),
-  );
+  document.setType('html');
+  document.setContentType('text/html');
+  document.setMode(DocumentMode.Quirks);
+  document.setOrigin(origin);
+  document.setBrowsingContext(browsingContext);
+  document.setPermissionsPolicy(permissionsPolicy);
+  document.setActiveSandboxingFlagSet(sandboxFlags);
+  document.setLoadTimingInfo(loadTimingInfo);
+  document.setIsInitialAboutBlank(true);
+  document.setAboutBaseURL(creatorBaseURL);
+  document.setAllowsDeclarativeShadowRoots(true);
+  document.setCustomElementRegistry(new CustomElementRegistryImpl());
 
   const iframeReferrerPolicy = determineIframeElementReferrerPolicy(embedder);
-  DocumentImpl.setInternalAncestorOriginObjectsList(
-    document,
-    createInternalAncestorOriginObjectsList(
-      document,
-      iframeReferrerPolicy,
-      embedder,
-    ),
+  document.setInternalAncestorOriginObjectsList(
+    createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder),
   );
-  DocumentImpl.setAncestorOriginsList(
-    document,
-    createAncestorOriginsList(document),
-  );
+  document.setAncestorOriginsList(createAncestorOriginsList(document));
 
   if (creator !== null) {
     inheritCreatorDocumentState(document, creator);
   }
 
   if (
-    DocumentImpl.getURL(document) !== 'about:blank' ||
+    document.URL !== 'about:blank' ||
     serializeURL(settings.creationURL) !== 'about:blank'
   ) {
     throw new Error('Initial Document and environment must use about:blank');
   }
 
-  WindowImpl.setAssociatedDocument(window, document);
-  DocumentImpl.markReadyForPostLoadTasks(document);
+  window.setAssociatedDocument(document);
+  document.markReadyForPostLoadTasks();
   populateWithHTMLHeadBody(document);
   makeActive(document);
   completelyFinishLoading(document);
@@ -210,11 +188,10 @@ export function createNewBrowsingContextGroupAndDocument(
   userAgent: UserAgent,
 ): [group: BrowsingContextGroup, document: DocumentImpl] {
   const group = userAgent.createBrowsingContextGroup();
-  const [browsingContext, document] = createNewBrowsingContextAndDocument(
-    null,
-    null,
-    group,
-  );
+  const [browsingContext, document] =
+    createNewBrowsingContextAndDocument(
+      null, null, group
+    );
   group.append(browsingContext);
   return [group, document];
 }
@@ -251,7 +228,7 @@ export class BrowsingContextGroup {
     }
 
     this.browsingContextSet.add(browsingContext);
-    BrowsingContext.setGroup(browsingContext, this);
+    browsingContext.setGroup(this);
   }
 
   remove(browsingContext: BrowsingContext): void {
@@ -259,7 +236,7 @@ export class BrowsingContextGroup {
       throw new Error('The browsing context is not in this group');
     }
 
-    BrowsingContext.setGroup(browsingContext, null);
+    browsingContext.setGroup(null);
     this.browsingContextSet.delete(browsingContext);
 
     if (this.browsingContextSet.size === 0) {
@@ -383,7 +360,7 @@ function createInternalAncestorOriginObjectsList(
 function createAncestorOriginsList(
   document: DocumentImpl,
 ): readonly string[] {
-  const origins = DocumentImpl.getInternalAncestorOriginObjectsList(document);
+  const origins = document.getInternalAncestorOriginObjectsList();
   if (origins === null) {
     throw new Error('Document has no internal ancestor origin objects list');
   }
@@ -398,21 +375,9 @@ function inheritCreatorDocumentState(
 }
 
 function populateWithHTMLHeadBody(document: DocumentImpl): void {
-  const html = DocumentImpl.createElementNode(
-    document,
-    'html',
-    HTML_NAMESPACE,
-  );
-  const head = DocumentImpl.createElementNode(
-    document,
-    'head',
-    HTML_NAMESPACE,
-  );
-  const body = DocumentImpl.createElementNode(
-    document,
-    'body',
-    HTML_NAMESPACE,
-  );
+  const html = document.createElementNode('html', HTML_NAMESPACE);
+  const head = document.createElementNode('head', HTML_NAMESPACE);
+  const body = document.createElementNode('body', HTML_NAMESPACE);
 
   document.appendChild(html);
   html.appendChild(head);
@@ -427,7 +392,7 @@ function makeActive(
   if (!window) {
     throw new Error('Document relevant global object is not a Window');
   }
-  const browsingContext = DocumentImpl.getBrowsingContext(document);
+  const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
     throw new Error('Document has no browsing context');
   }
@@ -439,13 +404,10 @@ function makeActive(
 }
 
 function completelyFinishLoading(document: DocumentImpl): void {
-  if (DocumentImpl.getBrowsingContext(document) === null) {
+  if (document.getBrowsingContext() === null) {
     throw new Error('A completely loaded Document needs a browsing context');
   }
-  DocumentImpl.setCompletelyLoadedTime(
-    document,
-    currentCoarsenedWallTime().milliseconds,
-  );
+  document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
 
   // A newly-created top-level Document has no container, so the remaining
   // iframe/container load-event steps have no effect.

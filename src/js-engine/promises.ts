@@ -93,7 +93,7 @@ export class PromiseValue<T> {
     this.#promises = promises;
   }
 
-  /** Engine friend: unwrap internal settlement only while importing into a consumer. */
+  /** Import settlement into a destination, unwrapping internal payloads. */
   static import<T>(
     source: Promise<unknown> | PromiseValue<T>, promises: Promises,
     convert?: (value: unknown) => unknown,

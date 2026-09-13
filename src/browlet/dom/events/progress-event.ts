@@ -34,7 +34,7 @@ export class ProgressEventImpl extends EventImpl {
     timeStamp?: DOMHighResTimeStamp,
   ) {
     super(type, eventInitDict, timeStamp);
-    ProgressEventImpl.initialize(this, eventInitDict);
+    this.initialize(eventInitDict);
   }
 
   get lengthComputable(): boolean {
@@ -49,13 +49,12 @@ export class ProgressEventImpl extends EventImpl {
     return this.#total;
   }
 
-  static initialize(
-    event: ProgressEventImpl,
-    init: ProgressEventInitRecord,
-  ): void {
-    event.#lengthComputable = init.lengthComputable ?? false;
-    event.#loaded = init.loaded ?? 0;
-    event.#total = init.total ?? 0;
+  // -- Internal methods -------------------------------------------------
+
+  initialize(init: ProgressEventInitRecord): void {
+    this.#lengthComputable = init.lengthComputable ?? false;
+    this.#loaded = init.loaded ?? 0;
+    this.#total = init.total ?? 0;
   }
 }
 
@@ -67,8 +66,7 @@ export function fireProgressEvent(
   length: number,
 ): boolean {
   return fireEvent(name, target, ProgressEventImpl, (event) => {
-    ProgressEventImpl.initialize(
-      event as ProgressEventImpl,
+    (event as ProgressEventImpl).initialize(
       length === 0
         ? { loaded: transmitted }
         : {
@@ -79,6 +77,8 @@ export function fireProgressEvent(
     );
   });
 }
+
+// -- Web IDL ------------------------------------------------------------
 
 export const progressEventIDL = defineInterface({
   name: 'ProgressEvent',

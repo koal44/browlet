@@ -15,6 +15,10 @@ export type RuntimeContext = {
   createAbortController(): AbortControllerCapability;
   /** HTML structured cloning into the owner's realm. */
   clone(value: unknown): unknown;
+  /** HTML structured serialization; the provider owns the opaque record. */
+  serialize(value: unknown): object;
+  /** Reconstruct a serialized record in the owner's realm. */
+  deserialize(record: object): unknown;
 };
 
 export type NetworkingTasks = {

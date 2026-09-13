@@ -471,11 +471,11 @@ The ordinary two-object path is the default. Exceptions must be explicit.
   or explicitly identify `null` or `undefined` as an unsupported getter result
   when that getter is safe to call for support checks. Neither a nullable return
   type nor `length` implies which indices are supported.
-- **Global objects:** with the compatibility addon, Window has a separate
-  native platform object and retains `WindowImpl.prototype` on its implementation.
-  The plain-Node fallback still uses the implementation as its global target
-  and changes its prototype during projection. That fallback is not evidence
-  that ordinary platform objects should be self-backed.
+- **Global objects:** Window retains its implementation prototype on both
+  backends. The compatibility addon supplies a native platform object; the
+  plain-Node binding allocates a separate ordinary target with the platform
+  prototype and applies its existing immutable-prototype behavior. Projected
+  operations can call internal instance methods without exposing those methods.
 - **WindowProxy:** this is a stable exotic identity which forwards to the
   current Window platform object. It is not a second Window implementation.
 - **Native-exotic platform objects:** DOMException's Error object uses an
@@ -596,11 +596,11 @@ It records migration work, not permanent architecture.
 | Ordinary platform identity | Core registry and recursive result projection use separate implementation and platform objects | Extend the same rule to unprojected CSSOM and later interfaces |
 | Binding-world ownership | Browlet's composition root owns one main `BindingWorld` spanning its Node VM realms; it is neither Agent- nor AgentCluster-owned | Add explicit additional worlds only with an isolated-world or separate-runtime consumer |
 | Post-conversion implementation types | AbortSignal and the EventTarget signal path retain `AbortSignalImpl` | Remove remaining ambient platform types which reappear inside implementation algorithms |
-| Ambient `implements` and stubs | Removed from Window, EventTarget, Event, and CustomEvent | Audit `asDocument`, `Document & DocumentImpl`, factory overload intersections, and similar type fictions |
-| Static friends | Separate platform objects remove the need to use statics to hide or label internal operations. Blob and File use instance members for data access and serialization state | Prefer instance members for operations on one implementation; keep predicates, factories, cross-instance algorithms, and specification-level static operations. Review existing friends in bounded passes. Defer EventTarget and Window because global Window projection still replaces the implementation prototype |
+| Ambient `implements` and stubs | Removed from Window, EventTarget, Event, and CustomEvent. Node and collection classes no longer repeat ambient `implements` clauses; unfinished node stubs remain | Audit `asDocument`, `Document & DocumentImpl`, factory overload intersections, and similar type fictions |
+| Static friends | Separate platform objects remove the need to use statics to hide or label internal operations. Blob, File, Window, AbortSignal, EventTarget, Event, ProgressEvent, and the DOM node classes use instance members for implementation state and operations. Window preserves its implementation prototype on both backends | Prefer instance members for operations on one implementation; keep predicates, factories, cross-instance algorithms, and specification-level static operations. Continue reviewing existing friends in bounded passes |
 | Callback vocabulary | Callback conversion retains an adapter, original object identity, and realm | Replace temporary `SemanticFoo` and `ResolvedFoo` names with role-based `Value`, `Record`, or `Steps` names; never create callback `Impl` types |
 | Legacy collections | HTMLCollection and NamedNodeMap now have declared platform interfaces, stable projected identity, and declarative supported-name/index hooks over automatically bound getters | Review Array-backed storage and the bindings which exist only to expose Array's own `length`; keep real legacy named/indexed-property algorithms explicit |
-| Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Queuing-strategy size functions use shared declarative bindings. Promise bookkeeping and this architecture review are complete for the migrated paths | Move remaining Fetch abort context uses into bindings or integration; connect Request/Response body consumption when its slice is reached. Streams' current contracts and deferred integrations are described in [README.md](./streams/README.md) |
+| Implementation Binding Context removal | Encoding, streams, Blob reading, FileReader, and Fetch bodies receive one Runtime Context; Binding keeps conversion, callbacks, and projection. FileReader retains its final buffer; byte streams allocate through the runtime; Fetch error delivery and writer Promise identity have projected coverage. Fetch abort reasons use runtime serialization/deserialization; integration realizes fallback errors. Queuing-strategy size functions use shared declarative bindings. Promise bookkeeping and this architecture review are complete for the migrated paths | Connect Request/Response body consumption when its slice is reached. Streams' current contracts and deferred integrations are described in [README.md](./streams/README.md) |
 | Weak declaration escapes | DOM collection returns no longer use `object` | Continue replacing known platform returns declared as `object` or `any`; leave genuine Web IDL `object` and `any` alone |
 
 ## Current limits and next applications
@@ -608,7 +608,9 @@ It records migration work, not permanent architecture.
 - One implementation has one platform object per `BindingWorld`. Browlet
   currently creates one host-wide main world; isolated extension worlds or
   separate runtime instances remain future work.
-- Global Window projection remains a special self-backed host path.
+- Plain Node still cannot make the modeled WindowProxy the VM context's actual
+  top-level `this`; keeping a separate Window implementation does not change
+  that engine limitation.
 - A bare `object` or `any` result cannot be projected generically.
 - CSSOM interfaces such as `StyleSheetList`, `CSSStyleSheet`, and
   `CSSStyleDeclaration` are not yet projected. They should be migrated as one
