@@ -1,5 +1,5 @@
 import { types as nodeTypes } from 'node:util';
-import { jsRuntime } from './runtime';
+import { getNativeArrayBufferViewLengthTracking } from './runtime';
 
 export type RuntimeBuffers = {
   /** Allocate zero-initialized final storage directly in the owning realm. */
@@ -199,7 +199,7 @@ export function isLengthTrackingArrayBufferView(
   value: object,
 ): boolean {
   const name = requireBufferViewTypeName(value);
-  const native = jsRuntime.isLengthTrackingArrayBufferView(value);
+  const native = getNativeArrayBufferViewLengthTracking(value);
   if (native !== undefined) return native;
   return probeLengthTrackingArrayBufferView(value, name);
 }

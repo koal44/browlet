@@ -10,9 +10,9 @@ const { once } = require('node:events');
 const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
 
-if (compat.supportsHostHooks === false) {
-  testInWorker('host hooks report an unsupported engine without changing existing facilities', () => {
-    assert.throws(() => compat.setHostHooks({}), { code: 'ERR_HOST_HOOKS_UNAVAILABLE' });
+if (!compat.setHostHooks) {
+  testInWorker('unsupported engines omit host hooks and keep existing facilities', () => {
+    assert.equal(compat.setHostHooks, undefined);
     const handle = compat.createContextHandle();
     assert.equal(compat.runInContext('1 + 1', handle), 2);
   });
@@ -36,7 +36,7 @@ if (compat.supportsHostHooks === false) {
   });
 
   testInWorker('host hook installation returns nothing and cannot be replaced', () => {
-    assert.equal(compat.supportsHostHooks, true);
+    assert.equal(typeof compat.setHostHooks, 'function');
     assert.throws(() => compat.setHostHooks({ unknown() {} }), /Unknown host hook/);
     assert.throws(() => compat.setHostHooks({ enqueuePromiseJob: 1 }), /must be a function/);
     assert.equal(compat.setHostHooks({}), undefined);

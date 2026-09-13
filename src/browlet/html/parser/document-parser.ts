@@ -1,6 +1,6 @@
 import { finished } from 'node:stream';
 import { ParserStream } from 'parse5-parser-stream';
-import { jsRuntime, type PromiseValue, type RuntimeContext } from '../../../js-engine/index';
+import { bindAsyncContext, type PromiseValue, type RuntimeContext } from '../../../js-engine/index';
 import { DocumentImpl } from '../../dom/nodes/document';
 import type { ElementImpl } from '../../dom/nodes/element';
 import type { EventLoop } from '../../scripting/event-loop';
@@ -111,7 +111,7 @@ export class BrowletParser {
   }
 
   private queueTask(steps: () => void): void {
-    queueTask(networkingTaskSource, this.#eventLoop, this.document, jsRuntime.bindAsyncContext(steps));
+    queueTask(networkingTaskSource, this.#eventLoop, this.document, bindAsyncContext(steps));
   }
 }
 

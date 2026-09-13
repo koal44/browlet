@@ -7,8 +7,11 @@ import {
 import { Promises } from './promises';
 import { isObject } from './abstract-operations';
 import {
-  jsRuntime, type JSMicrotaskQueue,
-  type JSRuntime, type NodeContext,
+  associateContext, associateRealm, createCollectionIterator, createContext,
+  createMicrotaskQueue, detachContext, getAllocatedGlobalObject, getContextGlobal,
+  getContextPrototypeChain, makePrototypeImmutable,
+  observePromise, runInContext, runWithActiveRealm, setGlobalObject,
+  setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
 } from './runtime';
 
 /*
@@ -16,12 +19,9 @@ import {
  * this identity to add Web IDL and HTML policy.
  */
 export class JSRealm {
-  static readonly supportsGlobalPrototypeChain = jsRuntime.hasNativeGlobalObjects;
-
   readonly globalPrototypeChain: readonly object[] | undefined;
   readonly allocatedGlobalObject: GlobalObject | undefined;
   readonly intrinsics: JSIntrinsics;
-  readonly runtime: JSRuntime = jsRuntime;
   readonly promises: Promises;
   readonly #callableFunctionFactory: RealmFunctionFactory;
   readonly #context: NodeContext;
@@ -34,27 +34,24 @@ export class JSRealm {
   readonly #microtaskQueue: JSMicrotaskQueue;
 
   constructor(
-    microtaskQueue: JSMicrotaskQueue =
-      jsRuntime.createMicrotaskQueue(),
+    microtaskQueue: JSMicrotaskQueue = createMicrotaskQueue(),
     options: JSRealmOptions = {},
   ) {
     this.#microtaskQueue = microtaskQueue;
     const reuseGlobalProxyFrom = options.reuseGlobalProxyFrom === undefined
       ? undefined
       : options.reuseGlobalProxyFrom.#context;
-    this.#context = jsRuntime.createContext(
+    this.#context = createContext(
       microtaskQueue,
       reuseGlobalProxyFrom,
       options.globalPrototypeChain,
     );
-    this.globalPrototypeChain = jsRuntime.getContextPrototypeChain(this.#context);
-    this.allocatedGlobalObject = jsRuntime.getAllocatedGlobalObject(this.#context);
+    this.globalPrototypeChain = getContextPrototypeChain(this.#context);
+    this.allocatedGlobalObject = getAllocatedGlobalObject(this.#context);
     if (options.globalPrototypeChain && !this.globalPrototypeChain) {
       throw new Error('The Node backend did not allocate the requested global prototypes');
     }
-    this.#hostGlobal = jsRuntime.getContextGlobal(
-      this.#context,
-    ) as RealmGlobal;
+    this.#hostGlobal = getContextGlobal(this.#context) as RealmGlobal;
     this.#globalObject = this.#hostGlobal;
     this.#globalThis = this.#hostGlobal;
 
@@ -121,7 +118,7 @@ export class JSRealm {
     if (!iteratorPrototype) {
       throw new Error('Could not obtain the realm Iterator prototype');
     }
-    const asyncIterator = jsRuntime.runInContext(
+    const asyncIterator = runInContext(
       '(async function* () {})()',
       this.#context,
     ) as object;
@@ -234,20 +231,20 @@ export class JSRealm {
       this.intrinsics.promise.constructor,
       (promise, fulfilled, rejected) => { this.observePromise(promise, fulfilled, rejected); },
     );
-    this.#callableFunctionFactory = jsRuntime.runInContext(
+    this.#callableFunctionFactory = runInContext(
       callableFunctionFactorySource,
       this.#context,
     ) as RealmFunctionFactory;
-    this.#constructibleFunctionFactory = jsRuntime.runInContext(
+    this.#constructibleFunctionFactory = runInContext(
       constructibleFunctionFactorySource,
       this.#context,
     ) as RealmFunctionFactory;
 
-    jsRuntime.associateContext(this.#context, this);
-    jsRuntime.associateRealm(this.#hostGlobal, this);
-    jsRuntime.associateRealm(this.intrinsics.functionPrototype, this);
-    jsRuntime.associateRealm(this.intrinsics.objectPrototype, this);
-    jsRuntime.associateRealm(
+    associateContext(this.#context, this);
+    associateRealm(this.#hostGlobal, this);
+    associateRealm(this.intrinsics.functionPrototype, this);
+    associateRealm(this.intrinsics.objectPrototype, this);
+    associateRealm(
       this.intrinsics.iteration.asyncIteratorPrototype,
       this,
     );
@@ -270,11 +267,11 @@ export class JSRealm {
   }
 
   detachGlobal(): object {
-    return jsRuntime.detachContext(this.#context);
+    return detachContext(this.#context);
   }
 
   setPropertyDelegate(object: object, delegate: object): void {
-    jsRuntime.setPropertyDelegate(object, delegate);
+    setPropertyDelegate(object, delegate);
   }
 
   createFunction(
@@ -296,7 +293,7 @@ export class JSRealm {
         value: options.name,
       },
     });
-    jsRuntime.associateRealm(function_, this);
+    associateRealm(function_, this);
     return function_;
   }
 
@@ -305,7 +302,7 @@ export class JSRealm {
     if (!Reflect.setPrototypeOf(object, prototype)) {
       throw new Error('Could not set an ordinary object prototype');
     }
-    jsRuntime.associateRealm(object, this);
+    associateRealm(object, this);
     return object;
   }
 
@@ -320,7 +317,7 @@ export class JSRealm {
 
   /** Create a Map/Set-branded iterator whose steps supply each IteratorResult. */
   createCollectionIterator(kind: CollectionIteratorKind, next: () => object): object {
-    const native = jsRuntime.createCollectionIterator(this.#context, kind, next);
+    const native = createCollectionIterator(this.#context, kind, next);
     if (native !== undefined) return native;
 
     /*
@@ -470,12 +467,12 @@ export class JSRealm {
     onFulfilled: JSFunction | undefined,
     onRejected: JSFunction | undefined,
   ): void {
-    jsRuntime.observePromise(this, promise, onFulfilled, onRejected);
+    observePromise(this, promise, onFulfilled, onRejected);
   }
 
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    return jsRuntime.runWithActiveRealm(this, () =>
-      jsRuntime.runInContext(source, this.#context, {
+    return runWithActiveRealm(this, () =>
+      runInContext(source, this.#context, {
         displayErrors: false,
         filename,
         lineOffset,
@@ -509,7 +506,7 @@ export class JSRealm {
           Reflect.deleteProperty(this.#hostGlobal, key);
         }
       }
-      jsRuntime.setGlobalObject(this.#context, globalObject);
+      setGlobalObject(this.#context, globalObject);
     } else {
       /*
        * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing host
@@ -524,13 +521,13 @@ export class JSRealm {
       value: globalThis,
       writable: true,
     });
-    jsRuntime.associateRealm(globalObject, this);
-    jsRuntime.associateRealm(globalThis, this);
+    associateRealm(globalObject, this);
+    associateRealm(globalThis, this);
   }
 
   protected makeHostGlobalPrototypeImmutable(): void {
     if (this.globalPrototypeChain !== undefined) return;
-    jsRuntime.makePrototypeImmutable(this.#hostGlobal);
+    makePrototypeImmutable(this.#hostGlobal);
   }
 
   #installDefaultGlobalBindings(): void {

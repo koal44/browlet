@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { jsRuntime } from '../../../src/js-engine/index';
+import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
@@ -56,7 +56,7 @@ describe('Agent', () => {
 describe('obtainSimilarOriginWindowAgent', () => {
   it('starts each host-backed agent when the agent is created', () => {
     const eventLoopOptions = {
-      createMicrotaskQueue: vi.fn(jsRuntime.createMicrotaskQueue),
+      createMicrotaskQueue: vi.fn(createMicrotaskQueue),
       requestEventLoopTurn: vi.fn(),
       unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
     };
@@ -260,7 +260,7 @@ class TestAgent extends Agent {
 
 function createEventLoopOptions() {
   return {
-    createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
+    createMicrotaskQueue,
     requestEventLoopTurn: () => {},
     unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
   };

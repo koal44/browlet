@@ -1,7 +1,7 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
-import { jsRuntime, type PromiseValue } from '../../src/js-engine/index';
+import { createMicrotaskQueue, type PromiseValue } from '../../src/js-engine/index';
 import { createBindings } from '../../src/web-idl/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { TestRealm } from '../web-idl/test-realm';
@@ -103,7 +103,7 @@ describe('MIME Sniffing §5.2: interpreting resource metadata', () => {
 
 describe('MIME Sniffing §5.3: reading the resource header', () => {
   it('completes collection through the supplied runtime queue', async () => {
-    const queue = jsRuntime.createMicrotaskQueue();
+    const queue = createMicrotaskQueue();
     const runtime = createRuntime(new TestRealm({ microtaskQueue: queue }));
     const source = runtime.promises.withResolvers<Uint8Array | null>();
     const metadata = createResourceMetadata({ kind: 'other', mimeType: undefined });

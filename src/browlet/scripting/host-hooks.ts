@@ -1,4 +1,4 @@
-import { jsRuntime } from '../../js-engine/index';
+import { setHostHooks } from '../../js-engine/index';
 import type {
   JSJobCallback, JSJobRegistration, JSFunction,
   JSRealm,
@@ -12,9 +12,10 @@ import { runStepsAfterTimeout } from './timers';
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
 /* One HTML host installation serves all Browlet instances in this runtime. */
+let installed = false;
 export function installHostHooks(): void {
-  if (installed || !jsRuntime.supportsHostHooks) return;
-  jsRuntime.setHostHooks({
+  if (installed || !setHostHooks) return;
+  setHostHooks({
     makeJobCallback,
     callJobCallback,
     enqueuePromiseJob,
@@ -23,8 +24,6 @@ export function installHostHooks(): void {
   });
   installed = true;
 }
-
-let installed = false;
 
 type JobCallback = JSJobCallback<EnvironmentSettingsObject | null>;
 

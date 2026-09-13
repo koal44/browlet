@@ -1,4 +1,4 @@
-import { isObject, type ByteSequence } from '../js-engine/index';
+import { getAssociatedRealm, isObject, type ByteSequence } from '../js-engine/index';
 import { getDOMExceptionRequest } from './exceptions/dom-exception-core';
 import { getSimpleExceptionRequest } from '../js-engine/simple-exception';
 import type {
@@ -640,7 +640,7 @@ export class RealmBinding {
     // Web IDL's interface-object fallback uses newTarget's function realm,
     // after reading prototype. The platform object still belongs to this realm.
     try {
-      const realm = this.realm.runtime.getAssociatedRealm(newTarget);
+      const realm = getAssociatedRealm(newTarget);
       const binding = realm === this.realm ? this :
         realm && this.platformObjects.getRealmBinding(realm);
       if (!binding) {

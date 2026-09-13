@@ -1,5 +1,9 @@
 export { JSRealm, type JSRealmOptions } from './realm';
-export { jsRuntime } from './runtime';
+export { addon } from './node-addons';
+export {
+  bindAsyncContext, createMicrotaskQueue, getAssociatedRealm,
+  getNativeArrayBufferViewLengthTracking, setHostHooks,
+} from './runtime';
 export * from './abstract-operations';
 export * from './built-in-primitives';
 export * from './buffers';
@@ -19,5 +23,5 @@ export type {
 } from './realm';
 export type {
   JSHostHooks, JSJobCallback, JSJobRegistration,
-  JSMicrotaskQueue, JSRuntime,
+  JSMicrotaskQueue,
 } from './runtime';

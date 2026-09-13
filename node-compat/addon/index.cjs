@@ -17,8 +17,9 @@ if (builtFor.version !== process.versions.node || builtFor.modules !== process.v
 const native = require(join(build, 'node-compat.node'));
 const vm = require('node:vm');
 
-exports.supportsHostHooks = native.supportsHostHooks;
-exports.setHostHooks = require('./host-hooks.cjs')(native);
+if (native.installHostHooks) {
+  exports.setHostHooks = require('./host-hooks.cjs')(native);
+}
 exports.getRealm = native.getRealm;
 exports.getFunctionRealm = native.getFunctionRealm;
 exports.observePromise = native.observePromise;

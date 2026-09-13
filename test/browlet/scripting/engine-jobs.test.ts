@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
-import { jsRuntime } from '../../../src/js-engine/index';
+import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import {
@@ -87,7 +87,7 @@ describe('HTML generic and timeout jobs', () => {
 function createFixture() {
   installHostHooks();
   const options = {
-    createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
+    createMicrotaskQueue,
     requestEventLoopTurn: vi.fn(),
     unsafeSharedCurrentTime,
   };

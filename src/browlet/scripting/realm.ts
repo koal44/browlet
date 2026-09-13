@@ -1,5 +1,5 @@
 import {
-  JSRealm, jsRuntime, type GlobalObject, type JSRealmOptions,
+  JSRealm, getAssociatedRealm, type GlobalObject, type JSRealmOptions,
 } from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
@@ -194,7 +194,6 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
       realm.makeHostGlobalPrototypeImmutable();
     }
     const taskDestination = {
-      realm,
       eventLoop: realm.agent.eventLoop,
       getDocument: () => {
         const window = realm.#windowImplementation;
@@ -222,7 +221,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   }
 
   static getAssociatedRealm(value: object): Realm | undefined {
-    const realm = jsRuntime.getAssociatedRealm(value);
+    const realm = getAssociatedRealm(value);
     return realm instanceof Realm ? realm : undefined;
   }
 

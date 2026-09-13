@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../test-runtime';
 import type { JSFunction } from '../../src/js-engine/index';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
@@ -19,7 +20,7 @@ describe('interface constructor prototype fallback', () => {
     });
   }
 
-  it('follows a bound target despite a different function prototype', () => {
+  itPassesWith('functionRealms')('follows a bound target despite a different function prototype', () => {
     const { first, second, target } = createBindings();
     Reflect.set(first.realm.global, 'foreignTarget', target);
     const bound = first.realm.evaluate(
@@ -31,7 +32,7 @@ describe('interface constructor prototype fallback', () => {
     expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject('Example'));
   });
 
-  it('reads prototype once without consulting proxy prototype traps', () => {
+  itPassesWith('functionRealms')('reads prototype once without consulting proxy prototype traps', () => {
     const { first, second, target } = createBindings();
     const trace: string[] = [];
     const proxy = new Proxy(target, {

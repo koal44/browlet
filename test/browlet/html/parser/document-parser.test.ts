@@ -4,7 +4,7 @@ import { createNewTopLevelTraversable } from '../../../../src/browlet/browsing/n
 import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/high-resolution-time';
 import { networkingTaskSource, queueGlobalTask } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
-import { jsRuntime } from '../../../../src/js-engine/index';
+import { createMicrotaskQueue } from '../../../../src/js-engine/index';
 import { TreeNode } from '../../../../src/browlet/dom/infra/tree';
 
 import {
@@ -198,7 +198,7 @@ function createParserDocument() {
   const realm = getRelevantRealm(document);
   const runtime = getRealmBindings(realm).context.getRuntime();
   const options = {
-    createMicrotaskQueue: jsRuntime.createMicrotaskQueue,
+    createMicrotaskQueue,
     requestEventLoopTurn: () => {},
     unsafeSharedCurrentTime,
   };
