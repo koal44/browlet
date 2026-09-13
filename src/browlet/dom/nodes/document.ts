@@ -33,13 +33,10 @@ import {
 } from '../../browsing/policy/sandbox';
 import { asciiLower } from '../../../infra/ascii';
 import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  arg, contextValue, ctor, defineDictionary, defineIncludes, defineInterface,
-  definePartialInterface, dictMember, emptyDictionary, idlType,
-  impl, nullable, op, roAttr, reference, union,
-} from '../../../web-idl/declaration/index';
+  arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
+  dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
+  DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import { createOpaqueOrigin, type Origin } from '../../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../../url/url';
 import { AttrImpl } from './attribute';
@@ -379,7 +376,7 @@ export class DocumentImpl extends NodeImpl {
   createAttribute(localName: string): AttrImpl {
     if (!isValidAttributeLocalName(localName)) {
       throwDOMException(
-        domExceptionName.invalidCharacter,
+        DOMExceptionNames.invalidCharacter,
         `Invalid attribute local name ${JSON.stringify(localName)}`,
       );
     }
@@ -760,19 +757,21 @@ export class DocumentImpl extends NodeImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-const nodeFactory = contextValue(
-  (context: DOMNodeProjector) =>
-    createProjectedDOMNodeFactory(context),
-);
-
 export const documentIDL = defineInterface({
   name: 'Document',
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentImpl, {
-    constructWith: [nodeFactory, contextValue(
-      (context: { getRuntime(): RuntimeContext; }) => createStyleletRuntime(context.getRuntime()),
-    )],
+    constructWith: [
+      atArg(0, (ctx): DOMNodeFactory => ({
+        constructNode(implementation, argumentsList) {
+          const value = directDOMNodeFactory.constructNode(implementation, argumentsList);
+          ctx.project(implementation, value);
+          return value;
+        },
+      })),
+      atArg(1, (ctx) => createStyleletRuntime(ctx.getRuntime())),
+    ],
   }),
   members: [
     ctor(),
@@ -941,42 +940,15 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 
 export type DOMNodeFactory = {
   constructNode<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: abstract new (...argumentsList: never[]) => T,
     argumentsList: readonly unknown[],
   ): T;
 };
 
-export function createProjectedDOMNodeFactory(
-  projector: DOMNodeProjector,
-): DOMNodeFactory {
-  return {
-    constructNode(implementation, argumentsList) {
-      const value = directDOMNodeFactory.constructNode(
-        implementation,
-        argumentsList,
-      );
-      projector.project(implementation, value);
-      return value;
-    },
-  };
-}
-
-type DOMNodeProjector = {
-  project<T extends object>(
-    implementation: ImplementationConstructor<T>,
-    value: T,
-  ): object;
-};
-
-type ImplementationConstructor<T extends object> = {
-  readonly prototype: T;
-} & (abstract new (...argumentsList: never[]) => T);
-
 export const directDOMNodeFactory: DOMNodeFactory = {
-  constructNode: <T extends object>(
-    implementation: ImplementationConstructor<T>,
-    argumentsList: readonly unknown[],
-  ) => Reflect.construct(implementation, argumentsList) as T,
+  constructNode(implementation, argumentsList) {
+    return Reflect.construct(implementation, argumentsList) as InstanceType<typeof implementation>;
+  },
 };
 
 export type DocumentWriter = (markup: string) => void;

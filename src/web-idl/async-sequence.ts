@@ -3,10 +3,10 @@ import type { PromiseValue } from '../js-engine/promises';
 
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
-} from './declaration/index';
+} from './core/index';
 import type { WebIDLRealmHost } from './js-realm';
 import {
-  createPromiseValue, type IDLPromise,
+  createIDLPromise, type IDLPromise,
 } from './promise-value';
 import { defineDataProperty } from './property';
 
@@ -16,7 +16,9 @@ export type AsyncSequenceValue<T> = {
   return(reason: unknown): PromiseValue<unknown>;
 };
 
-export function createAsyncSequenceValue(
+// Project helper: retain the async-sequence record with its element type.
+// Web IDL §3.2.22 Async sequences — async_sequence<T>.
+export function createIDLAsyncSequence(
   object: object,
   elementType: WebIDLType,
   method: JSMethod,
@@ -31,6 +33,7 @@ export function createAsyncSequenceValue(
   };
 }
 
+// Web IDL §3.2.22 Async sequences — convert a JavaScript value to an async sequence.
 export function convertJavaScriptValueToAsyncSequence(
   value: unknown,
   type: AsyncSequenceType,
@@ -44,22 +47,24 @@ export function convertJavaScriptValueToAsyncSequence(
 
   const asyncMethod = getMethod(value, Symbol.asyncIterator, realm);
   if (asyncMethod) {
-    return createAsyncSequenceValue(value, type.type, asyncMethod, 'async');
+    return createIDLAsyncSequence(value, type.type, asyncMethod, 'async');
   }
   const syncMethod = getMethod(value, Symbol.iterator, realm);
   if (!syncMethod) {
     throw new realm.intrinsics.typeError('Value is not asynchronously iterable');
   }
-  return createAsyncSequenceValue(value, type.type, syncMethod, 'sync');
+  return createIDLAsyncSequence(value, type.type, syncMethod, 'sync');
 }
 
+// Web IDL §3.2.22 Async sequences — convert an async sequence to a JavaScript value.
 export function convertAsyncSequenceToJavaScript(value: unknown): object {
-  if (!isAsyncSequence(value)) {
+  if (!isIDLAsyncSequence(value)) {
     throw new Error('IDL async sequence is not an async sequence value');
   }
   return value.object;
 }
 
+// Web IDL §3.2.22.1 Iterating async sequences — open an async sequence.
 export function openAsyncSequence(
   sequence: IDLAsyncSequence,
   realm: WebIDLRealmHost,
@@ -71,6 +76,7 @@ export function openAsyncSequence(
   return { elementType: sequence.elementType, record };
 }
 
+// Web IDL §3.2.22.1 Iterating async sequences — get the next value.
 export function getAsyncIteratorNextValue(
   iterator: IDLAsyncIterator,
   realm: WebIDLRealmHost,
@@ -103,6 +109,7 @@ export function getAsyncIteratorNextValue(
   });
 }
 
+// Web IDL §3.2.22.1 Iterating async sequences — close an async iterator.
 export function closeAsyncIterator(
   iterator: IDLAsyncIterator,
   reason: unknown,
@@ -139,7 +146,8 @@ export function closeAsyncIterator(
   );
 }
 
-export function isAsyncSequence(value: unknown): value is IDLAsyncSequence {
+// Project helper: recognize our retained async-sequence value.
+export function isIDLAsyncSequence(value: unknown): value is IDLAsyncSequence {
   return isObject(value) && asyncSequenceBrand in value;
 }
 
@@ -174,6 +182,7 @@ type JSMethod = (
   ...argumentsList: unknown[]
 ) => unknown;
 
+// Project adapter for ECMAScript §7.4.3 GetIteratorFromMethod.
 function getIteratorFromMethod(
   object: object,
   method: JSMethod,
@@ -190,6 +199,7 @@ function getIteratorFromMethod(
   return { iterator, nextMethod };
 }
 
+// Project adapter for ECMAScript §27.1.5.1 CreateAsyncFromSyncIterator, supplying next and return.
 function createAsyncFromSyncIterator(
   sync: IteratorRecord,
   realm: WebIDLRealmHost,
@@ -220,6 +230,8 @@ function createAsyncFromSyncIterator(
   return { iterator, nextMethod: next };
 }
 
+// Project adapter for ECMAScript §27.1.5 Async-from-Sync Iterator Objects —
+// next, return, and AsyncFromSyncIteratorContinuation.
 function adaptSyncIteratorResult(
   sync: IteratorRecord,
   operation: 'next' | 'return',
@@ -254,12 +266,14 @@ function adaptSyncIteratorResult(
   }
 }
 
+// Project helper: react to adaptation promises without IDL value conversion.
+// Web IDL §3.2.24.1 Creating and manipulating Promises — react.
 function reactToPromise(
   promise: IDLPromise,
   realm: WebIDLRealmHost,
   fulfilled: (value: unknown) => unknown,
 ): IDLPromise {
-  const result = createPromiseValue(idlType.any, realm);
+  const result = createIDLPromise(idlType.any, realm);
   const onFulfilled = realm.createFunction(
     (_thisArgument, [value]) => {
       try {
@@ -282,20 +296,22 @@ function reactToPromise(
   return result;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — create a resolved Promise<any>.
 function createResolvedPromise(
   value: unknown,
   realm: WebIDLRealmHost,
 ): IDLPromise {
-  const promise = createPromiseValue(idlType.any, realm);
+  const promise = createIDLPromise(idlType.any, realm);
   promise.resolve(value);
   return promise;
 }
 
+// Web IDL §3.2.24.1 Creating and manipulating Promises — create a rejected Promise<any>.
 function createRejectedPromise(
   reason: unknown,
   realm: WebIDLRealmHost,
 ): IDLPromise {
-  const promise = createPromiseValue(idlType.any, realm);
+  const promise = createIDLPromise(idlType.any, realm);
   promise.reject(reason);
   return promise;
 }

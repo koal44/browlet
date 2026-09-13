@@ -1,7 +1,7 @@
-import { impl } from '../../../web-idl/index';
 import {
-  arg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
-} from '../../../web-idl/declaration/index';
+  arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
+  impl,
+} from '../../../web-idl/index';
 import { AbortSignalImpl } from './abort-signal';
 
 /*
@@ -37,7 +37,7 @@ export const abortControllerIDL = defineInterface({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {
-    constructWith: [AbortSignalImpl],
+    constructWith: [atArg(0, (ctx) => ctx.construct(AbortSignalImpl))],
   }),
   members: [
     ctor(),

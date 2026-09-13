@@ -7,7 +7,7 @@ import { RealmBinding } from '../../src/web-idl/binding';
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
@@ -16,7 +16,7 @@ import {
   uponPromiseFulfillment, uponPromiseRejection, waitForAll,
 } from '../../src/web-idl/promise';
 import {
-  convertPromiseToJavaScript, isPromiseValue, type IDLPromise,
+  convertPromiseToJavaScript, isIDLPromise, type IDLPromise,
 } from '../../src/web-idl/promise-value';
 
 describe('Web IDL promises', () => {
@@ -266,7 +266,7 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
 }
 
 function requirePromiseValue(value: unknown): IDLPromise {
-  if (!isPromiseValue(value)) throw new Error('Value is not an IDL promise');
+  if (!isIDLPromise(value)) throw new Error('Value is not an IDL promise');
   return value;
 }
 

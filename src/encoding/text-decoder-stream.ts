@@ -1,9 +1,8 @@
 import { isFixedBufferSource, type RuntimeContext } from '../js-engine/index';
-import { runtimeContext } from '../web-idl/projection';
 import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 import { TypeError } from '../js-engine/simple-exception';
 import {
   GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
@@ -80,7 +79,7 @@ export const textDecoderStreamIDL = defineInterface({
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
     constructWith: [
-      atArg(2, runtimeContext),
+      atArg(2, (ctx) => ctx.getRuntime()),
     ],
   }),
   members: [ctor([

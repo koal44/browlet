@@ -1,7 +1,6 @@
 import { toString, type RuntimeContext } from '../js-engine/index';
 import { utf8Encode } from './codecs/utf-8';
-import { runtimeContext } from '../web-idl/projection';
-import { ctor, defineIncludes, defineInterface, impl } from '../web-idl/declaration/index';
+import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type WritableStreamImpl,
@@ -72,9 +71,7 @@ export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    constructWith: [
-      runtimeContext,
-    ],
+    constructWith: [atArg(0, (ctx) => ctx.getRuntime())],
   }),
   members: [ctor()],
 });

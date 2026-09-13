@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../src/browlet/browlet';
-import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import {
   FileReaderImpl, fileReaderIDL,
 } from '../../src/browlet/integration/file/file-reader';
@@ -13,8 +13,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
 import { getBufferSourceCopy } from '../../src/js-engine/index';
-import { serializeDefinition } from '../../src/web-idl/declaration/index';
-import type { BindingContext } from '../../src/web-idl/projection';
+import { serializeDefinition, type BindingContext } from '../../src/web-idl/index';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
 
 describe('File API FileReader foundation', () => {
@@ -557,7 +556,7 @@ function createReader(context = getContext(createWindow())): FileReaderImpl {
 }
 
 function getContext(window: object): BindingContext {
-  return getRealmBindings(getRelevantRealm(window)).context;
+  return getBindingContext(getRelevantRealm(window));
 }
 
 async function read(

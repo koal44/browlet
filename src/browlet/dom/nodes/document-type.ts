@@ -1,8 +1,5 @@
 import { withDocumentTypeStub } from '../../stubs';
-import {
-  defineIncludes, defineInterface, idlType, roAttr,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+import { defineIncludes, defineInterface, idlType, impl, roAttr } from '../../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import type { DocumentImpl } from './document';

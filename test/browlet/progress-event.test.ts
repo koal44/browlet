@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import {
@@ -112,8 +112,8 @@ function requireEventTargetImplementation(
   window: object,
   target: object,
 ): EventTargetImpl {
-  const context = getRealmBindings(getRelevantRealm(window)).context;
-  const implementation = context.getImplementation(target, EventTargetImpl);
+  const context = getBindingContext(getRelevantRealm(window));
+  const implementation = context.unwrap(target, EventTargetImpl);
   if (!implementation) throw new Error('Value is not an EventTarget');
   return implementation;
 }

@@ -1,7 +1,7 @@
 import {
   arg, defineInterface, idlType, impl, indexedGetter, nullable, op, reference,
   roAttr, xattr,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 import type { FileImpl } from './file';
 
 /*

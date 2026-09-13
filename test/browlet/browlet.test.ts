@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../src/browlet/browlet';
-import { getImplementation } from '../../src/browlet/bindings';
+import { unwrap } from '../../src/browlet/bindings';
 import {
   isHTMLLinkElement,
 } from '../../src/browlet/html/elements/metadata/link';
@@ -41,7 +41,7 @@ describe('Browlet', () => {
 
     await browlet.navigate('https://example.test/path?query#fragment');
     const document = browlet.document;
-    const documentImpl = getImplementation<DocumentImpl>(
+    const documentImpl = unwrap<DocumentImpl>(
       document,
     );
 
@@ -271,7 +271,7 @@ describe('Browlet', () => {
 
     expect(fireEvent(
       'ready',
-      getImplementation<DocumentImpl>(browlet.document),
+      unwrap<DocumentImpl>(browlet.document),
     )).toBe(true);
     expect(received).toBeInstanceOf(EventConstructor);
     expect(received?.isTrusted).toBe(true);

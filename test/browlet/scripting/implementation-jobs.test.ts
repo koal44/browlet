@@ -15,19 +15,17 @@ import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scrip
 import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
-import { createBindings } from '../../../src/web-idl/registration';
-import type { BindingContext } from '../../../src/web-idl/projection';
-import type { Promises, PromiseValue } from '../../../src/js-engine/index';
 import {
-  arg, contextValue, ctor, defineCallbackFunction, defineInterface, idlType, impl, op, promise,
-  reference, roAttr,
-} from '../../../src/web-idl/declaration/index';
+  createBindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
+  promise, reference, roAttr,
+} from '../../../src/web-idl/index';
+import type { Promises, PromiseValue } from '../../../src/js-engine/index';
 
 describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    createBindings([initializationIDL]).register(realm).install(realm.global);
+    createBindingWorld([initializationIDL]).register(realm).install(realm.global);
     const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
     const unrelated = new AsyncLocalStorage<string>();
     let reported: string | undefined;
@@ -49,7 +47,7 @@ describe('implementation Promise delivery', () => {
   itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    createBindings([initializationIDL]).register(realm).install(realm.global);
+    createBindingWorld([initializationIDL]).register(realm).install(realm.global);
     const trace: string[] = [];
     browlet.expose('record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
@@ -165,7 +163,7 @@ describe('implementation Promise delivery', () => {
 function createFixture(sharedAgent = false) {
   const trace: string[] = [];
   const pending = Promise.withResolvers<string>();
-  const bindings = createBindings([operationIDL, callbackIDL]);
+  const bindings = createBindingWorld([operationIDL, callbackIDL]);
   const first = new Browlet({ route: () => '' });
   const secondWindow = sharedAgent
     ? createSiblingWindow(first)
@@ -181,7 +179,7 @@ function createFixture(sharedAgent = false) {
     const implementation = new OwnershipProbeImpl(
       name, realm.promises.import(pending.promise, String), trace, realm.promises,
     );
-    const object = binding.context.project(OwnershipProbeImpl, implementation);
+    const object = binding.project(OwnershipProbeImpl, implementation);
     expose('record', (value: string) => {
       if (value === 'author B') {
         const settings = realm.agent.eventLoop.currentlyRunningTask
@@ -280,7 +278,7 @@ class InitializationProbeImpl {
 // };
 const initializationIDL = defineInterface({
   name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl, {
-    constructWith: [contextValue((context: BindingContext) => context.promises)],
+    constructWith: [atArg(0, (ctx) => ctx.promises)],
   }),
   members: [ctor(), roAttr('ready', promise(idlType.DOMString))],
 });

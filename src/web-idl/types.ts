@@ -1,8 +1,9 @@
 import type { DefinitionAssembly } from './assembly';
 import type {
   AnnotatedType, ExtendedAttribute, UnionType, WebIDLType,
-} from './declaration/index';
+} from './core/index';
 
+// Project helper for Web IDL §2.13.33 Annotated types — associate argument and dictionary-member attributes.
 export function getTypeWithApplicableExtendedAttributes(
   type: WebIDLType,
   extendedAttributes: ExtendedAttribute[] | undefined,
@@ -25,6 +26,7 @@ export function getTypeWithApplicableExtendedAttributes(
   return { extendedAttributes: applicable, kind: 'annotated', type };
 }
 
+// Web IDL §2.13.32 Union types — flattened member types.
 export function getFlattenedMemberTypes(
   type: UnionType | AnnotatedUnionType,
   definitions: DefinitionAssembly,
@@ -49,6 +51,7 @@ export function getFlattenedMemberTypes(
   return flattenedMemberTypes;
 }
 
+// Web IDL §2.13.32 Union types — number of nullable member types.
 export function getNumberOfNullableMemberTypes(
   type: UnionType | AnnotatedUnionType,
   definitions: DefinitionAssembly,
@@ -73,6 +76,7 @@ export function getNumberOfNullableMemberTypes(
   return numberOfNullableMemberTypes;
 }
 
+// Web IDL §2.13.32 Union types — includes a nullable type (definition).
 export function includesNullableType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -83,6 +87,7 @@ export function includesNullableType(
     getNumberOfNullableMemberTypes(innerType, definitions) === 1;
 }
 
+// Web IDL §2.13.32 Union types — includes undefined (definition).
 export function includesUndefined(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -103,6 +108,7 @@ export function includesUndefined(
   return false;
 }
 
+// Project helper: follow typedefs and strip declaration annotations to inspect the underlying type.
 export function getUnannotatedType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -114,6 +120,7 @@ export function getUnannotatedType(
   return innerType;
 }
 
+// Project helper for Web IDL §2.11 Typedefs — follow type aliases in the definition assembly.
 export function resolveTypedef(
   type: WebIDLType,
   definitions: DefinitionAssembly,

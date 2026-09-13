@@ -12,7 +12,7 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 | Module | Contents |
 | --- | --- |
 | [index.ts](./index.ts) | Entry point for other subsystems; implementation exports and IDL definitions |
-| [readable-stream.ts](./readable-stream.ts) | Stream, default/byte controllers, readers, BYOB request, pipe/tee algorithms |
+| [readable-stream.ts](./readable-stream.ts) | Stream, iterator, default/byte controllers, readers, BYOB request, pipe/tee algorithms |
 | [writable-stream.ts](./writable-stream.ts) | Stream, writer, controller, write/close/abort algorithms |
 | [transform-stream.ts](./transform-stream.ts) | Stream, controller, backpressure, generic-transform mixin, readable proxy |
 | [queuing-strategy.ts](./queuing-strategy.ts) | Strategy records, extraction algorithms, Count and ByteLength interfaces |
@@ -39,7 +39,12 @@ Implementations receive converted records and callable steps. Web IDL's
 `callbackDictionary()` preserves member-access order and the original source,
 sink, or transformer as the callback receiver. Binding also projects controllers,
 adapts Promise results, and realizes exceptions. Strategy `size` functions use
-`functionResult()` and Binding's existing per-realm identity cache.
+`attrFn()` and Binding's existing per-realm identity cache.
+
+`ReadableStreamIterator` owns its reader and `preventCancel` state. Its Web IDL
+declaration names `createAsyncIterator` as the factory and exposes `return()`.
+Binding handles the author iterator's identity, overlapping calls, completion,
+and realm-owned results.
 
 Internal factories combine allocation and setup. A null source, sink, or
 transformer requests allocation for later setup; an empty record runs normal

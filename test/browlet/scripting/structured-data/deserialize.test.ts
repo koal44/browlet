@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 
 import {
-  getDOMExceptionRequest,
-} from '../../../../src/web-idl/exceptions/dom-exception-core';
-import {
-  createBindings, defineInterface, impl, xattr,
+  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
-  structuredDeserialize, type StructuredDeserializationEnvironment,
+  structuredDeserialize,
 } from '../../../../src/browlet/scripting/structured-data/deserialize';
 import {
   domExceptionCapabilities,
@@ -21,12 +20,12 @@ import {
   serializable,
 } from '../../../../src/browlet/scripting/structured-data/serializable';
 import {
-  structuredSerialize, type StructuredSerializationEnvironment,
+  structuredSerialize,
 } from '../../../../src/browlet/scripting/structured-data/serialize';
 
 describe('HTML structured deserialization', () => {
   it('reconstructs primitive values and built-ins in the target realm', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const values = sourceRealm.evaluate(`[
       undefined, null, false, -0, 2n, 'text',
       new Boolean(true), new Number(-0), Object(3n), new String('boxed'),
@@ -87,7 +86,7 @@ describe('HTML structured deserialization', () => {
   });
 
   it('reconstructs buffers and views in the target realm', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const value = sourceRealm.evaluate(`(() => {
       const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
       new Uint8Array(buffer).set([1, 2, 3, 4]);
@@ -149,8 +148,8 @@ describe('HTML structured deserialization', () => {
   });
 
   it('preserves SharedArrayBuffer backing stores within an agent cluster', () => {
-    const agentCluster = {};
-    const { source, sourceRealm, target } = createEnvironments({ agentCluster });
+    const agentCluster = new AgentCluster('concrete');
+    const { source, sourceRealm, target } = createContexts({ agentCluster });
     const buffer = sourceRealm.evaluate(
       'new SharedArrayBuffer(4)',
       'structured-deserialize-shared-buffer.js',
@@ -178,13 +177,13 @@ describe('HTML structured deserialization', () => {
     expect(growable.byteLength).toBe(8);
 
     const serialized = structuredSerialize(buffer, source);
-    const otherCluster = createEnvironments().target;
+    const otherCluster = createContexts().target;
     expectDataCloneError(() => structuredDeserialize(serialized, otherCluster));
   });
 
   it('creates SharedArrayBuffer wrappers with target-realm behavior', () => {
-    const agentCluster = {};
-    const { source, sourceRealm, target, targetRealm } = createEnvironments({
+    const agentCluster = new AgentCluster('concrete');
+    const { source, sourceRealm, target, targetRealm } = createContexts({
       agentCluster,
     });
     const buffer = sourceRealm.evaluate(
@@ -215,8 +214,8 @@ describe('HTML structured deserialization', () => {
   });
 
   itPassesWith('lengthTracking')('preserves growable SharedArrayBuffer view length tracking', () => {
-    const agentCluster = {};
-    const { source, sourceRealm, target } = createEnvironments({ agentCluster });
+    const agentCluster = new AgentCluster('concrete');
+    const { source, sourceRealm, target } = createContexts({ agentCluster });
     const value = sourceRealm.evaluate(`(() => {
       const buffer = new SharedArrayBuffer(4, { maxByteLength: 8 });
       return {
@@ -243,7 +242,7 @@ describe('HTML structured deserialization', () => {
   });
 
   it('preserves container prototypes, cycles, identity, and property shape', () => {
-    const { source, target, targetRealm } = createEnvironments();
+    const { source, target, targetRealm } = createContexts();
     const child = { value: 1 };
     const value: Record<string, unknown> = {
       array: new Array(3),
@@ -288,7 +287,7 @@ describe('HTML structured deserialization', () => {
   });
 
   it('restores native Error state with target-realm prototypes', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const errors = sourceRealm.evaluate(`[
       new Error(), new EvalError('eval'), new RangeError('range'),
       new ReferenceError('reference'), new SyntaxError('syntax'),
@@ -313,7 +312,7 @@ describe('HTML structured deserialization', () => {
   });
 
   it('restores Error cause in the target realm with graph identity', () => {
-    const { source, target, targetRealm } = createEnvironments();
+    const { source, target, targetRealm } = createContexts();
     const cause: Record<string, unknown> = { marker: 'cause' };
     const error = new TypeError('failed', { cause });
     cause.error = error;
@@ -332,7 +331,7 @@ describe('HTML structured deserialization', () => {
   });
 
   it('restores only specified DOMException interface state', () => {
-    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const { source, sourceRealm, target, targetRealm } = createContexts();
     const SourceDOMException = Reflect.get(
       sourceRealm.global,
       'DOMException',
@@ -356,6 +355,16 @@ describe('HTML structured deserialization', () => {
     });
     Reflect.set(exception, 'custom', true);
     Reflect.set(quota, 'custom', true);
+
+    for (const value of [exception, quota]) {
+      for (const property of ['name', 'message', 'quota', 'requested']) {
+        Object.defineProperty(value, property, {
+          get() {
+            throw new Error(`Serialization read the author's ${property} getter`);
+          },
+        });
+      }
+    }
 
     const exceptionClone = cloneValue(exception, source, target) as DOMException;
     const quotaClone = cloneValue(quota, source, target) as QuotaExceededError;
@@ -402,33 +411,22 @@ describe('HTML structured deserialization', () => {
         );
       },
     })];
-    const bindings = createBindings([containerIDL], { capabilities });
+    const bindings = createBindingWorld<Realm>([containerIDL], { capabilities });
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
-    const sourceRegistration = bindings.register(sourceRealm);
-    const targetRegistration = bindings.register(targetRealm);
-    const agentCluster = {};
-    const source: StructuredSerializationEnvironment = {
-      agentCluster,
-      context: sourceRegistration.context,
-      realm: sourceRealm,
-    };
-    const target: StructuredDeserializationEnvironment = {
-      agentCluster,
-      context: targetRegistration.context,
-      realm: targetRealm,
-    };
-    const original = sourceRegistration.context.createPlatformObject(containerIDL);
+    const source = bindings.register(sourceRealm);
+    const target = bindings.register(targetRealm);
+    const original = source.createPlatformObject(containerIDL);
     (original.implementation as ContainerImpl).child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);
-    const resolved = targetRegistration.context.resolvePlatformObject(clone);
+    const resolved = target.getObjectRecord(clone);
     expect(resolved?.primaryInterface.definition).toBe(containerIDL);
     expect((resolved?.implementation as ContainerImpl).child).toBe(clone);
   });
 
   it('rejects unavailable platform interfaces and reuses caller memory', () => {
-    const { target } = createEnvironments();
+    const { target } = createContexts();
     const missing: SerializedRecord = {
       type: 'platform-object',
       fields: new Map(),
@@ -443,44 +441,38 @@ describe('HTML structured deserialization', () => {
   });
 });
 
-function createEnvironments(options: {
-  agentCluster?: object;
+function createContexts(options: {
+  agentCluster?: AgentCluster;
 } = {}): {
-  source: StructuredSerializationEnvironment;
+  source: BindingContext<Realm>;
   sourceRealm: Realm;
-  target: StructuredDeserializationEnvironment;
+  target: BindingContext<Realm>;
   targetRealm: Realm;
 } {
-  const bindings = createBindings([], {
+  const bindings = createBindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   });
   const sourceRealm = new Realm({ crossOriginIsolated: true });
   const targetRealm = new Realm({ crossOriginIsolated: true });
-  const sourceRegistration = bindings.register(sourceRealm);
-  const targetRegistration = bindings.register(targetRealm);
-  sourceRegistration.install(sourceRealm.global);
-  targetRegistration.install(targetRealm.global);
-  const agentCluster = options.agentCluster ?? {};
+  const source = bindings.register(sourceRealm);
+  const target = bindings.register(targetRealm);
+  source.install(sourceRealm.global);
+  target.install(targetRealm.global);
+  const agentCluster = options.agentCluster ?? new AgentCluster('concrete');
+  agentCluster.add(sourceRealm.agent);
+  agentCluster.add(targetRealm.agent);
   return {
-    source: {
-      agentCluster,
-      context: sourceRegistration.context,
-      realm: sourceRealm,
-    },
+    source,
     sourceRealm,
-    target: {
-      agentCluster,
-      context: targetRegistration.context,
-      realm: targetRealm,
-    },
+    target,
     targetRealm,
   };
 }
 
 function cloneValue(
   value: unknown,
-  source: StructuredSerializationEnvironment,
-  target: StructuredDeserializationEnvironment,
+  source: BindingContext<Realm>,
+  target: BindingContext<Realm>,
 ): unknown {
   return structuredDeserialize(structuredSerialize(value, source), target);
 }
@@ -489,7 +481,8 @@ function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(getDOMExceptionRequest(error)).toEqual({
+    expect(InternalDOMException.is(error)).toBe(true);
+    expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',
     });

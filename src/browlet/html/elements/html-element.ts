@@ -1,9 +1,6 @@
 import { defineElementInterface, ElementImpl } from '../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../infra/index';
-import {
-  defineIncludes, defineInterface,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+import { defineIncludes, defineInterface, impl } from '../../../web-idl/index';
 import { withHTMLElementStub } from '../../stubs';
 import type { CSSStyleDeclarationImpl } from '../../../stylelet/cssom/declaration';
 

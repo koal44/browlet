@@ -1,7 +1,6 @@
-import {
-  annotated, arg, defineCallbackFunction, defineTypedef, idlType, reference,
-  union, xattr,
-} from './declaration/definition';
+import { annotated, arg, idlType, reference, union, xattr } from './core/definition';
+import { defineCallbackFunction } from './core/definitions/callback-function';
+import { defineTypedef } from './core/definitions/typedef';
 import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
@@ -10,6 +9,7 @@ import {
  * callback Function = any (any... arguments);
  */
 
+// Web IDL §4.5 Function.
 export const functionIDL = defineCallbackFunction({
   name: 'Function',
   returns: idlType.any,
@@ -20,6 +20,7 @@ export const functionIDL = defineCallbackFunction({
  * callback VoidFunction = undefined ();
  */
 
+// Web IDL §4.6 VoidFunction.
 export const voidFunctionIDL = defineCallbackFunction({
   name: 'VoidFunction',
   returns: idlType.undefined,
@@ -34,6 +35,7 @@ export const voidFunctionIDL = defineCallbackFunction({
  *          ArrayBufferView;
  */
 
+// Web IDL §4.1 ArrayBufferView.
 export const arrayBufferViewIDL = defineTypedef({
   name: 'ArrayBufferView',
   type: union(
@@ -57,6 +59,7 @@ export const arrayBufferViewIDL = defineTypedef({
  * typedef (ArrayBufferView or ArrayBuffer) BufferSource;
  */
 
+// Web IDL §4.2 BufferSource.
 export const bufferSourceIDL = defineTypedef({
   name: 'BufferSource',
   type: union(reference('ArrayBufferView'), idlType.ArrayBuffer),
@@ -67,6 +70,7 @@ export const bufferSourceIDL = defineTypedef({
  *         AllowSharedBufferSource;
  */
 
+// Web IDL §4.3 AllowSharedBufferSource.
 export const allowSharedBufferSourceIDL = defineTypedef({
   name: 'AllowSharedBufferSource',
   type: union(
@@ -76,6 +80,7 @@ export const allowSharedBufferSourceIDL = defineTypedef({
   ),
 });
 
+// Project registration list for the common definitions and exception interfaces.
 export const webIDLCommonDefinitions = [
   arrayBufferViewIDL,
   bufferSourceIDL,

@@ -14,7 +14,7 @@ import { isCallbackFunctionValue } from
 import { convertToIDL } from '../../../src/web-idl/conversion';
 import {
   defineCallbackFunction, idlType, reference,
-} from '../../../src/web-idl/declaration/index';
+} from '../../../src/web-idl/core/index';
 import { PlatformObjectRegistry } from
   '../../../src/web-idl/platform-object';
 import type { PolicyContainer } from

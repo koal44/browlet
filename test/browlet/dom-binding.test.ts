@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getImplementation, getRelevantRealm, registerRealm } from '../../src/browlet/bindings';
+import { unwrap, getRelevantRealm, registerRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
@@ -174,7 +174,7 @@ describe('Browlet DOM binding', () => {
     const document = browlet.document;
     const element = document.createElement('main');
     const attributes = element.attributes;
-    const elementImpl = getImplementation<ElementImpl>(element);
+    const elementImpl = unwrap<ElementImpl>(element);
     const uppercase = new AttrImpl(
       'UPPER',
       '',

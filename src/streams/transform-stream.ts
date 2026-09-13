@@ -1,12 +1,11 @@
 import type { RuntimeContext } from '../js-engine/runtime-context';
 import type { PromiseValue, PromiseValueCapability } from '../js-engine/promises';
 import {
-  arg, atArg, callback, callbackDictionary, ctor, defineCallbackFunction, defineDictionary,
+  arg, atArg, onError, callbackDictionary, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl,
   nullable, op, promise, roAttr, reference, xattr,
-} from '../web-idl/declaration/index';
+} from '../web-idl/index';
 import { RangeError, TypeError } from '../js-engine/simple-exception';
-import { runtimeContext } from '../web-idl/projection';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
@@ -320,7 +319,7 @@ export const transformStreamIDL = defineInterface({
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
     constructWith: [
-      atArg(3, runtimeContext),
+      atArg(3, (ctx) => ctx.getRuntime()),
     ],
   }),
   members: [
@@ -392,7 +391,7 @@ export const transformerIDL = defineDictionary({
   name: 'Transformer',
   members: [
     dictMember('start', reference('TransformerStartCallback'),
-      callback('rethrow')),
+      onError('rethrow')),
     dictMember('transform', reference('TransformerTransformCallback')),
     dictMember('flush', reference('TransformerFlushCallback')),
     dictMember('cancel', reference('TransformerCancelCallback')),

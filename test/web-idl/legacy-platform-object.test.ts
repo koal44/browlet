@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { TestRealm as Realm } from './test-realm';
+import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
@@ -43,7 +43,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding, realm } = createBinding(interfaceIDL, implementations);
-    const Interface = binding.getInterfaceObject('ReadOnlyIndexed');
+    const Interface = getInstalledInterface(binding.install(), 'ReadOnlyIndexed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, '0')).toBe('zero');
@@ -114,7 +114,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const Interface = binding.getInterfaceObject('WritableIndexed');
+    const Interface = getInstalledInterface(binding.install(), 'WritableIndexed');
     const object = construct(Interface);
     const implementation = binding.platformObjects.getImplementationObject(
       object,
@@ -172,7 +172,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const object = construct(binding.getInterfaceObject('AnonymousIndexed'));
+    const object = construct(getInstalledInterface(binding.install(), 'AnonymousIndexed'));
 
     expect(Reflect.set(object, '0', 'updated')).toBe(true);
     expect(Reflect.set(object, '1', 'created')).toBe(true);
@@ -211,7 +211,7 @@ describe('Web IDL legacy platform objects', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const object = construct(binding.getInterfaceObject('IndexedDerived'));
+    const object = construct(getInstalledInterface(binding.install(), 'IndexedDerived'));
 
     expect(Reflect.has(object, '0')).toBe(false);
     expect(Reflect.get(object, '1')).toBe('derived');
@@ -251,7 +251,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const Interface = binding.getInterfaceObject('ReadOnlyNamed');
+    const Interface = getInstalledInterface(binding.install(), 'ReadOnlyNamed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, 'alpha')).toBe('named alpha');
@@ -324,7 +324,7 @@ describe('Web IDL legacy platform objects', () => {
       Reflect.getPrototypeOf(globalPrototype);
     if (!namedProperties) throw new Error('Missing named properties object');
 
-    const object = construct(legacyBinding.getInterfaceObject('LegacyNamed'));
+    const object = construct(getInstalledInterface(legacyBinding.install(), 'LegacyNamed'));
     expect(Reflect.setPrototypeOf(object, namedProperties)).toBe(true);
     expect(Reflect.get(object, 'shared')).toBe('legacy');
   });
@@ -384,7 +384,7 @@ describe('Web IDL legacy platform objects', () => {
     implementations.setAttributeSteps(fixed, { get: () => 'fixed attribute' });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const Interface = binding.getInterfaceObject('OverridingNamed');
+    const Interface = getInstalledInterface(binding.install(), 'OverridingNamed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, 'alpha')).toBe('named alpha');
@@ -434,7 +434,7 @@ describe('Web IDL legacy platform objects', () => {
     );
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const object = construct(binding.getInterfaceObject('StringifyingNamed'));
+    const object = construct(getInstalledInterface(binding.install(), 'StringifyingNamed'));
     const descriptor = Reflect.getOwnPropertyDescriptor(object, 'toString');
 
     expect(descriptor).toMatchObject({
@@ -487,7 +487,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const object = construct(binding.getInterfaceObject('AnonymousNamed'));
+    const object = construct(getInstalledInterface(binding.install(), 'AnonymousNamed'));
 
     expect(Reflect.set(object, 'existing', 'updated')).toBe(true);
     expect(Reflect.set(object, 'created', 'new value')).toBe(true);
@@ -542,7 +542,7 @@ describe('Web IDL legacy platform objects', () => {
     });
 
     const { binding } = createBinding(interfaceIDL, implementations);
-    const object = construct(binding.getInterfaceObject('IndexedAndNamed'));
+    const object = construct(getInstalledInterface(binding.install(), 'IndexedAndNamed'));
 
     expect(Reflect.get(object, '0')).toBe('indexed zero');
     expect(Reflect.get(object, '1')).toBeUndefined();

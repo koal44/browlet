@@ -12,7 +12,7 @@ import {
   annotated, asyncSequence, decimal, defineDictionary, defineEnumeration,
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
   sequence, union, xattr,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { RealmBinding } from '../../src/web-idl/binding';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';

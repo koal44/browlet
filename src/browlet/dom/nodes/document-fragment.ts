@@ -1,8 +1,9 @@
 import { withDocumentFragmentStub } from '../../stubs';
 import type { EventTargetVirtuals } from '../events/event-target';
+import type { Realm } from '../../scripting/realm';
 import {
-  contextValue, ctor, defineIncludes, defineInterface, impl,
-} from '../../../web-idl/declaration/index';
+  atArg, ctor, defineIncludes, defineInterface, impl,
+} from '../../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import type { DocumentImpl } from './document';
@@ -58,17 +59,12 @@ export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
 
 // -- Web IDL ------------------------------------------------------------
 
-const associatedDocument = contextValue(
-  (context: { readonly realm: DocumentFragmentRealm; }) =>
-    context.realm.getAssociatedDocument(),
-);
-
-export const documentFragmentIDL = defineInterface({
+export const documentFragmentIDL = defineInterface<Realm>({
   name: 'DocumentFragment',
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentFragmentImpl, {
-    constructWith: [associatedDocument],
+    constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())],
   }),
   members: [ctor()],
 });
@@ -77,7 +73,3 @@ export const documentFragmentIncludesParentNodeIDL = defineIncludes({
   interface: 'DocumentFragment',
   mixin: parentNodeIDL.name,
 });
-
-type DocumentFragmentRealm = {
-  getAssociatedDocument(): DocumentImpl;
-};

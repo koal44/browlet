@@ -1,7 +1,7 @@
 import { createPromises, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRealmBindings, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
 } from '../../../src/streams/index';
@@ -222,13 +222,13 @@ describe('transform-stream implementation', () => {
 describe('transform-stream projection', () => {
   it('projects a cross-specification transform at the binding boundary', () => {
     const window = new Browlet({ route: () => '' }).window;
-    const bindings = getRealmBindings(getRelevantRealm(window));
+    const bindings = getBindingContext(getRelevantRealm(window));
     const stream = createTransformStream(null);
     stream.setUp(() => undefined);
 
-    expect(bindings.context.resolvePlatformObject(stream)).toBeUndefined();
-    const object = bindings.context.project(TransformStreamImpl, stream);
-    const projectedStream = bindings.context.resolvePlatformObject(object);
+    expect(bindings.getObjectRecord(stream)).toBeUndefined();
+    const object = bindings.project(TransformStreamImpl, stream);
+    const projectedStream = bindings.getObjectRecord(object);
     expect(projectedStream?.primaryInterface.definition.name)
       .toBe('TransformStream');
     expect(projectedStream?.implementation).toBe(stream);

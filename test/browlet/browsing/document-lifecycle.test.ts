@@ -4,7 +4,7 @@ import {
   BrowsingContext,
 } from '../../../src/browlet/browsing/browsing-context';
 import {
-  createStructuredClone, createWindowRealm, getImplementation, getPlatformObject,
+  createStructuredClone, createWindowRealm, unwrap, project,
   getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
@@ -98,7 +98,7 @@ describe('browsing context groups', () => {
 
     expect(realm.agent).toBe(agent);
     expect(realm.windowImplementation).toBe(window);
-    expect(realm.globalObject).toBe(getPlatformObject(window));
+    expect(realm.globalObject).toBe(project(window));
     expect(realm.globalThis).toBe(context.windowProxy);
     expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.intrinsics.object);
     expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy);
@@ -242,7 +242,7 @@ describe('navigables', () => {
     expect(getWindowProxyWindow(browsingContext.windowProxy)).toBe(window);
 
     expect(realm.windowImplementation).toBe(window);
-    expect(getImplementation(realm.globalObject)).toBe(window);
+    expect(unwrap(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(browsingContext.windowProxy);
     expect(realm.agent.agentCluster).not.toBeNull();
     expect(window.getAssociatedDocument()).toBe(document);
@@ -384,7 +384,7 @@ describe('navigation lifecycle', () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window as InternalWindowProxy;
     const initialDocument = browlet.document;
-    const initialDocumentImpl = getImplementation<DocumentImpl>(
+    const initialDocumentImpl = unwrap<DocumentImpl>(
       initialDocument,
     );
     const navigable = initialDocumentImpl.getNodeNavigable();
@@ -398,7 +398,7 @@ describe('navigation lifecycle', () => {
     await browlet.navigate('https://example.test/');
 
     const document = browlet.document;
-    const documentImpl = getImplementation<DocumentImpl>(
+    const documentImpl = unwrap<DocumentImpl>(
       document,
     );
     const window = getWindowProxyWindow(windowProxy);
@@ -408,7 +408,7 @@ describe('navigation lifecycle', () => {
     expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
     expect(realm.windowImplementation).toBe(window);
-    expect(getImplementation(realm.globalObject)).toBe(window);
+    expect(unwrap(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
     expect(window && window.getAssociatedDocument()).toBe(documentImpl);

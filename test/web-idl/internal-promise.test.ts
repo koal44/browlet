@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/js-engine/index';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
-import { createBindings } from '../../src/web-idl/registration';
+import { createBindingWorld } from '../../src/web-idl/registration';
 import {
   defineInterface, idlType, impl, promise, reference, roAttr,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { TestRealm } from './test-realm';
 
 describe('internal Promise result projection', () => {
   it.each(['fulfill', 'reject'] as const)('retains the receiver projection on %s', async (mode) => {
-    const bindings = createBindings([ownerIDL, childIDL]);
+    const bindings = createBindingWorld([ownerIDL, childIDL]);
     const first = new TestRealm();
     const second = new TestRealm();
     const firstBinding = bindings.register(first);
     const secondBinding = bindings.register(second);
     const implementation = new ResultOwnerImpl(first.promises);
-    const owner = firstBinding.context.project(ResultOwnerImpl, implementation);
-    const foreign = secondBinding.context.project(ResultOwnerImpl, new ResultOwnerImpl(second.promises));
+    const owner = firstBinding.project(ResultOwnerImpl, implementation);
+    const foreign = secondBinding.project(ResultOwnerImpl, new ResultOwnerImpl(second.promises));
     const foreignPrototype = Object.getPrototypeOf(foreign) as object;
     const result = Reflect.get(owner, 'result') as Promise<unknown>;
     expect(Reflect.get(foreignPrototype, 'result', owner)).toBe(result);
@@ -28,7 +28,7 @@ describe('internal Promise result projection', () => {
     if (mode === 'fulfill') implementation.pending.resolve(child);
     else implementation.pending.reject(new TypeErrorRequest('read failed'));
     const value = await observed;
-    if (mode === 'fulfill') expect(value).toBe(bindings.getPlatformObject(child));
+    if (mode === 'fulfill') expect(value).toBe(bindings.project(child));
     else expect(value).toBeInstanceOf(first.intrinsics.typeError);
     expect(Reflect.get(owner, 'result')).toBe(result);
   });

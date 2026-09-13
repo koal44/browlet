@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
-import { TestRealm as Realm } from './test-realm';
+import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import {
   defineInterface, idlType, sequence, type MaplikeMember, type OperationMember,
   type SetlikeMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
@@ -280,7 +280,7 @@ describe('Web IDL maplike declarations', () => {
     implementations.setOperationSteps(staticSet, () => { staticCalls++; });
     const binding = createBinding(interface_, implementations);
     const object = binding.createPlatformObject(interface_.name);
-    const Interface = binding.getInterfaceObject(interface_.name);
+    const Interface = getInstalledInterface(binding.install(), interface_.name);
 
     Reflect.apply(getMethod(Interface, 'set'), Interface, []);
     expect(staticCalls).toBe(1);
@@ -404,7 +404,7 @@ describe('Web IDL setlike declarations', () => {
     implementations.setOperationSteps(staticAdd, () => { staticCalls++; });
     const binding = createBinding(interface_, implementations);
     const object = binding.createPlatformObject(interface_.name);
-    const Interface = binding.getInterfaceObject(interface_.name);
+    const Interface = getInstalledInterface(binding.install(), interface_.name);
 
     Reflect.apply(getMethod(Interface, 'add'), Interface, []);
     expect(staticCalls).toBe(1);

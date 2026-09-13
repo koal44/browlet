@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { TestRealm as Realm } from './test-realm';
+import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/binding';
 import {
   defineInterface, definePartialInterface, idlType, impl, integer,
   type AttributeMember, type OperationMember, type StringifierMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { createBindings } from '../../src/web-idl/registration';
+import { createBindingWorld } from '../../src/web-idl/registration';
 
 describe('Web IDL global platform objects', () => {
   it('lets projected operations call inherited internal instance methods', () => {
@@ -34,7 +34,7 @@ describe('Web IDL global platform objects', () => {
       implementation: impl(TestGlobalImpl),
       members: [operation('read', idlType.long)],
     });
-    const binding = createBindings([definition]).register(new Realm());
+    const binding = createBindingWorld([definition]).register(new Realm());
     const global = binding.projectGlobalObject(new TestGlobalImpl(), 'TestGlobal');
 
     expect(call(global, 'read', global)).toBe(1);
@@ -102,9 +102,10 @@ describe('Web IDL global platform objects', () => {
     const implementation = Reflect.construct(realm.intrinsics.object, []);
     const record = binding.projectGlobalObject(implementation, 'Window');
     const global = record.platformObject;
-    const Window = binding.getInterfaceObject('Window');
-    const Base = binding.getInterfaceObject('GlobalBase');
-    const Widget = binding.getInterfaceObject('Widget');
+    const exposed = binding.getExposedGlobalProperties();
+    const Window = getInstalledInterface(exposed, 'Window');
+    const Base = getInstalledInterface(exposed, 'GlobalBase');
+    const Widget = getInstalledInterface(exposed, 'Widget');
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),

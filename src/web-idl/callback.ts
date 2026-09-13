@@ -1,21 +1,22 @@
 import { isCallable, isConstructor } from '../js-engine/index';
 import type {
-  CallbackFunctionValue, CallbackInterfaceValue, CallbackValue,
+  CallbackFunctionValue, CallbackInterfaceRecord, CallbackValue,
 } from './callback-value';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import type {
   ArgumentDefinition, OperationMember, WebIDLType,
-} from './declaration/index';
-import type { CallbackExceptionBehavior } from './declaration/binding';
-import { isPromiseValue, type IDLPromise } from './promise-value';
+} from './core/index';
+import type { CallbackExceptionBehavior } from './core/binding';
+import { isIDLPromise, type IDLPromise } from './promise-value';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
 
+// Web IDL §3.11 Callback interfaces — call a user object's operation.
 export function callUserObjectOperation(
-  value: CallbackInterfaceValue,
+  value: CallbackInterfaceRecord,
   operationName: string,
   argumentsList: WebIDLArgumentsList,
   thisArgument?: unknown,
@@ -58,6 +59,7 @@ export function callUserObjectOperation(
   }
 }
 
+// Web IDL §3.12 Invoking callback functions — invoke a callback function.
 export function invokeCallbackFunction(
   callable: CallbackFunctionValue,
   argumentsList: WebIDLArgumentsList,
@@ -101,6 +103,7 @@ export function invokeCallbackFunction(
   }
 }
 
+// Web IDL §3.12 Invoking callback functions — construct a callback function.
 export function constructCallbackFunction(
   callable: CallbackFunctionValue,
   argumentsList: WebIDLArgumentsList,
@@ -131,6 +134,7 @@ export function constructCallbackFunction(
   });
 }
 
+// Web IDL §3.11 Callback interfaces — convert a Web IDL arguments list to a JavaScript arguments list.
 export function convertWebIDLArguments(
   argumentsList: WebIDLArgumentsList,
   definitions: ArgumentDefinition[],
@@ -171,6 +175,7 @@ export const missingArgument: unique symbol = Symbol(
   'missing Web IDL argument',
 );
 
+// Project helper: map an implementation receiver to its platform object before calling author code.
 function projectCallbackReceiver(
   value: unknown,
   context: ConversionContext,
@@ -179,7 +184,9 @@ function projectCallbackReceiver(
     value;
 }
 
-/* Web IDL §§3.11–3.12; HTML §§8.1.3.3 and 8.1.4.4. */
+// Extracted preparation and cleanup from Web IDL §3.11 Callback interfaces
+// and §3.12 Invoking callback functions; delegates lifecycle hooks to the host.
+// HTML §8.1.3.3 Realms, settings objects, and global objects; §8.1.4.4 Calling scripts.
 function runCallback(
   value: CallbackValue,
   steps: () => unknown,
@@ -198,8 +205,9 @@ function runCallback(
   }
 }
 
+// Project helper: find the callback-interface operation's declaration.
 function getCallbackOperation(
-  value: CallbackInterfaceValue,
+  value: CallbackInterfaceRecord,
   operationName: string,
 ): OperationMember {
   const operation = value.definition.members.find((member) =>
@@ -212,6 +220,7 @@ function getCallbackOperation(
   return operation;
 }
 
+// Project helper: find the declaration for a fixed or variadic callback argument.
 function getArgumentDefinition(
   definitions: ArgumentDefinition[],
   index: number,
@@ -222,6 +231,7 @@ function getArgumentDefinition(
   return variadic?.variadic ? variadic : undefined;
 }
 
+// Project validation of Web IDL §3.12 Invoking callback functions — invoke's exception-behavior requirements.
 function validateExceptionBehavior(
   returnType: WebIDLType,
   exceptionBehavior: CallbackExceptionBehavior | undefined,
@@ -247,6 +257,8 @@ function validateExceptionBehavior(
   }
 }
 
+// Extracted exception-to-promise return steps from Web IDL §3.11 Callback interfaces
+// and §3.12 Invoking callback functions.
 function rejectPromiseReturn(
   returnType: WebIDLType,
   exception: unknown,
@@ -260,12 +272,13 @@ function rejectPromiseReturn(
     [exception],
   );
   const promise = convertToIDL(rejected, returnType, context);
-  if (!isPromiseValue(promise)) {
+  if (!isIDLPromise(promise)) {
     throw new Error('Promise callback did not produce an IDL promise');
   }
   return promise;
 }
 
+// Project helper: resolve whether a callback declares a Promise<T> return type.
 function getPromiseReturnType(
   returnType: WebIDLType,
   context: ConversionContext,
@@ -274,6 +287,7 @@ function getPromiseReturnType(
   return type.kind === 'promise' ? type.type : undefined;
 }
 
+// Project helper: select the callback's realm for argument and result conversion.
 function withCallbackRealm(
   context: ConversionContext,
   value: CallbackValue,

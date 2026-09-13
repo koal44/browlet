@@ -1,7 +1,6 @@
 import { withTextStub } from '../../stubs';
 import type { EventImpl } from '../events/event';
-import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+import { arg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
 import {
   isText, NodeImpl, type NodeOptions, NodeType,
 } from './node';

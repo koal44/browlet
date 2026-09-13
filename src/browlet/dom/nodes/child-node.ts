@@ -1,6 +1,6 @@
 import {
   defineInterfaceMixin, idlType, op,
-} from '../../../web-idl/declaration/index';
+} from '../../../web-idl/index';
 import type { NodeImpl } from './node';
 
 /*

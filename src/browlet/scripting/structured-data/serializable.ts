@@ -1,7 +1,7 @@
 import {
   defineCapability, type ImplementationClass, type InterfaceDefinition,
-  type WebIDLRealmHost,
 } from '../../../web-idl/index';
+import type { Realm } from '../realm';
 import type { StructuredDataRecord } from './records';
 
 export const serializable = defineCapability<SerializableSteps>(
@@ -19,7 +19,7 @@ export type SerializableSteps = {
   deserializationSteps(
     serialized: StructuredDataRecord,
     value: object,
-    targetRealm: WebIDLRealmHost,
+    targetRealm: Realm,
     context: DeserializationContext,
   ): void;
 };
@@ -36,8 +36,8 @@ export type DeserializationContext = {
   subdeserialize(serialized: unknown): unknown;
 };
 
-function requireMarker(
-  interface_: InterfaceDefinition,
+function requireMarker<Realm>(
+  interface_: InterfaceDefinition<Realm>,
   name: string,
 ): void {
   const markers = interface_.extendedAttributes?.filter(

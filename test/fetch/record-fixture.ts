@@ -19,7 +19,7 @@ import { fileIDLDefinitions } from '../../src/file/index';
 import { streamsIDLDefinitions, ReadableStreamImpl } from '../../src/streams/index';
 import { urlIDLDefinitions } from '../../src/url/api';
 import { parseURL } from '../../src/url/url';
-import { createBindings } from '../../src/web-idl/index';
+import { createBindingWorld } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
 
@@ -33,7 +33,7 @@ export function createRequestRecord(
 }
 
 export function createRecordFixture() {
-  const bindings = createBindings([
+  const bindings = createBindingWorld([
     ...streamsIDLDefinitions, ...fileIDLDefinitions, ...xhrIDLDefinitions, ...urlIDLDefinitions,
     headersInitIDL, headersIDL, xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
     requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
@@ -41,8 +41,7 @@ export function createRecordFixture() {
     requestIDL, requestIncludesBodyIDL, responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
   ]);
   const realm = new TestRealm();
-  const registration = bindings.register(realm);
-  const { context } = registration;
+  const context = bindings.register(realm);
   const scheduling = { queueGlobalTask: vi.fn(), runInParallel: vi.fn() };
   const runtime = { ...createRuntime(realm), networking: scheduling };
   // This fixture allocates implementations. The incomplete API family is not installed.

@@ -19,7 +19,7 @@
     { "path": "../streams" },
     { "path": "../url" },
     { "path": "../web-idl" },
-    { "path": "../web-idl/exceptions" },
+    { "path": "../web-idl/core" },
     { "path": "../xhr" }
   ]
 }

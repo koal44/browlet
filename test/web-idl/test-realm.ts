@@ -1,4 +1,4 @@
-import { type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
+import { type JSFunction, type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../../src/web-idl/js-realm';
@@ -46,6 +46,15 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
   queueMicrotask(steps: () => void): void {
     this.enqueueMicrotask(steps);
   }
+}
+
+export function getInstalledInterface(
+  installed: Map<string, object>,
+  name: string,
+): JSFunction & { prototype: object; } {
+  const value = installed.get(name);
+  if (typeof value !== 'function') throw new Error(`${name} was not installed as an interface object`);
+  return value as JSFunction & { prototype: object; };
 }
 
 type TestRealmOptions = {

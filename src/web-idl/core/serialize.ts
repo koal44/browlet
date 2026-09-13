@@ -1,16 +1,19 @@
 import type {
-  ArgumentDefinition, AsyncIterableMember, ConstantValue, DefaultValue,
-  Definition, DictionaryMember,
-  Exposure, ExtendedAttribute, InterfaceMember, WebIDLType,
+  ArgumentDefinition, ConstantValue, DefaultValue, Definition, Exposure, ExtendedAttribute,
+  WebIDLType,
 } from './definition';
+import type { AsyncIterableMember, InterfaceMember } from './definitions/interface';
+import type { DictionaryMember } from './definitions/dictionary';
 
-export function serializeDefinitions(
-  definitions: Definition[],
+// Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
+export function serializeDefinitions<Realm>(
+  definitions: Definition<Realm>[],
 ): string {
   return definitions.map(serializeDefinition).join('\n\n');
 }
 
-export function serializeDefinition(definition: Definition): string {
+// Project formatter for Web IDL §2 Interface definition language — definition syntax.
+export function serializeDefinition<Realm>(definition: Definition<Realm>): string {
   const attributes = serializeAttributes(definition);
   const prefix = attributes === '' ? '' : `${attributes}\n`;
 
@@ -79,8 +82,9 @@ export function serializeDefinition(definition: Definition): string {
   }
 }
 
-export function serializeMember(
-  member: InterfaceMember,
+// Project formatter for Web IDL §2.5 Members — member syntax.
+export function serializeMember<Realm>(
+  member: InterfaceMember<Realm>,
 ): string {
   const prefix = serializeInlineAttributes(member);
 
@@ -121,6 +125,7 @@ export function serializeMember(
   }
 }
 
+// Project formatter for Web IDL §2.13 Types — type syntax.
 export function serializeType(type: WebIDLType): string {
   switch (type.kind) {
     case 'simple':
@@ -149,6 +154,7 @@ export function serializeType(type: WebIDLType): string {
   }
 }
 
+// Project formatter for Web IDL §2.14 Extended attributes — extended attribute syntax.
 export function serializeExtendedAttribute(
   attribute: ExtendedAttribute,
 ): string {
@@ -189,8 +195,10 @@ type AttributedDefinition = {
   extendedAttributes?: ExtendedAttribute[];
 };
 
-function serializeAttribute(
-  member: Extract<InterfaceMember, { kind: 'attribute'; }>,
+// Project formatter for Web IDL §2.5.2 Attributes, §2.5.5 Stringifiers, and §2.5.7 Static attributes and
+// operations.
+function serializeAttribute<Realm>(
+  member: Extract<InterfaceMember<Realm>, { kind: 'attribute'; }>,
 ): string {
   const modifier = member.stringifier
     ? 'stringifier '
@@ -202,6 +210,7 @@ function serializeAttribute(
     + `${serializeIdentifier(member.name, attributeNameKeywords)};`;
 }
 
+// Project formatter for Web IDL §2.5.10 Asynchronously iterable declarations.
 function serializeAsyncIterable(member: AsyncIterableMember): string {
   const argumentsList = member.arguments === undefined
     ? ''
@@ -210,10 +219,12 @@ function serializeAsyncIterable(member: AsyncIterableMember): string {
     + `${serializeType(member.value)}>${argumentsList};`;
 }
 
+// Project helper: format an optional key type before an iterable's value type.
 function serializeOptionalKey(key: WebIDLType | undefined): string {
   return key === undefined ? '' : `${serializeType(key)}, `;
 }
 
+// Project formatter for Web IDL §2.7 Dictionaries — dictionary member syntax.
 function serializeDictionaryMember(member: DictionaryMember): string {
   const prefix = serializeInlineAttributes(member);
   const required = member.required ? 'required ' : '';
@@ -224,6 +235,7 @@ function serializeDictionaryMember(member: DictionaryMember): string {
     + serializeIdentifier(member.name) + defaultValue + ';';
 }
 
+// Project formatter for Web IDL §2.5.3 Operations — Argument grammar.
 function serializeArgument(argument: ArgumentDefinition): string {
   const prefix = serializeInlineAttributes(argument);
   const optional = argument.optional ? 'optional ' : '';
@@ -235,6 +247,7 @@ function serializeArgument(argument: ArgumentDefinition): string {
     + serializeIdentifier(argument.name, argumentNameKeywords) + defaultValue;
 }
 
+// Project formatter for Web IDL §2.5.3 Operations — DefaultValue grammar.
 function serializeDefaultValue(value: DefaultValue): string {
   if (typeof value === 'boolean') return String(value);
   if (typeof value === 'string') return serializeString(value);
@@ -259,6 +272,7 @@ function serializeDefaultValue(value: DefaultValue): string {
   }
 }
 
+// Project formatter for Web IDL §2.5.1 Constants — ConstValue grammar.
 function serializeConstantValue(value: ConstantValue): string {
   if (typeof value === 'boolean') return String(value);
 
@@ -275,16 +289,19 @@ function serializeConstantValue(value: ConstantValue): string {
   }
 }
 
+// Project formatter for Web IDL §2.14 Extended attributes — ExtendedAttributeList grammar.
 function serializeAttributes(value: AttributedDefinition): string {
   const attributes = collectAttributes(value);
   return attributes.length === 0 ? '' : `[${attributes.join(', ')}]`;
 }
 
+// Project helper: place an extended attribute list before a member or argument.
 function serializeInlineAttributes(value: AttributedDefinition): string {
   const attributes = serializeAttributes(value);
   return attributes === '' ? '' : `${attributes} `;
 }
 
+// Project helper: combine the exposed field with explicit extended attribute records.
 function collectAttributes(value: AttributedDefinition): string[] {
   const attributes: string[] = [];
 
@@ -297,20 +314,24 @@ function collectAttributes(value: AttributedDefinition): string[] {
   return attributes;
 }
 
+// Project formatter for Web IDL §3.3.7 [Exposed].
 function serializeExposure(exposure: Exposure): string {
   if (typeof exposure === 'string') return exposure;
   return `(${exposure.map((value) => serializeIdentifier(value)).join(', ')})`;
 }
 
+// Project formatter for the Inheritance grammar in Web IDL §2.2 Interfaces and §2.7 Dictionaries.
 function serializeInheritance(inherits: string | undefined): string {
   return inherits === undefined ? '' : ` : ${serializeIdentifier(inherits)}`;
 }
 
+// Project helper: format a declaration body with braces, indentation, and a trailing semicolon.
 function serializeBlock(header: string, members: string[]): string {
   if (members.length === 0) return `${header} {\n};`;
   return `${header} {\n${members.map((member) => `  ${member}`).join('\n')}\n};`;
 }
 
+// Project formatter for Web IDL §2.1 Names — identifier spelling and keyword escaping.
 function serializeIdentifier(
   identifier: string,
   permittedKeywords: ReadonlySet<string> = noKeywords,
@@ -323,6 +344,7 @@ function serializeIdentifier(
     : identifier;
 }
 
+// Project formatter for the string token in Web IDL's unnumbered IDL grammar section.
 function serializeString(value: string): string {
   if (value.includes('"')) {
     throw new TypeError('Web IDL string values cannot contain U+0022 (").');
@@ -330,6 +352,7 @@ function serializeString(value: string): string {
   return `"${value}"`;
 }
 
+// Web IDL, IDL grammar — terminal keywords take precedence over identifier tokens.
 const reservedIdentifiers = new Set([
   'any', 'ArrayBuffer', 'async', 'async_iterable', 'async_sequence', 'attribute',
   'BigInt64Array', 'BigUint64Array', 'bigint', 'boolean', 'byte', 'ByteString',
@@ -345,6 +368,7 @@ const reservedIdentifiers = new Set([
   'unrestricted', 'unsigned', 'USVString',
 ]);
 
+// Web IDL §2.1 Names — ArgumentNameKeyword grammar.
 const argumentNameKeywords = new Set([
   'attribute', 'callback', 'const', 'constructor', 'deleter', 'dictionary',
   'enum', 'getter', 'includes', 'inherit', 'interface', 'iterable', 'maplike',
@@ -352,7 +376,10 @@ const argumentNameKeywords = new Set([
   'static', 'stringifier', 'typedef', 'unrestricted',
 ]);
 
+// Web IDL §2.5.2 Attributes — AttributeNameKeyword grammar.
 const attributeNameKeywords = new Set(['required']);
+// Web IDL §2.5.3 Operations — OperationNameKeyword grammar.
 const operationNameKeywords = new Set(['includes']);
 const noKeywords = new Set<string>();
+// Project helper: validate the identifier before adding a keyword escape.
 const identifierPattern = /^-?[A-Za-z][0-9A-Z_a-z-]*$/;

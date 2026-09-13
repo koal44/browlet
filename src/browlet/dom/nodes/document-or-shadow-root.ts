@@ -1,6 +1,6 @@
 import {
   defineInterfaceMixin, nullable, roAttr, reference,
-} from '../../../web-idl/declaration/index';
+} from '../../../web-idl/index';
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
 import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
 import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';

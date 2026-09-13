@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  domExceptionCode, domExceptionName,
-} from '../../../src/web-idl/exceptions/dom-exception-core';
+  DOMExceptionCodes, DOMExceptionNames,
+} from '../../../src/web-idl/core/dom-exception-core';
 
 describe('DOMException names', () => {
   it('follows the Web IDL names table and legacy code order', () => {
-    expect(Object.entries(domExceptionName)).toEqual([
+    expect(Object.entries(DOMExceptionNames)).toEqual([
       ['indexSize', 'IndexSizeError'],
       ['hierarchyRequest', 'HierarchyRequestError'],
       ['wrongDocument', 'WrongDocumentError'],
@@ -42,7 +42,7 @@ describe('DOMException names', () => {
       ['optOut', 'OptOutError'],
     ]);
 
-    expect(Object.values(domExceptionCode)).toEqual([
+    expect(Object.values(DOMExceptionCodes)).toEqual([
       1, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21,
       22, 23, 24, 25,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

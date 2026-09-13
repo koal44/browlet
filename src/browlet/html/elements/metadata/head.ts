@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineElementInterface } from '../../../dom/nodes/element';
-import { defineInterface } from '../../../../web-idl/declaration/index';
-import { impl } from '../../../../web-idl/index';
+import { defineInterface, impl } from '../../../../web-idl/index';
 import { withHTMLHeadElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
 

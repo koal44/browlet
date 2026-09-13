@@ -1,11 +1,7 @@
 import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  arg, defineInterface, idlType, indexedGetter, namedGetter, nullable, op,
-  roAttr, reference, xattr,
-} from '../../../web-idl/declaration/index';
-import { bind, impl } from '../../../web-idl/index';
+  arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
+  roAttr, xattr, DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import type { AttrImpl } from './attribute';
@@ -75,7 +71,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
 
   #remove(matches: (attribute: AttrImpl) => boolean): AttrImpl {
     const index = this.findIndex(matches);
-    if (index < 0) throwDOMException(domExceptionName.notFound);
+    if (index < 0) throwDOMException(DOMExceptionNames.notFound);
     const attribute = this.splice(index, 1)[0]!;
     attribute.setOwnerElement(null);
     return attribute;
@@ -86,7 +82,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
       attribute.ownerElement !== null &&
       attribute.ownerElement !== this.#element
     ) {
-      throwDOMException(domExceptionName.inUseAttribute);
+      throwDOMException(DOMExceptionNames.inUseAttribute);
     }
 
     const previous = attribute.namespaceURI === null
@@ -168,10 +164,10 @@ export const namedNodeMapIDL = defineInterface({
       ],
       xattr('CEReactions'),
     ),
-    roAttr('length', idlType.unsignedLong, bind({
+    roAttr('length', idlType.unsignedLong, {
       get() {
         return (this as NamedNodeMapImpl).length;
       },
-    })),
+    }),
   ],
 });

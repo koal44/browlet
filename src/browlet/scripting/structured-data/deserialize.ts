@@ -1,22 +1,19 @@
 import {
   appendMapData, appendSetData, getBufferTypeName, isObject, writeErrorStack,
 } from '../../../js-engine/index';
-import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import type { WebIDLRealmHost } from '../../../web-idl/index';
-import type { StructuredDataEnvironment } from './environment';
+import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import type { Realm } from '../realm';
 import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
   StructuredDeserializeMemory,
 } from './records';
 import { serializable } from './serializable';
 
-export type StructuredDeserializationEnvironment = StructuredDataEnvironment;
-
 /** HTML §2.7.6, StructuredDeserialize. */
 // BINDING_INTEGRATION: reconstruct platform objects in the destination realm.
 export function structuredDeserialize(
   serialized: SerializedRecord,
-  environment: StructuredDeserializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredDeserializeMemory = new Map(),
 ): unknown {
   if (memory.has(serialized)) return memory.get(serialized);
@@ -24,9 +21,9 @@ export function structuredDeserialize(
   let value: unknown;
   let deep = false;
   let platformObject: ReturnType<
-    StructuredDataEnvironment['context']['createPlatformObject']
+    BindingContext<Realm>['createPlatformObject']
   > | undefined;
-  const { realm } = environment;
+  const { realm } = ctx;
 
   switch (serialized.type) {
     case 'primitive':
@@ -59,8 +56,8 @@ export function structuredDeserialize(
       break;
     case 'SharedArrayBuffer':
     case 'GrowableSharedArrayBuffer':
-      if (environment.agentCluster !== serialized.agentCluster) {
-        return throwDataCloneError();
+      if (ctx.realm.agent.agentCluster !== serialized.agentCluster) {
+        return throwDOMException('DataCloneError');
       }
       value = deserializeSharedArrayBuffer(serialized.buffer, realm);
       break;
@@ -71,7 +68,7 @@ export function structuredDeserialize(
     case 'ArrayBufferView': {
       const buffer = structuredDeserialize(
         serialized.buffer,
-        environment,
+        ctx,
         memory,
       );
       if (!isObject(buffer)) {
@@ -112,13 +109,13 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'platform-object': {
-      const interface_ = environment.context.getInterface(
+      const interface_ = ctx.getInterface(
         serialized.interfaceName,
       );
-      if (!interface_ || !environment.context.isInterfaceExposed(interface_)) {
-        return throwDataCloneError();
+      if (!interface_ || !ctx.isInterfaceExposed(interface_)) {
+        return throwDOMException('DataCloneError');
       }
-      platformObject = environment.context.createPlatformObject(interface_);
+      platformObject = ctx.createPlatformObject(interface_);
       value = platformObject.platformObject;
       deep = true;
       break;
@@ -137,26 +134,26 @@ export function structuredDeserialize(
     for (const entry of serialized.entries) {
       appendMapData(
         value,
-        structuredDeserialize(entry.key, environment, memory),
-        structuredDeserialize(entry.value, environment, memory),
+        structuredDeserialize(entry.key, ctx, memory),
+        structuredDeserialize(entry.value, ctx, memory),
       );
     }
   } else if (serialized.type === 'Set') {
     for (const entry of serialized.entries) {
       appendSetData(
         value,
-        structuredDeserialize(entry, environment, memory),
+        structuredDeserialize(entry, ctx, memory),
       );
     }
   } else if (serialized.type === 'Error') {
-    deserializeErrorCause(serialized, value, environment, memory);
+    deserializeErrorCause(serialized, value, ctx, memory);
   } else if (serialized.type === 'Array' || serialized.type === 'Object') {
-    deserializeProperties(serialized.properties, value, environment, memory);
+    deserializeProperties(serialized.properties, value, ctx, memory);
   } else if (serialized.type === 'platform-object') {
     if (!platformObject) {
       throw new Error('A platform-object record was not created');
     }
-    const steps = environment.context.getCapability(
+    const steps = ctx.getCapability(
       platformObject.primaryInterface.definition,
       serializable,
     );
@@ -171,14 +168,14 @@ export function structuredDeserialize(
       realm,
       {
         getImplementation: (value, implementation) =>
-          environment.context.getImplementation(value, implementation),
+          ctx.unwrap(value, implementation),
         subdeserialize: (subSerialized) => {
           if (!isSerializedRecord(subSerialized)) {
             throw new TypeError('Sub-deserialization requires a serialized record');
           }
           return structuredDeserialize(
             subSerialized,
-            environment,
+            ctx,
             memory,
           );
         },
@@ -194,7 +191,7 @@ export function structuredDeserialize(
 /** HTML §2.7.6, SharedArrayBuffer and GrowableSharedArrayBuffer branches. */
 function deserializeSharedArrayBuffer(
   buffer: object,
-  realm: WebIDLRealmHost,
+  realm: Realm,
 ): object {
   if (getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
     throw new Error('Only a SharedArrayBuffer can share its backing store');
@@ -218,7 +215,7 @@ function deserializeArrayBuffer(
   serialized: Extract<SerializedRecord, {
     type: 'ArrayBuffer' | 'ResizableArrayBuffer';
   }>,
-  realm: WebIDLRealmHost,
+  realm: Realm,
 ): ArrayBuffer {
   try {
     return realm.createArrayBuffer(
@@ -226,7 +223,7 @@ function deserializeArrayBuffer(
       serialized.maxByteLength,
     );
   } catch {
-    return throwDataCloneError();
+    return throwDOMException('DataCloneError');
   }
 }
 
@@ -236,14 +233,14 @@ function deserializeProperties(
     type: 'Array' | 'Object';
   }>['properties'],
   value: object,
-  environment: StructuredDeserializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredDeserializeMemory,
 ): void {
   for (const entry of properties) {
     const status = Reflect.defineProperty(value, entry.key, {
       configurable: true,
       enumerable: true,
-      value: structuredDeserialize(entry.value, environment, memory),
+      value: structuredDeserialize(entry.value, ctx, memory),
       writable: true,
     });
     if (!status) throw new Error(`Could not deserialize property ${entry.key}`);
@@ -253,7 +250,7 @@ function deserializeProperties(
 /** HTML §2.7.6, the [[ErrorData]] branch. */
 function deserializeError(
   serialized: ErrorSerializedRecord,
-  realm: WebIDLRealmHost,
+  realm: Realm,
 ): object {
   const constructor = getErrorConstructor(serialized.name, realm);
   const value = Reflect.construct(
@@ -268,14 +265,14 @@ function deserializeError(
 function deserializeErrorCause(
   serialized: ErrorSerializedRecord,
   value: object,
-  environment: StructuredDeserializationEnvironment,
+  ctx: BindingContext<Realm>,
   memory: StructuredDeserializeMemory,
 ): void {
   if (serialized.cause === undefined) return;
   const status = Reflect.defineProperty(value, 'cause', {
     configurable: true,
     enumerable: false,
-    value: structuredDeserialize(serialized.cause, environment, memory),
+    value: structuredDeserialize(serialized.cause, ctx, memory),
     writable: true,
   });
   if (!status) throw new Error('Could not restore serialized Error cause');
@@ -283,7 +280,7 @@ function deserializeErrorCause(
 
 function getErrorConstructor(
   name: SerializedErrorName,
-  realm: WebIDLRealmHost,
+  realm: Realm,
 ): ErrorConstructor {
   switch (name) {
     case 'EvalError': return realm.intrinsics.evalError;

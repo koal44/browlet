@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBindings } from '../../../src/web-idl/index';
+import { createBindingWorld } from '../../../src/web-idl/index';
 import {
   RangeError as RangeErrorRequest, SyntaxError as SyntaxErrorRequest,
   TypeError as TypeErrorRequest,
@@ -12,10 +12,10 @@ describe('Web IDL simple exceptions', () => {
     { name: 'SyntaxError', Exception: SyntaxErrorRequest },
     { name: 'TypeError', Exception: TypeErrorRequest },
   ])('realizes a requested $name once, preserving its message', ({ name, Exception }) => {
-    const bindings = createBindings([]);
+    const bindings = createBindingWorld([]);
     const realm = new TestRealm();
-    const context = bindings.register(realm).context;
-    const foreignContext = bindings.register(new TestRealm()).context;
+    const context = bindings.register(realm);
+    const foreignContext = bindings.register(new TestRealm());
     const request = new Exception('invalid input');
     const error = context.realizeException(request);
 
@@ -26,7 +26,7 @@ describe('Web IDL simple exceptions', () => {
   });
 
   it('preserves existing exceptions and does not inspect author objects', () => {
-    const context = createBindings([]).register(new TestRealm()).context;
+    const context = createBindingWorld([]).register(new TestRealm());
     const { proxy, revoke } = Proxy.revocable({}, {});
     revoke();
 

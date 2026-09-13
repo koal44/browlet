@@ -2,10 +2,7 @@ import {
   defineElementInterface, type ElementCreationContext,
 } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
-import {
-  defineIncludes, defineInterface,
-} from '../../web-idl/declaration/index';
-import { impl } from '../../web-idl/index';
+import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
 import { withSVGStyleElementStub } from '../stubs';
 import { isSVGElement, SVGElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';

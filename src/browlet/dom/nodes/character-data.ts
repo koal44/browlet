@@ -1,8 +1,7 @@
 import { withCharacterDataStub } from '../../stubs';
 import {
-  annotated, attr, defineIncludes, defineInterface, idlType, xattr,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  annotated, attr, defineIncludes, defineInterface, idlType, impl, xattr,
+} from '../../../web-idl/index';
 import {
   NodeImpl, type NodeOptions, type NodeType,
 } from './node';

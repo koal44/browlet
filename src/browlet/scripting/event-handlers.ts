@@ -1,7 +1,7 @@
 import {
-  arg, attr, callback, defineCallbackFunction, defineTypedef, idlType,
+  arg, attr, onError, defineCallbackFunction, defineTypedef, idlType,
   nullable, reference, type AttributeMember, xattr,
-} from '../../web-idl/declaration/index';
+} from '../../web-idl/index';
 import type { EventTargetImpl } from '../dom/events/event-target';
 import type { EventImpl } from '../dom/events/event';
 
@@ -80,7 +80,7 @@ export function eventHandlerAttr(
   return attr(
     name,
     reference('EventHandler'),
-    callback('report'),
+    onError('report'),
   );
 }
 

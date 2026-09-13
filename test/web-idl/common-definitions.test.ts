@@ -10,9 +10,9 @@ import {
   voidFunctionIDL, webIDLCommonDefinitions,
 } from '../../src/web-idl/common-definitions';
 import { convertToIDL } from '../../src/web-idl/conversion';
-import { reference } from '../../src/web-idl/declaration/index';
+import { reference } from '../../src/web-idl/core/index';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { serializeDefinitions } from '../../src/web-idl/declaration/index';
+import { serializeDefinitions } from '../../src/web-idl/core/index';
 
 describe('Web IDL common definitions', () => {
   it('represents the common typedefs and callbacks losslessly', () => {

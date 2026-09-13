@@ -16,10 +16,11 @@ export default {
       Program(node) {
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration' ||
-              !/\/web-idl\/declaration\/index(?:\.js)?$/.test(statement.source.value)) continue;
+              !/\/web-idl\/(?:core\/)?index(?:\.js)?$/.test(statement.source.value)) continue;
           for (const variable of source.getDeclaredVariables(statement)) {
             const definition = variable.defs[0].node;
-            if (definition.type !== 'ImportSpecifier' || definition.imported.name !== 'op') continue;
+            if (definition.type !== 'ImportSpecifier' ||
+                !['op', 'staticOp'].includes(definition.imported.name)) continue;
             for (const reference of variable.references) references.add(reference.identifier);
           }
         }

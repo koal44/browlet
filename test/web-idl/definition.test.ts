@@ -8,13 +8,13 @@ import {
   defineNamespace, definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
   emptyDictionary, emptySequence, frozenArray, idlType, integer, iter,
-  maplike, nullable, observableArray, op, promise, roAttr, record,
+  maplike, nullable, observableArray, op, staticOp, promise, roAttr, record,
   reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute,
   serializeType,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 
 describe('Web IDL definitions', () => {
   it('represents the EventTarget fragment as structurally lossless data', () => {
@@ -163,12 +163,12 @@ dictionary AddEventListenerOptions : EventListenerOptions {
             special: 'getter',
           },
         ),
-        op('create', reference('Interface'), [], { static: true }),
+        staticOp('create', reference('Interface'), []),
         stringifier(),
         iter(idlType.DOMString),
         iter(idlType.long, { key: idlType.DOMString }),
         asyncIter(idlType.DOMString),
-        asyncIter(idlType.DOMString, { arguments: [] }),
+        asyncIter(idlType.DOMString, { arguments: [], create: 'createIterator', return: true }),
         maplike(idlType.DOMString, idlType.long, { readonly: true }),
         setlike(idlType.DOMString),
       ],

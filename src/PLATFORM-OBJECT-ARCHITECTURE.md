@@ -17,17 +17,23 @@ objects are already the realm-owned JavaScript objects exposed to an author.
 
 ## Vocabulary
 
-Use these three layer names consistently:
+Use these two layer names consistently:
 
 | Layer | Punchy name | Contains |
 | --- | --- | --- |
 | Specification state and algorithms | **Implementation** | `FooImpl`, private state, internal relationships, and subsystem algorithms |
-| Web IDL boundary machinery | **Binding** | conversion, overloads, receiver resolution, realm selection, and projection |
 | Realm-owned JavaScript API | **Platform** | the `Foo` platform object, its prototype, author-visible properties, and exotic behavior |
 
-The corresponding flow is **Implementation -> Binding -> Platform**. Projection
-names the Binding operation which associates an implementation object with, or
-recovers, its platform object. Projection is not a third object identity.
+Binding connects **Implementation** and **Platform** through conversion, overload
+handling, receiver resolution, realm selection, and projection. To **project** an
+implementation is to retrieve or create its platform object. To **unwrap** a
+platform object is to retrieve its existing implementation.
+
+Web IDL conversion maps between author JavaScript values and IDL values. Our
+binding also adapts converted IDL values to implementation representations, such
+as dictionary records and callable callback adapters. `convertToImpl()` performs
+both steps; `adaptIDLToImpl()` handles the implementation adaptation. These
+working representations belong to the binding machinery.
 
 Use *author* for the JavaScript consumer, not for a layer. Use *platform object*
 for the exposed object. Reserve *wrapper* for discussions of the concrete
@@ -36,14 +42,14 @@ it is not Browlet's general name for the Platform layer.
 
 ## The model
 
-An ordinary platform object has two object identities across the three layers:
+An ordinary platform object has two object identities across these layers:
 
 | Identity | Owns |
 | --- | --- |
 | Implementation object, such as `AbortSignalImpl` | Specification state, private fields, implementation methods, internal relationships, and subsystem algorithms |
 | Platform object, such as the JavaScript `AbortSignal` object | Realm-facing prototype identity, author properties, Web IDL member exposure, and any required exotic object behavior |
 
-The Binding layer connects them. One binding world's `PlatformObjectRegistry`
+Binding connects them. One binding world's `PlatformObjectRegistry`
 records one stable platform-object/implementation pair. The implementation
 keeps its own class prototype; ordinary projection does not turn it into the
 platform object.
@@ -100,7 +106,7 @@ private methods for work confined to that class, and statics for factories,
 predicates, or class-level algorithms. An internal operation does not need to be
 static merely to distinguish it from the declared platform API.
 
-### Binding layer
+### Binding machinery
 
 Web IDL owns the boundary into the Platform layer:
 
@@ -123,6 +129,15 @@ which share that identity. Definitions and capability registrations may be
 reused by many worlds; platform-object associations may not. Within one world,
 an implementation always recovers the same platform object. Another world may
 project its own platform object for the same underlying implementation.
+
+`createBindingWorld(definitions, options)` creates this owner. Its
+`BindingWorldOptions` configures shared capabilities and host-defined interfaces;
+realm registration supplies the realm-specific options.
+
+`world.register(realm)` returns the world's shared `BindingContext` for that
+realm; `world.forRealm(realm)` retrieves it without registering. Installation
+and global-object projection are context methods. Registering the same realm
+in another world produces a separate context and separate instance associations.
 
 HTML does not define wrapper worlds, so neither an HTML Agent nor AgentCluster
 is the generic owner. Browlet's current composition root owns one main binding
@@ -194,7 +209,7 @@ mechanism would become the real identity owner while the Agent maps merely
 duplicated it. Browlet therefore keeps:
 
 - execution and the event loop on `Agent`;
-- Realm-specific interface objects and prototypes on `RealmBindings`; and
+- Realm-specific interface objects and prototypes on `RealmBinding`; and
 - stable implementation/platform associations and origin tracking on the main
   `BindingWorld` owned by the Browlet composition root.
 
@@ -216,7 +231,7 @@ When a standalone subsystem cannot own or obtain a required facility, classify
 the dependency using
 [the cross-subsystem decision rules](./SUBSYSTEM-ARCHITECTURE.md#decision-rules):
 
-- keep conversion, callback adaptation, and projection in declaration/member
+- keep conversion, callback adaptation, and projection in core/member
   bindings, where the shared Binding Context is available;
 - supply implementation execution and allocation through the owner's
   `RuntimeContext`, assembled at realm registration;
@@ -279,7 +294,7 @@ conversion still belongs to the operation function's Realm, while its member
 binding receives the receiver's Binding Context. Static operations have no
 receiver Realm and use the context in which their function was installed.
 Implementations must not accept or retain that context. Existing
-`invokeWith(bindingContext)` dependencies are migration work. A future dependency
+`invokeWith(atArg(0, (ctx) => ctx))` dependencies are migration work. A future dependency
 on the calling script or incumbent settings requires explicit invocation
 information at the binding boundary.
 
@@ -352,6 +367,16 @@ and declared result projection supply that boundary. Async sequence arguments
 supply iteration steps whose internal results carry converted element values.
 The adapter retains dictionary and interface types through each fulfillment.
 
+An `async iterable` declaration names its implementation factory with `create`.
+Binding calls that method with converted arguments and adapts the internal
+iterator's `next()` and `return()` methods. `return: true` declares the return
+algorithm so Binding exposes that method on the author iterator prototype.
+The implementation owns its cursor and resource state. Binding retains the
+author iterator's identity, iteration kind, completion flag, and ongoing Promise
+in the world's `PlatformObjectRegistry`. Borrowed iterator methods therefore
+share completion and call ordering across realms in that world. The method's
+realm supplies the returned Promise and iterator result object.
+
 The fulfillment adapters use native Promise observation in the destination
 realm. A `PromiseValue` chain retains that destination. `Promises.import()`
 selects the consumer's destination when a result crosses between owners;
@@ -387,15 +412,16 @@ A retained promise keeps distinct projections for allocating
 and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.
 
-Function-valued attributes can declare `functionResult(length, steps)` to return
+Function-valued attributes can declare `attrFn(createCallback)` to return
 one built-in function per member and receiver realm, named after the attribute.
 Binding retains it alongside the getter in its existing member cache. The
 function receives ordinary JavaScript arguments and `this`; it is not an
 interface operation and performs no receiver-brand check. The attribute getter
 still validates its receiver, and borrowing it selects that receiver's realm.
-When the function's steps need that realm, declare them with `contextValue()`.
-Binding resolves the factory once when creating the cached function, using the
-receiver's Binding Context.
+Binding calls the factory once when creating the cached function, supplying the
+receiver's Binding Context. The returned callback's `length` supplies the public
+function's length. The declaration controls the getter; a writable attribute can
+also declare its setter normally.
 
 `object` and `any` do not identify a platform interface, so Web IDL cannot infer
 which implementation to project. Do not use either merely to postpone defining
@@ -412,6 +438,11 @@ author function directly. The adapter:
 - projects an associated implementation used as `this` to its platform object;
 - enters the callback's realm and lifecycle; and
 - applies the declared report/rethrow/promise exception policy.
+
+For callback interfaces, `CallbackInterfaceRecord` retains Web IDL's definition,
+conversion context, and captured callback context. The declaration's adapter
+receives a `CallbackInterfaceValue` with the original object, its realm, and
+the operation-invocation method.
 
 When a callback receiver is an implementation, it must already be associated
 with a platform object. A direct implementation test can invoke converted
@@ -430,9 +461,44 @@ construction supplies converted records and the runtime dependency. Shared
 callback binding supplies controller platform objects and imports declared
 Promise results; the implementation adopts start's `any` result through its runtime.
 
-A constructor's `bind({ construct })` supplies custom implementation creation
-steps. It returns the implementation; ordinary
-binding still owns platform allocation, subclass prototypes, and association.
+A constructor's `construct` option supplies custom implementation creation
+steps. It returns the implementation; ordinary binding still owns platform
+allocation, subclass prototypes, and association. Custom `get`, `set`, and
+`invoke` steps are also declared directly on their respective members.
+
+Declaration options have specific fields for constructor and operation
+dependencies (`constructWith` and `invokeWith`), result policies, callback
+conversion, and legacy getter support. They do not share a generic `binding`
+payload. The Core project owns these option types; `web-idl/index`
+supplies runtime-specific callback signatures by augmenting `DeclarationCallbacks`.
+That augmentation applies to declarations throughout the consuming TypeScript
+program. Source subsystems import through this full entry. ESLint forbids direct
+declaration imports outside Web IDL itself, Stylelet, and Selectlet. Those standalone packages
+can use `web-idl/core/index` without the runtime dependency.
+`InterfaceDefinition.implementation` owns the class,
+construction dependencies, and optional allocation/initialization hooks.
+`impl(Class, options)` fills that field; its options and result types derive from
+the field. Core also exports exception names, codes, and request helpers. It has
+no dependency on runtime source files or other source projects.
+
+The `BindingContext<Realm>` class retains the registered binding, its composed
+runtime, and the host's concrete realm type. A declaration can
+select it once with `defineInterface<Realm>`, and its nested callbacks infer the
+same context. `BindingWorld<Realm>` only registers compatible realms. Definitions
+without host-specific callbacks remain usable by any Web IDL host; the minimal
+host contract does not acquire HTML document or timing methods.
+
+Constructor and operation injections use the same `atArg(index, resolve)` record.
+The index identifies the final implementation argument slot; converted author
+arguments, or arguments supplied by internal construction, fill the remaining
+slots in order. Each resolver receives the active Binding Context and returns
+the injected argument. Selecting a global or constructing another implementation
+is explicit in that callback. Duplicate injected slots are rejected.
+
+`core/definitions/` groups each definition with its `define…` function
+and dedicated helpers; primary and partial forms share a module. Shared members,
+arguments, type expressions, and extended attributes remain in `core/definition.ts`.
+Cross-definition projection metadata remains in `core/binding.ts`.
 
 ### Exceptions
 
@@ -446,11 +512,28 @@ implementation state is ordinary `DOMExceptionImpl`, while the platform object
 is allocated as an Error exotic
 in the owning realm.
 
-Web IDL's `exceptions/dom-exception-core.ts` owns the shared names, legacy codes,
+Web IDL's `core/dom-exception-core.ts` owns the shared names, legacy codes,
 and DOMException-request helpers. JS Engine's
 [`simple-exception.ts`](./js-engine/simple-exception.ts) provides distinguishable
 `RangeError`, `SyntaxError`, and `TypeError` requests without importing Web IDL.
 Translate dependency failures into requests at the dependency call.
+
+Both families use native exception subclasses with private brands. Their `is()`
+predicates recognize our objects without reading public properties or walking
+prototype chains; arbitrary errors, forged prototypes, and proxies pass through.
+Realization reads the exception's own name and message without a separate snapshot.
+Standalone DOMExceptions retain native inheritance; the binding supplies the
+final realm-owned platform object.
+
+IDL-to-JavaScript conversion realizes internal exceptions before handing them to
+author callbacks or returning them as values. For example, a stream cancellation
+callback and the subsequent pipe rejection must receive the same realm-owned
+error, including any changes the callback makes to it. Web IDL §3.14.3 specifies
+exception creation and realm selection, not an immutable original-message record.
+
+Imported exception constructors request realm-owned failures from specification
+algorithms. Native errors remain appropriate for internal invariant failures;
+no import or declaration replaces the global error constructors.
 
 The binding realizes a request in the executing method's realm for synchronous
 calls, or the promise's realm when rejecting an internal promise. Existing

@@ -2,8 +2,8 @@ import {
   getArrayBufferMaxByteLength, getBufferSourceByteLength, getBufferTypeName,
   isBufferSourceDetached, isObject,
 } from '../../../js-engine/index';
-import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
-import type { StructuredDataEnvironment } from './environment';
+import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
   type StructuredDeserializeMemory, type StructuredSerializeMemory,
@@ -21,14 +21,14 @@ import {
 export function structuredSerializeWithTransfer(
   value: unknown,
   transferList: readonly unknown[],
-  environment: StructuredDataEnvironment,
+  ctx: BindingContext<Realm>,
 ): StructuredSerializeWithTransferResult {
   const memory: StructuredSerializeMemory = new Map();
   const preparedTransfers: PreparedTransfer[] = [];
 
   for (const valueToTransfer of transferList) {
-    const prepared = prepareTransfer(valueToTransfer, environment);
-    if (memory.has(valueToTransfer)) return throwDataCloneError();
+    const prepared = prepareTransfer(valueToTransfer, ctx);
+    if (memory.has(valueToTransfer)) return throwDOMException('DataCloneError');
     memory.set(valueToTransfer, prepared.placeholder);
     preparedTransfers.push(prepared);
   }
@@ -36,13 +36,13 @@ export function structuredSerializeWithTransfer(
   const serialized = structuredSerializeInternal(
     value,
     false,
-    environment,
+    ctx,
     memory,
   );
   const transferDataHolders: TransferDataHolder[] = [];
 
   for (const prepared of preparedTransfers) {
-    transferDataHolders.push(performTransfer(prepared, environment));
+    transferDataHolders.push(performTransfer(prepared, ctx));
   }
 
   return { serialized, transferDataHolders };
@@ -51,13 +51,13 @@ export function structuredSerializeWithTransfer(
 /** HTML §2.7.8, StructuredDeserializeWithTransfer. */
 export function structuredDeserializeWithTransfer(
   result: StructuredSerializeWithTransferResult,
-  environment: StructuredDataEnvironment,
+  ctx: BindingContext<Realm>,
 ): StructuredDeserializeWithTransferResult {
   const memory: StructuredDeserializeMemory = new Map();
   const transferredValues: unknown[] = [];
 
   for (const dataHolder of result.transferDataHolders) {
-    const value = receiveTransfer(dataHolder, environment);
+    const value = receiveTransfer(dataHolder, ctx);
     memory.set(dataHolder.placeholder, value);
     transferredValues.push(value);
   }
@@ -65,7 +65,7 @@ export function structuredDeserializeWithTransfer(
   return {
     deserialized: structuredDeserialize(
       result.serialized,
-      environment,
+      ctx,
       memory,
     ),
     transferredValues,
@@ -75,9 +75,9 @@ export function structuredDeserializeWithTransfer(
 // BINDING_INTEGRATION: resolve the source platform object and its transferable capability.
 function prepareTransfer(
   value: unknown,
-  environment: StructuredDataEnvironment,
+  ctx: BindingContext<Realm>,
 ): PreparedTransfer {
-  if (!isObject(value)) return throwDataCloneError();
+  if (!isObject(value)) return throwDOMException('DataCloneError');
   const bufferType = getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
@@ -85,16 +85,16 @@ function prepareTransfer(
   if (bufferType === 'ArrayBuffer') {
     return { kind: 'ArrayBuffer', placeholder, value: value as ArrayBuffer };
   }
-  if (bufferType === 'SharedArrayBuffer') return throwDataCloneError();
-  if (bufferType !== undefined) return throwDataCloneError();
+  if (bufferType === 'SharedArrayBuffer') return throwDOMException('DataCloneError');
+  if (bufferType !== undefined) return throwDOMException('DataCloneError');
 
-  const platformObject = environment.context.resolvePlatformObject(value);
-  if (!platformObject) return throwDataCloneError();
-  const steps = environment.context.getCapability(
+  const platformObject = ctx.getObjectRecord(value);
+  if (!platformObject) return throwDOMException('DataCloneError');
+  const steps = ctx.getCapability(
     platformObject.primaryInterface.definition,
     transferable,
   );
-  if (!steps) return throwDataCloneError();
+  if (!steps) return throwDOMException('DataCloneError');
   return {
     implementation: platformObject.implementation,
     interfaceName: platformObject.primaryInterface.definition.name,
@@ -106,10 +106,10 @@ function prepareTransfer(
 
 function performTransfer(
   prepared: PreparedTransfer,
-  environment: StructuredDataEnvironment,
+  ctx: BindingContext<Realm>,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
-    if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
+    if (isBufferSourceDetached(prepared.value)) return throwDOMException('DataCloneError');
     const byteLength = getBufferSourceByteLength(prepared.value);
     const maxByteLength = getArrayBufferMaxByteLength(prepared.value);
     return {
@@ -117,14 +117,14 @@ function performTransfer(
         ? 'ArrayBuffer'
         : 'ResizableArrayBuffer',
       placeholder: prepared.placeholder,
-      buffer: environment.realm.transferArrayBuffer(prepared.value),
+      buffer: ctx.realm.transferArrayBuffer(prepared.value),
       byteLength,
       ...(maxByteLength === undefined ? {} : { maxByteLength }),
     };
   }
 
   if (isTransferableDetached(prepared.implementation)) {
-    return throwDataCloneError();
+    return throwDOMException('DataCloneError');
   }
   const fields = createStructuredDataRecord();
   prepared.steps.transferSteps(prepared.implementation, fields);
@@ -140,17 +140,17 @@ function performTransfer(
 // BINDING_INTEGRATION: construct and initialize the destination platform object.
 function receiveTransfer(
   dataHolder: TransferDataHolder,
-  environment: StructuredDataEnvironment,
+  ctx: BindingContext<Realm>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
-    const interface_ = environment.context.getInterface(
+    const interface_ = ctx.getInterface(
       dataHolder.interfaceName,
     );
-    if (!interface_ || !environment.context.isInterfaceExposed(interface_)) {
-      return throwDataCloneError();
+    if (!interface_ || !ctx.isInterfaceExposed(interface_)) {
+      return throwDOMException('DataCloneError');
     }
-    const platformObject = environment.context.createPlatformObject(interface_);
-    const steps = environment.context.getCapability(
+    const platformObject = ctx.createPlatformObject(interface_);
+    const steps = ctx.getCapability(
       platformObject.primaryInterface.definition,
       transferable,
     );
@@ -166,7 +166,7 @@ function receiveTransfer(
     return platformObject.platformObject;
   }
 
-  const value = environment.realm.transferArrayBuffer(dataHolder.buffer);
+  const value = ctx.realm.transferArrayBuffer(dataHolder.buffer);
   if (
     getBufferSourceByteLength(value) !== dataHolder.byteLength ||
     getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength

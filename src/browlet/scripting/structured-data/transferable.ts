@@ -27,7 +27,7 @@ export function markTransferableDetached(value: object): void {
 // HTML owns the platform object's [[Detached]] state; it is not Web IDL state.
 const detachedPlatformObjects = new WeakSet<object>();
 
-function requireTransferableMarker(interface_: InterfaceDefinition): void {
+function requireTransferableMarker<Realm>(interface_: InterfaceDefinition<Realm>): void {
   const markers = interface_.extendedAttributes?.filter(
     (attribute) =>
       attribute.kind !== 'raw' && attribute.name === 'Transferable',

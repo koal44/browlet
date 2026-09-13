@@ -6,7 +6,7 @@ import {
   defineInterface, definePartialInterface, idlType, type AttributeMember,
   type NamedArgumentsExtendedAttribute, type OperationMember,
   type StringifierMember,
-} from '../../src/web-idl/declaration/index';
+} from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 

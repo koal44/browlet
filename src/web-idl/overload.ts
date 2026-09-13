@@ -2,19 +2,20 @@ import {
   getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
 } from '../js-engine/index';
 import type { DefinitionAssembly } from './assembly';
-import { createAsyncSequenceValue } from './async-sequence';
+import { createIDLAsyncSequence } from './async-sequence';
 import {
   convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import type {
   ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
-} from './declaration/index';
+} from './core/index';
 import {
   getFlattenedMemberTypes, getTypeWithApplicableExtendedAttributes,
   getUnannotatedType, includesNullableType,
 } from './types';
 
+// Web IDL §2.5.8 Overloading — compute the effective overload set, from selected callables.
 export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
   callables: Callable[],
   argumentCount: number,
@@ -75,6 +76,7 @@ export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
   return effectiveOverloadSet;
 }
 
+// Web IDL §3.6 Overload resolution algorithm.
 export function resolveOverload<Callable extends IDLCallable>(
   effectiveOverloadSet: EffectiveOverloadSetItem<Callable>[],
   argumentsList: unknown[],
@@ -137,7 +139,7 @@ export function resolveOverload<Callable extends IDLCallable>(
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
       throw new Error('Iterator method selected a non-async-sequence overload');
     }
-    values.push(createAsyncSequenceValue(
+    values.push(createIDLAsyncSequence(
       argumentsList[i] as object,
       asyncSequence.type,
       asyncSequenceMethod.method,
@@ -224,12 +226,14 @@ export type ResolvedOverload<Callable extends IDLCallable> = {
 export const missingArgument: unique symbol = Symbol('Web IDL missing argument');
 export type MissingArgument = typeof missingArgument;
 
+// Extracted from Web IDL §2.5.8 Overloading — compute the effective overload set's optionality values.
 function getOptionality(argument: ArgumentDefinition): Optionality {
   if (argument.variadic) return 'variadic';
   if (argument.optional) return 'optional';
   return 'required';
 }
 
+// Project helper: include applicable argument attributes in the type used for conversion.
 function getArgumentType(argument: ArgumentDefinition): WebIDLType {
   return getTypeWithApplicableExtendedAttributes(
     argument.type,
@@ -237,6 +241,7 @@ function getArgumentType(argument: ArgumentDefinition): WebIDLType {
   );
 }
 
+// Extracted from Web IDL §3.6 Overload resolution algorithm — select by the distinguishing argument.
 function resolveDistinguishingArgument<Callable extends IDLCallable>(
   candidates: EffectiveOverloadSetItem<Callable>[],
   value: unknown,
@@ -452,6 +457,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   return throwTypeError(context, 'No overload matches the argument value');
 }
 
+// Extracted from Web IDL §3.6 Overload resolution algorithm — convert an argument or use its default.
 function convertArgument<Callable extends IDLCallable>(
   value: unknown,
   item: EffectiveOverloadSetItem<Callable>,
@@ -470,6 +476,7 @@ function convertArgument<Callable extends IDLCallable>(
   return convertToIDL(value, type, context);
 }
 
+// Project helper: find the declaration for a fixed or expanded variadic argument.
 function getDeclaredArgument(
   callable: IDLCallable,
   index: number,
@@ -480,6 +487,8 @@ function getDeclaredArgument(
   return last?.variadic ? last : undefined;
 }
 
+// Project helper: locate the distinguishing position by comparing canonical type names.
+// Web IDL §2.5.8 Overloading — distinguishing argument index.
 function getDistinguishingArgumentIndex<Callable extends IDLCallable>(
   candidates: EffectiveOverloadSetItem<Callable>[],
   definitions: DefinitionAssembly,
@@ -498,6 +507,7 @@ function getDistinguishingArgumentIndex<Callable extends IDLCallable>(
   throw new Error('Overloads have no distinguishing argument');
 }
 
+// Project helper: produce comparable type names after resolving typedefs and annotations.
 function canonicalType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -528,6 +538,7 @@ function canonicalType(
   }
 }
 
+// Project helper: test candidate types against a platform object's implemented interfaces.
 function containsImplementedInterface(
   type: WebIDLType,
   value: unknown,
@@ -541,6 +552,7 @@ function containsImplementedInterface(
   });
 }
 
+// Project helper: find a callback definition among candidate types.
 function containsDefinitionKind(
   type: WebIDLType,
   kind: 'callback-function' | 'callback-interface',
@@ -551,6 +563,7 @@ function containsDefinitionKind(
     definitions.getDefinition(candidate.name)?.kind === kind);
 }
 
+// Project helper: recognize a dictionary among candidate types.
 function containsDictionary(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -560,6 +573,7 @@ function containsDictionary(
     definitions.getDefinition(candidate.name)?.kind === 'dictionary');
 }
 
+// Project helper: recognize string or enumeration candidates.
 function containsStringType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -571,6 +585,7 @@ function containsStringType(
         definitions.getDefinition(candidate.name)?.kind === 'enumeration');
 }
 
+// Project helper: recognize numeric candidates.
 function containsNumericType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -579,6 +594,7 @@ function containsNumericType(
     candidate.kind === 'simple' && numericTypeNames.has(candidate.name));
 }
 
+// Project helper: find a simple type by name among candidates.
 function containsSimpleType(
   type: WebIDLType,
   name: SimpleTypeName,
@@ -588,6 +604,7 @@ function containsSimpleType(
     candidate.kind === 'simple' && candidate.name === name);
 }
 
+// Project helper: recognize ArrayBuffer or SharedArrayBuffer candidates.
 function containsAnyBufferType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -597,6 +614,7 @@ function containsAnyBufferType(
     bufferTypeNames.has(candidate.name as BufferTypeName));
 }
 
+// Project helper: match a declaration type kind among candidates.
 function containsKind(
   type: WebIDLType,
   kind: WebIDLType['kind'],
@@ -606,6 +624,7 @@ function containsKind(
     candidate.kind === kind);
 }
 
+// Project helper: recognize sequence or frozen-array candidates.
 function containsSequenceLikeType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -614,6 +633,7 @@ function containsSequenceLikeType(
     candidate.kind === 'sequence' || candidate.kind === 'frozen-array');
 }
 
+// Project helper: find a matching type after unwrapping nullable types and unions.
 function findContainedType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -622,6 +642,7 @@ function findContainedType(
   return getContainedTypes(type, definitions).find(predicate);
 }
 
+// Project helper: expose candidate types through nullable types, annotations, and unions.
 function getContainedTypes(
   type: WebIDLType,
   definitions: DefinitionAssembly,
@@ -636,6 +657,7 @@ function getContainedTypes(
   return [inner];
 }
 
+// Project helper: filter overload candidates, returning undefined when none match.
 function retain<Value>(
   values: Value[],
   predicate: (value: Value) => boolean,
@@ -644,6 +666,7 @@ function retain<Value>(
   return matches.length > 0 ? matches : undefined;
 }
 
+// Project helper: create an overload-resolution failure in the selected realm.
 function throwTypeError(
   context: ConversionContext,
   message: string,

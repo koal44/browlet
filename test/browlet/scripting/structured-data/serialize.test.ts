@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { TypeError as TypeErrorRequest } from '../../../../src/js-engine/simple-exception';
 
 import {
-  getDOMExceptionRequest,
-} from '../../../../src/web-idl/exceptions/dom-exception-core';
-import {
-  createBindings, defineInterface, impl, xattr,
+  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   domExceptionCapabilities,
 } from '../../../../src/browlet/integration/dom-exception';
@@ -16,7 +15,7 @@ import type {
 } from '../../../../src/browlet/scripting/structured-data/records';
 import {
   structuredSerialize, structuredSerializeForStorage,
-  structuredSerializeInternal, type StructuredSerializationEnvironment,
+  structuredSerializeInternal,
 } from '../../../../src/browlet/scripting/structured-data/serialize';
 import {
   serializable,
@@ -24,23 +23,24 @@ import {
 
 describe('HTML structured serialization', () => {
   it('serializes primitive values and rejects symbols', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const primitives = [
       undefined, null, false, true, -0, 1, NaN, 1n, '', 'value',
     ];
 
     for (const value of primitives) {
-      const serialized = structuredSerialize(value, environment);
+      const serialized = structuredSerialize(value, ctx);
       expect(serialized).toEqual({ type: 'primitive', value });
       if (Object.is(value, -0)) {
         expect(Object.is(serializedValue(serialized), -0)).toBe(true);
       }
     }
-    expectDataCloneError(() => structuredSerialize(Symbol(), environment));
+    expectDataCloneError(() => structuredSerialize(Symbol(), ctx));
   });
 
   it('reads boxed primitives and built-ins by slots across realms', () => {
-    const { environment, realm } = createEnvironment();
+    const ctx = createContext();
+    const { realm } = ctx;
     const values = realm.evaluate(`[
       new Boolean(false),
       new Number(-0),
@@ -50,64 +50,65 @@ describe('HTML structured serialization', () => {
       /a+/dgimsy,
     ]`, 'structured-serialize-builtins.js') as object[];
 
-    expect(structuredSerialize(values[0], environment)).toEqual({
+    expect(structuredSerialize(values[0], ctx)).toEqual({
       type: 'Boolean', value: false,
     });
-    const number = structuredSerialize(values[1], environment);
+    const number = structuredSerialize(values[1], ctx);
     expect(number.type).toBe('Number');
     expect(Object.is(recordValue(number), -0)).toBe(true);
-    expect(structuredSerialize(values[2], environment)).toEqual({
+    expect(structuredSerialize(values[2], ctx)).toEqual({
       type: 'BigInt', value: 2n,
     });
-    expect(structuredSerialize(values[3], environment)).toEqual({
+    expect(structuredSerialize(values[3], ctx)).toEqual({
       type: 'String', value: 'text',
     });
-    expect(structuredSerialize(values[4], environment)).toEqual({
+    expect(structuredSerialize(values[4], ctx)).toEqual({
       type: 'Date', value: 1234,
     });
-    expect(structuredSerialize(values[5], environment)).toEqual({
+    expect(structuredSerialize(values[5], ctx)).toEqual({
       type: 'RegExp', source: 'a+', flags: 'dgimsy',
     });
     expectDataCloneError(
       () => structuredSerialize(realm.evaluate(
         'Object(Symbol())',
         'structured-serialize-symbol.js',
-      ), environment),
+      ), ctx),
     );
   });
 
   it('recognizes collection and buffer slots across realms', () => {
-    const { environment, realm } = createEnvironment();
+    const ctx = createContext();
+    const { realm } = ctx;
     const [map, set, buffer, view] = realm.evaluate(`(() => {
       const buffer = new ArrayBuffer(4);
       return [new Map([[1, 2]]), new Set([3]), buffer, new Uint8Array(buffer)];
     })()`, 'structured-serialize-cross-realm.js') as object[];
 
-    expect(structuredSerialize(map, environment)).toMatchObject({
+    expect(structuredSerialize(map, ctx)).toMatchObject({
       type: 'Map',
       entries: [{
         key: { type: 'primitive', value: 1 },
         value: { type: 'primitive', value: 2 },
       }],
     });
-    expect(structuredSerialize(set, environment)).toMatchObject({
+    expect(structuredSerialize(set, ctx)).toMatchObject({
       type: 'Set',
       entries: [{ type: 'primitive', value: 3 }],
     });
-    expect(structuredSerialize(buffer, environment)).toMatchObject({
+    expect(structuredSerialize(buffer, ctx)).toMatchObject({
       type: 'ArrayBuffer', byteLength: 4,
     });
-    expect(structuredSerialize(view, environment)).toMatchObject({
+    expect(structuredSerialize(view, ctx)).toMatchObject({
       type: 'ArrayBufferView', constructor: 'Uint8Array',
     });
   });
 
   it('copies ArrayBuffers and describes their views', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const buffer = new ArrayBuffer(8);
     new Uint8Array(buffer).set([1, 2, 3, 4]);
     const view = new Uint16Array(buffer, 2, 2);
-    const serializedBuffer = structuredSerialize(buffer, environment);
+    const serializedBuffer = structuredSerialize(buffer, ctx);
 
     expect(serializedBuffer).toMatchObject({
       type: 'ArrayBuffer',
@@ -120,7 +121,7 @@ describe('HTML structured serialization', () => {
     new Uint8Array(buffer)[0] = 9;
     expect(serializedBuffer.bytes[0]).toBe(1);
 
-    const serializedView = structuredSerialize(view, environment);
+    const serializedView = structuredSerialize(view, ctx);
     expect(serializedView).toMatchObject({
       type: 'ArrayBufferView',
       constructor: 'Uint16Array',
@@ -129,7 +130,7 @@ describe('HTML structured serialization', () => {
       byteOffset: 2,
       arrayLength: 2,
     });
-    expect(structuredSerialize(new DataView(buffer, 1, 3), environment))
+    expect(structuredSerialize(new DataView(buffer, 1, 3), ctx))
       .toMatchObject({
         type: 'ArrayBufferView',
         constructor: 'DataView',
@@ -139,9 +140,9 @@ describe('HTML structured serialization', () => {
   });
 
   it('preserves resizable buffer bounds and rejects invalid views', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
-    const serialized = structuredSerialize(buffer, environment);
+    const serialized = structuredSerialize(buffer, ctx);
 
     expect(serialized).toMatchObject({
       type: 'ResizableArrayBuffer',
@@ -152,7 +153,7 @@ describe('HTML structured serialization', () => {
     new Uint8Array(buffer).set([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(structuredSerialize(
       new Uint16Array(buffer, 2),
-      environment,
+      ctx,
     )).toMatchObject({
       type: 'ArrayBufferView',
       byteLength: 'auto',
@@ -160,7 +161,7 @@ describe('HTML structured serialization', () => {
     });
     expect(structuredSerialize(
       new Uint16Array(buffer, 2, 3),
-      environment,
+      ctx,
     )).toMatchObject({
       type: 'ArrayBufferView',
       byteLength: 6,
@@ -168,7 +169,7 @@ describe('HTML structured serialization', () => {
     });
     expect(structuredSerialize(
       new DataView(buffer, 1),
-      environment,
+      ctx,
     )).toMatchObject({
       type: 'ArrayBufferView',
       byteLength: 'auto',
@@ -180,41 +181,40 @@ describe('HTML structured serialization', () => {
     new Uint8Array(bounded).set([8, 7, 6, 5, 4, 3, 2, 1]);
     expect(structuredSerialize(
       new Uint16Array(bounded, 2),
-      environment,
+      ctx,
     )).toMatchObject({
       byteLength: 'auto',
       arrayLength: 'auto',
     });
     expect(structuredSerialize(
       new Uint16Array(bounded, 2, 3),
-      environment,
+      ctx,
     )).toMatchObject({
       byteLength: 6,
       arrayLength: 3,
     });
     expect(structuredSerialize(
       new DataView(bounded, 1),
-      environment,
+      ctx,
     )).toMatchObject({ byteLength: 'auto' });
     expect([...new Uint8Array(bounded)]).toEqual([8, 7, 6, 5, 4, 3, 2, 1]);
 
     const view = new Uint8Array(buffer, 4, 4);
     buffer.resize(2);
-    expectDataCloneError(() => structuredSerialize(view, environment));
+    expectDataCloneError(() => structuredSerialize(view, ctx));
 
     const detached = new ArrayBuffer(2);
     structuredClone(detached, { transfer: [detached] });
-    expectDataCloneError(() => structuredSerialize(detached, environment));
+    expectDataCloneError(() => structuredSerialize(detached, ctx));
   });
 
   it('shares SharedArrayBuffers only within non-storage isolated data', () => {
-    const agentCluster = {};
-    const isolated = createEnvironment({ agentCluster, crossOriginIsolated: true })
-      .environment;
-    const unisolated = createEnvironment({
+    const agentCluster = new AgentCluster('concrete');
+    const isolated = createContext({ agentCluster, crossOriginIsolated: true });
+    const unisolated = createContext({
       agentCluster,
       crossOriginIsolated: false,
-    }).environment;
+    });
     const buffer = new SharedArrayBuffer(4);
     const serialized = structuredSerialize(buffer, isolated);
 
@@ -237,14 +237,14 @@ describe('HTML structured serialization', () => {
   });
 
   it('preserves repeated identity and cycles in arrays and objects', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const child = { value: 1 };
     const source: Record<string, unknown> = { first: child, second: child };
     source.self = source;
     const first: Record<string, unknown> = {};
     const second: Record<string, unknown> = { first };
     first.second = second;
-    const serialized = structuredSerialize(source, environment);
+    const serialized = structuredSerialize(source, ctx);
 
     if (serialized.type !== 'Object') {
       throw new Error('Object serialized to the wrong record');
@@ -254,7 +254,7 @@ describe('HTML structured serialization', () => {
     );
     expect(properties.first).toBe(properties.second);
     expect(properties.self).toBe(serialized);
-    const serializedMutual = structuredSerialize(first, environment);
+    const serializedMutual = structuredSerialize(first, ctx);
     if (serializedMutual.type !== 'Object') {
       throw new Error('Object serialized to the wrong record');
     }
@@ -268,7 +268,7 @@ describe('HTML structured serialization', () => {
     sparse.length = 4;
     sparse[2] = sparse;
     Reflect.set(sparse, 'extra', 3);
-    const serializedSparse = structuredSerialize(sparse, environment);
+    const serializedSparse = structuredSerialize(sparse, ctx);
     expect(serializedSparse).toMatchObject({
       type: 'Array',
       length: 4,
@@ -284,7 +284,7 @@ describe('HTML structured serialization', () => {
   });
 
   it('snapshots Map and Set data before recursive serialization', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const map = new Map<unknown, unknown>();
     const mutator = Object.defineProperty({}, 'run', {
       enumerable: true,
@@ -295,7 +295,7 @@ describe('HTML structured serialization', () => {
     });
     map.set('first', mutator);
     map.set(map, 'self');
-    const serializedMap = structuredSerialize(map, environment);
+    const serializedMap = structuredSerialize(map, ctx);
 
     if (serializedMap.type !== 'Map') {
       throw new Error('Map serialized to the wrong record');
@@ -307,7 +307,7 @@ describe('HTML structured serialization', () => {
     const set = new Set<unknown>();
     set.add('first');
     set.add(set);
-    const serializedSet = structuredSerialize(set, environment);
+    const serializedSet = structuredSerialize(set, ctx);
     if (serializedSet.type !== 'Set') {
       throw new Error('Set serialized to the wrong record');
     }
@@ -315,13 +315,14 @@ describe('HTML structured serialization', () => {
   });
 
   it('serializes specified Error state without invoking message accessors', () => {
-    const { environment, realm } = createEnvironment();
+    const ctx = createContext();
+    const { realm } = ctx;
     const error = realm.evaluate(`(() => {
       const error = new TypeError('bad');
       error.name = 'RangeError';
       return error;
     })()`, 'structured-serialize-error.js') as object;
-    const serialized = structuredSerialize(error, environment);
+    const serialized = structuredSerialize(error, ctx);
 
     expect(serialized).toMatchObject({
       type: 'Error',
@@ -339,7 +340,7 @@ describe('HTML structured serialization', () => {
         throw new Error('must not run');
       },
     });
-    expect(structuredSerialize(accessorMessage, environment)).toMatchObject({
+    expect(structuredSerialize(accessorMessage, ctx)).toMatchObject({
       type: 'Error', message: undefined,
     });
 
@@ -351,7 +352,7 @@ describe('HTML structured serialization', () => {
         return 'author stack';
       },
     });
-    expect(structuredSerialize(accessorStack, environment)).toMatchObject({
+    expect(structuredSerialize(accessorStack, ctx)).toMatchObject({
       type: 'Error', stack: '',
     });
     expect(stackGetterRan).toBe(false);
@@ -361,17 +362,17 @@ describe('HTML structured serialization', () => {
       Object.defineProperty(error, 'message', { value: Symbol() });
       return error;
     })()`, 'structured-serialize-symbol-message.js') as object;
-    expect(() => structuredSerialize(symbolMessage, environment))
+    expect(() => structuredSerialize(symbolMessage, ctx))
       .toThrow(TypeErrorRequest);
   });
 
   it('serializes Error cause through the shared graph memory', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const cause: Record<string, unknown> = { marker: 'cause' };
     const error = new Error('failed', { cause });
     cause.error = error;
 
-    const serialized = structuredSerialize(error, environment);
+    const serialized = structuredSerialize(error, ctx);
 
     expect(serialized.type).toBe('Error');
     if (serialized.type !== 'Error' || serialized.cause === undefined) {
@@ -388,13 +389,13 @@ describe('HTML structured serialization', () => {
   });
 
   it('uses enumerable-key snapshots and propagates author exceptions', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const expected = new Error('getter failure');
     const source = Object.defineProperties({}, {
       hidden: { enumerable: false, value: 1 },
       visible: { enumerable: true, value: 2 },
     });
-    expect(structuredSerialize(source, environment)).toEqual({
+    expect(structuredSerialize(source, ctx)).toEqual({
       type: 'Object',
       properties: [{
         key: 'visible',
@@ -408,11 +409,11 @@ describe('HTML structured serialization', () => {
         throw expected;
       },
     });
-    expect(() => structuredSerialize(failure, environment)).toThrow(expected);
+    expect(() => structuredSerialize(failure, ctx)).toThrow(expected);
   });
 
   it('rejects callable, proxy, and unsupported internal-slot objects', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     let proxyTrapRan = false;
     const proxy = new Proxy([], {
       ownKeys() {
@@ -433,53 +434,54 @@ describe('HTML structured serialization', () => {
     ];
 
     for (const value of unsupported) {
-      expectDataCloneError(() => structuredSerialize(value, environment));
+      expectDataCloneError(() => structuredSerialize(value, ctx));
     }
     expect(proxyTrapRan).toBe(false);
   });
 
   it('rejects Array Iterator internal slots without advancing it', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const iterator = [1, 2][Symbol.iterator]();
-    expectDataCloneError(() => structuredSerialize(iterator, environment));
+    expectDataCloneError(() => structuredSerialize(iterator, ctx));
     expect(iterator.next()).toEqual({ value: 1, done: false });
   });
 
   it('rejects String Iterator internal slots without advancing it', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const iterator = 'ab'[Symbol.iterator]();
-    expectDataCloneError(() => structuredSerialize(iterator, environment));
+    expectDataCloneError(() => structuredSerialize(iterator, ctx));
     expect(iterator.next()).toEqual({ value: 'a', done: false });
   });
 
   it('does not infer Iterator slots from the prototype alone', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const iteratorPrototype = Reflect.getPrototypeOf(
       [][Symbol.iterator](),
     )!;
     const impostor = Object.create(iteratorPrototype) as object;
 
-    expect(structuredSerialize(impostor, environment)).toEqual({
+    expect(structuredSerialize(impostor, ctx)).toEqual({
       type: 'Object',
       properties: [],
     });
   });
 
   it.fails('rejects decorated Array Iterator internal slots', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const iterator = Object.assign([][Symbol.iterator](), { marker: true });
-    expectDataCloneError(() => structuredSerialize(iterator, environment));
+    expectDataCloneError(() => structuredSerialize(iterator, ctx));
   });
 
   it('dispatches serializable platform objects by exact primary interface', () => {
-    const { environment, realm } = createEnvironment();
+    const ctx = createContext();
+    const { realm } = ctx;
     const DOMException_ = Reflect.get(
       realm.global,
       'DOMException',
     ) as typeof DOMException;
     const source = new DOMException_('message', 'IndexSizeError');
     Reflect.set(source, 'ignored', true);
-    const serialized = structuredSerialize(source, environment);
+    const serialized = structuredSerialize(source, ctx);
 
     expect(serialized).toMatchObject({
       type: 'platform-object',
@@ -517,20 +519,15 @@ describe('HTML structured serialization', () => {
       },
       deserializationSteps() {},
     })];
-    const bindings = createBindings([containerIDL], { capabilities });
+    const bindings = createBindingWorld<Realm>([containerIDL], { capabilities });
     const realm = new Realm();
-    const registration = bindings.register(realm);
-    const container = registration.context.createPlatformObject(containerIDL);
+    const ctx = bindings.register(realm);
+    const container = ctx.createPlatformObject(containerIDL);
     const implementation = container.implementation as ContainerImpl;
     implementation.child = container.platformObject;
-    const environment: StructuredSerializationEnvironment = {
-      agentCluster: {},
-      context: registration.context,
-      realm,
-    };
     const serialized = structuredSerializeForStorage(
       container.platformObject,
-      environment,
+      ctx,
     );
 
     if (serialized.type !== 'platform-object') {
@@ -541,58 +538,53 @@ describe('HTML structured serialization', () => {
   });
 
   it('uses caller memory internally and fresh memory in each wrapper call', () => {
-    const environment = createEnvironment().environment;
+    const ctx = createContext();
     const source = {};
     const memory = new Map<unknown, SerializedRecord>();
     const first = structuredSerializeInternal(
       source,
       false,
-      environment,
+      ctx,
       memory,
     );
     const second = structuredSerializeInternal(
       source,
       false,
-      environment,
+      ctx,
       memory,
     );
 
     expect(second).toBe(first);
-    expect(structuredSerialize(source, environment)).not.toBe(first);
-    expect(structuredSerializeForStorage(source, environment)).not.toBe(first);
+    expect(structuredSerialize(source, ctx)).not.toBe(first);
+    expect(structuredSerializeForStorage(source, ctx)).not.toBe(first);
   });
 });
 
-function createEnvironment(options: {
-  agentCluster?: object;
+function createContext(options: {
+  agentCluster?: AgentCluster;
   crossOriginIsolated?: boolean;
-} = {}): {
-  environment: StructuredSerializationEnvironment;
-  realm: Realm;
-} {
-  const bindings = createBindings([], {
+} = {}): BindingContext<Realm> {
+  const bindings = createBindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   });
   const realm = new Realm({
     crossOriginIsolated: options.crossOriginIsolated,
   });
-  const registration = bindings.register(realm);
-  registration.install(realm.global);
-  return {
-    environment: {
-      agentCluster: options.agentCluster ?? {},
-      context: registration.context,
-      realm,
-    },
-    realm,
-  };
+  const agentCluster = options.agentCluster ?? new AgentCluster(
+    options.crossOriginIsolated ? 'concrete' : 'none',
+  );
+  agentCluster.add(realm.agent);
+  const ctx = bindings.register(realm);
+  ctx.install(realm.global);
+  return ctx;
 }
 
 function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(getDOMExceptionRequest(error)).toEqual({
+    expect(InternalDOMException.is(error)).toBe(true);
+    expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',
     });

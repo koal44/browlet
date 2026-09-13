@@ -1,9 +1,8 @@
 import { EventTargetImpl } from '../dom/events/event-target';
 import { withPerformanceStub } from '../stubs';
 import {
-  defineInterface, defineTypedef, idlType, op, roAttr, reference, xattr,
-} from '../../web-idl/declaration/index';
-import { impl } from '../../web-idl/index';
+  defineInterface, defineTypedef, idlType, impl, op, reference, roAttr, xattr,
+} from '../../web-idl/index';
 import type { EnvironmentTiming } from './high-resolution-time';
 
 /*

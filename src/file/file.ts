@@ -3,8 +3,7 @@ import type { RuntimeContext } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
-} from '../web-idl/declaration/index';
-import { runtimeContext } from '../web-idl/projection';
+} from '../web-idl/index';
 import {
   BlobImpl, type BlobPart, type BlobPropertyBag,
 } from './blob';
@@ -139,7 +138,7 @@ export const fileIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(FileImpl, {
-    constructWith: [atArg(3, runtimeContext)],
+    constructWith: [atArg(3, (ctx) => ctx.getRuntime())],
   }),
   members: [
     ctor([

@@ -6,7 +6,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, FileImpl,
   FileListImpl, type BlobByteSource,
 } from '../../src/file/index';
-import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import {
   structuredDeserialize,
@@ -132,7 +132,7 @@ describe('File API Blob projection', () => {
   it('preserves the construction realm for a host-created Blob', () => {
     const first = createWindow();
     const second = createWindow();
-    const context = getRealmBindings(getRelevantRealm(first)).context;
+    const context = getBindingContext(getRelevantRealm(first));
     const blob = projectBlob(
       first,
       context.construct(BlobImpl, ['A']),
@@ -240,7 +240,7 @@ describe('File API Blob projection', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
-    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getRealmBindings(getRelevantRealm(window)).context.getRuntime());
+    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getBindingContext(getRelevantRealm(window)).getRuntime());
     const blob = projectBlob(window, implementation);
 
     await expect(call(blob, 'bytes')).rejects.toMatchObject({
@@ -270,20 +270,11 @@ describe('File API Blob projection', () => {
     const targetWindow = createWindow();
     const sourceRealm = getRelevantRealm(sourceWindow);
     const targetRealm = getRelevantRealm(targetWindow);
-    const agentCluster = {};
     const serialized = serialize(
       constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
-      {
-        agentCluster,
-        context: getRealmBindings(sourceRealm).context,
-        realm: sourceRealm,
-      },
+      getBindingContext(sourceRealm),
     );
-    const clone = structuredDeserialize(serialized, {
-      agentCluster,
-      context: getRealmBindings(targetRealm).context,
-      realm: targetRealm,
-    }) as object;
+    const clone = structuredDeserialize(serialized, getBindingContext(targetRealm)) as object;
 
     expect(clone).toBeInstanceOf(requireFunction(targetWindow, 'Blob'));
     expect(clone).not.toBeInstanceOf(requireFunction(sourceWindow, 'Blob'));
@@ -384,7 +375,7 @@ describe('File API File and FileList projection', () => {
 
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {
     const window = createWindow();
-    const context = getRealmBindings(getRelevantRealm(window)).context;
+    const context = getBindingContext(getRelevantRealm(window));
     const runtime = context.getRuntime();
     const source: BlobByteSource = {
       size: 3,
@@ -433,6 +424,31 @@ describe('File API File and FileList projection', () => {
     expect(modificationTime).toBeLessThanOrEqual(after);
   });
 
+  it.each([false, true])('clones FileList entries regardless of prior access (accessed: %s)', (accessed) => {
+    const window = createWindow();
+    const ctx = getBindingContext(getRelevantRealm(window));
+    const file = ctx.construct(
+      FileImpl,
+      ['payload'],
+      'payload.txt',
+      { lastModified: 42, type: 'text/plain' },
+    );
+    const list = ctx.project(
+      FileListImpl,
+      ctx.construct(FileListImpl, [file]),
+    ) as FileList;
+    if (accessed) expect(list.item(0)?.name).toBe('payload.txt');
+
+    const clone = window.structuredClone(list);
+
+    expect(clone).toBeInstanceOf(requireFunction(window, 'FileList'));
+    expect(clone.length).toBe(1);
+    expect(clone.item(0)).toBeInstanceOf(requireFunction(window, 'File'));
+    expect(clone.item(0)?.name).toBe('payload.txt');
+    expect(clone.item(0)?.lastModified).toBe(42);
+    expect(clone.item(0)?.size).toBe(7);
+  });
+
   it('subserializes FileList entries with shared graph identity', async () => {
     const sourceWindow = createWindow();
     const targetWindow = createWindow();
@@ -445,20 +461,11 @@ describe('File API File and FileList projection', () => {
     const list = createFileList(sourceWindow, [file]).platformObject;
     const sourceRealm = getRelevantRealm(sourceWindow);
     const targetRealm = getRelevantRealm(targetWindow);
-    const agentCluster = {};
     const serialized = structuredSerializeForStorage(
       { file, list },
-      {
-        agentCluster,
-        context: getRealmBindings(sourceRealm).context,
-        realm: sourceRealm,
-      },
+      getBindingContext(sourceRealm),
     );
-    const clone = structuredDeserialize(serialized, {
-      agentCluster,
-      context: getRealmBindings(targetRealm).context,
-      realm: targetRealm,
-    }) as Record<string, object>;
+    const clone = structuredDeserialize(serialized, getBindingContext(targetRealm)) as Record<string, object>;
     const clonedFile = clone.file!;
     const clonedList = clone.list!;
 
@@ -505,7 +512,7 @@ function createFileList(
   window: object,
   files: object[],
 ): { implementation: FileListImpl; platformObject: object; } {
-  const context = getRealmBindings(getRelevantRealm(window)).context;
+  const context = getBindingContext(getRelevantRealm(window));
   const implementation = context.construct(
     FileListImpl,
     files.map((file) => requireFileImplementation(window, file)),
@@ -517,15 +524,15 @@ function createFileList(
 }
 
 function requireFileImplementation(window: object, file: object): FileImpl {
-  const context = getRealmBindings(getRelevantRealm(window)).context;
-  const implementation = context.getImplementation(file, FileImpl);
+  const context = getBindingContext(getRelevantRealm(window));
+  const implementation = context.unwrap(file, FileImpl);
   if (!implementation) throw new Error('Value is not a File');
   return implementation;
 }
 
 function projectBlob(window: object, implementation: BlobImpl): object {
   const realm = getRelevantRealm(window);
-  return getRealmBindings(realm).context.project(
+  return getBindingContext(realm).project(
     BlobImpl,
     implementation,
   );

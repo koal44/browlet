@@ -1,4 +1,4 @@
-import type { CapabilityRegistration } from '../../../web-idl/capability';
+import type { CapabilityRegistration } from '../../../web-idl/index';
 import { blobSerializableCapabilities } from './structured-data/blob';
 import { fileSerializableCapabilities } from './structured-data/file';
 import {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { FileImpl } from '../../src/file/index';
 import { FormDataImpl } from '../../src/xhr/index';
@@ -177,8 +177,8 @@ describe('XMLHttpRequest FormData projection', () => {
     const file = construct(window, 'File', [[], 'value.txt']);
     call(formData, 'append', ['file', file]);
 
-    const context = getRealmBindings(getRelevantRealm(window)).context;
-    const implementation = context.getImplementation(formData, FormDataImpl);
+    const context = getBindingContext(getRelevantRealm(window));
+    const implementation = context.unwrap(formData, FormDataImpl);
     if (!implementation) throw new Error('Value is not FormData');
     const entries = implementation.getEntryList();
 

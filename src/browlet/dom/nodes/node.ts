@@ -1,6 +1,3 @@
-import {
-  domExceptionName, throwDOMException,
-} from '../../../web-idl/exceptions/dom-exception-core';
 import type {
   EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';
@@ -9,10 +6,9 @@ import {
   TreeNode, type TreeNodeVirtuals,
 } from '../infra/tree';
 import {
-  arg, defineDictionary, defineInterface, dictMember, emptyDictionary,
-  idlType, nullable, op, roAttr, reference,
-} from '../../../web-idl/declaration/index';
-import { impl } from '../../../web-idl/index';
+  arg, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
+  op, reference, roAttr, DOMExceptionNames, throwDOMException,
+} from '../../../web-idl/index';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';
@@ -159,7 +155,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
 
     if (child.parentNode !== this) {
-      throwDOMException(domExceptionName.notFound);
+      throwDOMException(DOMExceptionNames.notFound);
     }
 
     child.insertTreeSiblingBefore(node);

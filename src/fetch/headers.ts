@@ -6,9 +6,7 @@ import { parseStructuredField, serializeStructuredField, type StructuredField } 
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,
-} from '../web-idl/declaration/index';
-import { bind } from '../web-idl/projection';
-
+} from '../web-idl/index';
 import { isForbiddenMethod } from './http/methods';
 import { parseSingleRangeHeaderValue } from './http/ranges';
 
@@ -345,9 +343,9 @@ export const headersIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   implementation: impl(HeadersImpl),
   members: [
-    ctor([arg('init', reference('HeadersInit'), { optional: true })], bind({
+    ctor([arg('init', reference('HeadersInit'), { optional: true })], {
       invoke() { throw new Error('Headers construction from HeadersInit is not implemented'); },
-    })),
+    }),
     op('append', idlType.undefined, [arg('name', idlType.ByteString), arg('value', idlType.ByteString)]),
     op('delete', idlType.undefined, [arg('name', idlType.ByteString)]),
     op('get', nullable(idlType.ByteString), [arg('name', idlType.ByteString)]),

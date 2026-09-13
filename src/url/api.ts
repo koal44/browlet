@@ -8,11 +8,9 @@ import {
   setURLPassword, setURLUsername, type URLRecord,
 } from './url';
 import {
-  arg, attr, ctor, defineInterface, idlType, iter, nullable, op,
-  roAttr, record, reference, sequence, stringifier, union, xattr,
-  type Definition,
-} from '../web-idl/declaration/index';
-import { impl } from '../web-idl/index';
+  arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
+  sequence, staticOp, stringifier, union, xattr, type Definition,
+} from '../web-idl/index';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this
@@ -244,19 +242,17 @@ export const urlIDL = defineInterface({
       arg('url', idlType.USVString),
       arg('base', idlType.USVString, { optional: true }),
     ]),
-    op('parse', nullable(reference('URL')),
+    staticOp('parse', nullable(reference('URL')),
       [
         arg('url', idlType.USVString),
         arg('base', idlType.USVString, { optional: true }),
       ],
-      { static: true },
     ),
-    op('canParse', idlType.boolean,
+    staticOp('canParse', idlType.boolean,
       [
         arg('url', idlType.USVString),
         arg('base', idlType.USVString, { optional: true }),
       ],
-      { static: true },
     ),
     attr('href', idlType.USVString, { stringifier: true }),
     roAttr('origin', idlType.USVString),

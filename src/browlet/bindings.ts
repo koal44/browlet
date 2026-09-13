@@ -7,8 +7,8 @@ import { urlIDLDefinitions } from '../url/api';
 import { originIDL } from '../url/origin-api';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  createBindings, type BindingWorld, type RealmBindingOptions, type RealmBindings,
-  type GlobalObjectAllocation,
+  createBindingWorld, type BindingWorld, type GlobalObjectAllocation,
+  type BindingContext, type RealmRegistrationOptions,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import {
@@ -74,27 +74,31 @@ export function getRelevantRealm(value: object): Realm {
   return browletBindings.getRelevantRealm(value);
 }
 
-export function getPlatformObject(value: object): object {
-  return browletBindings.getPlatformObject(value);
+export function project(value: object): object {
+  return browletBindings.project(value);
 }
 
-export function getImplementation<Value extends object>(value: object): Value {
-  return browletBindings.getImplementation<Value>(value);
+export function unwrap<Value extends object>(value: object): Value {
+  return browletBindings.unwrap<Value>(value);
 }
 
-export function registerRealm(realm: Realm, options?: RealmBindingOptions): RealmBindings {
+export function registerRealm(
+  realm: Realm,
+  options?: RealmRegistrationOptions<Realm>,
+): BindingContext<Realm> {
   return browletBindings.register(realm, options);
 }
 
-export function getRealmBindings(realm: Realm): RealmBindings {
+/** Retrieve the realm's context in Browlet's main binding world. */
+export function getBindingContext(realm: Realm): BindingContext<Realm> {
   return browletBindings.forRealm(realm);
 }
 
 class BrowletBindings {
-  readonly #world: BindingWorld;
+  readonly #world: BindingWorld<Realm>;
 
   constructor() {
-    this.#world = createBindings(
+    this.#world = createBindingWorld<Realm>(
       browletDefinitions,
       {
         capabilities: browletCapabilities,
@@ -103,14 +107,14 @@ class BrowletBindings {
     );
   }
 
-  register(realm: Realm, options: RealmBindingOptions = {}): RealmBindings {
+  register(realm: Realm, options: RealmRegistrationOptions<Realm> = {}): BindingContext<Realm> {
     return this.#world.register(realm, options);
   }
 
-  forRealm(realm: Realm): RealmBindings {
-    const bindings = this.#world.forRealm(realm);
-    if (!bindings) throw new Error('Realm has no Browlet binding');
-    return bindings;
+  forRealm(realm: Realm): BindingContext<Realm> {
+    const context = this.#world.forRealm(realm);
+    if (!context) throw new Error('Realm has no Browlet binding');
+    return context;
   }
 
   /* Compose engine allocation and bindings for the Window selected by HTML. */
@@ -130,8 +134,8 @@ class BrowletBindings {
       // Window.prototype -> named properties -> EventTarget.prototype.
       globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
     });
-    const bindings = this.register(realm, {
-      createRuntime: (context) => createWindowRuntime(realm, window, context),
+    const context = this.register(realm, {
+      createRuntime: (ctx) => createWindowRuntime(window, ctx),
     });
     const chain = realm.globalPrototypeChain;
     let globalObject: Window;
@@ -141,7 +145,8 @@ class BrowletBindings {
       if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
         throw new Error('Incomplete native Window allocation');
       }
-      globalObject = projectWindow(bindings, window, {
+      // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
+      globalObject = projectWindow(context, window, {
         object,
         prototypes: new Map([
           ['Window', windowPrototype],
@@ -153,7 +158,7 @@ class BrowletBindings {
         },
       });
     } else {
-      globalObject = projectWindow(bindings, window);
+      globalObject = projectWindow(context, window);
     }
     const globalThis = useAddonGlobals
       ? adoptNativeWindowProxy(realm.globalThis)
@@ -163,7 +168,7 @@ class BrowletBindings {
   }
 
   createDocument(realm: Realm): DocumentImpl {
-    const { context } = this.forRealm(realm);
+    const context = this.forRealm(realm);
     const document = context.construct(DocumentImpl);
     // Eager projection also installs EventTarget's realm-owned event factory.
     context.project(DocumentImpl, document);
@@ -171,14 +176,14 @@ class BrowletBindings {
   }
 
   createStructuredClone(realm: Realm): StructuredCloneSteps {
-    return createStructuredCloneSteps(realm, this.forRealm(realm).context);
+    return createStructuredCloneSteps(this.forRealm(realm));
   }
 
   retargetWindowProxy(
     windowProxy: WindowProxy,
     window: WindowImpl,
   ): void {
-    const windowObject = this.#world.getPlatformObject(window);
+    const windowObject = this.#world.project(window);
     if (!windowObject) throw new Error('Window has not been projected');
     setWindowProxyWindow(
       windowProxy,
@@ -196,25 +201,25 @@ class BrowletBindings {
     return realm;
   }
 
-  getPlatformObject(value: object): object {
-    const object = this.#world.getPlatformObject(value);
+  project(value: object): object {
+    const object = this.#world.project(value);
     if (!object) throw new Error('Implementation has not been projected');
     return object;
   }
 
-  getImplementation<Value extends object>(value: object): Value {
-    const implementation = this.#world.getImplementationObject(value);
+  unwrap<Value extends object>(value: object): Value {
+    const implementation = this.#world.unwrap(value);
     if (!implementation) throw new Error('Value is not a platform object');
     return implementation as Value;
   }
 }
 
 function projectWindow(
-  bindings: RealmBindings,
+  context: BindingContext<Realm>,
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
 ): Window {
-  const object = bindings.projectGlobalObject(window, 'Window', allocation) as Window;
+  const object = context.projectGlobalObject(window, 'Window', allocation) as Window;
   // Preserve the provisional CSSOM operation until Stylelet supplies its
   // Window partial and CSSStyleDeclaration projection (see WindowImpl).
   Object.defineProperty(object, 'getComputedStyle', {
