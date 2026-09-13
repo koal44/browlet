@@ -1,4 +1,4 @@
-import { EventImpl } from '../events/event';
+import type { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../../stubs';
 import {
@@ -6,9 +6,7 @@ import {
   roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
-import {
-  DocumentFragmentImpl,
-} from './document-fragment';
+import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
 import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
@@ -47,14 +45,24 @@ export const slotAssignmentModeIDL = defineEnumeration({
  * };
  * ShadowRoot includes DocumentOrShadowRoot;
  */
-export class ShadowRootImpl
-  extends withShadowRootStub(DocumentFragmentImpl)
-{
+export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
   readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   readonly #mode: ShadowRootMode;
 
+  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
+    getParent: (target, event) => ShadowRootImpl.is(target)
+      ? target.getEventParent(event)
+      : null,
+    getShadowRootHost: (target) => ShadowRootImpl.is(target)
+      ? target.host
+      : null,
+    getShadowRootMode: (target) => ShadowRootImpl.is(target)
+      ? target.mode
+      : null,
+  });
+
   constructor(host: ElementImpl, mode: ShadowRootMode) {
-    const document = NodeImpl.getNodeDocument(host);
+    const document = host.getNodeDocument();
     if (!document) throw new Error('A shadow host must have a node document');
 
     super(
@@ -69,6 +77,10 @@ export class ShadowRootImpl
         throw new Error('Shadow-root style scopes are not implemented');
       },
     });
+  }
+
+  static is(value: unknown): value is ShadowRootImpl {
+    return NodeImpl.is(value) && #mode in value;
   }
 
   get mode(): ShadowRootMode {
@@ -92,7 +104,9 @@ export class ShadowRootImpl
   }
 
   get host(): ElementImpl {
-    return ShadowRootImpl.getHost(this);
+    const host = super.getHost();
+    if (!host) throw new Error('A shadow root must have a host');
+    return host;
   }
 
   get customElementRegistry(): CustomElementRegistryImpl | null {
@@ -111,51 +125,20 @@ export class ShadowRootImpl
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
-  // -- Virtual ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
-    getParent: (target, event) => ShadowRootImpl.is(target)
-      ? ShadowRootImpl.getEventParent(target, event)
-      : null,
-    getShadowRootHost: (target) => ShadowRootImpl.is(target)
-      ? ShadowRootImpl.getHost(target)
-      : null,
-    getShadowRootMode: (target) => ShadowRootImpl.is(target)
-      ? ShadowRootImpl.getMode(target)
-      : null,
-  });
-
-  // -- Friends ----------------------------------------------------------
-
-  static is(value: unknown): value is ShadowRootImpl {
-    return NodeImpl.is(value) && #mode in value;
-  }
-
-  static getHost(root: ShadowRootImpl): ElementImpl {
-    const host = DocumentFragmentImpl.getHost(root);
-    if (!host) throw new Error('A shadow root must have a host');
-    return host;
-  }
-
-  static getMode(root: ShadowRootImpl): ShadowRootMode {
-    return root.#mode;
-  }
-
-  static getEventParent(
-    root: ShadowRootImpl,
-    event: EventImpl,
-  ): EventTargetImpl | null {
-    const firstTarget = EventImpl.getFirstPathInvocationTarget(event);
+  override getEventParent(event: EventImpl): EventTargetImpl | null {
+    const firstTarget = event.getFirstPathInvocationTarget();
 
     if (
-      !EventImpl.isComposed(event) &&
+      !event.composed &&
       NodeImpl.is(firstTarget) &&
-      NodeImpl.getRootNode(firstTarget) === root
+      firstTarget.getRoot() === this
     ) {
       return null;
     }
 
-    return ShadowRootImpl.getHost(root);
+    return this.host;
   }
 }
 

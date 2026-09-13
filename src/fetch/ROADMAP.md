@@ -144,9 +144,11 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
-`browlet/integration/fetch.ts` supplies HTML structured serialization and global
-networking tasks. Fetch retains serialization records opaquely; the caller
-supplies the source/target Binding Context and matching serialization capability.
+The source/target Runtime Contexts supply HTML structured serialization and
+deserialization. Fetch retains serialization records opaquely;
+`browlet/integration/runtime.ts` realizes exception requests at serialization,
+and `browlet/integration/fetch.ts` realizes fallback errors in the destination
+realm and supplies global networking tasks. The controller takes no Binding Context.
 The adapters are ready for Fetch orchestration; no public Fetch APIs are installed.
 
 Timing records store DOMHighResTimeStamp values. Reading/coarsening clocks and
@@ -284,7 +286,7 @@ processes the bytes. Full reads reuse Streams' read-all-bytes operation and
 queue either the complete result or the failure, including reader acquisition
 failure.
 
-`bytesAsBody` brings forward only §5.2's internal byte-sequence path. It retains
+`BodyRecord.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
 the source/length and creates a byte-stream implementation, filled through supplied
 parallel scheduling. `BodyRecord` retains `FetchTaskScheduling` from construction
 and forwards it when cloning. This implementation dependency supplies HTML global

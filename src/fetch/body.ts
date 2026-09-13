@@ -28,6 +28,22 @@ export class BodyRecord {
     this.#runtime = runtime;
   }
 
+  /** Fetch §§2.2.4 and 5.2, safely extract an internal byte sequence as a body. */
+  static fromBytes(bytes: Uint8Array, runtime: RuntimeContext): BodyRecord {
+    const scheduling = runtime.networking;
+    const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
+    scheduling.runInParallel(() => {
+      if (bytes.length > 0 && !stream.isErrored) {
+        stream.enqueueChunk(runtime.buffers.copyUint8Array(bytes));
+      }
+      stream.close();
+    });
+    const body = new BodyRecord(stream, runtime);
+    body.source = bytes;
+    body.length = bytes.length;
+    return body;
+  }
+
   clone(): BodyRecord {
     const [out1, out2] = this.stream.teeWithCloning();
     this.stream = out1;
@@ -98,28 +114,6 @@ export class BodyRecord {
 export type BodyWithType = { body: BodyRecord; type: string | null; };
 
 /**
- * Fetch §2.2.4 and §5.2: safely extract an internal byte sequence as a body.
- * The runtime supplies stream ownership and HTML task delivery.
- */
-export function bytesAsBody(
-  bytes: Uint8Array,
-  runtime: RuntimeContext,
-): BodyRecord {
-  const scheduling = runtime.networking;
-  const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
-  scheduling.runInParallel(() => {
-    if (bytes.length > 0 && !stream.isErrored) {
-      stream.enqueueChunk(runtime.buffers.copyUint8Array(bytes));
-    }
-    stream.close();
-  });
-  const body = new BodyRecord(stream, runtime);
-  body.source = bytes;
-  body.length = bytes.length;
-  return body;
-}
-
-/**
  * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
  * supported codecs, keyed by lowercase coding names; null represents failure.
  */
@@ -180,7 +174,6 @@ export class BodyMixin {
     return body !== null && (body.stream.disturbed || body.stream.locked);
   }
 
-  // Promise-valued operations return Web IDL promise records, as Blob does.
   arrayBuffer(): object {
     throw new Error('Body.arrayBuffer is not implemented');
   }
@@ -223,6 +216,8 @@ export type XMLHttpRequestBodyInitValue = BlobImpl | FormDataImpl | URLSearchPar
   ArrayBuffer | ArrayBufferView | string;
 
 export type BodyInitValue = ReadableStreamImpl | XMLHttpRequestBodyInitValue;
+
+// -- Web IDL ------------------------------------------------------------
 
 export const xmlHttpRequestBodyInitIDL = defineTypedef({
   name: 'XMLHttpRequestBodyInit',

@@ -1,10 +1,9 @@
 import { getRelevantRealm } from '../bindings';
-import { DocumentImpl } from '../dom/nodes/document';
+import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { Navigable } from '../browsing/navigable';
-import { WindowImpl } from '../browsing/window/window';
+import type { WindowImpl } from '../browsing/window/window';
 import type { WindowAgent } from './agents';
-import { EventLoop } from './event-loop';
 import { queueGlobalTask, renderingTaskSource } from './tasks';
 
 /*
@@ -58,15 +57,69 @@ export class WindowRenderingProducer {
     }
     if (windows.size === 0) return;
 
-    EventLoop.setLastRenderOpportunityTime(
-      this.#agent.eventLoop,
+    this.#agent.eventLoop.setLastRenderOpportunityTime(
       this.#host.unsafeSharedCurrentTime(),
     );
     for (const window of windows) {
       queueGlobalTask(renderingTaskSource, window, () => {
-        updateRendering(this.#agent, this.#host, this.#update);
+        this.#updateRendering();
       });
     }
+  }
+
+  #updateRendering(): void {
+    const frameTimestamp = this.#agent.eventLoop.lastRenderOpportunityTime;
+    if (frameTimestamp === null) {
+      throw new Error('A rendering task needs a rendering-opportunity time');
+    }
+
+    const documents = this.#collectRenderableDocuments();
+    let unsafeStyleAndLayoutStartTime: UnsafeMoment | null = null;
+    for (const phase of renderingUpdatePhases) {
+      if (phase === 'recalculateStylesUpdateLayoutAndResizeObservations') {
+        unsafeStyleAndLayoutStartTime = this.#host.unsafeSharedCurrentTime();
+      }
+
+      const run = this.#update[phase];
+      if (run === undefined) continue;
+      for (const document of documents) {
+        run({ document, frameTimestamp, unsafeStyleAndLayoutStartTime });
+      }
+    }
+  }
+
+  #collectRenderableDocuments(): DocumentImpl[] {
+    const documents: DocumentImpl[] = [];
+    const filters = this.#update.filters;
+    for (const window of this.#agent.windowObjects) {
+      const document = window.getAssociatedDocument();
+      if (!document.isFullyActive()) continue;
+
+      const navigable = document.getNodeNavigable();
+      if (
+        navigable === null ||
+        !this.#host.hasRenderingOpportunity(navigable) ||
+        filters?.isRenderBlocked?.(document) === true ||
+        filters?.hasHiddenVisibilityState?.(document) === true ||
+        filters?.isRenderingSuppressedForViewTransitions?.(document) === true ||
+        filters?.shouldSkipRendering?.(document) === true
+      ) continue;
+
+      if (
+        filters?.wouldRenderingHaveVisibleEffect?.(document) === false &&
+        filters.hasAnimationFrameCallbacks?.(document) === false
+      ) continue;
+
+      documents.push(document);
+    }
+
+    /*
+     * HTML orders this list parent-before-child, with siblings in their
+     * navigable containers' shadow-including tree order. Browlet currently
+     * creates only top-level traversables. Traverse the child topology when
+     * it arrives; sorting only by depth would not be sufficient.
+     */
+    return documents;
   }
 }
 
@@ -130,73 +183,6 @@ export const renderingUpdatePhases = [
   'updateRenderingAndUserInterface',
   'processTopLayerRemovals',
 ] as const;
-
-function updateRendering(
-  agent: WindowAgent,
-  host: RenderingOpportunityHost,
-  hooks: RenderingUpdateHooks,
-): void {
-  const frameTimestamp = agent.eventLoop.lastRenderOpportunityTime;
-  if (frameTimestamp === null) {
-    throw new Error('A rendering task needs a rendering-opportunity time');
-  }
-
-  const documents = collectRenderableDocuments(agent, host, hooks.filters);
-  let unsafeStyleAndLayoutStartTime: UnsafeMoment | null = null;
-  for (const phase of renderingUpdatePhases) {
-    if (phase === 'recalculateStylesUpdateLayoutAndResizeObservations') {
-      unsafeStyleAndLayoutStartTime = host.unsafeSharedCurrentTime();
-    }
-
-    const run = hooks[phase];
-    if (run === undefined) continue;
-    for (const document of documents) {
-      run({
-        document,
-        frameTimestamp,
-        unsafeStyleAndLayoutStartTime,
-      });
-    }
-  }
-}
-
-function collectRenderableDocuments(
-  agent: WindowAgent,
-  host: RenderingOpportunityHost,
-  filters: RenderingDocumentFilters = {},
-): DocumentImpl[] {
-  const documents: DocumentImpl[] = [];
-  for (const window of agent.windowObjects) {
-    const document = WindowImpl.getAssociatedDocument(window);
-    if (!DocumentImpl.isFullyActive(document)) continue;
-
-    const navigable = DocumentImpl.getNodeNavigable(document);
-    if (
-      navigable === null ||
-      !host.hasRenderingOpportunity(navigable) ||
-      filters.isRenderBlocked?.(document) === true ||
-      filters.hasHiddenVisibilityState?.(document) === true ||
-      filters.isRenderingSuppressedForViewTransitions?.(document) === true ||
-      filters.shouldSkipRendering?.(document) === true
-    ) continue;
-
-    if (
-      filters.wouldRenderingHaveVisibleEffect?.(document) === false &&
-      filters.hasAnimationFrameCallbacks?.(document) === false
-    ) continue;
-
-    documents.push(document);
-  }
-
-  /*
-   * HTML orders this Document list parent-before-child and orders siblings by
-   * their navigable container elements' shadow-including tree order. Browlet
-   * currently creates only top-level traversables. When child navigable
-   * containers arrive, replace the flat Window enumeration above with a
-   * traversal of that topology; sorting only by depth would not be sufficient.
-   */
-  return documents;
-}
 
 type DocumentPredicate = (
   this: void,

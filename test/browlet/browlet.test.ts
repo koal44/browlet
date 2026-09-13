@@ -8,7 +8,7 @@ import {
   isHTMLLinkElement,
 } from '../../src/browlet/html/elements/metadata/link';
 import { fireEvent } from '../../src/browlet/dom/events/event-target';
-import { DocumentImpl } from '../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../src/infra/index';
@@ -50,25 +50,25 @@ describe('Browlet', () => {
     );
     expect(document.baseURI).toBe(document.URL);
     expect(document.contentType).toBe('text/html');
-    expect(serializeOrigin(DocumentImpl.getOrigin(documentImpl))).toBe(
+    expect(serializeOrigin(documentImpl.getOrigin())).toBe(
       'https://example.test',
     );
-    expect(DocumentImpl.allowsDeclarativeShadowRoots(documentImpl))
+    expect(documentImpl.allowsDeclarativeShadowRoots())
       .toBe(true);
-    expect(DocumentImpl.getCurrentDocumentReadiness(documentImpl))
+    expect(documentImpl.readyState)
       .toBe('complete');
-    expect(DocumentImpl.isReadyForPostLoadTasks(documentImpl)).toBe(true);
-    expect(DocumentImpl.getCompletelyLoadedTime(documentImpl))
+    expect(documentImpl.isReadyForPostLoadTasks()).toBe(true);
+    expect(documentImpl.getCompletelyLoadedTime())
       .not.toBeNull();
-    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(documentImpl))
+    expect(documentImpl.wasCreatedViaCrossOriginRedirects())
       .toBe(false);
-    expect(DocumentImpl.getDuringLoadingNavigationID(documentImpl))
+    expect(documentImpl.getDuringLoadingNavigationID())
       .toBeNull();
-    expect(DocumentImpl.getCustomElementRegistry(documentImpl))
+    expect(documentImpl.customElementRegistry)
       .not.toBeNull();
-    expect(DocumentImpl.getInternalAncestorOriginObjectsList(documentImpl))
+    expect(documentImpl.getInternalAncestorOriginObjectsList())
       .toEqual([]);
-    expect(DocumentImpl.getAncestorOriginsList(documentImpl)).toEqual([]);
+    expect(documentImpl.getAncestorOriginsList()).toEqual([]);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
@@ -574,14 +574,23 @@ describe('Browlet', () => {
     expect(second?.nextElementSibling).toBe(after);
   });
 
-  it('rejects navigation when script execution fails', async () => {
+  it('preserves the original script error when navigation fails', async () => {
+    let scriptError: unknown;
     const browlet = new Browlet({
-      route: () => '<script>throw new Error("distinctive failure")</script>',
+      route: () => [
+        '<script>',
+        'const error = new TypeError("distinctive failure");',
+        'recordError(error);',
+        'throw error;',
+        '</script>',
+      ].join(''),
     });
+    browlet.expose('recordError', (error: unknown) => { scriptError = error; });
 
-    await expect(
-      browlet.navigate('https://example.test/page'),
-    ).rejects.toThrow('distinctive failure');
+    const navigation = browlet.navigate('https://example.test/page');
+    await expect(navigation).rejects.toThrow('distinctive failure');
+    expect(scriptError).toBeDefined();
+    await expect(navigation).rejects.toBe(scriptError);
   });
 
   it('reports inline script positions relative to the document source', async () => {

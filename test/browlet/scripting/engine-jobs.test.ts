@@ -9,7 +9,7 @@ import {
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { Duration } from '../../../src/browlet/performance/clock';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
-import { EventLoop, type Task } from '../../../src/browlet/scripting/event-loop';
+import { type Task } from '../../../src/browlet/scripting/event-loop';
 import {
   installHostHooks, jsEngineTaskSource,
 } from '../../../src/browlet/scripting/host-hooks';
@@ -61,7 +61,7 @@ describe('HTML generic and timeout jobs', () => {
 
     const activeEntry = fixture.traversable.activeSessionHistoryEntry;
     const otherDocument = new DocumentImpl();
-    DocumentImpl.setBrowsingContext(otherDocument, fixture.traversable.activeBrowsingContext);
+    otherDocument.setBrowsingContext(fixture.traversable.activeBrowsingContext);
     fixture.traversable.activeSessionHistoryEntry =
       createSessionHistoryEntry(createDocumentState(otherDocument));
     advance(10000);
@@ -105,6 +105,6 @@ function createFixture() {
   });
   return {
     array, document, loop, observations, options, realm, traversable,
-    jobs: EventLoop.getTaskQueue(loop, jsEngineTaskSource),
+    jobs: loop.getTaskQueue(jsEngineTaskSource),
   };
 }

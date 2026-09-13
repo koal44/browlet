@@ -29,10 +29,12 @@ export class OriginImpl {
   }
 
   static from(value: unknown): OriginImpl {
-    let origin = OriginImpl.extractOrigin(value) ??
-      URLImpl.extractOrigin(value);
-
-    if (origin === undefined && typeof value === 'string') {
+    let origin: Origin | undefined;
+    if (value !== null && typeof value === 'object' && #origin in value) {
+      origin = value.#origin;
+    } else if (URLImpl.is(value)) {
+      origin = value.getOrigin();
+    } else if (typeof value === 'string') {
       const url = parseURL(value).url;
       if (url !== null) origin = obtainURLOrigin(url);
     }
@@ -52,14 +54,6 @@ export class OriginImpl {
   isSameSite(other: OriginImpl): boolean {
     return areSameSite(this.#origin, other.#origin);
   }
-
-  // -- Friends ----------------------------------------------------------
-
-  static extractOrigin(value: unknown): Origin | undefined {
-    return value !== null && typeof value === 'object' && #origin in value
-      ? value.#origin
-      : undefined;
-  }
 }
 
 // -- Web IDL ------------------------------------------------------------
@@ -70,15 +64,12 @@ export const originIDL = defineInterface({
   implementation: impl(OriginImpl),
   members: [
     ctor(),
-    op('from', reference('Origin'), [
-      arg(
-        'value',
-        idlType.any,
-        resolveArgs(OriginImpl, URLImpl),
-      ),
-    ], {
-      static: true,
-    }),
+    op('from', reference('Origin'),
+      [
+        arg('value', idlType.any, resolveArgs(OriginImpl, URLImpl)),
+      ],
+      { static: true },
+    ),
     roAttr('opaque', idlType.boolean),
     op('isSameOrigin', idlType.boolean, [
       arg('other', reference('Origin')),

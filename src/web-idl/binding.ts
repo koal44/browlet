@@ -724,16 +724,13 @@ export class RealmBinding {
       }
     }
     const prototype = this.getInterfacePrototypeObject(interface_);
-    if (allocation) {
-      if (Reflect.getPrototypeOf(allocation.object) !== prototype) {
-        throw new Error('Allocated global object has the wrong prototype');
-      }
-    } else if (!Reflect.setPrototypeOf(implementation, prototype)) {
-      throw new Error('Could not set the global object prototype');
+    if (allocation && Reflect.getPrototypeOf(allocation.object) !== prototype) {
+      throw new Error('Allocated global object has the wrong prototype');
     }
     this.#runImplementationInitializationSteps(implementation, interface_);
-    const object = allocation?.object ??
-      this.#globalPlatformObjects.createObject(implementation);
+    const object = allocation?.object ?? this.#globalPlatformObjects.createObject(
+      this.realm.createOrdinaryObject(prototype),
+    );
     const record = this.associatePlatformObject(
       object,
       interface_,

@@ -1,4 +1,4 @@
-import { DocumentImpl } from '../../dom/nodes/document';
+import type { DocumentImpl } from '../../dom/nodes/document';
 import type { PolicyContainer } from '../policy/container';
 import type { Origin } from '../../../url/origin';
 import { parseURL, type URLRecord } from '../../../url/url';
@@ -70,7 +70,7 @@ export function createSessionHistoryEntry(
     throw new Error('An initial session history entry requires a Document');
   }
 
-  const url = parseURL(DocumentImpl.getURL(document)).url;
+  const url = parseURL(document.URL).url;
   if (url === null) {
     throw new Error('A Document must have a valid URL');
   }

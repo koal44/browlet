@@ -1,26 +1,18 @@
-import type { FetchStructuredData, FetchTaskScheduling, QueueGlobalFetchTask } from '../../fetch/index';
 import {
-  structuredDeserialize,
-} from '../scripting/structured-data/deserialize';
-import type {
-  StructuredDataEnvironment,
-} from '../scripting/structured-data/environment';
-import type { SerializedRecord } from '../scripting/structured-data/records';
-import { structuredSerialize } from '../scripting/structured-data/serialize';
+  deserializeAbortReason, type FetchTaskScheduling, type QueueGlobalFetchTask,
+} from '../../fetch/index';
+import type { BindingContext } from '../../web-idl/projection';
 import { networkingTaskSource, queueGlobalTask } from '../scripting/tasks';
 import { runInParallel } from './scripting';
 
-export function createFetchStructuredData(
-  environment: StructuredDataEnvironment,
-): FetchStructuredData {
-  return {
-    serialize: (value) => structuredSerialize(value, environment),
-    // Fetch only retains these records; HTML owns their concrete shape.
-    deserialize: (record) => structuredDeserialize(
-      record as SerializedRecord,
-      environment,
-    ),
-  };
+/** Realize Fetch's fallback error before delivering the reason into the target realm. */
+export function deserializeFetchAbortReason(
+  abortReason: object | null,
+  context: BindingContext,
+): unknown {
+  return context.realizeException(
+    deserializeAbortReason(abortReason, context.getRuntime()),
+  );
 }
 
 export const queueGlobalFetchTask: QueueGlobalFetchTask = (global, steps) => {

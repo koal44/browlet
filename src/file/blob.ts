@@ -337,23 +337,26 @@ export const blobIDL = defineInterface({
       }),
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
-    op('stream', reference('ReadableStream'), [], {
-      ...xattr('NewObject'),
-    }),
-    op('text', promise(idlType.USVString), [], {
-      ...xattr('NewObject'),
-    }),
-    op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
-      ...xattr('NewObject'),
-      ...newBufferResult(),
-    }),
-    op('textStream', reference('ReadableStream'), [], {
-      ...xattr('NewObject'),
-    }),
-    op('bytes', promise(idlType.Uint8Array), [], {
-      ...xattr('NewObject'),
-      ...newBufferResult(),
-    }),
+    op('stream', reference('ReadableStream'),
+      [],
+      { ...xattr('NewObject') },
+    ),
+    op('text', promise(idlType.USVString),
+      [],
+      { ...xattr('NewObject') },
+    ),
+    op('arrayBuffer', promise(idlType.ArrayBuffer),
+      [],
+      { ...xattr('NewObject'), ...newBufferResult() },
+    ),
+    op('textStream', reference('ReadableStream'),
+      [],
+      { ...xattr('NewObject') },
+    ),
+    op('bytes', promise(idlType.Uint8Array),
+      [],
+      { ...xattr('NewObject'), ...newBufferResult() },
+    ),
   ],
 });
 

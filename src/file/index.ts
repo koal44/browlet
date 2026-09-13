@@ -16,7 +16,7 @@ export {
   type BlobReadFailureReason, type BlobSnapshotState,
 } from './blob-data';
 export {
-  createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,
+  fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,
 } from './file';
 export { fileListIDL, FileListImpl } from './file-list';

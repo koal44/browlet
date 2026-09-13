@@ -158,7 +158,7 @@ class BrowletBindings {
     const globalThis = useAddonGlobals
       ? adoptNativeWindowProxy(realm.globalThis)
       : previousRealm?.globalThis ?? createWindowProxy();
-    Realm.setGlobalObjects(realm, globalObject, globalThis, window);
+    realm.setGlobalObjects(globalObject, globalThis, window);
     return { realm };
   }
 

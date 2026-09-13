@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getImplementation, getRelevantRealm } from '../../../src/browlet/bindings';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 
 describe('Stylelet runtime integration', () => {
   it.each(['initial', 'navigated', 'constructed'] as const)(
@@ -13,7 +13,7 @@ describe('Stylelet runtime integration', () => {
         ? new DocumentConstructor()
         : browlet.document;
       const implementation = getImplementation<DocumentImpl>(document);
-      const styles = DocumentImpl.getCSSEngine(implementation);
+      const styles = implementation.getCSSEngine();
       const sheet = styles.createStyleSheet();
       const result = sheet.replace('main { color: red }');
       const realm = getRelevantRealm(document);

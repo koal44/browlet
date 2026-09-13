@@ -3,7 +3,7 @@ import type { EventImpl } from '../events/event';
 import {
   isElement, NodeImpl, type NodeOptions, NodeType,
 } from './node';
-import { AttrImpl } from './attribute';
+import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
 import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
@@ -83,10 +83,7 @@ import { SlottableMixin } from './slottable';
  *   undefined insertAdjacentText(DOMString where, DOMString data); // legacy
  * };
  */
-export class ElementImpl
-  extends withElementStub(NodeImpl)
-  implements Element
-{
+export class ElementImpl extends withElementStub(NodeImpl) {
   readonly #childNodeMixin = new ChildNodeMixin(this);
   #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
   readonly #linkStyleMixin: LinkStyleMixin | undefined;
@@ -98,13 +95,35 @@ export class ElementImpl
   readonly #namespaceURI: string;
   readonly #slottableMixin = new SlottableMixin();
 
+  static readonly #nodeOptions: NodeOptions = {
+    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
+      getParent: (target, event) => NodeImpl.is(target) && isElement(target)
+        ? target.getEventParent(event)
+        : null,
+      getAssignedSlot: (target) => NodeImpl.is(target) && isElement(target)
+        ? target.getAssignedSlot()
+        : null,
+    }),
+    treeVirtuals: {
+      insertedInto: (node) => {
+        (node as ElementImpl).#linkStyleMixin?.update();
+      },
+      removedFrom: (node) => {
+        (node as ElementImpl).#linkStyleMixin?.update();
+      },
+      childrenChanged: (node) => {
+        (node as ElementImpl).#linkStyleMixin?.childrenChanged();
+      },
+    },
+  };
+
   constructor(
     context: ElementCreationContext,
     linkStyle?: LinkStyleInit,
   ) {
     super(NodeType.Element, context.document, ElementImpl.#nodeOptions);
     this.#attributes = new NamedNodeMapImpl();
-    NamedNodeMapImpl.associateElement(this.#attributes, this);
+    this.#attributes.associateElement(this);
     this.#localName = context.localName;
     this.#namespaceURI = context.namespaceURI;
     this.#linkStyleMixin = linkStyle
@@ -203,13 +222,13 @@ export class ElementImpl
     if (attribute) {
       attribute.value = value;
     } else {
-      const ownerDocument = NodeImpl.getNodeDocument(this);
+      const ownerDocument = this.getNodeDocument();
       if (!ownerDocument) {
         throw new Error('Element has no node document');
       }
       const created = ownerDocument.createAttribute(qualifiedName);
       created.value = value;
-      AttrImpl.setOwnerElement(created, this);
+      created.setOwnerElement(this);
       this.attributes.push(created);
     }
 
@@ -229,16 +248,14 @@ export class ElementImpl
 
     const oldValue = this.attributes[index]!.value;
     const [removed] = this.attributes.splice(index, 1);
-    if (removed) AttrImpl.setOwnerElement(removed, null);
+    if (removed) removed.setOwnerElement(null);
     if (qualifiedName === 'style') {
       this.#inlineStyleMixin?.attributeChanged(null);
     }
     this.#attributeChanged(qualifiedName, oldValue, null);
   }
 
-  getElementsByClassName(
-    classNames: string,
-  ): HTMLCollectionOf<Element> {
+  getElementsByClassName(classNames: string): HTMLCollectionOf<Element> {
     return findElementsByClassName(this, classNames);
   }
 
@@ -248,9 +265,7 @@ export class ElementImpl
   /** @deprecated */
   getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
   getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
-  getElementsByTagName(
-    qualifiedName: string,
-  ): HTMLCollectionOf<Element> {
+  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
@@ -265,82 +280,50 @@ export class ElementImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  // -- Virtual ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static readonly #nodeOptions: NodeOptions = {
-    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
-      getParent: (target, event) => NodeImpl.is(target) && isElement(target)
-        ? ElementImpl.getEventParent(target, event)
-        : null,
-      getAssignedSlot: (target) => NodeImpl.is(target) && isElement(target)
-        ? ElementImpl.getAssignedSlot(target)
-        : null,
-    }),
-    treeVirtuals: {
-      insertedInto: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.update();
-      },
-      removedFrom: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.update();
-      },
-      childrenChanged: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.childrenChanged();
-      },
-    },
-  };
-
-  // -- Friends ----------------------------------------------------------
-
-  static setAssignedSlot(
-    element: ElementImpl,
-    slot: ElementImpl | null,
-  ): void {
-    element.#slottableMixin.setAssignedSlot(slot);
+  setAssignedSlot(slot: ElementImpl | null): void {
+    this.#slottableMixin.setAssignedSlot(slot);
   }
 
-  static getAssignedSlot(element: ElementImpl): ElementImpl | null {
-    return element.#slottableMixin.assignedSlot;
+  override getAssignedSlot(): ElementImpl | null {
+    return this.#slottableMixin.assignedSlot;
   }
 
-  static getEventParent(
-    element: ElementImpl,
-    _event: EventImpl,
-  ): NodeImpl | null {
-    return element.#slottableMixin.assignedSlot ??
-      NodeImpl.getParentNode(element);
+  override getEventParent(_event: EventImpl): NodeImpl | null {
+    return this.#slottableMixin.assignedSlot ?? this.parentNode;
   }
 
-  static beginParsingChildren(element: ElementImpl): void {
-    element.#linkStyleMixin?.beginParsingChildren();
+  beginParsingChildren(): void {
+    this.#linkStyleMixin?.beginParsingChildren();
   }
 
-  static finishParsingChildren(element: ElementImpl): void {
-    element.#linkStyleMixin?.finishParsingChildren();
+  finishParsingChildren(): void {
+    this.#linkStyleMixin?.finishParsingChildren();
   }
 
-  static appendAttribute(
-    element: ElementImpl,
-    attribute: AttrImpl,
-  ): void {
+  appendAttribute(attribute: AttrImpl): void {
     if (attribute.ownerElement !== null) {
       throw new TypeError('Cannot append an attribute owned by another element');
     }
 
-    element.#attributes.push(attribute);
-    AttrImpl.setOwnerElement(attribute, element);
+    this.#attributes.push(attribute);
+    attribute.setOwnerElement(this);
     if (attribute.localName === 'style') {
-      element.#inlineStyleMixin?.attributeChanged(attribute.value);
+      this.#inlineStyleMixin?.attributeChanged(attribute.value);
     }
-    element.#attributeChanged(attribute.localName, null, attribute.value);
+    this.#attributeChanged(attribute.localName, null, attribute.value);
   }
 
-  static getInlineStyle(element: ElementImpl): CSSStyleDeclarationImpl {
-    return (element.#inlineStyleMixin ??=
-      new ElementCSSInlineStyleMixin(element, NodeImpl.getNodeDocument(element)!.styleletRuntime)).style;
+  getInlineStyle(): CSSStyleDeclarationImpl {
+    return (this.#inlineStyleMixin ??=
+      new ElementCSSInlineStyleMixin(
+        this, this.getNodeDocument()!.styleletRuntime,
+      )).style;
   }
 
-  static getStyleSheet(element: ElementImpl): CSSStyleSheetImpl | null {
-    return element.#linkStyleMixin?.sheet ?? null;
+  getStyleSheet(): CSSStyleSheetImpl | null {
+    return this.#linkStyleMixin?.sheet ?? null;
   }
 
   // -- Private ----------------------------------------------------------

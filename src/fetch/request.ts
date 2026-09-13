@@ -197,7 +197,9 @@ export class RequestImpl {
   text(): object { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
-  static getRequest(request: RequestImpl): RequestRecord { return request.#request; }
+  // -- Internal ---------------------------------------------------------
+
+  getRequest(): RequestRecord { return this.#request; }
 }
 
 export type RequestInitiatorType = 'audio' | 'beacon' | 'body' | 'css' | 'early-hints' |
@@ -234,6 +236,8 @@ export type RequestInitRecord = {
   priority?: RequestPriority;
   window?: unknown;
 };
+
+// -- Web IDL ------------------------------------------------------------
 
 export const requestInfoIDL = defineTypedef({
   name: 'RequestInfo',

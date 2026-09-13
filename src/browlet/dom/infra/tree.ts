@@ -107,7 +107,10 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   }
 
   insertTreeSiblingBefore(node: TNode): void {
-    TreeNode.insertSiblingBefore(this.#asNode(), node);
+    const parent = this.#parent;
+    if (!parent) throw new Error('Cannot insert before a detached node');
+
+    parent.#insertChild(node, this.#asNode());
   }
 
   insertTreeSiblingAfter(node: TNode): void {
@@ -125,97 +128,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     this.#insertChild(node, null);
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static remove<TNode extends TreeNode<TNode>>(
-    node: TreeNode<TNode>,
-  ): void {
-    node.#detach();
-  }
-
-  static insertSiblingBefore<TNode extends TreeNode<TNode>>(
-    reference: TreeNode<TNode>,
-    node: TNode,
-  ): void {
-    const parent = reference.#parent;
-    if (!parent) throw new Error('Cannot insert before a detached node');
-
-    parent.#insertChild(node, reference.#asNode());
-  }
-
-  static notifyParentChildrenChanged<TNode extends TreeNode<TNode>>(
-    node: TreeNode<TNode>,
-  ): void {
-    const parent = node.#parent;
-    if (parent) parent.#virtuals.childrenChanged?.(parent);
-  }
-
-  static appendChild<TNode extends TreeNode<TNode>>(
-    parent: TreeNode<TNode>,
-    node: TNode,
-  ): void {
-    parent.#insertChild(node, null);
-  }
-
-  static getRoot<TNode extends TreeNode<TNode>>(
-    node: TreeNode<TNode>,
-  ): TNode {
-    let root = node.#asNode();
-    while (root.#parent) root = root.#parent;
-    return root;
-  }
-
-  static getParent<TNode extends TreeNode<TNode>>(
-    node: TreeNode<TNode>,
-  ): TNode | null {
-    return node.#parent;
-  }
-
-  // -- Private ----------------------------------------------------------
-
-  #insertChild(node: TNode, reference: TNode | null): void {
-    if (node === this.#asNode()) {
-      throw new Error('Cannot insert a node into itself or its descendant');
-    }
-
-    for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
-      if (ancestor === node) {
-        throw new Error('Cannot insert a node into itself or its descendant');
-      }
-    }
-
-    if (
-      reference === node ||
-      (node.#parent === this.#asNode() && node.#nextSibling === reference)
-    ) {
-      return;
-    }
-
-    node.#detach();
-
-    const previous = reference ? reference.#previousSibling : this.#lastChild;
-
-    node.#parent = this.#asNode();
-    node.#previousSibling = previous;
-    node.#nextSibling = reference;
-
-    if (previous) {
-      previous.#nextSibling = node;
-    } else {
-      this.#firstChild = node;
-    }
-
-    if (reference) {
-      reference.#previousSibling = node;
-    } else {
-      this.#lastChild = node;
-    }
-
-    node.#notifyInsertedSubtree(this.#asNode());
-    this.#virtuals.childrenChanged?.(this.#asNode());
-  }
-
-  #detach(): void {
+  removeFromTree(): void {
     const parent = this.#parent;
     if (!parent) return;
 
@@ -240,6 +153,55 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 
     this.#notifyRemovedSubtree(parent);
     parent.#virtuals.childrenChanged?.(parent);
+  }
+
+  notifyParentChildrenChanged(): void {
+    const parent = this.#parent;
+    if (parent) parent.#virtuals.childrenChanged?.(parent);
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  #insertChild(node: TNode, reference: TNode | null): void {
+    if (node === this.#asNode()) {
+      throw new Error('Cannot insert a node into itself or its descendant');
+    }
+
+    for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
+      if (ancestor === node) {
+        throw new Error('Cannot insert a node into itself or its descendant');
+      }
+    }
+
+    if (
+      reference === node ||
+      (node.#parent === this.#asNode() && node.#nextSibling === reference)
+    ) {
+      return;
+    }
+
+    node.removeFromTree();
+
+    const previous = reference ? reference.#previousSibling : this.#lastChild;
+
+    node.#parent = this.#asNode();
+    node.#previousSibling = previous;
+    node.#nextSibling = reference;
+
+    if (previous) {
+      previous.#nextSibling = node;
+    } else {
+      this.#firstChild = node;
+    }
+
+    if (reference) {
+      reference.#previousSibling = node;
+    } else {
+      this.#lastChild = node;
+    }
+
+    node.#notifyInsertedSubtree(this.#asNode());
+    this.#virtuals.childrenChanged?.(this.#asNode());
   }
 
   #notifyInsertedSubtree(parent: TNode): void {

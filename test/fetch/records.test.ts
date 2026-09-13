@@ -87,7 +87,7 @@ describe('Fetch record/API sharing', () => {
     // Only signal identity is exercised here; DOM-dependent creation comes later.
     const signal = {};
     const request = fixture.createRequest(record, signal);
-    expect(RequestImpl.getRequest(request)).toBe(record);
+    expect(request.getRequest()).toBe(record);
     expect(request.signal).toBe(signal);
     expect(request.headers).toBe(request.headers);
     expect(request.headers.headerList).toBe(record.headerList);
@@ -109,7 +109,7 @@ describe('Fetch record/API sharing', () => {
     const fixture = createRecordFixture();
     const record = new ResponseRecord();
     const response = fixture.createResponse(record, 'immutable');
-    expect(ResponseImpl.getResponse(response)).toBe(record);
+    expect(response.getResponse()).toBe(record);
     expect(response.headers.headerList).toBe(record.headerList);
     expect(response.headers.guard).toBe('immutable');
     expect(fixture.bindings.getRealm(response)).toBe(fixture.realm);

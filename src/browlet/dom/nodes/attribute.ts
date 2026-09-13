@@ -21,10 +21,7 @@ import { NodeImpl, NodeType } from './node';
  *   readonly attribute boolean specified; // historical; always returns true
  * };
  */
-export class AttrImpl
-  extends withAttrStub(NodeImpl)
-  implements Attr
-{
+export class AttrImpl extends withAttrStub(NodeImpl) {
   #element: ElementImpl | null = null;
   readonly #localName: string;
   #value: string;
@@ -43,6 +40,10 @@ export class AttrImpl
     this.#value = value;
     this.#namespaceURI = namespaceURI;
     this.#prefix = prefix;
+  }
+
+  static is(value: unknown): value is AttrImpl {
+    return NodeImpl.is(value) && #localName in value;
   }
 
   get localName(): string {
@@ -77,17 +78,10 @@ export class AttrImpl
     return true;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static is(value: unknown): value is AttrImpl {
-    return NodeImpl.is(value) && #localName in value;
-  }
-
-  static setOwnerElement(
-    attribute: AttrImpl,
-    element: ElementImpl | null,
-  ): void {
-    attribute.#element = element;
+  setOwnerElement(element: ElementImpl | null): void {
+    this.#element = element;
   }
 }
 

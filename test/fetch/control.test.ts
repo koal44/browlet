@@ -4,13 +4,14 @@ import { FetchController } from '../../src/fetch/controller';
 import { isOffline, serializeInteger } from '../../src/fetch/infrastructure';
 import { queueFetchTask } from '../../src/fetch/tasks';
 import {
-  ConnectionTimingInfo, FetchTimingInfo, ResponseBodyInfo, createOpaqueTimingInfo,
+  ConnectionTimingInfo, FetchTimingInfo, ResponseBodyInfo,
 } from '../../src/fetch/timing';
 import {
   isFetchScheme, isHTTPScheme, isLocalScheme, isLocalURL,
 } from '../../src/fetch/url';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { parseURL } from '../../src/url/url';
+import { createRuntime } from '../js-engine/runtime-fixture';
 import { createControllerFixture } from './control-fixture';
 
 describe('Fetch §2 controllers', () => {
@@ -52,6 +53,7 @@ describe('Fetch §2 controllers', () => {
     const error = {};
     const record = {};
     const { controller, abort } = createControllerFixture({
+      ...createRuntime(),
       serialize(value) {
         expect(controller.state).toBe('aborted');
         expect(controller.serializedAbortReason).toBeNull();
@@ -70,6 +72,7 @@ describe('Fetch §2 controllers', () => {
 
   it('does not add a once-only restriction to abort or terminate', () => {
     const { controller, abort } = createControllerFixture({
+      ...createRuntime(),
       serialize: (value) => ({ value }),
       deserialize: vi.fn(),
     });
@@ -82,7 +85,7 @@ describe('Fetch §2 controllers', () => {
 
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
-    const { abort } = createControllerFixture({ serialize, deserialize: vi.fn() });
+    const { abort } = createControllerFixture({ ...createRuntime(), serialize, deserialize: vi.fn() });
 
     abort();
     expect(serialize.mock.calls[0]![0]).toMatchObject({ name: 'AbortError' });
@@ -90,16 +93,14 @@ describe('Fetch §2 controllers', () => {
     expect(serialize.mock.calls[1]![0]).toBeUndefined();
   });
 
-  it('falls back to a target-realm AbortError if deserialization throws', () => {
-    const { context, deserialize } = createControllerFixture({
+  it('falls back to AbortError if deserialization throws', () => {
+    const { deserialize } = createControllerFixture({
+      ...createRuntime(),
       serialize: vi.fn(),
       deserialize: () => { throw new Error('Unavailable serialized type'); },
     });
     const reason = deserialize({});
     expect(reason).toMatchObject({ name: 'AbortError', message: '' });
-    expect(Object.getPrototypeOf(reason)).toBe(
-      context.realm.evaluate('DOMException.prototype', 'abort-prototype.js'),
-    );
   });
 });
 
@@ -119,7 +120,7 @@ describe('Fetch §2 timing information', () => {
       serverTimingHeaders: ['db;dur=4'],
       renderBlocking: true,
     });
-    const opaque = createOpaqueTimingInfo(timing);
+    const opaque = timing.createOpaque();
 
     expect(opaque).toEqual({
       startTime: 1,

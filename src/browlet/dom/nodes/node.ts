@@ -1,8 +1,8 @@
 import {
   domExceptionName, throwDOMException,
 } from '../../../web-idl/exceptions/dom-exception-core';
-import {
-  type EventTargetVirtuals, EventTargetImpl,
+import type {
+  EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import {
@@ -82,9 +82,7 @@ import type { TextImpl } from './text';
  *   boolean composed = false;
  * };
  */
-export abstract class NodeImpl
-  extends TreeNode<NodeImpl>
-{
+export abstract class NodeImpl extends TreeNode<NodeImpl> {
   readonly #nodeType: NodeType;
   readonly #virtuals: NodeVirtuals;
   #document: DocumentImpl | null;
@@ -101,6 +99,16 @@ export abstract class NodeImpl
     this.#nodeType = nodeType;
     this.#virtuals = options.virtuals ?? {};
     this.#document = ownerDocument;
+  }
+
+  static is(value: unknown): value is NodeImpl {
+    return typeof value === 'object' &&
+      value !== null &&
+      #document in value;
+  }
+
+  static createEventTargetVirtuals(overrides: EventTargetVirtuals): EventTargetVirtuals {
+    return { ...nodeEventTargetVirtuals, ...overrides };
   }
 
   get nodeType(): NodeType {
@@ -132,11 +140,11 @@ export abstract class NodeImpl
   }
 
   get isConnected(): boolean {
-    return isDocument(NodeImpl.getShadowIncludingRoot(this));
+    return isDocument(this.getShadowIncludingRoot());
   }
 
   getRootNode(options?: GetRootNodeOptions): NodeImpl {
-    return NodeImpl.getRootNode(this, options?.composed);
+    return options?.composed ? this.getShadowIncludingRoot() : super.getRoot();
   }
 
   appendChild<T extends NodeImpl>(node: T): T {
@@ -150,14 +158,11 @@ export abstract class NodeImpl
       return node;
     }
 
-    if (NodeImpl.getParentNode(child) !== this) {
+    if (child.parentNode !== this) {
       throwDOMException(domExceptionName.notFound);
     }
 
-    TreeNode.insertSiblingBefore<NodeImpl>(
-      child,
-      node,
-    );
+    child.insertTreeSiblingBefore(node);
     return node;
   }
 
@@ -182,83 +187,50 @@ export abstract class NodeImpl
       : DOCUMENT_POSITION_PRECEDING;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static is(value: unknown): value is NodeImpl {
-    return typeof value === 'object' &&
-      value !== null &&
-      #document in value;
-  }
-
-  static isDefaultPassiveTarget(node: NodeImpl): boolean {
-    const root = node.getRoot();
-    const document = isDocument(root) ? root : node.#document;
+  isDefaultPassiveTarget(this: NodeImpl): boolean {
+    const root = this.getRoot();
+    const document = isDocument(root) ? root : this.#document;
 
     return document !== null && (
-      node === document ||
-      node === document.documentElement ||
-      node === document.body
+      this === document ||
+      this === document.documentElement ||
+      this === document.body
     );
   }
 
-  static getEventParent(
-    node: NodeImpl,
-    _event: EventImpl,
-  ): EventTargetImpl | null {
-    return NodeImpl.getParentNode(node);
+  getEventParent(_event: EventImpl): EventTargetImpl | null {
+    return this.parentNode;
   }
 
-  static getParentNode(node: NodeImpl): NodeImpl | null {
-    return TreeNode.getParent(node);
+  getNodeDocument(): DocumentImpl | null {
+    return this.#document;
   }
 
-  static getRootNode(node: NodeImpl, composed = false): NodeImpl {
-    return composed
-      ? NodeImpl.getShadowIncludingRoot(node)
-      : TreeNode.getRoot(node);
+  setNodeDocument(document: DocumentImpl): void {
+    this.#document = document;
   }
 
-  static createEventTargetVirtuals(
-    overrides: EventTargetVirtuals,
-  ): EventTargetVirtuals {
-    return { ...nodeEventTargetVirtuals, ...overrides };
-  }
-
-  static getNodeDocument(node: NodeImpl): DocumentImpl | null {
-    return node.#document;
-  }
-
-  static setNodeDocument(
-    node: NodeImpl,
-    document: DocumentImpl,
-  ): void {
-    node.#document = document;
-  }
-
-  static getShadowIncludingRoot(node: NodeImpl): NodeImpl {
-    let root = TreeNode.getRoot(node);
-    let host = EventTargetImpl.getShadowRootHost(root);
+  getShadowIncludingRoot(): NodeImpl {
+    let root = this.getRoot();
+    let host = root.getShadowRootHost();
 
     while (NodeImpl.is(host)) {
-      root = TreeNode.getRoot(host);
-      host = EventTargetImpl.getShadowRootHost(root);
+      root = host.getRoot();
+      host = root.getShadowRootHost();
     }
 
     return root;
   }
 
-  static isShadowIncludingInclusiveAncestor(
-    ancestor: NodeImpl,
-    node: NodeImpl,
-  ): boolean {
+  isShadowIncludingInclusiveAncestor(node: NodeImpl): boolean {
     let current = node;
 
     while (true) {
-      if (ancestor.contains(current)) return true;
+      if (this.contains(current)) return true;
 
-      const host = EventTargetImpl.getShadowRootHost(
-        TreeNode.getRoot(current),
-      );
+      const host = current.getRoot().getShadowRootHost();
       if (!NodeImpl.is(host)) return false;
       current = host;
     }
@@ -283,14 +255,11 @@ export const nodeIDL = defineInterface({
     roAttr('previousSibling', nullable(reference('Node'))),
     roAttr('nextSibling', nullable(reference('Node'))),
     roAttr('isConnected', idlType.boolean),
-    op('getRootNode', reference('Node'), [arg(
-      'options',
-      reference('GetRootNodeOptions'),
-      {
-        default: emptyDictionary,
-        optional: true,
-      },
-    )]),
+    op('getRootNode', reference('Node'), [
+      arg('options', reference('GetRootNodeOptions'), {
+        default: emptyDictionary, optional: true,
+      }),
+    ]),
     op('appendChild', reference('Node'), [
       arg('node', reference('Node')),
     ]),
@@ -316,16 +285,16 @@ export const getRootNodeOptionsIDL = defineDictionary({
 const nodeEventTargetVirtuals: EventTargetVirtuals = {
   isNode: (target) => NodeImpl.is(target),
   getTreeRoot: (target) => NodeImpl.is(target)
-    ? TreeNode.getRoot(target)
+    ? target.getRoot()
     : null,
   isShadowIncludingInclusiveAncestor: (ancestor, target) =>
     NodeImpl.is(ancestor) &&
     NodeImpl.is(target) &&
-    NodeImpl.isShadowIncludingInclusiveAncestor(ancestor, target),
+    ancestor.isShadowIncludingInclusiveAncestor(target),
   getParent: (target, event) =>
-    NodeImpl.is(target) ? NodeImpl.getEventParent(target, event) : null,
+    NodeImpl.is(target) ? target.getEventParent(event) : null,
   isDefaultPassiveTarget: (target) =>
-    NodeImpl.is(target) && NodeImpl.isDefaultPassiveTarget(target),
+    NodeImpl.is(target) && target.isDefaultPassiveTarget(),
 };
 
 export type NodeOptions = {

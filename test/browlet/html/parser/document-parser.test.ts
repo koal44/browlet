@@ -5,7 +5,6 @@ import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/hig
 import { networkingTaskSource, queueGlobalTask } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createMicrotaskQueue } from '../../../../src/js-engine/index';
-import { TreeNode } from '../../../../src/browlet/dom/infra/tree';
 
 import {
   BrowletParser,
@@ -16,15 +15,12 @@ import {
 import {
   isHTMLStyleElement,
 } from '../../../../src/browlet/html/elements/metadata/style';
-import {
-  DocumentImpl,
-} from '../../../../src/browlet/dom/nodes/document';
 
 describe('BrowletParser', () => {
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
     const { document, realm, runtime, drain } = createParserDocument();
     const blocker = document.createElement('style');
-    DocumentImpl.addScriptBlockingStyleSheet(document, blocker);
+    document.addScriptBlockingStyleSheet(blocker);
     let scripts = 0;
     let complete = false;
     const errors: unknown[] = [];
@@ -38,7 +34,7 @@ describe('BrowletParser', () => {
     expect(document.getElementById('after')).toBeNull();
 
     queueGlobalTask(networkingTaskSource, realm.global, () => {
-      DocumentImpl.removeScriptBlockingStyleSheet(document, blocker);
+      document.removeScriptBlockingStyleSheet(blocker);
     });
     try {
       await inNodeTask(() => {
@@ -72,9 +68,9 @@ describe('BrowletParser', () => {
       throw new Error('Expected stylesheet owner elements');
     }
 
-    DocumentImpl.addScriptBlockingStyleSheet(parser.document, first);
-    DocumentImpl.addScriptBlockingStyleSheet(parser.document, second);
-    DocumentImpl.addScriptBlockingStyleSheet(parser.document, first);
+    parser.document.addScriptBlockingStyleSheet(first);
+    parser.document.addScriptBlockingStyleSheet(second);
+    parser.document.addScriptBlockingStyleSheet(first);
 
     let complete = false;
     const errors: unknown[] = [];
@@ -88,15 +84,15 @@ describe('BrowletParser', () => {
       expect(scripts).toHaveLength(0);
 
       queueGlobalTask(networkingTaskSource, realm.global, () => {
-        DocumentImpl.removeScriptBlockingStyleSheet(document, first);
+        document.removeScriptBlockingStyleSheet(first);
       });
       await inNodeTask(drain);
 
       expect(scripts).toHaveLength(0);
     } finally {
       queueGlobalTask(networkingTaskSource, realm.global, () => {
-        DocumentImpl.removeScriptBlockingStyleSheet(document, first);
-        DocumentImpl.removeScriptBlockingStyleSheet(document, second);
+        document.removeScriptBlockingStyleSheet(first);
+        document.removeScriptBlockingStyleSheet(second);
       });
       await inNodeTask(drain);
       await inNodeTask(drain);
@@ -110,7 +106,7 @@ describe('BrowletParser', () => {
     const { document, realm, runtime, drain } = createParserDocument();
     const first = document.createElement('style');
     const second = document.createElement('style');
-    DocumentImpl.addScriptBlockingStyleSheet(document, first);
+    document.addScriptBlockingStyleSheet(first);
     let scripts = 0;
     const errors: unknown[] = [];
     new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, runtime)
@@ -118,19 +114,19 @@ describe('BrowletParser', () => {
     await inNodeTask(drain);
 
     queueGlobalTask(networkingTaskSource, realm.global, () => {
-      DocumentImpl.removeScriptBlockingStyleSheet(document, first);
-      if (!laterTask) DocumentImpl.addScriptBlockingStyleSheet(document, second);
+      document.removeScriptBlockingStyleSheet(first);
+      if (!laterTask) document.addScriptBlockingStyleSheet(second);
     });
     if (laterTask) {
       queueGlobalTask(networkingTaskSource, realm.global, () => {
-        DocumentImpl.addScriptBlockingStyleSheet(document, second);
+        document.addScriptBlockingStyleSheet(second);
       });
     }
     await inNodeTask(drain);
     expect(scripts).toBe(0);
 
     queueGlobalTask(networkingTaskSource, realm.global, () => {
-      DocumentImpl.removeScriptBlockingStyleSheet(document, second);
+      document.removeScriptBlockingStyleSheet(second);
     });
     await inNodeTask(drain);
     await inNodeTask(drain);
@@ -194,7 +190,7 @@ function createParserDocument() {
   const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active document');
-  while (document.firstChild) TreeNode.remove(document.firstChild);
+  while (document.firstChild) document.firstChild.removeFromTree();
   const realm = getRelevantRealm(document);
   const runtime = getRealmBindings(realm).context.getRuntime();
   const options = {

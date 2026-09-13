@@ -15,10 +15,7 @@ import type { DocumentImpl } from './document';
  *   readonly attribute DOMString systemId;
  * };
  */
-export class DocumentTypeImpl
-  extends withDocumentTypeStub(NodeImpl)
-  implements DocumentType
-{
+export class DocumentTypeImpl extends withDocumentTypeStub(NodeImpl) {
   readonly #childNodeMixin = new ChildNodeMixin(this);
   #name: string;
   #publicId: string;
@@ -52,17 +49,16 @@ export class DocumentTypeImpl
     this.#childNodeMixin.remove();
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static setIdentifiers(
-    doctype: DocumentTypeImpl,
+  setIdentifiers(
     name: string,
     publicId: string,
     systemId: string,
   ): void {
-    doctype.#name = name;
-    doctype.#publicId = publicId;
-    doctype.#systemId = systemId;
+    this.#name = name;
+    this.#publicId = publicId;
+    this.#systemId = systemId;
   }
 }
 

@@ -1,5 +1,5 @@
+import type { RuntimeContext } from '../js-engine/index';
 import { createDOMException } from '../web-idl/exceptions/dom-exception-core';
-import type { BindingContext } from '../web-idl/projection';
 import type { FetchTimingInfo } from './timing';
 
 /** Fetch §2, fetch controller and its operations. */
@@ -29,25 +29,19 @@ export class FetchController {
     return this.fullTimingInfo;
   }
 
-  /** The extra context and structured-data arguments supply the aborting realm and HTML serialization. */
-  // SPEC_MISMATCH: abort(controller, error?)
-  // TODO(BINDING_INTEGRATION): move fallback-error realization to the HTML serialization boundary.
+  /** Fetch §2, abort a fetch controller; an omitted error differs from explicit undefined. */
   abort(
-    context: BindingContext,
-    structuredData: FetchStructuredData,
-    error?: unknown,
+    ...args: [runtime: RuntimeContext] | [error: unknown, runtime: RuntimeContext]
   ): void {
     this.state = 'aborted';
-    const fallbackError = context.realizeException(
-      createDOMException('AbortError'),
-    );
+    const fallbackError = createDOMException('AbortError');
+    const runtime = args.length === 1 ? args[0] : args[1];
+    const error = args.length === 1 ? fallbackError : args[0];
     let serializedError: object;
     try {
-      serializedError = structuredData.serialize(
-        arguments.length < 3 ? fallbackError : error,
-      );
+      serializedError = runtime.serialize(error);
     } catch {
-      serializedError = structuredData.serialize(fallbackError);
+      serializedError = runtime.serialize(fallbackError);
     }
     this.serializedAbortReason = serializedError;
   }
@@ -57,23 +51,15 @@ export class FetchController {
   }
 }
 
-/**
- * Fetch §2, deserialize a serialized abort reason in the target realm.
- * BindingContext represents that realm; the extra capability supplies HTML deserialization.
- */
-// SPEC_MISMATCH: (abortReason, realm)
-// TODO(BINDING_INTEGRATION): isolate target-realm error creation at the HTML deserialization boundary.
+/** Fetch §2, deserialize a serialized abort reason in the target runtime's realm. */
 export function deserializeAbortReason(
   abortReason: object | null,
-  context: BindingContext,
-  structuredData: FetchStructuredData,
+  runtime: RuntimeContext,
 ): unknown {
-  const fallbackError = context.realizeException(
-    createDOMException('AbortError'),
-  );
+  const fallbackError = createDOMException('AbortError');
   if (abortReason !== null) {
     try {
-      const error = structuredData.deserialize(abortReason);
+      const error = runtime.deserialize(abortReason);
       return error === undefined ? fallbackError : error;
     } catch {
       return fallbackError;
@@ -81,14 +67,3 @@ export function deserializeAbortReason(
   }
   return fallbackError;
 }
-
-/*
- * HTML's StructuredSerialize/StructuredDeserialize operations, bound to their
- * source or target realm. Fetch retains the resulting record opaquely; the
- * provider owns its representation. This is serialization, not cloning or
- * StructuredSerializeForStorage.
- */
-export type FetchStructuredData = {
-  serialize(value: unknown): object;
-  deserialize(record: object): unknown;
-};

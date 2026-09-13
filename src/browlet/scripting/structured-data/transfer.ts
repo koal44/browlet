@@ -1,4 +1,7 @@
-import * as JSEngine from '../../../js-engine/index';
+import {
+  getArrayBufferMaxByteLength, getBufferSourceByteLength, getBufferTypeName,
+  isBufferSourceDetached, isObject,
+} from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../web-idl/exceptions/dom-exception-core';
 import type { StructuredDataEnvironment } from './environment';
 import {
@@ -74,8 +77,8 @@ function prepareTransfer(
   value: unknown,
   environment: StructuredDataEnvironment,
 ): PreparedTransfer {
-  if (!JSEngine.isObject(value)) return throwDataCloneError();
-  const bufferType = JSEngine.getBufferTypeName(value);
+  if (!isObject(value)) return throwDataCloneError();
+  const bufferType = getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
   };
@@ -106,11 +109,9 @@ function performTransfer(
   environment: StructuredDataEnvironment,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
-    if (JSEngine.isBufferSourceDetached(prepared.value)) return throwDataCloneError();
-    const byteLength = JSEngine.getBufferSourceByteLength(prepared.value);
-    const maxByteLength = JSEngine.getArrayBufferMaxByteLength(
-      prepared.value,
-    );
+    if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
+    const byteLength = getBufferSourceByteLength(prepared.value);
+    const maxByteLength = getArrayBufferMaxByteLength(prepared.value);
     return {
       type: maxByteLength === undefined
         ? 'ArrayBuffer'
@@ -167,8 +168,8 @@ function receiveTransfer(
 
   const value = environment.realm.transferArrayBuffer(dataHolder.buffer);
   if (
-    JSEngine.getBufferSourceByteLength(value) !== dataHolder.byteLength ||
-    JSEngine.getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
+    getBufferSourceByteLength(value) !== dataHolder.byteLength ||
+    getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
     throw new Error('Received ArrayBuffer does not match its data holder');
   }

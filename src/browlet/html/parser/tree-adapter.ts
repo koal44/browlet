@@ -1,14 +1,13 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
 import type { AttrImpl } from '../../dom/nodes/attribute';
 import type { CommentImpl } from '../../dom/nodes/comment';
-import { DocumentImpl, DocumentMode } from '../../dom/nodes/document';
-import { DocumentTypeImpl } from '../../dom/nodes/document-type';
+import { DocumentMode, type DocumentImpl } from '../../dom/nodes/document';
+import type { DocumentTypeImpl } from '../../dom/nodes/document-type';
 import type { DocumentFragmentImpl } from '../../dom/nodes/document-fragment';
-import { ElementImpl } from '../../dom/nodes/element';
+import type { ElementImpl } from '../../dom/nodes/element';
 import type { TextImpl } from '../../dom/nodes/text';
-import { TreeNode } from '../../dom/infra/tree';
 import {
-  isComment, isDocumentType, isElement, isText, NodeImpl,
+  isComment, isDocumentType, isElement, isText, type NodeImpl,
 } from '../../dom/nodes/node';
 
 export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
@@ -38,7 +37,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   createDocumentFragment(): DocumentFragmentImpl {
-    return DocumentImpl.createDocumentFragment(this.#document);
+    return this.#document.createDocumentFragment();
   }
 
   createElement(
@@ -46,18 +45,11 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     namespaceURI: html.NS,
     attrs: Token.Attribute[],
   ): ElementImpl {
-    const element = DocumentImpl.createElementNode(
-      this.#document,
-      tagName,
-      namespaceURI,
-    );
+    const element = this.#document.createElementNode(tagName, namespaceURI);
     for (const attribute of attrs) {
-      ElementImpl.appendAttribute(
-        element,
-        fromParserAttribute(attribute, this.#document),
-      );
+      element.appendAttribute(fromParserAttribute(attribute, this.#document));
     }
-    ElementImpl.beginParsingChildren(element);
+    element.beginParsingChildren();
     return element;
   }
 
@@ -76,17 +68,17 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
       this.#finishPendingUnpushedElement();
     }
 
-    ElementImpl.beginParsingChildren(item);
+    item.beginParsingChildren();
   }
 
   onItemPop(item: ElementImpl, _newTop: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    ElementImpl.finishParsingChildren(item);
+    item.finishParsingChildren();
   }
 
   appendChild(parentNode: NodeImpl, newNode: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    TreeNode.appendChild(parentNode, newNode);
+    parentNode.appendTreeChild(newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
@@ -96,12 +88,12 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     referenceNode: NodeImpl,
   ): void {
     this.#finishPendingUnpushedElement();
-    TreeNode.insertSiblingBefore(referenceNode, newNode);
+    referenceNode.insertTreeSiblingBefore(newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
   detachNode(node: NodeImpl): void {
-    TreeNode.remove(node);
+    node.removeFromTree();
   }
 
   insertText(parentNode: NodeImpl, text: string): void {
@@ -111,10 +103,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     if (isText(lastChild)) {
       lastChild.data += text;
     } else {
-      TreeNode.appendChild(
-        parentNode,
-        this.#document.createTextNode(text),
-      );
+      parentNode.appendTreeChild(this.#document.createTextNode(text));
     }
   }
 
@@ -129,10 +118,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   adoptAttributes(recipient: ElementImpl, attrs: Token.Attribute[]): void {
     for (const attr of attrs) {
       if (recipient.hasAttributeNS(attr.namespace ?? null, attr.name)) continue;
-      ElementImpl.appendAttribute(
-        recipient,
-        fromParserAttribute(attr, this.#document),
-      );
+      recipient.appendAttribute(fromParserAttribute(attr, this.#document));
     }
   }
 
@@ -151,7 +137,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   getParentNode(node: NodeImpl): NodeImpl | null {
-    return NodeImpl.getParentNode(node);
+    return node.parentNode;
   }
 
   getAttrList(element: ElementImpl): Token.Attribute[] {
@@ -206,46 +192,36 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     const doctype = document.doctype;
 
     if (doctype) {
-      DocumentTypeImpl.setIdentifiers(
-        doctype,
-        name,
-        publicId,
-        systemId,
-      );
+      doctype.setIdentifiers(name, publicId, systemId);
       return;
     }
 
-    const newDoctype = DocumentImpl.createDocumentType(
-      document,
-      name,
-      publicId,
-      systemId,
-    );
+    const newDoctype = document.createDocumentType(name, publicId, systemId);
     const documentElement = document.documentElement;
 
     if (documentElement) {
-      TreeNode.insertSiblingBefore(documentElement, newDoctype);
+      documentElement.insertTreeSiblingBefore(newDoctype);
     } else {
-      TreeNode.appendChild(document, newDoctype);
+      document.appendTreeChild(newDoctype);
     }
   }
 
   setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {
     switch (mode) {
       case html.DOCUMENT_MODE.NO_QUIRKS:
-        DocumentImpl.setMode(document, DocumentMode.NoQuirks);
+        document.setMode(DocumentMode.NoQuirks);
         break;
       case html.DOCUMENT_MODE.QUIRKS:
-        DocumentImpl.setMode(document, DocumentMode.Quirks);
+        document.setMode(DocumentMode.Quirks);
         break;
       case html.DOCUMENT_MODE.LIMITED_QUIRKS:
-        DocumentImpl.setMode(document, DocumentMode.LimitedQuirks);
+        document.setMode(DocumentMode.LimitedQuirks);
         break;
     }
   }
 
   getDocumentMode(document: DocumentImpl): html.DOCUMENT_MODE {
-    switch (DocumentImpl.getMode(document)) {
+    switch (document.getMode()) {
       case DocumentMode.NoQuirks:
         return html.DOCUMENT_MODE.NO_QUIRKS;
       case DocumentMode.Quirks:
@@ -299,7 +275,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     if (!element) return;
 
     this.#pendingUnpushedElement = null;
-    ElementImpl.finishParsingChildren(element);
+    element.finishParsingChildren();
   }
 }
 
@@ -335,8 +311,7 @@ function fromParserAttribute(
   attribute: Token.Attribute,
   document: DocumentImpl,
 ): AttrImpl {
-  return DocumentImpl.createAttribute(
-    document,
+  return document.createAttributeNode(
     attribute.name,
     attribute.value,
     attribute.namespace ?? null,

@@ -1,6 +1,4 @@
-import {
-  defineElementInterface, type ElementCreationContext, ElementImpl,
-} from '../dom/nodes/element';
+import { defineElementInterface, ElementImpl } from '../dom/nodes/element';
 import { MATHML_NAMESPACE } from '../../infra/index';
 import {
   defineIncludes, defineInterface,
@@ -16,14 +14,9 @@ import type { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
  */
 export class MathMLElementImpl
   extends withMathMLElementStub(ElementImpl)
-  implements MathMLElement
 {
-  constructor(context: ElementCreationContext) {
-    super(context);
-  }
-
   get style(): CSSStyleDeclarationImpl {
-    return ElementImpl.getInlineStyle(this);
+    return this.getInlineStyle();
   }
 }
 

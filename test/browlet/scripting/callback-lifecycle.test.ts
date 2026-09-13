@@ -29,8 +29,9 @@ import type { EventLoopOptions, Task } from
 import {
   Moment, monotonicClock, UnsafeMoment,
 } from '../../../src/browlet/performance/clock';
+import type { Realm } from '../../../src/browlet/scripting/realm';
 import {
-  createRealm, Realm,
+  createRealm,
 } from '../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
@@ -267,7 +268,7 @@ function createTestRealm(
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  Realm.setHostDefined(executionContext.realm, settings);
+  executionContext.realm.setHostDefined(settings);
   return { realm: executionContext.realm, settings };
 }
 

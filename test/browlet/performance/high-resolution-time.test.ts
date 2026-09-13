@@ -4,8 +4,7 @@ import {
   Clock, Moment, UnsafeMoment, monotonicClock,
 } from '../../../src/browlet/performance/clock';
 import {
-  coarsenTime, EnvironmentTiming,
-  initializeEstimatedMonotonicTimeOfUnixEpoch,
+  EnvironmentTiming, initializeEstimatedMonotonicTimeOfUnixEpoch,
 } from '../../../src/browlet/performance/high-resolution-time';
 
 describe('High Resolution Time algorithms', () => {
@@ -13,8 +12,8 @@ describe('High Resolution Time algorithms', () => {
     const clock = new Clock(() => 0);
     const unsafeMoment = new UnsafeMoment(clock, 12.345_678);
 
-    const coarse = coarsenTime(unsafeMoment);
-    const isolated = coarsenTime(unsafeMoment, true);
+    const coarse = unsafeMoment.coarsen();
+    const isolated = unsafeMoment.coarsen(true);
 
     expect(coarse.clock).toBe(clock);
     expect(coarse.coarsened).toBe(true);

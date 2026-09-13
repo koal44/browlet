@@ -253,12 +253,13 @@ dependencies through the Runtime Context below. Track the remaining migration in
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
 Promises, buffer allocation, microtasks, task delivery, abort-controller
-construction, cloning, and immutable native-line-ending configuration.
+construction, structured cloning/serialization/deserialization, and immutable
+native-line-ending configuration.
 It contains no Binding Context, realm object,
 conversion, callback adaptation, or platform-object registry.
 
 The neutral contract and engine-owned buffer operations live in `js-engine/`.
-HTML task policy, DOM aborting, and HTML cloning retain their implementations in
+HTML task policy, DOM aborting, and HTML structured data retain their implementations in
 Browlet. [`integration/runtime.ts`](browlet/integration/runtime.ts) assembles
 them once during Window realm registration, reusing that realm's existing
 Promise facility. Binding exposes the same object through `context.getRuntime()`;
@@ -273,6 +274,13 @@ Invocation-specific information, such as Fetch's explicit task destination,
 remains an operation argument. Borrowing another realm's method does not change
 the receiver's runtime.
 
+`serialize(value)` captures a value using the source runtime;
+`deserialize(record)` reconstructs it in the destination runtime's realm.
+Consumers retain the record opaquely; HTML owns its representation. Fetch uses
+these separate stages for abort reasons. Runtime integration realizes exception
+requests before serialization, and Fetch integration realizes a fallback error
+before delivering a deserialized reason. No Binding Context enters the controller.
+
 Allocation is an implementation dependency when a value can reach callbacks or
 be retained before return projection. FileReader stores its final buffer once;
 its getter returns that buffer without a projection cache. TextEncoderStream
@@ -285,7 +293,7 @@ distinct operations; see the [engine buffer contract](js-engine/README.md).
 
 Do not introduce subsystem-specific copies of this context or route ordinary
 imports through it. Standalone tests compose real engine facilities with narrow
-task/abort/clone fakes; HTML ownership tests use Browlet's actual composition.
+task/abort/structured-data fakes; HTML ownership tests use Browlet's actual composition.
 
 ### Shared algorithm
 

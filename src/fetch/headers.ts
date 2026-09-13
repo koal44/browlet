@@ -1,5 +1,4 @@
 import { isomorphicEncode } from '../js-engine/byte-string';
-
 import { getMIMETypeEssence, parseMIMEType } from '../mime/index';
 import { collectHTTPQuotedString, isHTTPToken } from '../http/syntax';
 import { TextCursor } from '../infra/text-cursor';
@@ -333,6 +332,8 @@ export type HeadersGuard = 'immutable' | 'request' | 'request-no-cors' | 'respon
 
 /** Binding converts HeadersInit's sequence/record branches to arrays/plain objects. */
 export type HeadersInitValue = string[][] | Record<string, string>;
+
+// -- Web IDL ------------------------------------------------------------
 
 export const headersInitIDL = defineTypedef({
   name: 'HeadersInit',

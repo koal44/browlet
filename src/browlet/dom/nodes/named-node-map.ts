@@ -8,13 +8,10 @@ import {
 import { bind, impl } from '../../../web-idl/index';
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
-import { AttrImpl } from './attribute';
+import type { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
 
-export class NamedNodeMapImpl
-  extends Array<AttrImpl>
-  implements NamedNodeMap
-{
+export class NamedNodeMapImpl extends Array<AttrImpl> {
   #element: ElementImpl | null = null;
 
   getNamedItem(qualifiedName: string): AttrImpl | null {
@@ -22,10 +19,7 @@ export class NamedNodeMapImpl
     return this.find((attribute) => attribute.name === qualifiedName) ?? null;
   }
 
-  getNamedItemNS(
-    namespaceURI: string | null,
-    localName: string,
-  ): AttrImpl | null {
+  getNamedItemNS(namespaceURI: string | null, localName: string): AttrImpl | null {
     if (namespaceURI === '') namespaceURI = null;
     return this.find((attribute) =>
       attribute.namespaceURI === namespaceURI &&
@@ -68,15 +62,12 @@ export class NamedNodeMapImpl
     return names;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static associateElement(
-    attributes: NamedNodeMapImpl,
-    element: ElementImpl,
-  ): void {
-    attributes.#element = element;
-    for (const attribute of attributes) {
-      AttrImpl.setOwnerElement(attribute, element);
+  associateElement(element: ElementImpl): void {
+    this.#element = element;
+    for (const attribute of this) {
+      attribute.setOwnerElement(element);
     }
   }
 
@@ -86,7 +77,7 @@ export class NamedNodeMapImpl
     const index = this.findIndex(matches);
     if (index < 0) throwDOMException(domExceptionName.notFound);
     const attribute = this.splice(index, 1)[0]!;
-    AttrImpl.setOwnerElement(attribute, null);
+    attribute.setOwnerElement(null);
     return attribute;
   }
 
@@ -103,11 +94,11 @@ export class NamedNodeMapImpl
       : this.getNamedItemNS(attribute.namespaceURI, attribute.localName);
     if (previous) {
       this.splice(this.indexOf(previous), 1, attribute);
-      AttrImpl.setOwnerElement(previous, null);
+      previous.setOwnerElement(null);
     } else {
       this.push(attribute);
     }
-    AttrImpl.setOwnerElement(attribute, this.#element);
+    attribute.setOwnerElement(this.#element);
     return previous;
   }
 
@@ -144,18 +135,18 @@ export const namedNodeMapIDL = defineInterface({
   ...xattr('LegacyUnenumerableNamedProperties'),
   implementation: impl(NamedNodeMapImpl),
   members: [
-    op('getNamedItem', nullable(reference('Attr')), [
-      arg('qualifiedName', idlType.DOMString),
-    ], namedGetter(
-      (attributes: NamedNodeMapImpl) =>
-        attributes.getSupportedPropertyNames(),
-    )),
-    op('setNamedItem', nullable(reference('Attr')), [
-      arg('attr', reference('Attr')),
-    ], xattr('CEReactions')),
-    op('removeNamedItem', reference('Attr'), [
-      arg('qualifiedName', idlType.DOMString),
-    ], xattr('CEReactions')),
+    op('getNamedItem', nullable(reference('Attr')),
+      [arg('qualifiedName', idlType.DOMString)],
+      namedGetter(
+        (attributes: NamedNodeMapImpl) => attributes.getSupportedPropertyNames(),
+      ),
+    ),
+    op('setNamedItem', nullable(reference('Attr')),
+      [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('removeNamedItem', reference('Attr'),
+      [arg('qualifiedName', idlType.DOMString)], xattr('CEReactions'),
+    ),
     op('item', nullable(reference('Attr')),
       [arg('index', idlType.unsignedLong)],
       indexedGetter(
@@ -167,13 +158,16 @@ export const namedNodeMapIDL = defineInterface({
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),
     ]),
-    op('setNamedItemNS', nullable(reference('Attr')), [
-      arg('attr', reference('Attr')),
-    ], xattr('CEReactions')),
-    op('removeNamedItemNS', reference('Attr'), [
-      arg('namespace', nullable(idlType.DOMString)),
-      arg('localName', idlType.DOMString),
-    ], xattr('CEReactions')),
+    op('setNamedItemNS', nullable(reference('Attr')),
+      [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('removeNamedItemNS', reference('Attr'),
+      [
+        arg('namespace', nullable(idlType.DOMString)),
+        arg('localName', idlType.DOMString),
+      ],
+      xattr('CEReactions'),
+    ),
     roAttr('length', idlType.unsignedLong, bind({
       get() {
         return (this as NamedNodeMapImpl).length;

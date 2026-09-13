@@ -1,7 +1,7 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../test-runtime';
-import { BodyRecord, bytesAsBody } from '../../src/fetch/body';
+import { BodyRecord } from '../../src/fetch/body';
 import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
 import {
   defineInterface, idlType, impl, op, promise,
@@ -15,7 +15,7 @@ describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), source.context.getRuntime());
+    const body = BodyRecord.fromBytes(Uint8Array.of(1, 2), source.context.getRuntime());
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
@@ -39,7 +39,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('fully reads on the stream realm checkpoint and queues completion as another task', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const body = BodyRecord.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
     await nextTurn();
     const process = vi.fn();
     const error = vi.fn();
@@ -56,7 +56,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {
     const fixture = createFetchWindow();
-    const body = bytesAsBody(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const body = BodyRecord.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);

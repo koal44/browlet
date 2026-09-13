@@ -363,10 +363,13 @@ describe('Web IDL implementation registration', () => {
       }),
       members: [
         ctor([arg('value', idlType.DOMString)]),
-        op('create', reference('ContextualDependency'), [], {
-          ...invokeWith(ContextualDependencyImpl),
-          static: true,
-        }),
+        op('create', reference('ContextualDependency'),
+          [],
+          {
+            ...invokeWith(ContextualDependencyImpl),
+            static: true,
+          },
+        ),
         roAttr('environment', idlType.object),
         roAttr('value', idlType.DOMString),
       ],
@@ -419,10 +422,13 @@ describe('Web IDL implementation registration', () => {
         constructWith: ['current-global'],
       }),
       members: [
-        op('create', reference('Result'), [], {
-          ...invokeWith(ResultImpl),
-          static: true,
-        }),
+        op('create', reference('Result'),
+          [],
+          {
+            ...invokeWith(ResultImpl),
+            static: true,
+          },
+        ),
         roAttr('global', idlType.object),
       ],
     });
@@ -491,61 +497,85 @@ describe('Web IDL implementation registration', () => {
       implementation: impl(NestedResultOwnerImpl),
       members: [
         ctor(),
-        op('nullableResult', nullable(resultType), [], bind({
-          invoke() { return createResult('nullable'); },
-        })),
-        op('unionResult', union(resultType, idlType.DOMString), [], bind({
-          invoke() { return createResult('union'); },
-        })),
-        op('sequenceResult', sequence(resultType), [], bind({
-          invoke() {
-            const value = createResult('sequence');
-            return [value, value];
-          },
-        })),
-        op('dictionaryResult', reference(resultDictionaryIDL.name), [], bind({
-          invoke() {
-            const value = createResult('dictionary');
-            return new Map([
-              ['first', value],
-              ['second', value],
-            ]);
-          },
-        })),
-        op('createdPromiseResult', promiseType(resultType), [], bind({
-          invoke(context) {
-            return context.promises.resolve(createResult('created promise'));
-          },
-        })),
-        op('resolvedPromiseResult', promiseType(resultType), [], bind({
-          invoke(context) {
-            const result = context.promises.withResolvers<NestedResultImpl>();
-            result.resolve(createResult('resolved promise'));
-            return result.promise;
-          },
-        })),
-        op('reactedPromiseResult', promiseType(resultType), [], bind({
-          invoke(context) {
-            return context.promises.resolve().then(() => createResult('reacted promise'));
-          },
-        })),
-        op('callbackArguments', idlType.undefined, [
-          arg(
-            'callback',
-            reference(nestedResultCallbackIDL.name),
-            projectCallback('rethrow'),
-          ),
-        ], bind({
-          invoke(_context, callback) {
-            (callback as (
-              direct: NestedResultImpl,
-              union: NestedResultImpl,
-            ) => void)(
-              createResult('callback direct'),
-              createResult('callback union'),
-            );
-          },
-        })),
+        op('nullableResult', nullable(resultType),
+          [],
+          bind({
+            invoke() { return createResult('nullable'); },
+          }),
+        ),
+        op('unionResult', union(resultType, idlType.DOMString),
+          [],
+          bind({
+            invoke() { return createResult('union'); },
+          }),
+        ),
+        op('sequenceResult', sequence(resultType),
+          [],
+          bind({
+            invoke() {
+              const value = createResult('sequence');
+              return [value, value];
+            },
+          }),
+        ),
+        op('dictionaryResult', reference(resultDictionaryIDL.name),
+          [],
+          bind({
+            invoke() {
+              const value = createResult('dictionary');
+              return new Map([
+                ['first', value],
+                ['second', value],
+              ]);
+            },
+          }),
+        ),
+        op('createdPromiseResult', promiseType(resultType),
+          [],
+          bind({
+            invoke(context) {
+              return context.promises.resolve(createResult('created promise'));
+            },
+          }),
+        ),
+        op('resolvedPromiseResult', promiseType(resultType),
+          [],
+          bind({
+            invoke(context) {
+              const result = context.promises.withResolvers<NestedResultImpl>();
+              result.resolve(createResult('resolved promise'));
+              return result.promise;
+            },
+          }),
+        ),
+        op('reactedPromiseResult', promiseType(resultType),
+          [],
+          bind({
+            invoke(context) {
+              return context.promises.resolve().then(() => createResult('reacted promise'));
+            },
+          }),
+        ),
+        op('callbackArguments', idlType.undefined,
+          [
+            arg(
+              'callback',
+              reference(nestedResultCallbackIDL.name),
+              projectCallback('rethrow'),
+            ),
+          ],
+          bind({
+            invoke(_context, callback) {
+              (callback as (
+                direct: NestedResultImpl,
+                union: NestedResultImpl,
+              ) => void)(
+                createResult('callback direct'),
+                createResult('callback union'),
+              );
+            },
+          }),
+        ),
       ],
     });
     const realm = new Realm();
@@ -638,16 +668,19 @@ describe('Web IDL implementation registration', () => {
         expect(context.realm).toBe(realm);
       },
     }));
-    const parse = op('parse', idlType.DOMString, [
-      arg('value', idlType.DOMString),
-    ], bind({
-      invoke(context, value) {
-        expect(context.realm).toBe(realm);
-        return `bound:${String(value)}`;
-      },
-    }, {
-      static: true,
-    }));
+    const parse = op('parse', idlType.DOMString,
+      [
+        arg('value', idlType.DOMString),
+      ],
+      bind({
+        invoke(context, value) {
+          expect(context.realm).toBe(realm);
+          return `bound:${String(value)}`;
+        },
+      }, {
+        static: true,
+      }),
+    );
     const interfaceIDL = defineInterface({
       name: 'DeclarativeExample',
       exposed: 'Window',
@@ -1039,24 +1072,30 @@ describe('Web IDL implementation registration', () => {
           },
         })),
         attr('value', idlType.DOMString),
-        op('namedItem', idlType.DOMString, [
-          arg('name', idlType.DOMString),
-        ], bind({
-          getSupportedPropertyNames() {
-            return new Set(['label']);
+        op('namedItem', idlType.DOMString,
+          [
+            arg('name', idlType.DOMString),
+          ],
+          bind({
+            getSupportedPropertyNames() {
+              return new Set(['label']);
+            },
+            invoke(_context, name) {
+              return ProductImpl.namedItem(
+                this as ProductImpl,
+                String(name),
+              );
+            },
+          }, { special: 'getter' }),
+        ),
+        op('copy', reference('Product'),
+          [
+            arg('value', idlType.any, resolveArgs(ProductImpl)),
+          ],
+          {
+            static: true,
           },
-          invoke(_context, name) {
-            return ProductImpl.namedItem(
-              this as ProductImpl,
-              String(name),
-            );
-          },
-        }, { special: 'getter' })),
-        op('copy', reference('Product'), [
-          arg('value', idlType.any, resolveArgs(ProductImpl)),
-        ], {
-          static: true,
-        }),
+        ),
       ],
     });
     const realm = new Realm();
@@ -1302,14 +1341,20 @@ describe('Web IDL implementation registration', () => {
       implementation: impl(ExceptionSourceImpl),
       members: [
         ctor([], bind({ invoke() {} })),
-        op('requested', idlType.undefined, [], bind({
-          invoke() {
-            throwDOMException('InvalidStateError', 'requested');
-          },
-        }, { static: true })),
-        op('arbitrary', idlType.undefined, [], bind({
-          invoke() { throw arbitrary; },
-        }, { static: true })),
+        op('requested', idlType.undefined,
+          [],
+          bind({
+            invoke() {
+              throwDOMException('InvalidStateError', 'requested');
+            },
+          }, { static: true }),
+        ),
+        op('arbitrary', idlType.undefined,
+          [],
+          bind({
+            invoke() { throw arbitrary; },
+          }, { static: true }),
+        ),
       ],
     });
     const realm = new Realm();

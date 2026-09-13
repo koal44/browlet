@@ -2,6 +2,41 @@ import { describe, expect, it } from 'vitest';
 
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 
+describe('Runtime structured serialization', () => {
+  it('reuses a snapshot to reconstruct independent graphs in destination realms', () => {
+    const source = createFetchWindow();
+    const target = createFetchWindow();
+    const other = createFetchWindow();
+    type Value = { bytes: Uint8Array; alias: Uint8Array; self: Value; };
+    const value = source.realm.evaluate(`(() => {
+      const bytes = new Uint8Array([1, 2]);
+      const value = { bytes, alias: bytes };
+      value.self = value;
+      return value;
+    })()`, 'runtime-serialize.js') as Value;
+    const record = source.runtime.serialize(value);
+    value.bytes[0] = 9;
+
+    const first = target.runtime.deserialize(record) as Value;
+    const second = other.runtime.deserialize(record) as Value;
+    for (const [restored, destination] of [[first, target], [second, other]] as const) {
+      expect([...restored.bytes]).toEqual([1, 2]);
+      expect(restored.self).toBe(restored);
+      expect(restored.alias).toBe(restored.bytes);
+      expect(Object.getPrototypeOf(restored)).toBe(destination.realm.intrinsics.object.prototype);
+      expect(Object.getPrototypeOf(restored.bytes)).toBe(
+        destination.realm.evaluate('Uint8Array.prototype', 'runtime-view.js'),
+      );
+      expect(Object.getPrototypeOf(restored.bytes.buffer)).toBe(
+        destination.realm.evaluate('ArrayBuffer.prototype', 'runtime-buffer.js'),
+      );
+    }
+    first.bytes[0] = 7;
+    expect([...second.bytes]).toEqual([1, 2]);
+    expect([...value.bytes]).toEqual([9, 2]);
+  });
+});
+
 describe('Fetch controller abort reasons through HTML structured data', () => {
   it('snapshots a cyclic reason at abort and recreates it in the target realm', () => {
     const source = createFetchWindow();
@@ -47,7 +82,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
 
   it('uses AbortError for a missing record and for serialized undefined', () => {
     const target = createFetchWindow();
-    for (const record of [null, target.structuredData.serialize(undefined)]) {
+    for (const record of [null, target.runtime.serialize(undefined)]) {
       expectAbortError(target.deserialize(record), target);
     }
   });

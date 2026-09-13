@@ -126,9 +126,7 @@ export type DocumentConstructionOptions = {
  *   DOMString is;
  * };
  */
-export class DocumentImpl
-  extends NodeImpl
-{
+export class DocumentImpl extends NodeImpl {
   #aboutBaseURL: URLRecord | null = null;
   readonly #activeSandboxingFlagSet = createSandboxingFlagSet();
   #allowDeclarativeShadowRoots = false;
@@ -176,6 +174,18 @@ export class DocumentImpl
   readonly #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
+  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
+    getParent: (target, event) => NodeImpl.is(target) && isDocument(target)
+      ? target.getEventParent(event)
+      : null,
+  });
+
+  static readonly #nodeVirtuals: NodeVirtuals = {
+    getBaseURI: (node) => isDocument(node)
+      ? node.URL
+      : 'about:blank',
+  };
+
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
     styleletRuntime: StyleletRuntimeCaps = defaultStyleletRuntimeCaps,
@@ -188,19 +198,19 @@ export class DocumentImpl
         virtuals: DocumentImpl.#nodeVirtuals,
       },
     );
-    NodeImpl.setNodeDocument(this, this);
+    this.setNodeDocument(this);
     this.#nodeFactory = nodeFactory;
     this.styleletRuntime = styleletRuntime;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => this.#customElementRegistry,
-      getStyleScope: () => DocumentImpl.getCSSEngine(this).documentScope,
+      getStyleScope: () => this.getCSSEngine().documentScope,
     });
     this.#parentNodeMixin = new ParentNodeMixin(this);
   }
 
   get URL(): string {
-    return DocumentImpl.getURL(this);
+    return serializeURL(this.#url);
   }
 
   get documentURI(): string {
@@ -340,7 +350,7 @@ export class DocumentImpl
     _options?: ElementCreationOptions,
   ): HTMLElement & ElementImpl {
     if (this.#type === 'html') localName = asciiLower(localName);
-    return DocumentImpl.createElementNode(this, localName, HTML_NAMESPACE);
+    return this.createElementNode(localName, HTML_NAMESPACE);
   }
 
   createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement & ElementImpl;
@@ -355,11 +365,7 @@ export class DocumentImpl
     qualifiedName: string,
     _options?: string | ElementCreationOptions,
   ): Element & ElementImpl {
-    return DocumentImpl.createElementNode(
-      this,
-      qualifiedName,
-      namespaceURI ?? '',
-    );
+    return this.createElementNode(qualifiedName, namespaceURI ?? '');
   }
 
   createTextNode(data: string): TextImpl {
@@ -378,7 +384,7 @@ export class DocumentImpl
       );
     }
     if (this.#type === 'html') localName = asciiLower(localName);
-    return DocumentImpl.createAttribute(this, localName, '', null, null);
+    return this.createAttributeNode(localName, '', null, null);
   }
 
   write(...text: string[]): void {
@@ -395,9 +401,7 @@ export class DocumentImpl
     return findElementById(this, id);
   }
 
-  getElementsByClassName(
-    classNames: string,
-  ): HTMLCollectionOf<Element> {
+  getElementsByClassName(classNames: string): HTMLCollectionOf<Element> {
     return findElementsByClassName(this, classNames);
   }
 
@@ -407,9 +411,7 @@ export class DocumentImpl
   /** @deprecated */
   getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
   getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
-  getElementsByTagName(
-    qualifiedName: string,
-  ): HTMLCollectionOf<Element> {
+  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
@@ -424,59 +426,36 @@ export class DocumentImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  // -- Virtual ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
-    getParent: (target, event) => NodeImpl.is(target) && isDocument(target)
-      ? DocumentImpl.getEventParent(target, event)
-      : null,
-  });
-
-  static readonly #nodeVirtuals: NodeVirtuals = {
-    getBaseURI: (node) => isDocument(node)
-      ? DocumentImpl.getURL(node)
-      : 'about:blank',
-  };
-
-  // -- Friends ----------------------------------------------------------
-
-  static getURL(document: DocumentImpl): string {
-    return serializeURL(document.#url);
+  setURL(url: URLRecord): void {
+    this.#url = url;
   }
 
-  static setURL(document: DocumentImpl, url: URLRecord): void {
-    document.#url = url;
+  setContentType(contentType: string): void {
+    this.#contentType = contentType;
   }
 
-  static setContentType(document: DocumentImpl, contentType: string): void {
-    document.#contentType = contentType;
+  getBrowsingContext(): BrowsingContext | null {
+    return this.#browsingContext;
   }
 
-  static getBrowsingContext(
-    document: DocumentImpl,
-  ): BrowsingContext | null {
-    return document.#browsingContext;
-  }
-
-  static setBrowsingContext(
-    document: DocumentImpl,
-    browsingContext: BrowsingContext | null,
-  ): void {
-    document.#browsingContext = browsingContext;
+  setBrowsingContext(browsingContext: BrowsingContext | null): void {
+    this.#browsingContext = browsingContext;
   }
 
   /*
-   * Return the navigable whose active Document is document. Inactive
+   * Return the navigable whose active Document is this one. Inactive
    * Documents intentionally have no node navigable, even while session
    * history retains them for possible later reactivation.
    */
-  static getNodeNavigable(document: DocumentImpl): Navigable | null {
-    const navigable = document.#browsingContext?.navigable;
-    return navigable?.activeDocument === document ? navigable : null;
+  getNodeNavigable(): Navigable | null {
+    const navigable = this.#browsingContext?.navigable;
+    return navigable?.activeDocument === this ? navigable : null;
   }
 
-  static isFullyActive(document: DocumentImpl): boolean {
-    const navigable = DocumentImpl.getNodeNavigable(document);
+  isFullyActive(): boolean {
+    const navigable = this.getNodeNavigable();
     if (navigable === null) return false;
     if (navigable.isTopLevelTraversable) return true;
 
@@ -491,392 +470,292 @@ export class DocumentImpl
     return false;
   }
 
-  static observeFullyActiveState(
-    document: DocumentImpl,
-    observer: FullyActiveStateObserver,
-  ): () => void {
-    document.#fullyActiveObservers.add(observer);
-    return () => { document.#fullyActiveObservers.delete(observer); };
+  observeFullyActiveState(observer: FullyActiveStateObserver): () => void {
+    this.#fullyActiveObservers.add(observer);
+    return () => { this.#fullyActiveObservers.delete(observer); };
   }
 
-  static notifyFullyActiveStateChanged(document: DocumentImpl): void {
-    const fullyActive = DocumentImpl.isFullyActive(document);
-    for (const observer of document.#fullyActiveObservers) {
+  notifyFullyActiveStateChanged(): void {
+    const fullyActive = this.isFullyActive();
+    for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }
   }
 
-  static getMode(document: DocumentImpl): DocumentMode {
-    return document.#mode;
+  getMode(): DocumentMode {
+    return this.#mode;
   }
 
-  static setMode(document: DocumentImpl, mode: DocumentMode): void {
-    document.#mode = mode;
+  setMode(mode: DocumentMode): void {
+    this.#mode = mode;
   }
 
-  static setType(document: DocumentImpl, type: DocumentType): void {
-    document.#type = type;
+  setType(type: DocumentType): void {
+    this.#type = type;
   }
 
-  static getOrigin(document: DocumentImpl): Origin {
-    return document.#origin;
+  getOrigin(): Origin {
+    return this.#origin;
   }
 
-  static setOrigin(document: DocumentImpl, origin: Origin): void {
-    document.#origin = origin;
+  setOrigin(origin: Origin): void {
+    this.#origin = origin;
   }
 
-  static getModuleMap(document: DocumentImpl): ModuleMap {
-    return document.#moduleMap;
+  getModuleMap(): ModuleMap {
+    return this.#moduleMap;
   }
 
-  static getPolicyContainer(document: DocumentImpl): PolicyContainer {
-    return document.#policyContainer;
+  getPolicyContainer(): PolicyContainer {
+    return this.#policyContainer;
   }
 
-  static setPolicyContainer(
-    document: DocumentImpl,
-    policyContainer: PolicyContainer,
-  ): void {
-    document.#policyContainer = policyContainer;
+  setPolicyContainer(policyContainer: PolicyContainer): void {
+    this.#policyContainer = policyContainer;
   }
 
-  static getPermissionsPolicy(document: DocumentImpl): PermissionsPolicy {
-    return document.#permissionsPolicy;
+  getPermissionsPolicy(): PermissionsPolicy {
+    return this.#permissionsPolicy;
   }
 
-  static setPermissionsPolicy(
-    document: DocumentImpl,
-    permissionsPolicy: PermissionsPolicy,
-  ): void {
-    document.#permissionsPolicy = permissionsPolicy;
+  setPermissionsPolicy(permissionsPolicy: PermissionsPolicy): void {
+    this.#permissionsPolicy = permissionsPolicy;
   }
 
-  static getActiveSandboxingFlagSet(
-    document: DocumentImpl,
-  ): SandboxingFlagSet {
-    return document.#activeSandboxingFlagSet;
+  getActiveSandboxingFlagSet(): SandboxingFlagSet {
+    return this.#activeSandboxingFlagSet;
   }
 
-  static setActiveSandboxingFlagSet(
-    document: DocumentImpl,
-    sandboxingFlagSet: ReadonlySet<SandboxingFlag>,
-  ): void {
-    document.#activeSandboxingFlagSet.clear();
+  setActiveSandboxingFlagSet(sandboxingFlagSet: ReadonlySet<SandboxingFlag>): void {
+    this.#activeSandboxingFlagSet.clear();
     for (const flag of sandboxingFlagSet) {
-      document.#activeSandboxingFlagSet.add(flag);
+      this.#activeSandboxingFlagSet.add(flag);
     }
   }
 
-  static getOpenerPolicy(document: DocumentImpl): OpenerPolicy {
-    return document.#openerPolicy;
+  getOpenerPolicy(): OpenerPolicy {
+    return this.#openerPolicy;
   }
 
-  static setOpenerPolicy(
-    document: DocumentImpl,
-    openerPolicy: OpenerPolicy,
-  ): void {
-    document.#openerPolicy = openerPolicy;
+  setOpenerPolicy(openerPolicy: OpenerPolicy): void {
+    this.#openerPolicy = openerPolicy;
   }
 
-  static getLoadTimingInfo(
-    document: DocumentImpl,
-  ): DocumentLoadTimingInfo {
-    return document.#loadTimingInfo;
+  getLoadTimingInfo(): DocumentLoadTimingInfo {
+    return this.#loadTimingInfo;
   }
 
-  static setLoadTimingInfo(
-    document: DocumentImpl,
-    loadTimingInfo: DocumentLoadTimingInfo,
-  ): void {
-    document.#loadTimingInfo = loadTimingInfo;
+  setLoadTimingInfo(loadTimingInfo: DocumentLoadTimingInfo): void {
+    this.#loadTimingInfo = loadTimingInfo;
   }
 
-  static isInitialAboutBlank(document: DocumentImpl): boolean {
-    return document.#isInitialAboutBlank;
+  isInitialAboutBlank(): boolean {
+    return this.#isInitialAboutBlank;
   }
 
-  static setIsInitialAboutBlank(
-    document: DocumentImpl,
-    isInitialAboutBlank: boolean,
-  ): void {
-    document.#isInitialAboutBlank = isInitialAboutBlank;
+  setIsInitialAboutBlank(isInitialAboutBlank: boolean): void {
+    this.#isInitialAboutBlank = isInitialAboutBlank;
   }
 
-  static getAboutBaseURL(document: DocumentImpl): URLRecord | null {
-    return document.#aboutBaseURL;
+  getAboutBaseURL(): URLRecord | null {
+    return this.#aboutBaseURL;
   }
 
-  static setAboutBaseURL(
-    document: DocumentImpl,
-    aboutBaseURL: URLRecord | null,
-  ): void {
-    document.#aboutBaseURL = aboutBaseURL;
+  setAboutBaseURL(aboutBaseURL: URLRecord | null): void {
+    this.#aboutBaseURL = aboutBaseURL;
   }
 
-  static allowsDeclarativeShadowRoots(document: DocumentImpl): boolean {
-    return document.#allowDeclarativeShadowRoots;
+  allowsDeclarativeShadowRoots(): boolean {
+    return this.#allowDeclarativeShadowRoots;
   }
 
-  static setAllowsDeclarativeShadowRoots(
-    document: DocumentImpl,
-    allow: boolean,
-  ): void {
-    document.#allowDeclarativeShadowRoots = allow;
+  setAllowsDeclarativeShadowRoots(allow: boolean): void {
+    this.#allowDeclarativeShadowRoots = allow;
   }
 
-  static getCustomElementRegistry(
-    document: DocumentImpl,
-  ): CustomElementRegistryImpl | null {
-    return document.#customElementRegistry;
+  setCustomElementRegistry(registry: CustomElementRegistryImpl): void {
+    this.#customElementRegistry = registry;
   }
 
-  static setCustomElementRegistry(
-    document: DocumentImpl,
-    registry: CustomElementRegistryImpl,
-  ): void {
-    document.#customElementRegistry = registry;
+  getInternalAncestorOriginObjectsList(): readonly Origin[] | null {
+    return this.#internalAncestorOriginObjectsList;
   }
 
-  static getInternalAncestorOriginObjectsList(
-    document: DocumentImpl,
-  ): readonly Origin[] | null {
-    return document.#internalAncestorOriginObjectsList;
+  setInternalAncestorOriginObjectsList(origins: readonly Origin[]): void {
+    this.#internalAncestorOriginObjectsList = origins;
   }
 
-  static setInternalAncestorOriginObjectsList(
-    document: DocumentImpl,
-    origins: readonly Origin[],
-  ): void {
-    document.#internalAncestorOriginObjectsList = origins;
+  getAncestorOriginsList(): readonly string[] | null {
+    return this.#ancestorOriginsList;
   }
 
-  static getAncestorOriginsList(
-    document: DocumentImpl,
-  ): readonly string[] | null {
-    return document.#ancestorOriginsList;
+  setAncestorOriginsList(origins: readonly string[]): void {
+    this.#ancestorOriginsList = origins;
   }
 
-  static setAncestorOriginsList(
-    document: DocumentImpl,
-    origins: readonly string[],
-  ): void {
-    document.#ancestorOriginsList = origins;
+  isReadyForPostLoadTasks(): boolean {
+    return this.#readyForPostLoadTasks;
   }
 
-  static isReadyForPostLoadTasks(document: DocumentImpl): boolean {
-    return document.#readyForPostLoadTasks;
+  markReadyForPostLoadTasks(): void {
+    this.#readyForPostLoadTasks = true;
   }
 
-  static markReadyForPostLoadTasks(document: DocumentImpl): void {
-    document.#readyForPostLoadTasks = true;
+  setCurrentDocumentReadiness(readiness: DocumentReadyState): void {
+    this.#currentDocumentReadiness = readiness;
   }
 
-  static getCurrentDocumentReadiness(
-    document: DocumentImpl,
-  ): DocumentReadyState {
-    return document.#currentDocumentReadiness;
+  setReferrer(referrer: string): void {
+    this.#referrer = referrer;
   }
 
-  static setCurrentDocumentReadiness(
-    document: DocumentImpl,
-    readiness: DocumentReadyState,
-  ): void {
-    document.#currentDocumentReadiness = readiness;
+  wasCreatedViaCrossOriginRedirects(): boolean {
+    return this.#wasCreatedViaCrossOriginRedirects;
   }
 
-  static setReferrer(document: DocumentImpl, referrer: string): void {
-    document.#referrer = referrer;
+  setWasCreatedViaCrossOriginRedirects(value: boolean): void {
+    this.#wasCreatedViaCrossOriginRedirects = value;
   }
 
-  static wasCreatedViaCrossOriginRedirects(
-    document: DocumentImpl,
-  ): boolean {
-    return document.#wasCreatedViaCrossOriginRedirects;
+  getDuringLoadingNavigationID(): string | null {
+    return this.#duringLoadingNavigationID;
   }
 
-  static setWasCreatedViaCrossOriginRedirects(
-    document: DocumentImpl,
-    value: boolean,
-  ): void {
-    document.#wasCreatedViaCrossOriginRedirects = value;
+  setDuringLoadingNavigationID(id: string | null): void {
+    this.#duringLoadingNavigationID = id;
   }
 
-  static getDuringLoadingNavigationID(
-    document: DocumentImpl,
-  ): string | null {
-    return document.#duringLoadingNavigationID;
+  getCompletelyLoadedTime(): number | null {
+    return this.#completelyLoadedTime;
   }
 
-  static setDuringLoadingNavigationID(
-    document: DocumentImpl,
-    id: string | null,
-  ): void {
-    document.#duringLoadingNavigationID = id;
+  setCompletelyLoadedTime(time: number): void {
+    this.#completelyLoadedTime = time;
   }
 
-  static getCompletelyLoadedTime(document: DocumentImpl): number | null {
-    return document.#completelyLoadedTime;
-  }
-
-  static setCompletelyLoadedTime(
-    document: DocumentImpl,
-    time: number,
-  ): void {
-    document.#completelyLoadedTime = time;
-  }
-
-  static getEventParent(
-    document: DocumentImpl,
-    event: EventImpl,
-  ): EventTargetImpl | null {
-    if (event.type === 'load' || document.#browsingContext === null) {
+  override getEventParent(event: EventImpl): EventTargetImpl | null {
+    if (event.type === 'load' || this.#browsingContext === null) {
       return null;
     }
 
-    if (document.#relevantGlobalObject === null) {
+    if (this.#relevantGlobalObject === null) {
       throw new Error(
         'A Document with a browsing context needs a relevant global object',
       );
     }
-    return document.#relevantGlobalObject;
+    return this.#relevantGlobalObject;
   }
 
-  static setRelevantGlobalObject(
-    document: DocumentImpl,
-    window: WindowImpl,
-  ): void {
+  setRelevantGlobalObject(window: WindowImpl): void {
     if (
-      document.#relevantGlobalObject !== null &&
-      document.#relevantGlobalObject !== window
+      this.#relevantGlobalObject !== null &&
+      this.#relevantGlobalObject !== window
     ) {
       throw new Error('A Document cannot change its relevant global object');
     }
-    document.#relevantGlobalObject = window;
+    this.#relevantGlobalObject = window;
   }
 
-  static getRelevantGlobalObject(document: DocumentImpl): WindowImpl | null {
-    return document.#relevantGlobalObject;
+  getRelevantGlobalObject(): WindowImpl | null {
+    return this.#relevantGlobalObject;
   }
 
-  static getCSSEngine(document: DocumentImpl): Stylelet {
-    return document.#stylelet ??= new Stylelet(asDocument(document), { runtime: document.styleletRuntime });
+  getCSSEngine(): Stylelet {
+    return this.#stylelet ??= new Stylelet(asDocument(this), {
+      runtime: this.styleletRuntime,
+    });
   }
 
-  static getTreeScopeResolver(
-    document: DocumentImpl,
-  ): TreeScopeResolver {
-    return document.#treeScopeResolver;
+  getTreeScopeResolver(): TreeScopeResolver {
+    return this.#treeScopeResolver;
   }
 
-  static withWriter<T>(
-    document: DocumentImpl,
-    writer: DocumentWriter,
-    callback: () => T,
-  ): T {
-    const previousWriter = document.#writer;
-    document.#writer = writer;
+  withWriter<T>(writer: DocumentWriter, callback: () => T): T {
+    const previousWriter = this.#writer;
+    this.#writer = writer;
 
     try {
       return callback();
     } finally {
-      document.#writer = previousWriter;
+      this.#writer = previousWriter;
     }
   }
 
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE): ElementImpl & HTMLElement;
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string): ElementImpl;
-  static createElementNode(
-    document: DocumentImpl,
-    localName: string,
-    namespaceURI: string,
-  ): ElementImpl {
+  createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE): ElementImpl & HTMLElement;
+  createElementNode(localName: string, namespaceURI: string): ElementImpl;
+  createElementNode(localName: string, namespaceURI: string): ElementImpl {
     const interface_ = resolveElementInterface(namespaceURI, localName);
-    return document.#nodeFactory.constructNode<ElementImpl>(
+    return this.#nodeFactory.constructNode<ElementImpl>(
       interface_.implementation,
       [{
-        document,
+        document: this,
         localName,
         namespaceURI,
-        treeScopeResolver: document.#treeScopeResolver,
+        treeScopeResolver: this.#treeScopeResolver,
       }],
     );
   }
 
-  static createDocumentFragment(
-    document: DocumentImpl,
-  ): DocumentFragmentImpl {
-    return document.#nodeFactory.constructNode(
+  createDocumentFragment(): DocumentFragmentImpl {
+    return this.#nodeFactory.constructNode(
       DocumentFragmentImpl,
-      [document],
+      [this],
     );
   }
 
-  static createAttribute(
-    document: DocumentImpl,
+  createAttributeNode(
     localName: string,
     value: string,
     namespaceURI: string | null,
     prefix: string | null,
   ): AttrImpl {
-    return document.#nodeFactory.constructNode(AttrImpl, [
+    return this.#nodeFactory.constructNode(AttrImpl, [
       localName,
       value,
       namespaceURI,
       prefix,
-      document,
+      this,
     ]);
   }
 
-  static createDocumentType(
-    document: DocumentImpl,
+  createDocumentType(
     name: string,
     publicId: string,
     systemId: string,
   ): DocumentTypeImpl {
-    return document.#nodeFactory.constructNode(
+    return this.#nodeFactory.constructNode(
       DocumentTypeImpl,
-      [name, publicId, systemId, document],
+      [name, publicId, systemId, this],
     );
   }
 
-  static addScriptBlockingStyleSheet(
-    document: DocumentImpl,
-    ownerNode: ElementImpl,
-  ): void {
-    document.#scriptBlockingStyleSheets.add(ownerNode);
+  addScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
+    this.#scriptBlockingStyleSheets.add(ownerNode);
   }
 
-  static removeScriptBlockingStyleSheet(
-    document: DocumentImpl,
-    ownerNode: ElementImpl,
-  ): void {
-    if (!document.#scriptBlockingStyleSheets.delete(ownerNode)) return;
-    if (document.#scriptBlockingStyleSheets.size > 0) return;
+  removeScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
+    if (!this.#scriptBlockingStyleSheets.delete(ownerNode)) return;
+    if (this.#scriptBlockingStyleSheets.size > 0) return;
 
-    const ready = document.#scriptBlockingStyleSheetsReady;
-    document.#scriptBlockingStyleSheetsReady = null;
+    const ready = this.#scriptBlockingStyleSheetsReady;
+    this.#scriptBlockingStyleSheetsReady = null;
     ready?.resolve(undefined);
   }
 
-  static hasScriptBlockingStyleSheets(document: DocumentImpl): boolean {
-    return document.#scriptBlockingStyleSheets.size > 0;
+  hasScriptBlockingStyleSheets(): boolean {
+    return this.#scriptBlockingStyleSheets.size > 0;
   }
 
-  static waitForScriptBlockingStyleSheets(
-    document: DocumentImpl,
-    runtime: RuntimeContext,
-  ): PromiseValue<void> {
+  waitForScriptBlockingStyleSheets(runtime: RuntimeContext): PromiseValue<void> {
     return runtime.promises.try(() => {
-      if (document.#scriptBlockingStyleSheets.size === 0) return;
-      const ready = document.#scriptBlockingStyleSheetsReady ??=
+      if (this.#scriptBlockingStyleSheets.size === 0) return;
+      const ready = this.#scriptBlockingStyleSheetsReady ??=
         runtime.promises.withResolvers<void>();
       return ready.promise.then(() =>
-        DocumentImpl.waitForScriptBlockingStyleSheets(document, runtime),
+        this.waitForScriptBlockingStyleSheets(runtime),
       );
     });
   }
-
 }
 
 // -- Web IDL ------------------------------------------------------------
@@ -1055,7 +934,7 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 
   resolve(root: NodeImpl): TreeScope | null {
     return root === this.#document
-      ? DocumentImpl.getCSSEngine(this.#document).documentScope
+      ? this.#document.getCSSEngine().documentScope
       : null;
   }
 }

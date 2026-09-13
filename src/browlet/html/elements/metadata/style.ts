@@ -1,5 +1,5 @@
 import {
-  defineElementInterface, type ElementCreationContext, ElementImpl,
+  defineElementInterface, type ElementCreationContext,
 } from '../../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import {
@@ -42,7 +42,7 @@ export class HTMLStyleElementImpl
   }
 
   get sheet(): CSSStyleSheetImpl | null {
-    return ElementImpl.getStyleSheet(this);
+    return this.getStyleSheet();
   }
 }
 

@@ -5,14 +5,11 @@ import {
 } from '../../../../src/browlet/dom/nodes/document';
 import { DocumentFragmentImpl } from '../../../../src/browlet/dom/nodes/document-fragment';
 import { DocumentTypeImpl } from '../../../../src/browlet/dom/nodes/document-type';
-import { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import {
-  isComment, isDocument, isDocumentType, isElement, isText, NodeImpl, NodeType,
+  isComment, isDocument, isDocumentType, isElement, isText, NodeType,
 } from '../../../../src/browlet/dom/nodes/node';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
-import { TextImpl } from '../../../../src/browlet/dom/nodes/text';
 import { EventImpl } from '../../../../src/browlet/dom/events/event';
-import { EventTargetImpl } from '../../../../src/browlet/dom/events/event-target';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
@@ -32,45 +29,45 @@ describe('Document', () => {
     expect(document.compatMode).toBe('CSS1Compat');
     expect(document.customElementRegistry).toBeNull();
     expect(document.type).toBe('xml');
-    expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
-    expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(false);
-    expect(DocumentImpl.getModuleMap(document)).toEqual({ entries: [] });
-    expect(DocumentImpl.getPolicyContainer(document)).toMatchObject({
+    expect(document.getOrigin().kind).toBe('opaque');
+    expect(document.allowsDeclarativeShadowRoots()).toBe(false);
+    expect(document.getModuleMap()).toEqual({ entries: [] });
+    expect(document.getPolicyContainer()).toMatchObject({
       cspList: [],
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
-    expect(DocumentImpl.getPermissionsPolicy(document)).toEqual({});
-    expect(DocumentImpl.getOpenerPolicy(document)).toEqual({
+    expect(document.getPermissionsPolicy()).toEqual({});
+    expect(document.getOpenerPolicy()).toEqual({
       value: 'unsafe-none',
       reportingEndpoint: null,
       reportOnlyValue: 'unsafe-none',
       reportOnlyReportingEndpoint: null,
     });
-    expect(DocumentImpl.getLoadTimingInfo(document).navigationStartTime)
+    expect(document.getLoadTimingInfo().navigationStartTime)
       .toBe(0);
-    expect(DocumentImpl.isInitialAboutBlank(document)).toBe(false);
+    expect(document.isInitialAboutBlank()).toBe(false);
   });
 
   it('always has a base URI', () => {
     const document = new DocumentImpl();
-    DocumentImpl.setURL(document, documentURL('https://example.com/'));
+    document.setURL(documentURL('https://example.com/'));
     const text = document.createTextNode('content');
 
     expect(new DocumentImpl().baseURI).toBe('about:blank');
     expect(document.baseURI).toBe('https://example.com/');
     expect(text.baseURI).toBe(document.baseURI);
-    expect(NodeImpl.getNodeDocument(document)).toBe(document);
-    expect(NodeImpl.getNodeDocument(text)).toBe(document);
+    expect(document.getNodeDocument()).toBe(document);
+    expect(text.getNodeDocument()).toBe(document);
   });
 
   it('can update a node document during a future adoption operation', () => {
     const first = new DocumentImpl();
     const second = new DocumentImpl();
-    DocumentImpl.setURL(first, documentURL('https://first.example/'));
-    DocumentImpl.setURL(second, documentURL('https://second.example/'));
+    first.setURL(documentURL('https://first.example/'));
+    second.setURL(documentURL('https://second.example/'));
     const text = first.createTextNode('content');
 
-    NodeImpl.setNodeDocument(text, second);
+    text.setNodeDocument(second);
 
     expect(text.ownerDocument).toBe(second);
     expect(text.baseURI).toBe(second.baseURI);
@@ -79,16 +76,16 @@ describe('Document', () => {
   it('uses its relevant Window as its event parent while it has a browsing context', () => {
     const document = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
-    WindowImpl.setAssociatedDocument(window, document);
+    window.setAssociatedDocument(document);
 
-    expect(EventTargetImpl.getParent(document, new EventImpl('ready')))
+    expect(document.getParent(new EventImpl('ready')))
       .toBeNull();
 
-    DocumentImpl.setBrowsingContext(document, new BrowsingContext());
+    document.setBrowsingContext(new BrowsingContext());
 
-    expect(EventTargetImpl.getParent(document, new EventImpl('ready')))
+    expect(document.getParent(new EventImpl('ready')))
       .toBe(window);
-    expect(EventTargetImpl.getParent(document, new EventImpl('load')))
+    expect(document.getParent(new EventImpl('load')))
       .toBeNull();
   });
 
@@ -97,74 +94,55 @@ describe('Document', () => {
     const first = new DocumentImpl();
     const second = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
-    DocumentImpl.setBrowsingContext(first, browsingContext);
-    DocumentImpl.setBrowsingContext(second, browsingContext);
+    first.setBrowsingContext(browsingContext);
+    second.setBrowsingContext(browsingContext);
 
-    WindowImpl.setAssociatedDocument(window, first);
-    WindowImpl.setAssociatedDocument(window, second);
+    window.setAssociatedDocument(first);
+    window.setAssociatedDocument(second);
 
-    expect(WindowImpl.getAssociatedDocument(window)).toBe(second);
-    expect(EventTargetImpl.getParent(first, new EventImpl('ready')))
+    expect(window.getAssociatedDocument()).toBe(second);
+    expect(first.getParent(new EventImpl('ready')))
       .toBe(window);
-    expect(EventTargetImpl.getParent(second, new EventImpl('ready')))
+    expect(second.getParent(new EventImpl('ready')))
       .toBe(window);
   });
 
   it('represents document fragments and shadow-root event topology', () => {
     const document = new DocumentImpl();
-    const host = DocumentImpl.createElementNode(
-      document,
-      'main',
-      HTML_NAMESPACE,
-    );
+    const host = document.createElementNode('main', HTML_NAMESPACE);
     const fragment = new DocumentFragmentImpl(document);
     const root = new ShadowRootImpl(host, 'closed');
 
     expect(fragment.nodeType).toBe(NodeType.DocumentFragment);
-    expect(DocumentFragmentImpl.getHost(fragment)).toBeNull();
+    expect(fragment.getHost()).toBeNull();
     expect(root.nodeType).toBe(NodeType.DocumentFragment);
     expect(root.host).toBe(host);
     expect(root.mode).toBe('closed');
     expect(root.getRootNode()).toBe(root);
     expect(root.getRootNode({ composed: true })).toBe(host);
-    expect(EventTargetImpl.getParent(
-      root,
-      new EventImpl('ready', { composed: true }),
-    )).toBe(host);
+    expect(root.getParent(new EventImpl('ready', { composed: true }))).toBe(host);
   });
 
   it('uses an assigned slot before a node tree parent', () => {
     const document = new DocumentImpl();
-    const parent = DocumentImpl.createElementNode(
-      document,
-      'main',
-      HTML_NAMESPACE,
-    );
-    const slot = DocumentImpl.createElementNode(
-      document,
-      'slot',
-      HTML_NAMESPACE,
-    );
-    const element = DocumentImpl.createElementNode(
-      document,
-      'span',
-      HTML_NAMESPACE,
-    );
+    const parent = document.createElementNode('main', HTML_NAMESPACE);
+    const slot = document.createElementNode('slot', HTML_NAMESPACE);
+    const element = document.createElementNode('span', HTML_NAMESPACE);
     const text = document.createTextNode('content');
     parent.appendChild(element);
     parent.appendChild(text);
 
-    expect(EventTargetImpl.getParent(element, new EventImpl('ready')))
+    expect(element.getParent(new EventImpl('ready')))
       .toBe(parent);
-    expect(EventTargetImpl.getParent(text, new EventImpl('ready')))
+    expect(text.getParent(new EventImpl('ready')))
       .toBe(parent);
 
-    ElementImpl.setAssignedSlot(element, slot);
-    TextImpl.setAssignedSlot(text, slot);
+    element.setAssignedSlot(slot);
+    text.setAssignedSlot(slot);
 
-    expect(EventTargetImpl.getParent(element, new EventImpl('ready')))
+    expect(element.getParent(new EventImpl('ready')))
       .toBe(slot);
-    expect(EventTargetImpl.getParent(text, new EventImpl('ready')))
+    expect(text.getParent(new EventImpl('ready')))
       .toBe(slot);
   });
 
@@ -194,7 +172,7 @@ describe('Document', () => {
 
     expect(document.doctype).toBe(doctype);
     expect(document.documentElement).toBe(element);
-    expect(DocumentImpl.getMode(document)).toBe(DocumentMode.NoQuirks);
+    expect(document.getMode()).toBe(DocumentMode.NoQuirks);
   });
 
   it('derives its head from the HTML document tree', () => {
@@ -213,8 +191,8 @@ describe('Document', () => {
 
   it('creates HTML elements and text nodes', () => {
     const document = new DocumentImpl();
-    DocumentImpl.setType(document, 'html');
-    DocumentImpl.setContentType(document, 'text/html');
+    document.setType('html');
+    document.setContentType('text/html');
     const element = document.createElement('MaIn');
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -232,13 +210,13 @@ describe('Document', () => {
 
   it('identifies HTML and compatibility mode', () => {
     const document = new DocumentImpl();
-    DocumentImpl.setType(document, 'html');
-    DocumentImpl.setContentType(document, 'text/html');
+    document.setType('html');
+    document.setContentType('text/html');
 
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');
 
-    DocumentImpl.setMode(document, DocumentMode.Quirks);
+    document.setMode(DocumentMode.Quirks);
 
     expect(document.compatMode).toBe('BackCompat');
   });
@@ -246,11 +224,7 @@ describe('Document', () => {
   it('discriminates its node types without constructor identity', () => {
     const document = new DocumentImpl();
     const doctype = new DocumentTypeImpl('html', '', '');
-    const element = DocumentImpl.createElementNode(
-      document,
-      'main',
-      HTML_NAMESPACE,
-    );
+    const element = document.createElementNode('main', HTML_NAMESPACE);
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
 
@@ -274,7 +248,7 @@ describe('Document', () => {
     const document = new DocumentImpl();
     const writes: string[] = [];
 
-    DocumentImpl.withWriter(document, (markup) => writes.push(markup), () => {
+    document.withWriter((markup) => writes.push(markup), () => {
       document.write('<main>', '</main>');
     });
 

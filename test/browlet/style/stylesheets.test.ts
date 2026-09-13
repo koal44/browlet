@@ -12,7 +12,7 @@ import {
 import {
   parseHTMLDocument,
 } from '../../../src/browlet/html/parser/parse';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 
 describe('stylesheet integration', () => {
   it('creates and associates parser-created inline style sheets', () => {
@@ -183,7 +183,7 @@ describe('stylesheet integration', () => {
     });
     const style = getStyleElement(document, 'style');
     const target = document.getElementById('target')!;
-    const engine = DocumentImpl.getCSSEngine(document);
+    const engine = document.getCSSEngine();
     const computed = engine.getComputedStyle(target);
 
     expect(computed.opacity).toBe('1');
@@ -214,7 +214,7 @@ describe('stylesheet integration', () => {
     void target.style;
     const getAttribute = vi.spyOn(target, 'getAttribute');
 
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.5');
     expect(getAttribute).not.toHaveBeenCalledWith('style');
   });
@@ -230,7 +230,7 @@ describe('stylesheet integration', () => {
     const first = getStyleElement(document, 'first');
     const second = getStyleElement(document, 'second');
     const target = document.getElementById('target')!;
-    const engine = DocumentImpl.getCSSEngine(document);
+    const engine = document.getCSSEngine();
 
     expect(engine.getComputedStyle(target).opacity).toBe('0.2');
 
@@ -253,7 +253,7 @@ describe('stylesheet integration', () => {
 
     expect(alpha.disabled).toBe(false);
     expect(beta.disabled).toBe(true);
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.25');
   });
 
@@ -263,8 +263,8 @@ describe('stylesheet integration', () => {
     });
     const target = document.getElementById('target')!;
     const styleSheets = document.adoptedStyleSheets;
-    const first = DocumentImpl.getCSSEngine(document).createStyleSheet();
-    const second = DocumentImpl.getCSSEngine(document).createStyleSheet();
+    const first = document.getCSSEngine().createStyleSheet();
+    const second = document.getCSSEngine().createStyleSheet();
     first.replaceSync('.target { opacity: 0.25 }');
     second.replaceSync('.target { opacity: 0.5 }');
 
@@ -272,27 +272,27 @@ describe('stylesheet integration', () => {
 
     expect(document.adoptedStyleSheets).toBe(styleSheets);
     expect(styleSheets).toEqual([first]);
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.25');
 
     styleSheets.push(second);
 
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.5');
 
     styleSheets.reverse();
 
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.25');
 
     styleSheets.splice(1, 1);
 
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.5');
 
     styleSheets.splice(0, 1, first);
 
-    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+    expect(document.getCSSEngine().getComputedStyle(target).opacity)
       .toBe('0.25');
   });
 
@@ -302,7 +302,7 @@ describe('stylesheet integration', () => {
     });
     const embedded = getStyleElement(document, 'style').sheet!;
     const otherDocument = createTestDocument();
-    const foreign = DocumentImpl.getCSSEngine(otherDocument).createStyleSheet();
+    const foreign = otherDocument.getCSSEngine().createStyleSheet();
 
     expect(() => document.adoptedStyleSheets.push(embedded))
       .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));

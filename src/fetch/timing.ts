@@ -13,6 +13,14 @@ export class FetchTimingInfo {
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
   serverTimingHeaders: string[] = [];
   renderBlocking = false;
+
+  /** Fetch §2, create an opaque timing info. */
+  createOpaque(): FetchTimingInfo {
+    const opaque = new FetchTimingInfo();
+    opaque.startTime = this.startTime;
+    opaque.postRedirectStartTime = this.startTime;
+    return opaque;
+  }
 }
 
 /** Fetch §2, response body info. */
@@ -21,14 +29,6 @@ export class ResponseBodyInfo {
   decodedSize = 0;
   contentType = '';
   contentEncoding = '';
-}
-
-/** Fetch §2, create an opaque timing info. */
-export function createOpaqueTimingInfo(timingInfo: FetchTimingInfo): FetchTimingInfo {
-  const opaque = new FetchTimingInfo();
-  opaque.startTime = timingInfo.startTime;
-  opaque.postRedirectStartTime = timingInfo.startTime;
-  return opaque;
 }
 
 /*

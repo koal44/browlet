@@ -1,4 +1,4 @@
-import { DocumentImpl } from '../../dom/nodes/document';
+import type { DocumentImpl } from '../../dom/nodes/document';
 import { ElementImpl } from '../../dom/nodes/element';
 import type { EventImpl } from '../../dom/events/event';
 import {
@@ -10,8 +10,9 @@ import {
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { LocationImpl } from './location';
+import type { WindowProxy } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
-import { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
+import type { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
 
 /*
  * [Global=Window,
@@ -90,16 +91,20 @@ export class WindowImpl
     this.#location = new LocationImpl(url);
   }
 
-  get window(): Window & typeof globalThis {
-    return WindowImpl.getWindowProxy(this) as Window & typeof globalThis;
+  static is(value: unknown): value is WindowImpl {
+    return typeof value === 'object' && value !== null && #document in value;
   }
 
-  get self(): Window & typeof globalThis {
-    return WindowImpl.getWindowProxy(this) as Window & typeof globalThis;
+  get window(): WindowProxy {
+    return this.getWindowProxy();
+  }
+
+  get self(): WindowProxy {
+    return this.getWindowProxy();
   }
 
   get document(): DocumentImpl {
-    return WindowImpl.getAssociatedDocument(this);
+    return this.getAssociatedDocument();
   }
 
   get location(): LocationImpl {
@@ -111,7 +116,7 @@ export class WindowImpl
   }
 
   get performance(): PerformanceImpl {
-    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).performance;
+    return this.getWindowOrWorkerGlobalScopeMixin().performance;
   }
 
   /** @deprecated */
@@ -129,9 +134,7 @@ export class WindowImpl
       throw new Error('Pseudo-element computed style is not implemented');
     }
 
-    return DocumentImpl.getCSSEngine(
-      WindowImpl.getAssociatedDocument(this),
-    ).getComputedStyle(element);
+    return this.getAssociatedDocument().getCSSEngine().getComputedStyle(element);
   };
 
   setTimeout(
@@ -139,15 +142,15 @@ export class WindowImpl
     timeout?: number,
     ...args: unknown[]
   ): number {
-    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setTimeout(
-      createTimerAction(this, handler),
+    return this.getWindowOrWorkerGlobalScopeMixin().setTimeout(
+      this.#createTimerAction(handler),
       timeout ?? 0,
       args,
     );
   }
 
   clearTimeout(id?: number): void {
-    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id ?? 0);
   }
 
   setInterval(
@@ -155,83 +158,69 @@ export class WindowImpl
     timeout?: number,
     ...args: unknown[]
   ): number {
-    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setInterval(
-      createTimerAction(this, handler),
+    return this.getWindowOrWorkerGlobalScopeMixin().setInterval(
+      this.#createTimerAction(handler),
       timeout ?? 0,
       args,
     );
   }
 
   clearInterval(id?: number): void {
-    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id ?? 0);
   }
 
   queueMicrotask(callback: VoidFunction): void {
-    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this)
-      .queueMicrotask(callback);
+    this.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
   }
 
   structuredClone<T>(
     value: T,
     options?: StructuredSerializeOptions,
   ): T {
-    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this)
+    return this.getWindowOrWorkerGlobalScopeMixin()
       .structuredClone(value, options) as T;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal methods -------------------------------------------------
 
-  static is(value: unknown): value is WindowImpl {
-    return typeof value === 'object' && value !== null && #document in value;
-  }
-
-  static getAssociatedDocument(window: WindowImpl): DocumentImpl {
-    if (!window.#document) {
+  getAssociatedDocument(): DocumentImpl {
+    if (!this.#document) {
       throw new Error('Window has no associated Document');
     }
-    return window.#document;
+    return this.#document;
   }
 
-  static getCurrentEvent(window: WindowImpl): EventImpl | undefined {
-    return window.#currentEvent;
+  getCurrentEvent(): EventImpl | undefined {
+    return this.#currentEvent;
   }
 
-  static getWindowOrWorkerGlobalScopeMixin(
-    window: WindowImpl,
-  ): WindowOrWorkerGlobalScopeMixin {
-    // HTML creates the Window with its realm, then immediately sets up its
-    // environment settings object before projecting or exposing the Window.
-    if (window.#globalScopeMixin === null) {
+  getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
+    // HTML creates the Window with its realm, then sets up its environment
+    // settings object before exposing the Window.
+    if (this.#globalScopeMixin === null) {
       throw new Error('Window global-scope mixin is not initialized');
     }
-    return window.#globalScopeMixin;
+    return this.#globalScopeMixin;
   }
 
-  static setWindowOrWorkerGlobalScopeMixin(
-    window: WindowImpl,
+  setWindowOrWorkerGlobalScopeMixin(
     mixin: WindowOrWorkerGlobalScopeMixin,
   ): void {
-    if (window.#globalScopeMixin !== null) {
+    if (this.#globalScopeMixin !== null) {
       throw new Error('Window global-scope mixin is already initialized');
     }
-    window.#globalScopeMixin = mixin;
+    this.#globalScopeMixin = mixin;
   }
 
-  static getNamedProperty(
-    window: WindowImpl,
-    name: string,
-  ): ElementImpl {
-    const element = WindowImpl.getAssociatedDocument(window)
-      .getElementById(name);
+  getNamedProperty(name: string): ElementImpl {
+    const element = this.getAssociatedDocument().getElementById(name);
     if (!element) throw new Error(`Window named property ${name} disappeared`);
     return element;
   }
 
-  static getSupportedPropertyNames(
-    window: WindowImpl,
-  ): ReadonlySet<string> {
+  getSupportedPropertyNames(): ReadonlySet<string> {
     const names = new Set<string>();
-    for (const element of WindowImpl.getAssociatedDocument(window)
+    for (const element of this.getAssociatedDocument()
       .getElementsByTagName('*')) {
       const name = element.getAttribute('id');
       if (name) names.add(name);
@@ -239,40 +228,46 @@ export class WindowImpl
     return names;
   }
 
-  static getWindowProxy(window: WindowImpl): Window {
-    const browsingContext = DocumentImpl.getBrowsingContext(
-      WindowImpl.getAssociatedDocument(window),
-    );
+  getWindowProxy(): WindowProxy {
+    const browsingContext = this.getAssociatedDocument().getBrowsingContext();
     if (!browsingContext) {
       throw new Error('Window Document has no browsing context');
     }
     return browsingContext.windowProxy;
   }
 
-  static setAssociatedDocument(
-    window: WindowImpl,
-    document: DocumentImpl,
-  ): void {
+  setAssociatedDocument(document: DocumentImpl): void {
     /*
      * The initial about:blank Document and its replacement can share this
      * Window. Each Document nevertheless retains the Window as its relevant
      * global object when the Window's associated Document advances.
      */
-    DocumentImpl.setRelevantGlobalObject(document, window);
-    window.#document = document;
-    if (window.#globalScopeMixin !== null) {
-      WindowOrWorkerGlobalScopeMixin.setAssociatedDocument(
-        window.#globalScopeMixin,
-        document,
-      );
+    document.setRelevantGlobalObject(this);
+    this.#document = document;
+    if (this.#globalScopeMixin !== null) {
+      this.#globalScopeMixin.setAssociatedDocument(document);
     }
   }
 
-  static setCurrentEvent(
-    window: WindowImpl,
-    event: EventImpl | undefined,
-  ): void {
-    window.#currentEvent = event;
+  setCurrentEvent(event: EventImpl | undefined): void {
+    this.#currentEvent = event;
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  #createTimerAction(handler: TimerHandler): (argumentsList: readonly unknown[]) => void {
+    if (typeof handler === 'string') {
+      return () => {
+        throw new Error(
+          'String timer handlers await Trusted Types, CSP, and classic scripts',
+        );
+      };
+    }
+
+    const callbackThisValue = this.getWindowProxy();
+    return (argumentsList) => {
+      Reflect.apply(handler, callbackThisValue, argumentsList);
+    };
   }
 }
 
@@ -306,29 +301,33 @@ export const windowIDL = defineInterface({
     ),
     // Web IDL's unnamed getter has no implementation member name to bind
     // automatically, and Window supplies its dynamic supported-name set.
-    op(undefined, idlType.object, [arg('name', idlType.DOMString)], bind({
-      getSupportedPropertyNames() {
-        return WindowImpl.getSupportedPropertyNames(this as WindowImpl);
-      },
-      invoke(context, name) {
-        return context.project(
-          ElementImpl,
-          WindowImpl.getNamedProperty(this as WindowImpl, name as string),
-        );
-      },
-    }, {
-      special: 'getter',
-    })),
+    op(undefined, idlType.object,
+      [arg('name', idlType.DOMString)],
+      bind({
+        getSupportedPropertyNames() {
+          return (this as WindowImpl).getSupportedPropertyNames();
+        },
+        invoke(context, name) {
+          return context.project(
+            ElementImpl,
+            (this as WindowImpl).getNamedProperty(name as string),
+          );
+        },
+      }, {
+        special: 'getter',
+      }),
+    ),
   ],
 });
 
 export const windowEventIDL = definePartialInterface({
   name: 'Window',
   exposed: 'Window',
-  members: [roAttr('event', union(
-    reference('Event'),
-    idlType.undefined,
-  ), xattr('Replaceable'))],
+  members: [
+    roAttr(
+      'event', union(reference('Event'), idlType.undefined),
+      xattr('Replaceable')),
+  ],
 });
 
 /*
@@ -345,24 +344,6 @@ const windowEventTargetVirtuals: EventTargetVirtuals = {
   isDefaultPassiveTarget: () => true,
   isWindow: () => true,
   getLegacyTargetOverride: (target) => WindowImpl.is(target)
-    ? WindowImpl.getAssociatedDocument(target)
+    ? target.getAssociatedDocument()
     : target,
 };
-
-function createTimerAction(
-  window: WindowImpl,
-  handler: TimerHandler,
-): (argumentsList: readonly unknown[]) => void {
-  if (typeof handler === 'string') {
-    return () => {
-      throw new Error(
-        'String timer handlers await Trusted Types, CSP, and classic scripts',
-      );
-    };
-  }
-
-  const callbackThisValue = WindowImpl.getWindowProxy(window);
-  return (argumentsList) => {
-    Reflect.apply(handler, callbackThisValue, argumentsList);
-  };
-}

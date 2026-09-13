@@ -19,44 +19,36 @@ import { SlottableMixin } from './slottable';
  *   readonly attribute DOMString wholeText;
  * };
  */
-export class TextImpl
-  extends withTextStub(CharacterDataImpl)
-  implements Text
-{
+export class TextImpl extends withTextStub(CharacterDataImpl) {
   readonly #slottableMixin = new SlottableMixin();
+
+  static readonly #nodeOptions: NodeOptions = {
+    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
+      getParent: (target, event) => NodeImpl.is(target) && isText(target)
+        ? target.getEventParent(event)
+        : null,
+      getAssignedSlot: (target) => NodeImpl.is(target) && isText(target)
+        ? target.getAssignedSlot()
+        : null,
+    }),
+  };
 
   constructor(data: string, ownerDocument: DocumentImpl | null = null) {
     super(NodeType.Text, data, ownerDocument, TextImpl.#nodeOptions);
   }
 
-  // -- Virtual ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static readonly #nodeOptions: NodeOptions = {
-    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
-      getParent: (target, event) => NodeImpl.is(target) && isText(target)
-        ? TextImpl.getEventParent(target, event)
-        : null,
-      getAssignedSlot: (target) => NodeImpl.is(target) && isText(target)
-        ? TextImpl.getAssignedSlot(target)
-        : null,
-    }),
-  };
-
-  // -- Friends ----------------------------------------------------------
-
-  static setAssignedSlot(text: TextImpl, slot: ElementImpl | null): void {
-    text.#slottableMixin.setAssignedSlot(slot);
+  setAssignedSlot(slot: ElementImpl | null): void {
+    this.#slottableMixin.setAssignedSlot(slot);
   }
 
-  static getAssignedSlot(text: TextImpl): ElementImpl | null {
-    return text.#slottableMixin.assignedSlot;
+  override getAssignedSlot(): ElementImpl | null {
+    return this.#slottableMixin.assignedSlot;
   }
 
-  static getEventParent(
-    text: TextImpl,
-    _event: EventImpl,
-  ): NodeImpl | null {
-    return text.#slottableMixin.assignedSlot ?? NodeImpl.getParentNode(text);
+  override getEventParent(_event: EventImpl): NodeImpl | null {
+    return this.#slottableMixin.assignedSlot ?? this.parentNode;
   }
 }
 

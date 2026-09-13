@@ -27,7 +27,7 @@ export class AbortControllerImpl
   }
 
   abort(reason: unknown = undefined): void {
-    AbortSignalImpl.signalAbort(this.#signal, reason);
+    this.#signal.signalAbort(reason);
   }
 }
 

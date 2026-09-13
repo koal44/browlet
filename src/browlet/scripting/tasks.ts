@@ -1,11 +1,8 @@
 import { bindAsyncContext, type GlobalObject } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import {
-  createTaskSource, EventLoop, queueTask, type TaskCreationOptions,
-  type TaskSource,
+  createTaskSource, type EventLoop, type TaskCreationOptions, type TaskSource,
 } from './event-loop';
-
-export { queueTask } from './event-loop';
 
 /*
  * HTML section 8.1.7.4 defines these shared source identities for otherwise
@@ -49,15 +46,14 @@ export function queueGlobalTask(
   if (destination === undefined) {
     throw new Error('A global object must have a task destination');
   }
-  const task = queueTask(
+  const task = destination.eventLoop.queueTask(
     source,
-    destination.eventLoop,
     destination.getDocument(),
     bindAsyncContext(steps),
     options,
   );
   return {
-    remove: () => EventLoop.removeTask(destination.eventLoop, task),
+    remove: () => destination.eventLoop.removeTask(task),
   };
 }
 

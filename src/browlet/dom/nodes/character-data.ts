@@ -3,7 +3,6 @@ import {
   annotated, attr, defineIncludes, defineInterface, idlType, xattr,
 } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
-import { TreeNode } from '../infra/tree';
 import {
   NodeImpl, type NodeOptions, type NodeType,
 } from './node';
@@ -26,10 +25,7 @@ import type { ElementImpl } from './element';
  *   undefined replaceData(unsigned long offset, unsigned long count, DOMString data);
  * };
  */
-export class CharacterDataImpl
-  extends withCharacterDataStub(NodeImpl)
-  implements CharacterData
-{
+export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
   readonly #childNodeMixin = new ChildNodeMixin(this);
   #data: string;
   readonly #nonDocumentTypeChildNodeMixin =
@@ -51,7 +47,7 @@ export class CharacterDataImpl
 
   set data(value: string) {
     this.#data = value;
-    TreeNode.notifyParentChildrenChanged(this);
+    this.notifyParentChildrenChanged();
   }
 
   get previousElementSibling(): ElementImpl | null {

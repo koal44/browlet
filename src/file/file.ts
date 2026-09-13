@@ -4,7 +4,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
 } from '../web-idl/declaration/index';
-import { runtimeContext, type BindingContext } from '../web-idl/projection';
+import { runtimeContext } from '../web-idl/projection';
 import {
   BlobImpl, type BlobPart, type BlobPropertyBag,
 } from './blob';
@@ -50,6 +50,25 @@ export class FileImpl extends BlobImpl {
 
   // -- Internal operations ----------------------------------------------
 
+  /** File API §4, create a File from host-selected storage. */
+  static fromHost(
+    source: BlobByteSource,
+    metadata: HostFileMetadata,
+    runtime: RuntimeContext,
+  ): FileImpl {
+    const type = requireHostFileType(metadata.type);
+    const file = new FileImpl(
+      [], metadata.name, { lastModified: metadata.lastModified ?? 0, type }, runtime,
+    );
+    file.setSerializationState({
+      data: BlobData.fromSource(source),
+      snapshotState: source.snapshotState,
+      type,
+    });
+    file.#lastModified = metadata.lastModified ?? null;
+    return file;
+  }
+
   getFileSerializationState(): FileSerializationState {
     return {
       lastModified: this.lastModified,
@@ -67,14 +86,6 @@ export class FileImpl extends BlobImpl {
   static is(value: unknown): value is FileImpl {
     return value !== null && typeof value === 'object' && #name in value;
   }
-
-  setHostMetadata(
-    name: string,
-    lastModified: number | undefined,
-  ): void {
-    this.#lastModified = lastModified ?? null;
-    this.#name = name;
-  }
 }
 
 export type FilePropertyBag = BlobPropertyBag & {
@@ -91,29 +102,6 @@ export type HostFileMetadata = {
   name: string;
   type: string;
 };
-
-/** Browlet host integration for File API §4 host-selected storage. */
-// BINDING_INTEGRATION: associate a host-selected File with its destination binding.
-export function createFileFromHost(
-  context: BindingContext,
-  source: BlobByteSource,
-  metadata: HostFileMetadata,
-): FileImpl {
-  const type = requireHostFileType(metadata.type);
-  const file = context.construct(
-    FileImpl,
-    [],
-    metadata.name,
-    { lastModified: metadata.lastModified ?? 0, type },
-  );
-  file.setSerializationState({
-    data: BlobData.fromSource(source),
-    snapshotState: source.snapshotState,
-    type,
-  });
-  file.setHostMetadata(metadata.name, metadata.lastModified);
-  return file;
-}
 
 function requireHostFileType(value: string): string {
   if (value === '') return value;

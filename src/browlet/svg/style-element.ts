@@ -1,5 +1,5 @@
 import {
-  defineElementInterface, type ElementCreationContext, ElementImpl,
+  defineElementInterface, type ElementCreationContext,
 } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
 import {
@@ -39,7 +39,7 @@ export class SVGStyleElementImpl
   }
 
   get sheet(): CSSStyleSheetImpl | null {
-    return ElementImpl.getStyleSheet(this);
+    return this.getStyleSheet();
   }
 }
 

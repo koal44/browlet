@@ -47,10 +47,7 @@ export class NonDocumentTypeChildNodeMixin {
 export const nonDocumentTypeChildNodeIDL = defineInterfaceMixin({
   name: 'NonDocumentTypeChildNode',
   members: [
-    roAttr(
-      'previousElementSibling',
-      nullable(reference('Element')),
-    ),
+    roAttr('previousElementSibling', nullable(reference('Element'))),
     roAttr('nextElementSibling', nullable(reference('Element'))),
   ],
 });

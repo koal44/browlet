@@ -86,6 +86,15 @@ export class EventImpl {
     this.#composed = init.composed ?? false;
   }
 
+  static is(value: unknown): value is EventImpl {
+    return typeof value === 'object' && value !== null && #initialized in value;
+  }
+
+  static get NONE(): 0 { return 0; }
+  static get CAPTURING_PHASE(): 1 { return 1; }
+  static get AT_TARGET(): 2 { return 2; }
+  static get BUBBLING_PHASE(): 3 { return 3; }
+
   get type(): string {
     return this.#type;
   }
@@ -256,127 +265,110 @@ export class EventImpl {
     this.#initialize(type, bubbles, cancelable);
   }
 
-  static get NONE(): 0 { return 0; }
-  static get CAPTURING_PHASE(): 1 { return 1; }
-  static get AT_TARGET(): 2 { return 2; }
-  static get BUBBLING_PHASE(): 3 { return 3; }
+  // -- Internal methods -------------------------------------------------
 
-  // -- Friends ----------------------------------------------------------
-
-  static isDispatching(event: EventImpl): boolean {
-    return event.#dispatching;
+  isDispatching(): boolean {
+    return this.#dispatching;
   }
 
-  static is(value: unknown): value is EventImpl {
-    return typeof value === 'object' && value !== null && #initialized in value;
+  isInitialized(): boolean {
+    return this.#initialized;
   }
 
-  static isInitialized(event: EventImpl): boolean {
-    return event.#initialized;
+  setTrusted(trusted: boolean): void {
+    this.#isTrusted = trusted;
   }
 
-  static setTrusted(event: EventImpl, trusted: boolean): void {
-    event.#isTrusted = trusted;
+  beginDispatch(): void {
+    this.#dispatching = true;
   }
 
-  static beginDispatch(event: EventImpl): void {
-    event.#dispatching = true;
+  getRelatedTarget(): EventTargetImpl | null {
+    return this.#relatedTarget;
   }
 
-  static getRelatedTarget(event: EventImpl): EventTargetImpl | null {
-    return event.#relatedTarget;
+  getTouchTargetList(): readonly (EventTargetImpl | null)[] {
+    return this.#touchTargetList;
   }
 
-  static getCurrentTarget(event: EventImpl): EventTargetImpl | null {
-    return event.#currentTarget;
+  getPath(): readonly EventPathItem[] {
+    return this.#path;
   }
 
-  static isComposed(event: EventImpl): boolean {
-    return event.#composed;
-  }
-
-  static getTouchTargetList(
-    event: EventImpl,
-  ): readonly (EventTargetImpl | null)[] {
-    return event.#touchTargetList;
-  }
-
-  static getPath(event: EventImpl): readonly EventPathItem[] {
-    return event.#path;
-  }
-
-  static appendToPath(event: EventImpl, item: EventPathItem): void {
-    event.#path.push(item);
-  }
-
-  static setTarget(event: EventImpl, target: EventTargetImpl | null): void {
-    event.#target = target;
-  }
-
-  static setRelatedTarget(
-    event: EventImpl,
+  appendToPath(
+    invocationTarget: EventTargetImpl,
+    shadowAdjustedTarget: EventTargetImpl | null,
     relatedTarget: EventTargetImpl | null,
+    touchTargetList: readonly (EventTargetImpl | null)[],
+    slotInClosedTree: boolean,
   ): void {
-    event.#relatedTarget = relatedTarget;
+    const root = invocationTarget.getTreeRoot();
+
+    this.#path.push({
+      invocationTarget,
+      invocationTargetInShadowTree: root !== null &&
+        root.getShadowRootHost() !== null,
+      shadowAdjustedTarget,
+      relatedTarget,
+      touchTargetList,
+      rootOfClosedTree: invocationTarget.getShadowRootMode() === 'closed',
+      slotInClosedTree,
+    });
   }
 
-  static setTouchTargetList(
-    event: EventImpl,
-    targets: readonly (EventTargetImpl | null)[],
-  ): void {
-    event.#touchTargetList = [...targets];
+  setTarget(target: EventTargetImpl | null): void {
+    this.#target = target;
   }
 
-  static setCurrentTarget(
-    event: EventImpl,
-    target: EventTargetImpl | null,
-  ): void {
-    event.#currentTarget = target;
+  setRelatedTarget(relatedTarget: EventTargetImpl | null): void {
+    this.#relatedTarget = relatedTarget;
   }
 
-  static setPhase(event: EventImpl, phase: 0 | 1 | 2 | 3): void {
-    event.#eventPhase = phase;
+  setTouchTargetList(targets: readonly (EventTargetImpl | null)[]): void {
+    this.#touchTargetList = [...targets];
   }
 
-  static propagationStopped(event: EventImpl): boolean {
-    return event.#stopPropagation;
+  setCurrentTarget(target: EventTargetImpl | null): void {
+    this.#currentTarget = target;
   }
 
-  static immediatePropagationStopped(event: EventImpl): boolean {
-    return event.#stopImmediatePropagation;
+  setPhase(phase: 0 | 1 | 2 | 3): void {
+    this.#eventPhase = phase;
   }
 
-  static setInPassiveListener(event: EventImpl, passive: boolean): void {
-    event.#inPassiveListener = passive;
+  propagationStopped(): boolean {
+    return this.#stopPropagation;
   }
 
-  static isCanceled(event: EventImpl): boolean {
-    return event.#canceled;
+  immediatePropagationStopped(): boolean {
+    return this.#stopImmediatePropagation;
   }
 
-  static setType(event: EventImpl, type: string): void {
-    event.#type = type;
+  setInPassiveListener(passive: boolean): void {
+    this.#inPassiveListener = passive;
   }
 
-  static finishDispatch(event: EventImpl, clearTargets: boolean): void {
-    event.#eventPhase = EventImpl.NONE;
-    event.#currentTarget = null;
-    event.#path = [];
-    event.#dispatching = false;
-    event.#stopPropagation = false;
-    event.#stopImmediatePropagation = false;
+  setType(type: string): void {
+    this.#type = type;
+  }
+
+  finishDispatch(clearTargets: boolean): void {
+    this.#eventPhase = EventImpl.NONE;
+    this.#currentTarget = null;
+    this.#path = [];
+    this.#dispatching = false;
+    this.#stopPropagation = false;
+    this.#stopImmediatePropagation = false;
 
     if (clearTargets) {
-      event.#target = null;
-      event.#relatedTarget = null;
-      event.#touchTargetList = [];
+      this.#target = null;
+      this.#relatedTarget = null;
+      this.#touchTargetList = [];
     }
   }
 
-  static getFirstPathInvocationTarget(
-    event: EventImpl,
-  ): EventTargetImpl | null {
-    return event.#path[0]?.invocationTarget ?? null;
+  getFirstPathInvocationTarget(): EventTargetImpl | null {
+    return this.#path[0]?.invocationTarget ?? null;
   }
 
   // -- Private ----------------------------------------------------------
@@ -507,7 +499,7 @@ export class CustomEventImpl<T = unknown>
     cancelable = false,
     detail: T = null as T,
   ): void {
-    if (EventImpl.isDispatching(this)) return;
+    if (this.isDispatching()) return;
 
     this.initEvent(type, bubbles, cancelable);
     this.#detail = detail;

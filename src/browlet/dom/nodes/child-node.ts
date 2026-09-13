@@ -1,7 +1,6 @@
 import {
   defineInterfaceMixin, idlType, op,
 } from '../../../web-idl/declaration/index';
-import { TreeNode } from '../infra/tree';
 import type { NodeImpl } from './node';
 
 /*
@@ -20,7 +19,7 @@ export class ChildNodeMixin {
   }
 
   remove(): void {
-    TreeNode.remove(this.#node);
+    this.#node.removeFromTree();
   }
 }
 

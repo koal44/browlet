@@ -15,8 +15,7 @@ import {
   EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../src/browlet/scripting/environment';
 import {
-  createNewTopLevelTraversable, initializeNavigable, Navigable,
-  TopLevelTraversable,
+  createNewTopLevelTraversable, Navigable, TopLevelTraversable,
 } from '../../../src/browlet/browsing/navigable';
 import {
   Realm,
@@ -81,7 +80,7 @@ describe('browsing context groups', () => {
     const document = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
     const windowObject = { addEventListener() {} } as unknown as Window;
-    WindowImpl.setAssociatedDocument(window, document);
+    window.setAssociatedDocument(document);
     setWindowProxyWindow(context.windowProxy, window, windowObject);
 
     expect(context.activeWindow).toBe(window);
@@ -113,7 +112,7 @@ describe('browsing context groups', () => {
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
     const window = new WindowImpl(new URL('about:blank'));
     const executionContext = createWindowRealm(agent, window);
-    WindowImpl.setAssociatedDocument(window, new DocumentImpl());
+    window.setAssociatedDocument(new DocumentImpl());
 
     expect(Reflect.has(executionContext.realm.globalObject, 'SharedArrayBuffer')).toBe(false);
     expect(executionContext.realm.intrinsics.bufferSource.sharedArrayBuffer)
@@ -145,12 +144,12 @@ describe('browsing context groups', () => {
 describe('navigables', () => {
   it('initializes one pending current and active history entry', () => {
     const document = new DocumentImpl();
-    DocumentImpl.setBrowsingContext(document, new BrowsingContext());
-    DocumentImpl.setURL(document, requireURL('https://example.test/page'));
+    document.setBrowsingContext(new BrowsingContext());
+    document.setURL(requireURL('https://example.test/page'));
     const documentState = createDocumentState(document);
     const traversable = new TopLevelTraversable();
 
-    initializeNavigable(traversable, documentState);
+    traversable.initialize(documentState);
 
     expect(traversable.parent).toBeNull();
     expect(traversable.currentSessionHistoryEntry)
@@ -175,21 +174,21 @@ describe('navigables', () => {
       throw new Error('Expected a complete initial navigable');
     }
     const secondDocument = new DocumentImpl();
-    DocumentImpl.setBrowsingContext(secondDocument, browsingContext);
+    secondDocument.setBrowsingContext(browsingContext);
 
-    expect(DocumentImpl.getNodeNavigable(firstDocument)).toBe(traversable);
-    expect(DocumentImpl.isFullyActive(firstDocument)).toBe(true);
-    expect(DocumentImpl.getNodeNavigable(secondDocument)).toBeNull();
-    expect(DocumentImpl.isFullyActive(secondDocument)).toBe(false);
+    expect(firstDocument.getNodeNavigable()).toBe(traversable);
+    expect(firstDocument.isFullyActive()).toBe(true);
+    expect(secondDocument.getNodeNavigable()).toBeNull();
+    expect(secondDocument.isFullyActive()).toBe(false);
 
     traversable.activeSessionHistoryEntry = createSessionHistoryEntry(
       createDocumentState(secondDocument),
     );
 
-    expect(DocumentImpl.getNodeNavigable(firstDocument)).toBeNull();
-    expect(DocumentImpl.isFullyActive(firstDocument)).toBe(false);
-    expect(DocumentImpl.getNodeNavigable(secondDocument)).toBe(traversable);
-    expect(DocumentImpl.isFullyActive(secondDocument)).toBe(true);
+    expect(firstDocument.getNodeNavigable()).toBeNull();
+    expect(firstDocument.isFullyActive()).toBe(false);
+    expect(secondDocument.getNodeNavigable()).toBe(traversable);
+    expect(secondDocument.isFullyActive()).toBe(true);
   });
 
   it('does not mistake a parent association for a container Document', () => {
@@ -204,13 +203,13 @@ describe('navigables', () => {
     }
     const childDocument = new DocumentImpl();
     const childContext = new BrowsingContext();
-    DocumentImpl.setBrowsingContext(childDocument, childContext);
+    childDocument.setBrowsingContext(childContext);
     const child = new Navigable();
-    initializeNavigable(child, createDocumentState(childDocument), parent);
+    child.initialize(createDocumentState(childDocument), parent);
 
-    expect(DocumentImpl.getNodeNavigable(childDocument)).toBe(child);
-    expect(DocumentImpl.isFullyActive(parentDocument)).toBe(true);
-    expect(DocumentImpl.isFullyActive(childDocument)).toBe(false);
+    expect(childDocument.getNodeNavigable()).toBe(child);
+    expect(parentDocument.isFullyActive()).toBe(true);
+    expect(childDocument.isFullyActive()).toBe(false);
   });
 
   it('creates the complete initial top-level about:blank graph', () => {
@@ -246,25 +245,25 @@ describe('navigables', () => {
     expect(getImplementation(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(browsingContext.windowProxy);
     expect(realm.agent.agentCluster).not.toBeNull();
-    expect(WindowImpl.getAssociatedDocument(window)).toBe(document);
+    expect(window.getAssociatedDocument()).toBe(document);
 
     expect(document.type).toBe('html');
-    expect(DocumentImpl.getMode(document)).toBe('quirks');
+    expect(document.getMode()).toBe('quirks');
     expect(document.contentType).toBe('text/html');
     expect(document.URL).toBe('about:blank');
-    expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
-    expect(DocumentImpl.getBrowsingContext(document)).toBe(browsingContext);
-    expect(DocumentImpl.getActiveSandboxingFlagSet(document)).toEqual(new Set());
-    expect(DocumentImpl.getAboutBaseURL(document)).toBeNull();
-    expect(DocumentImpl.isInitialAboutBlank(document)).toBe(true);
-    expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(true);
-    expect(DocumentImpl.getCustomElementRegistry(document)).not.toBeNull();
-    expect(DocumentImpl.getInternalAncestorOriginObjectsList(document))
+    expect(document.getOrigin().kind).toBe('opaque');
+    expect(document.getBrowsingContext()).toBe(browsingContext);
+    expect(document.getActiveSandboxingFlagSet()).toEqual(new Set());
+    expect(document.getAboutBaseURL()).toBeNull();
+    expect(document.isInitialAboutBlank()).toBe(true);
+    expect(document.allowsDeclarativeShadowRoots()).toBe(true);
+    expect(document.customElementRegistry).not.toBeNull();
+    expect(document.getInternalAncestorOriginObjectsList())
       .toEqual([]);
-    expect(DocumentImpl.getAncestorOriginsList(document)).toEqual([]);
-    expect(DocumentImpl.isReadyForPostLoadTasks(document)).toBe(true);
-    expect(DocumentImpl.getCurrentDocumentReadiness(document)).toBe('complete');
-    expect(DocumentImpl.getCompletelyLoadedTime(document)).not.toBeNull();
+    expect(document.getAncestorOriginsList()).toEqual([]);
+    expect(document.isReadyForPostLoadTasks()).toBe(true);
+    expect(document.readyState).toBe('complete');
+    expect(document.getCompletelyLoadedTime()).not.toBeNull();
     expect(document.documentElement?.localName).toBe('html');
     expect(document.head?.localName).toBe('head');
     expect(document.body?.localName).toBe('body');
@@ -272,10 +271,10 @@ describe('navigables', () => {
     expect(settings.executionReady).toBe(true);
     expect(serializeURL(settings.creationURL)).toBe('about:blank');
     expect(serializeURL(settings.topLevelCreationURL!)).toBe('about:blank');
-    expect(settings.topLevelOrigin).toBe(DocumentImpl.getOrigin(document));
+    expect(settings.topLevelOrigin).toBe(document.getOrigin());
     expect(settings.timeOrigin.clock).toBe(monotonicClock);
     expect(settings.timeOrigin.milliseconds)
-      .toBe(DocumentImpl.getLoadTimingInfo(document).navigationStartTime);
+      .toBe(document.getLoadTimingInfo().navigationStartTime);
 
     const initialEntry = traversable.activeSessionHistoryEntry;
     expect(traversable.currentSessionHistoryEntry).toBe(initialEntry);
@@ -284,7 +283,7 @@ describe('navigables', () => {
     expect(initialEntry.documentState.document).toBe(document);
     expect(initialEntry.documentState.initiatorOrigin).toBeNull();
     expect(initialEntry.documentState.origin)
-      .toBe(DocumentImpl.getOrigin(document));
+      .toBe(document.getOrigin());
     expect(initialEntry.documentState.navigableTargetName).toBe('');
     expect(initialEntry.documentState.aboutBaseURL).toBeNull();
   });
@@ -319,15 +318,15 @@ describe('environment settings objects', () => {
       createStructuredClone(executionContext.realm),
     );
     const document = new DocumentImpl();
-    DocumentImpl.setOrigin(document, origin);
-    DocumentImpl.setURL(document, creationURL);
-    WindowImpl.setAssociatedDocument(window, document);
+    document.setOrigin(origin);
+    document.setURL(creationURL);
+    window.setAssociatedDocument(document);
 
     expect(settings.realmExecutionContext).toBe(executionContext);
     expect(executionContext.realm.hostDefined).toBe(settings);
-    expect(settings.moduleMap).toBe(DocumentImpl.getModuleMap(document));
+    expect(settings.moduleMap).toBe(document.getModuleMap());
     expect(settings.policyContainer)
-      .toBe(DocumentImpl.getPolicyContainer(document));
+      .toBe(document.getPolicyContainer());
     expect(settings.timeOrigin.clock).toBe(monotonicClock);
     expect(settings.timeOrigin.milliseconds).toBe(0);
     expect(serializeURL(settings.apiBaseURL)).toBe('https://example.test/');
@@ -388,7 +387,7 @@ describe('navigation lifecycle', () => {
     const initialDocumentImpl = getImplementation<DocumentImpl>(
       initialDocument,
     );
-    const navigable = DocumentImpl.getNodeNavigable(initialDocumentImpl);
+    const navigable = initialDocumentImpl.getNodeNavigable();
     if (navigable === null) {
       throw new Error('Initial Document has no node navigable');
     }
@@ -412,13 +411,13 @@ describe('navigation lifecycle', () => {
     expect(getImplementation(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
-    expect(window && WindowImpl.getAssociatedDocument(window)).toBe(documentImpl);
-    expect(DocumentImpl.getBrowsingContext(documentImpl)?.windowProxy)
+    expect(window && window.getAssociatedDocument()).toBe(documentImpl);
+    expect(documentImpl.getBrowsingContext()?.windowProxy)
       .toBe(windowProxy);
-    expect(DocumentImpl.getNodeNavigable(initialDocumentImpl)).toBeNull();
-    expect(DocumentImpl.isFullyActive(initialDocumentImpl)).toBe(false);
-    expect(DocumentImpl.getNodeNavigable(documentImpl)).toBe(navigable);
-    expect(DocumentImpl.isFullyActive(documentImpl)).toBe(true);
+    expect(initialDocumentImpl.getNodeNavigable()).toBeNull();
+    expect(initialDocumentImpl.isFullyActive()).toBe(false);
+    expect(documentImpl.getNodeNavigable()).toBe(navigable);
+    expect(documentImpl.isFullyActive()).toBe(true);
   });
 
 });

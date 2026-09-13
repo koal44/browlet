@@ -27,14 +27,14 @@ describe('Parser tree adapter', () => {
       .parse('<!doctype html><main>content</main>');
     const quirks = createParser().parse('<main>content</main>');
 
-    expect(DocumentImpl.getMode(standards)).toBe(DocumentMode.NoQuirks);
+    expect(standards.getMode()).toBe(DocumentMode.NoQuirks);
     expect(standards.type).toBe('html');
     expect(standards.contentType).toBe('text/html');
     expect(standards.URL).toBe('about:blank');
     expect(standards.characterSet).toBe('UTF-8');
     expect(standards.doctype?.name).toBe('html');
     expect(standards.documentElement?.localName).toBe('html');
-    expect(DocumentImpl.getMode(quirks)).toBe(DocumentMode.Quirks);
+    expect(quirks.getMode()).toBe(DocumentMode.Quirks);
   });
 
   it('parses comments as comment nodes', () => {
@@ -67,7 +67,7 @@ describe('Parser tree adapter', () => {
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
 
-    expect(DocumentImpl.getMode(document)).toBe(DocumentMode.Quirks);
+    expect(document.getMode()).toBe(DocumentMode.Quirks);
     expect(parser.getDocumentMode(document)).toBe(html.DOCUMENT_MODE.QUIRKS);
   });
 
@@ -98,7 +98,7 @@ describe('Parser tree adapter', () => {
 
 function createParser(): HTMLTreeAdapter {
   const document = createDocument();
-  DocumentImpl.setType(document, 'html');
-  DocumentImpl.setContentType(document, 'text/html');
+  document.setType('html');
+  document.setContentType('text/html');
   return new HTMLTreeAdapter(document);
 }

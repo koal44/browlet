@@ -1,4 +1,4 @@
-import { DocumentImpl } from './dom/nodes/document';
+import type { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
@@ -164,7 +164,7 @@ export class Browlet {
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
 
-    DocumentImpl.withWriter(document, write, () => {
+    document.withWriter(write, () => {
       realm.evaluate(source, scriptURL.href, lineOffset);
     });
   }

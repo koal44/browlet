@@ -32,8 +32,8 @@ export class GlobalPlatformObjectBinding {
     this.#implementations = implementations;
   }
 
-  createObject(implementation: object): object {
-    return this.#withPrototypeBehavior(implementation);
+  createObject(target: object): object {
+    return this.#withPrototypeBehavior(target);
   }
 
   createNamedPropertiesObject(

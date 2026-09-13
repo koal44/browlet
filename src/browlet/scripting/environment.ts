@@ -1,9 +1,9 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { EventLoop } from './event-loop';
-import { Realm, type JSExecutionContext } from './realm';
-import { DocumentImpl, type ModuleMap } from '../dom/nodes/document';
+import type { JSExecutionContext } from './realm';
+import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
-import { WindowImpl } from '../browsing/window/window';
+import type { WindowImpl } from '../browsing/window/window';
 import type { Origin } from '../../url/origin';
 import { parseURL, type URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
@@ -78,22 +78,18 @@ export class WindowEnvironmentSettingsObject
 
   get apiBaseURL(): URLRecord {
     const url = parseURL(
-      WindowImpl.getAssociatedDocument(this.#window).baseURI,
+      this.#window.getAssociatedDocument().baseURI,
     ).url;
     if (url === null) throw new Error('Window Document has an invalid base URL');
     return url;
   }
 
   get moduleMap(): ModuleMap {
-    return DocumentImpl.getModuleMap(
-      WindowImpl.getAssociatedDocument(this.#window),
-    );
+    return this.#window.getAssociatedDocument().getModuleMap();
   }
 
   get origin(): Origin {
-    return DocumentImpl.getOrigin(
-      WindowImpl.getAssociatedDocument(this.#window),
-    );
+    return this.#window.getAssociatedDocument().getOrigin();
   }
 
   get hasCrossSiteAncestor(): boolean {
@@ -103,9 +99,7 @@ export class WindowEnvironmentSettingsObject
   }
 
   get policyContainer(): PolicyContainer {
-    return DocumentImpl.getPolicyContainer(
-      WindowImpl.getAssociatedDocument(this.#window),
-    );
+    return this.#window.getAssociatedDocument().getPolicyContainer();
   }
 
   get crossOriginIsolatedCapability(): boolean {
@@ -113,9 +107,7 @@ export class WindowEnvironmentSettingsObject
       ?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
 
-    void DocumentImpl.getPermissionsPolicy(
-      WindowImpl.getAssociatedDocument(this.#window),
-    );
+    void this.#window.getAssociatedDocument().getPermissionsPolicy();
     throw new Error(
       'The cross-origin-isolated permissions-policy check is not implemented',
     );
@@ -124,9 +116,7 @@ export class WindowEnvironmentSettingsObject
   get timeOrigin(): Moment {
     return new Moment(
       monotonicClock,
-      DocumentImpl.getLoadTimingInfo(
-        WindowImpl.getAssociatedDocument(this.#window),
-      ).navigationStartTime,
+      this.#window.getAssociatedDocument().getLoadTimingInfo().navigationStartTime,
     );
   }
 }
@@ -161,8 +151,7 @@ export function setupWindowEnvironmentSettingsObject(
     settings.id = reservedEnvironment.id;
     reservedEnvironment.id = '';
   }
-  WindowImpl.setWindowOrWorkerGlobalScopeMixin(
-    window,
+  window.setWindowOrWorkerGlobalScopeMixin(
     new WindowOrWorkerGlobalScopeMixin({
       eventLoop: realm.agent.eventLoop,
       global: realm.global,
@@ -170,7 +159,7 @@ export function setupWindowEnvironmentSettingsObject(
       timing: settings.timing,
     }),
   );
-  Realm.setHostDefined(realm, settings);
+  realm.setHostDefined(settings);
   return settings;
 }
 

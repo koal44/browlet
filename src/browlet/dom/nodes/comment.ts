@@ -11,10 +11,7 @@ import type { DocumentImpl } from './document';
  *   constructor(optional DOMString data = "");
  * };
  */
-export class CommentImpl
-  extends withCommentStub(CharacterDataImpl)
-  implements Comment
-{
+export class CommentImpl extends withCommentStub(CharacterDataImpl) {
   constructor(
     data: string,
     ownerDocument: DocumentImpl | null = null,

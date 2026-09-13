@@ -157,9 +157,12 @@ dictionary AddEventListenerOptions : EventListenerOptions {
         attr('text', idlType.DOMString, { stringifier: true }),
         op('run', idlType.undefined),
         op('run', idlType.undefined, [arg('value', idlType.long)]),
-        op(undefined, idlType.object, [arg('name', idlType.DOMString)], {
-          special: 'getter',
-        }),
+        op(undefined, idlType.object,
+          [arg('name', idlType.DOMString)],
+          {
+            special: 'getter',
+          },
+        ),
         op('create', reference('Interface'), [], { static: true }),
         stringifier(),
         iter(idlType.DOMString),

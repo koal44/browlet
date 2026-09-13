@@ -30,9 +30,9 @@ describe('DOM document construction', () => {
 
   it('lazily associates one CSS engine with its document', () => {
     const document = parseHTMLDocument('<main id="target"></main>');
-    const cssEngine = DocumentImpl.getCSSEngine(document);
+    const cssEngine = document.getCSSEngine();
 
-    expect(DocumentImpl.getCSSEngine(document)).toBe(cssEngine);
+    expect(document.getCSSEngine()).toBe(cssEngine);
     expect(cssEngine.context.document).toBe(document);
     expect(cssEngine.context.root).toBe(document.documentElement);
     expect(cssEngine.context.isQuirksMode).toBe(true);

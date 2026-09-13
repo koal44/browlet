@@ -8,10 +8,7 @@ import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
 import { associateGlobalTaskDestination } from './tasks';
 import { WindowImpl } from '../browsing/window/window';
-import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
-import {
-  coarsenedSharedCurrentTime,
-} from '../performance/high-resolution-time';
+import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
 
 /*
  * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
@@ -28,7 +25,7 @@ export function createRealm(
     ? customizations.createGlobalThisValue(realm, globalObject)
     : globalObject;
 
-  Realm.setGlobalObjects(realm, globalObject, globalThis);
+  realm.setGlobalObjects(globalObject, globalThis);
   if (agent instanceof WindowAgent) {
     if (!WindowImpl.is(globalObject)) {
       throw new Error('A Window realm requires a Window implementation');
@@ -102,6 +99,11 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     };
   }
 
+  static getAssociatedRealm(value: object): Realm | undefined {
+    const realm = getAssociatedRealm(value);
+    return realm instanceof Realm ? realm : undefined;
+  }
+
   get windowImplementation(): WindowImpl | undefined {
     return this.#windowImplementation;
   }
@@ -124,15 +126,13 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     if (settings === null) {
       return coarsenedSharedCurrentTime().milliseconds;
     }
-    return implicitlyConvertDurationToTimestamp(
-      settings.timing.currentHighResolutionTime(),
-    );
+    return settings.timing.currentHighResolutionTime().toTimestamp();
   }
 
   getAssociatedDocument(): DocumentImpl {
     const window = this.#windowImplementation;
     if (!window) throw new Error('Realm global object has no associated Document');
-    return WindowImpl.getAssociatedDocument(window);
+    return window.getAssociatedDocument();
   }
 
   performSecurityCheck(
@@ -147,7 +147,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   queueMicrotask(steps: () => void): void {
     const window = this.#windowImplementation;
     const document = window
-      ? WindowImpl.getAssociatedDocument(window)
+      ? window.getAssociatedDocument()
       : null;
     this.agent.eventLoop.queueMicrotask(steps, document);
   }
@@ -155,13 +155,13 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   getCurrentEvent(_global: object): EventImpl | undefined {
     const window = this.#windowImplementation;
     return window
-      ? WindowImpl.getCurrentEvent(window)
+      ? window.getCurrentEvent()
       : undefined;
   }
 
   setCurrentEvent(_global: object, event: EventImpl | undefined): void {
     const window = this.#windowImplementation;
-    if (window) WindowImpl.setCurrentEvent(window, event);
+    if (window) window.setCurrentEvent(event);
   }
 
   recordTimingInfo(
@@ -173,37 +173,36 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     // once Browlet has the HTML performance timeline machinery.
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static setGlobalObjects(
-    realm: Realm,
+  setGlobalObjects(
     globalObject: GlobalObject,
     globalThis: object,
     windowImplementation = WindowImpl.is(globalObject) ? globalObject : undefined,
   ): void {
-    realm.#windowImplementation = windowImplementation;
-    realm.initializeGlobalObjects(globalObject, globalThis);
-    if (realm.agent.agentCluster?.crossOriginIsolationMode === 'none') {
+    this.#windowImplementation = windowImplementation;
+    this.initializeGlobalObjects(globalObject, globalThis);
+    if (this.agent.agentCluster?.crossOriginIsolationMode === 'none') {
       const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
       if (!status) throw new Error('Could not remove SharedArrayBuffer');
     }
-    if (windowImplementation && realm.agent instanceof WindowAgent) {
-      realm.agent.windowObjects.add(windowImplementation);
+    if (windowImplementation && this.agent instanceof WindowAgent) {
+      this.agent.windowObjects.add(windowImplementation);
     }
-    if (!realm.isGlobalPrototypeChainMutable) {
-      realm.makeHostGlobalPrototypeImmutable();
+    if (!this.isGlobalPrototypeChainMutable) {
+      this.makeHostGlobalPrototypeImmutable();
     }
     const taskDestination = {
-      eventLoop: realm.agent.eventLoop,
+      eventLoop: this.agent.eventLoop,
       getDocument: () => {
-        const window = realm.#windowImplementation;
+        const window = this.#windowImplementation;
         return window
-          ? WindowImpl.getAssociatedDocument(window)
+          ? window.getAssociatedDocument()
           : null;
       },
     };
     associateGlobalTaskDestination(
-      realm.hostGlobal,
+      this.hostGlobal,
       taskDestination,
     );
     associateGlobalTaskDestination(globalObject, taskDestination);
@@ -213,16 +212,8 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     }
   }
 
-  static setHostDefined(
-    realm: Realm,
-    settings: EnvironmentSettingsObject,
-  ): void {
-    realm.#hostDefined = settings;
-  }
-
-  static getAssociatedRealm(value: object): Realm | undefined {
-    const realm = getAssociatedRealm(value);
-    return realm instanceof Realm ? realm : undefined;
+  setHostDefined(settings: EnvironmentSettingsObject): void {
+    this.#hostDefined = settings;
   }
 
   // -- Private ----------------------------------------------------------

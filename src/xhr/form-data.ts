@@ -134,9 +134,11 @@ export class FormDataImpl {
     }
   }
 
+  // -- Internal methods -------------------------------------------------
+
   /** XHR §4 entry-list access for Fetch BodyInit extraction. */
-  static getEntryList(formData: FormDataImpl): readonly FormDataEntry[] {
-    return formData.#entryList;
+  getEntryList(): readonly FormDataEntry[] {
+    return this.#entryList;
   }
 }
 

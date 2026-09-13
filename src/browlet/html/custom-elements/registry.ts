@@ -6,5 +6,4 @@ import { withCustomElementRegistryStub } from '../../stubs';
  * section; this class preserves the actor and its identity in the meantime.
  */
 export class CustomElementRegistryImpl
-  extends withCustomElementRegistryStub(class {})
-  implements CustomElementRegistry {}
+  extends withCustomElementRegistryStub(class {}) {}

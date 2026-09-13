@@ -129,8 +129,8 @@ function createRelatedWindow(first: Window): WindowProxy {
   const { realm } = executionContext;
   const proxy = realm.globalThis as WindowProxy;
   const document = new DocumentImpl();
-  DocumentImpl.setBrowsingContext(document, new BrowsingContext(proxy));
-  WindowImpl.setAssociatedDocument(window, document);
+  document.setBrowsingContext(new BrowsingContext(proxy));
+  window.setAssociatedDocument(document);
   setupWindowEnvironmentSettingsObject(
     settings.creationURL, executionContext, null, settings.creationURL,
     settings.origin, createStructuredClone(realm),

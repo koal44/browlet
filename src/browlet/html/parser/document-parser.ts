@@ -1,10 +1,11 @@
 import { finished } from 'node:stream';
+import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
 import { bindAsyncContext, type PromiseValue, type RuntimeContext } from '../../../js-engine/index';
-import { DocumentImpl } from '../../dom/nodes/document';
+import type { DocumentImpl } from '../../dom/nodes/document';
 import type { ElementImpl } from '../../dom/nodes/element';
 import type { EventLoop } from '../../scripting/event-loop';
-import { networkingTaskSource, queueTask } from '../../scripting/tasks';
+import { networkingTaskSource } from '../../scripting/tasks';
 import {
   HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from './tree-adapter';
@@ -83,8 +84,8 @@ export class BrowletParser {
     try {
       // HTML's blocking wait resumes on the original (networking) task source.
       // Recheck here: another stylesheet can block before that task runs.
-      if (DocumentImpl.hasScriptBlockingStyleSheets(this.document)) {
-        DocumentImpl.waitForScriptBlockingStyleSheets(this.document, this.#runtime).observe(
+      if (this.document.hasScriptBlockingStyleSheets()) {
+        this.document.waitForScriptBlockingStyleSheets(this.#runtime).observe(
           () => { this.queueTask(() => { this.runScript(element, write, resume); }); },
           (error) => { this.#stream.destroy(toError(error)); },
         );
@@ -111,7 +112,7 @@ export class BrowletParser {
   }
 
   private queueTask(steps: () => void): void {
-    queueTask(networkingTaskSource, this.#eventLoop, this.document, bindAsyncContext(steps));
+    this.#eventLoop.queueTask(networkingTaskSource, this.document, bindAsyncContext(steps));
   }
 }
 
@@ -123,5 +124,6 @@ export type ScriptHandler = (
 export type DocumentWrite = (markup: string) => void;
 
 function toError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
+  // Preserve errors from page realms when passing failures to Node's stream.
+  return types.isNativeError(value) ? value : new Error(String(value));
 }

@@ -202,7 +202,7 @@ model and §9.5 piping operation, and Encoding §7.5 `TextDecoderStream`.
 
 File API creates a `TextDecoderStream`, while Streams defines every object
 including `GenericTransformStream` as owning an associated actual
-`TransformStream`. A narrow implementation-only friend operation now exposes
+`TransformStream`. An internal instance method exposes
 that association to cross-specification algorithms. `Blob.textStream()` passes
 the actual transform to `stream.pipeThroughTransform()` rather than reconstructing
 its readable/writable pair or calling the projected author API. The binding
@@ -229,8 +229,8 @@ reviewed checkouts, so they provide no stronger evidence for this new method.
   captured snapshot. Only the unknown host-file case reads the wall clock from
   the getter, as §4 requires.
 - Keep filesystem paths and type discovery in the future selecting host. The
-  File API factory accepts only the already-sanitized metadata and existing
-  byte-source boundary.
+  `FileImpl.fromHost()` factory accepts the already-sanitized metadata, existing
+  byte source, and owning runtime. The host binding projects the resulting File.
 - Implement FileList as an ordered owner-mutable list with `length`, `item()`,
   a declarative `indexedGetter()`, exact File identity, and no author
   constructor. Its "at risk" status does not authorize substituting an Array.

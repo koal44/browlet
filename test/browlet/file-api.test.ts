@@ -3,7 +3,7 @@ import { EOL as nodeLineEnding } from 'node:os';
 import { describe, expect, it } from 'vitest';
 
 import {
-  BlobData, BlobImpl, BlobReadFailure, createFileFromHost, FileImpl,
+  BlobData, BlobImpl, BlobReadFailure, FileImpl,
   FileListImpl, type BlobByteSource,
 } from '../../src/file/index';
 import { getRealmBindings, getRelevantRealm } from '../../src/browlet/bindings';
@@ -385,6 +385,7 @@ describe('File API File and FileList projection', () => {
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {
     const window = createWindow();
     const context = getRealmBindings(getRelevantRealm(window)).context;
+    const runtime = context.getRuntime();
     const source: BlobByteSource = {
       size: 3,
       snapshotState: { version: 1 },
@@ -392,36 +393,39 @@ describe('File API File and FileList projection', () => {
         Uint8Array.of(1, 2, 3).slice(start, start + length),
       ),
     };
-    const implementation = createFileFromHost(context, source, {
+    const implementation = FileImpl.fromHost(source, {
       lastModified: 12,
       name: 'picked.bin',
       type: 'application/octet-stream',
-    });
+    }, runtime);
     const file = context.project(FileImpl, implementation);
 
+    expect(file).toBeInstanceOf(requireFunction(window, 'File'));
+    expect(context.project(FileImpl, implementation)).toBe(file);
     expect(Reflect.get(file, 'name')).toBe('picked.bin');
     expect(Reflect.get(file, 'lastModified')).toBe(12);
     expect(Reflect.get(file, 'type')).toBe('application/octet-stream');
     const bytes = await call(file, 'bytes') as Uint8Array;
+    expect(bytes).toBeInstanceOf(requireFunction(window, 'Uint8Array'));
     expect(Array.from(bytes)).toEqual([1, 2, 3]);
-    expect(() => createFileFromHost(context, source, {
+    expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'Text/Plain',
-    })).toThrow(TypeError);
-    expect(() => createFileFromHost(context, source, {
+    }, runtime)).toThrow(TypeError);
+    expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'text/plain;charset=utf-8',
-    })).toThrow(TypeError);
-    expect(() => createFileFromHost(context, source, {
+    }, runtime)).toThrow(TypeError);
+    expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'application/example;name=é',
-    })).toThrow(TypeError);
+    }, runtime)).toThrow(TypeError);
 
     const before = Date.now();
-    const unknown = context.project(FileImpl, createFileFromHost(
-      context,
+    const unknown = context.project(FileImpl, FileImpl.fromHost(
       source,
       { name: 'unknown.bin', type: '' },
+      runtime,
     ));
     const modificationTime = Reflect.get(unknown, 'lastModified') as number;
     const after = Date.now();

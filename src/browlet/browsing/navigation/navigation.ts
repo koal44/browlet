@@ -1,4 +1,4 @@
-import { DocumentImpl } from '../../dom/nodes/document';
+import type { DocumentImpl } from '../../dom/nodes/document';
 import {
   createPolicyContainer, type PolicyContainer,
 } from '../policy/container';
@@ -134,13 +134,13 @@ export function resolveNavigationHistoryBehavior(
   const activeURL = navigable.activeSessionHistoryEntry.url;
   let historyHandling: NavigationHistoryBehavior =
     urlsEqual(url, activeURL) &&
-    areSameOrigin(origin, DocumentImpl.getOrigin(activeDocument))
+    areSameOrigin(origin, activeDocument.getOrigin())
       ? 'replace'
       : 'push';
 
   if (
     url.scheme === 'javascript' ||
-    DocumentImpl.isInitialAboutBlank(activeDocument)
+    activeDocument.isInitialAboutBlank()
   ) {
     historyHandling = 'replace';
   }
@@ -177,7 +177,7 @@ export function finalizeCrossDocumentNavigation(
     throw new Error('Navigation requires an active Document');
   }
 
-  const browsingContext = DocumentImpl.getBrowsingContext(document);
+  const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
     throw new Error('Navigation Document has no browsing context');
   }
@@ -188,8 +188,8 @@ export function finalizeCrossDocumentNavigation(
       browsingContext.openerBrowsingContext !== null
     ) &&
     !areSameOrigin(
-      DocumentImpl.getOrigin(document),
-      DocumentImpl.getOrigin(activeDocument),
+      document.getOrigin(),
+      activeDocument.getOrigin(),
     )
   ) {
     historyEntry.documentState.navigableTargetName = '';
@@ -231,7 +231,7 @@ function applyPushOrReplaceHistoryStep(
 ): void {
   const document = historyEntry.documentState.document;
   if (document === null) return;
-  const browsingContext = DocumentImpl.getBrowsingContext(document);
+  const browsingContext = document.getBrowsingContext();
   const realm = getRelevantRealm(document);
   if (browsingContext === null) {
     throw new Error('Navigation Document has no browsing context');

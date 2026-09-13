@@ -82,7 +82,7 @@ export class URLImpl {
   }
 
   get origin(): string {
-    return serializeOrigin(obtainURLOrigin(this.#url));
+    return serializeOrigin(this.getOrigin());
   }
 
   get protocol(): string {
@@ -168,17 +168,14 @@ export class URLImpl {
   set search(value: string) {
     if (value === '') {
       this.#url.query = null;
-      URLSearchParamsImpl.replaceList(this.#queryObject, []);
+      this.#queryObject.replaceList([]);
       return;
     }
 
     const input = value.startsWith('?') ? value.slice(1) : value;
     this.#url.query = '';
     basicURLParse(input, { stateOverride: 'query', url: this.#url });
-    URLSearchParamsImpl.replaceList(
-      this.#queryObject,
-      parseFormUrlEncodedString(input),
-    );
+    this.#queryObject.replaceList(parseFormUrlEncodedString(input));
   }
 
   get searchParams(): URLSearchParamsImpl {
@@ -209,28 +206,29 @@ export class URLImpl {
     return serializeURL(this.#url);
   }
 
+  // -- Internal methods -------------------------------------------------
+
   static fromRecord(record: URLRecord): URLImpl {
     return new URLImpl(record);
   }
 
-  static setQuery(url: URLImpl, query: string | null): void {
-    url.#url.query = query;
+  static is(value: unknown): value is URLImpl {
+    return value !== null && typeof value === 'object' && #url in value;
   }
 
-  static extractOrigin(value: unknown): Origin | undefined {
-    return value !== null && typeof value === 'object' && #url in value
-      ? obtainURLOrigin(value.#url)
-      : undefined;
+  setQuery(query: string | null): void {
+    this.#url.query = query;
+  }
+
+  getOrigin(): Origin {
+    return obtainURLOrigin(this.#url);
   }
 
   #initialize(record: URLRecord): void {
     const query = record.query ?? '';
     this.#url = record;
-    URLSearchParamsImpl.replaceList(
-      this.#queryObject,
-      parseFormUrlEncodedString(query),
-    );
-    URLSearchParamsImpl.associateURL(this.#queryObject, this);
+    this.#queryObject.replaceList(parseFormUrlEncodedString(query));
+    this.#queryObject.associateURL(this);
   }
 }
 
@@ -246,29 +244,31 @@ export const urlIDL = defineInterface({
       arg('url', idlType.USVString),
       arg('base', idlType.USVString, { optional: true }),
     ]),
-    op('parse', nullable(reference('URL')), [
-      arg('url', idlType.USVString),
-      arg('base', idlType.USVString, { optional: true }),
-    ], {
-      static: true,
-    }),
-    op('canParse', idlType.boolean, [
-      arg('url', idlType.USVString),
-      arg('base', idlType.USVString, { optional: true }),
-    ], {
-      static: true,
-    }),
+    op('parse', nullable(reference('URL')),
+      [
+        arg('url', idlType.USVString),
+        arg('base', idlType.USVString, { optional: true }),
+      ],
+      { static: true },
+    ),
+    op('canParse', idlType.boolean,
+      [
+        arg('url', idlType.USVString),
+        arg('base', idlType.USVString, { optional: true }),
+      ],
+      { static: true },
+    ),
     attr('href', idlType.USVString, { stringifier: true }),
     roAttr('origin', idlType.USVString),
-    ...[
-      'protocol', 'username', 'password', 'host', 'hostname', 'port',
-      'pathname', 'search',
-    ].map((name) => attr(name, idlType.USVString)),
-    roAttr(
-      'searchParams',
-      reference('URLSearchParams'),
-      xattr('SameObject'),
-    ),
+    attr('protocol', idlType.USVString),
+    attr('username', idlType.USVString),
+    attr('password', idlType.USVString),
+    attr('host', idlType.USVString),
+    attr('hostname', idlType.USVString),
+    attr('port', idlType.USVString),
+    attr('pathname', idlType.USVString),
+    attr('search', idlType.USVString),
+    roAttr('searchParams', reference('URLSearchParams'), xattr('SameObject')),
     attr('hash', idlType.USVString),
     op('toJSON', idlType.USVString),
   ],
@@ -312,9 +312,12 @@ export class URLSearchParamsImpl implements URLSearchParams {
   }
 
   delete(name: string, value?: string): void {
-    removeMatching(this.#list, (tuple) =>
-      tuple[0] === name &&
-      (value === undefined || tuple[1] === value));
+    for (let index = this.#list.length - 1; index >= 0; index--) {
+      const tuple = this.#list[index]!;
+      if (tuple[0] === name && (value === undefined || tuple[1] === value)) {
+        this.#list.splice(index, 1);
+      }
+    }
     this.#update();
   }
 
@@ -393,22 +396,21 @@ export class URLSearchParamsImpl implements URLSearchParams {
     return serializeFormUrlEncoded(this.#list);
   }
 
-  static associateURL(query: URLSearchParamsImpl, url: URLImpl): void {
-    query.#urlObject = url;
+  // -- Internal methods -------------------------------------------------
+
+  associateURL(url: URLImpl): void {
+    this.#urlObject = url;
   }
 
-  static replaceList(query: URLSearchParamsImpl, list: FormTuple[]): void {
-    query.#list.splice(0, query.#list.length, ...list);
+  replaceList(list: FormTuple[]): void {
+    this.#list.splice(0, this.#list.length, ...list);
   }
 
   #initialize(init: URLSearchParamsInit): void {
     this.#list.length = 0;
     if (typeof init === 'string') {
       const input = init.startsWith('?') ? init.slice(1) : init;
-      URLSearchParamsImpl.replaceList(
-        this,
-        parseFormUrlEncodedString(input),
-      );
+      this.replaceList(parseFormUrlEncodedString(input));
       return;
     }
 
@@ -434,7 +436,7 @@ export class URLSearchParamsImpl implements URLSearchParams {
   #update(): void {
     if (this.#urlObject === null) return;
     const serialized = serializeFormUrlEncoded(this.#list);
-    URLImpl.setQuery(this.#urlObject, serialized === '' ? null : serialized);
+    this.#urlObject.setQuery(serialized === '' ? null : serialized);
   }
 }
 
@@ -515,13 +517,4 @@ function cannotHaveUsernamePasswordPort(url: URLRecord): boolean {
 
 function hasOpaquePath(url: URLRecord): boolean {
   return typeof url.path === 'string';
-}
-
-function removeMatching(
-  list: FormTuple[],
-  matches: (tuple: FormTuple) => boolean,
-): void {
-  for (let index = list.length - 1; index >= 0; index--) {
-    if (matches(list[index]!)) list.splice(index, 1);
-  }
 }

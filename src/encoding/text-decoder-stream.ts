@@ -69,7 +69,7 @@ export class TextDecoderStreamImpl {
   }
 
   getAssociatedTransform(): TransformStreamImpl {
-    return GenericTransformStreamMixin.getAssociatedTransform(this.#generic);
+    return this.#generic.getAssociatedTransform();
   }
 }
 

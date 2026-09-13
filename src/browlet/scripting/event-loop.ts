@@ -1,5 +1,5 @@
 import type { JSMicrotaskQueue } from '../../js-engine/index';
-import { DocumentImpl } from '../dom/nodes/document';
+import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';
 
@@ -307,37 +307,39 @@ export class EventLoop {
     });
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static enqueueTask(eventLoop: EventLoop, task: Task): void {
-    eventLoop.#getTaskQueue(task.source).add(task);
-    eventLoop.#requestTurnIfNeeded();
-  }
-
-  static removeTask(eventLoop: EventLoop, task: Task): boolean {
-    return eventLoop.#getTaskQueue(task.source).delete(task);
-  }
-
-  static notifyTaskRunnabilityChanged(eventLoop: EventLoop): void {
-    eventLoop.#requestTurnIfNeeded();
-  }
-
-  static setLastRenderOpportunityTime(
-    eventLoop: EventLoop,
-    time: UnsafeMoment,
-  ): void {
-    eventLoop.#lastRenderOpportunityTime = time;
-  }
-
-  static getTaskQueue(
-    eventLoop: EventLoop,
+  queueTask(
     source: TaskSource,
-  ): ReadonlySet<Task> {
-    return eventLoop.#getTaskQueue(source);
+    document: DocumentImpl | null,
+    steps: () => void,
+    options: TaskCreationOptions = {},
+  ): Task {
+    // Keep HTML's otherwise implied destination and Document explicit.
+    const task = new Task(source, document, steps, options);
+    this.#getTaskQueue(source).add(task);
+    this.#requestTurnIfNeeded();
+    return task;
   }
 
-  static getTaskQueues(eventLoop: EventLoop): ReadonlySet<ReadonlySet<Task>> {
-    return eventLoop.#taskQueues;
+  removeTask(task: Task): boolean {
+    return this.#getTaskQueue(task.source).delete(task);
+  }
+
+  notifyTaskRunnabilityChanged(): void {
+    this.#requestTurnIfNeeded();
+  }
+
+  setLastRenderOpportunityTime(time: UnsafeMoment): void {
+    this.#lastRenderOpportunityTime = time;
+  }
+
+  getTaskQueue(source: TaskSource): ReadonlySet<Task> {
+    return this.#getTaskQueue(source);
+  }
+
+  getTaskQueues(): ReadonlySet<ReadonlySet<Task>> {
+    return this.#taskQueues;
   }
 
   // -- Private ----------------------------------------------------------
@@ -461,7 +463,7 @@ export class Task {
 
   get isRunnable(): boolean {
     return this.document === null ||
-      DocumentImpl.isFullyActive(this.document);
+      this.document.isFullyActive();
   }
 }
 
@@ -474,23 +476,6 @@ export type TaskSource = Readonly<{ name: string; }>;
 
 export function createTaskSource(name: string): TaskSource {
   return Object.freeze({ name });
-}
-
-export function queueTask(
-  source: TaskSource,
-  eventLoop: EventLoop,
-  document: DocumentImpl | null,
-  steps: () => void,
-  options: TaskCreationOptions = {},
-): Task {
-  /*
-   * Require the values which HTML permits specifications to imply. The spec
-   * warns that those ambient deductions are ambiguous; Browlet callers should
-   * normally enter through the global or element wrapper instead.
-   */
-  const task = new Task(source, document, steps, options);
-  EventLoop.enqueueTask(eventLoop, task);
-  return task;
 }
 
 export type TaskCreationOptions = {

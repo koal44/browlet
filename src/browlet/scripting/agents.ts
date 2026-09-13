@@ -41,14 +41,14 @@ export abstract class Agent {
     return this.#agentCluster;
   }
 
-  // -- Friends ----------------------------------------------------------
+  // -- Internal ---------------------------------------------------------
 
-  static associateWithCluster(agent: Agent, cluster: AgentCluster): void {
-    if (agent.#agentCluster !== null && agent.#agentCluster !== cluster) {
+  associateWithCluster(cluster: AgentCluster): void {
+    if (this.#agentCluster !== null && this.#agentCluster !== cluster) {
       throw new Error('An agent cannot move between agent clusters');
     }
 
-    agent.#agentCluster = cluster;
+    this.#agentCluster = cluster;
   }
 }
 
@@ -164,7 +164,7 @@ export class AgentCluster {
   }
 
   add(agent: Agent): void {
-    Agent.associateWithCluster(agent, this);
+    agent.associateWithCluster(this);
     this.agents.add(agent);
   }
 }
