@@ -35,6 +35,21 @@ That distinction matters. A dependency edge explains how an existing
 implementation obtains work it does not own. It must not manufacture another
 representation of the same platform object.
 
+Binding stamps a `PlatformRecord` onto an implementation instance through a
+private field, independently of its implementation class. That record selects
+the owning realm and retains the eventual platform object;
+implementation methods still receive their execution dependencies explicitly
+through `RuntimeContext`. Stamping does not inject Binding Context into
+implementation constructors or change their prototypes.
+During projection, Binding stamps the same record onto the platform object.
+Each identity carries its record directly, without a platform-object lookup
+map. Stamp lookup needs only the object. World APIs, receiver validation, and
+conversion boundaries enforce ownership when accepting an object.
+
+Infra's `Stamper` base supplies the constructor-return mechanism shared by
+Web IDL and JS Engine. Each concrete stamper owns its private fields and record
+types in its subsystem; Infra has no dependency on those records.
+
 ## The actors
 
 ### Implementation
@@ -85,12 +100,23 @@ Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
 Collection iterators follow this rule: JS Engine owns native allocation and
 the stock fallback; Web IDL supplies live iteration and per-step conversion.
+The stock fallback carries private state on each Map/Set iterator, so another
+realm's fallback method can recognize it without a realm-local state map.
+For synchronous pair iterables, the providing subsystem exposes its current
+entry tuples through `getEntryList()`; Web IDL owns the author iterator's index
+and result projection. The iterator carries its private state; borrowed methods
+recognize it across realms within the target's binding world.
 For asynchronous iterable declarations, the providing subsystem creates an
 internal iterator that owns its traversal state. Streams' `ReadableStreamIterator`
 owns the reader and cancellation policy. The declaration names the implementation
 factory and whether to expose `return()`. Web IDL adapts the internal iterator's
 methods and owns author identity, call ordering, and result projection; it has
-no dependency on Streams.
+no dependency on Streams. That binding state lives privately on each author
+iterator, retaining its owning registry to check binding-world membership.
+Internal iterator completions reach Binding without outgoing promise projection.
+Binding observes them in the method's realm, converts the item, and resolves the
+author's result Promise. Streams owns the explicit adoption of author thenable
+chunks in its read steps.
 Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
 Composition exposes the required operations through `runtime.buffers` and
@@ -193,6 +219,10 @@ one platform-object registry and can contain several realm registrations.
 Definitions and capability registrations can be shared across worlds, but a
 platform-object association belongs to exactly one world.
 
+The registry retains the single realm-to-binding index. Each Realm Binding
+owns its Binding Context, including runtime composition; the index receives
+the binding only after declaration setup succeeds.
+
 Browlet's composition root currently owns one main `BindingWorld` spanning the
 realms in its Node VM. It is not owned by an HTML Agent: the host can synchronously
 pass platform objects between Browlet realms associated with different agents,
@@ -244,6 +274,9 @@ different contexts in different worlds.
 Structured-data operations receive `BindingContext<Realm>` directly. They use
 `ctx.realm` for allocation and `ctx.realm.agent.agentCluster` for shared-memory
 identity; no separate structured-data environment duplicates that ownership.
+Serializable capabilities operate on implementation instances. Their attached
+binding records supply interface dispatch before or after platform projection;
+serialization itself does not require a source platform object.
 
 The exact TypeScript shape may evolve. The important property is its identity:
 one shared context describes one binding realm. Several Binding Contexts can
@@ -454,8 +487,11 @@ to its main binding world. Document creation reuses the dependencies declared
 for its Web IDL constructor; the root also prepares structured-clone steps
 through `integration/runtime.ts`. Environment-settings setup accepts those steps and
 constructs its global-scope mixin without receiving a realm binding. The
-Document retains its node factory, and creation still projects eagerly to
-initialize its realm-owned event factory.
+Document retains its node factory. The bound factory uses `context.construct()`
+to establish node ownership and still projects eagerly to initialize its
+realm-owned event factory. Internal fragment creation supplies its owning
+Document explicitly; only the public `DocumentFragment()` constructor injects
+the realm's associated Document.
 
 ## Composition map
 

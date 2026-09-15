@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { invokeCallbackFunction } from '../../src/web-idl/callback';
 import { isCallbackFunctionValue } from '../../src/web-idl/callback-value';
 import {

@@ -3,7 +3,7 @@ import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
 } from '../web-idl/index';
-import { TypeError } from '../js-engine/simple-exception';
+import { TypeError } from '../js-engine/exceptions';
 import {
   GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
   type WritableStreamImpl,

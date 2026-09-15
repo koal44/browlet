@@ -32,10 +32,13 @@ machinery or Web IDL feature is implemented.
   [the event-loop architecture](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts).
 - **Security checks:** The Web IDL call sites exist, but Browlet's hook is a
   no-op until HTML's cross-origin `WindowProxy` and `Location` behavior exists.
-- **Constructor realm fallback:** A non-object `newTarget.prototype` currently
-  stops with an explicit error. Completing that path requires ECMAScript's
-  `GetFunctionRealm` behavior and the corresponding target-realm binding from
-  the host. The expected-failure contract covers the cross-realm fallback.
+- **Constructor realm fallback:** A non-object `newTarget.prototype` selects
+  the interface prototype from the constructor's associated realm. Exact realm
+  lookup for bound functions and callable proxies depends on the add-on's
+  `getFunctionRealm` operation. Plain stock Node's fallback can select the wrong
+  realm after a function's prototype changes or consult a proxy's prototype trap.
+  [`constructor-realm.test.ts`](../../test/web-idl/constructor-realm.test.ts)
+  covers the ordinary fallback and marks cases requiring exact lookup by capability.
 - **DOMException error internals:** Constructing `DOMException` through the
   realm's native `Error` gives it the engine's error data, but V8 currently
   exposes `stack` as an own property rather than through the standardized
@@ -96,19 +99,17 @@ handled depend on the same inaccessible machinery.
 
 ## Collection iterators
 
-- **Native iterator internal slots:** JavaScript cannot run
-  `CreateIteratorFromClosure` with `%MapIteratorPrototype%` or
-  `%SetIteratorPrototype%`. Maplike and setlike iterators therefore use proxy
-  shells with the correct realm prototype, class string, inherited surface,
-  live ordering, conversions, and iterator results. Ordinary `iterator.next()`
-  and normal iterator-protocol consumers such as `for...of`, spread, and
-  `Array.from()` are conforming. The limitation is observable only when code
-  explicitly applies the realm's native iterator-prototype `next` function to
-  one of these shells, or when native host code performs the equivalent brand
-  check. No current Selectlet caller does so; the only normative references to
-  these intrinsics in the local web-platform specifications are Web IDL's
-  iterator-creation steps themselves. Replace the shell if the host eventually
-  provides iterator creation with a supplied closure.
+- **Native iterator internal slots:** `JSRealm.createCollectionIterator()`
+  uses the add-on's `createCollectionIterator` operation when available. Without
+  it, JavaScript cannot run `CreateIteratorFromClosure` with
+  `%MapIteratorPrototype%` or `%SetIteratorPrototype%`, so the engine supplies
+  proxy shells with the correct realm prototype, class string, inherited
+  surface, live ordering, conversions, and iterator results. Ordinary
+  `iterator.next()` and iterator-protocol consumers use that fallback. Applying
+  the realm's native iterator-prototype `next` function to a shell still fails
+  its native brand check. Capability-sensitive cases in
+  [`collection.test.ts`](../../test/web-idl/collection.test.ts) retain that
+  distinction.
 
 ## Platform integration
 

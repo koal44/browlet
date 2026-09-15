@@ -1,3 +1,4 @@
+import { getImplementationRecord } from './platform-object';
 import { isCallable, isConstructor } from '../js-engine/index';
 import type {
   CallbackFunctionValue, CallbackInterfaceRecord, CallbackValue,
@@ -8,8 +9,9 @@ import {
 import type {
   ArgumentDefinition, OperationMember, WebIDLType,
 } from './core/index';
-import type { CallbackExceptionBehavior } from './core/binding';
-import { isIDLPromise, type IDLPromise } from './promise-value';
+import type { CallbackExceptionBehavior } from './core/types';
+import { isIDLPromiseRecord, type IDLPromiseRecord } from './promise-record';
+import { getArgumentDefinition } from './overload';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
@@ -27,7 +29,7 @@ export function callUserObjectOperation(
   try {
     return runCallback(value, () => {
       let function_: unknown = value.object;
-      let receiver = projectCallbackReceiver(thisArgument, callbackContext);
+      let receiver = projectCallbackReceiver(thisArgument);
 
       if (!isCallable(function_)) {
         function_ = Reflect.get(value.object, operationName) as unknown;
@@ -80,7 +82,7 @@ export function invokeCallbackFunction(
     return runCallback(callable, () => {
       const result = Reflect.apply(
         function_,
-        projectCallbackReceiver(thisArgument, callbackContext),
+        projectCallbackReceiver(thisArgument),
         convertWebIDLArguments(
           argumentsList,
           definition.arguments,
@@ -178,10 +180,8 @@ export const missingArgument: unique symbol = Symbol(
 // Project helper: map an implementation receiver to its platform object before calling author code.
 function projectCallbackReceiver(
   value: unknown,
-  context: ConversionContext,
 ): unknown {
-  return context.platformObjects.getImplementationRecord(value)?.platformObject ??
-    value;
+  return getImplementationRecord(value)?.platformObject ?? value;
 }
 
 // Extracted preparation and cleanup from Web IDL §3.11 Callback interfaces
@@ -220,17 +220,6 @@ function getCallbackOperation(
   return operation;
 }
 
-// Project helper: find the declaration for a fixed or variadic callback argument.
-function getArgumentDefinition(
-  definitions: ArgumentDefinition[],
-  index: number,
-): ArgumentDefinition | undefined {
-  const definition = definitions[index];
-  if (definition) return definition;
-  const variadic = definitions.at(-1);
-  return variadic?.variadic ? variadic : undefined;
-}
-
 // Project validation of Web IDL §3.12 Invoking callback functions — invoke's exception-behavior requirements.
 function validateExceptionBehavior(
   returnType: WebIDLType,
@@ -263,7 +252,7 @@ function rejectPromiseReturn(
   returnType: WebIDLType,
   exception: unknown,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   const type = getPromiseReturnType(returnType, context);
   if (!type) throw exception;
   const rejected = Reflect.apply(
@@ -272,7 +261,7 @@ function rejectPromiseReturn(
     [exception],
   );
   const promise = convertToIDL(rejected, returnType, context);
-  if (!isIDLPromise(promise)) {
+  if (!isIDLPromiseRecord(promise)) {
     throw new Error('Promise callback did not produce an IDL promise');
   }
   return promise;

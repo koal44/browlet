@@ -7,8 +7,9 @@ import { urlIDLDefinitions } from '../url/api';
 import { originIDL } from '../url/origin-api';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  createBindingWorld, type BindingWorld, type GlobalObjectAllocation,
-  type BindingContext, type RealmRegistrationOptions,
+  BindingWorld, type GlobalObjectAllocation,
+  type BindingContext, type StampedImplInstance, type StampedPlatformObject,
+  type RealmRegistrationOptions,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import {
@@ -58,7 +59,7 @@ export function createWindowRealm(
   return browletBindings.createWindowRealm(agent, window, previousRealm);
 }
 
-export function createDocument(realm: Realm): DocumentImpl {
+export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
   return browletBindings.createDocument(realm);
 }
 
@@ -74,11 +75,11 @@ export function getRelevantRealm(value: object): Realm {
   return browletBindings.getRelevantRealm(value);
 }
 
-export function project(value: object): object {
+export function project(value: object): StampedPlatformObject {
   return browletBindings.project(value);
 }
 
-export function unwrap<Value extends object>(value: object): Value {
+export function unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
   return browletBindings.unwrap<Value>(value);
 }
 
@@ -98,7 +99,7 @@ class BrowletBindings {
   readonly #world: BindingWorld<Realm>;
 
   constructor() {
-    this.#world = createBindingWorld<Realm>(
+    this.#world = new BindingWorld<Realm>(
       browletDefinitions,
       {
         capabilities: browletCapabilities,
@@ -167,7 +168,7 @@ class BrowletBindings {
     return { realm };
   }
 
-  createDocument(realm: Realm): DocumentImpl {
+  createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
     const context = this.forRealm(realm);
     const document = context.construct(DocumentImpl);
     // Eager projection also installs EventTarget's realm-owned event factory.
@@ -188,7 +189,7 @@ class BrowletBindings {
     setWindowProxyWindow(
       windowProxy,
       window,
-      windowObject as Window,
+      windowObject as StampedPlatformObject<Window>,
     );
   }
 
@@ -201,16 +202,16 @@ class BrowletBindings {
     return realm;
   }
 
-  project(value: object): object {
+  project(value: object): StampedPlatformObject {
     const object = this.#world.project(value);
     if (!object) throw new Error('Implementation has not been projected');
     return object;
   }
 
-  unwrap<Value extends object>(value: object): Value {
-    const implementation = this.#world.unwrap(value);
-    if (!implementation) throw new Error('Value is not a platform object');
-    return implementation as Value;
+  unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
+    const implInst = this.#world.unwrap(value);
+    if (!implInst) throw new Error('Value is not a platform object');
+    return implInst as StampedImplInstance<Value>;
   }
 }
 
@@ -218,8 +219,8 @@ function projectWindow(
   context: BindingContext<Realm>,
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
-): Window {
-  const object = context.projectGlobalObject(window, 'Window', allocation) as Window;
+): StampedPlatformObject<Window> {
+  const object = context.projectGlobalObject(window, 'Window', allocation) as StampedPlatformObject<Window>;
   // Preserve the provisional CSSOM operation until Stylelet supplies its
   // Window partial and CSSStyleDeclaration projection (see WindowImpl).
   Object.defineProperty(object, 'getComputedStyle', {

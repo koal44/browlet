@@ -1,11 +1,65 @@
-import { describe, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
+import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scripting/tasks';
 
 describe('HTML Promise jobs', () => {
+  it.each(['fulfill', 'reject'] as const)('continues when Node delivers Promise settlement through an HTML task (%s)', async (settlement) => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.window);
+    const observations: string[] = [];
+    browlet.expose('thenable', {
+      then(resolve: (value: string) => void, reject: (reason: string) => void) {
+        observations.push('thenable');
+        queueGlobalTask(networkingTaskSource, realm.globalObject, () => {
+          observations.push('task');
+          if (settlement === 'fulfill') resolve('fulfilled');
+          else reject('rejected');
+        });
+        observations.push('thenable finished');
+      },
+    });
+    browlet.expose('observe', (value: string) => { observations.push(value); });
+
+    realm.evaluate('Promise.resolve(thenable).then(value => observe(value), reason => observe(reason))',
+      'host-settlement-task.js');
+
+    await expect.poll(() => observations).toEqual([
+      'thenable', 'thenable finished', 'task',
+      settlement === 'fulfill' ? 'fulfilled' : 'rejected',
+    ]);
+  });
+
+  it.each(['fulfill', 'reject'] as const)('resumes an idle Window after a Node thenable settles its Promise (%s)', async (settlement) => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getRelevantRealm(browlet.window);
+    const observations: string[] = [];
+    browlet.expose('thenable', {
+      then(resolve: (value: string) => void, reject: (reason: string) => void) {
+        observations.push('thenable');
+        if (settlement === 'fulfill') resolve('fulfilled');
+        else reject('rejected');
+        observations.push('thenable finished');
+      },
+    });
+    browlet.expose('observe', (value: string) => { observations.push(value); });
+
+    try {
+      realm.evaluate('Promise.resolve(thenable).then(value => observe(value), reason => observe(reason))',
+        'host-thenable.js');
+
+      await expect.poll(() => observations).toEqual([
+        'thenable', 'thenable finished', settlement === 'fulfill' ? 'fulfilled' : 'rejected',
+      ]);
+    } finally {
+      // Drain any stranded job after the assertion, so a failure cannot leak work.
+      realm.agent.eventLoop.performMicrotaskCheckpoint();
+    }
+  });
+
   itPassesWith('hostHooks')('runs thenables and reactions as separate HTML microtasks with script cleanup', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);

@@ -1,5 +1,5 @@
 import type { JSMethod, JSRealm } from './realm';
-import { SyntaxError, TypeError } from './simple-exception';
+import { SyntaxError, TypeError } from './exceptions';
 
 /** Selected ECMAScript abstract operations shared by higher specifications. */
 

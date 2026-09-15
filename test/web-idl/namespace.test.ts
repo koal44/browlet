@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL namespace objects', () => {
@@ -58,13 +58,13 @@ describe('Web IDL namespace objects', () => {
     const implementations = new ImplementationRegistry();
     const receivers: Array<object | null> = [];
     implementations.setAttributeSteps(version, {
-      get() {
-        receivers.push(this);
+      get(receiver) {
+        receivers.push(receiver);
         return '1.0';
       },
     });
-    implementations.setOperationSteps(echo, function(value) {
-      receivers.push(this);
+    implementations.setOperationSteps(echo, function(receiver, value) {
+      receivers.push(receiver);
       return value;
     });
     const realm = new Realm();
@@ -92,11 +92,11 @@ describe('Web IDL namespace objects', () => {
     expect(Reflect.get(tools, 'READY')).toBe(7);
     expect(Reflect.has(tools, 'hidden')).toBe(false);
     expect(Reflect.has(realm.global, 'Nested')).toBe(false);
-    expect(Reflect.get(binding.getInterfacePrototypeObject('Nested'), 'constructor')).toBe(Nested);
+    expect(Reflect.get(binding.getInterfacePrototypeObject(binding.resolveInterface('Nested')), 'constructor')).toBe(Nested);
     expect(Object.prototype.toString.call(
       requireObject(Reflect.get(Nested, 'prototype')),
     )).toBe('[object Tools.Nested]');
-    expect(binding.getNamespaceObject('Tools')).toBe(tools);
+    expect(binding.getNamespaceObject(binding.definitions.getNamespace('Tools')!)).toBe(tools);
 
     expect(Reflect.getOwnPropertyDescriptor(tools, 'version')).toMatchObject({
       configurable: true,

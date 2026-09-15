@@ -112,7 +112,7 @@ export function includesUndefined(
 export function getUnannotatedType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
-): WebIDLType {
+): Exclude<WebIDLType, { kind: 'annotated'; }> {
   let innerType = resolveTypedef(type, definitions);
   while (innerType.kind === 'annotated') {
     innerType = resolveTypedef(innerType.type, definitions);

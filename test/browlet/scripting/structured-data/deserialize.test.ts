@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 
 import {
-  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
+  BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
@@ -411,18 +411,18 @@ describe('HTML structured deserialization', () => {
         );
       },
     })];
-    const bindings = createBindingWorld<Realm>([containerIDL], { capabilities });
+    const bindings = new BindingWorld<Realm>([containerIDL], { capabilities });
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
     const source = bindings.register(sourceRealm);
     const target = bindings.register(targetRealm);
     const original = source.createPlatformObject(containerIDL);
-    (original.implementation as ContainerImpl).child = original.platformObject;
+    source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);
     const resolved = target.getObjectRecord(clone);
     expect(resolved?.primaryInterface.definition).toBe(containerIDL);
-    expect((resolved?.implementation as ContainerImpl).child).toBe(clone);
+    expect(target.unwrap(clone, ContainerImpl)?.child).toBe(clone);
   });
 
   it('rejects unavailable platform interfaces and reuses caller memory', () => {
@@ -449,7 +449,7 @@ function createContexts(options: {
   target: BindingContext<Realm>;
   targetRealm: Realm;
 } {
-  const bindings = createBindingWorld<Realm>([], {
+  const bindings = new BindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   });
   const sourceRealm = new Realm({ crossOriginIsolated: true });

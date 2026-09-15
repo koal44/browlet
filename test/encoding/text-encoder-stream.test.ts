@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
-import { TypeError as InternalTypeError } from '../../src/js-engine/simple-exception';
+import { TypeError as InternalTypeError } from '../../src/js-engine/exceptions';
 import { getBufferSourceCopy } from '../../src/js-engine/buffers';
 
 describe('TextEncoderStream byte production', () => {

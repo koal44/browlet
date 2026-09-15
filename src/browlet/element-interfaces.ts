@@ -50,22 +50,22 @@ function compileElementInterfaces(
 ): ElementInterfaceRegistry {
   const namespaces = new Map<string, Map<string, ElementInterface>>();
 
-  for (const interface_ of interfaces) {
-    let localNames = namespaces.get(interface_.namespaceURI);
+  for (const elementInterface of interfaces) {
+    let localNames = namespaces.get(elementInterface.namespaceURI);
     if (!localNames) {
       localNames = new Map();
-      namespaces.set(interface_.namespaceURI, localNames);
+      namespaces.set(elementInterface.namespaceURI, localNames);
     }
 
-    for (const localName of interface_.localNames) {
+    for (const localName of elementInterface.localNames) {
       const existing = localNames.get(localName);
       if (existing) {
         throw new TypeError(
-          `Element ${interface_.namespaceURI} ${localName} is declared by ` +
-          `${existing.definition.name} and ${interface_.definition.name}`,
+          `Element ${elementInterface.namespaceURI} ${localName} is declared by ` +
+          `${existing.definition.name} and ${elementInterface.definition.name}`,
         );
       }
-      localNames.set(localName, interface_);
+      localNames.set(localName, elementInterface);
     }
   }
 

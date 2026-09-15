@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { extractHighWaterMark } from '../../../src/streams/index';
-import { RangeError } from '../../../src/js-engine/simple-exception';
+import { RangeError } from '../../../src/js-engine/exceptions';
 
 describe('Streams queuing strategies', () => {
   it('extracts high-water marks and requests internal RangeErrors', () => {

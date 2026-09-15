@@ -1,6 +1,6 @@
-import { annotated, arg, idlType, reference, union, xattr } from './core/definition';
-import { defineCallbackFunction } from './core/definitions/callback-function';
-import { defineTypedef } from './core/definitions/typedef';
+import { annotated, arg, reference, union, xattr } from './core/helpers';
+import { idlType } from './core/types';
+import { defineCallbackFunction, defineTypedef } from './core/declarations';
 import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';

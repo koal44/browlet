@@ -1,7 +1,7 @@
 import { isomorphicDecode } from '../js-engine/byte-string';
 import type { PromiseValue } from '../js-engine/promises';
 import type { RuntimeContext } from '../js-engine/runtime-context';
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
 

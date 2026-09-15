@@ -3,7 +3,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, packageData,
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
-import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception-core';
+import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
 import type { PromiseValue } from '../../src/js-engine/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
 

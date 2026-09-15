@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
+  BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
@@ -207,36 +207,45 @@ describe('HTML structured transfer', () => {
         (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
       },
     })];
-    const bindings = createBindingWorld<Realm>([transferBoxIDL], { capabilities });
+    const bindings = new BindingWorld<Realm>([transferBoxIDL], { capabilities });
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
     const source = bindings.register(sourceRealm);
     const target = bindings.register(targetRealm);
     const original = source.createPlatformObject(transferBoxIDL);
-    (original.implementation as TransferBoxImpl).value = 'transferred';
+    source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
       original.platformObject,
       [original.platformObject, original.platformObject],
       source,
     ));
-    expect(isTransferableDetached(original.implementation)).toBe(false);
+    expect(isTransferableDetached(original.implInst)).toBe(false);
+
+    expectDataCloneError(() => structuredSerializeWithTransfer(
+      original.platformObject,
+      [original.platformObject, original.implInst],
+      source,
+    ));
+    expect(isTransferableDetached(original.implInst)).toBe(false);
 
     const serialized = structuredSerializeWithTransfer(
-      original.platformObject,
+      { first: original.platformObject, second: original.implInst },
       [original.platformObject],
       source,
     );
-    expect(isTransferableDetached(original.implementation)).toBe(true);
+    expect(isTransferableDetached(original.implInst)).toBe(true);
 
     const result = structuredDeserializeWithTransfer(serialized, target);
     const transferred = result.transferredValues[0];
     const resolved = target.getObjectRecord(transferred);
-    expect(result.deserialized).toBe(transferred);
+    const clone = result.deserialized as { first: object; second: object; };
+    expect(clone.first).toBe(transferred);
+    expect(clone.second).toBe(transferred);
     expect(resolved?.primaryInterface.definition).toBe(transferBoxIDL);
-    expect((resolved?.implementation as TransferBoxImpl).value)
+    expect(target.unwrap(transferred, TransferBoxImpl)?.value)
       .toBe('transferred');
-    expect(isTransferableDetached(resolved!.implementation)).toBe(false);
+    expect(isTransferableDetached(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = new Realm({ globalNames: ['Worker'] });
     const hiddenTarget = bindings.register(hiddenRealm);
@@ -259,7 +268,7 @@ function createContexts(): {
   target: BindingContext<Realm>;
   targetRealm: Realm;
 } {
-  const bindings = createBindingWorld<Realm>([]);
+  const bindings = new BindingWorld<Realm>([]);
   const sourceRealm = new Realm();
   const targetRealm = new Realm();
   const source = bindings.register(sourceRealm);

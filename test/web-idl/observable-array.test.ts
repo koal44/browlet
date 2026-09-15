@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, observableArray, reference,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
+import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL observable arrays', () => {
   it('creates one realm Array per platform object and attribute', () => {
@@ -30,7 +30,7 @@ describe('Web IDL observable arrays', () => {
       fixture.attribute,
     )).toEqual([1, 2]);
 
-    const other = fixture.binding.createPlatformObject('NumberArrays');
+    const other = fixture.binding.createPlatformObject(fixture.binding.resolveInterface('NumberArrays'));
     expect(getValues(other)).not.toBe(first);
   });
 
@@ -61,12 +61,9 @@ describe('Web IDL observable arrays', () => {
       'set 0 2',
       'delete 0 2',
     ]);
-    expect(receivers).toEqual([
-      fixture.object,
-      fixture.object,
-      fixture.object,
-      fixture.object,
-    ]);
+    const implInst = getPlatformRecord(fixture.object)!.implInst;
+    expect(receivers).toHaveLength(4);
+    for (const receiver of receivers) expect(receiver).toBe(implInst);
   });
 
   it('preserves deletions completed before a later delete step throws', () => {
@@ -204,6 +201,8 @@ describe('Web IDL observable arrays', () => {
   });
 
   it('converts interface elements and reflects specification list changes', () => {
+    class EmployeeImpl {}
+    class BuildingImpl {}
     const employee = defineInterface({
       name: 'Employee',
       exposed: '*',
@@ -220,22 +219,28 @@ describe('Web IDL observable arrays', () => {
       members: [workers],
     });
     const realm = new Realm();
+    const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(employee, () => new EmployeeImpl());
+    implementations.setImplementationCreationSteps(building, () => new BuildingImpl());
     const binding = new RealmBinding(
       assembleDefinitions([employee, building]),
       realm,
       new PlatformObjectRegistry(),
+      implementations,
     );
-    const object = binding.createPlatformObject('Building');
-    const employeeObject = binding.createPlatformObject('Employee');
+    const object = binding.createPlatformObject(binding.resolveInterface('Building'));
+    const employeeObject = binding.createPlatformObject(binding.resolveInterface('Employee'));
+    const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
     const values = getArray(object, 'workers');
     const backingList = binding.getObservableArrayBackingList(object, workers);
 
     values.push(employeeObject);
-    expect(backingList).toEqual([employeeObject]);
+    expect(backingList).toHaveLength(1);
+    expect(backingList[0]).toBe(employeeImpl);
     expect(values[0]).toBe(employeeObject);
     expect(() => values.push({})).toThrow(realm.intrinsics.typeError);
 
-    backingList.push(employeeObject);
+    backingList.push(employeeImpl);
     expect(values).toEqual([employeeObject, employeeObject]);
   });
 });
@@ -243,19 +248,21 @@ describe('Web IDL observable arrays', () => {
 function createNumberArrayBinding(
   implementations = new ImplementationRegistry(),
 ): NumberArrayFixture {
+  class NumberArraysImpl {}
   const attribute = {
     kind: 'attribute',
     name: 'values',
     type: observableArray(idlType.long),
   } satisfies AttributeMember;
-  const interface_ = defineInterface({
+  const definition = defineInterface({
     name: 'NumberArrays',
     exposed: '*',
     members: [attribute],
   });
+  implementations.setImplementationCreationSteps(definition, () => new NumberArraysImpl());
   const realm = new Realm();
   const binding = new RealmBinding(
-    assembleDefinitions([interface_]),
+    assembleDefinitions([definition]),
     realm,
     new PlatformObjectRegistry(),
     implementations,
@@ -263,7 +270,7 @@ function createNumberArrayBinding(
   return {
     attribute,
     binding,
-    object: binding.createPlatformObject('NumberArrays'),
+    object: binding.createPlatformObject(binding.resolveInterface('NumberArrays')),
     realm,
   };
 }

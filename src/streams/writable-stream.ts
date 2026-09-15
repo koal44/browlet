@@ -3,11 +3,11 @@ import type {
 } from '../js-engine/runtime-context';
 import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
 import {
-  arg, atArg, onError, callbackDictionary, ctor, defineCallbackFunction, defineDictionary,
+  arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, nullable, op, promise,
   roAttr, reference, xattr,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../js-engine/simple-exception';
+import { RangeError, TypeError } from '../js-engine/exceptions';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
@@ -428,7 +428,7 @@ export const writableStreamIDL = defineInterface({
     ctor([
       arg('underlyingSink', idlType.object, {
         optional: true,
-        ...callbackDictionary('UnderlyingSink'),
+        ...cbDict('UnderlyingSink'),
       }),
       arg('strategy', reference('QueuingStrategy'), {
         default: emptyDictionary,

@@ -4,7 +4,7 @@ import {
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../js-engine/simple-exception';
+import { RangeError, TypeError } from '../js-engine/exceptions';
 import { type Encoding, getDecoder, getEncoding } from './encodings';
 import { endOfQueue, IOQueue, type Decoder } from './io-queue';
 

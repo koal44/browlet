@@ -1,9 +1,7 @@
 import type {
-  ArgumentDefinition, ConstantValue, DefaultValue, Definition, Exposure, ExtendedAttribute,
-  WebIDLType,
-} from './definition';
-import type { AsyncIterableMember, InterfaceMember } from './definitions/interface';
-import type { DictionaryMember } from './definitions/dictionary';
+  ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, WebIDLType,
+} from './types';
+import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
 export function serializeDefinitions<Realm>(

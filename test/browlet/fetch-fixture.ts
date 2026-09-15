@@ -15,7 +15,7 @@ import { AgentCluster } from '../../src/browlet/scripting/agents';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { queueFetchTask } from '../../src/fetch/tasks';
-import { createBindingWorld, type BindingContext } from '../../src/web-idl/index';
+import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/control-fixture';
 import { createRuntime } from '../js-engine/runtime-fixture';
 
@@ -46,7 +46,7 @@ export function createFetchWindow() {
 export function createIsolatedFetchRealm() {
   const realm = new Realm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = createBindingWorld<Realm>([], {
+  const registration = new BindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   }).register(realm, {
     createRuntime: (context) => ({

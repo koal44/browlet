@@ -1,13 +1,14 @@
+import type { PromiseValue } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type {
   AsyncIterableMember, ConstructorMember, InterfaceDefinition, IterableMember,
-} from './core/definitions/interface';
+} from './core/declarations';
 import type {
   AttributeMember, NamedArgumentsExtendedAttribute, OperationMember, StringifierMember,
-} from './core/definition';
-import type { ImplementationClass } from './core/binding';
+  ImplementationClass,
+} from './core/types';
 import type { ValuePair } from './iterable';
-import type { IDLPromise } from './promise-value';
+import type { StampedImplInstance, PlatformRecord } from './platform-object';
 
 export class ImplementationRegistry {
   #attributes = new WeakMap<
@@ -66,9 +67,9 @@ export class ImplementationRegistry {
   setAttributeSteps(
     attribute: AttributeMember,
     steps: AttributeSteps,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): void {
-    setInterfaceScopedSteps(this.#attributes, attribute, steps, interface_);
+    setInterfaceScopedSteps(this.#attributes, attribute, steps, primaryInterface);
   }
 
   // Project helper: register an implementation iterator adapter.
@@ -98,35 +99,35 @@ export class ImplementationRegistry {
   // Project helper: index the implementation class and interface in both directions.
   setInterfaceForImplementation(
     implementation: ImplementationClass<object>,
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
   ): void {
-    this.#interfaces.set(implementation, interface_);
-    this.#interfaceImplementations.set(interface_.definition, implementation);
+    this.#interfaces.set(implementation, primaryInterface);
+    this.#interfaceImplementations.set(primaryInterface.definition, implementation);
   }
 
   // Project helper: register a replacement interface-constructor callback.
   setOverriddenConstructorSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
     steps: OverriddenConstructorSteps,
   ): void {
-    this.#overriddenConstructors.set(interface_, steps);
+    this.#overriddenConstructors.set(definition, steps);
   }
 
   // Project helper: register stringification behavior, optionally for a particular interface.
   setStringificationBehavior(
     stringifier: StringifierMember,
     behavior: StringificationBehavior,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): void {
     setInterfaceScopedSteps(
       this.#stringifiers,
       stringifier,
       behavior,
-      interface_,
+      primaryInterface,
     );
   }
 
-  // Project helper: register supported-index and indexed-mutation callbacks.
+  // Project helper: register supported-index and indexed-mutation callbacks before creating instances.
   setIndexedPropertySteps(
     getter: OperationMember,
     steps: IndexedPropertySteps,
@@ -134,7 +135,7 @@ export class ImplementationRegistry {
     this.#indexedProperties.set(getter, steps);
   }
 
-  // Project helper: register supported-name and named-mutation callbacks.
+  // Project helper: register supported-name and named-mutation callbacks before creating instances.
   setNamedPropertySteps(
     getter: OperationMember,
     steps: NamedPropertySteps,
@@ -146,33 +147,33 @@ export class ImplementationRegistry {
   setOperationSteps(
     operation: OperationMember,
     steps: OperationSteps,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): void {
-    setInterfaceScopedSteps(this.#operations, operation, steps, interface_);
+    setInterfaceScopedSteps(this.#operations, operation, steps, primaryInterface);
   }
 
   // Project helper: register implementation creation for internal platform-object allocation.
   setImplementationCreationSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
     steps: ImplementationCreationSteps,
   ): void {
-    this.#implementationCreators.set(interface_, steps);
+    this.#implementationCreators.set(definition, steps);
   }
 
   // Project helper: register initialization after implementation creation.
   setImplementationInitializationSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
     steps: ImplementationInitializationSteps,
   ): void {
-    this.#implementationInitializers.set(interface_, steps);
+    this.#implementationInitializers.set(definition, steps);
   }
 
   // Project helper: register a custom platform-object allocator.
   setPlatformObjectAllocationSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
     steps: PlatformObjectAllocationSteps,
   ): void {
-    this.#platformObjectAllocators.set(interface_, steps);
+    this.#platformObjectAllocators.set(definition, steps);
   }
 
   // Project helper: register observable-array mutation callbacks.
@@ -183,7 +184,7 @@ export class ImplementationRegistry {
     this.#observableArrays.set(attribute, steps);
   }
 
-  // Project helper: register a pair-iterable entries callback.
+  // Project helper: register access to a pair iterable's current entry list.
   setValuePairsSteps(
     iterable: IterableMember,
     steps: ValuePairsSteps,
@@ -194,9 +195,9 @@ export class ImplementationRegistry {
   // Project helper: select registered attribute accessors by interface ancestry.
   getAttributeSteps(
     attribute: AttributeMember,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): AttributeSteps | undefined {
-    return getInterfaceScopedSteps(this.#attributes, attribute, interface_);
+    return getInterfaceScopedSteps(this.#attributes, attribute, primaryInterface);
   }
 
   // Project helper: retrieve the registered implementation iterator adapter.
@@ -222,15 +223,15 @@ export class ImplementationRegistry {
 
   // Project helper: look up the implementation class registered for an interface.
   getImplementationForInterface(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
   ): ImplementationClass<object> | undefined {
-    return this.#interfaceImplementations.get(interface_);
+    return this.#interfaceImplementations.get(definition);
   }
 
-  // Project helper: identify an implementation class through its prototype constructors.
-  getImplementationForObject(
+  // Project helper: identify the registered interface through an implementation's prototype constructors.
+  getInterfaceForObject(
     value: object,
-  ): RegisteredImplementation | undefined {
+  ): AssembledInterfaceDefinition | undefined {
     for (
       let prototype = Reflect.getPrototypeOf(value);
       prototype;
@@ -243,27 +244,27 @@ export class ImplementationRegistry {
       if (typeof candidate !== 'function') continue;
 
       const implementation = candidate as ImplementationClass<object>;
-      const interface_ = this.#interfaces.get(implementation);
-      if (interface_) return { implementation, interface_ };
+      const primaryInterface = this.#interfaces.get(implementation);
+      if (primaryInterface) return primaryInterface;
     }
   }
 
   // Project helper: retrieve a registered interface-constructor override.
   getOverriddenConstructorSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
   ): OverriddenConstructorSteps | undefined {
-    return this.#overriddenConstructors.get(interface_);
+    return this.#overriddenConstructors.get(definition);
   }
 
   // Project helper: select registered stringification behavior by interface ancestry.
   getStringificationBehavior(
     stringifier: StringifierMember,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): StringificationBehavior | undefined {
     return getInterfaceScopedSteps(
       this.#stringifiers,
       stringifier,
-      interface_,
+      primaryInterface,
     );
   }
 
@@ -284,31 +285,31 @@ export class ImplementationRegistry {
   // Project helper: select registered operation behavior by interface ancestry.
   getOperationSteps(
     operation: OperationMember,
-    interface_?: AssembledInterfaceDefinition,
+    primaryInterface?: AssembledInterfaceDefinition,
   ): OperationSteps | undefined {
-    return getInterfaceScopedSteps(this.#operations, operation, interface_);
+    return getInterfaceScopedSteps(this.#operations, operation, primaryInterface);
   }
 
   // Project helper: retrieve registered internal implementation creation steps.
   getImplementationCreationSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
   ): ImplementationCreationSteps | undefined {
-    return this.#implementationCreators.get(interface_);
+    return this.#implementationCreators.get(definition);
   }
 
   // Project helper: retrieve registered implementation initialization steps.
   getImplementationInitializationSteps(
-    interface_: InterfaceDefinition,
+    definition: InterfaceDefinition,
   ): ImplementationInitializationSteps | undefined {
-    return this.#implementationInitializers.get(interface_);
+    return this.#implementationInitializers.get(definition);
   }
 
   // Project helper: select the first registered allocator in the interface ancestry.
   getPlatformObjectAllocationSteps(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
   ): PlatformObjectAllocationSteps | undefined {
     for (
-      let current: AssembledInterfaceDefinition | undefined = interface_;
+      let current: AssembledInterfaceDefinition | undefined = primaryInterface;
       current;
       current = current.parent
     ) {
@@ -324,7 +325,7 @@ export class ImplementationRegistry {
     return this.#observableArrays.get(attribute);
   }
 
-  // Project helper: retrieve the registered pair-iterable entries callback.
+  // Project helper: retrieve access to a pair iterable's current entry list.
   getValuePairsSteps(iterable: IterableMember): ValuePairsSteps | undefined {
     return this.#valuePairs.get(iterable);
   }
@@ -340,14 +341,14 @@ function setInterfaceScopedSteps<K extends object, T>(
   registry: WeakMap<K, InterfaceScopedSteps<T>>,
   key: K,
   steps: T,
-  interface_: AssembledInterfaceDefinition | undefined,
+  primaryInterface: AssembledInterfaceDefinition | undefined,
 ): void {
   let scoped = registry.get(key);
   if (!scoped) {
     scoped = { interfaces: new WeakMap() };
     registry.set(key, scoped);
   }
-  if (interface_) scoped.interfaces.set(interface_, steps);
+  if (primaryInterface) scoped.interfaces.set(primaryInterface, steps);
   else scoped.default = steps;
 }
 
@@ -355,12 +356,12 @@ function setInterfaceScopedSteps<K extends object, T>(
 function getInterfaceScopedSteps<K extends object, T>(
   registry: WeakMap<K, InterfaceScopedSteps<T>>,
   key: K,
-  interface_: AssembledInterfaceDefinition | undefined,
+  primaryInterface: AssembledInterfaceDefinition | undefined,
 ): T | undefined {
   const scoped = registry.get(key);
   if (!scoped) return;
   for (
-    let current = interface_;
+    let current = primaryInterface;
     current;
     current = current.parent
   ) {
@@ -370,20 +371,16 @@ function getInterfaceScopedSteps<K extends object, T>(
   return scoped.default;
 }
 
-export type RegisteredImplementation = {
-  readonly implementation: ImplementationClass<object>;
-  readonly interface_: AssembledInterfaceDefinition;
-};
-
+/** Member adapters receive the instance's binding record, or null for static/namespace members. */
 export type AttributeSteps = {
-  get(this: object | null): unknown;
-  set?(this: object | null, value: unknown): void;
+  get(receiver: PlatformRecord | null): unknown;
+  set?(receiver: PlatformRecord | null, value: unknown): void;
 };
 
 export type AsyncIteratorSteps = {
   create(target: object, argumentsList: unknown[]): object;
-  next(iterator: object): IDLPromise;
-  return?(iterator: object, value: unknown): IDLPromise;
+  next(iterator: object): Promise<unknown> | PromiseValue<unknown>;
+  return?(iterator: object, value: unknown): Promise<unknown> | PromiseValue<unknown>;
 };
 
 export type ConstructorSteps = (
@@ -406,7 +403,7 @@ export type ConstructorBehavior =
   };
 
 export type StringificationBehavior = (
-  this: object,
+  this: StampedImplInstance,
 ) => unknown;
 
 export type IndexedPropertySteps =
@@ -430,8 +427,9 @@ export type NamedPropertySteps = {
   setNew?(this: object, name: string, value: unknown): void;
 };
 
+/** Member adapters receive the recognized record before the converted arguments. */
 export type OperationSteps = (
-  this: object | null,
+  receiver: PlatformRecord | null,
   ...values: unknown[]
 ) => unknown;
 

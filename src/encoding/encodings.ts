@@ -33,7 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import { asciiLower } from '../infra/ascii';
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 import type { PromiseValue } from '../js-engine/promises';
 import type { RuntimeContext } from '../js-engine/runtime-context';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';

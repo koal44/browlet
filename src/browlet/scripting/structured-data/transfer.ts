@@ -2,7 +2,10 @@ import {
   getArrayBufferMaxByteLength, getBufferSourceByteLength, getBufferTypeName,
   isBufferSourceDetached, isObject,
 } from '../../../js-engine/index';
-import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import {
+  throwDOMException,
+  type BindingContext, type StampedImplInstance,
+} from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
@@ -28,8 +31,9 @@ export function structuredSerializeWithTransfer(
 
   for (const valueToTransfer of transferList) {
     const prepared = prepareTransfer(valueToTransfer, ctx);
-    if (memory.has(valueToTransfer)) return throwDOMException('DataCloneError');
-    memory.set(valueToTransfer, prepared.placeholder);
+    const identity = prepared.kind === 'platform-object' ? prepared.implInst : prepared.value;
+    if (memory.has(identity)) return throwDOMException('DataCloneError');
+    memory.set(identity, prepared.placeholder);
     preparedTransfers.push(prepared);
   }
 
@@ -72,7 +76,7 @@ export function structuredDeserializeWithTransfer(
   };
 }
 
-// BINDING_INTEGRATION: resolve the source platform object and its transferable capability.
+// BINDING_INTEGRATION: resolve the source instance and its transferable capability.
 function prepareTransfer(
   value: unknown,
   ctx: BindingContext<Realm>,
@@ -83,22 +87,26 @@ function prepareTransfer(
     type: 'transfer-placeholder',
   };
   if (bufferType === 'ArrayBuffer') {
-    return { kind: 'ArrayBuffer', placeholder, value: value as ArrayBuffer };
+    return {
+      kind: 'ArrayBuffer',
+      placeholder,
+      value: value as ArrayBuffer,
+    };
   }
   if (bufferType === 'SharedArrayBuffer') return throwDOMException('DataCloneError');
   if (bufferType !== undefined) return throwDOMException('DataCloneError');
 
-  const platformObject = ctx.getObjectRecord(value);
-  if (!platformObject) return throwDOMException('DataCloneError');
+  const record = ctx.getObjectRecord(value);
+  if (!record) return throwDOMException('DataCloneError');
   const steps = ctx.getCapability(
-    platformObject.primaryInterface.definition,
+    record.primaryInterface.definition,
     transferable,
   );
   if (!steps) return throwDOMException('DataCloneError');
   return {
-    implementation: platformObject.implementation,
-    interfaceName: platformObject.primaryInterface.definition.name,
     kind: 'platform-object',
+    implInst: record.implInst,
+    interfaceName: record.primaryInterface.definition.name,
     placeholder,
     steps,
   };
@@ -123,12 +131,12 @@ function performTransfer(
     };
   }
 
-  if (isTransferableDetached(prepared.implementation)) {
+  if (isTransferableDetached(prepared.implInst)) {
     return throwDOMException('DataCloneError');
   }
   const fields = createStructuredDataRecord();
-  prepared.steps.transferSteps(prepared.implementation, fields);
-  markTransferableDetached(prepared.implementation);
+  prepared.steps.transferSteps(prepared.implInst, fields);
+  markTransferableDetached(prepared.implInst);
   return {
     type: 'platform-object',
     placeholder: prepared.placeholder,
@@ -143,27 +151,27 @@ function receiveTransfer(
   ctx: BindingContext<Realm>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
-    const interface_ = ctx.getInterface(
+    const definition = ctx.getInterface(
       dataHolder.interfaceName,
     );
-    if (!interface_ || !ctx.isInterfaceExposed(interface_)) {
+    if (!definition || !ctx.isInterfaceExposed(definition)) {
       return throwDOMException('DataCloneError');
     }
-    const platformObject = ctx.createPlatformObject(interface_);
+    const platformRecord = ctx.createPlatformObject(definition);
     const steps = ctx.getCapability(
-      platformObject.primaryInterface.definition,
+      platformRecord.primaryInterface.definition,
       transferable,
     );
     if (!steps) {
       throw new Error(
-        `${platformObject.primaryInterface.definition.name} has no Transferable capability`,
+        `${platformRecord.primaryInterface.definition.name} has no Transferable capability`,
       );
     }
     steps.transferReceivingSteps(
       dataHolder.fields,
-      platformObject.implementation,
+      platformRecord.implInst,
     );
-    return platformObject.platformObject;
+    return platformRecord.platformObject;
   }
 
   const value = ctx.realm.transferArrayBuffer(dataHolder.buffer);
@@ -185,9 +193,9 @@ type PreparedArrayBufferTransfer = {
 };
 
 type PreparedPlatformTransfer = {
-  implementation: object;
-  interfaceName: string;
   kind: 'platform-object';
+  implInst: StampedImplInstance;
+  interfaceName: string;
   placeholder: TransferPlaceholderSerializedRecord;
   steps: TransferableSteps;
 };

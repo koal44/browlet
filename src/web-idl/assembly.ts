@@ -1,18 +1,9 @@
-import type { CallbackInterfaceDefinition } from './core/definitions/callback-interface';
-import type { Definition } from './core/definition';
 import type {
-  DictionaryDefinition, DictionaryMember, PartialDictionaryDefinition,
-} from './core/definitions/dictionary';
-import type { IncludesDefinition } from './core/definitions/includes';
-import type {
-  InterfaceDefinition, InterfaceMember, PartialInterfaceDefinition,
-} from './core/definitions/interface';
-import type {
-  InterfaceMixinDefinition, MixinMember, PartialInterfaceMixinDefinition,
-} from './core/definitions/interface-mixin';
-import type {
-  NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
-} from './core/definitions/namespace';
+  CallbackInterfaceDefinition, Definition, DictionaryDefinition, DictionaryMember,
+  PartialDictionaryDefinition, IncludesDefinition, InterfaceDefinition, InterfaceMember,
+  PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember,
+  PartialInterfaceMixinDefinition, NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
+} from './core/declarations';
 
 // Project helper: build our indexed representation of IDL definitions.
 export function assembleDefinitions(
@@ -68,56 +59,56 @@ export class DefinitionAssembly {
     const interfaces: AssembledInterfaceDefinition[] = [];
     for (const definition of this.#definitions.values()) {
       if (definition.kind !== 'interface') continue;
-      const interface_ = this.getInterface(definition.name);
-      if (interface_) interfaces.push(interface_);
+      const primaryInterface = this.getInterface(definition.name);
+      if (primaryInterface) interfaces.push(primaryInterface);
     }
     return interfaces;
   }
 
   // Project helper: assemble inheritance, partials, and included mixins.
   // Web IDL §2.2 Interfaces; §2.3 Interface mixins.
-  getInterface(name: string): AssembledInterfaceDefinition | undefined {
-    const existing = this.#interfaces.get(name);
+  getInterface(interfaceName: string): AssembledInterfaceDefinition | undefined {
+    const existing = this.#interfaces.get(interfaceName);
     if (existing) return existing;
 
-    const definition = this.#definitions.get(name);
+    const definition = this.#definitions.get(interfaceName);
     if (definition?.kind !== 'interface') return;
 
-    const assembled: AssembledInterfaceDefinition = {
+    const primaryInterface: AssembledInterfaceDefinition = {
       definition,
       includes: [],
       members: [],
       parent: undefined,
-      partials: [...(this.#interfacePartials.get(name) ?? [])],
+      partials: [...(this.#interfacePartials.get(interfaceName) ?? [])],
     };
-    this.#interfaces.set(name, assembled);
+    this.#interfaces.set(interfaceName, primaryInterface);
 
     if (definition.inherits) {
-      assembled.parent = this.getInterface(definition.inherits);
+      primaryInterface.parent = this.getInterface(definition.inherits);
     }
-    assembled.includes = (this.#includes.get(name) ?? []).map(
+    primaryInterface.includes = (this.#includes.get(interfaceName) ?? []).map(
       (include) => ({
         mixin: this.getInterfaceMixin(include.mixin),
         statement: include,
       }),
     );
-    appendInterfaceMembers(assembled.members, definition.members, definition);
-    for (const partial of assembled.partials) {
-      appendInterfaceMembers(assembled.members, partial.members, partial);
+    appendInterfaceMembers(primaryInterface.members, definition.members, definition);
+    for (const partial of primaryInterface.partials) {
+      appendInterfaceMembers(primaryInterface.members, partial.members, partial);
     }
-    for (const { mixin } of assembled.includes) {
+    for (const { mixin } of primaryInterface.includes) {
       if (!mixin) continue;
       appendInterfaceMembers(
-        assembled.members,
+        primaryInterface.members,
         mixin.definition.members,
         mixin.definition,
       );
       for (const partial of mixin.partials) {
-        appendInterfaceMembers(assembled.members, partial.members, partial);
+        appendInterfaceMembers(primaryInterface.members, partial.members, partial);
       }
     }
 
-    return assembled;
+    return primaryInterface;
   }
 
   // Project helper: collect a mixin and its partials.

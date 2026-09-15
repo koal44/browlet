@@ -13,18 +13,18 @@ import {
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
   sequence, union, xattr,
 } from '../../src/web-idl/core/index';
-import { RealmBinding } from '../../src/web-idl/binding';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL value conversion', () => {
   it('preserves the identity of host-defined interface values', () => {
     const object = {};
-    const interface_: HostDefinedInterface = {
+    const hostInterface: HostDefinedInterface = {
       is: (value) => value === object,
       name: 'HostObject',
     };
-    const { binding, realm } = createBinding([], [interface_]);
+    const { binding, realm } = createBinding([], [hostInterface]);
     const type = reference('HostObject');
 
     expect(convertToIDL(object, type, binding)).toBe(object);
@@ -518,16 +518,17 @@ describe('Web IDL value conversion', () => {
       members: [{ default: false, name: 'capture', type: idlType.boolean }],
     });
     const { binding } = createBinding([node, options]);
-    const interface_ = binding.definitions.getInterface('Node');
+    const primaryInterface = binding.definitions.getInterface('Node');
     const platformObject = {};
-    if (!interface_) throw new Error('Missing Node interface');
-    binding.associatePlatformObject(platformObject, interface_);
+    const implInst = {};
+    if (!primaryInterface) throw new Error('Missing Node interface');
+    binding.associatePlatformObject(platformObject, primaryInterface, implInst);
 
     expect(convertToIDL(
       platformObject,
       union(reference('Node'), idlType.DOMString),
       binding,
-    )).toBe(platformObject);
+    )).toBe(implInst);
     expect(convertToIDL(
       ['1', 2],
       union(sequence(idlType.long), idlType.DOMString),

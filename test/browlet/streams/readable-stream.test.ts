@@ -291,11 +291,10 @@ describe('readable-stream projection', () => {
     const bindings = getBindingContext(realm);
     const ReadableStream_ = requireFunction(window, 'ReadableStream');
     const projected = Reflect.construct(ReadableStream_, []) as object;
-    const resolved = bindings.getObjectRecord(projected);
-    if (resolved?.primaryInterface.definition.name !== 'ReadableStream') {
+    const stream = bindings.unwrap(projected, ReadableStreamImpl);
+    if (!stream) {
       throw new Error('ReadableStream did not resolve to its implementation');
     }
-    const stream = resolved.implementation as ReadableStreamImpl;
     const [branch1, branch2] = stream.teeDefault(true);
     const branch1Object = bindings.project(ReadableStreamImpl, branch1);
     const branch2Object = bindings.project(ReadableStreamImpl, branch2);
@@ -375,10 +374,10 @@ describe('readable-stream projection', () => {
     }
 
     expect(resolved.platformObject).toBe(signal);
-    expect(resolved.implementation).toBeInstanceOf(AbortSignalImpl);
-    expect(resolved.implementation).not.toBe(signal);
+    expect(resolved.implInst).toBeInstanceOf(AbortSignalImpl);
+    expect(resolved.implInst).not.toBe(signal);
     expect(Reflect.get(signal, 'addAlgorithm')).toBeUndefined();
-    expect(typeof Reflect.get(resolved.implementation, 'addAlgorithm')).toBe(
+    expect(typeof Reflect.get(resolved.implInst, 'addAlgorithm')).toBe(
       'function',
     );
     const piping = observeBrowletPromise(window, Reflect.apply(
@@ -447,6 +446,37 @@ describe('readable-stream projection', () => {
       value: undefined,
     });
     expect(Reflect.get(stream, 'locked')).toBe(false);
+  });
+
+  it.each(['fulfill', 'reject'] as const)('adopts a thenable chunk during async iteration (%s)', async (settlement) => {
+    const browlet = new Browlet({ route: () => '' });
+    const window = browlet.window;
+    const calls: string[] = [];
+    const reason = new Error('chunk failed');
+    browlet.expose('recordThen', () => { calls.push('then'); });
+    browlet.expose('chunkError', reason);
+    const chunk = getRelevantRealm(window).evaluate(`({
+      then(resolve, reject) {
+        recordThen();
+        ${settlement === 'fulfill' ? "resolve('chunk');" : 'reject(chunkError);'}
+      }
+    })`, 'thenable-chunk.js');
+    const stream = Reflect.construct(requireFunction(window, 'ReadableStream'), [{
+      start(controller: ReadableStreamDefaultController) {
+        controller.enqueue(chunk);
+        controller.close();
+      },
+    }]) as object;
+    const iterator = Reflect.apply(requireFunction(stream, 'values'), stream, []) as object;
+    const next = observeBrowletPromise(window, callIterator(iterator, 'next'));
+    performTestMicrotaskCheckpoint(window);
+
+    if (settlement === 'fulfill') {
+      await expect(next).resolves.toEqual({ done: false, value: 'chunk' });
+    } else {
+      await expect(next).rejects.toBe(reason);
+    }
+    expect(calls).toEqual(['then']);
   });
 
   it('errors ReadableStream.from() when the iterator throws', async () => {

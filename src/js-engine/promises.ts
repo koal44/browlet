@@ -1,4 +1,4 @@
-import { TypeError } from './simple-exception';
+import { TypeError } from './exceptions';
 
 /** Promise allocation, adoption, and observation in one supplied destination. */
 export class Promises {

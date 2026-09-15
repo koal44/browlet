@@ -5,13 +5,13 @@ import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembl
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import {
-  hasExtendedAttribute, type OperationMember,
-} from './core/definition';
+import { hasExtendedAttribute } from './core/helpers';
+import type { OperationMember } from './core/types';
+import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
 import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
-} from './registry';
+} from './implementation-registry';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
@@ -33,9 +33,8 @@ export class LegacyPlatformObjectBinding {
   createObject(
     target: object,
     implementation: object,
-    interface_: AssembledInterfaceDefinition,
+    properties: LegacyProperties | null,
   ): object {
-    const properties = this.#getLegacyProperties(interface_);
     if (!properties) return target;
 
     const handler = Object.assign(
@@ -102,10 +101,83 @@ export class LegacyPlatformObjectBinding {
     return new Proxy(target, handler);
   }
 
+  // Project helper: assemble inherited property declarations, flags, and registered callbacks.
+  createInterfaceProperties(
+    primaryInterface: AssembledInterfaceDefinition,
+  ): LegacyProperties | null {
+    const indexedGetter = findDerivedSpecialOperation(
+      primaryInterface,
+      'getter',
+      isIndexedOperation,
+      this.#context.definitions,
+    );
+    const namedGetter = findDerivedSpecialOperation(
+      primaryInterface,
+      'getter',
+      isNamedOperation,
+      this.#context.definitions,
+    );
+    if (!indexedGetter && !namedGetter) return null;
+
+    let indexed: IndexedProperties | undefined;
+    if (indexedGetter) {
+      const steps = this.#implementations.getIndexedPropertySteps(indexedGetter);
+      if (!steps) {
+        throw new Error('Missing supported property indices implementation');
+      }
+      indexed = {
+        getter: indexedGetter,
+        primaryInterface,
+        setter: findDerivedSpecialOperation(
+          primaryInterface,
+          'setter',
+          isIndexedOperation,
+          this.#context.definitions,
+        ),
+        steps,
+      };
+    }
+
+    let named: NamedProperties | undefined;
+    if (namedGetter) {
+      const steps = this.#implementations.getNamedPropertySteps(namedGetter);
+      if (!steps) {
+        throw new Error('Missing supported property names implementation');
+      }
+      named = {
+        deleter: findDerivedSpecialOperation(
+          primaryInterface,
+          'deleter',
+          isNamedOperation,
+          this.#context.definitions,
+        ),
+        getter: namedGetter,
+        primaryInterface,
+        overrideBuiltIns: implementsExtendedAttribute(
+          primaryInterface,
+          'LegacyOverrideBuiltIns',
+        ),
+        setter: findDerivedSpecialOperation(
+          primaryInterface,
+          'setter',
+          isNamedOperation,
+          this.#context.definitions,
+        ),
+        steps,
+        unenumerable: implementsExtendedAttribute(
+          primaryInterface,
+          'LegacyUnenumerableNamedProperties',
+        ),
+        unforgeableNames: getUnforgeablePropertyNames(primaryInterface),
+      };
+    }
+    return { indexed, named };
+  }
+
   // Project predicate: find an indexed getter on the assembled interface.
-  supportsIndexedProperties(interface_: AssembledInterfaceDefinition): boolean {
+  supportsIndexedProperties(primaryInterface: AssembledInterfaceDefinition): boolean {
     return findDerivedSpecialOperation(
-      interface_,
+      primaryInterface,
       'getter',
       isIndexedOperation,
       this.#context.definitions,
@@ -237,12 +309,12 @@ export class LegacyPlatformObjectBinding {
   ): PropertyDescriptor {
     const steps = this.#implementations.getOperationSteps(
       properties.getter,
-      properties.interface_,
+      properties.primaryInterface,
     );
     if (!steps) {
       throw new Error('Missing named property getter implementation');
     }
-    const value = Reflect.apply(steps, target, [property]);
+    const value = steps(this.#getReceiverRecord(target), property);
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
@@ -264,8 +336,7 @@ export class LegacyPlatformObjectBinding {
     receiver: unknown,
     properties: LegacyProperties,
   ): boolean {
-    const receiverTargetsObject = this.#context.platformObjects
-      .getImplementationObject(receiver) === implementation;
+    const receiverTargetsObject = getImplementationObject(receiver) === implementation;
     if (receiverTargetsObject && typeof property === 'string') {
       if (properties.indexed?.setter && isArrayIndex(property)) {
         this.#invokeIndexedSetter(
@@ -457,12 +528,12 @@ export class LegacyPlatformObjectBinding {
     if (setter.name) {
       const steps = this.#implementations.getOperationSteps(
         setter,
-        properties.interface_,
+        properties.primaryInterface,
       );
       if (!steps) {
         throw new Error('Missing indexed property setter implementation');
       }
-      Reflect.apply(steps, target, [index, converted]);
+      steps(this.#getReceiverRecord(target), index, converted);
       return;
     }
 
@@ -490,12 +561,12 @@ export class LegacyPlatformObjectBinding {
     if (setter.name) {
       const steps = this.#implementations.getOperationSteps(
         setter,
-        properties.interface_,
+        properties.primaryInterface,
       );
       if (!steps) {
         throw new Error('Missing named property setter implementation');
       }
-      Reflect.apply(steps, target, [property, converted]);
+      steps(this.#getReceiverRecord(target), property, converted);
       return;
     }
 
@@ -545,10 +616,10 @@ export class LegacyPlatformObjectBinding {
 
     const steps = this.#implementations.getOperationSteps(
       deleter,
-      properties.interface_,
+      properties.primaryInterface,
     );
     if (!steps) throw new Error('Missing named property deleter implementation');
-    const result = Reflect.apply(steps, target, [property]);
+    const result = steps(this.#getReceiverRecord(target), property);
     const returnType = getUnannotatedType(
       deleter.returns,
       this.#context.definitions,
@@ -589,10 +660,17 @@ export class LegacyPlatformObjectBinding {
   ): unknown {
     const steps = this.#implementations.getOperationSteps(
       properties.getter,
-      properties.interface_,
+      properties.primaryInterface,
     );
     if (!steps) throw new Error('Missing indexed property getter implementation');
-    return Reflect.apply(steps, implementation, [index]);
+    return steps(this.#getReceiverRecord(implementation), index);
+  }
+
+  // Proxy traps run after their implementation has been associated with the platform object.
+  #getReceiverRecord(implInst: object): PlatformRecord {
+    const record = getImplementationRecord(implInst);
+    if (!record) throw new Error('Legacy object implementation is not associated');
+    return record;
   }
 
   // Project adapter for Web IDL §2.5.6.1 Indexed properties — query the interface's supported property indices.
@@ -632,89 +710,16 @@ export class LegacyPlatformObjectBinding {
       [],
     );
   }
-
-  // Project helper: assemble inherited indexed and named property declarations and implementation steps.
-  #getLegacyProperties(
-    interface_: AssembledInterfaceDefinition,
-  ): LegacyProperties | undefined {
-    const indexedGetter = findDerivedSpecialOperation(
-      interface_,
-      'getter',
-      isIndexedOperation,
-      this.#context.definitions,
-    );
-    const namedGetter = findDerivedSpecialOperation(
-      interface_,
-      'getter',
-      isNamedOperation,
-      this.#context.definitions,
-    );
-    if (!indexedGetter && !namedGetter) return;
-
-    let indexed: IndexedProperties | undefined;
-    if (indexedGetter) {
-      const steps = this.#implementations.getIndexedPropertySteps(indexedGetter);
-      if (!steps) {
-        throw new Error('Missing supported property indices implementation');
-      }
-      indexed = {
-        getter: indexedGetter,
-        interface_,
-        setter: findDerivedSpecialOperation(
-          interface_,
-          'setter',
-          isIndexedOperation,
-          this.#context.definitions,
-        ),
-        steps,
-      };
-    }
-
-    let named: NamedProperties | undefined;
-    if (namedGetter) {
-      const steps = this.#implementations.getNamedPropertySteps(namedGetter);
-      if (!steps) {
-        throw new Error('Missing supported property names implementation');
-      }
-      named = {
-        deleter: findDerivedSpecialOperation(
-          interface_,
-          'deleter',
-          isNamedOperation,
-          this.#context.definitions,
-        ),
-        getter: namedGetter,
-        interface_,
-        overrideBuiltIns: implementsExtendedAttribute(
-          interface_,
-          'LegacyOverrideBuiltIns',
-        ),
-        setter: findDerivedSpecialOperation(
-          interface_,
-          'setter',
-          isNamedOperation,
-          this.#context.definitions,
-        ),
-        steps,
-        unenumerable: implementsExtendedAttribute(
-          interface_,
-          'LegacyUnenumerableNamedProperties',
-        ),
-        unforgeableNames: getUnforgeablePropertyNames(interface_),
-      };
-    }
-    return { indexed, named };
-  }
 }
 
-type LegacyProperties = {
+export type LegacyProperties = {
   indexed: IndexedProperties | undefined;
   named: NamedProperties | undefined;
 };
 
 type IndexedProperties = {
   getter: OperationMember;
-  interface_: AssembledInterfaceDefinition;
+  primaryInterface: AssembledInterfaceDefinition;
   setter: OperationMember | undefined;
   steps: IndexedPropertySteps;
 };
@@ -722,7 +727,7 @@ type IndexedProperties = {
 type NamedProperties = {
   deleter: OperationMember | undefined;
   getter: OperationMember;
-  interface_: AssembledInterfaceDefinition;
+  primaryInterface: AssembledInterfaceDefinition;
   overrideBuiltIns: boolean;
   setter: OperationMember | undefined;
   steps: NamedPropertySteps;
@@ -732,12 +737,12 @@ type NamedProperties = {
 
 // Project helper: locate the most-derived matching special operation.
 function findDerivedSpecialOperation(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   special: 'deleter' | 'getter' | 'setter',
   predicate: SpecialOperationPredicate,
   definitions: DefinitionAssembly,
 ): OperationMember | undefined {
-  let current: AssembledInterfaceDefinition | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
   while (current) {
     const operation = current.members.find(({ member }) =>
       member.kind === 'operation' &&
@@ -784,10 +789,10 @@ function hasKeyType(
 
 // Project helper: search inherited interfaces and partial declarations for an extended attribute.
 function implementsExtendedAttribute(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   name: string,
 ): boolean {
-  let current: AssembledInterfaceDefinition | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
   while (current) {
     if (
       hasExtendedAttribute(current.definition.extendedAttributes, name) ||
@@ -801,10 +806,10 @@ function implementsExtendedAttribute(
 
 // Project helper: collect [LegacyUnforgeable] member names across interface inheritance.
 function getUnforgeablePropertyNames(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
 ): Set<string> {
   const names = new Set<string>();
-  let current: AssembledInterfaceDefinition | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
   while (current) {
     for (const { member } of current.members) {
       if (!hasExtendedAttribute(

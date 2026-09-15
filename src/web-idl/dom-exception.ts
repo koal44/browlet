@@ -1,7 +1,7 @@
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 import {
   DOMExceptionCodes, DOMExceptionNames,
-} from './core/dom-exception-core';
+} from './core/dom-exception';
 import {
   arg, constant, ctor, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable,

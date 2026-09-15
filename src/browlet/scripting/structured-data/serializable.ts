@@ -1,12 +1,12 @@
 import {
-  defineCapability, type ImplementationClass, type InterfaceDefinition,
+  defineCapability, type StampedImplInstance, type ImplementationClass, type InterfaceDefinition,
 } from '../../../web-idl/index';
 import type { Realm } from '../realm';
-import type { StructuredDataRecord } from './records';
+import type { SerializedRecord, StructuredDataRecord } from './records';
 
 export const serializable = defineCapability<SerializableSteps>(
   'Serializable',
-  { validate: (interface_) => requireMarker(interface_, 'Serializable') },
+  { validate: (definition) => requireMarker(definition, 'Serializable') },
 );
 
 export type SerializableSteps = {
@@ -25,27 +25,27 @@ export type SerializableSteps = {
 };
 
 export type SerializationContext = {
-  subserialize(value: unknown): unknown;
+  subserialize(value: unknown): SerializedRecord;
 };
 
 export type DeserializationContext = {
-  getImplementation<T extends object>(
-    value: unknown,
-    implementation: ImplementationClass<T>,
-  ): T | undefined;
+  unwrap<T extends object>(
+    platformObject: object,
+    implClass: ImplementationClass<T>,
+  ): StampedImplInstance<T> | undefined;
   subdeserialize(serialized: unknown): unknown;
 };
 
 function requireMarker<Realm>(
-  interface_: InterfaceDefinition<Realm>,
+  definition: InterfaceDefinition<Realm>,
   name: string,
 ): void {
-  const markers = interface_.extendedAttributes?.filter(
+  const markers = definition.extendedAttributes?.filter(
     (attribute) => attribute.kind !== 'raw' && attribute.name === name,
   ) ?? [];
   if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
     throw new TypeError(
-      `${interface_.name} must declare exactly one [${name}] marker`,
+      `${definition.name} must declare exactly one [${name}] marker`,
     );
   }
 }

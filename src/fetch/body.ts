@@ -3,7 +3,7 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import {
   type GlobalObject, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
 } from '../js-engine/index';
-import { TypeError } from '../js-engine/simple-exception';
+import { TypeError } from '../js-engine/exceptions';
 import { ReadableStreamImpl } from '../streams/index';
 import type { URLSearchParamsImpl } from '../url/api';
 import {

@@ -1,5 +1,6 @@
-import type { AssembledInterfaceDefinition } from './assembly';
-import type { RealmBinding } from './binding';
+import type { PromiseValue } from '../js-engine/index';
+import type { AssembledDictionaryDefinition, AssembledInterfaceDefinition } from './assembly';
+import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import {
   callUserObjectOperation, constructCallbackFunction, invokeCallbackFunction,
@@ -8,27 +9,23 @@ import {
   isCallbackFunctionValue, isCallbackInterfaceRecord,
   type CallbackFunctionValue, type CallbackInterfaceValue,
 } from './callback-value';
-import {
-  hasExtendedAttribute, idlType, reference, type ArgumentDefinition, type AttributeMember,
-  type OperationMember, type StringifierMember, type WebIDLType,
-} from './core/definition';
+import { hasExtendedAttribute, reference } from './core/helpers';
 import type {
-  AsyncIterableMember, ConstructorMember, IterableMember,
-} from './core/definitions/interface';
-import type {
-  CallbackExceptionBehavior, ImplementationClass, InjectedArgument,
-} from './core/binding';
+  ArgumentDefinition, AttributeMember, OperationMember,
+  StringifierMember, WebIDLType, CallbackExceptionBehavior,
+  ImplementationClass, InjectedArgument, RecordType,
+} from './core/types';
+import type { AsyncIterableMember, ConstructorMember, IterableMember } from './core/declarations';
 import type {
   AsyncIteratorSteps, AttributeSteps, ConstructorSteps,
   ImplementationConstructorSteps, ImplementationRegistry, OperationSteps,
-  StringificationBehavior,
-} from './registry';
-import type { ValuePair } from './iterable';
-import type { WebIDLRealmHost } from './js-realm';
-import { missingArgument } from './overload';
+  StringificationBehavior, ValuePairsSteps,
+} from './implementation-registry';
+import { getArgumentDefinition, missingArgument } from './overload';
 import { convertToIDL } from './conversion';
-import { projectPromise, toImplementationPromise } from './promise';
-import { isIDLPromise } from './promise-value';
+import { toImplementationPromise } from './promise';
+import { defineDataProperty } from './property';
+import { isIDLPromiseRecord } from './promise-record';
 import { getUnannotatedType } from './types';
 import {
   closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
@@ -36,47 +33,44 @@ import {
 } from './async-sequence';
 
 // Project helper: register declaration adapters for one realm.
-export function registerDefinitionBindings<Realm extends WebIDLRealmHost>(
-  binding: RealmBinding<Realm>,
-  context: BindingContext<Realm>,
-): void {
-  for (const interface_ of binding.definitions.getInterfaces()) {
+export function registerDefinitionBindings(binding: RealmBinding): void {
+  for (const primaryInterface of binding.definitions.getInterfaces()) {
     registerDefinedInterface(
       binding,
       binding.implementations,
-      interface_,
-      context,
+      primaryInterface,
+      binding.context,
     );
   }
-  binding.platformObjects.registerRealm(binding, context);
+  binding.platformObjects.registerRealm(binding);
 }
 
 // Project helper: connect interface declarations to implementation members and factories.
 function registerDefinedInterface(
   realmBinding: RealmBinding,
   registry: ImplementationRegistry,
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   context: BindingContext,
 ): void {
-  const definition = interface_.definition.implementation;
+  const definition = primaryInterface.definition.implementation;
   if (!definition) return;
 
-  const implementation = definition.implementation;
-  registry.setInterfaceForImplementation(implementation, interface_);
+  const implClass = definition.implClass;
+  registry.setInterfaceForImplementation(implClass, primaryInterface);
 
-  for (const { member } of interface_.members) {
+  for (const { member } of primaryInterface.members) {
     switch (member.kind) {
       case 'attribute':
         if (member.attributeFunction || member.get || member.set) {
           registerDefinedAttribute(
-            registry, member, interface_, context, realmBinding,
+            registry, member, primaryInterface, context, realmBinding,
           );
         } else {
           registerAttribute(
             registry,
             member,
-            member.static ? implementation : implementation.prototype,
-            interface_,
+            member.static ? implClass : implClass.prototype,
+            primaryInterface,
             context,
             realmBinding,
           );
@@ -86,12 +80,7 @@ function registerDefinedInterface(
         if (member.construct) {
           const construct = member.construct;
           registry.setImplementationConstructorSteps(member, (values) => {
-            const args = values.map((value, index) => {
-              const argument = getArgument(member.arguments, index);
-              return adaptIDLToImpl(
-                value, argument?.type, argument ?? {}, context, realmBinding,
-              );
-            });
+            const args = adaptArguments(values, member.arguments, context, realmBinding);
             return callImplementation(construct, undefined, [context, ...args], realmBinding);
           });
         } else if (member.invoke) {
@@ -105,7 +94,7 @@ function registerDefinedInterface(
           registry.setImplementationConstructorSteps(
             member,
             createImplementationConstructorSteps(
-              implementation,
+              implClass,
               member.arguments,
               context,
               realmBinding,
@@ -122,18 +111,18 @@ function registerDefinedInterface(
             createDefinedOperationSteps(
               member.invoke, member, context, realmBinding,
             ),
-            interface_,
+            primaryInterface,
           );
         } else {
           if (member.name === undefined) {
-            throw missingMemberBinding(interface_, member);
+            throw missingMemberBinding(primaryInterface, member);
           }
           registerOperation(
             registry,
             member,
             member.name,
-            member.static ? implementation : implementation.prototype,
-            interface_,
+            member.static ? implClass : implClass.prototype,
+            primaryInterface,
             context,
             realmBinding,
             member.invokeWith,
@@ -187,17 +176,17 @@ function registerDefinedInterface(
           registerPairIterable(
             registry,
             member,
-            implementation.prototype,
+            implClass.prototype,
             realmBinding,
           );
         }
         break;
       case 'async-iterable': {
         const factory: unknown = member.create !== undefined
-          ? findDescriptor(implementation.prototype, member.create)?.value
+          ? findDescriptor(implClass.prototype, member.create)?.value
           : undefined;
         if (typeof factory !== 'function') {
-          throw missingMemberBinding(interface_, member);
+          throw missingMemberBinding(primaryInterface, member);
         }
         registry.setAsyncIteratorSteps(
           member,
@@ -214,8 +203,8 @@ function registerDefinedInterface(
         registerStringifier(
           registry,
           member,
-          implementation.prototype,
-          interface_,
+          implClass.prototype,
+          primaryInterface,
           realmBinding,
         );
         break;
@@ -223,12 +212,12 @@ function registerDefinedInterface(
   }
 
   registry.setImplementationCreationSteps(
-    interface_.definition,
+    primaryInterface.definition,
     () => callImplementation(
       constructImplementationObject,
       undefined,
       [
-        implementation,
+        implClass,
         resolveImplementationArguments(
           [],
           definition.constructWith ?? [],
@@ -241,7 +230,7 @@ function registerDefinedInterface(
   const initializeImplementation = definition.initializeImplementation;
   if (initializeImplementation) {
     registry.setImplementationInitializationSteps(
-      interface_.definition,
+      primaryInterface.definition,
       (value) => callImplementation(
         initializeImplementation,
         undefined,
@@ -253,7 +242,7 @@ function registerDefinedInterface(
   const allocatePlatformObject = definition.allocatePlatformObject;
   if (allocatePlatformObject) {
     registry.setPlatformObjectAllocationSteps(
-      interface_.definition,
+      primaryInterface.definition,
       (prototype) => callImplementation(
         allocatePlatformObject,
         undefined,
@@ -268,11 +257,11 @@ type Constructable = new (...argumentsList: unknown[]) => object;
 
 // Project helper: report an incomplete implementation registration.
 function missingMemberBinding(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   member: { kind: string; name?: string; },
 ): TypeError {
   return new TypeError(
-    `Web IDL ${interface_.definition.name}.${member.name ?? member.kind} has no binding`,
+    `Web IDL ${primaryInterface.definition.name}.${member.name ?? member.kind} has no binding`,
   );
 }
 
@@ -281,20 +270,19 @@ function missingMemberBinding(
 function registerDefinedAttribute(
   registry: ImplementationRegistry,
   member: AttributeMember,
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): void {
   const createCallback = member.attributeFunction;
   const steps: AttributeSteps = {
     // Project helper: invoke a declared getter or obtain its realm-owned attribute function.
-    get() {
+    get(receiver) {
+      const owner = receiver?.binding ?? realmBinding;
+      const ownerContext = receiver ? owner.context : context;
       if (createCallback) {
-        const ownerContext = getMemberBindingContext(member, this, context, realmBinding);
-        const owner = realmBinding.platformObjects.getRealmBinding(ownerContext.realm);
-        if (!owner) throw new Error('Attribute function realm has no binding');
         return owner.getAttributeFunction(
-          interface_, member,
+          primaryInterface, member,
           () => createCallback.call(undefined, ownerContext),
         );
       }
@@ -305,19 +293,19 @@ function registerDefinedAttribute(
       }
       return callImplementation(
         member.get,
-        this,
-        [getMemberBindingContext(member, this, context, realmBinding)],
+        receiver?.implInst ?? null,
+        [ownerContext],
         realmBinding,
       );
     },
   };
   const set = member.set;
   if (set && !member.readonly) {
-    steps.set = function(value) {
-      const operationContext = getMemberBindingContext(member, this, context, realmBinding);
+    steps.set = (receiver, value) => {
+      const operationContext = receiver?.binding.context ?? context;
       callImplementation(
         set,
-        this,
+        receiver?.implInst ?? null,
         [
           operationContext,
           adaptIDLToImpl(
@@ -332,7 +320,7 @@ function registerDefinedAttribute(
       );
     };
   }
-  registry.setAttributeSteps(member, steps, interface_);
+  registry.setAttributeSteps(member, steps, primaryInterface);
 }
 
 // Project helper: adapt converted constructor arguments for a declared initializer.
@@ -348,16 +336,7 @@ function createDefinedConstructorSteps(
       this,
       [
         context,
-        ...values.map((value, index) => {
-          const argument = getArgument(arguments_, index);
-          return adaptIDLToImpl(
-            value,
-            argument?.type,
-            argument ?? {},
-            context,
-            realmBinding,
-          );
-        }),
+        ...adaptArguments(values, arguments_, context, realmBinding),
       ],
       realmBinding,
     );
@@ -378,16 +357,7 @@ function createImplementationConstructorSteps(
     [
       implementation,
       resolveImplementationArguments(
-        values.map((value, index) => {
-          const argument = getArgument(arguments_, index);
-          return adaptIDLToImpl(
-            value,
-            argument?.type,
-            argument ?? {},
-            context,
-            realmBinding,
-          );
-        }),
+        adaptArguments(values, arguments_, context, realmBinding),
         injectedArguments,
         context,
       ),
@@ -415,28 +385,14 @@ function createDefinedOperationSteps(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): OperationSteps {
-  return function(...values) {
-    const operationContext = getMemberBindingContext(
-      member,
-      this,
-      context,
-      realmBinding,
-    );
+  return (receiver, ...values) => {
+    const operationContext = receiver?.binding.context ?? context;
     return callImplementation(
       invoke,
-      this,
+      receiver?.implInst ?? null,
       [
         operationContext,
-        ...values.map((value, index) => {
-          const argument = getArgument(member.arguments, index);
-          return adaptIDLToImpl(
-            value,
-            argument?.type,
-            argument ?? {},
-            operationContext,
-            realmBinding,
-          );
-        }),
+        ...adaptArguments(values, member.arguments, operationContext, realmBinding),
       ],
       realmBinding,
     );
@@ -457,38 +413,29 @@ function createAsyncIteratorSteps(
       return callImplementation(
         factory,
         target,
-        argumentsList.map((value, index) => {
-          const argument = getArgument(member.arguments ?? [], index);
-          return adaptIDLToImpl(
-            value,
-            argument?.type,
-            argument ?? {},
-            context,
-            realmBinding,
-          );
-        }),
+        adaptArguments(argumentsList, member.arguments ?? [], context, realmBinding),
         realmBinding,
       );
     },
-    // Project adapter for "get the next iteration result": invoke next and project its promise.
+    // Project adapter for "get the next iteration result": invoke the implementation iterator.
     next(iterator: AsyncIteratorValue) {
-      return projectPromise(callImplementation(
+      return callImplementation(
         iterator.next,
         iterator,
         [],
         realmBinding,
-      ), idlType.any, realmBinding);
+      );
     },
     ...(member.return
       ? {
-        // Project adapter for "asynchronous iterator return": invoke return and project its promise.
+        // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
         return(iterator: AsyncIteratorValue, value: unknown) {
-          return projectPromise(callImplementation(
+          return callImplementation(
             iterator.return!,
             iterator,
             [value],
             realmBinding,
-          ), idlType.any, realmBinding);
+          );
         },
       }
       : {}),
@@ -496,8 +443,8 @@ function createAsyncIteratorSteps(
 }
 
 type AsyncIteratorValue = {
-  next: (this: object) => unknown;
-  return?: (this: object, value: unknown) => unknown;
+  next: (this: object) => Promise<unknown> | PromiseValue<unknown>;
+  return?: (this: object, value: unknown) => Promise<unknown> | PromiseValue<unknown>;
 };
 
 // Project helper: register adapters for implementation accessors.
@@ -506,7 +453,7 @@ function registerAttribute(
   registry: ImplementationRegistry,
   member: AttributeMember,
   target: object,
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): void {
@@ -522,17 +469,17 @@ function registerAttribute(
     ((this: object | null, value: unknown) => void) | undefined;
   registry.setAttributeSteps(member, {
     // Project helper: invoke the implementation getter through our exception boundary.
-    get() {
-      return callImplementation(get, this, [], realmBinding);
+    get(receiver) {
+      return callImplementation(get, receiver?.implInst ?? null, [], realmBinding);
     },
     ...(set && !member.readonly
       ? {
         // Project helper: adapt the converted attribute value before invoking the implementation setter.
-        set(value: unknown) {
-          const operationContext = getMemberBindingContext(member, this, context, realmBinding);
+        set(receiver, value) {
+          const operationContext = receiver?.binding.context ?? context;
           callImplementation(
             set,
-            this,
+            receiver?.implInst ?? null,
             [
               adaptIDLToImpl(
                 value,
@@ -550,7 +497,7 @@ function registerAttribute(
         },
       }
       : {}),
-  }, interface_);
+  }, primaryInterface);
 }
 
 // Project helper: register an implementation method adapter.
@@ -560,7 +507,7 @@ function registerOperation(
   member: OperationMember,
   name: string,
   target: object,
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   context: BindingContext,
   realmBinding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
@@ -571,7 +518,7 @@ function registerOperation(
       `Web IDL operation ${name} has no implementation`,
     );
   }
-  const method = value as OperationSteps;
+  const method = value as (this: object | null, ...values: unknown[]) => unknown;
 
   registry.setOperationSteps(
     member,
@@ -582,67 +529,31 @@ function registerOperation(
       realmBinding,
       injectedArguments,
     ),
-    interface_,
+    primaryInterface,
   );
 }
 
 // Project helper: adapt converted arguments, inject dependencies, and invoke an implementation method.
 function createOperationSteps(
-  implementation: OperationSteps,
+  implementation: (this: object | null, ...values: unknown[]) => unknown,
   member: OperationMember,
   context: BindingContext,
   realmBinding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
 ): OperationSteps {
-  return function(...values) {
-    const operationContext = getMemberBindingContext(
-      member,
-      this,
-      context,
-      realmBinding,
-    );
+  return (receiver, ...values) => {
+    const operationContext = receiver?.binding.context ?? context;
     return callImplementation(
       implementation,
-      this,
+      receiver?.implInst ?? null,
       resolveImplementationArguments(
-        values.map((value, index) => {
-          const argument = getArgument(member.arguments, index);
-          return adaptIDLToImpl(
-            value,
-            argument?.type,
-            argument ?? {},
-            operationContext,
-            realmBinding,
-          );
-        }),
+        adaptArguments(values, member.arguments, operationContext, realmBinding),
         injectedArguments,
         operationContext,
       ),
       realmBinding,
     );
   };
-}
-
-// Project helper: select the receiver's context, or the installed context for a static member.
-function getMemberBindingContext(
-  member: OperationMember | AttributeMember,
-  receiver: object | null,
-  installedContext: BindingContext,
-  realmBinding: RealmBinding,
-): BindingContext {
-  if (member.static) return installedContext;
-  if (!receiver) {
-    throw new Error('Instance member has no implementation receiver');
-  }
-  const record = realmBinding.platformObjects.getImplementationRecord(receiver);
-  if (!record) {
-    throw new Error('Instance member receiver has no platform-object record');
-  }
-  const context = realmBinding.platformObjects.getBindingContext(record.realm);
-  if (!context) {
-    throw new Error('Member receiver realm has no binding context');
-  }
-  return context;
 }
 
 // Project helper: merge converted arguments with explicitly positioned implementation dependencies.
@@ -669,7 +580,7 @@ export function resolveImplementationArguments(
   return result;
 }
 
-// Project helper: adapt an implementation's entries method to an IDL pair iterable.
+// Project helper: read the implementation's current entry list without copying its pairs.
 // Web IDL §2.5.9 Iterable declarations — value pairs to iterate over.
 function registerPairIterable(
   registry: ImplementationRegistry,
@@ -677,35 +588,17 @@ function registerPairIterable(
   target: object,
   realmBinding: RealmBinding,
 ): void {
-  const value: unknown = findDescriptor(target, 'entries')?.value;
+  const value: unknown = findDescriptor(target, 'getEntryList')?.value;
   if (typeof value !== 'function') {
     throw new TypeError(
-      'Web IDL pair iterable implementation has no entries method',
+      'Web IDL pair iterable implementation has no getEntryList method',
     );
   }
-  const entries = value as PairEntries;
+  const getEntryList = value as ValuePairsSteps;
   registry.setValuePairsSteps(member, function() {
-    return callImplementation(
-      collectValuePairs,
-      this,
-      [entries],
-      realmBinding,
-    );
+    return callImplementation(getEntryList, this, [], realmBinding);
   });
 }
-
-// Project helper: turn implementation entry tuples into our value-pair records.
-function collectValuePairs(
-  this: object,
-  entries: PairEntries,
-): ValuePair[] {
-  const pairs = Reflect.apply(entries, this, []);
-  return Array.from(pairs, ([key, value]) => ({ key, value }));
-}
-
-type PairEntries = (
-  this: object,
-) => Iterable<[key: unknown, value: unknown]>;
 
 // Project helper: register an implementation's toString method as stringification behavior.
 // Web IDL §2.5.5 Stringifiers.
@@ -713,7 +606,7 @@ function registerStringifier(
   registry: ImplementationRegistry,
   member: StringifierMember,
   target: object,
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   realmBinding: RealmBinding,
 ): void {
   const value: unknown = findDescriptor(target, 'toString')?.value;
@@ -728,7 +621,7 @@ function registerStringifier(
       [],
       realmBinding,
     );
-  }, interface_);
+  }, primaryInterface);
 }
 
 // Project helper: invoke implementation code and realize exceptions at the binding boundary.
@@ -758,6 +651,19 @@ function findDescriptor(
     const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
     if (descriptor) return descriptor;
   }
+}
+
+// Project helper: adapt each converted argument using its fixed or variadic declaration.
+function adaptArguments(
+  values: readonly unknown[],
+  definitions: ArgumentDefinition[],
+  context: BindingContext,
+  realmBinding: RealmBinding,
+): unknown[] {
+  return values.map((value, index) => {
+    const argument = getArgumentDefinition(definitions, index);
+    return adaptIDLToImpl(value, argument?.type, argument ?? {}, context, realmBinding);
+  });
 }
 
 // Project helper: adapt converted IDL values to our implementation representations.
@@ -796,14 +702,14 @@ export function adaptIDLToImpl(
       ),
     };
   }
-  if (isIDLPromise(value)) {
+  if (isIDLPromiseRecord(value)) {
     return toImplementationPromise(value, realmBinding, (result) =>
       adaptIDLToImpl(
         result, value.type, options, context, realmBinding,
       ), context.promises);
   }
-  for (const implementation of options.implementations ?? []) {
-    const resolved = context.unwrap(value, implementation);
+  for (const implClass of options.implClasses ?? []) {
+    const resolved = context.unwrap(value, implClass);
     if (resolved) return resolved;
   }
   if (isCallbackFunctionValue(value)) {
@@ -816,8 +722,8 @@ export function adaptIDLToImpl(
     );
   }
   if (isCallbackInterfaceRecord(value)) {
-    const callbackAdapter = value.definition.adapter;
-    if (!callbackAdapter) return value;
+    const adapt = value.definition.adapt;
+    if (!adapt) return value;
 
     const callback: CallbackInterfaceValue = {
       // Delegates Web IDL §3.11 Callback interfaces — call a user object's operation.
@@ -835,7 +741,7 @@ export function adaptIDLToImpl(
       realm: value.realm,
     };
     return callImplementation(
-      callbackAdapter.adapt,
+      adapt,
       undefined,
       [context, callback],
       realmBinding,
@@ -858,27 +764,27 @@ export function adaptIDLToImpl(
   }
   if (!(value instanceof Map)) return value;
 
-  const getMemberType = type && getMapMemberType(
-    type,
-    realmBinding,
-  );
-  if (!getMemberType) return value;
+  const declaration = type && getMapDeclaration(type, realmBinding);
+  if (!declaration) return value;
+  const members = 'members' in declaration ? declaration.members : undefined;
+  const recordValueType = 'value' in declaration ? declaration.value : undefined;
 
   const object: Record<PropertyKey, unknown> = {};
   const dictionary = value as Map<PropertyKey, unknown>;
   for (const [name, memberValue] of dictionary) {
-    object[name] = adaptIDLToImpl(
+    const member = members?.find((member) => member.name === name);
+    defineDataProperty(object, name, adaptIDLToImpl(
       memberValue,
-      getMemberType(name),
+      member?.type ?? recordValueType,
       {
         callbackExceptionBehavior:
-          getMapMemberExceptionBehavior(type, name, realmBinding) ??
+          member?.callbackExceptionBehavior ??
           options.callbackExceptionBehavior,
         callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
       },
       context,
       realmBinding,
-    );
+    ));
   }
   return object;
 }
@@ -887,7 +793,7 @@ type ImplementationAdaptationOptions = {
   callbackDictionary?: string;
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   callbackThis?: unknown;
-  implementations?: ImplementationClass[];
+  implClasses?: ImplementationClass[];
 };
 
 // Project helper: expose a retained IDL callback to implementations as an ordinary callable.
@@ -931,17 +837,6 @@ function adaptCallbackFunction(
   return adapter;
 }
 
-// Project helper: select argument metadata, reusing the final definition for variadic arguments.
-function getArgument(
-  definitions: ArgumentDefinition[],
-  index: number,
-): ArgumentDefinition | undefined {
-  const definition = definitions[index];
-  if (definition) return definition;
-  const variadic = definitions.at(-1);
-  return variadic?.variadic ? variadic : undefined;
-}
-
 // Project helper: find the sequence element type through our nullable, union, and typedef representations.
 function getArrayItemType(
   type: WebIDLType,
@@ -952,9 +847,11 @@ function getArrayItemType(
     case 'nullable':
       return getArrayItemType(innerType.type, binding);
     case 'union':
-      return innerType.types
-        .map((memberType) => getArrayItemType(memberType, binding))
-        .find((memberType) => memberType !== undefined);
+      for (const memberType of innerType.types) {
+        const itemType = getArrayItemType(memberType, binding);
+        if (itemType) return itemType;
+      }
+      return undefined;
     case 'sequence':
       return innerType.type;
     default:
@@ -962,57 +859,25 @@ function getArrayItemType(
   }
 }
 
-// Project helper: resolve a dictionary member type or record value type for implementation adaptation.
-function getMapMemberType(
+// Project helper: resolve a Map value's dictionary or record declaration for implementation adaptation.
+function getMapDeclaration(
   type: WebIDLType,
   binding: RealmBinding,
-): ((name: PropertyKey) => WebIDLType | undefined) | undefined {
+): AssembledDictionaryDefinition | RecordType | undefined {
   const innerType = getUnannotatedType(type, binding.definitions);
   switch (innerType.kind) {
     case 'nullable':
-      return getMapMemberType(innerType.type, binding);
+      return getMapDeclaration(innerType.type, binding);
     case 'union':
-      return innerType.types
-        .map((memberType) => getMapMemberType(memberType, binding))
-        .find((getMemberType) => getMemberType !== undefined);
-    case 'record':
-      return () => innerType.value;
-    case 'reference': {
-      const dictionary = binding.definitions.getDictionary(innerType.name);
-      if (!dictionary) return undefined;
-      return (name) => typeof name === 'string'
-        ? dictionary.members.find((member) => member.name === name)?.type
-        : undefined;
-    }
-    default:
+      for (const memberType of innerType.types) {
+        const declaration = getMapDeclaration(memberType, binding);
+        if (declaration) return declaration;
+      }
       return undefined;
-  }
-}
-
-// Project helper: read a dictionary member's declared callback exception policy.
-function getMapMemberExceptionBehavior(
-  type: WebIDLType,
-  name: PropertyKey,
-  binding: RealmBinding,
-): CallbackExceptionBehavior | undefined {
-  const innerType = getUnannotatedType(type, binding.definitions);
-  switch (innerType.kind) {
-    case 'nullable':
-      return getMapMemberExceptionBehavior(innerType.type, name, binding);
-    case 'union':
-      return innerType.types
-        .map((memberType) => getMapMemberExceptionBehavior(
-          memberType,
-          name,
-          binding,
-        ))
-        .find((behavior) => behavior !== undefined);
-    case 'reference': {
-      if (typeof name !== 'string') return undefined;
-      const dictionary = binding.definitions.getDictionary(innerType.name);
-      return dictionary?.members.find((member) => member.name === name)
-        ?.callbackExceptionBehavior;
-    }
+    case 'record':
+      return innerType;
+    case 'reference':
+      return binding.definitions.getDictionary(innerType.name);
     default:
       return undefined;
   }

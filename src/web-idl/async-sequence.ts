@@ -4,10 +4,10 @@ import type { PromiseValue } from '../js-engine/promises';
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './core/index';
-import type { WebIDLRealmHost } from './js-realm';
+import type { WebIDLRealmHost } from './realm-host';
 import {
-  createIDLPromise, type IDLPromise,
-} from './promise-value';
+  createIDLPromiseRecord, type IDLPromiseRecord,
+} from './promise-record';
 import { defineDataProperty } from './property';
 
 /** Converted iteration steps supplied to implementation algorithms. */
@@ -81,7 +81,7 @@ export function getAsyncIteratorNextValue(
   iterator: IDLAsyncIterator,
   realm: WebIDLRealmHost,
   convert: (value: unknown, type: WebIDLType) => unknown,
-): IDLPromise {
+): IDLPromiseRecord {
   let nextResult: unknown;
   try {
     nextResult = Reflect.apply(
@@ -114,7 +114,7 @@ export function closeAsyncIterator(
   iterator: IDLAsyncIterator,
   reason: unknown,
   realm: WebIDLRealmHost,
-): IDLPromise {
+): IDLPromiseRecord {
   let returnMethod: JSMethod | undefined;
   try {
     returnMethod = getMethod(iterator.record.iterator, 'return', realm);
@@ -237,7 +237,7 @@ function adaptSyncIteratorResult(
   operation: 'next' | 'return',
   argumentsList: unknown[],
   realm: WebIDLRealmHost,
-): IDLPromise {
+): IDLPromiseRecord {
   let method: JSMethod | undefined;
   try {
     method = operation === 'next'
@@ -269,11 +269,11 @@ function adaptSyncIteratorResult(
 // Project helper: react to adaptation promises without IDL value conversion.
 // Web IDL §3.2.24.1 Creating and manipulating Promises — react.
 function reactToPromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   realm: WebIDLRealmHost,
   fulfilled: (value: unknown) => unknown,
-): IDLPromise {
-  const result = createIDLPromise(idlType.any, realm);
+): IDLPromiseRecord {
+  const result = createIDLPromiseRecord(idlType.any, realm);
   const onFulfilled = realm.createFunction(
     (_thisArgument, [value]) => {
       try {
@@ -300,8 +300,8 @@ function reactToPromise(
 function createResolvedPromise(
   value: unknown,
   realm: WebIDLRealmHost,
-): IDLPromise {
-  const promise = createIDLPromise(idlType.any, realm);
+): IDLPromiseRecord {
+  const promise = createIDLPromiseRecord(idlType.any, realm);
   promise.resolve(value);
   return promise;
 }
@@ -310,8 +310,8 @@ function createResolvedPromise(
 function createRejectedPromise(
   reason: unknown,
   realm: WebIDLRealmHost,
-): IDLPromise {
-  const promise = createIDLPromise(idlType.any, realm);
+): IDLPromiseRecord {
+  const promise = createIDLPromiseRecord(idlType.any, realm);
   promise.reject(reason);
   return promise;
 }

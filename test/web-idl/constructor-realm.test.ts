@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import type { JSFunction } from '../../src/js-engine/index';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { ctor, defineInterface, impl } from '../../src/web-idl/core/index';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { BindingContext } from '../../src/web-idl/binding-context';
-import { registerDefinitionBindings } from '../../src/web-idl/projection';
+import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { TestRealm, getInstalledInterface } from './test-realm';
 
 describe('interface constructor prototype fallback', () => {
@@ -16,8 +15,8 @@ describe('interface constructor prototype fallback', () => {
       Reflect.set(target, 'prototype', prototype);
       const object = Reflect.construct(Example, [], target) as object;
 
-      expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject('Example'));
-      expect(first.getPlatformObjectRecord(object)?.realm).toBe(first.realm);
+      expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject(second.resolveInterface('Example')));
+      expect(getPlatformRecord(object)?.realm).toBe(first.realm);
     });
   }
 
@@ -30,7 +29,7 @@ describe('interface constructor prototype fallback', () => {
     Reflect.setPrototypeOf(bound, first.realm.intrinsics.functionPrototype);
     const object = Reflect.construct(Example, [], bound) as object;
 
-    expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject('Example'));
+    expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject(second.resolveInterface('Example')));
   });
 
   itPassesWith('functionRealms')('reads prototype once without consulting proxy prototype traps', () => {
@@ -47,7 +46,7 @@ describe('interface constructor prototype fallback', () => {
     const object = Reflect.construct(Example, [], proxy) as object;
 
     expect(trace).toEqual(['get prototype']);
-    expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject('Example'));
+    expect(Reflect.getPrototypeOf(object)).toBe(second.getInterfacePrototypeObject(second.resolveInterface('Example')));
   });
 
   it('throws when a primitive prototype getter revokes newTarget', () => {
@@ -110,8 +109,8 @@ function createBindings() {
   const objects = new PlatformObjectRegistry();
   const first = new RealmBinding(definitions, new TestRealm(), objects);
   const second = new RealmBinding(definitions, new TestRealm(), objects);
-  registerDefinitionBindings(first, new BindingContext(first));
-  registerDefinitionBindings(second, new BindingContext(second));
+  registerDefinitionBindings(first);
+  registerDefinitionBindings(second);
   const target = second.realm.evaluate('(function Target() {})', 'target.js') as JSFunction;
   Reflect.set(target, 'prototype', null);
   const Example = getInstalledInterface(first.install(), 'Example');

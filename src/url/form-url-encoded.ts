@@ -1,6 +1,6 @@
 import { getEncoding, getOutputEncoding } from '../encoding/encodings';
 import { utf8DecodeWithoutBOM, utf8Encode } from '../encoding/codecs/utf-8';
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 
 import {
   percentDecodeBytes, percentEncodeAfterEncoding,

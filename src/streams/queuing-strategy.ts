@@ -3,7 +3,7 @@ import {
   dictMember, idlType, impl, roAttr, reference,
 } from '../web-idl/index';
 import { getV } from '../js-engine/index';
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 
 /*
  * dictionary QueuingStrategy {

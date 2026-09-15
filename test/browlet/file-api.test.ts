@@ -8,6 +8,7 @@ import {
 } from '../../src/file/index';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { StampedPlatformObject } from '../../src/web-idl/index';
 import {
   structuredDeserialize,
 } from '../../src/browlet/scripting/structured-data/deserialize';
@@ -436,11 +437,12 @@ describe('File API File and FileList projection', () => {
     const list = ctx.project(
       FileListImpl,
       ctx.construct(FileListImpl, [file]),
-    ) as FileList;
+    ) as StampedPlatformObject<FileList>;
     if (accessed) expect(list.item(0)?.name).toBe('payload.txt');
 
     const clone = window.structuredClone(list);
 
+    if (!accessed) expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
     expect(clone).toBeInstanceOf(requireFunction(window, 'FileList'));
     expect(clone.length).toBe(1);
     expect(clone.item(0)).toBeInstanceOf(requireFunction(window, 'File'));
@@ -449,7 +451,7 @@ describe('File API File and FileList projection', () => {
     expect(clone.item(0)?.size).toBe(7);
   });
 
-  it('subserializes FileList entries with shared graph identity', async () => {
+  it.each([false, true])('subserializes FileList entries with shared graph identity (list first: %s)', async (listFirst) => {
     const sourceWindow = createWindow();
     const targetWindow = createWindow();
     const file = constructFile(
@@ -462,7 +464,7 @@ describe('File API File and FileList projection', () => {
     const sourceRealm = getRelevantRealm(sourceWindow);
     const targetRealm = getRelevantRealm(targetWindow);
     const serialized = structuredSerializeForStorage(
-      { file, list },
+      listFirst ? { list, file } : { file, list },
       getBindingContext(sourceRealm),
     );
     const clone = structuredDeserialize(serialized, getBindingContext(targetRealm)) as Record<string, object>;

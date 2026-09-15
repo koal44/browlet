@@ -1,4 +1,4 @@
-import { RangeError } from '../js-engine/simple-exception';
+import { RangeError } from '../js-engine/exceptions';
 
 /** Streams §8.1, a queue that tracks the total size of its values. */
 export class QueueWithSizes<Value> {

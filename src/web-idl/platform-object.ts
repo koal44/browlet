@@ -1,232 +1,213 @@
 import { isObject, type JSRealm, type PromiseValue } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../infra/observable-array';
+import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
-import type { AsyncIteratorRecord } from './async-iterable';
-import type { RealmBinding } from './binding';
+import type { RealmBinding } from './realm-binding';
 import type { AttributeMember, WebIDLType } from './core/index';
-import type { WebIDLRealmHost } from './js-realm';
-import type { IDLPromise } from './promise-value';
-import type { BindingContext } from './binding-context';
+import type { WebIDLRealmHost } from './realm-host';
+
+/** An implementation instance stamped with its private platform record. */
+export type StampedImplInstance<T extends object = object> = T & ImplementationStamper;
+
+/** A platform object stamped with the same record as its implementation instance. */
+export type StampedPlatformObject<T extends object = object> = T & PlatformObjectStamper;
+
+/** Recognize an implementation stamp, regardless of its owning binding world. */
+export function isStampedImplInstance(implInst: unknown): implInst is StampedImplInstance {
+  return ImplementationStamper.get(implInst) !== undefined;
+}
+
+/** Recognize a platform stamp, regardless of its owning binding world. */
+export function isStampedPlatformObject(platformObject: unknown): platformObject is StampedPlatformObject {
+  return PlatformObjectStamper.get(platformObject) !== undefined;
+}
 
 /**
- * Instance associations shared by the realms in one binding world. Each
- * projected platform object and its implementation point to one shared record.
- * Interface constructor functions and prototypes are cached by RealmBinding.
+ * Realm registrations and promise projections shared within one binding world.
+ * Implementation and platform objects carry their own records; this registry's
+ * identity scopes those records to their world.
  */
 export class PlatformObjectRegistry {
-  // One registry belongs to one binding world. A separate world can therefore
-  // associate its own platform object without weakening this identity boundary.
-  /** Realm/interface selection retained until the implementation is projected. */
-  #implementationOrigins = new WeakMap<object, PlatformImplementationOrigin>();
-  /** Completed implementation/platform pairs, indexed by the implementation. */
-  #implementationRecords = new WeakMap<object, PlatformObjectRecord>();
-  #objectRecords = new WeakMap<object, PlatformObjectRecord>();
-  #realmBindings = new WeakMap<JSRealm, RealmPlatformBinding>();
-
-  readonly asyncIterators = new WeakMap<object, AsyncIteratorRecord>();
+  #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
   // Retained promises share a projection per result type and realm in this world.
   promiseProjections?: WeakMap<Promise<unknown> | PromiseValue<unknown>, PromiseProjection[]>;
 
-  // Project helper: register the binding and context used to project into a realm.
-  registerRealm(
-    binding: RealmBinding,
-    context: BindingContext,
-  ): void {
+  // Project helper: publish a realm binding after its declaration setup succeeds.
+  registerRealm(binding: RealmBinding): void {
     if (this.#realmBindings.has(binding.realm)) {
       throw new TypeError('Realm already has a registered binding');
     }
-    this.#realmBindings.set(binding.realm, { context, binding });
-  }
-
-  // Project helper: retain an implementation's interface and realm before projection.
-  associateOrigin(
-    implementation: object,
-    primaryInterface: AssembledInterfaceDefinition,
-    realm: WebIDLRealmHost,
-  ): void {
-    if (
-      this.#objectRecords.has(implementation) ||
-      this.#implementationRecords.has(implementation) ||
-      this.#implementationOrigins.has(implementation)
-    ) {
-      throw new TypeError('Implementation object is already associated');
-    }
-    this.#implementationOrigins.set(implementation, {
-      primaryInterface,
-      realm,
-    });
-  }
-
-  // Project helper: project an implementation using its recorded origin.
-  projectFromOrigin(implementation: object): object {
-    const origin = this.#implementationOrigins.get(implementation);
-    if (!origin) throw new TypeError('Implementation object has no origin');
-    const registration = this.#realmBindings.get(origin.realm);
-    if (!registration) {
-      throw new TypeError('Implementation origin has no registered realm');
-    }
-    return registration.binding.projectPlatformObject(
-      implementation, origin.primaryInterface,
-    ).platformObject;
-  }
-
-  // Project helper: pair implementation and platform identities in our record.
-  // Web IDL §3.8 Platform objects implementing interfaces defines [[Realm]] and [[PrimaryInterface]].
-  associate(
-    platformObject: object,
-    implementation: object,
-    primaryInterface: AssembledInterfaceDefinition,
-    realm: WebIDLRealmHost,
-  ): PlatformObjectRecord {
-    if (
-      this.#objectRecords.has(platformObject) ||
-      this.#implementationRecords.has(platformObject) ||
-      this.#implementationOrigins.has(platformObject) ||
-      this.#objectRecords.has(implementation) ||
-      this.#implementationRecords.has(implementation)
-    ) {
-      throw new TypeError('Platform object is already associated');
-    }
-
-    const origin = this.#implementationOrigins.get(implementation);
-    if (origin && (
-      origin.primaryInterface !== primaryInterface ||
-      origin.realm !== realm
-    )) {
-      throw new TypeError('Implementation object has another originating realm');
-    }
-
-    const record = {
-      implementation,
-      platformObject,
-      primaryInterface,
-      realm,
-    };
-    this.#implementationOrigins.delete(implementation);
-    this.#implementationRecords.set(implementation, record);
-    this.#objectRecords.set(platformObject, record);
-    return record;
-  }
-
-  // Project helper: find our record for a platform object.
-  getRecord(value: unknown): PlatformObjectRecord | undefined {
-    return isObject(value)
-      ? this.#objectRecords.get(value)
-      : undefined;
-  }
-
-  // Project helper: find our record for an implementation object.
-  getImplementationRecord(value: unknown): PlatformObjectRecord | undefined {
-    return isObject(value)
-      ? this.#implementationRecords.get(value)
-      : undefined;
-  }
-
-  // Project helper: look up an implementation's origin before projection.
-  getImplementationOrigin(
-    value: unknown,
-  ): PlatformImplementationOrigin | undefined {
-    return isObject(value)
-      ? this.#implementationOrigins.get(value)
-      : undefined;
-  }
-
-  // Project helper: look up a realm's binding context.
-  getBindingContext(realm: WebIDLRealmHost): BindingContext | undefined {
-    return this.#realmBindings.get(realm)?.context;
+    this.#realmBindings.set(binding.realm, binding);
   }
 
   // Project helper: look up a realm's binding.
   getRealmBinding(realm: JSRealm): RealmBinding | undefined {
-    return this.#realmBindings.get(realm)?.binding;
-  }
-
-  // Project helper: retrieve the implementation paired with a platform object.
-  getImplementationObject(value: unknown): object | undefined {
-    return this.getRecord(value)?.implementation;
-  }
-
-  // Project helper: retrieve the platform object paired with an implementation.
-  getPlatformObject(value: unknown): object | undefined {
-    return this.getImplementationRecord(value)?.platformObject;
-  }
-
-  // Project helper: update the realm in our existing platform-object record.
-  changeRealm(
-    value: object,
-    realm: WebIDLRealmHost,
-  ): void {
-    const record = this.getRecord(value);
-    if (!record) throw new TypeError('Value is not a platform object');
-    record.realm = realm;
-  }
-
-  // Project helper: recognize objects registered in this binding world.
-  // Web IDL §2.12 Objects implementing interfaces leaves recognition implementation-specific.
-  isPlatformObject(value: unknown): boolean {
-    return this.getRecord(value) !== undefined;
-  }
-
-  // Project helper: look up a platform object and apply the interface-membership rule below.
-  implements(value: unknown, interface_: AssembledInterfaceDefinition): boolean {
-    const record = this.getRecord(value);
-    return record ? this.recordImplements(record, interface_) : false;
-  }
-
-  // Project helper: apply the interface-membership rule to a record's primary interface.
-  recordImplements(
-    record: PlatformObjectRecord,
-    interface_: AssembledInterfaceDefinition,
-  ): boolean {
-    return this.interfaceImplements(record.primaryInterface, interface_);
-  }
-
-  // Web IDL §3.8 Platform objects implementing interfaces — "implements" rule.
-  // Test the primary interface and its inherited interfaces using our assembled definitions.
-  interfaceImplements(
-    primaryInterface: AssembledInterfaceDefinition,
-    interface_: AssembledInterfaceDefinition,
-  ): boolean {
-    let current: AssembledInterfaceDefinition | undefined = primaryInterface;
-
-    while (current) {
-      if (current.definition === interface_.definition) return true;
-      current = current.parent;
-    }
-
-    return false;
+    return this.#realmBindings.get(realm);
   }
 }
 
-export type PlatformImplementationOrigin = {
-  primaryInterface: AssembledInterfaceDefinition;
-  realm: WebIDLRealmHost;
-};
-
-type RealmPlatformBinding = {
-  context: BindingContext;
+/** The shared record for an implementation instance and its eventual platform object. */
+export class PlatformRecord<T extends object = object> {
+  readonly implInst: StampedImplInstance<T>;
+  readonly primaryInterface: AssembledInterfaceDefinition;
   binding: RealmBinding;
-};
-
-/** One projected instance and its implementation, with interface and realm metadata. */
-export type PlatformObjectRecord = {
-  implementation: object;
+  platformObject?: StampedPlatformObject;
   // Per-object IDL state follows the object when its associated realm changes.
-  mapEntries?: Map<unknown, unknown>;
-  platformObject: object;
-  observableArrays?: WeakMap<
-    AttributeMember,
-    ObservableArrayHandle<unknown, unknown>
-  >;
-  primaryInterface: AssembledInterfaceDefinition;
-  realm: WebIDLRealmHost;
-  setEntries?: Set<unknown>;
-};
+  declare mapEntries?: Map<unknown, unknown>;
+  declare observableArrays?: WeakMap<AttributeMember, ObservableArrayHandle<unknown, unknown>>;
+  declare setEntries?: Set<unknown>;
+
+  constructor(
+    implInst: T,
+    primaryInterface: AssembledInterfaceDefinition,
+    binding: RealmBinding,
+  ) {
+    this.primaryInterface = primaryInterface;
+    this.binding = binding;
+    this.implInst = ImplementationStamper.stamp(implInst, this);
+  }
+
+  get realm(): WebIDLRealmHost { return this.binding.realm; }
+
+  project(): StampedPlatformObject {
+    return this.platformObject ??
+      this.binding.projectPlatformObject(this.implInst, this.primaryInterface).platformObject!;
+  }
+
+  // Project helper: apply interface membership to this record's primary interface.
+  implements(primaryInterface: AssembledInterfaceDefinition): boolean {
+    return interfaceImplements(this.primaryInterface, primaryInterface);
+  }
+}
+
+// Project helper: stamp the implementation with its owner before its first projection.
+export function stampImplementation<T extends object>(
+  implInst: T,
+  primaryInterface: AssembledInterfaceDefinition,
+  binding: RealmBinding,
+): StampedImplInstance<T> {
+  if (isStampedPlatformObject(implInst) || isStampedImplInstance(implInst)) {
+    throw new TypeError('Implementation object is already stamped or is a platform object');
+  }
+  return new PlatformRecord(implInst, primaryInterface, binding).implInst;
+}
+
+// Project helper: pair implementation and platform identities in our record.
+// Web IDL §3.8 Platform objects implementing interfaces defines [[Realm]] and [[PrimaryInterface]].
+export function associatePlatformObject<T extends object>(
+  platformObject: object,
+  implInst: T,
+  primaryInterface: AssembledInterfaceDefinition,
+  binding: RealmBinding,
+): PlatformRecord<T> {
+  if (platformObject === implInst) {
+    throw new TypeError('Implementation and platform objects must be distinct');
+  }
+  if (
+    isStampedPlatformObject(platformObject) ||
+    isStampedPlatformObject(implInst) ||
+    isStampedImplInstance(platformObject)
+  ) {
+    throw new TypeError('Platform object is already associated');
+  }
+
+  const record = (ImplementationStamper.get(implInst) ??
+    new PlatformRecord(implInst, primaryInterface, binding)) as PlatformRecord<T>;
+  if (record.binding !== binding ||
+    record.primaryInterface !== primaryInterface || record.platformObject) {
+    throw new TypeError('Implementation object is already associated with another owner or platform object');
+  }
+  record.platformObject = PlatformObjectStamper.stamp(platformObject, record);
+  return record;
+}
+
+// Project helper: read the platform object's attached record.
+export function getPlatformRecord(platformObject: unknown): PlatformRecord | undefined {
+  return PlatformObjectStamper.get(platformObject);
+}
+
+// Project helper: read the implementation instance's attached record.
+export function getImplementationRecord<T extends object>(
+  implInst: T,
+): PlatformRecord<T> | undefined;
+export function getImplementationRecord(
+  implInst: unknown,
+): PlatformRecord | undefined;
+export function getImplementationRecord(
+  implInst: unknown,
+): PlatformRecord | undefined {
+  return ImplementationStamper.get(implInst);
+}
+
+// Project helper: retrieve the implementation paired with a platform object.
+export function getImplementationObject(
+  platformObject: unknown,
+): StampedImplInstance | undefined {
+  return getPlatformRecord(platformObject)?.implInst;
+}
+
+// Project helper: retrieve the platform object paired with an implementation.
+export function getPlatformObject(
+  implInst: unknown,
+): StampedPlatformObject | undefined {
+  return getImplementationRecord(implInst)?.platformObject;
+}
+
+// Web IDL §3.8 Platform objects implementing interfaces — "implements" rule.
+// Test the primary interface and its inherited interfaces using our assembled definitions.
+export function interfaceImplements(
+  primaryInterface: AssembledInterfaceDefinition,
+  expectedInterface: AssembledInterfaceDefinition,
+): boolean {
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
+
+  while (current) {
+    if (current.definition === expectedInterface.definition) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+class ImplementationStamper extends Stamper {
+  #record: PlatformRecord;
+
+  private constructor(implInst: object, record: PlatformRecord) {
+    super(implInst);
+    this.#record = record;
+  }
+
+  static stamp<T extends object>(implInst: T, record: PlatformRecord<T>): StampedImplInstance<T> {
+    new ImplementationStamper(implInst, record);
+    return implInst as StampedImplInstance<T>;
+  }
+
+  static get(implInst: unknown): PlatformRecord | undefined {
+    return isObject(implInst) && #record in implInst ? implInst.#record : undefined;
+  }
+}
+
+class PlatformObjectStamper extends Stamper {
+  #record: PlatformRecord;
+
+  private constructor(platformObject: object, record: PlatformRecord) {
+    super(platformObject);
+    this.#record = record;
+  }
+
+  static stamp<T extends object>(platformObject: T, record: PlatformRecord): StampedPlatformObject<T> {
+    new PlatformObjectStamper(platformObject, record);
+    return platformObject as StampedPlatformObject<T>;
+  }
+
+  static get(platformObject: unknown): PlatformRecord | undefined {
+    return isObject(platformObject) && #record in platformObject ? platformObject.#record : undefined;
+  }
+}
 
 type PromiseProjection = {
   realm: WebIDLRealmHost;
   type: WebIDLType;
-  promise: IDLPromise;
+  promise: Promise<unknown>;
   newBufferResult: boolean;
 };

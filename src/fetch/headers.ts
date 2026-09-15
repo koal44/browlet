@@ -321,7 +321,7 @@ export class HeadersImpl {
     throw new Error('Headers.set is not implemented');
   }
 
-  entries(): IterableIterator<[string, string]> {
+  getEntryList(): readonly Header[] {
     throw new Error('Headers sorting and combining is not implemented');
   }
 }

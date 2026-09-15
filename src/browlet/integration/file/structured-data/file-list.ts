@@ -29,8 +29,8 @@ const fileListSerializable: SerializableSteps = {
       );
     }
     const files = requireFiles(serialized).map((serializedFile) => {
-      const object = context.subdeserialize(serializedFile);
-      const file = context.getImplementation(object, FileImpl);
+      const platformFile = context.subdeserialize(serializedFile) as File;
+      const file = context.unwrap(platformFile, FileImpl);
       if (!file) {
         throw new TypeError('A FileList entry did not deserialize to File');
       }

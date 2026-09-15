@@ -49,10 +49,79 @@ An ordinary platform object has two object identities across these layers:
 | Implementation object, such as `AbortSignalImpl` | Specification state, private fields, implementation methods, internal relationships, and subsystem algorithms |
 | Platform object, such as the JavaScript `AbortSignal` object | Realm-facing prototype identity, author properties, Web IDL member exposure, and any required exotic object behavior |
 
-Binding connects them. One binding world's `PlatformObjectRegistry`
-records one stable platform-object/implementation pair. The implementation
-keeps its own class prototype; ordinary projection does not turn it into the
-platform object.
+Binding stamps one `PlatformRecord` onto each implementation instance
+participating in binding.
+`StampedImplInstance<T>` identifies the same instance after stamping;
+it retains `T`'s members and is recognized by `isStampedImplInstance()`.
+`stampImplementation()` and `BindingContext.construct()` return this
+typed instance, as does unwrapping an existing platform object. The record's
+`implInst` refers back to that instance.
+The record retains its owning `RealmBinding`, primary interface, and, after
+projection, platform object. One record class covers both stages; its optional
+`platformObject` field is populated during association. The realm is obtained
+from that owner. The implementation keeps its own class prototype; ordinary
+projection does not turn it into the platform object. `getPlatformRecord()` and
+`getImplementationRecord()` read that same record directly from the respective
+object's private stamp, without a registry or a world-membership check.
+`StampedPlatformObject<T>` retains the platform object's shape, independently
+of `StampedImplInstance<T>`; projection returns the platform stamp type.
+World APIs, receiver validation, and conversion boundaries enforce world
+membership where they accept an object. Code reading an already-owned object
+uses its stamp directly. Each object has one record and cannot be reassociated
+in a second world. `PlatformRecord.implements()` checks its interface ancestry.
+
+Entry points which select an interface by name accept `interfaceName: string`
+and resolve it immediately. Internal projection and allocation take
+`primaryInterface: AssembledInterfaceDefinition`; they do not also accept names.
+Exact declaration identities remain `definition`, including capability keys.
+
+```text
+BlobImpl class -- construction --> blobImpl instance
+                                      │ private field
+                                      ▼
+                               PlatformRecord
+                               ├─ owning RealmBinding
+                               └─ blob platform object (after projection)
+
+blob platform object -- private field --> the same record --> blobImpl
+window.Blob = realm-owned constructor function, cached separately
+```
+
+## Stamping
+
+[`Stamper`](./infra/stamper.ts) provides the shared constructor that returns the
+supplied object. JavaScript initializes a derived stamper's private fields on
+that object without changing its prototype. Each concrete stamper stays with
+the module that owns its record and accessors; the base owns no record or brand.
+Its static `stamp(target, record)` attaches the state and returns the same target;
+`get(target)` retrieves the state. Concrete constructors are private so call
+sites consistently name the stamping operation.
+Stamped types retain the target's members and use the concrete stamper's private
+field as their type brand, without adding a runtime marker. `JSFunction<Result>`
+preserves iterator stamp types through realm function creation. Receivers coming
+back from author JavaScript still require stamp recognition.
+`ImplementationStamper` and `PlatformObjectStamper` attach the shared record to
+their respective identities; the iterator stampers attach iteration state.
+Implementation instances and their platform objects are distinct objects;
+association rejects using the same object for both roles. Private-field recognition
+does not invoke proxy traps, and the field is absent from `Reflect.ownKeys`.
+Frozen implementation instances and platform objects are supported. A proxy created
+by Binding carries its own stamp. Its target and an author-created proxy around
+it do not inherit that stamp; recognition also works after proxy revocation.
+
+Synchronous pair iterators also carry private binding state on the iterator
+object itself: target, interface, kind, and index. Borrowed `next()` methods
+read that same state across realms, checking world membership through the
+target's existing platform record. Iterator prototypes and result
+allocation remain realm-owned; state recognition does not depend on the
+method's realm or the iterator's mutable prototype.
+
+Asynchronous iterators carry their internal iterator, interface, kind, ongoing
+promise, and completion state in a private field on the author iterator. The
+state also retains its owning registry to check binding-world membership;
+the internal iterator itself needs no binding record. The registry has no
+separate iterator-state map. Promise ordering and result allocation remain
+binding work.
 
 ```text
 author call
@@ -122,22 +191,48 @@ Web IDL owns the boundary into the Platform layer:
 Bindings project a complete implementation object graph; they do not construct
 the implementation state which makes a partial interface or mixin function.
 
+Member dispatch preserves the recognized receiver record through registered
+attribute and operation adapters. Their first argument is the record, or `null`
+for static and namespace members. Adapters use its `implInst` as the actual
+implementation receiver and its owning binding's context for receiver-owned
+dependencies. The executing member's binding still handles argument conversion
+and synchronous exceptions. Borrowing a method from another realm therefore
+does not change the receiver's owner. Collections and observable arrays also
+use the recognized record directly when they need its retained state or
+platform object.
+
+Legacy indexed/named property metadata is assembled once per interface in each
+realm's existing initial-object record. It retains the inherited operations,
+registration-time callbacks, flags, and unforgeable names. Supported property
+names and indices remain live queries against each implementation instance.
+Ordinary interfaces retain a null result to avoid repeated legacy checks.
+
 ### Binding worlds
 
 A `BindingWorld` owns one platform-object registry and the realm registrations
 which share that identity. Definitions and capability registrations may be
-reused by many worlds; platform-object associations may not. Within one world,
-an implementation always recovers the same platform object. Another world may
-project its own platform object for the same underlying implementation.
+reused by many worlds. An implementation instance belongs to one world and
+always recovers the same platform object. Attempting to associate it with a
+second world throws; that world must construct its own implementation instance.
 
-`createBindingWorld(definitions, options)` creates this owner. Its
+`new BindingWorld(definitions, options)` creates this owner. Its
 `BindingWorldOptions` configures shared capabilities and host-defined interfaces;
 realm registration supplies the realm-specific options.
 
 `world.register(realm)` returns the world's shared `BindingContext` for that
 realm; `world.forRealm(realm)` retrieves it without registering. Installation
 and global-object projection are context methods. Registering the same realm
-in another world produces a separate context and separate instance associations.
+in another world produces a separate context for that world's own instances.
+
+The platform-object registry holds the world's single realm-to-binding index.
+Only registration and realm lookup remain instance methods on the registry;
+the remaining stored state is the promise-projection cache. Record access and
+stamping belong to module functions and the concrete stampers.
+Each `RealmBinding` constructs and retains its `BindingContext` directly;
+`BindingWorld` queries that index rather than retaining another context map.
+Runtime composition and declaration setup complete before the binding enters
+the index, so a failed setup leaves the realm unregistered. Low-level binding
+setup uses the same owned context through `registerDefinitionBindings(binding)`.
 
 HTML does not define wrapper worlds, so neither an HTML Agent nor AgentCluster
 is the generic owner. Browlet's current composition root owns one main binding
@@ -210,8 +305,9 @@ duplicated it. Browlet therefore keeps:
 
 - execution and the event loop on `Agent`;
 - Realm-specific interface objects and prototypes on `RealmBinding`; and
-- stable implementation/platform associations and origin tracking on the main
-  `BindingWorld` owned by the Browlet composition root.
+- stable implementation/platform associations on each implementation instance,
+  with platform-object lookup scoped to the main `BindingWorld` owned by the
+  Browlet composition root.
 
 The lower [`js-engine/`](./js-engine/README.md) project separately maps native
 Node/V8 contexts to realms, with explicit host-object associations and a
@@ -282,28 +378,47 @@ internal object-creation
 adapter when realm-owned dependencies must be injected. They must not call a
 public constructor and then unwrap its result.
 
+`createPlatformObject()` requires registered implementation creation steps and
+projects the resulting implementation through the ordinary projection path.
+It does not manufacture an object to serve both identities. A declaration without
+creation steps can still supply an interface object and prototype, but attempting
+to instantiate it reports a configuration error.
+
 Projection can remain lazy until an implementation crosses an author-observable
 boundary. Returning an already-associated implementation recovers its stable
 platform object. When a regular member returns a fresh, realm-neutral
-implementation, Binding associates it with the receiver's relevant Realm before
-JavaScript conversion. A method borrowed from another Realm therefore cannot
+implementation, IDL-to-JavaScript conversion associates it with the receiver's
+relevant Realm. A method borrowed from another Realm therefore cannot
 claim the result merely because it supplied the function object.
 
 The same receiver rule applies to explicit instance-member bindings. Argument
 conversion still belongs to the operation function's Realm, while its member
 binding receives the receiver's Binding Context. Static operations have no
 receiver Realm and use the context in which their function was installed.
+Getters and operations take their result conversion context directly from the
+receiver record's `binding`; they do not reconstruct it from the realm.
 Implementations must not accept or retain that context. Existing
 `invokeWith(atArg(0, (ctx) => ctx))` dependencies are migration work. A future dependency
 on the calling script or incumbent settings requires explicit invocation
 information at the binding boundary.
 
 When a value needs a specified realm before any ordinary result projection,
-the binding or composition boundary can record its origin with
-`context.construct()`. Borrowing a member alone does not establish that need:
+the binding or composition boundary stamps its platform record with
+`context.construct()`. Projection fills in that record's platform-object field;
+it does not replace a temporary origin record. The instance record belongs to
+Binding, while implementation methods receive only the `RuntimeContext`
+dependencies they use. Raw implementation construction remains usable outside
+Web IDL, and gains binding ownership when explicitly stamped or projected.
+Borrowing a member alone does not establish a need for early stamping:
 receiver-aware return conversion already handles it. Request and Response
 therefore construct their Headers implementations directly; the typed getter
 establishes platform identity and preserves `[SameObject]`.
+
+`getObjectRecord()` retrieves the attached instance record through either
+identity, including before projection. Structured serialization uses its
+implementation and interface without allocating a platform object. Serialization
+memory and transfer placeholders use the implementation instance as their key,
+so internal references and author-visible references retain one cloned identity.
 
 ### Return projection
 
@@ -355,6 +470,12 @@ one realm-owned error when the same internal failure reaches multiple results.
 Dictionary results can be ordinary records, including `{ value, done }` from
 stream reads; binding creates the realm-owned result and projects its members.
 
+`conversion.ts` owns `projectPromise` and its fulfillment conversion. Projection
+returns the author Promise directly; the cache retains that same Promise.
+`promise-record.ts` supplies the retained capability and settlement operations;
+`promise.ts` builds the higher-level promise algorithms on those values and
+conversion. Conversion does not depend on the promise algorithms.
+
 Declared Promise arguments and Promise-returning callback functions supply
 `PromiseValue<T>` results whose fulfillment has undergone the declared
 conversion. Their continuation destination belongs to the receiving
@@ -367,15 +488,29 @@ and declared result projection supply that boundary. Async sequence arguments
 supply iteration steps whose internal results carry converted element values.
 The adapter retains dictionary and interface types through each fulfillment.
 
+A synchronous pair `iterable` uses the implementation's `getEntryList()` method
+to read its current `[key, value]` tuples. Binding retains the iterator's index,
+consults the list on each `next()` and after each `forEach()` callback, and
+converts only the selected pair. It creates fresh author-facing entry arrays
+without copying the backing list. FormData also uses this entry-list accessor
+for Fetch BodyInit extraction.
+
 An `async iterable` declaration names its implementation factory with `create`.
 Binding calls that method with converted arguments and adapts the internal
 iterator's `next()` and `return()` methods. `return: true` declares the return
 algorithm so Binding exposes that method on the author iterator prototype.
 The implementation owns its cursor and resource state. Binding retains the
 author iterator's identity, iteration kind, completion flag, and ongoing Promise
-in the world's `PlatformObjectRegistry`. Borrowed iterator methods therefore
+in its private stamp. Borrowed iterator methods therefore
 share completion and call ordering across realms in that world. The method's
 realm supplies the returned Promise and iterator result object.
+
+The iterator's completion can be a `PromiseValue` or a native Promise. Binding
+observes it in the method's realm and converts the item before resolving the
+author's result Promise. It does not project the completion as `Promise<any>`:
+native resolution must not inspect an implementation instance's `then` property.
+ReadableStream explicitly adopts author chunks through `Promises.resolve()` in
+its chunk-read steps; generic iterator binding does not supply that Streams rule.
 
 The fulfillment adapters use native Promise observation in the destination
 realm. A `PromiseValue` chain retains that destination. `Promises.import()`
@@ -440,7 +575,7 @@ author function directly. The adapter:
 - applies the declared report/rethrow/promise exception policy.
 
 For callback interfaces, `CallbackInterfaceRecord` retains Web IDL's definition,
-conversion context, and captured callback context. The declaration's adapter
+conversion context, and captured callback context. The declaration's `adapt` callback
 receives a `CallbackInterfaceValue` with the original object, its realm, and
 the operation-invocation method.
 
@@ -449,7 +584,7 @@ with a platform object. A direct implementation test can invoke converted
 callbacks with implementation values, but that is not a substitute for a
 projected callback test.
 
-An object argument can declare `callbackDictionary(name)` to convert to that
+An object argument can declare `cbDict(name)` to convert to that
 dictionary after ordinary IDL argument conversion. Its callback-function members,
 including inherited members, use the original input object as `this`. The
 existing callback adapter retains this receiver and preserves the original
@@ -495,10 +630,13 @@ slots in order. Each resolver receives the active Binding Context and returns
 the injected argument. Selecting a global or constructing another implementation
 is explicit in that callback. Duplicate injected slots are rejected.
 
-`core/definitions/` groups each definition with its `define…` function
-and dedicated helpers; primary and partial forms share a module. Shared members,
-arguments, type expressions, and extended attributes remain in `core/definition.ts`.
-Cross-definition projection metadata remains in `core/binding.ts`.
+`core/declarations.ts` pairs each definition with its `define…` function,
+grouping primary and partial forms together. `core/helpers.ts` supplies member,
+argument, type-expression, and implementation-option builders. Shared member
+records, IDL types and their fixed values, extended attributes, and contextual
+callback contracts live in `core/types.ts`. Helper option types stay private and
+derive from those records. The Core entry exposes these declarations without
+depending on runtime binding code.
 
 ### Exceptions
 
@@ -512,9 +650,9 @@ implementation state is ordinary `DOMExceptionImpl`, while the platform object
 is allocated as an Error exotic
 in the owning realm.
 
-Web IDL's `core/dom-exception-core.ts` owns the shared names, legacy codes,
+Web IDL's `core/dom-exception.ts` owns the shared names, legacy codes,
 and DOMException-request helpers. JS Engine's
-[`simple-exception.ts`](./js-engine/simple-exception.ts) provides distinguishable
+[`exceptions.ts`](./js-engine/exceptions.ts) provides distinguishable
 `RangeError`, `SyntaxError`, and `TypeError` requests without importing Web IDL.
 Translate dependency failures into requests at the dependency call.
 
@@ -688,9 +826,9 @@ It records migration work, not permanent architecture.
 
 ## Current limits and next applications
 
-- One implementation has one platform object per `BindingWorld`. Browlet
-  currently creates one host-wide main world; isolated extension worlds or
-  separate runtime instances remain future work.
+- One implementation instance belongs to one `BindingWorld` and has one
+  platform object. Browlet currently creates one host-wide main world;
+  sharing an implementation instance across isolated worlds is not supported.
 - Plain Node still cannot make the modeled WindowProxy the VM context's actual
   top-level `this`; keeping a separate Window implementation does not change
   that engine limitation.

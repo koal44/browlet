@@ -4,6 +4,7 @@ import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
 import { createMicrotaskQueue, type PromiseValue } from '../js-engine/index';
+import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getBindingContext, getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
@@ -59,7 +60,7 @@ export class Browlet {
     if (document === null) {
       throw new Error('Top-level traversable has no active Document');
     }
-    return project(document) as Document;
+    return project(document) as StampedPlatformObject<Document>;
   }
 
   get window(): WindowProxy {

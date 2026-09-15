@@ -1,3 +1,4 @@
+import { Stamper } from '../infra/stamper';
 import {
   bufferViewNames, getArrayBufferViewElementSize, getBufferTypeName,
   isDetachedArrayBuffer, writeArrayBuffer,
@@ -27,7 +28,6 @@ export class JSRealm {
   readonly #context: NodeContext;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
   readonly #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
-  readonly #fallbackIterators = new WeakMap<object, FallbackCollectionIterator>();
   #globalObject: GlobalObject;
   #globalThis: object;
   readonly #hostGlobal: RealmGlobal;
@@ -274,10 +274,10 @@ export class JSRealm {
     setPropertyDelegate(object, delegate);
   }
 
-  createFunction(
-    steps: RealmFunctionSteps,
+  createFunction<Result>(
+    steps: RealmFunctionSteps<Result>,
     options: RealmFunctionOptions,
-  ): JSFunction {
+  ): JSFunction<Result> {
     const factory = options.constructible
       ? this.#constructibleFunctionFactory
       : this.#callableFunctionFactory;
@@ -343,12 +343,11 @@ export class JSRealm {
           ? fallbackNext : value;
       },
     });
-    this.#fallbackIterators.set(iterator, { kind, next, running: false });
-    return iterator;
+    return IteratorStamper.stamp(iterator, { kind, next, running: false });
   }
 
   #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): object {
-    const record = isObject(receiver) ? this.#fallbackIterators.get(receiver) : undefined;
+    const record = isObject(receiver) ? IteratorStamper.get(receiver) : undefined;
     if (!record || record.kind !== kind) {
       throw new this.intrinsics.typeError('Illegal invocation');
     }
@@ -558,7 +557,28 @@ export class JSRealm {
 
 export type CollectionIteratorKind = 'map' | 'set';
 
-type FallbackCollectionIterator = {
+type StampedIterator<T extends object = object> = T & IteratorStamper;
+
+// Fallback state lives on the iterator, accessible to borrowed methods across realms.
+class IteratorStamper extends Stamper {
+  #state: FallbackIteratorRecord;
+
+  private constructor(iterator: object, state: FallbackIteratorRecord) {
+    super(iterator);
+    this.#state = state;
+  }
+
+  static stamp<T extends object>(iterator: T, state: FallbackIteratorRecord): StampedIterator<T> {
+    new IteratorStamper(iterator, state);
+    return iterator as StampedIterator<T>;
+  }
+
+  static get(value: object): FallbackIteratorRecord | undefined {
+    return #state in value ? value.#state : undefined;
+  }
+}
+
+type FallbackIteratorRecord = {
   kind: CollectionIteratorKind;
   next: (() => object) | undefined;
   running: boolean;
@@ -624,9 +644,9 @@ export type JSIntrinsics = {
   uriError: URIErrorConstructor;
 };
 
-export type JSFunction = (
+export type JSFunction<Result = unknown> = (
   ...argumentsList: unknown[]
-) => unknown;
+) => Result;
 
 export type RealmFunctionOptions = {
   name: string;
@@ -634,11 +654,11 @@ export type RealmFunctionOptions = {
   constructible?: boolean;
 };
 
-export type RealmFunctionSteps = (
+export type RealmFunctionSteps<Result = unknown> = (
   thisArgument: unknown,
   argumentsList: unknown[],
   newTarget: JSFunction | undefined,
-) => unknown;
+) => Result;
 
 export type JSMethod = (
   this: unknown,
@@ -651,9 +671,9 @@ type BufferViewConstructor = new (
 
 type RealmGlobal = Record<PropertyKey, unknown>;
 
-type RealmFunctionFactory = (
-  steps: RealmFunctionSteps,
-) => JSFunction;
+type RealmFunctionFactory = <Result>(
+  steps: RealmFunctionSteps<Result>,
+) => JSFunction<Result>;
 
 const callableFunctionFactorySource = `
   (steps) => ({

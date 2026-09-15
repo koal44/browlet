@@ -126,15 +126,9 @@ export class FormDataImpl {
     }
   }
 
-  *entries(): IterableIterator<FormDataEntry> {
-    for (let index = 0; index < this.#entryList.length; index++) {
-      yield this.#entryList[index]!;
-    }
-  }
-
   // -- Internal methods -------------------------------------------------
 
-  /** XHR §4 entry-list access for Fetch BodyInit extraction. */
+  /** XHR §4 — value pairs to iterate over; also used by Fetch BodyInit extraction. */
   getEntryList(): readonly FormDataEntry[] {
     return this.#entryList;
   }

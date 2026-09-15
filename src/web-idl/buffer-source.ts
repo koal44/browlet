@@ -1,16 +1,14 @@
 import * as JSEngine from '../js-engine/index';
-import {
-  hasExtendedAttribute, type BufferTypeName, type BufferViewTypeName,
-  type ExtendedAttribute,
-} from './core/definition';
-import { TypeError } from '../js-engine/simple-exception';
+import { hasExtendedAttribute } from './core/helpers';
+import type { BufferTypeName, BufferViewTypeName, ExtendedAttribute } from './core/types';
+import { TypeError } from '../js-engine/exceptions';
 
 // Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.
 export function convertBufferSourceToIDL(
   value: unknown,
   name: BufferTypeName,
   extendedAttributes: ExtendedAttribute[],
-): object {
+): ArrayBufferLike | ArrayBufferView {
   if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
     throw new TypeError(`Value is not a ${name}`);
   }
@@ -33,18 +31,18 @@ export function convertBufferSourceToIDL(
   } else if (!allowResizable && JSEngine.isResizableArrayBuffer(value)) {
     throw new TypeError(`${name} is resizable`);
   }
-  return value;
+  return value as ArrayBufferLike | ArrayBufferView;
 }
 
 // Web IDL §3.2.26 Buffer source types — convert a buffer source to a JavaScript value.
 export function convertBufferSourceToJavaScript(
   value: unknown,
   name: BufferTypeName,
-): object {
+): ArrayBufferLike | ArrayBufferView {
   if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
     throw new Error(`IDL ${name} value has the wrong buffer source type`);
   }
-  return value;
+  return value as ArrayBufferLike | ArrayBufferView;
 }
 
 // Project helper: distinguish buffer views from ArrayBuffer and SharedArrayBuffer.

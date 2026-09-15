@@ -5,7 +5,7 @@ import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindin
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
 } from '../../../src/streams/index';
-import { RangeError, TypeError } from '../../../src/js-engine/simple-exception';
+import { RangeError, TypeError } from '../../../src/js-engine/exceptions';
 import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('transform-stream implementation', () => {
@@ -231,7 +231,7 @@ describe('transform-stream projection', () => {
     const projectedStream = bindings.getObjectRecord(object);
     expect(projectedStream?.primaryInterface.definition.name)
       .toBe('TransformStream');
-    expect(projectedStream?.implementation).toBe(stream);
+    expect(projectedStream?.implInst).toBe(stream);
   });
 
   it('keeps implementation state off the platform objects', () => {

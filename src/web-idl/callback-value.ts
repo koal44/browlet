@@ -3,7 +3,7 @@ import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
 } from './core/index';
 import type { ConversionContext } from './conversion';
-import type { WebIDLRealmHost } from './js-realm';
+import type { WebIDLRealmHost } from './realm-host';
 
 /** Callback identity, realm, and invocation supplied to a declaration's adapter. */
 export type CallbackInterfaceValue = {

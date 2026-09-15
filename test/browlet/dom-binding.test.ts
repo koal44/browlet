@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { unwrap, getRelevantRealm, registerRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
+import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
 import { Realm } from '../../src/browlet/scripting/realm';
 import { itPassesWith } from '../test-runtime';
@@ -98,6 +99,25 @@ describe('Browlet DOM binding', () => {
     expect(() => {
       FirstEventTarget.prototype.addEventListener.call({}, 'ready', null);
     }).toThrow(FirstTypeError);
+  });
+
+  it('keeps an internally created event in its owning realm when first delivered through another realm', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const FirstAbortController = getGlobal<typeof AbortController>(first, 'AbortController');
+    const SecondEventTarget = getGlobal<typeof EventTarget>(second, 'EventTarget');
+    const controller = new FirstAbortController();
+    const observed: Event[] = [];
+    SecondEventTarget.prototype.addEventListener.call(controller.signal, 'abort', (event) => {
+      observed.push(event);
+    });
+
+    controller.abort();
+
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toBeInstanceOf(getConstructor(first, 'Event'));
+    expect(observed[0]).not.toBeInstanceOf(getConstructor(second, 'Event'));
+    expect(observed[0]?.target).toBe(controller.signal);
   });
 
   itPassesWith('explicitQueues')('reports Window unforgeable descriptors through WindowProxy', () => {
@@ -425,6 +445,17 @@ describe('Browlet DOM binding', () => {
     expect(fragment.ownerDocument).toBe(browlet.document);
     expect(() => { Reflect.construct(ShadowRoot_, []); })
       .toThrow('Illegal constructor');
+  });
+
+  it('keeps a created fragment with its document when the realm has another document', () => {
+    const browlet = createBrowlet();
+    const object = Reflect.construct(getConstructor(browlet, 'Document'), []);
+    const document = unwrap<DocumentImpl>(object);
+    const fragment = document.createDocumentFragment();
+
+    expect(fragment.ownerDocument).toBe(document);
+    expect(fragment.getHost()).toBeNull();
+    expect(getRelevantRealm(fragment)).toBe(getRelevantRealm(object));
   });
 
   it('filters DOM constructors for the host exposure set', () => {

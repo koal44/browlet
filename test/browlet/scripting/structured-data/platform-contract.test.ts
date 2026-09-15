@@ -15,12 +15,12 @@ import {
   isTransferableDetached, markTransferableDetached, transferable,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
-  createBindingWorld, defineInterface, xattr,
+  BindingWorld, defineInterface, xattr, type StampedPlatformObject,
 } from '../../../../src/web-idl/index';
 
 describe('HTML structured-data platform contracts', () => {
   it('runs DOMException steps across realms through exact interface metadata', () => {
-    const domain = createBindingWorld([], {
+    const domain = new BindingWorld([], {
       capabilities: domExceptionCapabilities,
     });
     const firstRealm = new Realm();
@@ -49,7 +49,7 @@ describe('HTML structured-data platform contracts', () => {
     const serialized = createStructuredDataRecord();
 
     steps.serializationSteps(
-      sourceBinding.implementation,
+      sourceBinding.implInst,
       serialized,
       false,
       unusedSerializationContext,
@@ -59,11 +59,11 @@ describe('HTML structured-data platform contracts', () => {
     );
     steps.deserializationSteps(
       serialized,
-      targetBinding.implementation,
+      targetBinding.implInst,
       secondRealm,
       unusedDeserializationContext,
     );
-    const clone = targetBinding.platformObject as DOMException;
+    const clone = targetBinding.platformObject as StampedPlatformObject<DOMException>;
 
     expect(clone).toBeInstanceOf(SecondDOMException);
     expect(clone).not.toBeInstanceOf(FirstDOMException);
@@ -75,7 +75,7 @@ describe('HTML structured-data platform contracts', () => {
   });
 
   it('gives derived serializable interfaces standalone inherited-state steps', () => {
-    const domain = createBindingWorld([], {
+    const domain = new BindingWorld([], {
       capabilities: domExceptionCapabilities,
     });
     const realm = new Realm();
@@ -101,7 +101,7 @@ describe('HTML structured-data platform contracts', () => {
     const serialized = createStructuredDataRecord();
 
     steps.serializationSteps(
-      sourceBinding.implementation,
+      sourceBinding.implInst,
       serialized,
       true,
       unusedSerializationContext,
@@ -111,11 +111,11 @@ describe('HTML structured-data platform contracts', () => {
     );
     steps.deserializationSteps(
       serialized,
-      targetBinding.implementation,
+      targetBinding.implInst,
       realm,
       unusedDeserializationContext,
     );
-    const clone = targetBinding.platformObject as QuotaExceededError;
+    const clone = targetBinding.platformObject as StampedPlatformObject<QuotaExceededError>;
 
     expect(clone).toBeInstanceOf(QuotaExceededError);
     expect(clone.name).toBe('QuotaExceededError');
@@ -195,8 +195,8 @@ const unusedSerializationContext: SerializationContext = {
 };
 
 const unusedDeserializationContext: DeserializationContext = {
-  getImplementation() {
-    throw new Error('DOMException steps do not resolve implementations');
+  unwrap() {
+    throw new Error('DOMException steps do not unwrap platform objects');
   },
   subdeserialize() {
     throw new Error('DOMException steps do not subdeserialize');

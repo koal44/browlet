@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createBindingWorld } from '../../../src/web-idl/index';
+import { BindingWorld } from '../../../src/web-idl/index';
 import {
   RangeError as RangeErrorRequest, SyntaxError as SyntaxErrorRequest,
   TypeError as TypeErrorRequest,
-} from '../../../src/js-engine/simple-exception';
+} from '../../../src/js-engine/exceptions';
 import { TestRealm } from '../test-realm';
 
 describe('Web IDL simple exceptions', () => {
@@ -12,7 +12,7 @@ describe('Web IDL simple exceptions', () => {
     { name: 'SyntaxError', Exception: SyntaxErrorRequest },
     { name: 'TypeError', Exception: TypeErrorRequest },
   ])('realizes a requested $name once, preserving its message', ({ name, Exception }) => {
-    const bindings = createBindingWorld([]);
+    const bindings = new BindingWorld([]);
     const realm = new TestRealm();
     const context = bindings.register(realm);
     const foreignContext = bindings.register(new TestRealm());
@@ -26,7 +26,7 @@ describe('Web IDL simple exceptions', () => {
   });
 
   it('preserves existing exceptions and does not inspect author objects', () => {
-    const context = createBindingWorld([]).register(new TestRealm());
+    const context = new BindingWorld([]).register(new TestRealm());
     const { proxy, revoke } = Proxy.revocable({}, {});
     revoke();
 

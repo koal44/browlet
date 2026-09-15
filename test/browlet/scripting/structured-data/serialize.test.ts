@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { TypeError as TypeErrorRequest } from '../../../../src/js-engine/simple-exception';
+import { TypeError as TypeErrorRequest } from '../../../../src/js-engine/exceptions';
 
 import {
-  createBindingWorld, defineInterface, impl, xattr, type BindingContext,
+  BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception-core';
+import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
@@ -519,12 +519,12 @@ describe('HTML structured serialization', () => {
       },
       deserializationSteps() {},
     })];
-    const bindings = createBindingWorld<Realm>([containerIDL], { capabilities });
+    const bindings = new BindingWorld<Realm>([containerIDL], { capabilities });
     const realm = new Realm();
     const ctx = bindings.register(realm);
     const container = ctx.createPlatformObject(containerIDL);
-    const implementation = container.implementation as ContainerImpl;
-    implementation.child = container.platformObject;
+    const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
+    implInst.child = container.platformObject;
     const serialized = structuredSerializeForStorage(
       container.platformObject,
       ctx,
@@ -564,7 +564,7 @@ function createContext(options: {
   agentCluster?: AgentCluster;
   crossOriginIsolated?: boolean;
 } = {}): BindingContext<Realm> {
-  const bindings = createBindingWorld<Realm>([], {
+  const bindings = new BindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
   });
   const realm = new Realm({

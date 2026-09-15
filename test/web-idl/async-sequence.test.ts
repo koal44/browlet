@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { createBindingWorld } from '../../src/web-idl/registration';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import {
   closeAsyncIterator, convertAsyncSequenceToJavaScript, endOfIteration,
   getAsyncIteratorNextValue, isIDLAsyncSequence, openAsyncSequence,
   type AsyncSequenceValue, type IDLAsyncIterator, type IDLAsyncSequence,
 } from '../../src/web-idl/async-sequence';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { convertToIDL } from '../../src/web-idl/conversion';
 import {
   asyncSequence, defineDictionary, defineInterface, dictMember, idlType,
   reference, type OperationMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL async sequences', () => {
@@ -24,7 +24,7 @@ describe('Web IDL async sequences', () => {
       name: 'Entry', members: [dictMember('name', idlType.DOMString)],
     });
     const realm = new Realm();
-    const context = createBindingWorld([entryIDL]).register(realm);
+    const context = new BindingWorld([entryIDL]).register(realm);
     let conversions = 0;
     const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
     const sequence = context.convertToImpl(entries, asyncSequence(reference('Entry'))) as
@@ -152,6 +152,7 @@ describe('Web IDL async sequences', () => {
   });
 
   it('captures the distinguishing iterator method once during overload resolution', () => {
+    class AsyncSequenceConsumerImpl {}
     const asyncOperation = {
       arguments: [{ name: 'values', type: asyncSequence(idlType.long) }],
       kind: 'operation',
@@ -164,22 +165,23 @@ describe('Web IDL async sequences', () => {
       name: 'accept',
       returns: idlType.DOMString,
     } satisfies OperationMember;
-    const interface_ = defineInterface({
+    const definition = defineInterface({
       name: 'AsyncSequenceConsumer',
       exposed: ['Window'],
       members: [asyncOperation, stringOperation],
     });
     const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(asyncOperation, (_value) => 'async');
-    implementations.setOperationSteps(stringOperation, (_value) => 'string');
+    implementations.setImplementationCreationSteps(definition, () => new AsyncSequenceConsumerImpl());
+    implementations.setOperationSteps(asyncOperation, (_receiver, _value) => 'async');
+    implementations.setOperationSteps(stringOperation, (_receiver, _value) => 'string');
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interface_]),
+      assembleDefinitions([definition]),
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
-    const object = binding.createPlatformObject(interface_.name);
+    const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
     let gets = 0;
     const source = Object.defineProperty({}, Symbol.asyncIterator, {
       get() {

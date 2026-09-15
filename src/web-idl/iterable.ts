@@ -1,4 +1,5 @@
-import { isObject } from '../js-engine/index';
+import { isObject, type JSFunction } from '../js-engine/index';
+import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
@@ -6,19 +7,21 @@ import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import { reference, type IterableMember } from './core/index';
+import {
+  getImplementationRecord, getPlatformRecord, type StampedImplInstance,
+  type PlatformRecord,
+} from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
-import type { ImplementationRegistry } from './registry';
+import type { ImplementationRegistry } from './implementation-registry';
 
-export type ValuePair<Key = unknown, Value = unknown> = {
-  key: Key;
-  value: Value;
-};
+// Value pairs use the implementation's existing entry tuples.
+// SPEC_MISMATCH: value pair { key, value }
+export type ValuePair<Key = unknown, Value = unknown> = readonly [key: Key, value: Value];
 
 export class SynchronousIterableBinding {
   readonly #context: ConversionContext;
   readonly #getIteratorPrototype: IteratorPrototypeFactory;
   readonly #implementations: ImplementationRegistry;
-  readonly #iterators = new WeakMap<object, DefaultIterator>();
 
   // Project helper: retain the conversion context, implementations, and iterator-prototype factory.
   constructor(
@@ -34,7 +37,7 @@ export class SynchronousIterableBinding {
   // Web IDL §3.7.9 Iterable declarations — define the iteration methods.
   defineMethods(
     target: object,
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     if (iterable.key === undefined) {
@@ -42,17 +45,17 @@ export class SynchronousIterableBinding {
       return;
     }
 
-    this.initializePrototype(interface_, iterable);
-    this.#definePairIterationMethods(target, interface_, iterable);
+    this.initializePrototype(primaryInterface, iterable);
+    this.#definePairIterationMethods(target, primaryInterface, iterable);
   }
 
   // Project helper: initialize the pair iterator's prototype before installing methods.
   initializePrototype(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     if (iterable.key !== undefined) {
-      this.#getIteratorPrototypeObject(interface_, iterable);
+      this.#getIteratorPrototypeObject(primaryInterface, iterable);
     }
   }
 
@@ -72,11 +75,11 @@ export class SynchronousIterableBinding {
   // Extracted from Web IDL §3.7.9 Iterable declarations — install pair iteration methods.
   #definePairIterationMethods(
     target: object,
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): void {
     const entries = this.#createIteratorMethod(
-      interface_,
+      primaryInterface,
       iterable,
       'key+value',
       'entries',
@@ -87,13 +90,13 @@ export class SynchronousIterableBinding {
     defineDataProperty(
       target,
       'keys',
-      this.#createIteratorMethod(interface_, iterable, 'key', 'keys', 'keys'),
+      this.#createIteratorMethod(primaryInterface, iterable, 'key', 'keys', 'keys'),
     );
     defineDataProperty(
       target,
       'values',
       this.#createIteratorMethod(
-        interface_,
+        primaryInterface,
         iterable,
         'value',
         'values',
@@ -103,35 +106,34 @@ export class SynchronousIterableBinding {
     defineDataProperty(
       target,
       'forEach',
-      this.#createForEachMethod(interface_, iterable),
+      this.#createForEachMethod(primaryInterface, iterable),
     );
   }
 
   // Project factory for the entries, keys, and values functions in Web IDL §3.7.9 Iterable declarations.
   #createIteratorMethod(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
-  ): JSFunction {
+  ): JSFunction<StampedDefaultIterator> {
     return this.#context.realm.createFunction(
       (thisArgument) => {
-        const target = this.#unwrapReceiver(
+        const receiver = this.#getReceiverRecord(
           thisArgument,
-          interface_,
+          primaryInterface,
           securityIdentifier,
         );
         const iterator = this.#context.realm.createOrdinaryObject(
-          this.#getIteratorPrototypeObject(interface_, iterable),
+          this.#getIteratorPrototypeObject(primaryInterface, iterable),
         );
-        this.#iterators.set(iterator, {
+        return DefaultIteratorStamper.stamp(iterator, {
           index: 0,
-          interface: interface_,
+          primaryInterface,
           kind,
-          target,
+          target: receiver.implInst,
         });
-        return iterator;
       },
       { length: 0, name },
     );
@@ -139,14 +141,14 @@ export class SynchronousIterableBinding {
 
   // Project factory for the forEach function in Web IDL §3.7.9 Iterable declarations.
   #createForEachMethod(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const object = this.#unwrapReceiver(
+        const receiver = this.#getReceiverRecord(
           thisArgument,
-          interface_,
+          primaryInterface,
           'forEach',
         );
         const callback = convertToIDL(
@@ -157,34 +159,28 @@ export class SynchronousIterableBinding {
         if (!isCallbackFunctionValue(callback)) {
           throw new Error('Function conversion did not produce a callback');
         }
-        const platformObject = this.#context.platformObjects
-          .getPlatformObject(object);
-        if (!platformObject) {
-          throw new Error('Iterable implementation has no platform object');
-        }
-
-        let pairs = this.#getValuePairs(object, interface_, iterable);
+        let pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
         for (let index = 0; index < pairs.length; index++) {
-          const pair = pairs[index]!;
+          const [key, value] = pairs[index]!;
           invokeCallbackFunction(
             callback,
             [
               convertToJavaScript(
-                pair.value,
+                value,
                 iterable.value,
                 this.#context,
               ),
               convertToJavaScript(
-                pair.key,
+                key,
                 iterable.key!,
                 this.#context,
               ),
-              platformObject,
+              receiver.platformObject,
             ],
             'rethrow',
             argumentsList[1],
           );
-          pairs = this.#getValuePairs(object, interface_, iterable);
+          pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
         }
         return undefined;
       },
@@ -194,22 +190,22 @@ export class SynchronousIterableBinding {
 
   // Project cache for Web IDL §3.7.9.2 Iterator prototype object.
   #getIteratorPrototypeObject(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): object {
-    return this.#getIteratorPrototype(interface_, () => {
+    return this.#getIteratorPrototype(primaryInterface, () => {
       const prototype = this.#context.realm.createOrdinaryObject(
         this.#context.realm.intrinsics.iteration.iteratorPrototype,
       );
       const next = this.#context.realm.createFunction(
-        (thisArgument) => this.#next(interface_, iterable, thisArgument),
+        (thisArgument) => this.#next(primaryInterface, iterable, thisArgument),
         { length: 0, name: 'next' },
       );
       defineDataProperty(prototype, 'next', next);
       Object.defineProperty(prototype, Symbol.toStringTag, {
         configurable: true,
         enumerable: false,
-        value: `${interface_.definition.name} Iterator`,
+        value: `${primaryInterface.definition.name} Iterator`,
         writable: false,
       });
       return prototype;
@@ -218,26 +214,27 @@ export class SynchronousIterableBinding {
 
   // Web IDL §3.7.9.2 Iterator prototype object — next steps.
   #next(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
     thisArgument: unknown,
   ): object {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
-    if (this.#context.platformObjects.isPlatformObject(thisArgument)) {
+    if (getPlatformRecord(thisArgument)?.binding.platformObjects === this.#context.platformObjects) {
       this.#context.realm.performSecurityCheck(
         thisArgument,
         'next',
         'method',
       );
     }
-    const iterator = this.#iterators.get(thisArgument);
-    if (!iterator || iterator.interface !== interface_) {
+    const iterator = DefaultIteratorStamper.get(thisArgument);
+    if (!iterator || iterator.primaryInterface !== primaryInterface ||
+      getImplementationRecord(iterator.target)?.binding.platformObjects !== this.#context.platformObjects) {
       this.#throwTypeError('Illegal invocation');
     }
 
     const pairs = this.#getValuePairs(
       iterator.target,
-      interface_,
+      primaryInterface,
       iterable,
     );
     if (iterator.index >= pairs.length) {
@@ -257,59 +254,57 @@ export class SynchronousIterableBinding {
 
   // Extracted from Web IDL §3.7.9.2 Iterator prototype object — iterator result: select and convert the value.
   #convertPairResult(
-    pair: ValuePair,
+    [key, value]: ValuePair,
     iterable: IterableMember,
     kind: IterationKind,
   ): unknown {
-    const key = kind === 'value'
+    const convertedKey = kind === 'value'
       ? undefined
-      : convertToJavaScript(pair.key, iterable.key!, this.#context);
-    const value = kind === 'key'
+      : convertToJavaScript(key, iterable.key!, this.#context);
+    const convertedValue = kind === 'key'
       ? undefined
-      : convertToJavaScript(pair.value, iterable.value, this.#context);
+      : convertToJavaScript(value, iterable.value, this.#context);
 
-    if (kind === 'key') return key;
-    if (kind === 'value') return value;
+    if (kind === 'key') return convertedKey;
+    if (kind === 'value') return convertedValue;
 
     const result = Reflect.construct(this.#context.realm.intrinsics.array, [2]);
-    defineDataProperty(result, '0', key);
-    defineDataProperty(result, '1', value);
+    defineDataProperty(result, '0', convertedKey);
+    defineDataProperty(result, '1', convertedValue);
     return result;
   }
 
   // Project delegate to Web IDL §2.5.9 Iterable declarations — the interface's value pairs to iterate over.
   #getValuePairs(
-    object: object,
-    interface_: AssembledInterfaceDefinition,
+    implInst: StampedImplInstance,
+    primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
   ): readonly ValuePair[] {
     const steps = this.#implementations.getValuePairsSteps(iterable);
     if (!steps) {
       throw new Error(
-        `Missing ${interface_.definition.name} value-pairs implementation`,
+        `Missing ${primaryInterface.definition.name} value-pairs implementation`,
       );
     }
-    return Reflect.apply(steps, object, []);
+    return Reflect.apply(steps, implInst, []);
   }
 
   // Project adapter for the receiver and security checks in Web IDL §3.7.9 Iterable declarations.
-  #unwrapReceiver(
+  #getReceiverRecord(
     value: unknown,
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     identifier: string,
-  ): object {
+  ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    const record = this.#context.platformObjects.getRecord(value);
-    if (record) {
-      this.#context.realm.performSecurityCheck(value, identifier, 'method');
-    }
-    if (
-      !record ||
-      !this.#context.platformObjects.recordImplements(record, interface_)
-    ) {
+    const record = getPlatformRecord(value);
+    if (record?.binding.platformObjects !== this.#context.platformObjects) {
       this.#throwTypeError('Illegal invocation');
     }
-    return record.implementation;
+    this.#context.realm.performSecurityCheck(value, identifier, 'method');
+    if (!record.implements(primaryInterface)) {
+      this.#throwTypeError('Illegal invocation');
+    }
+    return record;
   }
 
   // Project helper: throw a TypeError allocated in this binding's realm.
@@ -319,20 +314,37 @@ export class SynchronousIterableBinding {
 }
 
 type IteratorPrototypeFactory = (
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   create: () => object,
 ) => object;
 
+type StampedDefaultIterator<T extends object = object> = T & DefaultIteratorStamper;
+
+class DefaultIteratorStamper extends Stamper {
+  #state: DefaultIterator;
+
+  private constructor(iterator: object, state: DefaultIterator) {
+    super(iterator);
+    this.#state = state;
+  }
+
+  static stamp<T extends object>(iterator: T, state: DefaultIterator): StampedDefaultIterator<T> {
+    new DefaultIteratorStamper(iterator, state);
+    return iterator as StampedDefaultIterator<T>;
+  }
+
+  static get(value: object): DefaultIterator | undefined {
+    return #state in value ? value.#state : undefined;
+  }
+}
+
 type DefaultIterator = {
   index: number;
-  interface: AssembledInterfaceDefinition;
+  primaryInterface: AssembledInterfaceDefinition;
   kind: IterationKind;
-  target: object;
+  target: StampedImplInstance;
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';
-type JSFunction = ReturnType<
-  ConversionContext['realm']['createFunction']
->;
 
 const functionType = reference('Function');

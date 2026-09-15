@@ -7,12 +7,14 @@ describe('Web IDL package surface', () => {
   it('exposes declarations, binding entry points, exceptions, and async-sequence values', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(core),
+      'BindingWorld',
       'DOMExceptionImpl',
       'QuotaExceededErrorImpl',
-      'createBindingWorld',
       'defineCapability',
       'domExceptionIDL',
       'endOfIteration',
+      'isStampedImplInstance',
+      'isStampedPlatformObject',
       'quotaExceededErrorIDL',
       'quotaExceededErrorOptionsIDL',
     ].sort());

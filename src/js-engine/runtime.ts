@@ -8,7 +8,7 @@ import {
 import type {
   CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSRealm,
 } from './realm';
-import { TypeError } from './simple-exception';
+import { TypeError } from './exceptions';
 
 export function createMicrotaskQueue(): JSMicrotaskQueue {
   return jsRuntime.createMicrotaskQueue();
