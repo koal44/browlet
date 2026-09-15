@@ -3,13 +3,13 @@ import type {
 } from '../js-engine/runtime-context';
 import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
 import {
-  arg, atArg, asyncIter, asyncSequence, onError, callbackDictionary, ctor,
+  arg, atArg, asyncIter, asyncSequence, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr, reference,
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
   endOfIteration, type AsyncSequenceValue,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../js-engine/simple-exception';
+import { RangeError, TypeError } from '../js-engine/exceptions';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
@@ -1281,7 +1281,7 @@ export const readableStreamIDL = defineInterface({
     ctor([
       arg('underlyingSource', idlType.object, {
         optional: true,
-        ...callbackDictionary('UnderlyingSource'),
+        ...cbDict('UnderlyingSource'),
       }),
       arg('strategy', reference('QueuingStrategy'), {
         default: emptyDictionary,
@@ -1452,9 +1452,10 @@ class ReadableStreamIterator {
   /** Streams §4.2.5, get the next iteration result. */
   next(): PromiseValue<unknown> {
     const reader = this.#reader;
-    const promise = reader.genericReaderMixin.state.promises.withResolvers<unknown>();
+    const promises = reader.genericReaderMixin.state.promises;
+    const promise = promises.withResolvers<unknown>();
     reader.readChunk({
-      chunkSteps: (chunk) => promise.resolve(chunk),
+      chunkSteps: (chunk) => promises.resolve(chunk).observe(promise.resolve, promise.reject),
       closeSteps() {
         reader.release();
         promise.resolve(endOfIteration);

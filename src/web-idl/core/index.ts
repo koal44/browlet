@@ -1,58 +1,46 @@
-// Project entry point for standalone declarations and exception requests.
+// Project entry point for standalone declarations and DOM exceptions.
 export {
   createDOMException, DOMExceptionCodes, DOMExceptionNames, throwDOMException,
   type DOMExceptionName,
-} from './dom-exception-core';
+} from './dom-exception';
 
 export {
-  defineInterface, definePartialInterface, impl, constructWith, ctor,
-  iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
-} from './definitions/interface';
+  defineInterface, definePartialInterface, defineInterfaceMixin, definePartialInterfaceMixin,
+  defineIncludes, defineDictionary, definePartialDictionary, defineNamespace, definePartialNamespace,
+  defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef,
+} from './declarations';
 export type {
-  InterfaceDefinition, PartialInterfaceDefinition, InterfaceMember,
-  ImplementationOptions, ConstructorMember, IterableMember, AsyncIterableMember,
-  MaplikeMember, SetlikeMember, IndexedGetterDeclaration, IndexedPropertySupport,
-  SupportedPropertyNamesSteps,
-} from './definitions/interface';
-export { defineInterfaceMixin, definePartialInterfaceMixin } from './definitions/interface-mixin';
-export type {
-  InterfaceMixinDefinition, PartialInterfaceMixinDefinition, MixinMember,
-} from './definitions/interface-mixin';
-export { defineCallbackInterface } from './definitions/callback-interface';
-export type { CallbackInterfaceDefinition } from './definitions/callback-interface';
-export { defineNamespace, definePartialNamespace } from './definitions/namespace';
-export type {
-  NamespaceDefinition, PartialNamespaceDefinition, NamespaceMember,
-} from './definitions/namespace';
-export { defineDictionary, definePartialDictionary, dictMember } from './definitions/dictionary';
-export type {
+  InterfaceDefinition, PartialInterfaceDefinition, InterfaceMember, ConstructorMember,
+  IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
+  InterfaceMixinDefinition, PartialInterfaceMixinDefinition, MixinMember, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition, DictionaryMember,
-} from './definitions/dictionary';
-export { defineEnumeration } from './definitions/enumeration';
-export { defineCallbackFunction } from './definitions/callback-function';
-export type { CallbackFunctionDefinition } from './definitions/callback-function';
-export { defineTypedef } from './definitions/typedef';
-export { defineIncludes } from './definitions/includes';
-export type { IncludesDefinition } from './definitions/includes';
+  NamespaceDefinition, PartialNamespaceDefinition, NamespaceMember,
+  CallbackInterfaceDefinition, CallbackFunctionDefinition, Definition,
+} from './declarations';
 
 export {
-  annotated, arg, asyncSequence, attr, constant, decimal, emptyDictionary, emptySequence,
-  frozenArray, idlType, integer, negativeInfinity, notANumber, nullable, observableArray, op,
-  positiveInfinity, promise, roAttr, record, reference, sequence, staticOp, stringifier, undefinedDefault,
-  union, xattr,
-} from './definition';
-export type {
-  AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, BufferTypeName,
-  BufferViewTypeName, ConstantMember, ConstantValue, DefaultValue, Definition, Exposure,
-  ExtendedAttribute, NamedArgumentsExtendedAttribute, OperationMember, SimpleTypeName,
-  StringifierMember, UnionType, WebIDLType,
-} from './definition';
+  ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
+  iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
+  reference, nullable, union, sequence, asyncSequence, record, promise,
+  frozenArray, observableArray, annotated,
+  integer, decimal, xattr,
+  impl, atArg, invokeWith, newBufferResult, unwrapArg, cbDict, onError,
+} from './helpers';
+
 export {
-  atArg, attrFn, callbackDictionary, invokeWith, newBufferResult, onError, unwrapArg,
-} from './binding';
+  idlType, positiveInfinity, negativeInfinity, notANumber,
+  undefinedDefault, emptySequence, emptyDictionary,
+} from './types';
 export type {
-  CallbackExceptionBehavior, ImplementationClass, InjectedArgument,
-} from './binding';
+  ConstantMember, AttributeMember, OperationMember, StringifierMember, ArgumentDefinition,
+  WebIDLType, AnnotatedType, AsyncSequenceType, UnionType,
+  SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
+  PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
+  Exposure, ExtendedAttribute, NamedArgumentsExtendedAttribute,
+  ImplementationClass, InjectedArgument, CallbackExceptionBehavior,
+  IndexedGetterDeclaration, SupportedPropertyNamesSteps,
+} from './types';
+
 export {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute, serializeMember, serializeType,
 } from './serialize';

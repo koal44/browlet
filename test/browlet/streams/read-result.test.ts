@@ -9,7 +9,7 @@ import {
   type ReadableStreamReadResult,
 } from '../../../src/streams/index';
 import {
-  arg, defineCallbackFunction, defineInterface, impl, op, promise, reference, createBindingWorld,
+  arg, defineCallbackFunction, defineInterface, impl, op, promise, reference, BindingWorld,
 } from '../../../src/web-idl/index';
 
 import * as scheduling from '../../../src/browlet/integration/scripting';
@@ -39,7 +39,7 @@ describe('stream read Promise boundaries', () => {
   itPassesWith('explicitQueues').each(['consume', 'invoke'] as const)(
     'imports a real stream read through %s without crossing independent queues', (method) => {
       const { first, second } = createFixture();
-      const bindings = createBindingWorld([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
+      const bindings = new BindingWorld([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
       const entries = [first, second].map((fixture) => {
         const consumer = new ReadConsumerImpl();
         const object = bindings.register(fixture.realm).project(ReadConsumerImpl, consumer);

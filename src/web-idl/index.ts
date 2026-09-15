@@ -1,7 +1,7 @@
 import type { BindingContext } from './binding-context';
-import type { AttributeFunctionCallback } from './binding';
+import type { AttributeFunctionCallback } from './realm-binding';
 import type { CallbackInterfaceValue } from './callback-value';
-import type { WebIDLRealmHost } from './js-realm';
+import type { WebIDLRealmHost } from './realm-host';
 
 export * from './core/index';
 
@@ -16,18 +16,21 @@ export {
   defineCapability, type Capability, type CapabilityRegistration,
   type CapabilityOptions,
 } from './capability';
-export { createBindingWorld } from './registration';
-export type {
-  BindingWorld, BindingWorldOptions, RealmRegistrationOptions,
-} from './registration';
+export {
+  BindingWorld, type BindingWorldOptions, type RealmRegistrationOptions,
+} from './binding-world';
 export type { WebIDLRealmHost };
-export type { GlobalObjectAllocation } from './binding';
+export type { GlobalObjectAllocation } from './realm-binding';
+export {
+  isStampedImplInstance, isStampedPlatformObject,
+  type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
+} from './platform-object';
 
 // Project typing: the full Web IDL entry supplies contextual callback types for declarations.
-declare module './core/definition' {
+declare module './core/types' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface DeclarationCallbacks<Realm> {
-    'argument-resolve': (ctx: BindingContext<Realm & WebIDLRealmHost>) => unknown;
+    'argument-resolve': BindingCallback<Realm, void, [], unknown>;
     'allocate-platform-object': BindingCallback<Realm, undefined, [prototype: object], object>;
     'initialize-implementation': BindingCallback<Realm, undefined, [value: object], void>;
     'constructor-create': BindingCallback<Realm, undefined, unknown[], object>;

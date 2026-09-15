@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, definePartialInterface, idlType, impl, integer,
   type AttributeMember, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { createBindingWorld } from '../../src/web-idl/registration';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL global platform objects', () => {
   it('lets projected operations call inherited internal instance methods', () => {
@@ -34,7 +34,7 @@ describe('Web IDL global platform objects', () => {
       implementation: impl(TestGlobalImpl),
       members: [operation('read', idlType.long)],
     });
-    const binding = createBindingWorld([definition]).register(new Realm());
+    const binding = new BindingWorld([definition]).register(new Realm());
     const global = binding.projectGlobalObject(new TestGlobalImpl(), 'TestGlobal');
 
     expect(call(global, 'read', global)).toBe(1);
@@ -86,7 +86,7 @@ describe('Web IDL global platform objects', () => {
     implementations.setOperationSteps(baseMethod, () => 'base');
     implementations.setAttributeSteps(title, { get: () => 'global title' });
     implementations.setOperationSteps(ping, () => 'pong');
-    implementations.setOperationSteps(namedItem, (name) =>
+    implementations.setOperationSteps(namedItem, (_receiver, name) =>
       values.get(name as string));
     implementations.setNamedPropertySteps(namedItem, {
       getSupportedPropertyNames: () => new Set(values.keys()),
@@ -100,8 +100,8 @@ describe('Web IDL global platform objects', () => {
       implementations,
     );
     const implementation = Reflect.construct(realm.intrinsics.object, []);
-    const record = binding.projectGlobalObject(implementation, 'Window');
-    const global = record.platformObject;
+    const record = binding.projectGlobalObject(implementation, binding.resolveInterface('Window'));
+    const global = record.platformObject!;
     const exposed = binding.getExposedGlobalProperties();
     const Window = getInstalledInterface(exposed, 'Window');
     const Base = getInstalledInterface(exposed, 'GlobalBase');
@@ -111,7 +111,7 @@ describe('Web IDL global platform objects', () => {
       Reflect.getPrototypeOf(globalPrototype),
     );
 
-    expect(record.implementation).toBe(implementation);
+    expect(record.implInst).toBe(implementation);
     expect(global === implementation).toBe(false);
     expect(globalPrototype).toBe(Window.prototype);
     expect(Reflect.getPrototypeOf(namedProperties))
@@ -200,8 +200,8 @@ describe('Web IDL global platform objects', () => {
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'Window',
-    ).platformObject;
+      binding.resolveInterface('Window'),
+    ).platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -225,7 +225,7 @@ describe('Web IDL global platform objects', () => {
     const forwarded = attribute('forwarded', idlType.object, true, [{
       kind: 'identifier', name: 'PutForwards', value: 'value',
     }]);
-    const interface_ = defineInterface({
+    const definition = defineInterface({
       name: 'Window',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
@@ -235,8 +235,8 @@ describe('Web IDL global platform objects', () => {
     const forwardedTarget = { value: 'original' };
     const implementations = new ImplementationRegistry();
     implementations.setAttributeSteps(value, {
-      get() { return values.get(this as object) ?? ''; },
-      set(next) { values.set(this as object, next as string); },
+      get(receiver) { return values.get(receiver!.implInst) ?? ''; },
+      set(receiver, next) { values.set(receiver!.implInst, next as string); },
     });
     implementations.setAttributeSteps(replaceable, {
       get: () => 'original',
@@ -246,7 +246,7 @@ describe('Web IDL global platform objects', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interface_]),
+      assembleDefinitions([definition]),
       realm,
       new PlatformObjectRegistry(),
       implementations,
@@ -255,8 +255,8 @@ describe('Web IDL global platform objects', () => {
     values.set(implementation, 'initial');
     const global = binding.projectGlobalObject(
       implementation,
-      'Window',
-    ).platformObject;
+      binding.resolveInterface('Window'),
+    ).platformObject!;
     const valueDescriptor = requireAccessor(global, 'value');
     const replaceableDescriptor = requireAccessor(global, 'replaceable');
     const forwardedDescriptor = requireAccessor(global, 'forwarded');
@@ -278,7 +278,7 @@ describe('Web IDL global platform objects', () => {
 
   it('rejects nullish global stringifier receivers', () => {
     const stringifier = { kind: 'stringifier' } satisfies StringifierMember;
-    const interface_ = defineInterface({
+    const definition = defineInterface({
       name: 'Window',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
@@ -291,15 +291,15 @@ describe('Web IDL global platform objects', () => {
     );
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interface_]),
+      assembleDefinitions([definition]),
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'Window',
-    ).platformObject;
+      binding.resolveInterface('Window'),
+    ).platformObject!;
     const toString = Reflect.get(global, 'toString') as unknown;
     if (typeof toString !== 'function') {
       throw new Error('Missing global stringifier');
@@ -316,9 +316,9 @@ describe('Web IDL global platform objects', () => {
     const { binding, realm } = createGlobalBinding();
     const record = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'TestGlobal',
+      binding.resolveInterface('TestGlobal'),
     );
-    const global = record.platformObject;
+    const global = record.platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -355,17 +355,17 @@ describe('Web IDL global platform objects', () => {
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'PlainGlobal',
-    ).platformObject;
+      binding.resolveInterface('PlainGlobal'),
+    ).platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
 
     expect(Reflect.getPrototypeOf(globalPrototype))
-      .toBe(binding.getInterfacePrototypeObject('PlainBase'));
+      .toBe(binding.getInterfacePrototypeObject(binding.resolveInterface('PlainBase')));
   });
 
   it('projects a global declared by the partial containing its named getter', () => {
     const getter = namedGetter(undefined);
-    const interface_ = defineInterface({
+    const definition = defineInterface({
       name: 'PartialGlobal',
       exposed: ['PartialGlobal'],
       members: [],
@@ -376,22 +376,22 @@ describe('Web IDL global platform objects', () => {
       members: [getter],
     });
     const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(getter, (name) =>
+    implementations.setOperationSteps(getter, (_receiver, name) =>
       name === 'answer' ? 'named answer' : undefined);
     implementations.setNamedPropertySteps(getter, {
       getSupportedPropertyNames: () => new Set(['answer']),
     });
     const realm = new Realm({ globalNames: ['PartialGlobal'] });
     const binding = new RealmBinding(
-      assembleDefinitions([interface_, partial]),
+      assembleDefinitions([definition, partial]),
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'PartialGlobal',
-    ).platformObject;
+      binding.resolveInterface('PartialGlobal'),
+    ).platformObject!;
 
     expect(Reflect.get(global, 'answer')).toBe('named answer');
   });
@@ -400,9 +400,9 @@ describe('Web IDL global platform objects', () => {
     const { binding, realm } = createGlobalBinding(true);
     const record = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
-      'TestGlobal',
+      binding.resolveInterface('TestGlobal'),
     );
-    const global = record.platformObject;
+    const global = record.platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -425,7 +425,7 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
   realm: Realm;
 } {
   const getter = namedGetter(undefined);
-  const interface_ = defineInterface({
+  const definition = defineInterface({
     name: 'TestGlobal',
     exposed: ['Window'],
     extendedAttributes: [identifier('Global', 'TestGlobal')],
@@ -439,7 +439,7 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
   const realm = new Realm({ isGlobalPrototypeChainMutable });
   return {
     binding: new RealmBinding(
-      assembleDefinitions([interface_]),
+      assembleDefinitions([definition]),
       realm,
       new PlatformObjectRegistry(),
       implementations,

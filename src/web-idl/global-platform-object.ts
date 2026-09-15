@@ -1,3 +1,4 @@
+import { getPlatformRecord } from './platform-object';
 import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
@@ -5,12 +6,11 @@ import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembl
 import {
   convertToJavaScript, type ConversionContext,
 } from './conversion';
-import {
-  hasExtendedAttribute, type OperationMember,
-} from './core/definition';
+import { hasExtendedAttribute } from './core/helpers';
+import type { OperationMember } from './core/types';
 import type {
   ImplementationRegistry, NamedPropertySteps,
-} from './registry';
+} from './implementation-registry';
 import { getUnannotatedType } from './types';
 
 // The Web IDL object kind is shared across realms and binding instances.
@@ -41,15 +41,15 @@ export class GlobalPlatformObjectBinding {
 
   // Project adapter for Web IDL §3.7.4 Named properties object — allocation and internal methods.
   createNamedPropertiesObject(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
     prototype: object,
     getGlobalObject: () => object | undefined,
     allocation?: { object: object; setDelegate(delegate: object): void; },
   ): object {
-    const properties = this.#getNamedProperties(interface_);
+    const properties = this.#getNamedProperties(primaryInterface);
     if (!properties) {
       throw new Error(
-        `${interface_.definition.name} does not support named properties`,
+        `${primaryInterface.definition.name} does not support named properties`,
       );
     }
 
@@ -57,7 +57,7 @@ export class GlobalPlatformObjectBinding {
     Reflect.defineProperty(target, Symbol.toStringTag, {
       configurable: true,
       enumerable: false,
-      value: `${interface_.definition.name}Properties`,
+      value: `${primaryInterface.definition.name}Properties`,
       writable: false,
     });
 
@@ -126,9 +126,9 @@ export class GlobalPlatformObjectBinding {
   }
 
   // Project predicate: find an inherited or directly declared named property getter.
-  supportsNamedProperties(interface_: AssembledInterfaceDefinition): boolean {
+  supportsNamedProperties(primaryInterface: AssembledInterfaceDefinition): boolean {
     return findNamedGetter(
-      interface_,
+      primaryInterface,
       this.#context.definitions,
     ) !== undefined;
   }
@@ -155,16 +155,15 @@ export class GlobalPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const record = this.#context.platformObjects.getRecord(global);
-    const target = record?.implementation;
-    if (!target) throw new Error('Global object is not a platform object');
+    const record = getPlatformRecord(global);
+    if (!record) throw new Error('Global object is not a platform object');
 
     const steps = this.#implementations.getOperationSteps(
       properties.getter,
-      properties.interface_,
+      properties.primaryInterface,
     );
     if (!steps) throw new Error('Missing named property getter implementation');
-    const value = Reflect.apply(steps, target, [property]);
+    const value = steps(record, property);
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
@@ -183,8 +182,8 @@ export class GlobalPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): boolean {
-    const record = this.#context.platformObjects.getRecord(global);
-    const target = record?.implementation;
+    const record = getPlatformRecord(global);
+    const target = record?.implInst;
     if (!target || !this.#getSupportedNames(target, properties).has(property)) {
       return false;
     }
@@ -216,9 +215,9 @@ export class GlobalPlatformObjectBinding {
 
   // Project helper: collect the named getter, supported-name steps, and enumerability flag.
   #getNamedProperties(
-    interface_: AssembledInterfaceDefinition,
+    primaryInterface: AssembledInterfaceDefinition,
   ): NamedProperties | undefined {
-    const getter = findNamedGetter(interface_, this.#context.definitions);
+    const getter = findNamedGetter(primaryInterface, this.#context.definitions);
     if (!getter) return;
     const steps = this.#implementations.getNamedPropertySteps(getter);
     if (!steps) {
@@ -226,10 +225,10 @@ export class GlobalPlatformObjectBinding {
     }
     return {
       getter,
-      interface_,
+      primaryInterface,
       steps,
       unenumerable: implementsExtendedAttribute(
-        interface_,
+        primaryInterface,
         'LegacyUnenumerableNamedProperties',
       ),
     };
@@ -238,17 +237,17 @@ export class GlobalPlatformObjectBinding {
 
 type NamedProperties = {
   getter: OperationMember;
-  interface_: AssembledInterfaceDefinition;
+  primaryInterface: AssembledInterfaceDefinition;
   steps: NamedPropertySteps;
   unenumerable: boolean;
 };
 
 // Project helper: search inherited interfaces and partial declarations for an extended attribute.
 function implementsExtendedAttribute(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   name: string,
 ): boolean {
-  let current: AssembledInterfaceDefinition | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
   while (current) {
     if (hasExtendedAttribute(current.definition.extendedAttributes, name)) {
       return true;
@@ -260,10 +259,10 @@ function implementsExtendedAttribute(
 
 // Project helper: locate the most-derived named property getter.
 function findNamedGetter(
-  interface_: AssembledInterfaceDefinition,
+  primaryInterface: AssembledInterfaceDefinition,
   definitions: DefinitionAssembly,
 ): OperationMember | undefined {
-  let current: AssembledInterfaceDefinition | undefined = interface_;
+  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
   while (current) {
     const operation = current.members.find(({ member }) =>
       member.kind === 'operation' &&

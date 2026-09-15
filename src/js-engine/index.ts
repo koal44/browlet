@@ -12,7 +12,7 @@ export {
   readUTF8, utf8ByteLength, writeUTF8, writeUTF8Into,
 } from './byte-string';
 export * from './promises';
-export * from './simple-exception';
+export * from './exceptions';
 export type {
   AbortAlgorithmHandle, AbortControllerCapability, AbortSignalCapability,
   NetworkingTasks, RuntimeContext,

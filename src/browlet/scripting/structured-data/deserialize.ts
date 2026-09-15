@@ -1,7 +1,9 @@
 import {
   appendMapData, appendSetData, getBufferTypeName, isObject, writeErrorStack,
 } from '../../../js-engine/index';
-import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import {
+  throwDOMException, type BindingContext, type PlatformRecord,
+} from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
@@ -20,9 +22,7 @@ export function structuredDeserialize(
 
   let value: unknown;
   let deep = false;
-  let platformObject: ReturnType<
-    BindingContext<Realm>['createPlatformObject']
-  > | undefined;
+  let platformRecord: PlatformRecord | undefined;
   const { realm } = ctx;
 
   switch (serialized.type) {
@@ -109,14 +109,14 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'platform-object': {
-      const interface_ = ctx.getInterface(
+      const definition = ctx.getInterface(
         serialized.interfaceName,
       );
-      if (!interface_ || !ctx.isInterfaceExposed(interface_)) {
+      if (!definition || !ctx.isInterfaceExposed(definition)) {
         return throwDOMException('DataCloneError');
       }
-      platformObject = ctx.createPlatformObject(interface_);
-      value = platformObject.platformObject;
+      platformRecord = ctx.createPlatformObject(definition);
+      value = platformRecord.platformObject;
       deep = true;
       break;
     }
@@ -150,25 +150,25 @@ export function structuredDeserialize(
   } else if (serialized.type === 'Array' || serialized.type === 'Object') {
     deserializeProperties(serialized.properties, value, ctx, memory);
   } else if (serialized.type === 'platform-object') {
-    if (!platformObject) {
+    if (!platformRecord) {
       throw new Error('A platform-object record was not created');
     }
     const steps = ctx.getCapability(
-      platformObject.primaryInterface.definition,
+      platformRecord.primaryInterface.definition,
       serializable,
     );
     if (!steps) {
       throw new Error(
-        `${platformObject.primaryInterface.definition.name} has no Serializable capability`,
+        `${platformRecord.primaryInterface.definition.name} has no Serializable capability`,
       );
     }
     steps.deserializationSteps(
       serialized.fields,
-      platformObject.implementation,
+      platformRecord.implInst,
       realm,
       {
-        getImplementation: (value, implementation) =>
-          ctx.unwrap(value, implementation),
+        unwrap: (platformObject, implClass) =>
+          ctx.unwrap(platformObject, implClass),
         subdeserialize: (subSerialized) => {
           if (!isSerializedRecord(subSerialized)) {
             throw new TypeError('Sub-deserialization requires a serialized record');

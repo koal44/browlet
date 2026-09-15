@@ -3,7 +3,7 @@ import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType,
@@ -16,8 +16,8 @@ import {
   uponPromiseFulfillment, uponPromiseRejection, waitForAll,
 } from '../../src/web-idl/promise';
 import {
-  convertPromiseToJavaScript, isIDLPromise, type IDLPromise,
-} from '../../src/web-idl/promise-value';
+  isIDLPromiseRecord, type IDLPromiseRecord,
+} from '../../src/web-idl/promise-record';
 
 describe('Web IDL promises', () => {
   it('wraps JavaScript values in a target-realm PromiseCapability', async () => {
@@ -27,7 +27,7 @@ describe('Web IDL promises', () => {
       promiseType(idlType.DOMString),
       binding,
     );
-    const promise = requirePromiseValue(value);
+    const promise = requirePromiseRecord(value);
     const javaScriptValue = convertToJavaScript(
       promise,
       promiseType(idlType.DOMString),
@@ -59,7 +59,7 @@ describe('Web IDL promises', () => {
       binding,
     ))).rejects.toBe(reason);
 
-    const input = requirePromiseValue(convertToIDL(
+    const input = requirePromiseRecord(convertToIDL(
       '4.9',
       promiseType(idlType.long),
       binding,
@@ -72,7 +72,7 @@ describe('Web IDL promises', () => {
     );
     await expect(toJavaScriptPromise(reaction)).resolves.toBe(5);
 
-    const invalid = requirePromiseValue(convertToIDL(
+    const invalid = requirePromiseRecord(convertToIDL(
       '😞',
       promiseType(idlType.ByteString),
       binding,
@@ -265,13 +265,13 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
   };
 }
 
-function requirePromiseValue(value: unknown): IDLPromise {
-  if (!isIDLPromise(value)) throw new Error('Value is not an IDL promise');
+function requirePromiseRecord(value: unknown): IDLPromiseRecord {
+  if (!isIDLPromiseRecord(value)) throw new Error('Value is not an IDL promise');
   return value;
 }
 
 function toJavaScriptPromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
 ): Promise<unknown> {
-  return convertPromiseToJavaScript(promise);
+  return promise.promise;
 }

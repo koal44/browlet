@@ -13,6 +13,7 @@ import type { Realm } from '../../../src/browlet/scripting/realm';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';
+import type { StampedPlatformObject } from '../../../src/web-idl/index';
 
 // Native allocation belongs to the addon; plain Node has no equivalent API.
 describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window allocation', () => {
@@ -63,7 +64,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     expect(second.platformWindow).not.toBe(first.platformWindow);
     expect(second.realm.intrinsics.object).not.toBe(first.realm.intrinsics.object);
     expect(oldClosure()).toBe(42);
-    expect(unwrap(oldDocument()) === first.document).toBe(true);
+    expect(unwrap(oldDocument())).toBe(first.document);
     expect(oldState()).toEqual([2, proxy]);
     expect(second.realm.evaluate('typeof pageState', 'new-state.js')).toBe('undefined');
     expect(unwrap(first.platformWindow)).toBe(first.window);
@@ -150,7 +151,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const { realm } = createWindowRealm(agent, window, previous?.realm);
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
-  const platformWindow = project(window) as Window;
+  const platformWindow = project(window) as StampedPlatformObject<Window>;
   const document = createDocument(realm);
   document.setBrowsingContext(context);
   window.setAssociatedDocument(document);

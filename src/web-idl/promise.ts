@@ -1,74 +1,25 @@
-import { PromiseValue, type ByteSequence, type Promises } from '../js-engine/index';
+import type { PromiseValue, Promises } from '../js-engine/index';
 import {
-  convertToIDL, convertToJavaScript, createBufferResult, type ConversionContext,
+  convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import { idlType, sequence, type WebIDLType } from './core/index';
 import {
-  createIDLPromise, isIDLPromise, type IDLPromise,
-} from './promise-value';
+  createIDLPromiseRecord, isIDLPromiseRecord, type IDLPromiseRecord,
+} from './promise-record';
 import { getUnannotatedType } from './types';
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — create a new promise.
 export function createPromise(
   type: WebIDLType,
   context: ConversionContext,
-): IDLPromise {
-  return createIDLPromise(type, context.realm, context.realizeException);
-}
-
-// Project adapter: preserve projected promise identity and convert fulfillment values into the target realm.
-/** Adapt an implementation promise to the declared result type and realm. */
-export function projectPromise(
-  value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-  newBufferResult = false,
-): IDLPromise {
-  if (isIDLPromise(value)) return value;
-  const source = value as Promise<unknown> | PromiseValue<unknown>;
-  const promises = context.platformObjects.promiseProjections ??= new WeakMap();
-  let projections = promises.get(source);
-  const existing = projections?.find((entry) =>
-    entry.realm === context.realm && entry.type === type &&
-    entry.newBufferResult === newBufferResult);
-  if (existing) return existing.promise;
-
-  const promise = createPromise(type, context);
-  if (!projections) {
-    projections = [];
-    promises.set(source, projections);
-  }
-  projections.push({ realm: context.realm, type, promise, newBufferResult });
-  // These callbacks adapt implementation state; author reactions still run
-  // through the projected promise's own realm and queue.
-  const onFulfilled = (result: unknown): void => {
-    try {
-      resolvePromise(promise, newBufferResult
-        ? createBufferResult(result as ByteSequence, type, context)
-        : result, context);
-    } catch (error) {
-      promise.reject(error);
-    }
-  };
-  const onRejected = (reason: unknown): void => {
-    promise.reject(reason);
-  };
-  try {
-    if (source instanceof PromiseValue) {
-      context.realm.promises.import(source).observe(onFulfilled, onRejected);
-    } else {
-      context.realm.observePromise(source, onFulfilled, onRejected);
-    }
-  } catch (error) {
-    promise.reject(error);
-  }
-  return promise;
+): IDLPromiseRecord {
+  return createIDLPromiseRecord(type, context.realm, context.realizeException);
 }
 
 // Project adapter: convert author fulfillment values for an implementation's promise queue.
 /** Convert author fulfillment values before supplying an implementation promise. */
 export function toImplementationPromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   context: ConversionContext,
   convertValue: (value: unknown) => unknown,
   promises: Promises,
@@ -83,7 +34,7 @@ export function createResolvedPromise(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   const promise = createPromise(type, context);
   promise.resolve(toPromiseResolution(value, type, context));
   return promise;
@@ -94,7 +45,7 @@ export function createRejectedPromise(
   reason: unknown,
   type: WebIDLType,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   const promise = createPromise(type, context);
   rejectPromise(promise, reason);
   return promise;
@@ -102,7 +53,7 @@ export function createRejectedPromise(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — resolve.
 export function resolvePromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   value: unknown,
   context: ConversionContext,
 ): void {
@@ -115,24 +66,24 @@ export function resolvePromise(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — reject.
 export function rejectPromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   reason: unknown,
 ): void {
   promise.reject(reason);
 }
 
 // Project helper: inspect whether either resolving function has been accepted.
-export function isPromiseUnresolved(promise: IDLPromise): boolean {
+export function isPromiseUnresolved(promise: IDLPromiseRecord): boolean {
   return !promise.resolved;
 }
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — react.
 export function reactToPromise(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   resultType: WebIDLType,
   steps: PromiseReactionSteps,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   const reactionContext = withPromiseRealm(context, promise);
   const resultPromise = createPromise(resultType, reactionContext);
   const onFulfilled = promise.realm.createFunction(
@@ -191,10 +142,10 @@ export function reactToPromise(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — upon fulfillment.
 export function uponPromiseFulfillment(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   steps: (value: unknown) => void,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   return reactToPromise(
     promise,
     idlType.undefined,
@@ -205,10 +156,10 @@ export function uponPromiseFulfillment(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — upon rejection.
 export function uponPromiseRejection(
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   steps: (reason: unknown) => void,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   return reactToPromise(
     promise,
     idlType.undefined,
@@ -219,7 +170,7 @@ export function uponPromiseRejection(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — wait for all.
 export function waitForAll(
-  promises: readonly IDLPromise[],
+  promises: readonly IDLPromiseRecord[],
   successSteps: (values: unknown[]) => void,
   failureSteps: (reason: unknown) => void,
   context: ConversionContext,
@@ -261,10 +212,10 @@ export function waitForAll(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — get a promise for waiting for all.
 export function getPromiseForWaitingForAll(
-  promises: readonly IDLPromise[],
+  promises: readonly IDLPromiseRecord[],
   type: WebIDLType,
   context: ConversionContext,
-): IDLPromise {
+): IDLPromiseRecord {
   const promise = createPromise(sequence(type), context);
   waitForAll(
     promises,
@@ -276,7 +227,7 @@ export function getPromiseForWaitingForAll(
 }
 
 // Project implementation of Web IDL §3.2.24.1 Creating and manipulating Promises — mark as handled.
-export function markPromiseAsHandled(promise: IDLPromise): void {
+export function markPromiseAsHandled(promise: IDLPromiseRecord): void {
   // ECMAScript does not expose [[PromiseIsHandled]]. Attaching a rejection
   // reaction performs the same state transition on the original promise.
   const onRejected = promise.realm.createFunction(
@@ -298,7 +249,7 @@ export type PromiseReactionSteps = {
 // Project helper: project a reaction result before resolving its result promise.
 function settleReaction(
   result: unknown,
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
   resultType: WebIDLType,
   context: ConversionContext,
 ): void {
@@ -311,7 +262,7 @@ function toPromiseResolution(
   type: WebIDLType,
   context: ConversionContext,
 ): unknown {
-  return isIDLPromise(value)
+  return isIDLPromiseRecord(value)
     ? value.promise
     : convertToJavaScript(value, type, context);
 }
@@ -319,7 +270,7 @@ function toPromiseResolution(
 // Project helper: select the promise's realm for value conversion.
 function withPromiseRealm(
   context: ConversionContext,
-  promise: IDLPromise,
+  promise: IDLPromiseRecord,
 ): ConversionContext {
   return {
     definitions: context.definitions,

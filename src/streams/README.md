@@ -36,7 +36,7 @@ while byte tee copies bytes. Writable controllers obtain their AbortController
 from the runtime.
 
 Implementations receive converted records and callable steps. Web IDL's
-`callbackDictionary()` preserves member-access order and the original source,
+`cbDict()` preserves member-access order and the original source,
 sink, or transformer as the callback receiver. Binding also projects controllers,
 adapts Promise results, and realizes exceptions. Strategy `size` functions use
 `attrFn()` and Binding's existing per-realm identity cache.

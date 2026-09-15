@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DOMExceptionCodes, DOMExceptionNames,
-} from '../../../src/web-idl/core/dom-exception-core';
+} from '../../../src/web-idl/core/dom-exception';
 
 describe('DOMException names', () => {
   it('follows the Web IDL names table and legacy code order', () => {

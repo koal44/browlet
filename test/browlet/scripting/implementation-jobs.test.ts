@@ -16,7 +16,7 @@ import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scri
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import {
-  createBindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
+  BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr,
 } from '../../../src/web-idl/index';
 import type { Promises, PromiseValue } from '../../../src/js-engine/index';
@@ -25,7 +25,7 @@ describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    createBindingWorld([initializationIDL]).register(realm).install(realm.global);
+    new BindingWorld([initializationIDL]).register(realm).install(realm.global);
     const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
     const unrelated = new AsyncLocalStorage<string>();
     let reported: string | undefined;
@@ -47,7 +47,7 @@ describe('implementation Promise delivery', () => {
   itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    createBindingWorld([initializationIDL]).register(realm).install(realm.global);
+    new BindingWorld([initializationIDL]).register(realm).install(realm.global);
     const trace: string[] = [];
     browlet.expose('record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
@@ -163,7 +163,7 @@ describe('implementation Promise delivery', () => {
 function createFixture(sharedAgent = false) {
   const trace: string[] = [];
   const pending = Promise.withResolvers<string>();
-  const bindings = createBindingWorld([operationIDL, callbackIDL]);
+  const bindings = new BindingWorld([operationIDL, callbackIDL]);
   const first = new Browlet({ route: () => '' });
   const secondWindow = sharedAgent
     ? createSiblingWindow(first)

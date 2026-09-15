@@ -20,7 +20,7 @@ import {
   type ArrayBufferSerializedRecord,
   type ArrayBufferViewSerializedRecord,
   type ErrorSerializedRecord, type MapSerializedRecord,
-  type ObjectSerializedRecord, type PlatformObjectSerializedRecord,
+  type ObjectSerializedRecord,
   type SerializedRecord,
   type SetSerializedRecord, type SharedArrayBufferSerializedRecord,
   type StructuredSerializeMemory,
@@ -45,20 +45,21 @@ export function structuredSerializeForStorage(
 }
 
 /** HTML §2.7.3, StructuredSerializeInternal. */
-// BINDING_INTEGRATION: recognize platform objects before serializing JavaScript data.
+// BINDING_INTEGRATION: recognize stamped instances through either implementation or platform identity.
 export function structuredSerializeInternal(
   value: unknown,
   forStorage: boolean,
   ctx: BindingContext<Realm>,
   memory: StructuredSerializeMemory = new Map(),
 ): SerializedRecord {
-  if (memory.has(value)) return memory.get(value)!;
+  const record = ctx.getObjectRecord(value);
+  const identity = record?.implInst ?? value;
+  if (memory.has(identity)) return memory.get(identity)!;
 
   if (isPrimitive(value)) return { type: 'primitive', value };
   if (typeof value === 'symbol') return throwDOMException('DataCloneError');
 
-  const platformObject = ctx.getObjectRecord(value);
-  if (!platformObject && isProxyObject(value)) {
+  if (!record && isProxyObject(value)) {
     return throwDOMException('DataCloneError');
   }
   let serialized: SerializedRecord;
@@ -134,25 +135,33 @@ export function structuredSerializeInternal(
     } else if (hasSetData(value)) {
       serialized = { type: 'Set', entries: [] };
       deep = true;
-    } else if (hasErrorData(value) &&
-      !platformObject) {
+    } else if (hasErrorData(value) && !record) {
       serialized = serializeError(value, ctx.realm);
       deep = true;
-    } else if (platformObject) {
+    } else if (record) {
       const steps = ctx.getCapability(
-        platformObject.primaryInterface.definition,
+        record.primaryInterface.definition,
         serializable,
       );
       if (!steps) return throwDOMException('DataCloneError');
-      if (isTransferableDetached(platformObject.implementation)) {
+      if (isTransferableDetached(record.implInst)) {
         return throwDOMException('DataCloneError');
       }
       serialized = {
         type: 'platform-object',
-        interfaceName: platformObject.primaryInterface.definition.name,
+        interfaceName: record.primaryInterface.definition.name,
         fields: createStructuredDataRecord(),
       };
-      deep = true;
+      memory.set(identity, serialized);
+      steps.serializationSteps(
+        record.implInst,
+        serialized.fields,
+        forStorage,
+        {
+          subserialize: (subValue) => structuredSerializeInternal(subValue, forStorage, ctx, memory),
+        },
+      );
+      return serialized;
     } else if (Array.isArray(value)) {
       const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
       if (typeof length !== 'number') {
@@ -171,21 +180,13 @@ export function structuredSerializeInternal(
     }
   }
 
-  memory.set(value, serialized);
+  memory.set(identity, serialized);
   if (!deep) return serialized;
 
   if (serialized.type === 'Map') {
     serializeMapData(value, serialized, forStorage, ctx, memory);
   } else if (serialized.type === 'Set') {
     serializeSetData(value, serialized, forStorage, ctx, memory);
-  } else if (serialized.type === 'platform-object') {
-    serializePlatformObject(
-      value,
-      serialized,
-      forStorage,
-      ctx,
-      memory,
-    );
   } else if (serialized.type === 'Error') {
     serializeErrorCause(
       value,
@@ -310,46 +311,6 @@ function serializeSetData(
       memory,
     ));
   }
-}
-
-/** HTML §2.7.3, serializable platform-object steps. */
-// BINDING_INTEGRATION: dispatch the registered interface's serialization steps.
-function serializePlatformObject(
-  value: object,
-  serialized: PlatformObjectSerializedRecord,
-  forStorage: boolean,
-  ctx: BindingContext<Realm>,
-  memory: StructuredSerializeMemory,
-): void {
-  const platformObject = ctx.getObjectRecord(value);
-  if (!platformObject) {
-    throw new Error('A resolved platform object became unavailable');
-  }
-  const steps = ctx.getCapability(
-    platformObject.primaryInterface.definition,
-    serializable,
-  );
-  if (!steps) {
-    throw new Error('A serializable platform object lost its capability');
-  }
-  steps.serializationSteps(
-    platformObject.implementation,
-    serialized.fields,
-    forStorage,
-    {
-      subserialize: (subValue) => {
-        const platformObject = ctx.getObjectRecord(
-          subValue,
-        )?.platformObject ?? subValue;
-        return structuredSerializeInternal(
-          platformObject,
-          forStorage,
-          ctx,
-          memory,
-        );
-      },
-    },
-  );
 }
 
 /** HTML §2.7.3, enumerable own-property serialization. */

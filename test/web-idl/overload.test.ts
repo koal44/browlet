@@ -6,9 +6,9 @@ import {
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import type { HostDefinedInterface } from '../../src/web-idl/conversion';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../src/web-idl/overload';
@@ -165,17 +165,18 @@ describe('Web IDL effective overload sets', () => {
       values: [missingArgument],
     });
 
-    const interface_ = binding.definitions.getInterface('Node');
+    const primaryInterface = binding.definitions.getInterface('Node');
     const platformObject = {};
-    if (!interface_) throw new Error('Missing Node interface');
-    binding.associatePlatformObject(platformObject, interface_);
+    const implInst = {};
+    if (!primaryInterface) throw new Error('Missing Node interface');
+    binding.associatePlatformObject(platformObject, primaryInterface, implInst);
 
     const node = namedOperation('node', reference('Node'));
     const string = namedOperation('string', idlType.DOMString);
-    expect(resolve([node, string], [platformObject], binding)).toEqual({
-      callable: node,
-      values: [platformObject],
-    });
+    const selected = resolve([node, string], [platformObject], binding);
+    expect(selected.callable).toBe(node);
+    expect(selected.values).toHaveLength(1);
+    expect(selected.values[0]).toBe(implInst);
 
     const hostObject = {};
     const hostBinding = createBinding([], [{

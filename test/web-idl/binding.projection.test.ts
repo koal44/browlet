@@ -12,13 +12,15 @@ import {
   negativeInfinity, notANumber, positiveInfinity, reference,
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
-import { RealmBinding } from '../../src/web-idl/binding';
-import type { SecurityCheckType } from '../../src/web-idl/js-realm';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
+import type { SecurityCheckType } from '../../src/web-idl/realm-host';
+import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL ordinary interface projection', () => {
   it('projects constructors, inheritance, fragments, members, and descriptors', () => {
+    class ProjectionBaseImpl {}
+    class ProjectionDerivedImpl extends ProjectionBaseImpl {}
     const constructor = constructorMember([
       { name: 'value', type: idlType.long },
     ]);
@@ -86,17 +88,18 @@ describe('Web IDL ordinary interface projection', () => {
     });
     const state = new WeakMap<object, number>();
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(derived, () => new ProjectionDerivedImpl());
     implementations.setConstructorSteps(constructor, function(value_) {
       state.set(this, value_ as number);
     });
     implementations.setAttributeSteps(value, {
-      get() { return state.get(this as object) ?? 0; },
-      set(value_) { state.set(this as object, value_ as number); },
+      get(receiver) { return state.get(receiver!.implInst) ?? 0; },
+      set(receiver, value_) { state.set(receiver!.implInst, value_ as number); },
     });
-    implementations.setOperationSteps(describeNumber, function(value_) {
+    implementations.setOperationSteps(describeNumber, function(_receiver, value_) {
       return `number:${String(value_)}`;
     });
-    implementations.setOperationSteps(describeString, function(value_) {
+    implementations.setOperationSteps(describeString, function(_receiver, value_) {
       return `string:${String(value_)}`;
     });
     implementations.setOperationSteps(partialOperation, () => 'partial');
@@ -158,6 +161,8 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('copies mixin members with distinct host-interface identities', () => {
+    class FirstHostImpl {}
+    class SecondHostImpl {}
     const firstConstructor = constructorMember([]);
     const secondConstructor = constructorMember([]);
     const value = attributeMember('value', idlType.long, true);
@@ -175,6 +180,8 @@ describe('Web IDL ordinary interface projection', () => {
       exposed: '*', members: [secondConstructor],
     });
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(first, () => new FirstHostImpl());
+    implementations.setImplementationCreationSteps(second, () => new SecondHostImpl());
     implementations.setConstructorSteps(firstConstructor, () => undefined);
     implementations.setConstructorSteps(secondConstructor, () => undefined);
     implementations.setAttributeSteps(value, { get: () => 1 });
@@ -286,6 +293,7 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('brands receivers across realms and performs the security-check callsite', () => {
+    class CrossRealmImpl {}
     const constructor = constructorMember([]);
     const operation = operationMember('read', [], idlType.DOMString);
     const interfaceIDL = defineInterface({
@@ -295,6 +303,7 @@ describe('Web IDL ordinary interface projection', () => {
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new CrossRealmImpl());
     implementations.setConstructorSteps(constructor, () => undefined);
     implementations.setOperationSteps(operation, () => 'ok');
     const platformObjects = new PlatformObjectRegistry();
@@ -341,18 +350,18 @@ describe('Web IDL ordinary interface projection', () => {
       members: [read, echo],
     });
     const definitions = assembleDefinitions([interfaceIDL]);
-    const interface_ = definitions.getInterface('SeparatedIdentity');
-    if (!interface_) throw new Error('Missing assembled interface');
+    const primaryInterface = definitions.getInterface('SeparatedIdentity');
+    if (!primaryInterface) throw new Error('Missing assembled interface');
 
     const implementation = new PrivateStateImplementation(42);
     const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(read, function() {
-      return PrivateStateImplementation.read(
-        this as PrivateStateImplementation,
-      );
+    implementations.setOperationSteps(read, function(receiver) {
+      const implInst = receiver?.implInst;
+      if (!(implInst instanceof PrivateStateImplementation)) throw new Error('Wrong implementation');
+      return PrivateStateImplementation.read(implInst);
     });
-    implementations.setOperationSteps(echo, function(value) {
-      expect(this).toBe(implementation);
+    implementations.setOperationSteps(echo, function(receiver, value) {
+      expect(receiver!.implInst).toBe(implementation);
       expect(value).toBe(implementation);
       return value;
     });
@@ -364,8 +373,8 @@ describe('Web IDL ordinary interface projection', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    const prototype = binding.getInterfacePrototypeObject(interface_);
-    const record = binding.projectPlatformObject(implementation, interface_);
+    const prototype = binding.getInterfacePrototypeObject(primaryInterface);
+    const record = binding.projectPlatformObject(implementation, primaryInterface);
     const { platformObject: object } = record;
 
     expect(binding.isPlatformObject(object)).toBe(true);
@@ -375,7 +384,7 @@ describe('Web IDL ordinary interface projection', () => {
       .toBe(PrivateStateImplementation.prototype);
     expect(implementation).toBeInstanceOf(PrivateStateImplementation);
     expect(record.platformObject).toBe(object);
-    expect(record.implementation).toBe(implementation);
+    expect(record.implInst).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
     expect(convertToIDL(
@@ -395,6 +404,8 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('runs the default toJSON operation over exposed JSON attributes', () => {
+    class JSONBaseImpl {}
+    class JSONDerivedImpl extends JSONBaseImpl {}
     const constructor = constructorMember([]);
     const inheritedValue = attributeMember('inheritedValue', idlType.long);
     const ownValue = attributeMember('ownValue', idlType.DOMString);
@@ -419,6 +430,7 @@ describe('Web IDL ordinary interface projection', () => {
       members: [constructor, ownValue, nonJSONValue, derivedToJSON],
     });
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(derived, () => new JSONDerivedImpl());
     implementations.setConstructorSteps(constructor, () => undefined);
     implementations.setAttributeSteps(inheritedValue, {
       get() { return 12; },
@@ -446,6 +458,8 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('creates default toJSON results in the function realm', () => {
+    class JSONPointImpl {}
+    class JSONHolderImpl {}
     const pointToJSON = operationMember('toJSON', [], idlType.object);
     const point = defineInterface({
       name: 'JSONPoint',
@@ -467,6 +481,8 @@ describe('Web IDL ordinary interface projection', () => {
     });
     const definitions = assembleDefinitions([holder, point]);
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(point, () => new JSONPointImpl());
+    implementations.setImplementationCreationSteps(holder, () => new JSONHolderImpl());
     const platformObjects = new PlatformObjectRegistry();
     const local = new RealmBinding(
       definitions,
@@ -480,16 +496,16 @@ describe('Web IDL ordinary interface projection', () => {
       platformObjects,
       implementations,
     );
-    const pointObject = local.createPlatformObject('JSONPoint');
-    const pointRecord = local.getPlatformObjectRecord(pointObject);
+    const pointObject = local.createPlatformObject(local.resolveInterface('JSONPoint'));
+    const pointRecord = getPlatformRecord(pointObject);
     if (!pointRecord) throw new Error('Missing JSONPoint platform record');
     implementations.setAttributeSteps(pointAttribute, {
-      get() { return pointRecord.implementation; },
+      get() { return pointRecord.implInst; },
     });
-    const holderObject = local.createPlatformObject('JSONHolder');
+    const holderObject = local.createPlatformObject(local.resolveInterface('JSONHolder'));
 
     const json = call(
-      foreign.getInterfacePrototypeObject('JSONHolder'),
+      foreign.getInterfacePrototypeObject(foreign.resolveInterface('JSONHolder')),
       'toJSON',
       holderObject,
     );
@@ -499,6 +515,7 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('converts frozen array attributes once and returns them by identity', () => {
+    class FrozenArrayImpl {}
     const constructor = constructorMember([]);
     const values = attributeMember(
       'values',
@@ -512,12 +529,13 @@ describe('Web IDL ordinary interface projection', () => {
     const realm = new Realm();
     const state = new WeakMap<object, readonly unknown[]>();
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new FrozenArrayImpl());
     implementations.setConstructorSteps(constructor, function() {
       state.set(this, Object.freeze(new realm.intrinsics.array()));
     });
     implementations.setAttributeSteps(values, {
-      get() { return state.get(this as object); },
-      set(value) { state.set(this as object, value as readonly unknown[]); },
+      get(receiver) { return state.get(receiver!.implInst); },
+      set(receiver, value) { state.set(receiver!.implInst, value as readonly unknown[]); },
     });
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
@@ -541,6 +559,7 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('converts BufferSource operation arguments and results by identity', () => {
+    class BufferSourceImpl {}
     const constructor = constructorMember([]);
     const echo = operationMember(
       'echo',
@@ -553,8 +572,9 @@ describe('Web IDL ordinary interface projection', () => {
       members: [constructor, echo],
     });
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new BufferSourceImpl());
     implementations.setConstructorSteps(constructor, () => undefined);
-    implementations.setOperationSteps(echo, (source) => source);
+    implementations.setOperationSteps(echo, (_receiver, source) => source);
     const realm = new Realm();
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
@@ -576,6 +596,7 @@ describe('Web IDL ordinary interface projection', () => {
   });
 
   it('implements applicable member extended attributes', () => {
+    class ExtendedInterfaceImpl {}
     const constructor = constructorMember([]);
     const unforgeable = {
       ...attributeMember('trusted', idlType.boolean, true),
@@ -612,6 +633,7 @@ describe('Web IDL ordinary interface projection', () => {
     const forwarded = { value: '' };
     const choices = new WeakMap<object, string>();
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new ExtendedInterfaceImpl());
     implementations.setConstructorSteps(constructor, function() {
       choices.set(this, 'first');
     });
@@ -625,8 +647,8 @@ describe('Web IDL ordinary interface projection', () => {
       get() { return forwarded; },
     });
     implementations.setAttributeSteps(choice, {
-      get() { return choices.get(this as object) ?? 'first'; },
-      set(value) { choices.set(this as object, value as string); },
+      get(receiver) { return choices.get(receiver!.implInst) ?? 'first'; },
+      set(receiver, value) { choices.set(receiver!.implInst, value as string); },
     });
     implementations.setOperationSteps(fixed, () => 'fixed');
     implementations.setOperationSteps(scoped, () => undefined);

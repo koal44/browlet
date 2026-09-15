@@ -35,7 +35,7 @@ import { asciiLower } from '../../../infra/ascii';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
-  DOMExceptionNames, throwDOMException,
+  DOMExceptionNames, throwDOMException, type ImplementationClass,
 } from '../../../web-idl/index';
 import { createOpaqueOrigin, type Origin } from '../../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../../url/url';
@@ -681,9 +681,9 @@ export class DocumentImpl extends NodeImpl {
   createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE): ElementImpl & HTMLElement;
   createElementNode(localName: string, namespaceURI: string): ElementImpl;
   createElementNode(localName: string, namespaceURI: string): ElementImpl {
-    const interface_ = resolveElementInterface(namespaceURI, localName);
+    const elementInterface = resolveElementInterface(namespaceURI, localName);
     return this.#nodeFactory.constructNode<ElementImpl>(
-      interface_.implementation,
+      elementInterface.implementation,
       [{
         document: this,
         localName,
@@ -764,10 +764,13 @@ export const documentIDL = defineInterface({
   implementation: impl(DocumentImpl, {
     constructWith: [
       atArg(0, (ctx): DOMNodeFactory => ({
-        constructNode(implementation, argumentsList) {
-          const value = directDOMNodeFactory.constructNode(implementation, argumentsList);
-          ctx.project(implementation, value);
-          return value;
+        constructNode<T extends object>(
+          implClass: ImplementationClass<T>,
+          argumentsList: readonly unknown[],
+        ): T {
+          const implInst = ctx.construct(implClass, ...argumentsList);
+          ctx.project(implClass, implInst);
+          return implInst;
         },
       })),
       atArg(1, (ctx) => createStyleletRuntime(ctx.getRuntime())),
@@ -946,8 +949,11 @@ export type DOMNodeFactory = {
 };
 
 export const directDOMNodeFactory: DOMNodeFactory = {
-  constructNode(implementation, argumentsList) {
-    return Reflect.construct(implementation, argumentsList) as InstanceType<typeof implementation>;
+  constructNode<T extends object>(
+    implementation: abstract new (...argumentsList: never[]) => T,
+    argumentsList: readonly unknown[],
+  ): T {
+    return Reflect.construct(implementation, argumentsList) as T;
   },
 };
 

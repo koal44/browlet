@@ -390,8 +390,8 @@ export const elementIDL = defineInterface({
 export function defineElementInterface(
   options: ElementInterfaceOptions,
 ): ElementInterface {
-  const implementation = options.definition.implementation?.implementation;
-  if (!implementation) {
+  const implClass = options.definition.implementation?.implClass;
+  if (!implClass) {
     throw new TypeError(
       `Element interface ${options.definition.name} has no implementation`,
     );
@@ -399,7 +399,7 @@ export function defineElementInterface(
 
   return {
     definition: options.definition,
-    implementation: implementation as ElementImplementation,
+    implementation: implClass as ElementImplementation,
     localNames: options.localNames ?? [],
     namespaceURI: options.namespaceURI,
   };

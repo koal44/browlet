@@ -398,6 +398,11 @@ export class URLSearchParamsImpl implements URLSearchParams {
     this.#urlObject = url;
   }
 
+  /** URL §6.2 — value pairs to iterate over. */
+  getEntryList(): readonly FormTuple[] {
+    return this.#list;
+  }
+
   replaceList(list: FormTuple[]): void {
     this.#list.splice(0, this.#list.length, ...list);
   }

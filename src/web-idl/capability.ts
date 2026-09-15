@@ -1,5 +1,5 @@
 import type { DefinitionAssembly } from './assembly';
-import type { InterfaceDefinition } from './core/definitions/interface';
+import type { InterfaceDefinition } from './core/declarations';
 
 // Project helper: declare a typed key for behavior supplied by another subsystem.
 /**
@@ -16,9 +16,9 @@ export function defineCapability<Value>(
 ): Capability<Value> {
   const capability: Capability<Value> = Object.freeze({
     // Project helper: associate a capability value with an interface definition.
-    for(interface_: InterfaceDefinition<never>, value: Value) {
-      options.validate?.(interface_);
-      return { capability, interface_, value };
+    for(definition: InterfaceDefinition<never>, value: Value) {
+      options.validate?.(definition);
+      return { capability, definition, value };
     },
     name,
   }) as Capability<Value>;
@@ -28,7 +28,7 @@ export function defineCapability<Value>(
 export type Capability<Value> = {
   readonly name: string;
   for(
-    interface_: InterfaceDefinition<never>,
+    definition: InterfaceDefinition<never>,
     value: Value,
   ): CapabilityRegistration;
   readonly [capabilityValueType]: Value;
@@ -37,12 +37,12 @@ export type Capability<Value> = {
 // The definition is an identity key; capability lookup never invokes its callbacks.
 export type CapabilityRegistration = {
   readonly capability: Capability<unknown>;
-  readonly interface_: InterfaceDefinition<never>;
+  readonly definition: InterfaceDefinition<never>;
   readonly value: unknown;
 };
 
 export type CapabilityOptions = {
-  readonly validate?: (interface_: InterfaceDefinition<never>) => void;
+  readonly validate?: (definition: InterfaceDefinition<never>) => void;
 };
 
 export class CapabilityRegistry {
@@ -57,24 +57,24 @@ export class CapabilityRegistry {
     registrations: readonly CapabilityRegistration[],
   ) {
     for (const registration of registrations) {
-      const interface_ = definitions.getInterface(
-        registration.interface_.name,
+      const primaryInterface = definitions.getInterface(
+        registration.definition.name,
       );
-      if (interface_?.definition !== registration.interface_) {
+      if (primaryInterface?.definition !== registration.definition) {
         throw new TypeError(
           `Capability ${registration.capability.name} targets unknown ` +
-          `interface definition ${registration.interface_.name}`,
+          `interface definition ${registration.definition.name}`,
         );
       }
 
-      let values = this.#values.get(registration.interface_);
+      let values = this.#values.get(registration.definition);
       if (!values) {
         values = new Map();
-        this.#values.set(registration.interface_, values);
+        this.#values.set(registration.definition, values);
       }
       if (values.has(registration.capability)) {
         throw new TypeError(
-          `Interface ${registration.interface_.name} has a duplicate ` +
+          `Interface ${registration.definition.name} has a duplicate ` +
           `${registration.capability.name} capability registration`,
         );
       }
@@ -84,10 +84,10 @@ export class CapabilityRegistry {
 
   // Project helper: retrieve a capability value by interface and capability identity.
   get<Value>(
-    interface_: InterfaceDefinition<never>,
+    definition: InterfaceDefinition<never>,
     capability: Capability<Value>,
   ): Value | undefined {
-    return this.#values.get(interface_)?.get(capability) as Value | undefined;
+    return this.#values.get(definition)?.get(capability) as Value | undefined;
   }
 }
 

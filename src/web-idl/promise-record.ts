@@ -1,13 +1,13 @@
 import type { WebIDLType } from './core/index';
-import type { WebIDLRealmHost } from './js-realm';
+import type { WebIDLRealmHost } from './realm-host';
 
 // Project helper: retain a PromiseCapability with its type, realm, and settlement state.
 // Web IDL §3.2.24 Promise types — Promise<T>.
-export function createIDLPromise(
+export function createIDLPromiseRecord(
   type: WebIDLType,
   realm: WebIDLRealmHost,
   realizeException?: ExceptionRealizer,
-): IDLPromise {
+): IDLPromiseRecord {
   let resolve: PromiseSettlement | undefined;
   let reject: PromiseSettlement | undefined;
   const promise = new realm.intrinsics.promise.constructor((resolve_, reject_) => {
@@ -19,8 +19,8 @@ export function createIDLPromise(
   }
   const reject_ = reject;
   const resolve_ = resolve;
-  const value: IDLPromise = {
-    [promiseValueBrand]: true,
+  const value: IDLPromiseRecord = {
+    [promiseRecordBrand]: true,
     promise,
     realm,
     // Project helper: record settlement and realize a rejection before calling the native capability.
@@ -47,29 +47,21 @@ export function convertJavaScriptValueToPromise(
   type: WebIDLType,
   realm: WebIDLRealmHost,
   realizeException?: ExceptionRealizer,
-): IDLPromise {
-  const promise = createIDLPromise(type, realm, realizeException);
+): IDLPromiseRecord {
+  const promise = createIDLPromiseRecord(type, realm, realizeException);
   promise.resolve(value);
   return promise;
 }
 
-// Web IDL §3.2.24 Promise types — IDL-to-JavaScript conversion uses the capability's Promise field.
-export function convertPromiseToJavaScript(value: unknown): Promise<unknown> {
-  if (!isIDLPromise(value)) {
-    throw new Error('IDL promise value is not a PromiseCapability record');
-  }
-  return value.promise;
-}
-
 // Project helper: recognize our retained PromiseCapability value.
-export function isIDLPromise(value: unknown): value is IDLPromise {
+export function isIDLPromiseRecord(value: unknown): value is IDLPromiseRecord {
   return typeof value === 'object' &&
     value !== null &&
-    promiseValueBrand in value;
+    promiseRecordBrand in value;
 }
 
-export type IDLPromise = {
-  [promiseValueBrand]: true;
+export type IDLPromiseRecord = {
+  [promiseRecordBrand]: true;
   promise: Promise<unknown>;
   realm: WebIDLRealmHost;
   reject: PromiseSettlement;
@@ -83,4 +75,4 @@ type PromiseSettlement = (value?: unknown) => void;
 
 type ExceptionRealizer = (value: unknown) => unknown;
 
-const promiseValueBrand: unique symbol = Symbol('Web IDL promise value');
+const promiseRecordBrand: unique symbol = Symbol('Web IDL promise record');

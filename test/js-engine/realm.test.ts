@@ -46,11 +46,10 @@ describe('JavaScript Realm', () => {
       length: 2,
       name: 'perform',
     });
-    expect(Reflect.apply(callable, receiver, ['a', 'b'])).toEqual({
-      argumentsList: ['a', 'b'],
-      newTarget: undefined,
-      thisArgument: receiver,
-    });
+    const result = Reflect.apply(callable, receiver, ['a', 'b']);
+    expect(result.argumentsList).toEqual(['a', 'b']);
+    expect(result.newTarget).toBeUndefined();
+    expect(result.thisArgument).toBe(receiver);
     expect(Reflect.apply(callable, undefined, [])).toMatchObject({
       thisArgument: undefined,
     });
@@ -202,6 +201,38 @@ describe('JavaScript Realm', () => {
 });
 
 describe('Realm collection iterators', () => {
+  it.each(['map', 'set'] as const)('%s iterator accepts next borrowed from another realm', (kind) => {
+    const first = new JSRealm();
+    const second = new JSRealm();
+    let index = 0;
+    const iterator = first.createCollectionIterator(kind, () =>
+      first.createIteratorResultObject(++index, false));
+    const foreignIterator = second.createCollectionIterator(kind, () =>
+      second.createIteratorResultObject(undefined, true));
+    const next = Reflect.get(foreignIterator, 'next') as JSFunction;
+
+    expect(Reflect.apply(next, iterator, [])).toEqual({ value: 1, done: false });
+    expect(Reflect.apply(Reflect.get(iterator, 'next') as JSFunction, iterator, []))
+      .toEqual({ value: 2, done: false });
+  });
+
+  it.each(['map', 'set'] as const)('%s iterator state is hidden and survives freezing and prototype changes', (kind) => {
+    const realm = new JSRealm();
+    const iterator = realm.createCollectionIterator(kind, () =>
+      realm.createIteratorResultObject('value', false));
+    const prototype = kind === 'map'
+      ? realm.intrinsics.iteration.mapIteratorPrototype
+      : realm.intrinsics.iteration.setIteratorPrototype;
+    const next = Reflect.get(iterator, 'next') as JSFunction;
+
+    expect(Reflect.getPrototypeOf(iterator)).toBe(prototype);
+    expect(Reflect.ownKeys(iterator)).toEqual([]);
+    Reflect.setPrototypeOf(iterator, null);
+    Object.freeze(iterator);
+    expect(Reflect.apply(next, iterator, [])).toEqual({ value: 'value', done: false });
+    expect(Reflect.ownKeys(iterator)).toEqual([]);
+  });
+
   it.each(['map', 'set'] as const)('%s iteration is lazy, branded, and completes once', (kind) => {
     const realm = new JSRealm();
     let calls = 0;

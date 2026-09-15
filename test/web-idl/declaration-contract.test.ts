@@ -5,8 +5,9 @@ import { expect, it } from 'vitest';
 it('infers projection callbacks and preserves the host realm through registration', () => {
   const source = `
     import {
-      atArg, attrFn, constructWith, ctor, createBindingWorld, defineCapability, defineInterface,
-      idlType, impl, op, roAttr, serializeDefinition, type WebIDLRealmHost,
+      atArg, attrFn, ctor, BindingWorld, defineCapability, defineInterface,
+      idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
+      type StampedImplInstance, type StampedPlatformObject, type WebIDLRealmHost,
     } from '../../src/web-idl/index';
     import type { RuntimeContext } from '../../src/js-engine/runtime-context';
 
@@ -16,7 +17,7 @@ it('infers projection callbacks and preserves the host realm through registratio
     }
     declare const hostRealm: HostRealm;
     declare const minimalRealm: WebIDLRealmHost;
-    class Example {}
+    class Example { value = 1; }
 
     atArg(0, (ctx) => ctx.getRuntime());
     attrFn((ctx) => function value() { return ctx.realm.global; });
@@ -29,7 +30,9 @@ it('infers projection callbacks and preserves the host realm through registratio
         constructWith: [atArg(0, (ctx) => ctx.realm.eventTimeStamp())],
       }),
       members: [
-        ctor([], constructWith(atArg(0, (ctx) => ctx.realm.eventTimeStamp()))),
+        ctor([], {
+          constructWith: [atArg(0, (ctx) => ctx.realm.eventTimeStamp())],
+        }),
         roAttr('time', idlType.double, {
           get(ctx) { return ctx.realm.eventTimeStamp(); },
         }),
@@ -40,7 +43,7 @@ it('infers projection callbacks and preserves the host realm through registratio
     });
     serializeDefinition(definition);
     const capability = defineCapability<RuntimeContext>('runtime');
-    const world = createBindingWorld<HostRealm>([definition], {
+    const world = new BindingWorld<HostRealm>([definition], {
       capabilities: [capability.for(definition, runtime)],
     });
     const ctx = world.register(hostRealm, {
@@ -50,13 +53,38 @@ it('infers projection callbacks and preserves the host realm through registratio
       },
     });
     ctx.realm.eventTimeStamp();
+    world.forRealm(hostRealm)?.realm.eventTimeStamp();
     ctx.getCapability(definition, capability);
     ctx.createPlatformObject(definition);
     ctx.isInterfaceExposed(definition);
+    const implInst: StampedImplInstance<Example> = ctx.construct(Example);
+    implInst.value.toFixed();
+    const platformObject: StampedPlatformObject = ctx.project(Example, implInst);
+    const projected: StampedPlatformObject | undefined = world.project(implInst);
+    const created: StampedPlatformObject | undefined = ctx.createPlatformObject(definition).platformObject;
+    const unwrapped: StampedImplInstance<Example> | undefined = ctx.unwrap(platformObject, Example);
+    unwrapped?.value.toFixed();
+    const plain = new Example();
+    // @ts-expect-error An ordinary instance has no stamped platform record.
+    const unstamped: StampedImplInstance<Example> = plain;
+    // @ts-expect-error An implementation stamp is not a platform stamp.
+    const notPlatform: StampedPlatformObject = implInst;
+    // @ts-expect-error A platform stamp does not expose its implementation's stamp.
+    const notImpl: StampedImplInstance = platformObject;
+    if (isStampedImplInstance(plain)) {
+      const recognized: StampedImplInstance<Example> = plain;
+      recognized.value.toFixed();
+    }
+    if (isStampedPlatformObject(plain)) {
+      const recognized: StampedPlatformObject<Example> = plain;
+      recognized.value.toFixed();
+    }
     // @ts-expect-error HTML callbacks cannot be installed on the minimal host.
     world.register(minimalRealm);
+    // @ts-expect-error This world's realm lookup requires the same host type as registration.
+    world.forRealm(minimalRealm);
     // @ts-expect-error A world of arbitrary Web IDL realms cannot run HTML callbacks.
-    createBindingWorld<WebIDLRealmHost>([definition]);
+    new BindingWorld<WebIDLRealmHost>([definition]);
   `;
   const { diagnostics } = checkFixture(source);
   expect(diagnostics).toEqual([]);
@@ -65,11 +93,11 @@ it('infers projection callbacks and preserves the host realm through registratio
 it('checks declaration options without importing the runtime binding', () => {
   const source = `
     import {
-      arg, atArg, attr, attrFn, constructWith, ctor, defineCallbackInterface, defineInterface,
+      arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
       dictMember, idlType, impl, invokeWith, newBufferResult, op, staticOp,
     } from '../../src/web-idl/core/index';
 
-    declare module '../../src/web-idl/core/definition' {
+    declare module '../../src/web-idl/core/types' {
       interface DeclarationCallbacks {
         'argument-resolve': (ctx: { global: object }) => unknown;
       }
@@ -78,7 +106,6 @@ it('checks declaration options without importing the runtime binding', () => {
     class Example {}
     defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
     impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
-    ctor([], constructWith(atArg(0, () => new Example())));
     ctor([], { constructWith: [atArg(0, () => new Example())] });
     op('read', idlType.ArrayBuffer, [], newBufferResult());
     op('run', idlType.undefined, [], invokeWith(atArg(0, () => new Example())));
@@ -90,13 +117,13 @@ it('checks declaration options without importing the runtime binding', () => {
     // @ts-expect-error Operation dependencies are not constructor dependencies.
     ctor([], invokeWith(atArg(0, () => new Example())));
     // @ts-expect-error Constructor dependencies are not operation dependencies.
-    op('run', idlType.undefined, [], constructWith(atArg(0, () => new Example())));
+    op('run', idlType.undefined, [], { constructWith: [atArg(0, () => new Example())] });
     // @ts-expect-error A buffer result policy is not an attribute option.
     attr('value', idlType.object, newBufferResult());
     // @ts-expect-error A declaration cannot carry arbitrary binding metadata.
     ctor([], { binding: { nonsense: true } });
     // @ts-expect-error Injected constructor arguments require explicit positions.
-    constructWith(Example);
+    ctor([], { constructWith: [Example] });
     // @ts-expect-error Injected operation arguments require explicit positions.
     invokeWith(Example);
     // @ts-expect-error Interface construction also requires explicit positions.
@@ -128,7 +155,7 @@ it('checks declaration options without importing the runtime binding', () => {
     // @ts-expect-error Initialization callbacks require the projection's signature.
     impl(Example, { initializeImplementation() {} });
     // @ts-expect-error Callback-interface adapters require the projection's signature.
-    defineCallbackInterface({ name: 'Callback', members: [], adapter: { adapt() {} } });
+    defineCallbackInterface({ name: 'Callback', members: [], adapt() {} });
   `;
   const { diagnostics, program } = checkFixture(source);
   expect(diagnostics).toEqual([]);
@@ -139,6 +166,63 @@ it('checks declaration options without importing the runtime binding', () => {
     .map((file) => path.resolve(file.fileName))
     .filter((name) => name.startsWith(sourceDirectory) && !name.startsWith(coreDirectory));
   expect(externalSources).toEqual([]);
+});
+
+it('preserves implementation identity and validated buffer and type results', () => {
+  const source = `
+    import type { AssembledInterfaceDefinition, DefinitionAssembly } from '../../src/web-idl/assembly';
+    import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from '../../src/web-idl/buffer-source';
+    import type { StampedImplInstance, PlatformRecord, WebIDLType } from '../../src/web-idl/index';
+    import {
+      associatePlatformObject, getImplementationRecord, getPlatformRecord,
+      stampImplementation,
+    } from '../../src/web-idl/platform-object';
+    import type { RealmBinding } from '../../src/web-idl/realm-binding';
+    import { getUnannotatedType } from '../../src/web-idl/types';
+
+    declare const binding: RealmBinding;
+    const primaryInterface: AssembledInterfaceDefinition = binding.resolveInterface('Example');
+    declare const definitions: DefinitionAssembly;
+    declare const type: WebIDLType;
+    declare const authorValue: unknown;
+    const implInst = { count: 1 };
+    const platformObject = { authorProperty: true };
+
+    const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, primaryInterface);
+    const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, primaryInterface);
+    const paired: PlatformRecord<typeof implInst> = binding.associatePlatformObject(platformObject, primaryInterface, implInst);
+    // @ts-expect-error The implementation must be supplied separately from the platform object.
+    binding.associatePlatformObject(platformObject, primaryInterface);
+    const registered: PlatformRecord<typeof implInst> = associatePlatformObject(platformObject, implInst, primaryInterface, binding);
+    const found: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(implInst)?.implInst;
+    const stamped = stampImplementation(implInst, primaryInterface, binding);
+    const foundStamped: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(stamped)?.implInst;
+    // @ts-expect-error Name lookup accepts a name, not an already assembled definition.
+    binding.resolveInterface(primaryInterface);
+    // @ts-expect-error Internal creation requires the already assembled primary interface.
+    binding.createPlatformObject('Example');
+    // @ts-expect-error Internal projection requires the already assembled primary interface.
+    binding.projectGlobalObject(implInst, 'Example');
+    binding.context.projectGlobalObject(implInst, 'Example');
+    // @ts-expect-error The external projection boundary accepts an interface name.
+    binding.context.projectGlobalObject(implInst, primaryInterface);
+    projected.implInst.count.toFixed();
+    // @ts-expect-error The record retains the implementation shape, not the platform shape.
+    paired.implInst.authorProperty;
+    // @ts-expect-error An unknown incoming value does not identify a concrete implementation type.
+    getImplementationRecord(authorValue)?.implInst.count;
+    // @ts-expect-error A platform-object lookup cannot infer the shape of its implementation from its key.
+    getPlatformRecord(platformObject)?.implInst.authorProperty;
+
+    const buffer: ArrayBufferLike | ArrayBufferView = convertBufferSourceToIDL(authorValue, 'Uint8Array', []);
+    const returnedBuffer: ArrayBufferLike | ArrayBufferView = convertBufferSourceToJavaScript(authorValue, 'ArrayBuffer');
+    buffer.byteLength.toFixed();
+    returnedBuffer.byteLength.toFixed();
+    // @ts-expect-error Outer annotations have been removed from the result.
+    const annotation: 'annotated' = getUnannotatedType(type, definitions).kind;
+  `;
+  const { diagnostics } = checkFixture(source);
+  expect(diagnostics).toEqual([]);
 });
 
 function checkFixture(source: string) {

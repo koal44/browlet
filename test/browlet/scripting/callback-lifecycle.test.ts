@@ -7,7 +7,7 @@ import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
 import { parseURL, type URLRecord } from '../../../src/url/url';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { RealmBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/realm-binding';
 import { invokeCallbackFunction } from '../../../src/web-idl/callback';
 import { isCallbackFunctionValue } from
   '../../../src/web-idl/callback-value';

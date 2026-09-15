@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arg, createBindingWorld, ctor, defineInterface, idlType, impl, newBufferResult,
+  arg, BindingWorld, ctor, defineInterface, idlType, impl, newBufferResult,
   op, promise, type WebIDLType,
 } from '../../src/web-idl/index';
 import {
@@ -79,14 +79,15 @@ function createFixture(type: WebIDLType, existingResultPolicy?: boolean) {
       op('existingAsync', promise(idlType.Uint8Array)),
     ],
   });
-  const bindings = createBindingWorld([definition]);
+  const bindings = new BindingWorld([definition]);
   const realm = new TestRealm();
   const foreignRealm = new TestRealm();
-  bindings.register(realm).install(realm.global);
+  const ctx = bindings.register(realm);
+  ctx.install(realm.global);
   bindings.register(foreignRealm).install(foreignRealm.global);
   const Constructor = Reflect.get(realm.global, definition.name) as new() => object;
   const receiver = new Constructor();
-  const implementation = bindings.unwrap(receiver) as BufferResultImpl;
+  const implementation = ctx.unwrap(receiver, BufferResultImpl)!;
   const ForeignConstructor = Reflect.get(foreignRealm.global, definition.name) as {
     prototype: object;
   };

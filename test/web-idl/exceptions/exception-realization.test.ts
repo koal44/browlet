@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
-} from '../../../src/js-engine/simple-exception';
+} from '../../../src/js-engine/exceptions';
 import {
   createDOMException, DOMException as InternalDOMException,
-} from '../../../src/web-idl/core/dom-exception-core';
-import { createBindingWorld } from '../../../src/web-idl/index';
+} from '../../../src/web-idl/core/dom-exception';
+import { BindingWorld } from '../../../src/web-idl/index';
 import { TestRealm } from '../test-realm';
 
 const cases = [
@@ -50,7 +50,7 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     const exception = create();
     Object.freeze(exception);
 
-    const world = createBindingWorld([]);
+    const world = new BindingWorld([]);
     const binding = world.register(new TestRealm());
     binding.install(binding.realm.global);
     const error = binding.realizeException(exception);
@@ -82,7 +82,7 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     });
     const revoked = Proxy.revocable(exception, {});
     revoked.revoke();
-    const context = createBindingWorld([]).register(new TestRealm());
+    const context = new BindingWorld([]).register(new TestRealm());
 
     for (const value of [
       Object.create(Reflect.getPrototypeOf(exception)),

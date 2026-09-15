@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/js-engine/index';
-import { TypeError as TypeErrorRequest } from '../../src/js-engine/simple-exception';
-import { createBindingWorld } from '../../src/web-idl/registration';
+import { TypeError as TypeErrorRequest } from '../../src/js-engine/exceptions';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import {
   defineInterface, idlType, impl, promise, reference, roAttr,
 } from '../../src/web-idl/core/index';
@@ -9,7 +9,7 @@ import { TestRealm } from './test-realm';
 
 describe('internal Promise result projection', () => {
   it.each(['fulfill', 'reject'] as const)('retains the receiver projection on %s', async (mode) => {
-    const bindings = createBindingWorld([ownerIDL, childIDL]);
+    const bindings = new BindingWorld([ownerIDL, childIDL]);
     const first = new TestRealm();
     const second = new TestRealm();
     const firstBinding = bindings.register(first);

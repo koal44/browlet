@@ -19,7 +19,7 @@ import { fileIDLDefinitions } from '../../src/file/index';
 import { streamsIDLDefinitions, ReadableStreamImpl } from '../../src/streams/index';
 import { urlIDLDefinitions } from '../../src/url/api';
 import { parseURL } from '../../src/url/url';
-import { createBindingWorld } from '../../src/web-idl/index';
+import { BindingWorld } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
 
@@ -33,7 +33,7 @@ export function createRequestRecord(
 }
 
 export function createRecordFixture() {
-  const bindings = createBindingWorld([
+  const bindings = new BindingWorld([
     ...streamsIDLDefinitions, ...fileIDLDefinitions, ...xhrIDLDefinitions, ...urlIDLDefinitions,
     headersInitIDL, headersIDL, xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
     requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,

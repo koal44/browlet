@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   callUserObjectOperation, constructCallbackFunction,
   convertWebIDLArguments, invokeCallbackFunction, missingArgument,
@@ -15,9 +15,9 @@ import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
   integer, nullable, promise as promiseType, reference,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
-import { isIDLPromise } from '../../src/web-idl/promise-value';
+import { isIDLPromiseRecord } from '../../src/web-idl/promise-record';
 
 describe('Web IDL callbacks', () => {
   it('captures callback context and invokes functions in their associated realm', () => {
@@ -257,7 +257,7 @@ describe('Web IDL callbacks', () => {
       'handleEvent',
       [],
     );
-    if (!isIDLPromise(functionResult) || !isIDLPromise(interfaceResult)) {
+    if (!isIDLPromiseRecord(functionResult) || !isIDLPromiseRecord(interfaceResult)) {
       throw new Error('Promise callback did not return an IDL promise');
     }
     const functionPromise = convertToJavaScript(
@@ -354,6 +354,7 @@ describe('Web IDL callbacks', () => {
   });
 
   it('applies legacy callback conversion at the attribute binding boundary', () => {
+    class CallbackOwnerImpl {}
     const callback = defineCallbackFunction({
       name: 'LegacyAttributeHandler',
       extendedAttributes: [{
@@ -368,24 +369,25 @@ describe('Web IDL callbacks', () => {
       name: 'handler',
       type: nullable(reference('LegacyAttributeHandler')),
     };
-    const interface_ = defineInterface({
+    const definition = defineInterface({
       name: 'CallbackOwner',
       members: [attribute],
     });
     const realm = new Realm();
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(definition, () => new CallbackOwnerImpl());
     let stored: unknown = null;
     implementations.setAttributeSteps(attribute, {
       get: () => stored,
-      set: (value) => { stored = value; },
+      set: (_receiver, value) => { stored = value; },
     });
     const binding = new RealmBinding(
-      assembleDefinitions([callback, interface_]),
+      assembleDefinitions([callback, definition]),
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
-    const object = binding.createPlatformObject('CallbackOwner');
+    const object = binding.createPlatformObject(binding.resolveInterface('CallbackOwner'));
 
     Reflect.set(object, 'handler', 1);
     expect(Reflect.get(object, 'handler')).toBeNull();

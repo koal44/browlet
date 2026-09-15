@@ -1,3 +1,4 @@
+import { getPlatformRecord } from './platform-object';
 import {
   getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
 } from '../js-engine/index';
@@ -466,7 +467,7 @@ function convertArgument<Callable extends IDLCallable>(
 ): unknown {
   const type = item.types[index] as WebIDLType;
   const optionality = item.optionality[index] as Optionality;
-  const argument = getDeclaredArgument(item.callable, index);
+  const argument = getArgumentDefinition(item.callable.arguments, index);
 
   if (optionality === 'optional' && value === undefined) {
     return argument?.default === undefined
@@ -477,13 +478,13 @@ function convertArgument<Callable extends IDLCallable>(
 }
 
 // Project helper: find the declaration for a fixed or expanded variadic argument.
-function getDeclaredArgument(
-  callable: IDLCallable,
+export function getArgumentDefinition(
+  definitions: ArgumentDefinition[],
   index: number,
 ): ArgumentDefinition | undefined {
-  const argument = callable.arguments[index];
+  const argument = definitions[index];
   if (argument) return argument;
-  const last = callable.arguments.at(-1);
+  const last = definitions.at(-1);
   return last?.variadic ? last : undefined;
 }
 
@@ -533,8 +534,6 @@ function canonicalType(
       return `record<${canonicalType(inner.key, definitions)}, ${
         canonicalType(inner.value, definitions)
       }>`;
-    case 'annotated':
-      throw new Error('Unannotated type unexpectedly retained annotations');
   }
 }
 
@@ -546,8 +545,12 @@ function containsImplementedInterface(
 ): boolean {
   return getContainedTypes(type, context.definitions).some((candidate) => {
     if (candidate.kind !== 'reference') return false;
-    const interface_ = context.definitions.getInterface(candidate.name);
-    if (interface_) return context.platformObjects.implements(value, interface_);
+    const primaryInterface = context.definitions.getInterface(candidate.name);
+    if (primaryInterface) {
+      const record = getPlatformRecord(value);
+      return record?.binding.platformObjects === context.platformObjects &&
+        record.implements(primaryInterface);
+    }
     return context.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;
   });
 }

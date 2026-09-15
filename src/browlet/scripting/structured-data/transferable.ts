@@ -27,14 +27,14 @@ export function markTransferableDetached(value: object): void {
 // HTML owns the platform object's [[Detached]] state; it is not Web IDL state.
 const detachedPlatformObjects = new WeakSet<object>();
 
-function requireTransferableMarker<Realm>(interface_: InterfaceDefinition<Realm>): void {
-  const markers = interface_.extendedAttributes?.filter(
+function requireTransferableMarker<Realm>(definition: InterfaceDefinition<Realm>): void {
+  const markers = definition.extendedAttributes?.filter(
     (attribute) =>
       attribute.kind !== 'raw' && attribute.name === 'Transferable',
   ) ?? [];
   if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
     throw new TypeError(
-      `${interface_.name} must declare exactly one [Transferable] marker`,
+      `${definition.name} must declare exactly one [Transferable] marker`,
     );
   }
 }

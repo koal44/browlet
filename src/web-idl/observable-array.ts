@@ -8,7 +8,8 @@ import {
 import {
   idlType, sequence, type AttributeMember, type WebIDLType,
 } from './core/index';
-import type { ImplementationRegistry } from './registry';
+import type { PlatformRecord } from './platform-object';
+import type { ImplementationRegistry } from './implementation-registry';
 
 export class ObservableArrayBinding {
   readonly #context: ConversionContext;
@@ -25,25 +26,25 @@ export class ObservableArrayBinding {
 
   // Project helper: retrieve the platform value for an observable-array attribute.
   get(
-    object: object,
+    record: PlatformRecord,
     attribute: AttributeMember,
     elementType: WebIDLType,
   ): unknown[] {
-    return this.#getHandle(object, attribute, elementType).value;
+    return this.#getHandle(record, attribute, elementType).value;
   }
 
   // Project helper: retrieve the observable-array attribute's retained backing list.
   getBackingList(
-    object: object,
+    record: PlatformRecord,
     attribute: AttributeMember,
     elementType: WebIDLType,
   ): unknown[] {
-    return this.#getHandle(object, attribute, elementType).backingList;
+    return this.#getHandle(record, attribute, elementType).backingList;
   }
 
   // Extracted from Web IDL §3.7.6 Attributes — replace an observable array's contents in an attribute setter.
   replace(
-    object: object,
+    record: PlatformRecord,
     attribute: AttributeMember,
     elementType: WebIDLType,
     value: unknown,
@@ -53,21 +54,16 @@ export class ObservableArrayBinding {
       sequence(elementType),
       this.#context,
     ) as IDLSequenceValue;
-    this.#getHandle(object, attribute, elementType).replaceValues(values);
+    this.#getHandle(record, attribute, elementType).replaceValues(values);
   }
 
   // Project adapter for Web IDL §3.10 Observable array exotic objects — compose conversion and mutation hooks
   // with Infra's backing list.
   #getHandle(
-    object: object,
+    record: PlatformRecord,
     attribute: AttributeMember,
     elementType: WebIDLType,
   ): ObservableArrayHandle<unknown, unknown> {
-    const record = this.#context.platformObjects.getImplementationRecord(
-      object,
-    );
-    if (!record) throw new Error('Observable array object is not associated');
-
     let attributes = record.observableArrays;
     if (!attributes) {
       attributes = new WeakMap();
@@ -88,7 +84,7 @@ export class ObservableArrayBinding {
       delete: deleteSteps
         ? (value, index) => Reflect.apply(
           deleteSteps,
-          object,
+          record.implInst,
           [value, index],
         )
         : undefined,
@@ -97,7 +93,7 @@ export class ObservableArrayBinding {
       set: setSteps
         ? (value, index) => Reflect.apply(
           setSteps,
-          object,
+          record.implInst,
           [value, index],
         )
         : undefined,

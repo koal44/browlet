@@ -28,6 +28,7 @@ export type SerializedRecord =
   | PlatformObjectSerializedRecord
   | TransferPlaceholderSerializedRecord;
 
+// Stamped instances use their implementation identity, including transfer placeholders.
 export type StructuredSerializeMemory = Map<unknown, SerializedRecord>;
 export type StructuredDeserializeMemory = Map<SerializedRecord, unknown>;
 

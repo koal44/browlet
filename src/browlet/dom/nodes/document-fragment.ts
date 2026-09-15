@@ -63,10 +63,12 @@ export const documentFragmentIDL = defineInterface<Realm>({
   name: 'DocumentFragment',
   inherits: 'Node',
   exposed: 'Window',
-  implementation: impl(DocumentFragmentImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())],
-  }),
-  members: [ctor()],
+  implementation: impl(DocumentFragmentImpl),
+  members: [
+    ctor([], {
+      constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())],
+    }),
+  ],
 });
 
 export const documentFragmentIncludesParentNodeIDL = defineIncludes({

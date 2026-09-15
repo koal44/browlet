@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/binding';
+import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, definePartialInterface, idlType, type AttributeMember,
   type NamedArgumentsExtendedAttribute, type OperationMember,
   type StringifierMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/registry';
+import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL initial objects', () => {
@@ -75,6 +75,7 @@ describe('Web IDL initial objects', () => {
   });
 
   it('keeps a legacy-hidden interface prototype accessible through instances', () => {
+    class HiddenImpl {}
     const interfaceIDL = defineInterface({
       name: 'HiddenInterface',
       exposed: '*',
@@ -83,21 +84,24 @@ describe('Web IDL initial objects', () => {
       }],
       members: [],
     });
+    const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new HiddenImpl());
     const realm = new Realm();
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
+      implementations,
     );
 
     const installed = binding.install();
-    const object = binding.createPlatformObject('HiddenInterface');
+    const object = binding.createPlatformObject(binding.resolveInterface('HiddenInterface'));
     const prototype = Reflect.getPrototypeOf(object);
 
     expect(installed.has('HiddenInterface')).toBe(false);
     expect(Reflect.has(realm.global, 'HiddenInterface')).toBe(false);
     expect(prototype).toBe(
-      binding.getInterfacePrototypeObject('HiddenInterface'),
+      binding.getInterfacePrototypeObject(binding.resolveInterface('HiddenInterface')),
     );
     expect(Object.hasOwn(prototype as object, 'constructor')).toBe(false);
     expect(Object.prototype.toString.call(prototype))
@@ -138,15 +142,23 @@ describe('Web IDL initial objects', () => {
   });
 
   it('creates legacy factory functions in the realm', () => {
+    class WidgetImpl { value = 0; }
     const factory = legacyFactory('LegacyWidget', idlType.unsignedLong);
+    const value: AttributeMember = {
+      kind: 'attribute', name: 'value', type: idlType.unsignedLong, readonly: true,
+    };
     const interfaceIDL = defineInterface({
       name: 'Widget',
       exposed: '*',
       extendedAttributes: [factory],
-      members: [],
+      members: [value],
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new WidgetImpl());
+    implementations.setAttributeSteps(value, {
+      get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
+    });
     const realm = new Realm();
     const binding = new RealmBinding(
       definitions,
@@ -187,10 +199,14 @@ describe('Web IDL initial objects', () => {
   });
 
   it('includes legacy factory functions declared on partial interfaces', () => {
+    class PartialWidgetImpl { value = ''; }
     const factory = legacyFactory('LegacyPartialWidget', idlType.DOMString);
+    const value: AttributeMember = {
+      kind: 'attribute', name: 'value', type: idlType.DOMString, readonly: true,
+    };
     const interfaceIDL = defineInterface({
       name: 'PartialWidget',
-      exposed: '*', members: [],
+      exposed: '*', members: [value],
     });
     const partial = definePartialInterface({
       name: 'PartialWidget',
@@ -198,6 +214,10 @@ describe('Web IDL initial objects', () => {
       members: [],
     });
     const implementations = new ImplementationRegistry();
+    implementations.setImplementationCreationSteps(interfaceIDL, () => new PartialWidgetImpl());
+    implementations.setAttributeSteps(value, {
+      get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
+    });
     implementations.setConstructorSteps(factory, function(value) {
       Reflect.set(this, 'value', value);
     });
@@ -311,8 +331,8 @@ describe('Web IDL initial objects', () => {
       },
     );
     implementations.setAttributeSteps(attribute, {
-      get() {
-        return Reflect.get(this as object, 'name') as unknown;
+      get(receiver) {
+        return Reflect.get(receiver!.implInst, 'name') as unknown;
       },
     });
     const realm = new Realm();
@@ -377,16 +397,16 @@ function project(
   name: string,
   properties: Record<string, unknown>,
 ): object {
-  const interface_ = binding.definitions.getInterface(name);
-  if (!interface_) throw new Error(`Missing interface ${name}`);
+  const primaryInterface = binding.definitions.getInterface(name);
+  if (!primaryInterface) throw new Error(`Missing interface ${name}`);
   const implementation = Object.create(
-    binding.getInterfacePrototypeObject(interface_),
+    binding.getInterfacePrototypeObject(primaryInterface),
     Object.fromEntries(Object.entries(properties).map(([key, value]) => [
       key,
       { configurable: true, enumerable: true, value, writable: true },
     ])),
   ) as object;
-  return binding.projectPlatformObject(implementation, interface_).platformObject;
+  return binding.projectPlatformObject(implementation, primaryInterface).platformObject!;
 }
 
 function requireFunction(value: unknown): RealmFunction {

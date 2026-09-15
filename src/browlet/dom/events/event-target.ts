@@ -408,20 +408,18 @@ export const eventListenerIDL = defineCallbackInterface({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
-  adapter: {
-    adapt(_context, callback) {
-      return new EventListenerValue(
-        callback.object,
-        callback.realm,
-        (event, currentTarget) => {
-          callback.callUserObjectOperation(
-            'handleEvent',
-            [event],
-            currentTarget,
-          );
-        },
-      );
-    },
+  adapt(_ctx, callback) {
+    return new EventListenerValue(
+      callback.object,
+      callback.realm,
+      (event, currentTarget) => {
+        callback.callUserObjectOperation(
+          'handleEvent',
+          [event],
+          currentTarget,
+        );
+      },
+    );
   },
   members: [
     op('handleEvent', idlType.undefined, [arg('event', reference('Event'))]),
