@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { invokeCallbackFunction } from '../../src/web-idl/callback';
@@ -36,7 +36,7 @@ callback VoidFunction = undefined();`);
   it('invokes Function and VoidFunction with their common contracts', () => {
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions(webIDLCommonDefinitions),
+      new DefinitionAssembly(webIDLCommonDefinitions),
       realm,
       new BindingWorld([]),
     );
@@ -46,12 +46,12 @@ callback VoidFunction = undefined();`);
         'common-function.js',
       ),
       reference('Function'),
-      binding,
+      binding.defaultConversionContext,
     );
     const voidFunction = convertToIDL(
       realm.evaluate('() => 42', 'common-void-function.js'),
       reference('VoidFunction'),
-      binding,
+      binding.defaultConversionContext,
     );
     if (
       !isCallbackFunctionValue(function_) ||

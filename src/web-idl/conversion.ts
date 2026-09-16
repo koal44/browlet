@@ -4,9 +4,7 @@ import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
   toBigInt, toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
 } from '../js-engine/index';
-import type {
-  AssembledDictionaryDefinition, AssembledInterfaceDefinition, DefinitionAssembly,
-} from './assembly';
+import type { AssembledDictionaryDefinition, DefinitionAssembly } from './assembly';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -23,11 +21,11 @@ import type {
   RecordType, SimpleTypeName, UnionType, WebIDLType,
 } from './core/types';
 import type { WebIDLRealmHost } from './realm-host';
-import type { BindingWorld } from './binding-world';
-import { getImplementationRecord, getPlatformRecord, type PlatformRecord } from './platform-object';
+import type { RealmBinding } from './realm-binding';
+import { getPlatformRecord, type StampedPlatformObject } from './platform-object';
 import {
   convertJavaScriptValueToPromise, createIDLPromiseRecord, isIDLPromiseRecord,
-  PromiseStamper, type PromiseSource,
+  PromiseProjectionStamper, type PromiseSource,
 } from './promise-record';
 import { defineDataProperty } from './property';
 import {
@@ -43,7 +41,7 @@ export function convertToIDL(
   options: ConversionOptions = {},
 ): unknown {
   const legacyCallbackAttribute = options.attributeAssignment === true &&
-    isNullableLegacyCallback(type, context.definitions);
+    isNullableLegacyCallback(type, context.binding.definitions);
   // Web IDL §3.2.20 Nullable types — [LegacyTreatNonObjectAsNull] attribute-assignment step.
   if (legacyCallbackAttribute && !isObject(value)) return null;
   try {
@@ -82,19 +80,19 @@ export function projectPromise(
   // Web IDL §3.2.24 — an existing capability converts to its Promise field.
   if (isIDLPromiseRecord(value)) return value.promise;
   const source = value as PromiseSource;
-  let projections = PromiseStamper.get(source);
+  let projections = PromiseProjectionStamper.get(source);
   const existing = projections?.find((entry) =>
-    entry.world === context.world &&
+    entry.world === context.binding.world &&
     entry.record.realm === context.realm && entry.record.type === type &&
     entry.newBufferResult === newBufferResult);
   if (existing) return existing.record.promise;
 
-  const record = createIDLPromiseRecord(type, context.realm, context.realizeException);
+  const record = createIDLPromiseRecord(type, context.realm, context.binding.realizeException);
   if (!projections) {
     projections = [];
-    void PromiseStamper.stamp(source, projections);
+    void PromiseProjectionStamper.stamp(source, projections);
   }
-  projections.push({ world: context.world, record, newBufferResult });
+  projections.push({ world: context.binding.world, record, newBufferResult });
   // These callbacks adapt implementation state; author reactions still run
   // through the projected promise's own realm and queue.
   const onFulfilled = (result: unknown): void => {
@@ -127,7 +125,7 @@ export function createBufferResult(
   type: WebIDLType,
   context: ConversionContext,
 ): ArrayBufferLike | ArrayBufferView {
-  const resultType = getUnannotatedType(type, context.definitions);
+  const resultType = getUnannotatedType(type, context.binding.definitions);
   if (resultType.kind !== 'simple' || !bufferTypeNames.has(resultType.name)) {
     throw new TypeError('newBufferResult requires a buffer source return type');
   }
@@ -199,8 +197,8 @@ export function isPlatformObject(
   value: unknown,
   context: ConversionContext,
 ): boolean {
-  if (getPlatformRecord(value)?.binding.world === context.world) return true;
-  for (const hostInterface of context.hostDefinedInterfaces.values()) {
+  if (getPlatformRecord(value)?.binding.world === context.binding.world) return true;
+  for (const hostInterface of context.binding.hostDefinedInterfaces.values()) {
     if (hostInterface.is(value)) return true;
   }
   return false;
@@ -219,7 +217,7 @@ export function materializeDefaultValue(
   switch (value.kind) {
     case 'integer': {
       const integer = parseBigInteger(value.value);
-      const numericType = getSoleNumericTypeName(type, context.definitions);
+      const numericType = getSoleNumericTypeName(type, context.binding.definitions);
       if (numericType === 'bigint') return integer;
       if (numericType && integerTypes[numericType]) return Number(integer);
       return convertToIDL(Number(integer), type, context);
@@ -242,14 +240,9 @@ export function materializeDefaultValue(
 }
 
 export type ConversionContext = {
-  definitions: DefinitionAssembly;
-  hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
-  world: BindingWorld;
-  projectImplementationObject?: (
-    implInst: object,
-    expectedInterface: AssembledInterfaceDefinition,
-  ) => object | undefined;
-  realizeException?: (value: unknown) => unknown;
+  /** Definitions, implementation identity, projection, and internal failures. */
+  binding: RealmBinding;
+  /** JavaScript allocation and conversion errors; may differ from binding.realm. */
   realm: WebIDLRealmHost;
 };
 
@@ -284,7 +277,7 @@ function convertJavaScriptValue(
 ): unknown {
   return convertJavaScriptValueByEffectiveType(
     value,
-    resolveEffectiveType(type, context.definitions, extendedAttributes),
+    resolveEffectiveType(type, context.binding.definitions, extendedAttributes),
     context,
     legacyCallbackAttribute,
   );
@@ -316,7 +309,7 @@ function convertJavaScriptValueByEffectiveType(
     case 'nullable':
       if (
         value === undefined &&
-        includesUndefined(type.type, context.definitions)
+        includesUndefined(type.type, context.binding.definitions)
       ) return undefined;
       if (value === null || value === undefined) return null;
       return convertJavaScriptValue(
@@ -368,7 +361,7 @@ function convertJavaScriptValueByEffectiveType(
         value,
         type.type,
         context.realm,
-        context.realizeException,
+        context.binding.realizeException,
       );
     case 'async-sequence':
       return convertJavaScriptValueToAsyncSequence(
@@ -390,7 +383,7 @@ function convertIDLValue(
 ): unknown {
   return convertIDLValueByEffectiveType(
     value,
-    resolveEffectiveType(type, context.definitions, extendedAttributes),
+    resolveEffectiveType(type, context.binding.definitions, extendedAttributes),
     context,
   );
 }
@@ -402,7 +395,7 @@ function convertIDLValueByEffectiveType(
   context: ConversionContext,
 ): unknown {
   // Realize internal exceptions before exposing them, including as callback arguments.
-  if (context.realizeException) value = context.realizeException(value);
+  value = context.binding.realizeException(value);
   switch (type.kind) {
     case 'simple':
       return convertSimpleTypeToJavaScript(value, type.name);
@@ -568,7 +561,7 @@ function convertJavaScriptValueToNamedType(
   context: ConversionContext,
   legacyCallbackAttribute: boolean,
 ): unknown {
-  const definition = context.definitions.getDefinition(name);
+  const definition = context.binding.definitions.getDefinition(name);
   switch (definition?.kind) {
     // Web IDL §3.2.18 Enumeration types — JavaScript-to-IDL conversion.
     case 'enumeration': {
@@ -580,12 +573,12 @@ function convertJavaScriptValueToNamedType(
     }
     // Web IDL §3.2.15 Interface types — JavaScript-to-IDL conversion.
     case 'interface': {
-      const primaryInterface = context.definitions.getInterface(name);
+      const primaryInterface = context.binding.definitions.getInterface(name);
       const record = getPlatformRecord(value);
       if (
         primaryInterface &&
         record &&
-        record.binding.world === context.world &&
+        record.binding.world === context.binding.world &&
         record.implements(primaryInterface)
       ) {
         return record.implInst;
@@ -593,7 +586,7 @@ function convertJavaScriptValueToNamedType(
       return throwTypeError(context, `Value does not implement ${name}`);
     }
     case 'dictionary': {
-      const dictionary = context.definitions.getDictionary(name);
+      const dictionary = context.binding.definitions.getDictionary(name);
       if (!dictionary) throw new Error(`Dictionary ${name} was not assembled`);
       return convertJavaScriptValueToDictionary(value, dictionary, context);
     }
@@ -628,7 +621,7 @@ function convertJavaScriptValueToNamedType(
     }
     // Project adapter: convert an interface supplied by the host.
     case undefined: {
-      const hostInterface = context.hostDefinedInterfaces.get(name);
+      const hostInterface = context.binding.hostDefinedInterfaces.get(name);
       if (hostInterface) {
         return hostInterface.is(value)
           ? value
@@ -647,22 +640,17 @@ function convertNamedTypeToJavaScript(
   name: string,
   context: ConversionContext,
 ): unknown {
-  const definition = context.definitions.getDefinition(name);
+  const definition = context.binding.definitions.getDefinition(name);
   switch (definition?.kind) {
     // Web IDL §3.2.18 Enumeration types — IDL-to-JavaScript conversion.
     case 'enumeration':
       return value;
     // Web IDL §3.2.15 Interface types — project our implementation to its platform object.
     case 'interface': {
-      const primaryInterface = context.definitions.getInterface(name);
-      const record = getImplementationRecord(value);
-      const platformObject = record?.binding.world === context.world
-        ? record.platformObject
+      const primaryInterface = context.binding.definitions.getInterface(name);
+      const object = primaryInterface && isObject(value)
+        ? context.binding.projectImplementationObject(value, primaryInterface)
         : undefined;
-      const object = platformObject ??
-        (primaryInterface && isObject(value)
-          ? context.projectImplementationObject?.(value, primaryInterface)
-          : undefined);
       if (!object) {
         throw new Error(
           `IDL interface value ${name} is not an implementation target`,
@@ -671,7 +659,7 @@ function convertNamedTypeToJavaScript(
       return object;
     }
     case 'dictionary': {
-      const dictionary = context.definitions.getDictionary(name);
+      const dictionary = context.binding.definitions.getDictionary(name);
       if (!dictionary) throw new Error(`Dictionary ${name} was not assembled`);
       return convertDictionaryToJavaScript(value, dictionary, context);
     }
@@ -688,7 +676,7 @@ function convertNamedTypeToJavaScript(
       return value.object;
     // Project adapter: recover an interface value supplied by the host.
     case undefined: {
-      const hostInterface = context.hostDefinedInterfaces.get(name);
+      const hostInterface = context.binding.hostDefinedInterfaces.get(name);
       if (hostInterface) {
         if (hostInterface.is(value)) return value;
         throw new Error(`IDL interface value does not implement ${name}`);
@@ -837,23 +825,23 @@ function convertJavaScriptValueToUnion(
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
 ): unknown {
-  if (value === undefined && includesUndefined(type, context.definitions)) {
+  if (value === undefined && includesUndefined(type, context.binding.definitions)) {
     return undefined;
   }
   if (
     (value === null || value === undefined) &&
-    includesNullableType(type, context.definitions)
+    includesNullableType(type, context.binding.definitions)
   ) return null;
 
   const types = flattenEffectiveTypes(
     type,
-    context.definitions,
+    context.binding.definitions,
     extendedAttributes,
   );
 
   if (value === null || value === undefined) {
     const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.definitions));
+      isDictionaryType(candidate, context.binding.definitions));
     if (dictionary) return convertJavaScriptValueByEffectiveType(value, dictionary, context);
   }
 
@@ -879,7 +867,7 @@ function convertJavaScriptValueToUnion(
 
   if (typeof value === 'function') {
     const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-function', context.definitions));
+      isDefinitionType(candidate, 'callback-function', context.binding.definitions));
     if (callback) return convertJavaScriptValueByEffectiveType(value, callback, context);
     const object = types.find(isObjectType);
     if (object) return value;
@@ -890,7 +878,7 @@ function convertJavaScriptValueToUnion(
       candidate.type.kind === 'async-sequence');
     if (asyncSequence && !(
       hasStringData(value) && types.some((candidate) =>
-        isStringType(candidate, context.definitions))
+        isStringType(candidate, context.binding.definitions))
     )) {
       const asyncMethod = getMethod(
         value,
@@ -943,12 +931,12 @@ function convertJavaScriptValueToUnion(
     }
 
     const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.definitions));
+      isDictionaryType(candidate, context.binding.definitions));
     if (dictionary) return convertJavaScriptValueByEffectiveType(value, dictionary, context);
     const record = types.find((candidate) => candidate.type.kind === 'record');
     if (record) return convertJavaScriptValueByEffectiveType(value, record, context);
     const callbackInterface = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-interface', context.definitions));
+      isDefinitionType(candidate, 'callback-interface', context.binding.definitions));
     if (callbackInterface) {
       return convertJavaScriptValueByEffectiveType(value, callbackInterface, context);
     }
@@ -970,7 +958,7 @@ function convertJavaScriptValueToUnion(
   }
 
   const string = types.find((candidate) =>
-    isStringType(candidate, context.definitions));
+    isStringType(candidate, context.binding.definitions));
   if (string) return convertJavaScriptValueByEffectiveType(value, string, context);
 
   const numeric = types.find(isNumericType);
@@ -998,7 +986,7 @@ function convertUnionToJavaScript(
 ): unknown {
   const types = flattenEffectiveTypes(
     type,
-    context.definitions,
+    context.binding.definitions,
     extendedAttributes,
   );
 
@@ -1007,25 +995,8 @@ function convertUnionToJavaScript(
       isSimpleType(candidate, 'undefined'));
     if (undefinedType) return undefined;
   }
-  if (value === null && includesNullableType(type, context.definitions)) {
+  if (value === null && includesNullableType(type, context.binding.definitions)) {
     return null;
-  }
-  const implementationRecord = getImplementationRecord(value);
-  if (
-    implementationRecord?.platformObject &&
-    implementationRecord.binding.world === context.world
-  ) {
-    const interfaceType = types.find((candidate) =>
-      isImplementedInterfaceRecordType(
-        candidate,
-        implementationRecord,
-        context,
-      ));
-    if (interfaceType) {
-      return convertIDLValueByEffectiveType(value, interfaceType, context);
-    }
-    const object = types.find(isObjectType);
-    if (object) return implementationRecord.platformObject;
   }
   if (isPlatformObject(value, context)) {
     const interfaceType = types.find((candidate) =>
@@ -1046,12 +1017,12 @@ function convertUnionToJavaScript(
   }
   if (isCallbackFunctionValue(value) || typeof value === 'function') {
     const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-function', context.definitions));
+      isDefinitionType(candidate, 'callback-function', context.binding.definitions));
     if (callback) return convertIDLValueByEffectiveType(value, callback, context);
   }
   if (isCallbackInterfaceRecord(value)) {
     const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-interface', context.definitions));
+      isDefinitionType(candidate, 'callback-interface', context.binding.definitions));
     if (callback) return convertIDLValueByEffectiveType(value, callback, context);
   }
   if (isIDLAsyncSequence(value)) {
@@ -1067,7 +1038,7 @@ function convertUnionToJavaScript(
   }
   if (isMap(value)) {
     const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.definitions));
+      isDictionaryType(candidate, context.binding.definitions));
     if (dictionary) return convertIDLValueByEffectiveType(value, dictionary, context);
     const record = types.find((candidate) => candidate.type.kind === 'record');
     if (record) return convertIDLValueByEffectiveType(value, record, context);
@@ -1086,7 +1057,7 @@ function convertUnionToJavaScript(
   }
   if (typeof value === 'string') {
     const string = types.find((candidate) =>
-      isStringType(candidate, context.definitions));
+      isStringType(candidate, context.binding.definitions));
     if (string) return value;
   }
   if (isObject(value)) {
@@ -1105,10 +1076,10 @@ function projectImplementationForType(
   value: object,
   type: EffectiveType,
   context: ConversionContext,
-): object | undefined {
+): StampedPlatformObject | undefined {
   if (type.type.kind !== 'reference') return;
-  const primaryInterface = context.definitions.getInterface(type.type.name);
-  return primaryInterface && context.projectImplementationObject?.(value, primaryInterface);
+  const primaryInterface = context.binding.definitions.getInterface(type.type.name);
+  return primaryInterface && context.binding.projectImplementationObject(value, primaryInterface);
 }
 
 // Web IDL §3.2.4.9 Abstract operations — ConvertToInt.
@@ -1228,25 +1199,13 @@ function isImplementedInterfaceType(
   context: ConversionContext,
 ): boolean {
   if (type.type.kind !== 'reference') return false;
-  const primaryInterface = context.definitions.getInterface(type.type.name);
+  const primaryInterface = context.binding.definitions.getInterface(type.type.name);
   if (primaryInterface) {
     const record = getPlatformRecord(value);
-    return record?.binding.world === context.world &&
+    return record?.binding.world === context.binding.world &&
       record.implements(primaryInterface);
   }
-  return context.hostDefinedInterfaces.get(type.type.name)?.is(value) ?? false;
-}
-
-// Project helper: test a registered implementation against a candidate interface type.
-function isImplementedInterfaceRecordType(
-  type: EffectiveType,
-  record: PlatformRecord,
-  context: ConversionContext,
-): boolean {
-  if (type.type.kind !== 'reference') return false;
-  const primaryInterface = context.definitions.getInterface(type.type.name);
-  return primaryInterface !== undefined &&
-    record.implements(primaryInterface);
+  return context.binding.hostDefinedInterfaces.get(type.type.name)?.is(value) ?? false;
 }
 
 // Project helper: recognize a named callback definition in a resolved type.

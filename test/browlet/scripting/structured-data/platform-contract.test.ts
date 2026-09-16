@@ -54,7 +54,7 @@ describe('HTML structured-data platform contracts', () => {
       false,
       unusedSerializationContext,
     );
-    const targetBinding = second.createPlatformObject(
+    const targetBinding = second.createPlatformRecord(
       sourceBinding.primaryInterface.definition,
     );
     steps.deserializationSteps(
@@ -106,7 +106,7 @@ describe('HTML structured-data platform contracts', () => {
       true,
       unusedSerializationContext,
     );
-    const targetBinding = registration.createPlatformObject(
+    const targetBinding = registration.createPlatformRecord(
       sourceBinding.primaryInterface.definition,
     );
     steps.deserializationSteps(

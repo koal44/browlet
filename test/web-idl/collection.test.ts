@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, sequence, type MaplikeMember, type OperationMember,
   type SetlikeMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 
 describe('Web IDL collection iterator overrides', () => {
   it.each(['map', 'set'] as const)('honors a replaced %s iterator prototype next', (kind) => {
@@ -138,8 +137,8 @@ describe('Web IDL maplike declarations', () => {
       members: [declaration],
     });
     const realm = new Realm();
-    const binding = createBinding(definition, undefined, realm);
-    const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
+    const binding = createBinding(definition, realm);
+    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     call(object, 'set', ['first', [1, 2]]);
     const firstIterator = call(object, 'values') as object;
     const secondIterator = call(object, 'values') as object;
@@ -201,7 +200,7 @@ describe('Web IDL maplike declarations', () => {
       exposed: ['Window'],
       members: [declaration],
     });
-    const definitions = assembleDefinitions([interfaceIDL]);
+    const definitions = new DefinitionAssembly([interfaceIDL]);
     const primaryInterface = definitions.getInterface('SeparatedMaplike');
     if (!primaryInterface) throw new Error('Missing assembled interface');
 
@@ -247,11 +246,12 @@ describe('Web IDL maplike declarations', () => {
       exposed: ['Window'],
       members: [clear, declaration],
     });
-    const implementations = new ImplementationRegistry();
+
     let calls = 0;
-    implementations.setOperationSteps(clear, () => { calls++; });
-    const binding = createBinding(definition, implementations);
-    const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
+
+    const binding = createBinding(definition);
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(clear).operationSteps = () => { calls++; };
+    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
 
     call(object, 'clear');
     expect(calls).toBe(1);
@@ -275,11 +275,12 @@ describe('Web IDL maplike declarations', () => {
       exposed: ['Window'],
       members: [staticSet, declaration],
     });
-    const implementations = new ImplementationRegistry();
+
     let staticCalls = 0;
-    implementations.setOperationSteps(staticSet, () => { staticCalls++; });
-    const binding = createBinding(definition, implementations);
-    const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
+
+    const binding = createBinding(definition);
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(staticSet).operationSteps = () => { staticCalls++; };
+    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
     Reflect.apply(getMethod(Interface, 'set'), Interface, []);
@@ -364,17 +365,16 @@ describe('Web IDL setlike declarations', () => {
       exposed: ['Window'],
       members: [{ kind: 'setlike', readonly: true, value: idlType.long }],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(readonlyMap, () => new ReadonlyMapImpl());
-    implementations.setImplementationCreationSteps(readonlySet, () => new ReadonlySetImpl());
+
     const binding = new RealmBinding(
-      assembleDefinitions([readonlyMap, readonlySet]),
+      new DefinitionAssembly([readonlyMap, readonlySet]),
       new Realm(),
       new BindingWorld([]),
-      implementations,
     );
-    const map = binding.createPlatformObject(binding.resolveInterface(readonlyMap.name));
-    const set = binding.createPlatformObject(binding.resolveInterface(readonlySet.name));
+    binding.getDefinitionBinding(readonlyMap).createImplementation = () => new ReadonlyMapImpl();
+    binding.getDefinitionBinding(readonlySet).createImplementation = () => new ReadonlySetImpl();
+    const map = binding.createPlatformRecord(binding.resolveInterface(readonlyMap.name)).platformObject!;
+    const set = binding.createPlatformRecord(binding.resolveInterface(readonlySet.name)).platformObject!;
 
     for (const name of ['clear', 'delete', 'set']) {
       expect(name in map).toBe(false);
@@ -405,11 +405,12 @@ describe('Web IDL setlike declarations', () => {
       exposed: ['Window'],
       members: [staticAdd, declaration],
     });
-    const implementations = new ImplementationRegistry();
+
     let staticCalls = 0;
-    implementations.setOperationSteps(staticAdd, () => { staticCalls++; });
-    const binding = createBinding(definition, implementations);
-    const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
+
+    const binding = createBinding(definition);
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(staticAdd).operationSteps = () => { staticCalls++; };
+    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
     Reflect.apply(getMethod(Interface, 'add'), Interface, []);
@@ -435,10 +436,10 @@ function createMaplikeBinding(): {
     members: [declaration],
   });
   const realm = new Realm();
-  const binding = createBinding(definition, undefined, realm);
+  const binding = createBinding(definition, realm);
   return {
     binding,
-    object: binding.createPlatformObject(binding.resolveInterface(definition.name)),
+    object: binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!,
     realm,
   };
 }
@@ -458,27 +459,26 @@ function createSetlikeBinding(): {
     members: [declaration],
   });
   const realm = new Realm();
-  const binding = createBinding(definition, undefined, realm);
+  const binding = createBinding(definition, realm);
   return {
     binding,
-    object: binding.createPlatformObject(binding.resolveInterface(definition.name)),
+    object: binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!,
     realm,
   };
 }
 
 function createBinding(
   definition: ReturnType<typeof defineInterface>,
-  implementations = new ImplementationRegistry(),
   realm = new Realm(),
 ): RealmBinding {
   class CollectionImpl {}
-  implementations.setImplementationCreationSteps(definition, () => new CollectionImpl());
-  return new RealmBinding(
-    assembleDefinitions([definition]),
+  const binding = new RealmBinding(
+    new DefinitionAssembly([definition]),
     realm,
     new BindingWorld([]),
-    implementations,
   );
+  binding.getDefinitionBinding(definition).createImplementation = () => new CollectionImpl();
+  return binding;
 }
 
 function call(

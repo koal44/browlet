@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { createDOMException } from '../../src/web-idl/core/dom-exception';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { endOfIteration } from '../../src/web-idl/async-sequence';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
@@ -16,7 +16,6 @@ import { BindingWorld } from '../../src/web-idl/binding-world';
 import { TypeError as TypeErrorRequest } from '../../src/js-engine/exceptions';
 import type { Promises, PromiseValue } from '../../src/js-engine/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import {
   createRejectedPromise, createResolvedPromise,
 } from '../../src/web-idl/promise';
@@ -212,31 +211,28 @@ describe('Web IDL promise member binding', () => {
         rejectedOperation,
       ],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(definition, () => new PromiseOwnerImpl());
+
     const reason = new Error('implementation failed');
-    implementations.setAttributeSteps(resolvedAttribute, {
-      get: () => createResolvedPromise(4, idlType.long, binding),
-    });
-    implementations.setAttributeSteps(rejectedAttribute, {
-      get() { throw reason; },
-    });
-    implementations.setOperationSteps(
-      resolvedOperation,
-      () => createResolvedPromise(5, idlType.long, binding),
-    );
-    implementations.setOperationSteps(rejectedOperation, () => {
-      throw reason;
-    });
 
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([definition]),
+      new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
-    const object = binding.createPlatformObject(binding.resolveInterface('PromiseOwner'));
+    const interfaceBinding = binding.getDefinitionBinding(definition);
+    interfaceBinding.createImplementation = () => new PromiseOwnerImpl();
+    interfaceBinding.getOrCreateMemberRecord(resolvedAttribute).attributeSteps = {
+      get: () => createResolvedPromise(4, idlType.long, binding.defaultConversionContext),
+    };
+    interfaceBinding.getOrCreateMemberRecord(rejectedAttribute).attributeSteps = {
+      get() { throw reason; },
+    };
+    interfaceBinding.getOrCreateMemberRecord(resolvedOperation).operationSteps = () => createResolvedPromise(5, idlType.long, binding.defaultConversionContext);
+    interfaceBinding.getOrCreateMemberRecord(rejectedOperation).operationSteps = () => {
+      throw reason;
+    };
+    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseOwner')).platformObject!;
     const resolvedProperty = Reflect.get(object, 'resolved') as Promise<unknown>;
     const rejectedProperty = Reflect.get(object, 'rejected') as Promise<unknown>;
     const resolvedCall = call(object, 'resolve') as Promise<unknown>;
@@ -266,18 +262,17 @@ describe('Web IDL promise member binding', () => {
       members: [read],
     });
     const realm = new Realm();
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(definition, () => new PromiseReceiverImpl());
-    implementations.setOperationSteps(read, () => {
-      throw new Error('unreachable');
-    });
+
     const binding = new RealmBinding(
-      assembleDefinitions([definition]),
+      new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
-    const object = binding.createPlatformObject(binding.resolveInterface('PromiseReceiver'));
+    binding.getDefinitionBinding(definition).createImplementation = () => new PromiseReceiverImpl();
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(read).operationSteps = () => {
+      throw new Error('unreachable');
+    };
+    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseReceiver')).platformObject!;
     const method = Reflect.get(object, 'read') as CallableFunction;
     const promise = Reflect.apply(method, {}, []) as Promise<unknown>;
 
@@ -298,30 +293,27 @@ describe('Web IDL promise member binding', () => {
       members: [reject, rejectArbitrary],
     });
     const realm = new Realm();
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(definition, () => new PromiseExceptionSourceImpl());
+
     const binding = new RealmBinding(
-      assembleDefinitions([...webIDLCommonDefinitions, definition]),
+      new DefinitionAssembly([...webIDLCommonDefinitions, definition]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    const interfaceBinding = binding.getDefinitionBinding(definition);
+    interfaceBinding.createImplementation = () => new PromiseExceptionSourceImpl();
     registerDefinitionBindings(binding);
-    implementations.setOperationSteps(reject, () => createRejectedPromise(
+    interfaceBinding.getOrCreateMemberRecord(reject).operationSteps = () => createRejectedPromise(
       createDOMException('NotAllowedError', 'requested rejection'),
       idlType.undefined,
-      binding,
-    ));
-    const arbitraryReason = { arbitrary: true };
-    implementations.setOperationSteps(
-      rejectArbitrary,
-      () => createRejectedPromise(
-        arbitraryReason,
-        idlType.undefined,
-        binding,
-      ),
+      binding.defaultConversionContext,
     );
-    const object = binding.createPlatformObject(binding.resolveInterface('PromiseExceptionSource'));
+    const arbitraryReason = { arbitrary: true };
+    interfaceBinding.getOrCreateMemberRecord(rejectArbitrary).operationSteps = () => createRejectedPromise(
+      arbitraryReason,
+      idlType.undefined,
+      binding.defaultConversionContext,
+    );
+    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;
     const promise = call(object, 'reject') as Promise<unknown>;
 
     expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);

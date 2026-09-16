@@ -82,7 +82,7 @@ export type PromiseProjectionRecord = {
 };
 
 /** Privately retain the source promise's author-facing projections. */
-export class PromiseStamper extends Stamper {
+export class PromiseProjectionStamper extends Stamper {
   #projections: PromiseProjectionRecord[];
 
   private constructor(source: PromiseSource, projections: PromiseProjectionRecord[]) {
@@ -93,9 +93,9 @@ export class PromiseStamper extends Stamper {
   static stamp<T extends PromiseSource>(
     source: T,
     projections: PromiseProjectionRecord[],
-  ): T & PromiseStamper {
-    new PromiseStamper(source, projections);
-    return source as T & PromiseStamper;
+  ): T & PromiseProjectionStamper {
+    new PromiseProjectionStamper(source, projections);
+    return source as T & PromiseProjectionStamper;
   }
 
   static get(source: PromiseSource): PromiseProjectionRecord[] | undefined {

@@ -11,7 +11,6 @@ import {
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
 import { registerDefinitionBindings } from './implementation-binding';
-import { ImplementationRegistry } from './implementation-registry';
 import type { RuntimeContext } from '../js-engine/runtime-context';
 import type { JSRealm } from '../js-engine/index';
 
@@ -20,8 +19,8 @@ import type { JSRealm } from '../js-engine/index';
  * Each realm binding owns its initial objects and implementation steps.
  */
 export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
+  hostDefinedInterfaces: Map<string, HostDefinedInterface>;
   #definitions: DefinitionAssembly;
-  #hostDefinedInterfaces: HostDefinedInterface[];
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
   // Project helper: compose definitions and capabilities shared across realm bindings.
@@ -35,7 +34,9 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
     ], options.capabilities);
-    this.#hostDefinedInterfaces = options.hostDefinedInterfaces ?? [];
+    this.hostDefinedInterfaces = new Map(
+      (options.hostDefinedInterfaces ?? []).map((hostInterface) => [hostInterface.name, hostInterface]),
+    );
   }
 
   /** Register a realm in this world, returning its shared binding context. */
@@ -47,8 +48,6 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       this.#definitions,
       realm,
       this,
-      new ImplementationRegistry(),
-      [...this.#hostDefinedInterfaces],
       options.createRuntime,
     );
     registerDefinitionBindings(binding);

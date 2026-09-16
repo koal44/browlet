@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 
 describe('Web IDL namespace objects', () => {
   it('projects namespace members and legacy-namespaced interfaces', () => {
@@ -54,26 +53,26 @@ describe('Web IDL namespace objects', () => {
       }],
       members: [],
     });
-    const definitions = assembleDefinitions([partial, nested, namespace]);
-    const implementations = new ImplementationRegistry();
+    const definitions = new DefinitionAssembly([partial, nested, namespace]);
+
     const receivers: Array<object | null> = [];
-    implementations.setAttributeSteps(version, {
-      get(receiver) {
-        receivers.push(receiver);
-        return '1.0';
-      },
-    });
-    implementations.setOperationSteps(echo, function(receiver, value) {
-      receivers.push(receiver);
-      return value;
-    });
+
     const realm = new Realm();
     const binding = new RealmBinding(
       definitions,
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    binding.getDefinitionBinding(namespace).getOrCreateMemberRecord(version).attributeSteps = {
+      get(receiver) {
+        receivers.push(receiver);
+        return '1.0';
+      },
+    };
+    binding.getDefinitionBinding(namespace).getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
+      receivers.push(receiver);
+      return value;
+    };
 
     const installed = binding.install();
     const tools = requireObject(installed.get('Tools'));

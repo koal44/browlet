@@ -97,7 +97,7 @@ export function resolveOverload<Callable extends IDLCallable>(
 
   const distinguishingIndex = candidates.length === 1
     ? -1
-    : getDistinguishingArgumentIndex(candidates, context.definitions);
+    : getDistinguishingArgumentIndex(candidates, context.binding.definitions);
   const values: unknown[] = [];
   let i = 0;
 
@@ -134,7 +134,7 @@ export function resolveOverload<Callable extends IDLCallable>(
     const type = selected.types[i];
     const asyncSequence = type && findContainedType(
       type,
-      context.definitions,
+      context.binding.definitions,
       (candidate) => candidate.kind === 'async-sequence',
     );
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
@@ -153,7 +153,7 @@ export function resolveOverload<Callable extends IDLCallable>(
     const type = selected.types[i];
     const sequenceLike = type && findContainedType(
       type,
-      context.definitions,
+      context.binding.definitions,
       (candidate) =>
         candidate.kind === 'sequence' || candidate.kind === 'frozen-array',
     );
@@ -260,8 +260,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   if (value === null || value === undefined) {
     matches = retain(candidates, ({ types }) => {
       const type = types[index] as WebIDLType;
-      return includesNullableType(type, context.definitions) ||
-        containsDictionary(type, context.definitions);
+      return includesNullableType(type, context.binding.definitions) ||
+        containsDictionary(type, context.binding.definitions);
     });
     if (matches) return { candidates: matches };
   }
@@ -270,7 +270,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     matches = retain(candidates, ({ types }) => {
       const type = types[index] as WebIDLType;
       return containsImplementedInterface(type, value, context) ||
-        containsSimpleType(type, 'object', context.definitions);
+        containsSimpleType(type, 'object', context.binding.definitions);
     });
     if (matches) return { candidates: matches };
   }
@@ -280,22 +280,22 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     if (bufferName === 'ArrayBuffer' || bufferName === 'SharedArrayBuffer') {
       matches = retain(candidates, ({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsAnyBufferType(type, context.definitions) ||
-          containsSimpleType(type, 'object', context.definitions);
+        return containsAnyBufferType(type, context.binding.definitions) ||
+          containsSimpleType(type, 'object', context.binding.definitions);
       });
       if (matches) return { candidates: matches };
     } else if (bufferName === 'DataView') {
       matches = retain(candidates, ({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsSimpleType(type, 'DataView', context.definitions) ||
-          containsSimpleType(type, 'object', context.definitions);
+        return containsSimpleType(type, 'DataView', context.binding.definitions) ||
+          containsSimpleType(type, 'object', context.binding.definitions);
       });
       if (matches) return { candidates: matches };
     } else if (bufferName) {
       matches = retain(candidates, ({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsSimpleType(type, bufferName, context.definitions) ||
-          containsSimpleType(type, 'object', context.definitions);
+        return containsSimpleType(type, bufferName, context.binding.definitions) ||
+          containsSimpleType(type, 'object', context.binding.definitions);
       });
       if (matches) return { candidates: matches };
     }
@@ -307,8 +307,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       return containsDefinitionKind(
         type,
         'callback-function',
-        context.definitions,
-      ) || containsSimpleType(type, 'object', context.definitions);
+        context.binding.definitions,
+      ) || containsSimpleType(type, 'object', context.binding.definitions);
     });
     if (matches) return { candidates: matches };
   }
@@ -318,10 +318,10 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       containsKind(
         types[index] as WebIDLType,
         'async-sequence',
-        context.definitions,
+        context.binding.definitions,
       ));
     const hasString = candidates.some(({ types }) =>
-      containsStringType(types[index] as WebIDLType, context.definitions));
+      containsStringType(types[index] as WebIDLType, context.binding.definitions));
 
     if (hasAsyncSequence && !(hasStringData(value) && hasString)) {
       const asyncMethod = getMethod(
@@ -338,7 +338,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
           containsKind(
             types[index] as WebIDLType,
             'async-sequence',
-            context.definitions,
+            context.binding.definitions,
           ));
         if (matches) {
           return {
@@ -355,7 +355,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     const hasSequenceLike = candidates.some(({ types }) =>
       containsSequenceLikeType(
         types[index] as WebIDLType,
-        context.definitions,
+        context.binding.definitions,
       ));
     if (hasSequenceLike) {
       const iteratorMethod = getMethod(
@@ -367,7 +367,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         matches = retain(candidates, ({ types }) =>
           containsSequenceLikeType(
             types[index] as WebIDLType,
-            context.definitions,
+            context.binding.definitions,
           ));
         if (matches) {
           return { candidates: matches, method: iteratorMethod };
@@ -380,10 +380,10 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       return containsDefinitionKind(
         type,
         'callback-interface',
-        context.definitions,
-      ) || containsDictionary(type, context.definitions) ||
-      containsKind(type, 'record', context.definitions) ||
-      containsSimpleType(type, 'object', context.definitions);
+        context.binding.definitions,
+      ) || containsDictionary(type, context.binding.definitions) ||
+      containsKind(type, 'record', context.binding.definitions) ||
+      containsSimpleType(type, 'object', context.binding.definitions);
     });
     if (matches) return { candidates: matches };
   }
@@ -393,7 +393,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       containsSimpleType(
         types[index] as WebIDLType,
         'boolean',
-        context.definitions,
+        context.binding.definitions,
       ));
     if (matches) return { candidates: matches };
   }
@@ -402,7 +402,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     matches = retain(candidates, ({ types }) =>
       containsNumericType(
         types[index] as WebIDLType,
-        context.definitions,
+        context.binding.definitions,
       ));
     if (matches) return { candidates: matches };
   }
@@ -412,7 +412,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       containsSimpleType(
         types[index] as WebIDLType,
         'bigint',
-        context.definitions,
+        context.binding.definitions,
       ));
     if (matches) return { candidates: matches };
   }
@@ -420,14 +420,14 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   matches = retain(candidates, ({ types }) =>
     containsStringType(
       types[index] as WebIDLType,
-      context.definitions,
+      context.binding.definitions,
     ));
   if (matches) return { candidates: matches };
 
   matches = retain(candidates, ({ types }) =>
     containsNumericType(
       types[index] as WebIDLType,
-      context.definitions,
+      context.binding.definitions,
     ));
   if (matches) return { candidates: matches };
 
@@ -435,7 +435,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     containsSimpleType(
       types[index] as WebIDLType,
       'boolean',
-      context.definitions,
+      context.binding.definitions,
     ));
   if (matches) return { candidates: matches };
 
@@ -443,7 +443,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     containsSimpleType(
       types[index] as WebIDLType,
       'bigint',
-      context.definitions,
+      context.binding.definitions,
     ));
   if (matches) return { candidates: matches };
 
@@ -451,7 +451,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     containsSimpleType(
       types[index] as WebIDLType,
       'any',
-      context.definitions,
+      context.binding.definitions,
     ));
   if (matches) return { candidates: matches };
 
@@ -543,15 +543,15 @@ function containsImplementedInterface(
   value: unknown,
   context: ConversionContext,
 ): boolean {
-  return getContainedTypes(type, context.definitions).some((candidate) => {
+  return getContainedTypes(type, context.binding.definitions).some((candidate) => {
     if (candidate.kind !== 'reference') return false;
-    const primaryInterface = context.definitions.getInterface(candidate.name);
+    const primaryInterface = context.binding.definitions.getInterface(candidate.name);
     if (primaryInterface) {
       const record = getPlatformRecord(value);
-      return record?.binding.world === context.world &&
+      return record?.binding.world === context.binding.world &&
         record.implements(primaryInterface);
     }
-    return context.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;
+    return context.binding.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;
   });
 }
 

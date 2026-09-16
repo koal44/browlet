@@ -55,13 +55,13 @@ it('infers projection callbacks and preserves the host realm through registratio
     ctx.realm.eventTimeStamp();
     world.forRealm(hostRealm)?.realm.eventTimeStamp();
     ctx.getCapability(definition, capability);
-    ctx.createPlatformObject(definition);
+    ctx.createPlatformRecord(definition);
     ctx.isInterfaceExposed(definition);
     const implInst: StampedImplInstance<Example> = ctx.construct(Example);
     implInst.value.toFixed();
     const platformObject: StampedPlatformObject = ctx.project(Example, implInst);
     const projected: StampedPlatformObject | undefined = world.project(implInst);
-    const created: StampedPlatformObject | undefined = ctx.createPlatformObject(definition).platformObject;
+    const created: StampedPlatformObject | undefined = ctx.createPlatformRecord(definition).platformObject;
     const unwrapped: StampedImplInstance<Example> | undefined = ctx.unwrap(platformObject, Example);
     unwrapped?.value.toFixed();
     const plain = new Example();
@@ -189,10 +189,11 @@ it('preserves implementation identity and validated buffer and type results', ()
     const platformObject = { authorProperty: true };
 
     const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, primaryInterface);
+    const created: PlatformRecord = binding.createPlatformRecord(primaryInterface);
     const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, primaryInterface);
-    const paired: PlatformRecord<typeof implInst> = binding.associatePlatformObject(platformObject, primaryInterface, implInst);
+    const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, primaryInterface, implInst);
     // @ts-expect-error The implementation must be supplied separately from the platform object.
-    binding.associatePlatformObject(platformObject, primaryInterface);
+    binding.initializePlatformObject(platformObject, primaryInterface);
     const registered: PlatformRecord<typeof implInst> = associatePlatformObject(platformObject, implInst, primaryInterface, binding);
     const found: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(implInst)?.implInst;
     const stamped = stampImplementation(implInst, primaryInterface, binding);
@@ -200,7 +201,7 @@ it('preserves implementation identity and validated buffer and type results', ()
     // @ts-expect-error Name lookup accepts a name, not an already assembled definition.
     binding.resolveInterface(primaryInterface);
     // @ts-expect-error Internal creation requires the already assembled primary interface.
-    binding.createPlatformObject('Example');
+    binding.createPlatformRecord('Example');
     // @ts-expect-error Internal projection requires the already assembled primary interface.
     binding.projectGlobalObject(implInst, 'Example');
     binding.context.projectGlobalObject(implInst, 'Example');

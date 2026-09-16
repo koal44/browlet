@@ -57,7 +57,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Project helper: compose Web IDL §3.2 JavaScript type mapping with implementation adaptation.
   convertToImpl(value: unknown, type: WebIDLType): unknown {
     return adaptIDLToImpl(
-      convertToIDL(value, type, this.#binding),
+      convertToIDL(value, type, this.#binding.defaultConversionContext),
       type,
       {},
       this,
@@ -75,11 +75,8 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // delegates "create a new object implementing the interface".
   // Definition arguments select registered interfaces by identity. Their callbacks
   // are invoked only through that registration, not through this reference.
-  createPlatformObject(definition: InterfaceDefinition<never>): PlatformRecord {
-    const object = this.#binding.createPlatformObject(this.#resolveInterface(definition));
-    const record = getPlatformRecord(object);
-    if (!record) throw new Error('Created platform object has no record');
-    return record;
+  createPlatformRecord(definition: InterfaceDefinition<never>): PlatformRecord {
+    return this.#binding.createPlatformRecord(this.#resolveInterface(definition));
   }
 
   // Project helper: retrieve a capability for an exact registered interface definition.
@@ -156,7 +153,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project helper: resolve the interface registered for an implementation class.
   #getImplementationInterface(implClass: ImplementationClass): AssembledInterfaceDefinition {
-    const primaryInterface = this.#binding.implementations.getInterfaceForImplementation(implClass);
+    const primaryInterface = this.#binding.definitions.getInterfaceForImplClass(implClass);
     if (!primaryInterface) {
       throw new Error('No Web IDL interface is registered for this implementation');
     }

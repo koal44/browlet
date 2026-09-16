@@ -5,36 +5,26 @@ import type { BindingWorld } from './binding-world';
 import { endOfIteration } from './async-sequence';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
-  type ConversionContext,
 } from './conversion';
 import {
   idlType, type ArgumentDefinition, type AsyncIterableMember,
 } from './core/index';
-import type {
-  AsyncIteratorSteps, ImplementationRegistry,
-} from './implementation-registry';
+import type { AsyncIteratorSteps } from './definition-binding';
 import { missingArgument } from './overload';
 import { getPlatformRecord, type StampedImplInstance } from './platform-object';
 import {
   createIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
 import { defineDataProperty, defineMethod } from './property';
+import type { RealmBinding } from './realm-binding';
 import { getTypeWithApplicableExtendedAttributes } from './types';
 
 export class AsynchronousIterableBinding {
-  readonly #context: ConversionContext;
-  readonly #getIteratorPrototype: IteratorPrototypeFactory;
-  readonly #implementations: ImplementationRegistry;
+  readonly #binding: RealmBinding;
 
-  // Project helper: retain the conversion context, implementations, and iterator-prototype factory.
-  constructor(
-    context: ConversionContext,
-    implementations: ImplementationRegistry,
-    getIteratorPrototype: IteratorPrototypeFactory,
-  ) {
-    this.#context = context;
-    this.#getIteratorPrototype = getIteratorPrototype;
-    this.#implementations = implementations;
+  // Project helper: retain the owning realm binding.
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
   }
 
   // Web IDL §3.7.10 Asynchronous iterable declarations — define the asynchronous iteration methods.
@@ -43,7 +33,7 @@ export class AsynchronousIterableBinding {
     primaryInterface: AssembledInterfaceDefinition,
     declaration: AsyncIterableMember,
   ): void {
-    this.initializePrototype(primaryInterface, declaration);
+    this.#getIteratorPrototypeObject(primaryInterface, declaration);
     if (declaration.key === undefined) {
       const values = this.#createIteratorMethod(
         primaryInterface, declaration, 'value', 'values', 'values',
@@ -75,14 +65,6 @@ export class AsynchronousIterableBinding {
     );
   }
 
-  // Project helper: initialize the asynchronous iterator's prototype before installing methods.
-  initializePrototype(
-    primaryInterface: AssembledInterfaceDefinition,
-    declaration: AsyncIterableMember,
-  ): void {
-    this.#getIteratorPrototypeObject(primaryInterface, declaration);
-  }
-
   // Project factory for the entries, keys, and values functions in Web IDL §3.7.10 Asynchronous iterable
   // declarations.
   #createIteratorMethod(
@@ -92,28 +74,28 @@ export class AsynchronousIterableBinding {
     name: string,
     securityIdentifier: string,
   ): JSFunction<StampedAsyncIterator> {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const target = this.#unwrapReceiver(
           thisArgument,
           primaryInterface,
           securityIdentifier,
         );
-        const iterator = this.#context.realm.createOrdinaryObject(
+        const iterator = this.#binding.realm.createOrdinaryObject(
           this.#getIteratorPrototypeObject(primaryInterface, declaration),
         );
         const steps = this.#requireSteps(primaryInterface, declaration);
-        const implementation = steps.create(
+        const implementationIterator = steps.create(
           target,
           this.#convertArguments(declaration.arguments ?? [], argumentsList),
         );
         return AsyncIteratorStamper.stamp(iterator, {
           finished: false,
-          implementation,
+          implementationIterator,
           primaryInterface,
           kind,
           ongoing: null,
-          world: this.#context.world,
+          world: this.#binding.world,
         });
       },
       { length: 0, name },
@@ -125,43 +107,45 @@ export class AsynchronousIterableBinding {
     primaryInterface: AssembledInterfaceDefinition,
     declaration: AsyncIterableMember,
   ): object {
-    return this.#getIteratorPrototype(primaryInterface, () => {
-      const prototype = this.#context.realm.createOrdinaryObject(
-        this.#context.realm.intrinsics.iteration.asyncIteratorPrototype,
-      );
+    const definitionBinding = this.#binding.getDefinitionBinding(primaryInterface.definition);
+    if (definitionBinding.asyncIteratorPrototype) return definitionBinding.asyncIteratorPrototype;
+
+    const prototype = this.#binding.realm.createOrdinaryObject(
+      this.#binding.realm.intrinsics.iteration.asyncIteratorPrototype,
+    );
+    defineDataProperty(
+      prototype,
+      'next',
+      this.#binding.realm.createFunction(
+        (thisArgument) => this.#next(primaryInterface, declaration, thisArgument),
+        { length: 0, name: 'next' },
+      ),
+    );
+
+    const steps = this.#binding.getMemberBinding(primaryInterface, declaration)?.asyncIteratorSteps;
+    if (steps?.return) {
       defineDataProperty(
         prototype,
-        'next',
-        this.#context.realm.createFunction(
-          (thisArgument) => this.#next(primaryInterface, declaration, thisArgument),
-          { length: 0, name: 'next' },
+        'return',
+        this.#binding.realm.createFunction(
+          (thisArgument, [value]) => this.#return(
+            primaryInterface,
+            declaration,
+            thisArgument,
+            value,
+          ),
+          { length: 1, name: 'return' },
         ),
       );
-
-      const steps = this.#implementations.getAsyncIteratorSteps(declaration);
-      if (steps?.return) {
-        defineDataProperty(
-          prototype,
-          'return',
-          this.#context.realm.createFunction(
-            (thisArgument, [value]) => this.#return(
-              primaryInterface,
-              declaration,
-              thisArgument,
-              value,
-            ),
-            { length: 1, name: 'return' },
-          ),
-        );
-      }
-      Object.defineProperty(prototype, Symbol.toStringTag, {
-        configurable: true,
-        enumerable: false,
-        value: `${primaryInterface.definition.name} AsyncIterator`,
-        writable: false,
-      });
-      return prototype;
+    }
+    Object.defineProperty(prototype, Symbol.toStringTag, {
+      configurable: true,
+      enumerable: false,
+      value: `${primaryInterface.definition.name} AsyncIterator`,
+      writable: false,
     });
+    definitionBinding.asyncIteratorPrototype = prototype;
+    return prototype;
   }
 
   // Web IDL §3.7.10.2 Asynchronous iterator prototype object — next steps.
@@ -201,7 +185,7 @@ export class AsynchronousIterableBinding {
     );
     return this.#react(
       ongoing.promise,
-      () => this.#context.realm.createIteratorResultObject(value, true),
+      () => this.#binding.realm.createIteratorResultObject(value, true),
     ).promise;
   }
 
@@ -213,14 +197,14 @@ export class AsynchronousIterableBinding {
   ): IDLPromiseRecord {
     if (state.finished) {
       return this.#resolvedPromise(
-        this.#context.realm.createIteratorResultObject(undefined, true),
+        this.#binding.realm.createIteratorResultObject(undefined, true),
       );
     }
 
     const steps = this.#requireSteps(state.primaryInterface, declaration);
     let nextPromise: Promise<unknown> | PromiseValue<unknown>;
     try {
-      nextPromise = steps.next(state.implementation);
+      nextPromise = steps.next(state.implementationIterator);
     } catch (exception) {
       state.finished = true;
       return this.#rejectedCapability(exception);
@@ -232,12 +216,12 @@ export class AsynchronousIterableBinding {
         state.ongoing = null;
         if (next === endOfIteration) {
           state.finished = true;
-          return this.#context.realm.createIteratorResultObject(
+          return this.#binding.realm.createIteratorResultObject(
             undefined,
             true,
           );
         }
-        return this.#context.realm.createIteratorResultObject(
+        return this.#binding.realm.createIteratorResultObject(
           this.#convertResult(next, declaration, state.kind),
           false,
         );
@@ -266,7 +250,7 @@ export class AsynchronousIterableBinding {
       );
     }
     try {
-      return this.#react(steps.return(state.implementation, value), () => undefined);
+      return this.#react(steps.return(state.implementationIterator, value), () => undefined);
     } catch (exception) {
       return this.#rejectedCapability(exception);
     }
@@ -285,7 +269,7 @@ export class AsynchronousIterableBinding {
     }
 
     const afterOngoing = this.#promiseCapability();
-    const onSettled = this.#context.realm.createFunction(
+    const onSettled = this.#binding.realm.createFunction(
       () => {
         try {
           afterOngoing.resolve(action().promise);
@@ -295,7 +279,7 @@ export class AsynchronousIterableBinding {
       },
       { length: 0, name: '' },
     );
-    this.#context.realm.observePromise(
+    this.#binding.realm.observePromise(
       ongoing.promise,
       onSettled,
       onSettled,
@@ -311,7 +295,7 @@ export class AsynchronousIterableBinding {
     rejected?: (reason: unknown) => unknown,
   ): IDLPromiseRecord {
     const result = this.#promiseCapability();
-    const onFulfilled = this.#context.realm.createFunction(
+    const onFulfilled = this.#binding.realm.createFunction(
       (_thisArgument, [value]) => {
         try {
           result.resolve(fulfilled(value));
@@ -321,7 +305,7 @@ export class AsynchronousIterableBinding {
       },
       { length: 1, name: '' },
     );
-    const onRejected = this.#context.realm.createFunction(
+    const onRejected = this.#binding.realm.createFunction(
       (_thisArgument, [reason]) => {
         if (!rejected) {
           result.reject(reason);
@@ -337,9 +321,9 @@ export class AsynchronousIterableBinding {
     );
     try {
       if (promise instanceof PromiseValue) {
-        this.#context.realm.promises.import(promise).observe(onFulfilled, onRejected);
+        this.#binding.realm.promises.import(promise).observe(onFulfilled, onRejected);
       } else {
-        this.#context.realm.observePromise(promise, onFulfilled, onRejected);
+        this.#binding.realm.observePromise(promise, onFulfilled, onRejected);
       }
     } catch (exception) {
       onRejected(exception);
@@ -364,10 +348,10 @@ export class AsynchronousIterableBinding {
           : materializeDefaultValue(
             argument.default,
             argumentType,
-            this.#context,
+            this.#binding.defaultConversionContext,
           );
       }
-      return convertToIDL(value, argumentType, this.#context);
+      return convertToIDL(value, argumentType, this.#binding.defaultConversionContext);
     });
   }
 
@@ -380,7 +364,7 @@ export class AsynchronousIterableBinding {
     kind: IterationKind,
   ): unknown {
     if (declaration.key === undefined) {
-      return convertToJavaScript(next, declaration.value, this.#context);
+      return convertToJavaScript(next, declaration.value, this.#binding.defaultConversionContext);
     }
     if (!Array.isArray(next) || next.length < 2) {
       throw new Error('Pair asynchronous iterator produced a non-pair value');
@@ -388,14 +372,14 @@ export class AsynchronousIterableBinding {
 
     const key = kind === 'value'
       ? undefined
-      : convertToJavaScript(next[0], declaration.key, this.#context);
+      : convertToJavaScript(next[0], declaration.key, this.#binding.defaultConversionContext);
     const value = kind === 'key'
       ? undefined
-      : convertToJavaScript(next[1], declaration.value, this.#context);
+      : convertToJavaScript(next[1], declaration.value, this.#binding.defaultConversionContext);
     if (kind === 'key') return key;
     if (kind === 'value') return value;
 
-    const pair = Reflect.construct(this.#context.realm.intrinsics.array, [2]);
+    const pair = Reflect.construct(this.#binding.realm.intrinsics.array, [2]);
     defineDataProperty(pair, '0', key);
     defineDataProperty(pair, '1', value);
     return pair;
@@ -409,12 +393,12 @@ export class AsynchronousIterableBinding {
     identifier: string,
   ): AsyncIteratorRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(value)?.binding.world === this.#context.world) {
-      this.#context.realm.performSecurityCheck(value, identifier, 'method');
+    if (getPlatformRecord(value)?.binding.world === this.#binding.world) {
+      this.#binding.realm.performSecurityCheck(value, identifier, 'method');
     }
     const state = AsyncIteratorStamper.get(value);
     if (!state || state.primaryInterface !== primaryInterface ||
-      state.world !== this.#context.world) {
+      state.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
     return state;
@@ -428,10 +412,10 @@ export class AsynchronousIterableBinding {
   ): StampedImplInstance {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#context.world) {
+    if (record?.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
-    this.#context.realm.performSecurityCheck(value, identifier, 'method');
+    this.#binding.realm.performSecurityCheck(value, identifier, 'method');
     if (!record.implements(primaryInterface)) {
       this.#throwTypeError('Illegal invocation');
     }
@@ -443,7 +427,7 @@ export class AsynchronousIterableBinding {
     primaryInterface: AssembledInterfaceDefinition,
     declaration: AsyncIterableMember,
   ): AsyncIteratorSteps {
-    const steps = this.#implementations.getAsyncIteratorSteps(declaration);
+    const steps = this.#binding.getMemberBinding(primaryInterface, declaration)?.asyncIteratorSteps;
     if (!steps) {
       throw new Error(
         `Missing ${primaryInterface.definition.name} asynchronous iterator implementation`,
@@ -470,8 +454,8 @@ export class AsynchronousIterableBinding {
   #promiseCapability(): IDLPromiseRecord {
     return createIDLPromiseRecord(
       idlType.any,
-      this.#context.realm,
-      this.#context.realizeException,
+      this.#binding.realm,
+      this.#binding.realizeException,
     );
   }
 
@@ -482,14 +466,9 @@ export class AsynchronousIterableBinding {
 
   // Project helper: throw a TypeError allocated in this binding's realm.
   #throwTypeError(message: string): never {
-    throw new this.#context.realm.intrinsics.typeError(message);
+    throw new this.#binding.realm.intrinsics.typeError(message);
   }
 }
-
-type IteratorPrototypeFactory = (
-  primaryInterface: AssembledInterfaceDefinition,
-  create: () => object,
-) => object;
 
 type StampedAsyncIterator<T extends object = object> = T & AsyncIteratorStamper;
 
@@ -513,7 +492,7 @@ class AsyncIteratorStamper extends Stamper {
 
 type AsyncIteratorRecord = {
   finished: boolean;
-  implementation: object;
+  implementationIterator: object;
   primaryInterface: AssembledInterfaceDefinition;
   kind: IterationKind;
   ongoing: IDLPromiseRecord | null;

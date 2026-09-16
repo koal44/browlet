@@ -9,7 +9,7 @@ import {
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { TypeError as InternalTypeError } from '../../src/js-engine/index';
 
-describe('Web IDL interface registration', () => {
+describe('Web IDL binding worlds and realm registration', () => {
   it('composes the implementation runtime once per realm registration', () => {
     const realm = new Realm();
     const runtime = createRuntime(realm);
@@ -370,7 +370,7 @@ describe('Web IDL interface registration', () => {
     if (object) expect(firstObject).toBe(object);
   });
 
-  it('binds a frozen implementation without changing its keys, prototype, or private fields', () => {
+  it('stamps a frozen implementation without changing its keys, prototype, or private fields', () => {
     class FrozenImpl {
       #value = 7;
       constructor() { Object.freeze(this); }
@@ -454,7 +454,7 @@ describe('Web IDL interface registration', () => {
       },
     );
     const registration = interfaces.register(new Realm());
-    const child = registration.createPlatformObject(childIDL);
+    const child = registration.createPlatformRecord(childIDL);
 
     expect(registration.getObjectRecord(child.platformObject))
       .toBe(child);
@@ -500,7 +500,7 @@ describe('Web IDL interface registration', () => {
     ctx.install(realm.global);
 
     expect(Reflect.get(realm.global, interfaceIDL.name)).toBeTypeOf('function');
-    expect(() => ctx.createPlatformObject(interfaceIDL))
+    expect(() => ctx.createPlatformRecord(interfaceIDL))
       .toThrow('Interface DeclarationOnly has no implementation creation steps');
   });
 
@@ -523,7 +523,7 @@ describe('Web IDL interface registration', () => {
     const registration = interfaces.register(realm);
     registration.install(realm.global);
 
-    const internal = registration.createPlatformObject(interfaceIDL);
+    const internal = registration.createPlatformRecord(interfaceIDL);
 
     expect(internal.primaryInterface.definition).toBe(interfaceIDL);
     expect(internal.realm).toBe(realm);
@@ -586,7 +586,7 @@ describe('Web IDL interface registration', () => {
     ).register(new Realm());
 
     expect(registration.isInterfaceExposed(restrictedIDL)).toBe(false);
-    expect(() => registration.createPlatformObject(restrictedIDL)).toThrow(
+    expect(() => registration.createPlatformRecord(restrictedIDL)).toThrow(
       'Interface RestrictedCapability is not exposed in this realm',
     );
   });

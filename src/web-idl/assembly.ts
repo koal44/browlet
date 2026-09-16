@@ -5,13 +5,7 @@ import type {
   PartialInterfaceMixinDefinition, NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
 } from './core/declarations';
 import type { Capability, CapabilityRegistration } from './capability';
-
-// Project helper: build our indexed representation of IDL definitions.
-export function assembleDefinitions(
-  definitions: Definition[],
-): DefinitionAssembly {
-  return new DefinitionAssembly(definitions);
-}
+import type { ImplementationClass } from './core/types';
 
 export class DefinitionAssembly {
   #definitions = new Map<string, PrimaryDefinition>();
@@ -21,6 +15,7 @@ export class DefinitionAssembly {
   #dictionaryPartials = new Map<string, PartialDictionaryDefinition[]>();
   #includes = new Map<string, IncludesDefinition[]>();
   #interfaces = new Map<string, AssembledInterfaceDefinition>();
+  #implementationInterfaces = new Map<ImplementationClass, AssembledInterfaceDefinition>();
   #mixins = new Map<string, AssembledInterfaceMixinDefinition>();
   #namespaces = new Map<string, AssembledNamespaceDefinition>();
   #dictionaries = new Map<string, AssembledDictionaryDefinition>();
@@ -49,6 +44,13 @@ export class DefinitionAssembly {
       }
     }
 
+    for (const primaryInterface of this.getInterfaces()) {
+      const implementation = primaryInterface.definition.implementation;
+      if (implementation) {
+        this.#implementationInterfaces.set(implementation.implClass, primaryInterface);
+      }
+    }
+
     for (const registration of capabilities) {
       const primaryInterface = this.getInterface(registration.definition.name);
       if (primaryInterface?.definition !== registration.definition) {
@@ -70,6 +72,25 @@ export class DefinitionAssembly {
   // Project helper: look up a primary definition by name.
   getDefinition(name: string): PrimaryDefinition | undefined {
     return this.#definitions.get(name);
+  }
+
+  /** Find the interface declared for an implementation class. */
+  getInterfaceForImplClass(implClass: ImplementationClass): AssembledInterfaceDefinition | undefined {
+    return this.#implementationInterfaces.get(implClass);
+  }
+
+  /** Identify an implementation instance through its prototype constructors. */
+  getInterfaceForImplInst(implInst: object): AssembledInterfaceDefinition | undefined {
+    for (
+      let prototype = Reflect.getPrototypeOf(implInst);
+      prototype;
+      prototype = Reflect.getPrototypeOf(prototype)
+    ) {
+      const candidate: unknown = Reflect.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+      if (typeof candidate !== 'function') continue;
+      const primaryInterface = this.#implementationInterfaces.get(candidate);
+      if (primaryInterface) return primaryInterface;
+    }
   }
 
   // Project helper: enumerate assembled interfaces.

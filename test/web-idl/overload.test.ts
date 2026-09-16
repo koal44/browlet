@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
-  type OperationMember,
+  type Definition, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import type { HostDefinedInterface } from '../../src/web-idl/conversion';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../src/web-idl/overload';
@@ -169,7 +168,7 @@ describe('Web IDL effective overload sets', () => {
     const platformObject = {};
     const implInst = {};
     if (!primaryInterface) throw new Error('Missing Node interface');
-    binding.associatePlatformObject(platformObject, primaryInterface, implInst);
+    binding.initializePlatformObject(platformObject, primaryInterface, implInst);
 
     const node = namedOperation('node', reference('Node'));
     const string = namedOperation('string', idlType.DOMString);
@@ -233,15 +232,13 @@ function namedOperation(
 }
 
 function createBinding(
-  definitions: Parameters<typeof assembleDefinitions>[0],
+  definitions: Definition[],
   hostDefinedInterfaces: HostDefinedInterface[] = [],
 ): RealmBinding {
   return new RealmBinding(
-    assembleDefinitions(definitions),
+    new DefinitionAssembly(definitions),
     new Realm(),
-    new BindingWorld([]),
-    new ImplementationRegistry(),
-    hostDefinedInterfaces,
+    new BindingWorld([], { hostDefinedInterfaces }),
   );
 }
 
@@ -253,6 +250,6 @@ function resolve(
   return resolveOverload(
     computeEffectiveOverloadSet(callables, argumentsList.length),
     argumentsList,
-    binding,
+    binding.defaultConversionContext,
   );
 }

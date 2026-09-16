@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   annotated, defineTypedef, idlType, nullable, reference, sequence, union,
   xattr,
@@ -13,7 +13,7 @@ import {
 
 describe('Web IDL types', () => {
   it('gets flattened member types from nested unions', () => {
-    const definitions = assembleDefinitions([]);
+    const definitions = new DefinitionAssembly([]);
     const type = annotated(
       union(
         reference('Node'),
@@ -37,7 +37,7 @@ describe('Web IDL types', () => {
   });
 
   it('counts nullable members through annotations, unions, and typedefs', () => {
-    const definitions = assembleDefinitions([
+    const definitions = new DefinitionAssembly([
       defineTypedef({
         name: 'MaybeEvent',
         type: annotated(nullable(reference('Event')), xattr('XAttr')),
@@ -55,7 +55,7 @@ describe('Web IDL types', () => {
   });
 
   it('detects undefined through annotations, nullable types, unions, and typedefs', () => {
-    const definitions = assembleDefinitions([
+    const definitions = new DefinitionAssembly([
       defineTypedef({ name: 'Nothing', type: idlType.undefined }),
     ]);
     const type = annotated(

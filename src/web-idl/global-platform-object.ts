@@ -3,14 +3,11 @@ import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
 import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembly';
-import {
-  convertToJavaScript, type ConversionContext,
-} from './conversion';
+import { convertToJavaScript } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
 import type { OperationMember } from './core/types';
-import type {
-  ImplementationRegistry, NamedPropertySteps,
-} from './implementation-registry';
+import type { NamedPropertySteps } from './definition-binding';
+import type { RealmBinding } from './realm-binding';
 import { getUnannotatedType } from './types';
 
 // The Web IDL object kind is shared across realms and binding instances.
@@ -22,16 +19,11 @@ export function isNamedPropertiesObject(object: object): boolean {
 }
 
 export class GlobalPlatformObjectBinding {
-  readonly #context: ConversionContext;
-  readonly #implementations: ImplementationRegistry;
+  readonly #binding: RealmBinding;
 
-  // Project helper: retain the conversion context and implementation registry.
-  constructor(
-    context: ConversionContext,
-    implementations: ImplementationRegistry,
-  ) {
-    this.#context = context;
-    this.#implementations = implementations;
+  // Project helper: retain the owning realm binding.
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
   }
 
   // Project adapter for Web IDL §3.8.1 [[SetPrototypeOf]] on global platform objects.
@@ -53,7 +45,7 @@ export class GlobalPlatformObjectBinding {
       );
     }
 
-    const target = this.#context.realm.createOrdinaryObject(prototype);
+    const target = this.#binding.realm.createOrdinaryObject(prototype);
     Reflect.defineProperty(target, Symbol.toStringTag, {
       configurable: true,
       enumerable: false,
@@ -121,7 +113,7 @@ export class GlobalPlatformObjectBinding {
   // Project allocator for Web IDL §3.7.3 Interface prototype object — global prototype-chain behavior.
   createPrototypeObject(prototype: object): object {
     return this.#withPrototypeBehavior(
-      this.#context.realm.createOrdinaryObject(prototype),
+      this.#binding.realm.createOrdinaryObject(prototype),
     );
   }
 
@@ -129,13 +121,13 @@ export class GlobalPlatformObjectBinding {
   supportsNamedProperties(primaryInterface: AssembledInterfaceDefinition): boolean {
     return findNamedGetter(
       primaryInterface,
-      this.#context.definitions,
+      this.#binding.definitions,
     ) !== undefined;
   }
 
   // Project adapter: supply global prototype behavior through a Proxy when needed.
   #withPrototypeBehavior(target: object): object {
-    if (this.#context.realm.isGlobalPrototypeChainMutable) return target;
+    if (this.#binding.realm.isGlobalPrototypeChainMutable) return target;
     return new Proxy(target, {
       setPrototypeOf: (target_, value) =>
         this.#setPrototypeOf(target_, value),
@@ -144,7 +136,7 @@ export class GlobalPlatformObjectBinding {
 
   // Web IDL §3.8.1 [[SetPrototypeOf]] and §3.7.4.4 [[SetPrototypeOf]] — global and named properties objects.
   #setPrototypeOf(target: object, value: object | null): boolean {
-    return this.#context.realm.isGlobalPrototypeChainMutable
+    return this.#binding.realm.isGlobalPrototypeChainMutable
       ? Reflect.setPrototypeOf(target, value)
       : Reflect.getPrototypeOf(target) === value;
   }
@@ -158,10 +150,7 @@ export class GlobalPlatformObjectBinding {
     const record = getPlatformRecord(global);
     if (!record) throw new Error('Global object is not a platform object');
 
-    const steps = this.#implementations.getOperationSteps(
-      properties.getter,
-      properties.primaryInterface,
-    );
+    const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
     if (!steps) throw new Error('Missing named property getter implementation');
     const value = steps(record, property);
     return {
@@ -170,7 +159,7 @@ export class GlobalPlatformObjectBinding {
       value: convertToJavaScript(
         value,
         properties.getter.returns,
-        this.#context,
+        this.#binding.defaultConversionContext,
       ),
       writable: true,
     };
@@ -217,9 +206,9 @@ export class GlobalPlatformObjectBinding {
   #getNamedProperties(
     primaryInterface: AssembledInterfaceDefinition,
   ): NamedProperties | undefined {
-    const getter = findNamedGetter(primaryInterface, this.#context.definitions);
+    const getter = findNamedGetter(primaryInterface, this.#binding.definitions);
     if (!getter) return;
-    const steps = this.#implementations.getNamedPropertySteps(getter);
+    const steps = this.#binding.getMemberBinding(primaryInterface, getter)?.namedPropertySteps;
     if (!steps) {
       throw new Error('Missing supported property names implementation');
     }
@@ -242,7 +231,7 @@ type NamedProperties = {
   unenumerable: boolean;
 };
 
-// Project helper: search inherited interfaces and partial declarations for an extended attribute.
+// Project helper: search the primary interface and its ancestors for an extended attribute.
 function implementsExtendedAttribute(
   primaryInterface: AssembledInterfaceDefinition,
   name: string,

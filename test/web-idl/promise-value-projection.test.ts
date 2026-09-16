@@ -7,7 +7,7 @@ import {
 } from '../../src/web-idl/core/index';
 import { TestRealm } from './test-realm';
 
-describe('internal Promise result projection', () => {
+describe('PromiseValue result projection', () => {
   it.each(['fulfill', 'reject'] as const)('retains the receiver projection on %s', async (mode) => {
     const bindings = new BindingWorld([ownerIDL, childIDL]);
     const first = new TestRealm();

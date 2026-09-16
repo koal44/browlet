@@ -7,7 +7,6 @@ import {
   dictMember, emptyDictionary, idlType, impl, integer, nullable,
   roAttr, reference, xattr,
 } from './core/index';
-import type { BindingContext } from './binding-context';
 
 /*
  * [Exposed=*,
@@ -87,7 +86,14 @@ export const domExceptionIDL = defineInterface({
   exposed: '*',
   ...xattr('Serializable'),
   implementation: impl(DOMExceptionImpl, {
-    allocatePlatformObject: allocateErrorPlatformObject,
+    // Web IDL §3.14.1 DOMException custom bindings — native Error backing for platform objects.
+    allocatePlatformObject(ctx, prototype) {
+      const object = Reflect.construct(ctx.realm.intrinsics.error, []);
+      if (!Reflect.setPrototypeOf(object, prototype)) {
+        throw new TypeError('Could not set DOMException platform-object prototype');
+      }
+      return object;
+    },
   }),
   members: [
     ctor([
@@ -203,9 +209,7 @@ export const quotaExceededErrorIDL = defineInterface({
   inherits: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  implementation: impl(QuotaExceededErrorImpl, {
-    allocatePlatformObject: allocateErrorPlatformObject,
-  }),
+  implementation: impl(QuotaExceededErrorImpl),
   members: [
     ctor([
       arg('message', idlType.DOMString, {
@@ -239,16 +243,3 @@ const legacyCodesByName = new Map<string, number>(
     DOMExceptionCodes[key as keyof typeof DOMExceptionCodes],
   ]),
 );
-
-// Project allocator for Web IDL §3.14.1 DOMException custom bindings — native Error backing for DOMException
-// platform objects.
-function allocateErrorPlatformObject(
-  context: BindingContext,
-  prototype: object,
-): object {
-  const object = Reflect.construct(context.realm.intrinsics.error, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new TypeError('Could not set DOMException platform-object prototype');
-  }
-  return object;
-}

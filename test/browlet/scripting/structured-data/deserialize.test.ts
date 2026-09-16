@@ -416,7 +416,7 @@ describe('HTML structured deserialization', () => {
     const targetRealm = new Realm();
     const source = bindings.register(sourceRealm);
     const target = bindings.register(targetRealm);
-    const original = source.createPlatformObject(containerIDL);
+    const original = source.createPlatformRecord(containerIDL);
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);

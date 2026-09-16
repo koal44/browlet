@@ -50,9 +50,9 @@ Infra's `Stamper` base supplies the constructor-return mechanism shared by
 Web IDL and JS Engine. Each concrete stamper owns its private fields and record
 types in its subsystem; Infra has no dependency on those records.
 
-Binding's `PromiseStamper` attaches projection records to source promises without
-adding public properties. The records preserve author Promise identity per
-world, realm, result type, and allocation policy; JS Engine's `PromiseValue`
+Binding's `PromiseProjectionStamper` attaches projection records to source
+promises without adding public properties. The records preserve author Promise
+identity per world, realm, result type, and allocation policy; JS Engine's `PromiseValue`
 continues to carry only implementation execution state in its own fields.
 
 ## The actors
@@ -230,6 +230,8 @@ which makes a subsystem work.
 
 A Binding World is the lifecycle boundary for platform-object identity. It owns
 the realm-to-binding WeakMap and can contain several realm registrations.
+It also indexes host-defined interfaces once, sharing their realm-neutral hooks
+with each realm binding.
 Definitions and capability registrations can be shared across worlds, but a
 platform-object association belongs to exactly one world.
 

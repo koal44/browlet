@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import type { JSFunction } from '../../src/js-engine/index';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { ctor, defineInterface, impl } from '../../src/web-idl/core/index';
@@ -102,7 +102,7 @@ describe('interface constructor prototype fallback', () => {
 
 function createBindings() {
   class ExampleImpl {}
-  const definitions = assembleDefinitions([
+  const definitions = new DefinitionAssembly([
     defineInterface({
       name: 'Example', exposed: '*', implementation: impl(ExampleImpl), members: [ctor()],
     }),

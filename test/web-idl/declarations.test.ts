@@ -16,7 +16,7 @@ import {
   serializeType,
 } from '../../src/web-idl/core/index';
 
-describe('Web IDL definitions', () => {
+describe('Web IDL declarations and serialization', () => {
   it('represents the EventTarget fragment as structurally lossless data', () => {
     const definitions = [
       defineInterface({

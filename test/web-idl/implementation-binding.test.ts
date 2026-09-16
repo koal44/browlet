@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { throwDOMException } from '../../src/web-idl/core/dom-exception';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
@@ -15,11 +15,10 @@ import {
   union, invokeWith,
 } from '../../src/web-idl/core/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { getImplementationObject } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
-describe('Web IDL implementation registration', () => {
+describe('Web IDL implementation bindings', () => {
   it('retains each dictionary input as callback receiver without changing callback identity', () => {
     type Options = { handler?: (value: unknown) => unknown; raw?: unknown; };
     class CallbackDictionaryImpl {
@@ -189,7 +188,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([
+      new DefinitionAssembly([
         common,
         first,
         second,
@@ -234,7 +233,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
+      new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -282,7 +281,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
+      new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -332,7 +331,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([dependencyIDL, ownerIDL]),
+      new DefinitionAssembly([dependencyIDL, ownerIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -396,7 +395,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
+      new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -451,7 +450,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([resultIDL]),
+      new DefinitionAssembly([resultIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -597,7 +596,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([
+      new DefinitionAssembly([
         nestedResultIDL,
         nestedResultCallbackIDL,
         resultDictionaryIDL,
@@ -713,14 +712,12 @@ describe('Web IDL implementation registration', () => {
         stringifier(),
       ],
     });
-    const definitions = assembleDefinitions([interfaceIDL]);
-    const implementations = new ImplementationRegistry();
+    const definitions = new DefinitionAssembly([interfaceIDL]);
 
     const binding = new RealmBinding(
       definitions,
       realm,
       new BindingWorld([]),
-      implementations,
     );
     registerDefinitionBindings(binding);
     const installed = binding.install();
@@ -776,15 +773,13 @@ describe('Web IDL implementation registration', () => {
         },
       ],
     });
-    const definitions = assembleDefinitions([settings, interfaceIDL]);
-    const implementations = new ImplementationRegistry();
+    const definitions = new DefinitionAssembly([settings, interfaceIDL]);
 
     const realm = new Realm();
     const binding = new RealmBinding(
       definitions,
       realm,
       new BindingWorld([]),
-      implementations,
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -1047,7 +1042,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([
+      new DefinitionAssembly([
         increment,
         voidCallback,
         factory,
@@ -1193,7 +1188,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
+      new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -1327,7 +1322,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([collectionIDL]),
+      new DefinitionAssembly([collectionIDL]),
       realm,
       new BindingWorld([]),
     );
@@ -1385,7 +1380,7 @@ describe('Web IDL implementation registration', () => {
         kind: 'constructor',
       }],
     });
-    const definitions = assembleDefinitions([parentIDL, childIDL]);
+    const definitions = new DefinitionAssembly([parentIDL, childIDL]);
     const binding = new RealmBinding(
       definitions,
       realm,
@@ -1406,7 +1401,7 @@ describe('Web IDL implementation registration', () => {
   });
 
   it('keeps binding contexts distinct within the same realm', () => {
-    const definitions = assembleDefinitions([]);
+    const definitions = new DefinitionAssembly([]);
     const realm = new Realm();
     const first = new RealmBinding(
       definitions,
@@ -1455,7 +1450,7 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
+      new DefinitionAssembly([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
       new BindingWorld([]),
     );

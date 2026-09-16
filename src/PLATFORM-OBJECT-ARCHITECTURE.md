@@ -209,7 +209,7 @@ use the recognized record directly when they need its retained state or
 platform object.
 
 Legacy indexed/named property metadata is assembled once per interface in each
-realm's existing initial-object record. It retains the inherited operations,
+realm's `DefinitionBinding`. It retains the inherited operations,
 registration-time callbacks, flags, and unforgeable names. Supported property
 names and indices remain live queries against each implementation instance.
 Ordinary interfaces retain a null result to avoid repeated legacy checks.
@@ -225,9 +225,30 @@ second world throws; that world must construct its own implementation instance.
 `new BindingWorld(definitions, options)` creates this owner. Its
 `BindingWorldOptions` configures shared capabilities and host-defined interfaces;
 realm registration supplies the realm-specific options.
+The world indexes host-defined interfaces by name at construction. Every realm
+binding shares that map and its realm-neutral recognition and receiver hooks.
 Capability values live on the world's assembled interface definitions. Realm
 bindings share those values; other worlds can configure the same raw declarations
 independently.
+
+`DefinitionAssembly` also owns the implementation-class-to-interface index,
+built from the declarations once per world. Each `RealmBinding` owns a
+`DefinitionBinding` for each definition it uses. That record holds the
+realm's construction, initialization, and allocation adapters alongside its
+generated interface objects and prototypes. Its `MemberBinding` records hold
+attribute, operation, and other member adapters alongside their generated
+platform functions. A member contributed by a mixin has a separate record for
+each including interface; inherited member lookup follows the interface ancestry.
+
+These adapters remain realm-owned because they capture runtime injection and
+exception realization for that realm. Sharing the assembled declarations does
+not share these callbacks. There is no separate implementation registry:
+registration populates the realm's owned definition/member records directly.
+
+Property installation creates and retains the corresponding member functions
+and iterator prototypes in those records. Hidden-interface unforgeables and
+regular global members can wait until their platform object is projected;
+subsequent installations and instances reuse the retained functions.
 
 `world.register(realm)` returns the world's shared `BindingContext` for that
 realm; `world.forRealm(realm)` retrieves it without registering. Installation
@@ -292,7 +313,7 @@ and Realms inside the same isolate-scoped `JSRuntime`. This is a Browlet
 embedding invariant, not a claim that web author code can synchronously
 exchange objects between isolated browser agent clusters. The
 [Browlet DOM binding](../test/browlet/dom-binding.test.ts),
-[registration](../test/web-idl/registration.test.ts), and
+[binding worlds](../test/web-idl/binding-world.test.ts), and
 [File API](../test/browlet/file-api.test.ts) tests require:
 
 - a method borrowed from one Browlet Realm to recognize a compatible platform
@@ -387,11 +408,15 @@ internal object-creation
 adapter when realm-owned dependencies must be injected. They must not call a
 public constructor and then unwrap its result.
 
-`createPlatformObject()` requires registered implementation creation steps and
-projects the resulting implementation through the ordinary projection path.
+`RealmBinding.createPlatformRecord()` requires registered implementation creation
+steps and returns the shared record from the ordinary projection path.
 It does not manufacture an object to serve both identities. A declaration without
 creation steps can still supply an interface object and prototype, but attempting
 to instantiate it reports a configuration error.
+
+`BindingContext.createPlatformRecord()` returns that same record directly.
+Constructor initialization uses its implementation instance before returning
+the platform object to the author.
 
 Projection can remain lazy until an implementation crosses an author-observable
 boundary. Returning an already-associated implementation recovers its stable
@@ -404,12 +429,33 @@ The same receiver rule applies to explicit instance-member bindings. Argument
 conversion still belongs to the operation function's Realm, while its member
 binding receives the receiver's Binding Context. Static operations have no
 receiver Realm and use the context in which their function was installed.
-Getters and operations take their result conversion context directly from the
-receiver record's `binding`; they do not reconstruct it from the realm.
+Getters and operations use the receiver record's binding and its
+`defaultConversionContext` for result conversion; they do not rediscover the
+binding through a realm lookup.
 Implementations must not accept or retain that context. Existing
 `invokeWith(atArg(0, (ctx) => ctx))` dependencies are migration work. A future dependency
 on the calling script or incumbent settings requires explicit invocation
 information at the binding boundary.
+
+`ConversionContext` explicitly pairs a `RealmBinding` with a conversion `realm`.
+The binding supplies definitions, implementation projection, host-interface
+recognition, and realization of internal failures. The realm selects ordinary
+JavaScript allocation and conversion errors. A callback in B can therefore
+receive a B array containing fresh platform objects projected through A's
+binding. `RealmBinding.defaultConversionContext` retains the ordinary pair
+`{ binding: this, realm: this.realm }`. Boundaries that select another conversion
+realm form an explicit pair, without changing the default or the binding's own
+realm. Nested conversions share the selected pair, and callbacks or continuations
+retain it when needed.
+This does not replace captured callback settings or an implementation's
+RuntimeContext.
+
+Web IDL promise resolution converts in the supplied context before calling the
+stored resolve function. Promise reactions also convert and create their handlers
+in the supplied context's realm, while allocating the result promise in the
+source promise's realm. Importing an IDL promise into an implementation remains
+a separate boundary: its fulfillment conversion uses the IDL promise record's
+realm and retains the implementation's binding and runtime.
 
 When a value needs a specified realm before any ordinary result projection,
 the binding or composition boundary stamps its platform record with
@@ -440,6 +486,13 @@ through:
 - promise creation, resolution, and reaction results.
 
 Repeated references to one implementation must produce one platform object.
+
+Conversion selects the declared interface or union member. The realm binding's
+implementation projector validates interface membership and world ownership,
+preserves an existing owner, and adopts fresh implementation results. Conversion
+does not separately recover cached platform objects from implementation records.
+Existing platform objects and host-defined interface values retain their own
+conversion paths; an `object` result preserves the supplied JavaScript value.
 
 Blob retains its Runtime Context at construction. Its `stream()` and private
 read operation use that context; `text()`, `bytes()`, and `arrayBuffer()` share
@@ -481,7 +534,7 @@ Dictionary results can be ordinary records, including `{ value, done }` from
 stream reads; binding creates the realm-owned result and projects its members.
 
 `conversion.ts` owns `projectPromise` and its fulfillment conversion. Projection
-returns the author Promise directly. `PromiseStamper` in `promise-record.ts`
+returns the author Promise directly. `PromiseProjectionStamper` in `promise-record.ts`
 privately attaches `PromiseProjectionRecord` entries to the source native
 Promise or `PromiseValue`. Each entry
 retains an `IDLPromiseRecord`, its binding world, and the buffer-allocation policy;
@@ -695,7 +748,7 @@ no import or declaration replaces the global error constructors.
 
 The binding first realizes a request in the executing method's realm for
 synchronous calls, or the promise's realm when rejecting an internal promise.
-`ExceptionStamper` retains that realized error in a private field on the original
+`ExceptionRealizationStamper` retains that realized error in a private field on the original
 internal exception. Subsequent boundaries reuse the same error, even in another
 realm, preserving both its identity and author changes. For example, a borrowed
 stream `enqueue()` method throws the same error that later rejects the stream's

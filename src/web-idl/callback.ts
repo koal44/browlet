@@ -24,7 +24,7 @@ export function callUserObjectOperation(
   thisArgument?: unknown,
 ): unknown {
   const operation = getCallbackOperation(value, operationName);
-  const callbackContext = withCallbackRealm(value.conversionContext, value);
+  const callbackContext = { binding: value.conversionContext.binding, realm: value.realm };
 
   try {
     return runCallback(value, () => {
@@ -71,7 +71,7 @@ export function invokeCallbackFunction(
   const { definition } = callable;
   const context = callable.conversionContext;
   validateExceptionBehavior(definition.returns, exceptionBehavior, context);
-  const callbackContext = withCallbackRealm(context, callable);
+  const callbackContext = { binding: context.binding, realm: callable.realm };
   const function_ = callable.object;
 
   if (!isCallable(function_)) {
@@ -118,7 +118,7 @@ export function constructCallbackFunction(
     );
   }
 
-  const callbackContext = withCallbackRealm(context, callable);
+  const callbackContext = { binding: context.binding, realm: callable.realm };
   return runCallback(callable, () => {
     const result = Reflect.construct(
       constructor,
@@ -235,7 +235,7 @@ function validateExceptionBehavior(
   if (!exceptionBehavior) {
     throw new Error('A non-promise callback requires exception behavior');
   }
-  const type = getUnannotatedType(returnType, context.definitions);
+  const type = getUnannotatedType(returnType, context.binding.definitions);
   const canReport = type.kind === 'simple' && (
     type.name === 'undefined' || type.name === 'any'
   );
@@ -272,21 +272,6 @@ function getPromiseReturnType(
   returnType: WebIDLType,
   context: ConversionContext,
 ): WebIDLType | undefined {
-  const type = getUnannotatedType(returnType, context.definitions);
+  const type = getUnannotatedType(returnType, context.binding.definitions);
   return type.kind === 'promise' ? type.type : undefined;
-}
-
-// Project helper: select the callback's realm for argument and result conversion.
-function withCallbackRealm(
-  context: ConversionContext,
-  value: CallbackValue,
-): ConversionContext {
-  return {
-    definitions: context.definitions,
-    hostDefinedInterfaces: context.hostDefinedInterfaces,
-    world: context.world,
-    projectImplementationObject: context.projectImplementationObject,
-    realizeException: context.realizeException,
-    realm: value.realm,
-  };
 }
