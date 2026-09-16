@@ -9,8 +9,8 @@ The named functions exported by `bindings.ts` forward to its main
 `BrowletBindings` instance. HTML lifecycle code selects the Window and owns its
 document/settings state. `createWindowRealm()` composes that Window's engine
 allocation and bindings; `createDocument()` obtains the node factory and
-Stylelet runtime through Document's existing construction declaration, then
-projects eagerly to initialize its realm-owned event factory. Environment
+Stylelet runtime through Document's existing construction declaration. Record
+creation initializes its realm-owned event factory without projecting it. Environment
 setup receives prepared structured-clone steps, rather than a Binding Context
 or the complete realm binding.
 

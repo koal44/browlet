@@ -169,11 +169,7 @@ class BrowletBindings {
   }
 
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
-    const context = this.forRealm(realm);
-    const document = context.construct(DocumentImpl);
-    // Eager projection also installs EventTarget's realm-owned event factory.
-    context.project(DocumentImpl, document);
-    return document;
+    return this.forRealm(realm).construct(DocumentImpl);
   }
 
   createStructuredClone(realm: Realm): StructuredCloneSteps {

@@ -624,10 +624,6 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         `Use projectGlobalObject for ${primaryInterface.definition.name}`,
       );
     }
-    this.#runImplementationInitializationSteps(
-      implInst,
-      primaryInterface,
-    );
     const allocatePlatformObject = this.#getPlatformObjectAllocationSteps(primaryInterface);
     const backingObject = allocatePlatformObject
       ? allocatePlatformObject(prototype)
@@ -683,7 +679,6 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     if (allocation && Reflect.getPrototypeOf(allocation.object) !== prototype) {
       throw new Error('Allocated global object has the wrong prototype');
     }
-    this.#runImplementationInitializationSteps(implInst, primaryInterface);
     const platformObject = allocation?.object ?? this.#globalPlatformObjects.createObject(
       this.realm.createOrdinaryObject(prototype),
     );
@@ -752,8 +747,8 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     return record;
   }
 
-  // Project helper: run registered implementation initializers in inheritance order.
-  #runImplementationInitializationSteps(
+  // Project helper: initialize the implementation before its record is stamped.
+  initializeImplementation(
     implInst: object,
     primaryInterface: AssembledInterfaceDefinition,
   ): void {

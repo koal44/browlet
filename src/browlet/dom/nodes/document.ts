@@ -768,9 +768,7 @@ export const documentIDL = defineInterface({
           implClass: ImplementationClass<T>,
           argumentsList: readonly unknown[],
         ): T {
-          const implInst = ctx.construct(implClass, ...argumentsList);
-          ctx.project(implClass, implInst);
-          return implInst;
+          return ctx.construct(implClass, ...argumentsList);
         },
       })),
       atArg(1, (ctx) => createStyleletRuntime(ctx.getRuntime())),
