@@ -1,12 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { unwrap, getRelevantRealm, registerRealm } from '../../src/browlet/bindings';
+import {
+  createDocument, getBindingContext, getRelevantRealm, registerRealm, unwrap,
+} from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import { WindowImpl } from '../../src/browlet/browsing/window/window';
+import { EventImpl } from '../../src/browlet/dom/events/event';
+import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
 import { Realm } from '../../src/browlet/scripting/realm';
 import { itPassesWith } from '../test-runtime';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Browlet DOM binding', () => {
   it('projects the Window global through its Web IDL interface', () => {
@@ -499,6 +506,67 @@ describe('Browlet DOM binding', () => {
 
     expect(new Event_('ready').timeStamp).toBe(123.5);
     expect(new CustomEvent_('ready').timeStamp).toBe(123.5);
+  });
+
+  it('gives a constructed EventTarget its event owner before projection', () => {
+    const browlet = createBrowlet();
+    const realm = getRelevantRealm(browlet.window);
+    const ctx = getBindingContext(realm);
+    vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123);
+    const target = ctx.construct(EventTargetImpl);
+    const event = target.createEvent();
+
+    expect(event.timeStamp).toBe(123);
+    expect(event.isTrusted).toBe(true);
+    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+    expect(ctx.getObjectRecord(target)?.platformObject).toBeUndefined();
+  });
+
+  it('creates an initialized Document without allocating its platform object', () => {
+    const browlet = createBrowlet();
+    const realm = getRelevantRealm(browlet.window);
+    const ctx = getBindingContext(realm);
+    vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(456);
+    const document = createDocument(realm);
+    const event = document.createEvent();
+
+    expect(event.timeStamp).toBe(456);
+    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+    expect(ctx.getObjectRecord(document)?.platformObject === undefined).toBe(true);
+  });
+
+  it.each(['element', 'text', 'fragment'] as const)(
+    'keeps an internal %s and its events in the Document realm', (kind) => {
+      const first = createBrowlet();
+      const second = createBrowlet();
+      const realm = getRelevantRealm(first.window);
+      const ctx = getBindingContext(realm);
+      const other = getBindingContext(getRelevantRealm(second.window));
+      vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(789);
+      const document = unwrap<DocumentImpl>(first.document);
+      const node = kind === 'element' ? document.createElement('div') :
+        kind === 'text' ? document.createTextNode('text') : document.createDocumentFragment();
+      const event = node.createEvent();
+
+      expect(event.timeStamp).toBe(789);
+      expect(ctx.getObjectRecord(node)?.platformObject === undefined).toBe(true);
+      expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+      const platformEvent = other.project(EventImpl, event);
+      expect(platformEvent).toBeInstanceOf(getConstructor(first, 'Event'));
+      expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
+    },
+  );
+
+  it('initializes Window after its realm becomes available', () => {
+    const browlet = createBrowlet();
+    const realm = getRelevantRealm(browlet.window);
+    const ctx = getBindingContext(realm);
+    vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(321);
+    const window = ctx.unwrap(realm.globalObject, WindowImpl)!;
+    const event = window.createEvent();
+
+    expect(event.timeStamp).toBe(321);
+    expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
   });
 
   it('applies inherited event invocation to internally created nodes', () => {

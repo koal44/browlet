@@ -15,7 +15,7 @@ import {
   union, invokeWith,
 } from '../../src/web-idl/core/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
-import { getImplementationObject } from '../../src/web-idl/platform-object';
+import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL implementation bindings', () => {
@@ -1398,6 +1398,49 @@ describe('Web IDL implementation bindings', () => {
     expect(object).toBeInstanceOf(ChildLifecycle);
     expect(contexts[0]).toBe(contexts[1]);
     expect(lifecycle).toEqual(['parent', 'child']);
+  });
+
+  it.each(['construct', 'project'] as const)('runs inherited initializers once through %s', (path) => {
+    class ParentImpl {}
+    class ChildImpl extends ParentImpl {}
+    const calls: string[] = [];
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Parent', exposed: '*', members: [], implementation: impl(ParentImpl, {
+          initializeImplementation() { calls.push('parent'); },
+        }),
+      }),
+      defineInterface({
+        name: 'Child', exposed: '*', inherits: 'Parent', members: [], implementation: impl(ChildImpl, {
+          initializeImplementation() { calls.push('child'); },
+        }),
+      }),
+    ]);
+    const ctx = world.register(new Realm());
+    const child = path === 'construct' ? ctx.construct(ChildImpl) : new ChildImpl();
+    if (path === 'construct') expect(calls).toEqual(['parent', 'child']);
+    const platform = ctx.project(ChildImpl, child);
+    expect(ctx.project(ChildImpl, child)).toBe(platform);
+    expect(calls).toEqual(['parent', 'child']);
+  });
+
+  it('does not retain an incomplete record when initialization throws', () => {
+    class ExampleImpl {}
+    let ready = false;
+    const failure = new Error('Initializer is not ready');
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Example', exposed: '*', members: [], implementation: impl(ExampleImpl, {
+          initializeImplementation() { if (!ready) throw failure; },
+        }),
+      }),
+    ]);
+    const ctx = world.register(new Realm());
+    const instance = new ExampleImpl();
+    expect(() => ctx.project(ExampleImpl, instance)).toThrow(failure);
+    expect(getImplementationRecord(instance) === undefined).toBe(true);
+    ready = true;
+    expect(ctx.project(ExampleImpl, instance)).toBe(getImplementationRecord(instance)?.platformObject);
   });
 
   it('keeps binding contexts distinct within the same realm', () => {

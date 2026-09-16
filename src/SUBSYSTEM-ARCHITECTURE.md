@@ -41,6 +41,8 @@ the owning realm and retains the eventual platform object;
 implementation methods still receive their execution dependencies explicitly
 through `RuntimeContext`. Stamping does not inject Binding Context into
 implementation constructors or change their prototypes.
+Creating the record runs inherited implementation initializers before attaching
+the stamp. An initialized implementation can therefore remain unprojected.
 During projection, Binding stamps the same record onto the platform object.
 Each identity carries its record directly, without a platform-object lookup
 map. Stamp lookup needs only the object. World APIs, receiver validation, and
@@ -502,9 +504,10 @@ to its main binding world. Document creation reuses the dependencies declared
 for its Web IDL constructor; the root also prepares structured-clone steps
 through `integration/runtime.ts`. Environment-settings setup accepts those steps and
 constructs its global-scope mixin without receiving a realm binding. The
-Document retains its node factory. The bound factory uses `context.construct()`
-to establish node ownership and still projects eagerly to initialize its
-realm-owned event factory. Internal fragment creation supplies its owning
+Document retains its node factory. The factory uses `context.construct()`
+to establish node ownership and initialize its realm-owned event factory.
+Document and node platform objects are allocated when projection is needed.
+Internal fragment creation supplies its owning
 Document explicitly; only the public `DocumentFragment()` constructor injects
 the realm's associated Document.
 

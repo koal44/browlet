@@ -361,7 +361,7 @@ export class EventTargetImpl {
 export const eventTargetIDL = defineInterface({
   name: 'EventTarget',
   exposed: '*',
-  // Projection supplies the realm-correct trusted-event factory to every
+  // Record creation supplies the owning realm's trusted-event factory to every
   // implementation whose primary interface inherits EventTarget.
   implementation: impl(EventTargetImpl, {
     initializeImplementation(context, value) {

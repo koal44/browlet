@@ -63,6 +63,10 @@ it retains `T`'s members and is recognized by `isStampedImplInstance()`.
 `stampImplementation()` and `BindingContext.construct()` return this
 typed instance, as does unwrapping an existing platform object. The record's
 `implInst` refers back to that instance.
+Record creation runs the registered `initializeImplementation` callbacks in
+parent-to-child inheritance order before attaching the implementation stamp.
+Successful initialization happens once per record; later projection reuses it.
+If initialization throws, the instance remains unstamped and can be retried.
 The record retains its owning `RealmBinding`, primary interface, and, after
 projection, platform object. One record class covers both stages; its optional
 `platformObject` field is populated during association. The realm is obtained
@@ -388,7 +392,8 @@ For a constructible interface:
 1. Web IDL converts author arguments.
 2. The implementation constructor or declared creation steps create `FooImpl`.
 3. Web IDL allocates the platform object in the target realm.
-4. Binding stamps the shared platform record onto both identities.
+4. Binding initializes the implementation and stamps the shared platform record
+   onto both identities.
 5. The author receives the platform object.
 
 An author subclass changes the platform object's prototype chain. It must not replace
@@ -802,8 +807,9 @@ Document and structured-clone steps. Document creation uses its existing
 Web IDL construction declaration to supply dependencies. HTML lifecycle code
 initializes Document state and the global-scope mixin; it does not assemble node projection
 or retain a realm binding for cloning. Internal Document/node construction
-continues to project eagerly, including EventTarget's realm-owned event-factory
-initialization.
+initializes EventTarget's realm-owned event factory when it creates the record;
+projection remains lazy. Window's implementation is constructed before its
+realm exists and receives its initialized record during global projection.
 
 ## Cross-specification declarations
 

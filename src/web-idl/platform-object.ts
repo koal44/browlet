@@ -40,6 +40,7 @@ export class PlatformRecord<T extends object = object> {
   ) {
     this.primaryInterface = primaryInterface;
     this.binding = binding;
+    binding.initializeImplementation(implInst, primaryInterface);
     this.implInst = ImplementationStamper.stamp(implInst, this);
   }
 
