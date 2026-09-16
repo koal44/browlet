@@ -1,4 +1,4 @@
-import { html } from 'parse5';
+import { html, parse, type Token } from 'parse5';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,7 +9,7 @@ import {
 } from '../../../../src/browlet/dom/nodes/document-fragment';
 import { isComment } from '../../../../src/browlet/dom/nodes/node';
 import {
-  HTMLTreeAdapter,
+  getSourceCodeLocation, HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from '../../../../src/browlet/html/parser/tree-adapter';
 
 describe('Parser tree adapter', () => {
@@ -44,6 +44,62 @@ describe('Parser tree adapter', () => {
     expect(isComment(comment)).toBe(true);
     if (!isComment(comment)) throw new Error('Expected a comment node');
     expect(comment.data).toBe('note');
+  });
+
+  it('retains source locations for parsed elements and merged text', () => {
+    const adapter = createParser();
+    const document = parse<HTMLTreeAdapterMap>([
+      '<!doctype html>',
+      '<main id="target">',
+      '  one &amp; two',
+      '</main>',
+    ].join('\n'), { treeAdapter: adapter, sourceCodeLocationInfo: true });
+    adapter.finishParsing();
+    const root = document.documentElement;
+    const main = document.getElementById('target');
+    if (!root || !main?.firstChild) throw new Error('Expected the parsed document and its text');
+
+    expect(getSourceCodeLocation(document)).toBeUndefined();
+    expect(getSourceCodeLocation(root)).toBeNull();
+    expect(getSourceCodeLocation(main)).toMatchObject({
+      startLine: 2, startCol: 1, endLine: 4, endCol: 8,
+      startTag: { startLine: 2, endLine: 2, endCol: 19 },
+      endTag: { startLine: 4, startCol: 1, endCol: 8 },
+    });
+    expect(getSourceCodeLocation(main.firstChild)).toMatchObject({
+      startLine: 2, startCol: 19, endLine: 4, endCol: 1,
+    });
+  });
+
+  it('replaces source locations on frozen nodes without exposing parser state', () => {
+    const adapter = createParser();
+    const node = adapter.createCommentNode('note');
+    Object.freeze(node);
+    const keys = Reflect.ownKeys(node);
+    const prototype: unknown = Object.getPrototypeOf(node);
+    const location: Token.ElementLocation = {
+      startLine: 1, startCol: 1, startOffset: 0,
+      endLine: 1, endCol: 12, endOffset: 11,
+    };
+
+    adapter.updateNodeSourceCodeLocation(node, { endLine: 2 });
+    expect(getSourceCodeLocation(node)).toBeUndefined();
+    adapter.setNodeSourceCodeLocation(node, null);
+    adapter.updateNodeSourceCodeLocation(node, { endLine: 2 });
+    expect(getSourceCodeLocation(node)).toBeNull();
+
+    adapter.setNodeSourceCodeLocation(node, location);
+    adapter.updateNodeSourceCodeLocation(node, { endCol: 13, endOffset: 12 });
+    expect(getSourceCodeLocation(node)).toBe(location);
+    expect(location.endCol).toBe(13);
+    const replacement = { ...location, startLine: 2, endLine: 2 };
+    adapter.setNodeSourceCodeLocation(node, replacement);
+    expect(createParser().getNodeSourceCodeLocation(node)).toBe(replacement);
+
+    adapter.setNodeSourceCodeLocation(node, null);
+    expect(getSourceCodeLocation(node)).toBeNull();
+    expect(Reflect.ownKeys(node)).toEqual(keys);
+    expect(Object.getPrototypeOf(node)).toBe(prototype);
   });
 
   it('parses attributes into the DOM attribute representation', () => {

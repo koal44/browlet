@@ -80,7 +80,10 @@ boundary. Do not create an otherwise empty module merely to satisfy this table.
 Status: complete. The generic Web IDL capability seam is keyed by exact
 interface-definition identity; registered realms expose target-realm creation,
 exposure checks, and primary-interface resolution. HTML owns the hook contracts
-and detached state. DOMException and QuotaExceededError provide the first
+and detached state. A private `DetachedTransferableStamper` marker on the source
+implementation instance records successful transfer. Both object identities
+resolve to that instance; the newly received instance starts undetached.
+DOMException and QuotaExceededError provide the first
 standalone Serializable capability registrations and cross-realm proof.
 
 Controlling sections: HTML §§2.7.1–2.7.2, "Serializable objects" and

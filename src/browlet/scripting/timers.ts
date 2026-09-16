@@ -1,40 +1,16 @@
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { Duration } from '../performance/clock';
-import { createTaskSource, type EventLoop, type Task } from './event-loop';
-import { queueGlobalTask } from './tasks';
+import { createTaskSource, type EventLoop, type Task, type TaskCreationOptions } from './event-loop';
 
 export const timerTaskSource = createTaskSource('timer');
 
-/*
- * HTML's general timeout primitive belongs to the global's stateful
- * WindowOrWorkerGlobalScope mixin. The weak association is routing only: the
- * mixin constructs and owns GlobalTimers before bindings expose the global.
- *
- * https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#run-steps-after-a-timeout
- */
-export function runStepsAfterTimeout(
-  global: object,
-  orderingIdentifier: string,
-  milliseconds: number,
-  completionSteps: () => void,
-): TimerKey {
-  const timers = timersByGlobal.get(global);
-  if (timers === undefined) {
-    throw new Error('A global object must have timer state');
-  }
-  return timers.runStepsAfterTimeout(
-    orderingIdentifier,
-    milliseconds,
-    completionSteps,
-  );
-}
-
+/** Timer state owned by a WindowOrWorkerGlobalScope mixin. */
 export class GlobalTimers {
   readonly #activeTimers = new Map<TimerKey, ActiveTimer>();
   readonly #eventLoop: EventLoop;
-  readonly #global: object;
   readonly #host: TimerHost;
   readonly #idMap = new Map<number, TimerKey>();
+  readonly #queueTask: GlobalTimersOptions['queueTask'];
   readonly #time: HighResolutionTimeSource;
   #fullyActive = false;
   #nextId = 1;
@@ -43,10 +19,9 @@ export class GlobalTimers {
 
   constructor(options: GlobalTimersOptions) {
     this.#eventLoop = options.eventLoop;
-    this.#global = options.global;
     this.#host = options.host ?? nodeTimerHost;
+    this.#queueTask = options.queueTask;
     this.#time = options.time;
-    timersByGlobal.set(options.global, this);
   }
 
   setAssociatedDocument(document: DocumentImpl): void {
@@ -59,6 +34,7 @@ export class GlobalTimers {
     this.#setFullyActive(document.isFullyActive());
   }
 
+  /** HTML §8.7, run steps after a timeout, using this global's timer state. */
   runStepsAfterTimeout(
     orderingIdentifier: string,
     milliseconds: number,
@@ -155,12 +131,7 @@ export class GlobalTimers {
       'setTimeout/setInterval',
       timeout,
       () => {
-        queueGlobalTask(
-          timerTaskSource,
-          this.#global,
-          taskSteps,
-          { timerNestingLevel: nestingLevel },
-        );
+        this.#queueTask(taskSteps, { timerNestingLevel: nestingLevel });
       },
     );
     this.#idMap.set(id, uniqueHandle);
@@ -269,10 +240,10 @@ export type TimerHost = {
 };
 
 export type GlobalTimersOptions = {
-  readonly eventLoop: EventLoop;
-  readonly global: object;
-  readonly host?: TimerHost;
-  readonly time: HighResolutionTimeSource;
+  eventLoop: EventLoop;
+  queueTask: (steps: () => void, options: TaskCreationOptions) => void;
+  time: HighResolutionTimeSource;
+  host?: TimerHost;
 };
 
 export type TimerKey = symbol;
@@ -291,8 +262,6 @@ type ActiveTimer = {
   readonly sequence: number;
   suspensionStartTime: number | null;
 };
-
-const timersByGlobal = new WeakMap<object, GlobalTimers>();
 
 const nodeTimerHost: TimerHost = {
   scheduleTimeout(milliseconds, steps) {

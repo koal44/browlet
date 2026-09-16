@@ -39,6 +39,9 @@ Domain-local behavior still remains with its owning subsystem.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.
+- `fetch.ts` resolves an explicit global task destination to its existing Realm
+  and queues through that Realm, which can differ from the body owner's Realm.
+  It also realizes deserialized abort reasons at the destination binding boundary.
 - `xhr.ts` supplies the realm-sensitive File construction used by HTML's form
   entry algorithms when XHR's FormData entry-list operations invoke them.
 - `dom-exception.ts` connects Web IDL DOMException records to HTML structured

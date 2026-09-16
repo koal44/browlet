@@ -26,7 +26,7 @@ import {
   type StructuredSerializeMemory,
 } from './records';
 import { serializable } from './serializable';
-import { isTransferableDetached } from './transferable';
+import { DetachedTransferableStamper } from './transferable';
 
 /** HTML §2.7.4, StructuredSerialize. */
 export function structuredSerialize(
@@ -144,7 +144,7 @@ export function structuredSerializeInternal(
         serializable,
       );
       if (!steps) return throwDOMException('DataCloneError');
-      if (isTransferableDetached(record.implInst)) {
+      if (DetachedTransferableStamper.has(record.implInst)) {
         return throwDOMException('DataCloneError');
       }
       serialized = {

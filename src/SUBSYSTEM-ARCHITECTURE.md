@@ -48,9 +48,9 @@ Each identity carries its record directly, without a platform-object lookup
 map. Stamp lookup needs only the object. World APIs, receiver validation, and
 conversion boundaries enforce ownership when accepting an object.
 
-Infra's `Stamper` base supplies the constructor-return mechanism shared by
-Web IDL and JS Engine. Each concrete stamper owns its private fields and record
-types in its subsystem; Infra has no dependency on those records.
+Infra's `Stamper` base supplies the shared constructor-return mechanism. Each
+concrete stamper owns its private fields and record types in its subsystem;
+Infra has no dependency on those records.
 
 Binding's `PromiseProjectionStamper` attaches projection records to source
 promises without adding public properties. The records preserve author Promise
@@ -87,15 +87,22 @@ IDL. The `JSRealm` class exposes realm-owned globals, intrinsics, function and
 iterator-result creation, buffer allocation/transfer, Promise observation,
 and evaluation. It owns one backend context
 (a `node:vm` context or a native context supplied by the compatibility addon),
-while the private, isolate-scoped `JSRuntime` owns realm associations, the active
+while the private, isolate-scoped `JSRuntime` owns global-to-realm associations, the active
 evaluation realm, and the shared ambient queue. Its module exposes named operations.
+Each backend context's stable realm reference privately carries its `JSRealm`
+through `RealmStamper`; native lookup and host hooks read that stamp
+without a context registry, including after global-proxy detachment and reuse.
 [`NodeAPI`](./js-engine/node-addons.ts) loads and types the optional backend methods;
 the shared `addon` instance exposes typed calls and `getMethod(name)` for availability.
 Direct calls to unavailable add-on operations throw; runtime operations choose
 their documented stock-Node fallbacks before making those calls.
 Operations that do not use isolate state are implemented directly as module
-functions. Explicit host-object associations remain available;
-plain Node uses provisional prototype evidence when native lookup is absent. It also
+functions. The global association map covers VM globals and supplied global
+objects/global-this values, including reassigned WindowProxies. Ordinary objects
+use native creation contexts when available; plain Node stores known origins
+through `RealmStamper`, with provisional prototype and evaluation evidence for
+unrecognized values. These realm-lookup and allocation-recording functions are
+selected once at module initialization. The runtime also
 supplies `JSMicrotaskQueue` backends without owning their HTML
 lifecycle: each EventLoop asks the runtime factory for one queue and shares it
 with all Realms of its Agent. The factory selects an explicit queue under
@@ -195,7 +202,11 @@ it does not discover HTML collaborators from platform objects.
 This is a dependency layer, not a fourth platform-object identity. Web IDL
 extends the JavaScript realm contract with binding policy, and Browlet's HTML
 `Realm` subclasses `JSRealm` to add its Agent, environment settings object,
-callback lifecycle, and global task associations. The JS Engine project must
+callback lifecycle, and global task routing. Its `queueGlobalTask()` method
+uses those existing owner links and captures the associated Document at queueing.
+The global-scope mixin owns `GlobalTimers`; environment setup supplies task
+delivery, and AbortSignal's declaration supplies its timeout-scheduling dependency.
+The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
 Web IDL's `BindingContext<Realm>` preserves that concrete host type through
@@ -294,6 +305,8 @@ identity; no separate structured-data environment duplicates that ownership.
 Serializable capabilities operate on implementation instances. Their attached
 binding records supply interface dispatch before or after platform projection;
 serialization itself does not require a source platform object.
+HTML's transferable module owns the private `[[Detached]]` marker on the
+implementation instance; it is independent of Web IDL's platform record.
 
 The exact TypeScript shape may evolve. The important property is its identity:
 one shared context describes one binding realm. Several Binding Contexts can

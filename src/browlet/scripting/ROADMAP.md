@@ -25,8 +25,12 @@
   Generic jobs use the JavaScript engine task source; timeout jobs reach that
   source through the global's fully-active-time timer steps.
   Active-script records/restoration remain part of the classic-script slice.
-- `tasks.ts`: explicit global-task routing and the five generic task-source
-  identities from HTML §8.1.7.4; each event loop owns their queue associations.
+- `tasks.ts`: the five generic task-source identities from HTML §8.1.7.4;
+  each event loop owns their queue associations. `Realm.queueGlobalTask()`
+  derives the destination from its Agent and current associated Document.
+- `timers.ts`: `GlobalTimers`, owned directly by the global-scope mixin,
+  supplies ordered active-time timeouts and Window function timers. Environment
+  setup supplies its timer-task delivery callback for that Realm.
 - `rendering-opportunity.ts`: the independently driven Window rendering
   producer, rendering task source, document filtering seams, and spec-ordered
   update pipeline.

@@ -359,18 +359,20 @@ has not been benchmarked.
   not required for separate features or upstream commits.
 - test/: standalone behavior and GC regressions plus a quick startup check.
 - ../scripts/build-node.mjs: verified dependency preparation and addon compilation.
-- experimental/: an ignored, independent Git repository for investigation.
+- experimental/: an independent local Git repository for Node/V8 and Browlet
+  investigations. Source and findings are committed there, separately from
+  Browlet. Like Scratch, its exclusion belongs in the developer's global Git
+  ignore file (`core.excludesFile`), as `/node-compat/experimental/`, rather
+  than Browlet's tracked `.gitignore`. See its README for the investigation index.
 - .cache/node-v24.19.0/: Node 24 headers, Release/node.lib and node.exe.
 - .cache/node-v26.8.1/: Node 26 headers, Release/node.lib and node.exe.
   These are replaceable dependencies prepared by `build:node`,
   not Node source checkouts. Download archives and duplicate libraries are
   discarded after preparation.
-- results/: ignored logs and JSON reports, grouped under addon/,
-  node-promise-hooks/, supported-global/ and node-version-check/. The last two
-  retain evidence from retired source copies; their useful implementation
-  changes are already in the maintained addon. These are disposable run outputs,
-  not build inputs. Keep raw failure logs while investigating an unresolved bug;
-  the maintained tests and experimental notes hold the lasting findings.
+- results/: disposable, ignored run output; never a build input. Stale logs,
+  reports, reference downloads, and temporary caches were cleared on 2026-09-16.
+  Keep raw failure logs while investigating an unresolved bug, then remove them
+  once the maintained tests or experimental notes preserve the useful findings.
 
 The original Promise investigation is now experimental/node-promise-hooks/.
 Its imported Git baseline is b1bcdfb. The older accumulated Node work is retained

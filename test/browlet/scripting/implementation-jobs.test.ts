@@ -12,7 +12,7 @@ import {
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
-import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scripting/tasks';
+import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import {
@@ -65,7 +65,7 @@ describe('implementation Promise delivery', () => {
         void readFile('package.json').then((bytes) => {
           expect(bytes.length).toBeGreaterThan(0);
           expect(unrelated.getStore()).toBe('backend library');
-          queueGlobalTask(networkingTaskSource, a.realm.globalObject, () => {
+          a.realm.queueGlobalTask(networkingTaskSource, () => {
             expect(unrelated.getStore()).toBe('backend library');
             trace.push('completion task');
             pending.resolve('done');

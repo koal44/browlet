@@ -593,12 +593,15 @@ describe('Browlet', () => {
     await expect(navigation).rejects.toMatchObject({ name: 'TypeError', message: 'distinctive failure' });
   });
 
-  it('reports inline script positions relative to the document source', async () => {
+  it.each([
+    { startTag: '<script>', line: 3 },
+    { startTag: '<script\n type="text/javascript"\n>', line: 5 },
+  ])('reports inline script positions relative to document line $line', async ({ startTag, line }) => {
     const stacks: string[] = [];
     const browlet = new Browlet({
       route: () => [
         '<main></main>',
-        '<script>',
+        startTag,
         'observe(new Error("location").stack);',
         '</script>',
       ].join('\n'),
@@ -607,6 +610,6 @@ describe('Browlet', () => {
     await browlet.exposeFunction('observe', (stack: unknown) => stacks.push(String(stack)));
     await browlet.navigate('https://example.test/page');
 
-    expect(stacks[0]).toContain('https://example.test/page:3');
+    expect(stacks[0]).toContain(`https://example.test/page:${line}`);
   });
 });

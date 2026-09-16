@@ -16,8 +16,7 @@ import {
 import { structuredDeserialize } from './deserialize';
 import { structuredSerializeInternal } from './serialize';
 import {
-  isTransferableDetached, markTransferableDetached, transferable,
-  type TransferableSteps,
+  DetachedTransferableStamper, transferable, type TransferableSteps,
 } from './transferable';
 
 /** HTML §2.7.7, StructuredSerializeWithTransfer. */
@@ -131,12 +130,12 @@ function performTransfer(
     };
   }
 
-  if (isTransferableDetached(prepared.implInst)) {
+  if (DetachedTransferableStamper.has(prepared.implInst)) {
     return throwDOMException('DataCloneError');
   }
   const fields = createStructuredDataRecord();
   prepared.steps.transferSteps(prepared.implInst, fields);
-  markTransferableDetached(prepared.implInst);
+  DetachedTransferableStamper.stamp(prepared.implInst);
   return {
     type: 'platform-object',
     placeholder: prepared.placeholder,

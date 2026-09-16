@@ -9,6 +9,7 @@ import { parseURL, type URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { WindowOrWorkerGlobalScopeMixin, type StructuredCloneSteps } from './global-scope';
+import { timerTaskSource } from './timers';
 
 /*
  * An environment carries navigation/client state before a realm, global
@@ -154,7 +155,7 @@ export function setupWindowEnvironmentSettingsObject(
   window.setWindowOrWorkerGlobalScopeMixin(
     new WindowOrWorkerGlobalScopeMixin({
       eventLoop: realm.agent.eventLoop,
-      global: realm.global,
+      queueTimerTask: (steps, options) => realm.queueGlobalTask(timerTaskSource, steps, options),
       structuredClone,
       timing: settings.timing,
     }),

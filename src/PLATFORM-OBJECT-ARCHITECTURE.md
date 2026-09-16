@@ -120,6 +120,18 @@ Frozen implementation instances and platform objects are supported. A proxy crea
 by Binding carries its own stamp. Its target and an author-created proxy around
 it do not inherit that stamp; recognition also works after proxy revocation.
 
+DOM's `AbortSignalRetentionStamper` attaches its strong retention set to each
+global object. For Window realms, the set stays on the per-realm Window object
+when navigation retargets the stable WindowProxy.
+
+JS Engine's `RealmStamper` attaches each `JSRealm` to its stable backend
+realm reference. That reference retains its stamp when the native global proxy
+is detached or reused; the proxy itself is not a stable private-state carrier.
+Without native realm lookup, the same stamper retains known origins on ordinary
+objects. With native lookup those object stamps are unnecessary. VM globals and
+supplied global objects/global-this values remain in `JSRuntime.#globalRealms`,
+which can update a reused global proxy's associated realm.
+
 Synchronous pair iterators also carry private binding state on the iterator
 object itself: target, interface, kind, and index. Borrowed `next()` methods
 read that same state across realms, checking world membership through the
@@ -343,12 +355,12 @@ duplicated it. Browlet therefore keeps:
   with platform-object lookup scoped to the main `BindingWorld` owned by the
   Browlet composition root.
 
-The lower [`js-engine/`](./js-engine/README.md) project separately maps native
-Node/V8 contexts to realms, with explicit host-object associations and a
-prototype-based fallback when the addon is absent. `JSRuntime`
-owns those isolate-scoped engine facts; `BindingWorld` owns Web IDL
-implementation/platform identity. Neither map is Agent- or AgentCluster-owned,
-and their different keys and responsibilities are not a reason to merge them.
+The lower [`js-engine/`](./js-engine/README.md) project separately associates
+Node/V8 contexts and objects with realms, using native creation contexts,
+private realm stamps, and a globals-only map. `JSRuntime` owns the isolate-scoped
+global lookup; `BindingWorld` owns Web IDL implementation/platform identity.
+Neither association is Agent- or AgentCluster-owned, and their different keys
+and responsibilities are not a reason to merge them.
 
 Reopen the number of binding worlds only when Browlet gains a concrete isolated
 world, a separate runtime/VM, or another embedding boundary which intentionally
@@ -479,6 +491,9 @@ identity, including before projection. Structured serialization uses its
 implementation and interface without allocating a platform object. Serialization
 memory and transfer placeholders use the implementation instance as their key,
 so internal references and author-visible references retain one cloned identity.
+HTML's `DetachedTransferableStamper` stores `[[Detached]]` privately on that
+instance after successful transfer steps. The source stays detached across
+realms; receiving creates a different, undetached instance.
 
 ### Return projection
 
@@ -796,8 +811,9 @@ callback lifecycle work.
 
 `createWindowRealm()` in Browlet's composition root combines that allocation
 with the Window binding. A browsing context receives its proxy once the initial realm exists;
-later realms reuse that identity. Internal task scheduling retains the Window
-implementation's task destination as well as the author-facing objects' associations.
+later realms reuse that identity. Internal task scheduling uses the owning
+Realm's Agent and Window directly. Retained callbacks for an old Window keep
+that destination after WindowProxy is retargeted.
 The Node 24 API dependency and remaining limitations are described in
 [`node-compat/README.md`](../node-compat/README.md#native-global-integration).
 Cross-origin access checks and history traversal remain separate work.

@@ -159,6 +159,7 @@ describe('JavaScript Realm', () => {
     const realm = new JSRealm();
     for (const source of [
       'Object.create(null)',
+      'Object.freeze(Object.create(null))',
       'Object.setPrototypeOf(function () {}, null)',
       'new Proxy(function () {}, { getPrototypeOf() { throw new Error("hidden"); } })',
     ]) {
@@ -197,6 +198,31 @@ describe('JavaScript Realm', () => {
     expect(result).toEqual({ value: 'value', done: false });
     expect(Reflect.getPrototypeOf(result))
       .toBe(realm.intrinsics.objectPrototype);
+  });
+
+  it('keeps allocation ownership across foreign prototypes and repeated evaluation', () => {
+    const first = new JSRealm();
+    const second = new JSRealm();
+    const callable = first.createFunction(() => undefined, { length: 0, name: 'retained' });
+    Object.setPrototypeOf(callable, null);
+
+    for (const value of [
+      first.createOrdinaryObject(second.intrinsics.objectPrototype),
+      first.createOrdinaryObject(null),
+      callable,
+    ]) {
+      const keys = Reflect.ownKeys(value);
+      const prototype = Object.getPrototypeOf(value) as object | null;
+      Object.freeze(value);
+      Reflect.set(second.global, 'foreignValue', value);
+
+      expect(getAssociatedRealm(value)).toBe(first);
+      expect(second.evaluate('foreignValue', 'foreign-allocation.js')).toBe(value);
+      expect(second.evaluate('foreignValue', 'foreign-allocation-again.js')).toBe(value);
+      expect(getAssociatedRealm(value)).toBe(first);
+      expect(Reflect.ownKeys(value)).toEqual(keys);
+      expect(Object.getPrototypeOf(value)).toBe(prototype);
+    }
   });
 });
 

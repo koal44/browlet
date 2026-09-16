@@ -4,7 +4,7 @@ import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
-import { networkingTaskSource, queueGlobalTask } from '../../../src/browlet/scripting/tasks';
+import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 
 describe('HTML Promise jobs', () => {
   it.each(['fulfill', 'reject'] as const)('continues when Node delivers Promise settlement through an HTML task (%s)', async (settlement) => {
@@ -14,7 +14,7 @@ describe('HTML Promise jobs', () => {
     await browlet.exposeFunction('host', () => ({
       then(resolve: (value: string) => void, reject: (reason: string) => void) {
         observations.push('thenable');
-        queueGlobalTask(networkingTaskSource, realm.globalObject, () => {
+        realm.queueGlobalTask(networkingTaskSource, () => {
           observations.push('task');
           if (settlement === 'fulfill') resolve('fulfilled');
           else reject('rejected');

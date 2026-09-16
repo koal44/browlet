@@ -59,7 +59,11 @@ post-creation immutable-prototype operation.
 
 `setHostHooks()` adapts the make/call and three enqueue hooks
 to known `JSRealm` identities. Context-handle references keep successive
-realms distinct even when their WindowProxy is reused. The Promise enqueue adapter also
+realms distinct even when their WindowProxy is reused. `RealmStamper`
+privately attaches the `JSRealm` to each backend realm reference; native lookup
+and host hooks read it directly. The reference is an ordinary object distinct
+from the reusable global proxy, so detachment and reuse preserve its state.
+The Promise enqueue adapter also
 identifies the realm owning the job's queue, which can differ from the null
 specification realm of a handlerless reaction. HTML owns the settings and task
 policy. Returning false from Promise enqueue retains its native V8 queue;
@@ -124,7 +128,7 @@ that operation independently of Web IDL records and conversion policy.
 
 The engine's realm and isolate state are backed by Node and the optional addon:
 
-- The private [`JSRuntime`](./runtime.ts) owns object-to-realm associations,
+- The private [`JSRuntime`](./runtime.ts) owns global-to-realm associations,
   the active evaluation realm, and the shared ambient queue. Its module exposes
   named operations and defines host hooks, job records, and the microtask-queue
   contract;
@@ -186,15 +190,27 @@ the same `writeUTF8Into` operation; both report consumed UTF-16 code units and
 written bytes. No addon is required. Remove the probe and scalar fallback when
 every supported Node build contains both corrections.
 
-With the addon, function lookup uses V8's public proxy-target, bound-target, and
-creation-context APIs without invoking author traps. Other objects use explicit
-host associations or V8's creation context. Evaluating a foreign value does not
-change its ownership.
+Realm lookup and allocation recording select their native or fallback functions
+once when the runtime module loads. With native lookup, functions use V8's public
+proxy-target, bound-target, and creation-context APIs without invoking author
+traps. Ordinary objects use V8's creation context and need neither map entries nor
+stamps. Evaluating a foreign value does not change its ownership.
 
-Without the addon, `node-v8-object-realms` follows prototype chains and falls
-back to an active `JSRealm.evaluate()` call when inspection fails. It retains
-the first evaluation association for returned values, including null-prototype
-objects, without overwriting known origins or inspecting author properties.
+`JSRuntime.#globalRealms` holds only the VM global and the supplied global object
+and global-this value. Browlet supplies its projected Window and WindowProxy;
+the plain-Node WindowProxy is created by host code, so its assigned realm differs
+from its native creation realm. The map also preserves a detached native global
+proxy's last realm until replacement construction associates it with the new
+realm. Native creation-context lookup rejects that proxy while it is detached,
+and its private fields do not survive reuse. This reverse lookup belongs to the
+runtime because its callers have a global object without knowing its realm yet.
+
+Without native lookup, `RealmStamper` attaches the realm to ordinary allocations
+and intrinsic prototypes. `node-v8-object-realms` follows prototype chains and
+falls back to an active `JSRealm.evaluate()` call when inspection fails. It stamps
+the first evaluation association onto returned values, including frozen and
+null-prototype objects, without overwriting known origins or inspecting author
+properties. Repeated lookup reads the stamp directly; globals stay in their map.
 These are incomplete clues: an unseen foreign result can still be assigned to
 the returning realm, and hidden bound/proxy targets cannot be inspected. The
 constructor-realm regressions expect failure when native function-realm lookup

@@ -8,11 +8,11 @@ import {
 import { Promises } from './promises';
 import { isObject } from './abstract-operations';
 import {
-  associateContext, associateRealm, createCollectionIterator, createContext,
-  createMicrotaskQueue, detachContext, getAllocatedGlobalObject, getContextGlobal,
-  getContextPrototypeChain, makePrototypeImmutable,
-  observePromise, runInContext, runWithActiveRealm, setGlobalObject,
-  setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
+  associateContext, associateGlobalRealm, associateObjectRealm,
+  createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
+  getAllocatedGlobalObject, getContextGlobal, getContextPrototypeChain,
+  makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
+  setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
 } from './runtime';
 
 /*
@@ -241,10 +241,10 @@ export class JSRealm {
     ) as RealmFunctionFactory;
 
     associateContext(this.#context, this);
-    associateRealm(this.#hostGlobal, this);
-    associateRealm(this.intrinsics.functionPrototype, this);
-    associateRealm(this.intrinsics.objectPrototype, this);
-    associateRealm(
+    associateGlobalRealm(this.#hostGlobal, this);
+    associateObjectRealm(this.intrinsics.functionPrototype, this);
+    associateObjectRealm(this.intrinsics.objectPrototype, this);
+    associateObjectRealm(
       this.intrinsics.iteration.asyncIteratorPrototype,
       this,
     );
@@ -293,7 +293,7 @@ export class JSRealm {
         value: options.name,
       },
     });
-    associateRealm(function_, this);
+    associateObjectRealm(function_, this);
     return function_;
   }
 
@@ -302,7 +302,7 @@ export class JSRealm {
     if (!Reflect.setPrototypeOf(object, prototype)) {
       throw new Error('Could not set an ordinary object prototype');
     }
-    associateRealm(object, this);
+    associateObjectRealm(object, this);
     return object;
   }
 
@@ -520,8 +520,8 @@ export class JSRealm {
       value: globalThis,
       writable: true,
     });
-    associateRealm(globalObject, this);
-    associateRealm(globalThis, this);
+    associateGlobalRealm(globalObject, this);
+    associateGlobalRealm(globalThis, this);
   }
 
   protected makeHostGlobalPrototypeImmutable(): void {

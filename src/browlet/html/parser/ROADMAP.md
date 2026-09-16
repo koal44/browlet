@@ -5,6 +5,10 @@
 - `parse.ts` is the synchronous parse convenience over an existing or newly
   constructed Browlet Document.
 - `tree-adapter.ts` maps parse5 tree operations to Browlet DOM algorithms.
+  Its private source-location stamp keeps optional parser metadata on each
+  `NodeImpl`, with parse5 types confined to the parser module. The streaming
+  parser enables these locations; Browlet reads script start-tag positions
+  to preserve document-relative line numbers in inline-script stack traces.
 - `document-parser.ts` enters and resumes parsing through HTML networking tasks.
   It retains the supplied EventLoop and Runtime Context; stylesheet waits and
   script-handler completion use `PromiseValue`. Node's stream-finished callback

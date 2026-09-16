@@ -1,4 +1,5 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
+import { Stamper } from '../../../infra/stamper';
 import type { AttrImpl } from '../../dom/nodes/attribute';
 import type { CommentImpl } from '../../dom/nodes/comment';
 import { DocumentMode, type DocumentImpl } from '../../dom/nodes/document';
@@ -251,7 +252,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     node: NodeImpl,
     location: Token.ElementLocation | null,
   ): void {
-    sourceCodeLocations.set(node, location);
+    SourceCodeLocationStamper.stamp(node, location);
   }
 
   getNodeSourceCodeLocation(
@@ -282,7 +283,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
 export function getSourceCodeLocation(
   node: NodeImpl,
 ): Token.ElementLocation | undefined | null {
-  return sourceCodeLocations.get(node);
+  return SourceCodeLocationStamper.get(node);
 }
 
 export type HTMLTreeAdapterMap = {
@@ -298,10 +299,27 @@ export type HTMLTreeAdapterMap = {
   documentType: DocumentTypeImpl;
 };
 
-const sourceCodeLocations = new WeakMap<
-  NodeImpl,
-  Token.ElementLocation | null
->();
+class SourceCodeLocationStamper extends Stamper {
+  #location: Token.ElementLocation | null;
+
+  private constructor(node: NodeImpl, location: Token.ElementLocation | null) {
+    super(node);
+    this.#location = location;
+  }
+
+  static stamp<T extends NodeImpl>(
+    node: T,
+    location: Token.ElementLocation | null,
+  ): T & SourceCodeLocationStamper {
+    if (#location in node) node.#location = location;
+    else new SourceCodeLocationStamper(node, location);
+    return node as T & SourceCodeLocationStamper;
+  }
+
+  static get(node: NodeImpl): Token.ElementLocation | undefined | null {
+    return #location in node ? node.#location : undefined;
+  }
+}
 
 function notImplemented(operation: string): never {
   throw new Error(`Parser tree adapter ${operation} is not implemented`);
