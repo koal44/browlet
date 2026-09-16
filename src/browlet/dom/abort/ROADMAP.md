@@ -44,13 +44,14 @@ behavior into this directory.
 
 ## HTML-owned pieces
 
-`AbortSignal.timeout(milliseconds)` now creates the signal in the binding
-realm and calls the HTML-owned "run steps after a timeout" and "queue a global
-task" algorithms with the relevant global and timer task source. HTML §8.1.7
-supplies the global-task destination and event-loop queue, while §8.7 supplies
-the per-global ordered timer map, fully-active-time suspension, host wake-up,
-and production loop startup. A direct Node `setTimeout()` is not used for the
-observable lifecycle. The scheduled completion closure captures the signal,
+`AbortSignal.timeout(milliseconds)` creates the signal in the binding realm.
+Its declaration supplies a timeout-scheduling callback composed from that
+Window's `GlobalTimers.runStepsAfterTimeout()` and `Realm.queueGlobalTask()`
+on the timer task source. The implementation aborts the signal when that task
+runs. HTML §8.1.7 owns task delivery; §8.7 owns the per-global ordered timer
+map, fully-active-time suspension, and host wake-up. The callback retains the
+original Window's timer owner when navigation retargets WindowProxy.
+The scheduled completion closure captures the signal,
 so the global-owned timer entry also supplies the required strong reachability
 while delivery is pending.
 
@@ -64,11 +65,14 @@ beforeunload handlers remain later HTML §8.1.8 work, not DOM §3 prerequisites.
 ## Retention
 
 Source-to-dependent relationships use an ordered weak-reference collection.
-A realm-partitioned retention registry keeps a live, non-aborted dependent
-signal strongly reachable while it has source signals and an abort listener or
-abort algorithm, then releases it when that condition ends. Node does not
-provide a deterministic observable GC test, so the implementation preserves
-the topology without adding a flaky collection test.
+Each signal owns one WeakRef shared by these collections and its abort-algorithm
+handles. `AbortSignalRetentionStamper` privately attaches a strong retention
+set to each global object. For a Window, the set stays with the per-realm
+Window object across WindowProxy retargeting. It keeps a live, non-aborted
+dependent signal strongly reachable while it has source signals and an abort
+listener or abort algorithm, then releases it when that condition ends. Node
+does not provide a deterministic observable GC test, so the implementation
+preserves the topology without adding a flaky collection test.
 
 DOM §3.3 (`#abortcontroller-api-integration`) supplies the contract by which
 Fetch, streams, and other hosts register abort algorithms. Do not put those

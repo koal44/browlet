@@ -11,7 +11,6 @@ import { structuredDeserialize } from '../scripting/structured-data/deserialize'
 import type { SerializedRecord } from '../scripting/structured-data/records';
 import { structuredSerialize } from '../scripting/structured-data/serialize';
 import { structuredClone } from '../scripting/structured-data/structured-clone';
-import { queueGlobalTask } from '../scripting/tasks';
 import { fetchTaskScheduling } from './fetch';
 import { runInParallel } from './scripting';
 
@@ -28,7 +27,7 @@ export function createWindowRuntime(
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     fileReading: {
-      queueTask: (steps) => queueGlobalTask(fileReadingTaskSource, realm.global, steps),
+      queueTask: (steps) => realm.queueGlobalTask(fileReadingTaskSource, steps),
       runInParallel,
     },
     networking: fetchTaskScheduling,

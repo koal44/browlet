@@ -1,14 +1,15 @@
+import { Stamper } from '../../../infra/stamper';
 import {
   arg, atArg, defineInterface, idlType, op, staticOp, roAttr, reference,
   sequence, invokeWith, xattr,
   impl,
   createDOMException, DOMExceptionNames, type DOMExceptionName,
 } from '../../../web-idl/index';
-import { queueGlobalTask } from '../../scripting/tasks';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
-import { runStepsAfterTimeout, timerTaskSource } from '../../scripting/timers';
+import { timerTaskSource } from '../../scripting/timers';
+import type { Realm } from '../../scripting/realm';
 import {
   EventTargetImpl, type EventTargetVirtuals, fireEvent,
 } from '../events/event-target';
@@ -42,13 +43,20 @@ export class AbortSignalImpl extends EventTargetImpl
   }]);
   readonly #global: object;
   #reason: unknown = undefined;
-  readonly #retention: AbortSignalRetention;
+  // A shared WeakRef lets every source/dependent set deduplicate by identity.
+  #reference = new WeakRef(this);
+  #retainedSignals: Set<AbortSignalImpl>;
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
   constructor(global: object) {
     super(abortSignalEventTargetVirtuals);
     this.#global = global;
-    this.#retention = getAbortSignalRetention(global);
+    let retainedSignals = AbortSignalRetentionStamper.get(global);
+    if (!retainedSignals) {
+      retainedSignals = new Set<AbortSignalImpl>();
+      AbortSignalRetentionStamper.stamp(global, retainedSignals);
+    }
+    this.#retainedSignals = retainedSignals;
   }
 
   // Binding supplies each static factory with a fresh signal in its realm.
@@ -65,18 +73,11 @@ export class AbortSignalImpl extends EventTargetImpl
   static timeout(
     signal: AbortSignalImpl,
     milliseconds: number,
+    queueTimeoutTask: (milliseconds: number, steps: () => void) => void,
   ): AbortSignalImpl {
-    runStepsAfterTimeout(
-      signal.#global,
-      'AbortSignal-timeout',
+    queueTimeoutTask(
       milliseconds,
-      () => {
-        queueGlobalTask(
-          timerTaskSource,
-          signal.#global,
-          () => signal.signalAbort(signal.#createException(DOMExceptionNames.timeout)),
-        );
-      },
+      () => signal.signalAbort(signal.#createException(DOMExceptionNames.timeout)),
     );
     return signal;
   }
@@ -116,7 +117,7 @@ export class AbortSignalImpl extends EventTargetImpl
   ): AbortAlgorithmHandle | null {
     if (this.aborted) return null;
 
-    const handle = new AbortAlgorithmHandleImpl(this, algorithm);
+    const handle = new AbortAlgorithmHandleImpl(this.#reference, algorithm);
     this.#abortAlgorithms.add(handle);
     this.updateRetention();
     return handle;
@@ -130,7 +131,8 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   updateRetention(): void {
-    this.#retention.update(this, this.#shouldRetain());
+    if (this.#shouldRetain()) this.#retainedSignals.add(this);
+    else this.#retainedSignals.delete(this);
   }
 
   signalAbort(reason: unknown = undefined): void {
@@ -189,8 +191,8 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   #dependOn(source: AbortSignalImpl): void {
-    this.#sourceSignals.add(source);
-    source.#dependentSignals.add(this);
+    this.#sourceSignals.add(source.#reference);
+    source.#dependentSignals.add(this.#reference);
   }
 
   #runAbortSteps(): void {
@@ -210,7 +212,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
   #settle(): void {
     for (const source of this.#sourceSignals.values()) {
-      source.#dependentSignals.delete(this);
+      source.#dependentSignals.delete(this.#reference);
     }
     this.#sourceSignals.clear();
     this.#dependentSignals.clear();
@@ -230,7 +232,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
 // -- Web IDL ------------------------------------------------------------
 
-export const abortSignalIDL = defineInterface({
+export const abortSignalIDL = defineInterface<Realm>({
   name: 'AbortSignal',
   inherits: 'EventTarget',
   exposed: '*',
@@ -248,7 +250,18 @@ export const abortSignalIDL = defineInterface({
     staticOp('timeout', reference('AbortSignal'),
       [arg('milliseconds', idlType.unsignedLongLong, xattr('EnforceRange'))],
       {
-        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
+        ...invokeWith(
+          atArg(0, (ctx) => ctx.construct(AbortSignalImpl)),
+          atArg(2, (ctx) => {
+            const { realm } = ctx;
+            const timers = realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin().timers;
+            return (milliseconds: number, steps: () => void) => {
+              timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
+                realm.queueGlobalTask(timerTaskSource, steps);
+              });
+            };
+          }),
+        ),
         ...xattr(['Exposed', ['Window', 'Worker']], 'NewObject'),
       },
     ),
@@ -271,9 +284,9 @@ class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
   #algorithm: (() => void) | null;
   #signal: WeakRef<AbortSignalImpl> | null;
 
-  constructor(signal: AbortSignalImpl, algorithm: () => void) {
+  constructor(signal: WeakRef<AbortSignalImpl>, algorithm: () => void) {
     this.#algorithm = algorithm;
-    this.#signal = new WeakRef(signal);
+    this.#signal = signal;
   }
 
   remove(): void {
@@ -292,40 +305,41 @@ class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
   }
 }
 
-class AbortSignalRetention
-{
-  #signals = new Set<AbortSignalImpl>();
+class AbortSignalRetentionStamper extends Stamper {
+  #signals: Set<AbortSignalImpl>;
 
-  update(signal: AbortSignalImpl, retain: boolean): void {
-    if (retain) this.#signals.add(signal);
-    else this.#signals.delete(signal);
+  private constructor(global: object, signals: Set<AbortSignalImpl>) {
+    super(global);
+    this.#signals = signals;
+  }
+
+  static stamp<T extends object>(
+    global: T,
+    signals: Set<AbortSignalImpl>,
+  ): T & AbortSignalRetentionStamper {
+    new AbortSignalRetentionStamper(global, signals);
+    return global as T & AbortSignalRetentionStamper;
+  }
+
+  static get(global: object): Set<AbortSignalImpl> | undefined {
+    return #signals in global ? global.#signals : undefined;
   }
 }
 
 class WeakOrderedSet<T extends object>
 {
   #references = new Set<WeakRef<T>>();
-  #referencesByValue = new WeakMap<T, WeakRef<T>>();
 
-  add(value: T): void {
-    if (this.#referencesByValue.has(value)) return;
-
-    const reference = new WeakRef(value);
+  add(reference: WeakRef<T>): void {
     this.#references.add(reference);
-    this.#referencesByValue.set(value, reference);
   }
 
   clear(): void {
     this.#references.clear();
-    this.#referencesByValue = new WeakMap();
   }
 
-  delete(value: T): void {
-    const reference = this.#referencesByValue.get(value);
-    if (!reference) return;
-
+  delete(reference: WeakRef<T>): void {
     this.#references.delete(reference);
-    this.#referencesByValue.delete(value);
   }
 
   hasValue(): boolean {
@@ -340,19 +354,6 @@ class WeakOrderedSet<T extends object>
       else this.#references.delete(reference);
     }
   }
-}
-
-const abortSignalRetentions = new WeakMap<object, AbortSignalRetention>();
-
-function getAbortSignalRetention(
-  global: object,
-): AbortSignalRetention {
-  let retention = abortSignalRetentions.get(global);
-  if (!retention) {
-    retention = new AbortSignalRetention();
-    abortSignalRetentions.set(global, retention);
-  }
-  return retention;
 }
 
 const abortSignalEventTargetVirtuals: EventTargetVirtuals = {

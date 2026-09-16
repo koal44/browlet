@@ -13,10 +13,8 @@ import {
   EventLoop, type EventLoopOptions,
 } from '../../../src/browlet/scripting/event-loop';
 import {
-  GlobalTimers, type TimerHost,
+  GlobalTimers, timerTaskSource, type TimerHost,
 } from '../../../src/browlet/scripting/timers';
-import { associateGlobalTaskDestination } from
-  '../../../src/browlet/scripting/tasks';
 
 describe('HTML timers', () => {
   it('counts only fully-active time before completing a timeout', () => {
@@ -116,23 +114,17 @@ function createTimerFixture() {
 
   const eventLoop = new EventLoop(createEventLoopOptions()
     .createMicrotaskQueue());
-  const global = {};
   const host = new ManualTimerHost();
   const timers = new GlobalTimers({
     eventLoop,
-    global,
+    queueTask: (steps, options) => { eventLoop.queueTask(timerTaskSource, document, steps, options); },
     host,
     time: {
       currentHighResolutionTime: () => new Duration(host.now),
     },
   });
   timers.setAssociatedDocument(document);
-  associateGlobalTaskDestination(global, {
-    eventLoop,
-    getDocument: () => document,
-  });
-
-  return { eventLoop, global, host, timers, traversable };
+  return { eventLoop, host, timers, traversable };
 }
 
 function runNextTask(eventLoop: EventLoop): void {

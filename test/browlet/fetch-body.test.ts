@@ -9,6 +9,10 @@ import {
 import { createFetchWindow } from './fetch-fixture';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
 import { ReadableStreamImpl } from '../../src/streams/index';
+import { Browlet } from '../../src/browlet/browlet';
+import { getRelevantRealm } from '../../src/browlet/bindings';
+import { queueGlobalFetchTask } from '../../src/browlet/integration/fetch';
+import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 
 describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
@@ -51,6 +55,29 @@ describe('Fetch body delivery through HTML', () => {
     fixture.runTask();
     expect(process).toHaveBeenCalledExactlyOnceWith(Uint8Array.of(1, 2));
     expect(error).not.toHaveBeenCalled();
+  });
+
+  it('keeps old Window destinations separate from the retargeted WindowProxy', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const proxy = browlet.window;
+    const firstRealm = getRelevantRealm(proxy);
+    const firstDocument = firstRealm.getAssociatedDocument();
+
+    await browlet.navigate('https://example.test/');
+
+    const secondRealm = getRelevantRealm(proxy);
+    expect(browlet.window).toBe(proxy);
+    expect(secondRealm).not.toBe(firstRealm);
+    const firstTasks = firstRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
+    const secondTasks = secondRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
+    const previousTasks = new Set([...firstTasks, ...secondTasks]);
+    queueGlobalFetchTask(firstRealm.global, vi.fn());
+    queueGlobalFetchTask(proxy, vi.fn());
+
+    const documents = [...new Set([...firstTasks, ...secondTasks])]
+      .filter((task) => !previousTasks.has(task))
+      .map((task) => task.document);
+    expect(documents).toEqual([firstDocument, secondRealm.getAssociatedDocument()]);
   });
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {

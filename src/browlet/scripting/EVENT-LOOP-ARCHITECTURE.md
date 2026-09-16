@@ -107,6 +107,18 @@ The queuing wrappers are routing algorithms:
   to the global wrapper; and
 - low-level `queue a task` accepts the resolved event loop and document.
 
+Browlet implements the global operation as `Realm.queueGlobalTask()`. The
+Realm supplies its Agent's EventLoop and captures its Window's associated
+Document when queueing. Callers that already hold the Realm use it directly.
+Fetch's integration resolves its explicitly supplied global through the existing
+engine realm association; the body owner and task destination can differ.
+
+The Window's global-scope mixin owns `GlobalTimers`. Environment setup supplies
+timer-task delivery through the owning Realm. Engine timeout jobs use that
+timer owner directly; AbortSignal's declaration supplies a scheduling callback
+which combines the active-time wait with delivery on the timer task source.
+Retaining an old Window's callback retains that owner across navigation.
+
 The standard warns against relying on implied event loops and documents. In
 Browlet, a low-level queuing call should therefore require both values. The
 element wrapper waits for its first production caller and a cycle-safe way to

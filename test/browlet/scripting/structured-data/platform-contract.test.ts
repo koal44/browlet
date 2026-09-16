@@ -12,7 +12,7 @@ import {
   domExceptionCapabilities,
 } from '../../../../src/browlet/integration/dom-exception';
 import {
-  isTransferableDetached, markTransferableDetached, transferable,
+  DetachedTransferableStamper, transferable,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
   BindingWorld, defineInterface, xattr, type StampedPlatformObject,
@@ -177,14 +177,17 @@ describe('HTML structured-data platform contracts', () => {
       .not.toThrow();
   });
 
-  it('tracks transferable platform-object detached state independently', () => {
-    const first = {};
+  it('keeps detached state private and instance-specific on frozen implementations', () => {
+    const first = Object.freeze({});
     const second = {};
 
-    expect(isTransferableDetached(first)).toBe(false);
-    markTransferableDetached(first);
-    expect(isTransferableDetached(first)).toBe(true);
-    expect(isTransferableDetached(second)).toBe(false);
+    expect(DetachedTransferableStamper.has(first)).toBe(false);
+    DetachedTransferableStamper.stamp(first);
+    expect(DetachedTransferableStamper.has(first)).toBe(true);
+    expect(DetachedTransferableStamper.has(second)).toBe(false);
+    expect(() => DetachedTransferableStamper.stamp(first)).not.toThrow();
+    expect(Reflect.ownKeys(first)).toEqual([]);
+    expect(Object.getPrototypeOf(first)).toBe(Object.prototype);
   });
 });
 

@@ -1,18 +1,19 @@
 import {
-  JSRealm, getAssociatedRealm, type GlobalObject, type JSRealmOptions,
+  JSRealm, bindAsyncContext, getAssociatedRealm, type GlobalObject, type JSRealmOptions,
 } from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
-import { associateGlobalTaskDestination } from './tasks';
+import type { TaskCreationOptions, TaskSource } from './event-loop';
+import type { QueuedTaskHandle } from './tasks';
 import { WindowImpl } from '../browsing/window/window';
 import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
 
 /*
  * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
- * task associations. JSRealm supplies the lower JS Engine backend.
+ * task routing. JSRealm supplies the lower JS Engine backend.
  */
 export function createRealm(
   agent: Agent,
@@ -144,6 +145,18 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     // checks once Browlet has WindowProxy and Location security machinery.
   }
 
+  /** HTML §8.1.7.2, queue a global task, with this Realm supplying the global. */
+  queueGlobalTask(
+    source: TaskSource,
+    steps: () => void,
+    options: TaskCreationOptions = {},
+  ): QueuedTaskHandle {
+    const eventLoop = this.agent.eventLoop;
+    const document = this.#windowImplementation?.getAssociatedDocument() ?? null;
+    const task = eventLoop.queueTask(source, document, bindAsyncContext(steps), options);
+    return { remove: () => eventLoop.removeTask(task) };
+  }
+
   queueMicrotask(steps: () => void): void {
     const window = this.#windowImplementation;
     const document = window
@@ -191,24 +204,6 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     }
     if (!this.isGlobalPrototypeChainMutable) {
       this.makeHostGlobalPrototypeImmutable();
-    }
-    const taskDestination = {
-      eventLoop: this.agent.eventLoop,
-      getDocument: () => {
-        const window = this.#windowImplementation;
-        return window
-          ? window.getAssociatedDocument()
-          : null;
-      },
-    };
-    associateGlobalTaskDestination(
-      this.hostGlobal,
-      taskDestination,
-    );
-    associateGlobalTaskDestination(globalObject, taskDestination);
-    associateGlobalTaskDestination(globalThis, taskDestination);
-    if (windowImplementation) {
-      associateGlobalTaskDestination(windowImplementation, taskDestination);
     }
   }
 

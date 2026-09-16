@@ -12,7 +12,7 @@ import {
 } from '../../../src/browlet/scripting/event-loop';
 import {
   domManipulationTaskSource, navigationAndTraversalTaskSource, networkingTaskSource,
-  queueGlobalTask, renderingTaskSource, userInteractionTaskSource,
+  renderingTaskSource, userInteractionTaskSource,
 } from '../../../src/browlet/scripting/tasks';
 import {
   createNewTopLevelTraversable,
@@ -71,12 +71,13 @@ describe('task queues', () => {
     );
     const window = traversable.activeWindow;
     if (window === null) throw new Error('Expected an active Window');
+    const realm = getRelevantRealm(window);
     const first = vi.fn();
     const second = vi.fn();
     const source = createTaskSource('removable');
-    const firstTask = queueGlobalTask(source, window, first);
+    const firstTask = realm.queueGlobalTask(source, first);
 
-    queueGlobalTask(source, window, second);
+    realm.queueGlobalTask(source, second);
 
     expect(firstTask.remove()).toBe(true);
     expect(firstTask.remove()).toBe(false);
@@ -110,7 +111,7 @@ describe('task queues', () => {
     const unrelated = new AsyncLocalStorage<string>();
     const observed: (string | undefined)[] = [];
     unrelated.run('registration', () => {
-      queueGlobalTask(networkingTaskSource, realm.globalObject, () => {
+      realm.queueGlobalTask(networkingTaskSource, () => {
         observed.push(unrelated.getStore());
         void Promise.resolve().then(() => { observed.push(unrelated.getStore()); });
       });
@@ -383,7 +384,7 @@ describe('task queues', () => {
     }
     const source = createTaskSource('global');
 
-    queueGlobalTask(source, window, vi.fn());
+    getRelevantRealm(window).queueGlobalTask(source, vi.fn());
 
     const [task] = requireEventLoop(window).getTaskQueue(source);
     expect(task!.document).toBe(document);
@@ -408,6 +409,22 @@ describe('task queues', () => {
     realm.queueMicrotask(steps);
 
     expect(queueMicrotask).toHaveBeenCalledWith(steps, document);
+  });
+
+  it('captures each task Document when queued, even if the Window changes Documents', () => {
+    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const window = traversable.activeWindow!;
+    const realm = getRelevantRealm(window);
+    const firstDocument = window.getAssociatedDocument();
+    const replacement = new DocumentImpl();
+    const source = createTaskSource('document replacement');
+
+    realm.queueGlobalTask(source, vi.fn());
+    window.setAssociatedDocument(replacement);
+    realm.queueGlobalTask(source, vi.fn());
+
+    expect([...requireEventLoop(window).getTaskQueue(source)].map((task) => task.document))
+      .toEqual([firstDocument, replacement]);
   });
 
   it('identifies a microtask as the currently running task', () => {

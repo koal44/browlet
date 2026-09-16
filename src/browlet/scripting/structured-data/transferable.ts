@@ -1,3 +1,4 @@
+import { Stamper } from '../../../infra/stamper';
 import {
   defineCapability, type InterfaceDefinition,
 } from '../../../web-idl/index';
@@ -16,16 +17,22 @@ export type TransferableSteps = {
   ): void;
 };
 
-export function isTransferableDetached(value: object): boolean {
-  return detachedPlatformObjects.has(value);
-}
+/** HTML's [[Detached]] marker, carried by the transferred implementation instance. */
+export class DetachedTransferableStamper extends Stamper {
+  #detached: undefined;
 
-export function markTransferableDetached(value: object): void {
-  detachedPlatformObjects.add(value);
-}
+  private constructor(implInst: object) {
+    super(implInst);
+  }
 
-// HTML owns the platform object's [[Detached]] state; it is not Web IDL state.
-const detachedPlatformObjects = new WeakSet<object>();
+  static stamp(implInst: object): void {
+    if (!(#detached in implInst)) new DetachedTransferableStamper(implInst);
+  }
+
+  static has(implInst: object): boolean {
+    return #detached in implInst;
+  }
+}
 
 function requireTransferableMarker<Realm>(definition: InterfaceDefinition<Realm>): void {
   const markers = definition.extendedAttributes?.filter(

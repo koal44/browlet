@@ -1,5 +1,6 @@
 import * as vm from 'node:vm';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { Stamper } from '../infra/stamper';
 import { isObject } from './abstract-operations';
 import {
   addon, isAddonContextHandle, isAddonMicrotaskQueueHandle,
@@ -10,16 +11,23 @@ import type {
 } from './realm';
 import { TypeError } from './exceptions';
 
+const getNativeRealm = addon.getMethod('getRealm');
+
 export function createMicrotaskQueue(): JSMicrotaskQueue {
   return jsRuntime.createMicrotaskQueue();
 }
 
-export function associateRealm(value: object, realm: JSRealm): void {
-  jsRuntime.associateRealm(value, realm);
+export function associateGlobalRealm(global: object, realm: JSRealm): void {
+  jsRuntime.associateGlobalRealm(global, realm);
 }
 
+/** Native allocations already retain their creation context; only plain Node needs a stamp. */
+export const associateObjectRealm: (object: object, realm: JSRealm) => void = getNativeRealm
+  ? () => undefined
+  : (object, realm) => { RealmStamper.stamp(object, realm); };
+
 export function associateContext(context: NodeContext, realm: JSRealm): void {
-  jsRuntime.associateContext(context, realm);
+  if (isAddonContextHandle(context)) RealmStamper.stamp(context.realm, realm);
 }
 
 /** Retain the registration's host async context for a later task handoff. */
@@ -54,9 +62,28 @@ export function observePromise(
   }
 }
 
-export const setHostHooks = addon.getMethod('setHostHooks') && addon.getMethod('getRealm')
+export const setHostHooks = addon.getMethod('setHostHooks') && getNativeRealm
   ? <HostDefined>(hooks: JSHostHooks<HostDefined>): void => {
-    jsRuntime.setHostHooks(hooks);
+    addon.setHostHooks({
+      makeJobCallback: (callback, registration) => hooks.makeJobCallback(callback, {
+        incumbent: registration.incumbent === null ? null :
+          RealmStamper.get(registration.incumbent) ?? null,
+        hostDefinedOptions: registration.hostDefinedOptions,
+      }),
+      callJobCallback: hooks.callJobCallback,
+      enqueuePromiseJob: (job, realm) => {
+        // The job's creation context owns its queue, including handlerless jobs
+        // whose specification-supplied realm is null.
+        const queueRealm = getNativeRealm(job);
+        return hooks.enqueuePromiseJob(job,
+          realm === null ? null : RealmStamper.get(realm) ?? null,
+          RealmStamper.get(queueRealm) ?? null);
+      },
+      enqueueGenericJob: (job, realm) =>
+        hooks.enqueueGenericJob(job, RealmStamper.get(realm) ?? null),
+      enqueueTimeoutJob: (job, realm, milliseconds) =>
+        hooks.enqueueTimeoutJob(job, RealmStamper.get(realm) ?? null, milliseconds),
+    });
   }
   : undefined;
 
@@ -153,9 +180,10 @@ export function runInContext(
   return vm.runInContext(source, context, options) as unknown;
 }
 
-export function runWithActiveRealm<Result>(realm: JSRealm, steps: () => Result): Result {
-  return jsRuntime.runWithActiveRealm(realm, steps);
-}
+export const runWithActiveRealm = getNativeRealm
+  ? <Result>(_realm: JSRealm, steps: () => Result): Result => steps()
+  : <Result>(realm: JSRealm, steps: () => Result): Result =>
+    jsRuntime.runWithActiveRealm(realm, steps);
 
 /*
  * One module instance represents one Node/V8 isolate. Node workers load a
@@ -163,11 +191,12 @@ export function runWithActiveRealm<Result>(realm: JSRealm, steps: () => Result):
  * Only operations that use this state forward to the private instance below.
  */
 class JSRuntime {
-  // Explicit associations cover host-created objects. Plain Node additionally
-  // uses prototype evidence and the active evaluation when native lookup is absent.
+  getAssociatedRealm: (value: object) => JSRealm | undefined;
+
+  // Globals can have an assigned realm distinct from their creation context.
+  // Native global proxies also lose their private fields on detachment/reuse.
+  #globalRealms = new WeakMap<object, JSRealm>();
   #evaluatingRealm: JSRealm | undefined;
-  readonly #objectRealms = new WeakMap<object, JSRealm>();
-  readonly #contextRealms = new WeakMap<object, JSRealm>();
   #tickCallback: (() => void) | undefined;
 
   /*
@@ -183,6 +212,29 @@ class JSRuntime {
     performMicrotaskCheckpoint: () => { this.#getTickCallback()(); },
   };
 
+  constructor() {
+    const getObjectRealm = getNativeRealm
+      ? (value: object): JSRealm | undefined =>
+        this.#globalRealms.get(value) ?? RealmStamper.get(getNativeRealm(value))
+      : (value: object): JSRealm | undefined => this.#getFallbackRealm(value);
+    const getFunctionRealm = addon.getMethod('getFunctionRealm');
+
+    this.getAssociatedRealm = getFunctionRealm
+      ? (value) => {
+        if (typeof value !== 'function') return getObjectRealm(value);
+        try {
+          return RealmStamper.get(getFunctionRealm(value as JSFunction));
+        } catch (error) {
+          if (typeof error === 'object' && error !== null &&
+            Reflect.get(error, 'code') === 'ERR_REVOKED_PROXY') {
+            throw new TypeError('Cannot get the realm of a revoked proxy');
+          }
+          throw error;
+        }
+      }
+      : getObjectRealm;
+  }
+
   createMicrotaskQueue(): JSMicrotaskQueue {
     if (!addon.getMethod('createMicrotaskQueue')) {
       return this.#ambientMicrotaskQueue;
@@ -196,77 +248,8 @@ class JSRuntime {
     return new AddonMicrotaskQueue(handle);
   }
 
-  associateRealm(value: object, realm: JSRealm): void {
-    this.#objectRealms.set(value, realm);
-  }
-
-  associateContext(context: NodeContext, realm: JSRealm): void {
-    if (isAddonContextHandle(context)) this.#contextRealms.set(context.realm, realm);
-  }
-
-  setHostHooks<HostDefined>(hooks: JSHostHooks<HostDefined>): void {
-    if (!addon.getMethod('setHostHooks') || !addon.getMethod('getRealm')) {
-      throw new Error('Node does not support job host hooks');
-    }
-    addon.setHostHooks({
-      makeJobCallback: (callback, registration) => hooks.makeJobCallback(callback, {
-        incumbent: registration.incumbent === null ? null :
-          this.#contextRealms.get(registration.incumbent) ?? null,
-        hostDefinedOptions: registration.hostDefinedOptions,
-      }),
-      callJobCallback: hooks.callJobCallback,
-      enqueuePromiseJob: (job, realm) => {
-        // The job's creation context owns its queue, including handlerless jobs
-        // whose specification-supplied realm is null.
-        const queueRealm = addon.getRealm(job);
-        return hooks.enqueuePromiseJob(job,
-          realm === null ? null : this.#contextRealms.get(realm) ?? null,
-          this.#contextRealms.get(queueRealm) ?? null);
-      },
-      enqueueGenericJob: (job, realm) =>
-        hooks.enqueueGenericJob(job, this.#contextRealms.get(realm) ?? null),
-      enqueueTimeoutJob: (job, realm, milliseconds) =>
-        hooks.enqueueTimeoutJob(job, this.#contextRealms.get(realm) ?? null, milliseconds),
-    });
-  }
-
-  getAssociatedRealm(value: object): JSRealm | undefined {
-    if (typeof value === 'function' && addon.getMethod('getFunctionRealm')) {
-      try {
-        const reference = addon.getFunctionRealm(value as JSFunction);
-        return this.#contextRealms.get(reference);
-      } catch (error) {
-        if (typeof error === 'object' && error !== null &&
-          Reflect.get(error, 'code') === 'ERR_REVOKED_PROXY') {
-          throw new TypeError('Cannot get the realm of a revoked proxy');
-        }
-        throw error;
-      }
-    }
-
-    const associated = this.#objectRealms.get(value);
-    if (associated) return associated;
-    if (addon.getMethod('getRealm')) {
-      const reference = addon.getRealm(value);
-      return this.#contextRealms.get(reference);
-    }
-
-    // ACCOMMODATION(node-v8-object-realms): plain Node has no native realm lookup.
-    try {
-      let current: object | null = value;
-      while (current !== null) {
-        const associated = this.#objectRealms.get(current);
-        if (associated) {
-          this.#objectRealms.set(value, associated);
-          return associated;
-        }
-        current = Reflect.getPrototypeOf(current);
-      }
-    } catch {
-      // Proxies can prevent prototype inspection. The active evaluation is
-      // the only realm information Node exposes at this boundary.
-    }
-    return this.#evaluatingRealm;
+  associateGlobalRealm(global: object, realm: JSRealm): void {
+    this.#globalRealms.set(global, realm);
   }
 
   runWithActiveRealm<Result>(
@@ -280,14 +263,32 @@ class JSRuntime {
       // ACCOMMODATION(node-v8-object-realms): plain Node cannot inspect a
       // returned value's creation realm without author traps. Keep its first
       // evaluation association, without overwriting an already-known origin.
-      if (!addon.getMethod('getRealm') && isObject(result) &&
-        !this.#objectRealms.has(result)) {
-        this.#objectRealms.set(result, realm);
+      if (isObject(result) && !this.#globalRealms.has(result)) {
+        RealmStamper.stamp(result, realm);
       }
       return result;
     } finally {
       this.#evaluatingRealm = previous;
     }
+  }
+
+  #getFallbackRealm(value: object): JSRealm | undefined {
+    // ACCOMMODATION(node-v8-object-realms): plain Node has no native realm lookup.
+    try {
+      let current: object | null = value;
+      while (current !== null) {
+        const associated = this.#globalRealms.get(current) ?? RealmStamper.get(current);
+        if (associated) {
+          if (current !== value) RealmStamper.stamp(value, associated);
+          return associated;
+        }
+        current = Reflect.getPrototypeOf(current);
+      }
+    } catch {
+      // Proxies can prevent prototype inspection. The active evaluation is
+      // the only realm information Node exposes at this boundary.
+    }
+    return this.#evaluatingRealm;
   }
 
   #getTickCallback(): () => void {
@@ -356,6 +357,25 @@ export type JSMicrotaskQueue = {
 
 /** Opaque Node VM context or compatibility-addon context handle. */
 export type NodeContext = object;
+
+/** Attach a realm to its backend reference or, on plain Node, its ordinary objects. */
+class RealmStamper extends Stamper {
+  #realm: JSRealm;
+
+  private constructor(object: object, realm: JSRealm) {
+    super(object);
+    this.#realm = realm;
+  }
+
+  static stamp(object: object, realm: JSRealm): void {
+    // Repeated evaluation must preserve the first known origin.
+    if (!(#realm in object)) new RealmStamper(object, realm);
+  }
+
+  static get(object: object): JSRealm | undefined {
+    return #realm in object ? object.#realm : undefined;
+  }
+}
 
 class AddonMicrotaskQueue implements JSMicrotaskQueue {
   readonly kind = 'explicit';

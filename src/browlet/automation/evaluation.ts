@@ -2,7 +2,7 @@
 import { Script } from 'node:vm';
 import type { Realm } from '../scripting/realm';
 import { createTaskSource } from '../scripting/event-loop';
-import { queueGlobalTask, type QueuedTaskHandle } from '../scripting/tasks';
+import type { QueuedTaskHandle } from '../scripting/tasks';
 import { copyEvaluationValue } from './evaluation-value';
 
 /** One page execution context and its outstanding host commands. */
@@ -109,7 +109,7 @@ export class PageEvaluation {
   #enqueue(steps: () => void): void {
     if (this.#disposed) throw new Error('Evaluation context was destroyed by navigation');
     const realm = this.#realm;
-    const task = queueGlobalTask(evaluationTaskSource, realm.globalObject, () => {
+    const task = realm.queueGlobalTask(evaluationTaskSource, () => {
       this.#tasks.delete(task);
       realm.agent.eventLoop.runScriptEvaluation(realm.hostDefined!, steps);
     });

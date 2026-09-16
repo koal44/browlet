@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
 import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/high-resolution-time';
-import { networkingTaskSource, queueGlobalTask } from '../../../../src/browlet/scripting/tasks';
+import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createMicrotaskQueue } from '../../../../src/js-engine/index';
 
@@ -33,7 +33,7 @@ describe('BrowletParser', () => {
     expect(scripts).toBe(0);
     expect(document.getElementById('after')).toBeNull();
 
-    queueGlobalTask(networkingTaskSource, realm.global, () => {
+    realm.queueGlobalTask(networkingTaskSource, () => {
       document.removeScriptBlockingStyleSheet(blocker);
     });
     try {
@@ -83,14 +83,14 @@ describe('BrowletParser', () => {
 
       expect(scripts).toHaveLength(0);
 
-      queueGlobalTask(networkingTaskSource, realm.global, () => {
+      realm.queueGlobalTask(networkingTaskSource, () => {
         document.removeScriptBlockingStyleSheet(first);
       });
       await inNodeTask(drain);
 
       expect(scripts).toHaveLength(0);
     } finally {
-      queueGlobalTask(networkingTaskSource, realm.global, () => {
+      realm.queueGlobalTask(networkingTaskSource, () => {
         document.removeScriptBlockingStyleSheet(first);
         document.removeScriptBlockingStyleSheet(second);
       });
@@ -113,19 +113,19 @@ describe('BrowletParser', () => {
       .parse('<script></script>').observe(() => {}, (error) => { errors.push(error); });
     await inNodeTask(drain);
 
-    queueGlobalTask(networkingTaskSource, realm.global, () => {
+    realm.queueGlobalTask(networkingTaskSource, () => {
       document.removeScriptBlockingStyleSheet(first);
       if (!laterTask) document.addScriptBlockingStyleSheet(second);
     });
     if (laterTask) {
-      queueGlobalTask(networkingTaskSource, realm.global, () => {
+      realm.queueGlobalTask(networkingTaskSource, () => {
         document.addScriptBlockingStyleSheet(second);
       });
     }
     await inNodeTask(drain);
     expect(scripts).toBe(0);
 
-    queueGlobalTask(networkingTaskSource, realm.global, () => {
+    realm.queueGlobalTask(networkingTaskSource, () => {
       document.removeScriptBlockingStyleSheet(second);
     });
     await inNodeTask(drain);
@@ -162,7 +162,7 @@ describe('BrowletParser', () => {
     await inNodeTask(drain);
     expect(document.getElementById('after')).toBeNull();
 
-    queueGlobalTask(networkingTaskSource, realm.global, () => {
+    realm.queueGlobalTask(networkingTaskSource, () => {
       if (reject) ready.reject(failure);
       else ready.resolve(undefined);
     });

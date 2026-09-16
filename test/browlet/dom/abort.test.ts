@@ -312,6 +312,45 @@ describe('AbortController and AbortSignal', () => {
     expect(signal).not.toBeInstanceOf(SecondAbortSignal);
   });
 
+  it('creates dependent signals in both old and new globals after navigation', async () => {
+    const browlet = createBrowlet();
+    const FirstAbortController = requireInterface<typeof AbortController>(
+      browlet.window, 'AbortController',
+    );
+    const FirstAbortSignal = requireInterface<typeof AbortSignal>(
+      browlet.window, 'AbortSignal',
+    );
+    const firstController = new FirstAbortController();
+    const first = FirstAbortSignal.any([firstController.signal]);
+
+    await browlet.navigate('https://example.test/');
+
+    const SecondAbortController = requireInterface<typeof AbortController>(
+      browlet.window, 'AbortController',
+    );
+    const SecondAbortSignal = requireInterface<typeof AbortSignal>(
+      browlet.window, 'AbortSignal',
+    );
+    const secondController = new SecondAbortController();
+    const second = SecondAbortSignal.any([secondController.signal]);
+    const laterFirst = FirstAbortSignal.any([firstController.signal]);
+    const calls: string[] = [];
+    first.addEventListener('abort', () => { calls.push('first'); });
+    laterFirst.addEventListener('abort', () => { calls.push('later first'); });
+    second.addEventListener('abort', () => { calls.push('second'); });
+
+    firstController.abort('old global');
+    expect(calls).toEqual(['first', 'later first']);
+    expect(second.aborted).toBe(false);
+    secondController.abort('new global');
+    expect(calls).toEqual(['first', 'later first', 'second']);
+    expect(first.reason).toBe('old global');
+    expect(laterFirst.reason).toBe('old global');
+    expect(second.reason).toBe('new global');
+    expect(laterFirst).toBeInstanceOf(FirstAbortSignal);
+    expect(second).toBeInstanceOf(SecondAbortSignal);
+  });
+
   it('supports replacement and ordering for the onabort IDL handler', () => {
     const { window } = createBrowlet();
     const AbortController_ = requireInterface<typeof AbortController>(
@@ -403,9 +442,85 @@ describe('AbortController and AbortSignal', () => {
     expect(signal.reason).toBeInstanceOf(DOMException_);
     expect((signal.reason as DOMException).name).toBe('TimeoutError');
   });
+
+  it('keeps retained AbortSignal constructors on their inactive Window after navigation', async () => {
+    const browlet = createBrowlet();
+    const FirstAbortSignal = requireInterface<typeof AbortSignal>(browlet.window, 'AbortSignal');
+    await browlet.navigate('https://example.test/');
+    const SecondAbortSignal = requireInterface<typeof AbortSignal>(browlet.window, 'AbortSignal');
+    const DOMException_ = requireInterface<typeof DOMException>(browlet.window, 'DOMException');
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const first = FirstAbortSignal.timeout(0);
+      const second = SecondAbortSignal.timeout(0);
+      const aborted = new Promise<void>((resolve) => {
+        second.addEventListener('abort', () => { resolve(); }, { once: true });
+      });
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(0);
+      expect(second.aborted).toBe(false);
+      await aborted;
+
+      expect(first.aborted).toBe(false);
+      expect(second.aborted).toBe(true);
+      expect(second.reason).toBeInstanceOf(DOMException_);
+      expect((second.reason as DOMException).name).toBe('TimeoutError');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('AbortSignal internal algorithms', () => {
+  it('supports repeated construction on a frozen global without exposing retention state', () => {
+    const global = Object.freeze({});
+    const prototype: unknown = Object.getPrototypeOf(global);
+    const source = new AbortSignalImpl(global);
+    const first = AbortSignalImpl.any(new AbortSignalImpl(global), [source]);
+    const second = AbortSignalImpl.any(new AbortSignalImpl(global), [source]);
+    const calls: string[] = [];
+    first.addAlgorithm(() => { calls.push('first'); });
+    second.addAlgorithm(() => { calls.push('second'); });
+
+    source.signalAbort('reason');
+
+    expect(calls).toEqual(['first', 'second']);
+    expect(first.reason).toBe('reason');
+    expect(second.reason).toBe('reason');
+    expect(Reflect.ownKeys(global)).toEqual([]);
+    expect(Object.getPrototypeOf(global)).toBe(prototype);
+  });
+
+  it('removes a settled dependent without removing other dependents of the shared source', () => {
+    const firstSource = new AbortSignalImpl(globalThis);
+    const sharedSource = new AbortSignalImpl(globalThis);
+    const first = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+      firstSource, sharedSource,
+    ]);
+    const second = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+      sharedSource, sharedSource,
+    ]);
+    const nested = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+      second, sharedSource,
+    ]);
+    const calls: string[] = [];
+    first.addAlgorithm(() => { calls.push('first'); });
+    second.addAlgorithm(() => { calls.push('second'); });
+    nested.addAlgorithm(() => { calls.push('nested'); });
+
+    firstSource.signalAbort('first');
+    expect(calls).toEqual(['first']);
+    expect(second.aborted).toBe(false);
+    expect(nested.aborted).toBe(false);
+
+    sharedSource.signalAbort('shared');
+    expect(calls).toEqual(['first', 'second', 'nested']);
+    expect(first.reason).toBe('first');
+    expect(second.reason).toBe('shared');
+    expect(nested.reason).toBe('shared');
+  });
+
   it('runs in order and permits an earlier algorithm to remove a later one', () => {
     const signal = new AbortSignalImpl(globalThis);
     const order: string[] = [];

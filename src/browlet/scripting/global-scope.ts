@@ -6,7 +6,7 @@ import { PerformanceImpl } from '../performance/performance';
 import type { EnvironmentTiming } from '../performance/high-resolution-time';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventLoop } from './event-loop';
-import { GlobalTimers, type TimerAction } from './timers';
+import { GlobalTimers, type GlobalTimersOptions, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 
 /*
@@ -48,18 +48,18 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
  * };
  */
 export class WindowOrWorkerGlobalScopeMixin {
+  readonly timers: GlobalTimers;
   readonly #eventLoop: EventLoop;
   readonly #performance: PerformanceImpl;
   readonly #structuredClone: StructuredCloneSteps;
-  readonly #timers: GlobalTimers;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
     this.#eventLoop = initialization.eventLoop;
     this.#performance = new PerformanceImpl(initialization.timing);
     this.#structuredClone = initialization.structuredClone;
-    this.#timers = new GlobalTimers({
+    this.timers = new GlobalTimers({
       eventLoop: initialization.eventLoop,
-      global: initialization.global,
+      queueTask: initialization.queueTimerTask,
       time: initialization.timing,
     });
   }
@@ -73,7 +73,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     timeout: number,
     argumentsList: readonly unknown[],
   ): number {
-    return this.#timers.setTimeout(action, timeout, argumentsList);
+    return this.timers.setTimeout(action, timeout, argumentsList);
   }
 
   setInterval(
@@ -81,11 +81,11 @@ export class WindowOrWorkerGlobalScopeMixin {
     timeout: number,
     argumentsList: readonly unknown[],
   ): number {
-    return this.#timers.setInterval(action, timeout, argumentsList);
+    return this.timers.setInterval(action, timeout, argumentsList);
   }
 
   clearTimer(id: number): void {
-    this.#timers.clearTimer(id);
+    this.timers.clearTimer(id);
   }
 
   queueMicrotask(callback: VoidFunction): void {
@@ -102,15 +102,15 @@ export class WindowOrWorkerGlobalScopeMixin {
   // -- Internal ---------------------------------------------------------
 
   setAssociatedDocument(document: DocumentImpl): void {
-    this.#timers.setAssociatedDocument(document);
+    this.timers.setAssociatedDocument(document);
   }
 }
 
 export type WindowOrWorkerGlobalScopeInitialization = {
-  readonly eventLoop: EventLoop;
-  readonly global: object;
-  readonly structuredClone: StructuredCloneSteps;
-  readonly timing: EnvironmentTiming;
+  eventLoop: EventLoop;
+  queueTimerTask: GlobalTimersOptions['queueTask'];
+  structuredClone: StructuredCloneSteps;
+  timing: EnvironmentTiming;
 };
 
 export type StructuredCloneSteps = (

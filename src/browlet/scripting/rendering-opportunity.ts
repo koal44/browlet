@@ -2,9 +2,9 @@ import { getRelevantRealm } from '../bindings';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { Navigable } from '../browsing/navigable';
-import type { WindowImpl } from '../browsing/window/window';
 import type { WindowAgent } from './agents';
-import { queueGlobalTask, renderingTaskSource } from './tasks';
+import type { Realm } from './realm';
+import { renderingTaskSource } from './tasks';
 
 /*
  * A rendering-opportunity host observes display refreshes, an embedder signal,
@@ -45,23 +45,22 @@ export class WindowRenderingProducer {
   }
 
   #produceRenderingTasks(navigables: readonly Navigable[]): void {
-    const windows = new Set<WindowImpl>();
+    const realms = new Set<Realm>();
     for (const navigable of navigables) {
       if (!this.#host.hasRenderingOpportunity(navigable)) continue;
 
       const window = navigable.activeWindow;
-      if (
-        window !== null &&
-        getRelevantRealm(window).agent === this.#agent
-      ) windows.add(window);
+      if (window === null) continue;
+      const realm = getRelevantRealm(window);
+      if (realm.agent === this.#agent) realms.add(realm);
     }
-    if (windows.size === 0) return;
+    if (realms.size === 0) return;
 
     this.#agent.eventLoop.setLastRenderOpportunityTime(
       this.#host.unsafeSharedCurrentTime(),
     );
-    for (const window of windows) {
-      queueGlobalTask(renderingTaskSource, window, () => {
+    for (const realm of realms) {
+      realm.queueGlobalTask(renderingTaskSource, () => {
         this.#updateRendering();
       });
     }

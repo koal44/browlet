@@ -12,7 +12,7 @@ import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
 import {
-  isTransferableDetached, transferable,
+  DetachedTransferableStamper, transferable,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 
 describe('HTML structured transfer', () => {
@@ -214,27 +214,38 @@ describe('HTML structured transfer', () => {
     const target = bindings.register(targetRealm);
     const original = source.createPlatformRecord(transferBoxIDL);
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
+    Object.freeze(original.implInst);
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
       original.platformObject,
       [original.platformObject, original.platformObject],
       source,
     ));
-    expect(isTransferableDetached(original.implInst)).toBe(false);
+    expect(DetachedTransferableStamper.has(original.implInst)).toBe(false);
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
       original.platformObject,
       [original.platformObject, original.implInst],
       source,
     ));
-    expect(isTransferableDetached(original.implInst)).toBe(false);
+    expect(DetachedTransferableStamper.has(original.implInst)).toBe(false);
 
     const serialized = structuredSerializeWithTransfer(
       { first: original.platformObject, second: original.implInst },
       [original.platformObject],
       source,
     );
-    expect(isTransferableDetached(original.implInst)).toBe(true);
+    expect(DetachedTransferableStamper.has(original.implInst)).toBe(true);
+    expectDataCloneError(() => structuredSerializeWithTransfer(
+      null,
+      [original.platformObject],
+      source,
+    ));
+    expectDataCloneError(() => structuredSerializeWithTransfer(
+      null,
+      [original.implInst],
+      target,
+    ));
 
     const result = structuredDeserializeWithTransfer(serialized, target);
     const transferred = result.transferredValues[0];
@@ -245,7 +256,7 @@ describe('HTML structured transfer', () => {
     expect(resolved?.primaryInterface.definition).toBe(transferBoxIDL);
     expect(target.unwrap(transferred, TransferBoxImpl)?.value)
       .toBe('transferred');
-    expect(isTransferableDetached(resolved!.implInst)).toBe(false);
+    expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = new Realm({ globalNames: ['Worker'] });
     const hiddenTarget = bindings.register(hiddenRealm);
