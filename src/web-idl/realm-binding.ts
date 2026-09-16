@@ -1,7 +1,7 @@
 import {
   getAssociatedRealm, isObject, RangeError as InternalRangeError,
   SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
-  type ByteSequence, type RuntimeContext,
+  type ByteSequence, type JSFunction, type RuntimeContext,
 } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
 import { DOMException as InternalDOMException } from './core/dom-exception';
@@ -25,20 +25,22 @@ import type {
 import type { CallbackInterfaceDefinition, ConstructorMember } from './core/declarations';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
 import {
-  ImplementationRegistry, type ConstructorBehavior,
-} from './implementation-registry';
+  DefinitionBinding, type PlatformDefinition, type PlatformMemberDefinition, type ConstructorBehavior,
+  type InterfaceObject, type MemberBinding, type MemberFunctionKind,
+  type PlatformObjectAllocationSteps,
+} from './definition-binding';
 import { SynchronousIterableBinding } from './iterable';
 import type { WebIDLRealmHost } from './realm-host';
 import { BindingContext } from './binding-context';
 import {
-  LegacyPlatformObjectBinding, type LegacyProperties,
+  LegacyPlatformObjectBinding, type LegacyPropertyMetadata,
 } from './legacy-platform-object';
 import {
   computeEffectiveOverloadSet, type IDLCallable, resolveOverload,
 } from './overload';
 import { ObservableArrayBinding } from './observable-array';
 import {
-  associatePlatformObject, getImplementationObject, getImplementationRecord, getPlatformRecord,
+  associatePlatformObject, getImplementationRecord, getPlatformRecord,
   interfaceImplements, stampImplementation, type PlatformRecord, type StampedPlatformObject,
 } from './platform-object';
 import type { BindingWorld } from './binding-world';
@@ -48,14 +50,14 @@ import { getUnannotatedType } from './types';
 export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   readonly definitions: DefinitionAssembly;
   readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
-  readonly implementations: ImplementationRegistry;
   readonly world: BindingWorld;
   readonly realizeException: (value: unknown) => unknown;
   readonly realm: Realm;
   readonly context: BindingContext<Realm>;
+  readonly defaultConversionContext: ConversionContext;
   readonly #collections: CollectionBinding;
   readonly #asyncIterables: AsynchronousIterableBinding;
-  readonly #initialObjects = new Map<InitialObjectDefinition, DefinitionInitialObjects>();
+  readonly #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
   readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
@@ -63,29 +65,23 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
   readonly #observableArrays: ObservableArrayBinding;
 
-  // Project helper: assemble the registries, conversion context, and realm binding machinery.
+  // Project helper: compose this realm's definition records and binding machinery.
   constructor(
     definitions: DefinitionAssembly,
     realm: Realm,
     world: BindingWorld,
-    implementations = new ImplementationRegistry(),
-    hostDefinedInterfaces: HostDefinedInterface[] = [],
     createRuntime?: (ctx: BindingContext<Realm>) => RuntimeContext,
   ) {
     this.definitions = definitions;
-    this.hostDefinedInterfaces = new Map(
-      hostDefinedInterfaces.map((hostInterface) => [hostInterface.name, hostInterface]),
-    );
-    this.implementations = implementations;
+    this.hostDefinedInterfaces = world.hostDefinedInterfaces;
     this.realm = realm;
     this.world = world;
-    // Promise and callback conversion contexts retain this projection callback.
-    this.projectImplementationObject = this.projectImplementationObject.bind(this);
+    this.defaultConversionContext = { binding: this, realm };
     // Project adapter: realize internal exceptions once and preserve the error across realms.
     // Web IDL §3.14.3 Creating and throwing exceptions supplies the realm-allocation rules.
     this.realizeException = (value) => {
       if (!isObject(value)) return value;
-      const existing = ExceptionStamper.get(value);
+      const existing = ExceptionRealizationStamper.get(value);
       if (existing) return existing;
       let error: object;
       if (InternalTypeError.is(value)) {
@@ -99,39 +95,15 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       } else {
         return value;
       }
-      void ExceptionStamper.stamp(value, error);
+      void ExceptionRealizationStamper.stamp(value, error);
       return error;
     };
-    this.#asyncIterables = new AsynchronousIterableBinding(
-      this,
-      implementations,
-      (primaryInterface, create) => {
-        const initial = this.#getInitialObjects(primaryInterface.definition);
-        return initial.asyncIteratorPrototype ??=
-          create();
-      },
-    );
-    this.#collections = new CollectionBinding(this);
-    this.#globalPlatformObjects = new GlobalPlatformObjectBinding(
-      this,
-      implementations,
-    );
-    this.#iterables = new SynchronousIterableBinding(
-      this,
-      implementations,
-      (primaryInterface, create) => {
-        const initial = this.#getInitialObjects(primaryInterface.definition);
-        return initial.iteratorPrototype ??= create();
-      },
-    );
-    this.#legacyPlatformObjects = new LegacyPlatformObjectBinding(
-      this,
-      implementations,
-    );
-    this.#observableArrays = new ObservableArrayBinding(
-      this,
-      implementations,
-    );
+    this.#asyncIterables = new AsynchronousIterableBinding(this);
+    this.#collections = new CollectionBinding(this.defaultConversionContext);
+    this.#globalPlatformObjects = new GlobalPlatformObjectBinding(this);
+    this.#iterables = new SynchronousIterableBinding(this);
+    this.#legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
+    this.#observableArrays = new ObservableArrayBinding(this);
     this.context = new BindingContext(this, createRuntime);
   }
 
@@ -149,11 +121,37 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     return primaryInterface;
   }
 
+  /** Retrieve this realm's adapters and generated objects for a definition. */
+  getDefinitionBinding(definition: PlatformDefinition): DefinitionBinding {
+    let binding = this.#definitionBindings.get(definition);
+    if (!binding) {
+      binding = new DefinitionBinding();
+      this.#definitionBindings.set(definition, binding);
+    }
+    return binding;
+  }
+
+  /** Find a member's binding on its including interface or an ancestor. */
+  getMemberBinding(
+    definition: MemberOwnerDefinition,
+    member: PlatformMemberDefinition,
+  ): MemberBinding | undefined {
+    for (
+      let current: MemberOwnerDefinition | undefined = definition;
+      current;
+      current = 'parent' in current ? current.parent : undefined
+    ) {
+      const binding = this.#definitionBindings.get(current.definition)?.members?.get(member);
+      if (binding) return binding;
+    }
+  }
+
   // Project installer for Web IDL §3.8 Platform objects implementing interfaces — global property references.
   install(
     target: object = this.#globalObject?.platformObject ?? this.realm.global,
+    isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
-    const installed = this.getExposedGlobalProperties();
+    const installed = this.getExposedGlobalProperties(isWindow);
 
     for (const [name, object] of installed) {
       defineProperty(target, name, {
@@ -181,7 +179,6 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     for (const primaryInterface of interfaces) {
       const definition = primaryInterface.definition;
       this.getInterfacePrototypeObject(primaryInterface);
-      this.#initializeMemberObjects(primaryInterface);
       if (
         !hasExtendedAttribute(
           definition.extendedAttributes,
@@ -232,13 +229,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   #getInterfaceObject(
     primaryInterface: AssembledInterfaceDefinition,
   ): InterfaceObject {
-    const initial = this.#getInitialObjects(primaryInterface.definition);
-    if (initial.interfaceObject) return initial.interfaceObject;
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
+    if (definitionBinding.interfaceObject) return definitionBinding.interfaceObject;
 
     const constructors = this.#getConstructors(primaryInterface);
-    const overridden = this.implementations.getOverriddenConstructorSteps(
-      primaryInterface.definition,
-    );
+    const overridden = definitionBinding.overriddenConstructor;
     const object: JSFunction = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
@@ -256,11 +251,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         const overload = resolveOverload(
           computeEffectiveOverloadSet(constructors, argumentsList.length),
           argumentsList,
-          this,
+          this.defaultConversionContext,
         );
-        const behavior = this.implementations.getConstructorBehavior(
-          overload.callable,
-        );
+        const behavior = this.getMemberBinding(primaryInterface, overload.callable)?.constructorBehavior;
         if (!behavior) {
           throw missingImplementation(primaryInterface, 'constructor');
         }
@@ -278,7 +271,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       },
     );
 
-    initial.interfaceObject = object;
+    definitionBinding.interfaceObject = object;
     this.#getUnforgeableObject(primaryInterface);
     Reflect.setPrototypeOf(
       object,
@@ -304,9 +297,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   getLegacyCallbackInterfaceObject(
     definition: CallbackInterfaceDefinition,
   ): object {
-    const initial = this.#getInitialObjects(definition);
-    if (initial.legacyCallbackInterfaceObject) {
-      return initial.legacyCallbackInterfaceObject;
+    const definitionBinding = this.getDefinitionBinding(definition);
+    if (definitionBinding.legacyCallbackInterfaceObject) {
+      return definitionBinding.legacyCallbackInterfaceObject;
     }
 
     const object = this.realm.createFunction(
@@ -321,7 +314,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         this.#defineConstant(object, member);
       }
     }
-    initial.legacyCallbackInterfaceObject = object;
+    definitionBinding.legacyCallbackInterfaceObject = object;
     return object;
   }
 
@@ -341,8 +334,8 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       );
     }
 
-    const initial = this.#getInitialObjects(primaryInterface.definition);
-    const existing = initial.legacyFactoryFunctions?.get(id);
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
+    const existing = definitionBinding.legacyFactoryFunctions?.get(id);
     if (existing) return existing;
 
     const function_ = this.realm.createFunction(
@@ -358,11 +351,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             argumentsList.length,
           ),
           argumentsList,
-          this,
+          this.defaultConversionContext,
         );
-        const behavior = this.implementations.getConstructorBehavior(
-          overload.callable,
-        );
+        const behavior = this.getMemberBinding(primaryInterface, overload.callable)?.constructorBehavior;
         if (!behavior) {
           throw new Error(
             `Web IDL ${primaryInterface.definition.name} legacy factory function ${id} has no implementation steps`,
@@ -387,7 +378,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       value: this.getInterfacePrototypeObject(primaryInterface),
       writable: false,
     });
-    (initial.legacyFactoryFunctions ??= new Map()).set(id, function_);
+    (definitionBinding.legacyFactoryFunctions ??= new Map()).set(id, function_);
     return function_;
   }
 
@@ -416,13 +407,13 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   getNamespaceObject(
     namespace: AssembledNamespaceDefinition,
   ): object {
-    const initial = this.#getInitialObjects(namespace.definition);
-    if (initial.namespaceObject) return initial.namespaceObject;
+    const definitionBinding = this.getDefinitionBinding(namespace.definition);
+    if (definitionBinding.namespaceObject) return definitionBinding.namespaceObject;
 
     const object = this.realm.createOrdinaryObject(
       this.realm.intrinsics.objectPrototype,
     );
-    initial.namespaceObject = object;
+    definitionBinding.namespaceObject = object;
     this.#defineAttributes(object, namespace, 'regular');
     this.#defineOperations(object, namespace, 'regular');
     this.#defineConstants(object, namespace);
@@ -455,9 +446,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   getInterfacePrototypeObject(
     primaryInterface: AssembledInterfaceDefinition,
   ): object {
-    const initial = this.#getInitialObjects(primaryInterface.definition);
-    if (initial.interfacePrototypeObject) {
-      return initial.interfacePrototypeObject;
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
+    if (definitionBinding.interfacePrototypeObject) {
+      return definitionBinding.interfacePrototypeObject;
     }
 
     this.#assertOrdinaryProjection(primaryInterface);
@@ -478,7 +469,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     if (Reflect.getPrototypeOf(prototype) !== parentPrototype) {
       throw new Error(`Allocated ${primaryInterface.definition.name} prototype has the wrong parent`);
     }
-    initial.interfacePrototypeObject = prototype;
+    definitionBinding.interfacePrototypeObject = prototype;
 
     this.#defineUnscopables(prototype, primaryInterface);
     if (!global) {
@@ -526,7 +517,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         : undefined;
     }
 
-    const primaryInterface = this.implementations.getInterfaceForObject(implInst);
+    const primaryInterface = this.definitions.getInterfaceForImplInst(implInst);
     if (
       !primaryInterface ||
       !interfaceImplements(primaryInterface, expectedInterface)
@@ -536,11 +527,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Project allocation entry point for Web IDL §3.8 Platform objects implementing interfaces — create a new
-  // object implementing the interface.
-  createPlatformObject(
+  // object implementing the interface, returning its shared record.
+  createPlatformRecord(
     primaryInterface: AssembledInterfaceDefinition,
     newTarget?: object,
-  ): StampedPlatformObject {
+  ): PlatformRecord {
     if (!this.isExposed(primaryInterface)) {
       throw new Error(
         `Interface ${primaryInterface.definition.name} is not exposed in this realm`,
@@ -554,10 +545,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
     const prototype = this.#getPlatformObjectPrototype(primaryInterface, newTarget);
 
-    const createImplementation = this.implementations
-      .getImplementationCreationSteps(
-        primaryInterface.definition,
-      );
+    const createImplementation = this.getDefinitionBinding(primaryInterface.definition).createImplementation;
     if (!createImplementation) {
       throw new Error(
         `Interface ${primaryInterface.definition.name} has no implementation creation steps`,
@@ -567,7 +555,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       createImplementation(),
       primaryInterface,
       prototype,
-    ).platformObject!;
+    );
   }
 
   // Project adapter: construct or initialize the implementation, then project its platform object.
@@ -578,13 +566,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     newTarget: object,
   ): StampedPlatformObject {
     if (behavior.kind === 'initialize') {
-      const platformObject = this.createPlatformObject(primaryInterface, newTarget);
-      const implInst = getImplementationObject(platformObject);
-      if (!implInst) {
-        throw new Error('New platform object has no implementation target');
-      }
-      Reflect.apply(behavior.steps, implInst, values);
-      return platformObject;
+      const record = this.createPlatformRecord(primaryInterface, newTarget);
+      Reflect.apply(behavior.steps, record.implInst, values);
+      return record.platformObject!;
     }
 
     const prototype = this.#getPlatformObjectPrototype(primaryInterface, newTarget);
@@ -644,8 +628,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       implInst,
       primaryInterface,
     );
-    const allocatePlatformObject = this.implementations
-      .getPlatformObjectAllocationSteps(primaryInterface);
+    const allocatePlatformObject = this.#getPlatformObjectAllocationSteps(primaryInterface);
     const backingObject = allocatePlatformObject
       ? allocatePlatformObject(prototype)
       : this.realm.createOrdinaryObject(prototype);
@@ -654,11 +637,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         `Platform object for ${primaryInterface.definition.name} has the wrong prototype`,
       );
     }
-    return this.associatePlatformObject(
+    return this.initializePlatformObject(
       this.#legacyPlatformObjects.createObject(
         backingObject,
         implInst,
-        this.#getLegacyProperties(primaryInterface),
+        this.#getLegacyPropertyMetadata(primaryInterface),
       ),
       primaryInterface,
       implInst,
@@ -691,7 +674,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     if (allocation) {
       for (const interfaceName of allocation.prototypes.keys()) {
         const definition = this.resolveInterface(interfaceName).definition;
-        if (this.#getInitialObjects(definition).interfacePrototypeObject) {
+        if (this.getDefinitionBinding(definition).interfacePrototypeObject) {
           throw new Error(`Prototype ${interfaceName} was already created before global allocation`);
         }
       }
@@ -704,7 +687,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     const platformObject = allocation?.object ?? this.#globalPlatformObjects.createObject(
       this.realm.createOrdinaryObject(prototype),
     );
-    const record = this.associatePlatformObject(
+    const record = this.initializePlatformObject(
       platformObject,
       primaryInterface,
       implInst,
@@ -717,7 +700,8 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     this.#defineIterationMethods(platformObject, primaryInterface);
     this.#defineAsyncIterationMethods(platformObject, primaryInterface);
     this.#defineCollectionMembers(platformObject, primaryInterface);
-    this.#defineGlobalPropertyReferences(platformObject);
+    const window = this.definitions.getInterface('Window');
+    this.install(platformObject, Boolean(window && record.implements(window)));
     return record;
   }
 
@@ -748,7 +732,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Project helper: register implementation/platform identity and initialize per-object binding state.
-  associatePlatformObject<T extends object>(
+  initializePlatformObject<T extends object>(
     platformObject: object,
     primaryInterface: AssembledInterfaceDefinition,
     implInst: T,
@@ -774,9 +758,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     primaryInterface: AssembledInterfaceDefinition,
   ): void {
     for (const ancestor of getInheritance(primaryInterface)) {
-      this.implementations.getImplementationInitializationSteps(
-        ancestor.definition,
-      )?.(implInst);
+      this.getDefinitionBinding(ancestor.definition).initializeImplementation?.(implInst);
     }
   }
 
@@ -836,7 +818,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Web IDL §3.7.5 Constants — define the constants.
-  #defineConstants(target: object, definition: MemberDefinition): void {
+  #defineConstants(target: object, definition: MemberOwnerDefinition): void {
     for (const entry of definition.members) {
       if (
         entry.member.kind !== 'constant' ||
@@ -853,9 +835,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       configurable: false,
       enumerable: true,
       value: convertToJavaScript(
-        materializeDefaultValue(constant.value, constant.type, this),
+        materializeDefaultValue(constant.value, constant.type, this.defaultConversionContext),
         constant.type,
-        this,
+        this.defaultConversionContext,
       ),
       writable: false,
     });
@@ -864,7 +846,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Web IDL §3.7.6 Attributes — define the attributes.
   #defineAttributes(
     target: object,
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     kind: MemberPlacement,
   ): void {
     for (const entry of definition.members) {
@@ -887,7 +869,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Web IDL §3.7.7 Operations — define the operations.
   #defineOperations(
     target: object,
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     kind: MemberPlacement,
   ): void {
     const groups = new Map<string, OperationMember[]>();
@@ -977,7 +959,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           const identifier = stringifier.kind === 'attribute'
             ? stringifier.name
             : 'toString';
-          const receiver = this.#implementationRecord(
+          const receiver = this.#getReceiverRecord(
             thisArgument,
             primaryInterface,
             identifier,
@@ -991,10 +973,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             const implementation = stringifier.inherit
               ? this.#findInheritedAttribute(primaryInterface, stringifier)
               : stringifier;
-            const steps = this.implementations.getAttributeSteps(
-              implementation,
-              primaryInterface,
-            );
+            const steps = this.getMemberBinding(primaryInterface, implementation)?.attributeSteps;
             if (!steps) {
               throw missingImplementation(
                 primaryInterface,
@@ -1003,8 +982,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             }
             value = steps.get(receiver);
           } else {
-            const behavior = this.implementations
-              .getStringificationBehavior(stringifier, primaryInterface);
+            const behavior = this.getMemberBinding(primaryInterface, stringifier)?.stringificationBehavior;
             if (!behavior) {
               throw missingImplementation(primaryInterface, 'stringifier');
             }
@@ -1013,7 +991,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           return convertToJavaScript(
             value,
             { kind: 'simple', name: 'DOMString' },
-            this,
+            this.defaultConversionContext,
           );
         },
         { length: 0, name: 'toString' },
@@ -1086,40 +1064,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     }
   }
 
-  // Project helper: populate the realm's initial member-function and iterator-prototype caches.
-  #initializeMemberObjects(primaryInterface: AssembledInterfaceDefinition): void {
-    const operationGroups = new Map<string, OperationMember[]>();
-    for (const entry of primaryInterface.members) {
-      if (!this.#isMemberExposed(primaryInterface, entry)) continue;
-      const { member } = entry;
-      if (member.kind === 'attribute') {
-        this.#getAttributeGetter(primaryInterface, member);
-        this.#getAttributeSetter(primaryInterface, member);
-      } else if (member.kind === 'operation' && member.name) {
-        const key = `${member.static === true ? 'static' : 'regular'}:${member.name}`;
-        const group = operationGroups.get(key);
-        if (group) group.push(member);
-        else operationGroups.set(key, [member]);
-      } else if (member.kind === 'iterable') {
-        this.#iterables.initializePrototype(primaryInterface, member);
-      } else if (member.kind === 'async-iterable') {
-        this.#asyncIterables.initializePrototype(primaryInterface, member);
-      }
-    }
-    for (const operations of operationGroups.values()) {
-      const name = operations[0]?.name;
-      if (name) this.#getOperationFunction(primaryInterface, name, operations);
-    }
-    const stringifier = this.#getStringifierEntry(primaryInterface)?.member;
-    if (
-      stringifier?.kind === 'stringifier' ||
-      stringifier?.kind === 'attribute'
-    ) this.#getStringifierFunction(primaryInterface, stringifier);
-  }
-
   // Project cache around Web IDL §3.7.6 Attributes — create an attribute getter.
   #getAttributeGetter(
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     attribute: AttributeMember,
   ): JSFunction {
     return this.#getOrCreateMemberFunction(
@@ -1131,7 +1078,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         try {
           const primaryInterface = getMemberInterface(definition);
           const receiver = primaryInterface && !attribute.static
-            ? this.#implementationRecord(
+            ? this.#getReceiverRecord(
               thisArgument,
               primaryInterface,
               attribute.name,
@@ -1143,7 +1090,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             )
             : null;
           if (receiver === invalidReceiver) return undefined;
-          resultContext = receiver?.binding ?? this;
+          resultContext = (receiver?.binding ?? this).defaultConversionContext;
 
           const elementType = getObservableArrayElementType(
             attribute.type,
@@ -1163,10 +1110,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           const implementation = primaryInterface && attribute.inherit
             ? this.#findInheritedAttribute(primaryInterface, attribute)
             : attribute;
-          const steps = this.implementations.getAttributeSteps(
-            implementation,
-            primaryInterface,
-          );
+          const steps = this.getMemberBinding(definition, implementation)?.attributeSteps;
           if (!steps) {
             throw missingImplementation(
               definition,
@@ -1183,7 +1127,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           return this.#handlePromiseException(
             attribute.type,
             exception,
-            resultContext ?? this,
+            resultContext ?? this.defaultConversionContext,
           );
         }
       }, { length: 0, name: `get ${attribute.name}` }),
@@ -1192,7 +1136,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project cache around Web IDL §3.7.6 Attributes — create an attribute setter.
   #getAttributeSetter(
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     attribute: AttributeMember,
   ): JSFunction | undefined {
     if (definition.definition.kind === 'namespace') return;
@@ -1220,7 +1164,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         const jsValue = this.#resolveThisValue(thisArgument);
         const receiver = attribute.static
           ? null
-          : this.#implementationRecord(
+          : this.#getReceiverRecord(
             jsValue,
             primaryInterface,
             attribute.name,
@@ -1284,14 +1228,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         );
         if (enumValue === invalidEnumerationValue) return undefined;
         const idlValue = enumValue === notAnEnumeration
-          ? convertToIDL(value, attribute.type, this, {
+          ? convertToIDL(value, attribute.type, this.defaultConversionContext, {
             attributeAssignment: true,
           })
           : enumValue;
-        const steps = this.implementations.getAttributeSteps(
-          attribute,
-          primaryInterface,
-        );
+        const steps = this.getMemberBinding(primaryInterface, attribute)?.attributeSteps;
         if (!steps?.set) {
           throw missingImplementation(
             definition,
@@ -1306,7 +1247,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project cache around Web IDL §3.7.7 Operations — create an operation function.
   #getOperationFunction(
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     name: string,
     operations: OperationMember[],
   ): JSFunction {
@@ -1321,7 +1262,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         try {
           const primaryInterface = getMemberInterface(definition);
           const receiver = primaryInterface && !operations[0]?.static
-            ? this.#implementationRecord(
+            ? this.#getReceiverRecord(
               thisArgument,
               primaryInterface,
               name,
@@ -1329,17 +1270,14 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
               false,
             )
             : null;
-          resultContext = receiver?.binding ?? this;
+          resultContext = (receiver?.binding ?? this).defaultConversionContext;
 
           const overload = resolveOverload(
             computeEffectiveOverloadSet(operations, argumentsList.length),
             argumentsList,
-            this,
+            this.defaultConversionContext,
           );
-          const steps = this.implementations.getOperationSteps(
-            overload.callable,
-            primaryInterface,
-          );
+          const steps = this.getMemberBinding(definition, overload.callable)?.operationSteps;
           if (hasExtendedAttribute(
             overload.callable.extendedAttributes,
             'Default',
@@ -1350,7 +1288,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             return convertToJavaScript(
               this.#runDefaultOperation(primaryInterface, receiver),
               overload.callable.returns,
-              this,
+              this.defaultConversionContext,
             );
           }
           if (!steps) {
@@ -1379,7 +1317,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           return this.#handlePromiseException(
             returnType,
             exception,
-            resultContext ?? this,
+            resultContext ?? this.defaultConversionContext,
           );
         }
       }, { length: getCallableLength(operations), name }),
@@ -1426,10 +1364,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         const implementation = attribute.inherit
           ? this.#findInheritedAttribute(ancestor, attribute)
           : attribute;
-        const steps = this.implementations.getAttributeSteps(
-          implementation,
-          ancestor,
-        );
+        const steps = this.getMemberBinding(ancestor, implementation)?.attributeSteps;
         if (!steps) {
           throw missingImplementation(
             ancestor,
@@ -1440,7 +1375,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         defineProperty(result, attribute.name, {
           configurable: true,
           enumerable: true,
-          value: convertToJavaScript(idlValue, attribute.type, this),
+          value: convertToJavaScript(idlValue, attribute.type, this.defaultConversionContext),
           writable: true,
         });
       }
@@ -1509,11 +1444,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project cache for the unforgeables object in Web IDL §3.7.1 Interface object.
   #getUnforgeableObject(primaryInterface: AssembledInterfaceDefinition): object {
-    const initial = this.#getInitialObjects(primaryInterface.definition);
-    if (initial.unforgeablesObject) return initial.unforgeablesObject;
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
+    if (definitionBinding.unforgeablesObject) return definitionBinding.unforgeablesObject;
 
     const object = this.realm.createOrdinaryObject(null);
-    initial.unforgeablesObject = object;
+    definitionBinding.unforgeablesObject = object;
     this.#defineAttributes(object, primaryInterface, 'unforgeable');
     this.#defineOperations(object, primaryInterface, 'unforgeable');
     this.#defineStringifier(object, primaryInterface, 'unforgeable');
@@ -1522,8 +1457,8 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project cache for Web IDL §3.7.4 Named properties object.
   #getNamedPropertiesObject(primaryInterface: AssembledInterfaceDefinition): object {
-    const initial = this.#getInitialObjects(primaryInterface.definition);
-    if (initial.namedPropertiesObject) return initial.namedPropertiesObject;
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
+    if (definitionBinding.namedPropertiesObject) return definitionBinding.namedPropertiesObject;
 
     const parent = primaryInterface.parent
       ? this.getInterfacePrototypeObject(primaryInterface.parent)
@@ -1534,7 +1469,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       () => this.#globalObject?.platformObject,
       this.#globalAllocation?.namedProperties,
     );
-    initial.namedPropertiesObject = object;
+    definitionBinding.namedPropertiesObject = object;
     return object;
   }
 
@@ -1550,28 +1485,6 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       }
     }
     return false;
-  }
-
-  // Web IDL §3.8 Platform objects implementing interfaces — define the global property references.
-  #defineGlobalPropertyReferences(
-    target: object,
-  ): void {
-    const window = this.definitions.getInterface('Window');
-    const record = getPlatformRecord(target);
-    const isWindow = Boolean(
-      window &&
-      record &&
-      record.implements(window),
-    );
-
-    for (const [name, object] of this.getExposedGlobalProperties(isWindow)) {
-      defineProperty(target, name, {
-        configurable: true,
-        enumerable: false,
-        value: object,
-        writable: true,
-      });
-    }
   }
 
   // Web IDL §3.7.3 Interface prototype object — @@unscopables setup for [Unscopable] members.
@@ -1607,21 +1520,21 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Project adapter for the receiver and security checks in Web IDL §3.7.6 Attributes and §3.7.7 Operations.
-  #implementationRecord(
+  #getReceiverRecord(
     thisArgument: unknown,
     primaryInterface: AssembledInterfaceDefinition,
     identifier: string,
     type: 'getter' | 'method' | 'setter',
     lenient: false,
   ): PlatformRecord;
-  #implementationRecord(
+  #getReceiverRecord(
     thisArgument: unknown,
     primaryInterface: AssembledInterfaceDefinition,
     identifier: string,
     type: 'getter' | 'method' | 'setter',
     lenient: boolean,
   ): PlatformRecord | typeof invalidReceiver;
-  #implementationRecord(
+  #getReceiverRecord(
     thisArgument: unknown,
     primaryInterface: AssembledInterfaceDefinition,
     identifier: string,
@@ -1697,7 +1610,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     const string = convertToIDL(value, {
       kind: 'simple',
       name: 'DOMString',
-    }, this) as string;
+    }, this.defaultConversionContext) as string;
     return definition.values.includes(string)
       ? string
       : invalidEnumerationValue;
@@ -1714,7 +1627,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project helper: combine exposure checks for a member, its declaration fragment, and its owner.
   #isMemberExposed(
-    definition: MemberDefinition,
+    definition: MemberOwnerDefinition,
     entry: MemberEntry,
   ): boolean {
     return this.#isConstructExposed(definition.definition) &&
@@ -1747,45 +1660,42 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Project helper: retain legacy interface metadata beside the realm's initial objects.
-  #getLegacyProperties(primaryInterface: AssembledInterfaceDefinition): LegacyProperties | null {
-    const initial = this.#getInitialObjects(primaryInterface.definition);
+  #getLegacyPropertyMetadata(
+    primaryInterface: AssembledInterfaceDefinition,
+  ): LegacyPropertyMetadata | null {
+    const definitionBinding = this.getDefinitionBinding(primaryInterface.definition);
     // null records an ordinary interface; undefined means it has not been inspected yet.
-    if (initial.legacyProperties === undefined) {
-      initial.legacyProperties = this.#legacyPlatformObjects.createInterfaceProperties(primaryInterface);
+    if (definitionBinding.legacyPropertyMetadata === undefined) {
+      definitionBinding.legacyPropertyMetadata = this.#legacyPlatformObjects.createPropertyMetadata(
+        primaryInterface,
+      );
     }
-    return initial.legacyProperties;
+    return definitionBinding.legacyPropertyMetadata;
   }
 
-  // Project helper: retrieve or allocate a definition's initial-object cache.
-  #getInitialObjects(definition: InitialObjectDefinition): DefinitionInitialObjects {
-    let initial = this.#initialObjects.get(definition);
-    if (!initial) {
-      initial = {};
-      this.#initialObjects.set(definition, initial);
+  // Project helper: select the first declared allocator in the interface ancestry.
+  #getPlatformObjectAllocationSteps(
+    primaryInterface: AssembledInterfaceDefinition,
+  ): PlatformObjectAllocationSteps | undefined {
+    for (
+      let current: AssembledInterfaceDefinition | undefined = primaryInterface;
+      current;
+      current = current.parent
+    ) {
+      const allocate = this.getDefinitionBinding(current.definition).allocatePlatformObject;
+      if (allocate) return allocate;
     }
-    return initial;
   }
 
   // Project helper: retain each initial getter, setter, or operation function in its realm.
   #getOrCreateMemberFunction(
-    kind: keyof MemberInitialObjects,
-    definition: MemberDefinition['definition'],
-    member: InitialObjectMember,
+    kind: MemberFunctionKind,
+    definition: MemberOwnerDefinition['definition'],
+    member: PlatformMemberDefinition,
     create: () => JSFunction,
   ): JSFunction {
-    const initial = this.#getInitialObjects(definition);
-    const members = initial.members ??= new Map<InitialObjectMember, MemberInitialObjects>();
-    let objects = members.get(member);
-    if (!objects) {
-      objects = {};
-      members.set(member, objects);
-    }
-    const existing = objects[kind];
-    if (existing) return existing;
-
-    const object = create();
-    objects[kind] = object;
-    return object;
+    const binding = this.getDefinitionBinding(definition).getOrCreateMemberRecord(member);
+    return binding[kind] ??= create();
   }
 
   // Project helper: throw a TypeError allocated in this binding's realm.
@@ -1795,7 +1705,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 }
 
 /** Privately retain the realm-owned error for an internal failure. */
-class ExceptionStamper extends Stamper {
+class ExceptionRealizationStamper extends Stamper {
   #realizedError: object;
 
   private constructor(exception: object, realizedError: object) {
@@ -1803,9 +1713,12 @@ class ExceptionStamper extends Stamper {
     this.#realizedError = realizedError;
   }
 
-  static stamp<T extends object>(exception: T, realizedError: object): T & ExceptionStamper {
-    new ExceptionStamper(exception, realizedError);
-    return exception as T & ExceptionStamper;
+  static stamp<T extends object>(
+    exception: T,
+    realizedError: object,
+  ): T & ExceptionRealizationStamper {
+    new ExceptionRealizationStamper(exception, realizedError);
+    return exception as T & ExceptionRealizationStamper;
   }
 
   static get(exception: object): object | undefined {
@@ -1815,12 +1728,9 @@ class ExceptionStamper extends Stamper {
 
 export type AttributeFunctionCallback = (this: unknown, ...argumentsList: unknown[]) => unknown;
 
-type JSFunction = ReturnType<WebIDLRealmHost['createFunction']>;
-type InterfaceObject = JSFunction & { prototype: object; };
-type MemberDefinition = AssembledInterfaceDefinition | AssembledNamespaceDefinition;
+/** Assembled interface or namespace whose contributed members are installed together. */
+type MemberOwnerDefinition = AssembledInterfaceDefinition | AssembledNamespaceDefinition;
 type MemberEntry = AssembledInterfaceMember | AssembledNamespaceMember;
-type InitialObjectDefinition = MemberDefinition['definition'] | CallbackInterfaceDefinition;
-type InitialObjectMember = AttributeMember | OperationMember | StringifierMember;
 /** Supply before projecting any object that needs these interface prototypes. */
 export type GlobalObjectAllocation = {
   readonly object: object;
@@ -1832,23 +1742,6 @@ export type GlobalObjectAllocation = {
 };
 
 type MemberPlacement = 'regular' | 'static' | 'unforgeable';
-type DefinitionInitialObjects = {
-  asyncIteratorPrototype?: object;
-  interfaceObject?: InterfaceObject;
-  interfacePrototypeObject?: object;
-  iteratorPrototype?: object;
-  legacyCallbackInterfaceObject?: JSFunction;
-  legacyFactoryFunctions?: Map<string, JSFunction>;
-  legacyProperties?: LegacyProperties | null;
-  members?: Map<InitialObjectMember, MemberInitialObjects>;
-  namedPropertiesObject?: object;
-  namespaceObject?: object;
-  unforgeablesObject?: object;
-};
-type MemberInitialObjects = Partial<Record<
-  'attributeFunction' | 'getter' | 'operation' | 'setter' | 'stringifier',
-  JSFunction
->>;
 type StringifierEntry = AssembledInterfaceMember & {
   member: StringifierMember | AttributeMember;
 };
@@ -1965,7 +1858,7 @@ function getObservableArrayElementType(
 
 // Project helper: distinguish an assembled interface from an assembled namespace.
 function getMemberInterface(
-  definition: MemberDefinition,
+  definition: MemberOwnerDefinition,
 ): AssembledInterfaceDefinition | undefined {
   return 'parent' in definition
     ? definition
@@ -2050,7 +1943,7 @@ function defineProperty(
 
 // Project helper: describe missing implementation steps in a binding declaration.
 function missingImplementation(
-  definition: MemberDefinition,
+  definition: MemberOwnerDefinition,
   member: string,
 ): Error {
   return new Error(

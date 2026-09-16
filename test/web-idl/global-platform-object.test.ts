@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
-  defineInterface, definePartialInterface, idlType, impl, integer,
+  attr, defineInterface, definePartialInterface, idlType, impl, integer, stringifier,
   type AttributeMember, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL global platform objects', () => {
@@ -39,6 +38,50 @@ describe('Web IDL global platform objects', () => {
     expect(call(global, 'read', global)).toBe(1);
     expect(call(global, 'read', global)).toBe(2);
     expect(Reflect.has(global, 'nextValue')).toBe(false);
+  });
+
+  it('preserves global members projected after global-reference enumeration', () => {
+    class GlobalImpl {
+      #value = 'global';
+
+      get label(): string { return this.#value; }
+      set label(value: string) { this.#value = value; }
+      read(): string { return this.#value; }
+      toString(): string { return this.#value; }
+    }
+    const definition = defineInterface({
+      name: 'TestGlobal',
+      exposed: '*',
+      extendedAttributes: [identifier('Global', 'TestGlobal')],
+      implementation: impl(GlobalImpl),
+      members: [
+        attr('label', idlType.DOMString),
+        operation('read', idlType.DOMString),
+        stringifier(),
+      ],
+    });
+    const realm = new Realm({ isGlobalPrototypeChainMutable: true });
+    const world = new BindingWorld([definition]);
+    const ctx = world.register(realm);
+    const binding = world.getRealmBinding(realm)!;
+    const installed = binding.getExposedGlobalProperties();
+    const prototype = binding.getInterfacePrototypeObject(binding.resolveInterface('TestGlobal'));
+    expect(Object.hasOwn(prototype, 'label')).toBe(false);
+    expect(Object.hasOwn(prototype, 'read')).toBe(false);
+
+    const global = ctx.projectGlobalObject(new GlobalImpl(), 'TestGlobal');
+    expect(Reflect.get(global, 'TestGlobal')).toBe(installed.get('TestGlobal'));
+    expect(Reflect.get(global, 'label')).toBe('global');
+    Reflect.set(global, 'label', 'changed');
+    expect(call(global, 'read', global)).toBe('changed');
+    expect(call(global, 'toString', global)).toBe('changed');
+    const names = ['label', 'read', 'toString'];
+    const descriptors = names.map((name) => Object.getOwnPropertyDescriptor(global, name));
+    expect(Reflect.getOwnPropertyDescriptor(global, 'label')?.get)
+      .toBeInstanceOf(realm.intrinsics.function);
+
+    binding.install(global);
+    expect(names.map((name) => Object.getOwnPropertyDescriptor(global, name))).toEqual(descriptors);
   });
 
   it('projects members and named properties at their specified levels', () => {
@@ -81,23 +124,22 @@ describe('Web IDL global platform objects', () => {
       ['title', 'named title'],
       ['Widget', 'named widget'],
     ]);
-    const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(baseMethod, () => 'base');
-    implementations.setAttributeSteps(title, { get: () => 'global title' });
-    implementations.setOperationSteps(ping, () => 'pong');
-    implementations.setOperationSteps(namedItem, (_receiver, name) =>
-      values.get(name as string));
-    implementations.setNamedPropertySteps(namedItem, {
-      getSupportedPropertyNames: () => new Set(values.keys()),
-    });
 
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([widget, window, base]),
+      new DefinitionAssembly([widget, window, base]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseMethod).operationSteps = () => 'base';
+    const interfaceBinding = binding.getDefinitionBinding(window);
+    interfaceBinding.getOrCreateMemberRecord(title).attributeSteps = { get: () => 'global title' };
+    interfaceBinding.getOrCreateMemberRecord(ping).operationSteps = () => 'pong';
+    interfaceBinding.getOrCreateMemberRecord(namedItem).operationSteps = (_receiver, name) =>
+      values.get(name as string);
+    interfaceBinding.getOrCreateMemberRecord(namedItem).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(values.keys()),
+    };
     const implementation = Reflect.construct(realm.intrinsics.object, []);
     const record = binding.projectGlobalObject(implementation, binding.resolveInterface('Window'));
     const global = record.platformObject!;
@@ -185,18 +227,17 @@ describe('Web IDL global platform objects', () => {
       extendedAttributes: [identifier('Global', 'Window')],
       members: [],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(namedItem, () => 'named value');
-    implementations.setNamedPropertySteps(namedItem, {
-      getSupportedPropertyNames: () => new Set(['named']),
-    });
+
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([window, base]),
+      new DefinitionAssembly([window, base]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    binding.getDefinitionBinding(base).getOrCreateMemberRecord(namedItem).operationSteps = () => 'named value';
+    binding.getDefinitionBinding(base).getOrCreateMemberRecord(namedItem).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['named']),
+    };
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       binding.resolveInterface('Window'),
@@ -232,24 +273,24 @@ describe('Web IDL global platform objects', () => {
     });
     const values = new WeakMap<object, string>();
     const forwardedTarget = { value: 'original' };
-    const implementations = new ImplementationRegistry();
-    implementations.setAttributeSteps(value, {
-      get(receiver) { return values.get(receiver!.implInst) ?? ''; },
-      set(receiver, next) { values.set(receiver!.implInst, next as string); },
-    });
-    implementations.setAttributeSteps(replaceable, {
-      get: () => 'original',
-    });
-    implementations.setAttributeSteps(forwarded, {
-      get: () => forwardedTarget,
-    });
+
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([definition]),
+      new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    const interfaceBinding = binding.getDefinitionBinding(definition);
+    interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
+      get(receiver) { return values.get(receiver!.implInst) ?? ''; },
+      set(receiver, next) { values.set(receiver!.implInst, next as string); },
+    };
+    interfaceBinding.getOrCreateMemberRecord(replaceable).attributeSteps = {
+      get: () => 'original',
+    };
+    interfaceBinding.getOrCreateMemberRecord(forwarded).attributeSteps = {
+      get: () => forwardedTarget,
+    };
     const implementation = Reflect.construct(realm.intrinsics.object, []);
     values.set(implementation, 'initial');
     const global = binding.projectGlobalObject(
@@ -283,18 +324,14 @@ describe('Web IDL global platform objects', () => {
       extendedAttributes: [identifier('Global', 'Window')],
       members: [stringifier],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setStringificationBehavior(
-      stringifier,
-      () => 'global stringifier',
-    );
+
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([definition]),
+      new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(stringifier).stringificationBehavior = () => 'global stringifier';
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       binding.resolveInterface('Window'),
@@ -348,7 +385,7 @@ describe('Web IDL global platform objects', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([globalIDL, base]),
+      new DefinitionAssembly([globalIDL, base]),
       realm,
       new BindingWorld([]),
     );
@@ -374,19 +411,18 @@ describe('Web IDL global platform objects', () => {
       extendedAttributes: [identifier('Global', 'PartialGlobal')],
       members: [getter],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setOperationSteps(getter, (_receiver, name) =>
-      name === 'answer' ? 'named answer' : undefined);
-    implementations.setNamedPropertySteps(getter, {
-      getSupportedPropertyNames: () => new Set(['answer']),
-    });
+
     const realm = new Realm({ globalNames: ['PartialGlobal'] });
     const binding = new RealmBinding(
-      assembleDefinitions([definition, partial]),
+      new DefinitionAssembly([definition, partial]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(getter).operationSteps = (_receiver, name) =>
+      name === 'answer' ? 'named answer' : undefined;
+    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(getter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['answer']),
+    };
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       binding.resolveInterface('PartialGlobal'),
@@ -430,21 +466,12 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
     extendedAttributes: [identifier('Global', 'TestGlobal')],
     members: [getter],
   });
-  const implementations = new ImplementationRegistry();
-  implementations.setOperationSteps(getter, () => undefined);
-  implementations.setNamedPropertySteps(getter, {
-    getSupportedPropertyNames: () => new Set(),
-  });
   const realm = new Realm({ isGlobalPrototypeChainMutable });
-  return {
-    binding: new RealmBinding(
-      assembleDefinitions([definition]),
-      realm,
-      new BindingWorld([]),
-      implementations,
-    ),
-    realm,
-  };
+  const binding = new RealmBinding(new DefinitionAssembly([definition]), realm, new BindingWorld([]));
+  const memberBinding = binding.getDefinitionBinding(definition).getOrCreateMemberRecord(getter);
+  memberBinding.operationSteps = () => undefined;
+  memberBinding.namedPropertySteps = { getSupportedPropertyNames: () => new Set() };
+  return { binding, realm };
 }
 
 function operation(

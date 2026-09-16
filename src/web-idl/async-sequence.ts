@@ -1,4 +1,4 @@
-import { getMethod, isObject } from '../js-engine/index';
+import { getMethod, isObject, type JSMethod } from '../js-engine/index';
 import type { PromiseValue } from '../js-engine/promises';
 
 import {
@@ -176,11 +176,6 @@ type IteratorRecord = {
   iterator: object;
   nextMethod: JSMethod;
 };
-
-type JSMethod = (
-  this: unknown,
-  ...argumentsList: unknown[]
-) => unknown;
 
 // Project adapter for ECMAScript §7.4.3 GetIteratorFromMethod.
 function getIteratorFromMethod(

@@ -13,7 +13,7 @@ export function createPromise(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromiseRecord {
-  return createIDLPromiseRecord(type, context.realm, context.realizeException);
+  return createIDLPromiseRecord(type, context.realm, context.binding.realizeException);
 }
 
 // Project adapter: convert author fulfillment values for an implementation's promise queue.
@@ -24,7 +24,7 @@ export function toImplementationPromise(
   convertValue: (value: unknown) => unknown,
   promises: Promises,
 ): PromiseValue<unknown> {
-  const conversionContext = withPromiseRealm(context, promise);
+  const conversionContext = { binding: context.binding, realm: promise.realm };
   return promises.import(promise.promise, (value) =>
     convertValue(convertToIDL(value, promise.type, conversionContext)));
 }
@@ -57,11 +57,7 @@ export function resolvePromise(
   value: unknown,
   context: ConversionContext,
 ): void {
-  promise.resolve(toPromiseResolution(
-    value,
-    promise.type,
-    withPromiseRealm(context, promise),
-  ));
+  promise.resolve(toPromiseResolution(value, promise.type, context));
 }
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — reject.
@@ -84,25 +80,25 @@ export function reactToPromise(
   steps: PromiseReactionSteps,
   context: ConversionContext,
 ): IDLPromiseRecord {
-  const reactionContext = withPromiseRealm(context, promise);
-  const resultPromise = createPromise(resultType, reactionContext);
-  const onFulfilled = promise.realm.createFunction(
+  const resultPromise = createIDLPromiseRecord(
+    resultType, promise.realm, context.binding.realizeException,
+  );
+  const onFulfilled = context.realm.createFunction(
     (_thisArgument, [value]) => {
       try {
-        const idlValue = convertToIDL(value, promise.type, reactionContext);
-        settleReaction(
+        const idlValue = convertToIDL(value, promise.type, context);
+        resolvePromise(
+          resultPromise,
           steps.fulfilled
             ? Reflect.apply(
               steps.fulfilled,
               undefined,
-              isUndefinedType(promise.type, reactionContext)
+              isUndefinedType(promise.type, context)
                 ? []
                 : [idlValue],
             )
             : idlValue,
-          resultPromise,
-          resultType,
-          reactionContext,
+          context,
         );
       } catch (exception) {
         resultPromise.reject(exception);
@@ -110,20 +106,19 @@ export function reactToPromise(
     },
     { length: 1, name: '' },
   );
-  const onRejected = promise.realm.createFunction(
+  const onRejected = context.realm.createFunction(
     (_thisArgument, [reason]) => {
       try {
-        settleReaction(
+        resolvePromise(
+          resultPromise,
           steps.rejected
             ? Reflect.apply(steps.rejected, undefined, [reason])
             : createRejectedPromise(
               reason,
               resultType,
-              reactionContext,
+              context,
             ),
-          resultPromise,
-          resultType,
-          reactionContext,
+          context,
         );
       } catch (exception) {
         resultPromise.reject(exception);
@@ -246,16 +241,6 @@ export type PromiseReactionSteps = {
   rejected?(this: void, reason: unknown): unknown;
 };
 
-// Project helper: project a reaction result before resolving its result promise.
-function settleReaction(
-  result: unknown,
-  promise: IDLPromiseRecord,
-  resultType: WebIDLType,
-  context: ConversionContext,
-): void {
-  promise.resolve(toPromiseResolution(result, resultType, context));
-}
-
 // Project helper: unwrap an IDL promise or project an ordinary resolution value.
 function toPromiseResolution(
   value: unknown,
@@ -267,26 +252,11 @@ function toPromiseResolution(
     : convertToJavaScript(value, type, context);
 }
 
-// Project helper: select the promise's realm for value conversion.
-function withPromiseRealm(
-  context: ConversionContext,
-  promise: IDLPromiseRecord,
-): ConversionContext {
-  return {
-    definitions: context.definitions,
-    hostDefinedInterfaces: context.hostDefinedInterfaces,
-    world: context.world,
-    projectImplementationObject: context.projectImplementationObject,
-    realizeException: context.realizeException,
-    realm: promise.realm,
-  };
-}
-
 // Project helper: identify Promise<undefined> reactions that receive no fulfillment argument.
 function isUndefinedType(
   type: WebIDLType,
   context: ConversionContext,
 ): boolean {
-  const resolved = getUnannotatedType(type, context.definitions);
+  const resolved = getUnannotatedType(type, context.binding.definitions);
   return resolved.kind === 'simple' && resolved.name === 'undefined';
 }

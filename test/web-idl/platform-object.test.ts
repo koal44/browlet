@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
@@ -13,11 +13,10 @@ import {
   stampImplementation, isStampedImplInstance, isStampedPlatformObject,
 } from '../../src/web-idl/platform-object';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 
-describe('Web IDL JavaScript binding foundation', () => {
+describe('Web IDL platform-object identity and state', () => {
   it('reads the shared stamped record without a registry', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'Example', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
     const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]));
     const primaryInterface = binding.resolveInterface('Example');
     const implInst = stampImplementation({}, primaryInterface, binding);
@@ -28,7 +27,7 @@ describe('Web IDL JavaScript binding foundation', () => {
     expect(record?.platformObject).toBeUndefined();
 
     const platformObject = {};
-    expect(binding.associatePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
+    expect(binding.initializePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
     expect(getPlatformRecord(platformObject)).toBe(record);
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(getPlatformObject(implInst)).toBe(platformObject);
@@ -41,8 +40,8 @@ describe('Web IDL JavaScript binding foundation', () => {
       inherits: 'Base',
       members: [],
     });
-    const firstDefinitions = assembleDefinitions([derivedIDL, baseIDL]);
-    const secondDefinitions = assembleDefinitions([derivedIDL, baseIDL]);
+    const firstDefinitions = new DefinitionAssembly([derivedIDL, baseIDL]);
+    const secondDefinitions = new DefinitionAssembly([derivedIDL, baseIDL]);
     const base = secondDefinitions.getInterface('Base');
     const derived = firstDefinitions.getInterface('Derived');
     const secondDerived = secondDefinitions.getInterface('Derived');
@@ -64,7 +63,7 @@ describe('Web IDL JavaScript binding foundation', () => {
       throw new Error('Missing assembled interface');
     }
 
-    const record = first.associatePlatformObject(object, derived, implInst);
+    const record = first.initializePlatformObject(object, derived, implInst);
 
     expect(first.isPlatformObject(object)).toBe(true);
     expect(isStampedImplInstance(implInst)).toBe(true);
@@ -105,7 +104,7 @@ describe('Web IDL JavaScript binding foundation', () => {
     });
     const realm = new Realm();
     const binding = new RealmBinding(
-      assembleDefinitions([choice, callback, alias]),
+      new DefinitionAssembly([choice, callback, alias]),
       realm,
       new BindingWorld([]),
     );
@@ -117,7 +116,7 @@ describe('Web IDL JavaScript binding foundation', () => {
   });
 
   it('returns the same instance with stamped state before projection', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'Example', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
     const primaryInterface = definitions.getInterface('Example');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
@@ -138,14 +137,14 @@ describe('Web IDL JavaScript binding foundation', () => {
     expect(getPlatformObject(implInst)).toBeUndefined();
 
     const platformObject = {};
-    binding.associatePlatformObject(platformObject, primaryInterface, implInst);
+    binding.initializePlatformObject(platformObject, primaryInterface, implInst);
     expect(isStampedImplInstance(platformObject)).toBe(false);
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(getPlatformObject(implInst)).toBe(platformObject);
   });
 
   it('looks up implementation records without inspecting proxy properties or prototypes', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'ProxyExample', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
     const primaryInterface = definitions.getInterface('ProxyExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
@@ -157,7 +156,7 @@ describe('Web IDL JavaScript binding foundation', () => {
 
     expect(getImplementationRecord(proxy)).toBeUndefined();
     expect(isStampedImplInstance(proxy)).toBe(false);
-    const record = binding.associatePlatformObject({}, primaryInterface, proxy);
+    const record = binding.initializePlatformObject({}, primaryInterface, proxy);
     expect(isStampedImplInstance(proxy)).toBe(true);
     expect(getImplementationRecord(proxy)).toBe(record);
     revoke();
@@ -167,7 +166,7 @@ describe('Web IDL JavaScript binding foundation', () => {
   });
 
   it('shares a record without changing frozen implementation and platform objects', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'FrozenExample', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'FrozenExample', members: [] })]);
     const primaryInterface = definitions.getInterface('FrozenExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
@@ -181,7 +180,7 @@ describe('Web IDL JavaScript binding foundation', () => {
     const record = getImplementationRecord(implInst);
 
     expect(isStampedPlatformObject(platformObject)).toBe(false);
-    expect(binding.associatePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
+    expect(binding.initializePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
     expect(isStampedPlatformObject(platformObject)).toBe(true);
     expect(getPlatformRecord(platformObject)).toBe(record);
     expect(getPlatformObject(implInst)).toBe(platformObject);
@@ -199,7 +198,7 @@ describe('Web IDL JavaScript binding foundation', () => {
   });
 
   it.each([false, true])('rejects one object serving both identities (stamped: %s)', (stamped) => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'Example', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
     const primaryInterface = definitions.getInterface('Example');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
@@ -207,14 +206,14 @@ describe('Web IDL JavaScript binding foundation', () => {
     const implInst = {};
     if (stamped) stampImplementation(implInst, primaryInterface, binding);
 
-    expect(() => binding.associatePlatformObject(implInst, primaryInterface, implInst))
+    expect(() => binding.initializePlatformObject(implInst, primaryInterface, implInst))
       .toThrow('Implementation and platform objects must be distinct');
     expect(isStampedImplInstance(implInst)).toBe(stamped);
     expect(isStampedPlatformObject(implInst)).toBe(false);
   });
 
   it('reads a platform proxy record without invoking traps, including after revocation', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'ProxyExample', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
     const primaryInterface = definitions.getInterface('ProxyExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
@@ -225,7 +224,7 @@ describe('Web IDL JavaScript binding foundation', () => {
       get: trap, getPrototypeOf: trap, defineProperty: trap, has: trap,
     });
     const implInst = {};
-    const record = binding.associatePlatformObject(proxy, primaryInterface, implInst);
+    const record = binding.initializePlatformObject(proxy, primaryInterface, implInst);
 
     expect(getPlatformRecord(proxy)).toBe(record);
     expect(isStampedPlatformObject(proxy)).toBe(true);
@@ -238,7 +237,7 @@ describe('Web IDL JavaScript binding foundation', () => {
   });
 
   it('rejects reusing a platform object in another world before stamping its new implementation', () => {
-    const definitions = assembleDefinitions([defineInterface({ name: 'Example', members: [] })]);
+    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
     const primaryInterface = definitions.getInterface('Example');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const firstWorld = new BindingWorld([]);
@@ -247,12 +246,12 @@ describe('Web IDL JavaScript binding foundation', () => {
     const second = new RealmBinding(definitions, new Realm(), secondWorld);
     const platformObject = {};
     const implInst = {};
-    const record = first.associatePlatformObject(platformObject, primaryInterface, implInst);
+    const record = first.initializePlatformObject(platformObject, primaryInterface, implInst);
     const secondImplInst = {};
 
     expect(second.isPlatformObject(platformObject)).toBe(false);
     expect(second.implements(platformObject, primaryInterface)).toBe(false);
-    expect(() => second.associatePlatformObject(platformObject, primaryInterface, secondImplInst))
+    expect(() => second.initializePlatformObject(platformObject, primaryInterface, secondImplInst))
       .toThrow('Platform object is already associated');
     expect(isStampedImplInstance(secondImplInst)).toBe(false);
     expect(getPlatformRecord(platformObject)).toBe(record);
@@ -279,7 +278,7 @@ describe('Web IDL JavaScript binding foundation', () => {
       members: [numbers, entries],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
-    const object = first.createPlatformObject(first.resolveInterface('RealmMutable'));
+    const object = first.createPlatformRecord(first.resolveInterface('RealmMutable')).platformObject!;
     const originalRecord = getPlatformRecord(object);
     const array = Reflect.get(object, 'numbers') as unknown[];
     array.push(1);
@@ -317,10 +316,10 @@ describe('Web IDL JavaScript binding foundation', () => {
     );
     Reflect.set(newTarget, 'prototype', null);
 
-    const object = first.createPlatformObject(
+    const object = first.createPlatformRecord(
       first.resolveInterface('RealmPrototypeFallback'),
       newTarget,
-    );
+    ).platformObject!;
 
     expect(Reflect.getPrototypeOf(object))
       .toBe(second.getInterfacePrototypeObject(second.resolveInterface('RealmPrototypeFallback')));
@@ -332,21 +331,12 @@ function createRealmBindings(
   interfaceIDL: ReturnType<typeof defineInterface>,
 ): { first: RealmBinding; second: RealmBinding; } {
   class RealmTestImpl {}
-  const implementations = new ImplementationRegistry();
-  implementations.setImplementationCreationSteps(interfaceIDL, () => new RealmTestImpl());
   const world = new BindingWorld([]);
-  return {
-    first: new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
-      new Realm(),
-      world,
-      implementations,
-    ),
-    second: new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
-      new Realm(),
-      world,
-      implementations,
-    ),
-  };
+  const definitions = new DefinitionAssembly([interfaceIDL]);
+  const first = new RealmBinding(definitions, new Realm(), world);
+  const second = new RealmBinding(definitions, new Realm(), world);
+  for (const binding of [first, second]) {
+    binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new RealmTestImpl();
+  }
+  return { first, second };
 }

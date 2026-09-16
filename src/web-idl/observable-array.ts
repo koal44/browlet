@@ -1,27 +1,19 @@
 import {
   createObservableArray, type ObservableArrayHandle,
 } from '../infra/observable-array';
-import {
-  convertToIDL, convertToJavaScript, type ConversionContext,
-  type IDLSequenceValue,
-} from './conversion';
+import { convertToIDL, convertToJavaScript, type IDLSequenceValue } from './conversion';
 import {
   idlType, sequence, type AttributeMember, type WebIDLType,
 } from './core/index';
 import type { PlatformRecord } from './platform-object';
-import type { ImplementationRegistry } from './implementation-registry';
+import type { RealmBinding } from './realm-binding';
 
 export class ObservableArrayBinding {
-  readonly #context: ConversionContext;
-  readonly #implementations: ImplementationRegistry;
+  readonly #binding: RealmBinding;
 
-  // Project helper: retain the conversion context and implementation registry.
-  constructor(
-    context: ConversionContext,
-    implementations: ImplementationRegistry,
-  ) {
-    this.#context = context;
-    this.#implementations = implementations;
+  // Project helper: retain the owning realm binding.
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
   }
 
   // Project helper: retrieve the platform value for an observable-array attribute.
@@ -52,7 +44,7 @@ export class ObservableArrayBinding {
     const values = convertToIDL(
       value,
       sequence(elementType),
-      this.#context,
+      this.#binding.defaultConversionContext,
     ) as IDLSequenceValue;
     this.#getHandle(record, attribute, elementType).replaceValues(values);
   }
@@ -73,14 +65,14 @@ export class ObservableArrayBinding {
     const existing = attributes.get(attribute);
     if (existing) return existing;
 
-    const steps = this.#implementations.getObservableArraySteps(attribute);
+    const steps = this.#binding.getMemberBinding(record.primaryInterface, attribute)?.observableArraySteps;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const deleteSteps = steps?.delete;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const setSteps = steps?.set;
     const handle = createObservableArray({
-      array: this.#context.realm.intrinsics.array,
-      convert: (value) => convertToIDL(value, elementType, this.#context),
+      array: this.#binding.realm.intrinsics.array,
+      convert: (value) => convertToIDL(value, elementType, this.#binding.defaultConversionContext),
       delete: deleteSteps
         ? (value, index) => Reflect.apply(
           deleteSteps,
@@ -88,8 +80,8 @@ export class ObservableArrayBinding {
           [value, index],
         )
         : undefined,
-      rangeError: this.#context.realm.intrinsics.rangeError,
-      typeError: this.#context.realm.intrinsics.typeError,
+      rangeError: this.#binding.realm.intrinsics.rangeError,
+      typeError: this.#binding.realm.intrinsics.typeError,
       set: setSteps
         ? (value, index) => Reflect.apply(
           setSteps,
@@ -100,12 +92,12 @@ export class ObservableArrayBinding {
       toJavaScript: (value) => convertToJavaScript(
         value,
         elementType,
-        this.#context,
+        this.#binding.defaultConversionContext,
       ),
       toNumber: (value) => convertToIDL(
         value,
         idlType.unrestrictedDouble,
-        this.#context,
+        this.#binding.defaultConversionContext,
       ) as number,
     });
     attributes.set(attribute, handle);

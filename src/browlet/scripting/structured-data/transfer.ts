@@ -157,7 +157,7 @@ function receiveTransfer(
     if (!definition || !ctx.isInterfaceExposed(definition)) {
       return throwDOMException('DataCloneError');
     }
-    const platformRecord = ctx.createPlatformObject(definition);
+    const platformRecord = ctx.createPlatformRecord(definition);
     const steps = ctx.getCapability(
       platformRecord.primaryInterface.definition,
       transferable,

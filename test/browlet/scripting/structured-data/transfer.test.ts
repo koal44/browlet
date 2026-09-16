@@ -212,7 +212,7 @@ describe('HTML structured transfer', () => {
     const targetRealm = new Realm();
     const source = bindings.register(sourceRealm);
     const target = bindings.register(targetRealm);
-    const original = source.createPlatformObject(transferBoxIDL);
+    const original = source.createPlatformRecord(transferBoxIDL);
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
@@ -249,7 +249,7 @@ describe('HTML structured transfer', () => {
 
     const hiddenRealm = new Realm({ globalNames: ['Worker'] });
     const hiddenTarget = bindings.register(hiddenRealm);
-    const hiddenOriginal = source.createPlatformObject(transferBoxIDL);
+    const hiddenOriginal = source.createPlatformRecord(transferBoxIDL);
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
       [hiddenOriginal.platformObject],

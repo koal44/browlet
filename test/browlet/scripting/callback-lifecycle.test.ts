@@ -6,7 +6,7 @@ import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
 import { parseURL, type URLRecord } from '../../../src/url/url';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/realm-binding';
 import { invokeCallbackFunction } from '../../../src/web-idl/callback';
 import { isCallbackFunctionValue } from
@@ -79,7 +79,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const agent = new TestAgent(createEventLoopOptions(checkpoint));
     const callbackRealm = createTestRealm(agent, 'callback');
     const incumbentRealm = createTestRealm(agent, 'incumbent');
-    const definitions = assembleDefinitions([defineCallbackFunction({
+    const definitions = new DefinitionAssembly([defineCallbackFunction({
       arguments: [],
       name: 'LifecycleCallback',
       returns: idlType.undefined,
@@ -115,7 +115,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       convertToIDL(
         value,
         reference('LifecycleCallback'),
-        incumbentContext,
+        incumbentContext.defaultConversionContext,
       ));
     const callbackValue = incumbentRealm.realm.evaluate(
       'convert(callback)',
@@ -173,7 +173,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     });
     const agent = new TestAgent(createEventLoopOptions(checkpoint));
     const entry = createTestRealm(agent, 'reentrant');
-    const definitions = assembleDefinitions([defineCallbackFunction({
+    const definitions = new DefinitionAssembly([defineCallbackFunction({
       arguments: [],
       name: 'LifecycleCallback',
       returns: idlType.undefined,
@@ -184,7 +184,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
-      convertToIDL(value, reference('LifecycleCallback'), context));
+      convertToIDL(value, reference('LifecycleCallback'), context.defaultConversionContext));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',
       'create-reentrant-callback.js',

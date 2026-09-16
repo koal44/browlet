@@ -1,4 +1,4 @@
-import { isObject } from '../js-engine/index';
+import { isObject, type JSFunction } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
@@ -532,7 +532,7 @@ export class CollectionBinding {
   ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#context.world) {
+    if (record?.binding.world !== this.#context.binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
     this.#context.realm.performSecurityCheck(value, identifier, type);
@@ -554,9 +554,6 @@ export type IDLSetEntries = Set<unknown>;
 type CollectionKind = 'map' | 'set';
 type MapIterationKind = 'key' | 'key+value' | 'value';
 type SetIterationKind = 'key+value' | 'value';
-type JSFunction = ReturnType<
-  ConversionContext['realm']['createFunction']
->;
 
 // Extracted from Web IDL §3.7.11 Maplike declarations and §3.7.12 Setlike declarations — convert keys/entries
 // and replace -0 with +0.

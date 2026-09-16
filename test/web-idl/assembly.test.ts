@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   defineCallbackInterface, defineDictionary, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
@@ -24,7 +24,7 @@ describe('Web IDL definition assembly', () => {
     });
     const parent = defineInterface({ name: 'Parent', members: [] });
 
-    const definitions = assembleDefinitions([partial, child, parent]);
+    const definitions = new DefinitionAssembly([partial, child, parent]);
     const assembled = definitions.getInterface('Child');
 
     expect(assembled?.definition).toBe(child);
@@ -50,7 +50,7 @@ describe('Web IDL definition assembly', () => {
     const includeSecond = defineIncludes({ interface: 'Host', mixin: 'Second' });
     const includeFirst = defineIncludes({ interface: 'Host', mixin: 'First' });
 
-    const definitions = assembleDefinitions([
+    const definitions = new DefinitionAssembly([
       includeSecond,
       secondPartial,
       host,
@@ -79,7 +79,7 @@ describe('Web IDL definition assembly', () => {
         returns: idlType.undefined,
       }],
     });
-    const definitions = assembleDefinitions([callback]);
+    const definitions = new DefinitionAssembly([callback]);
 
     expect(definitions.getDefinition('EventListener')).toBe(callback);
     expect(definitions.getCallbackInterface('EventListener')).toBe(callback);
@@ -102,7 +102,7 @@ describe('Web IDL definition assembly', () => {
       }],
     });
 
-    const definitions = assembleDefinitions([partial, primary]);
+    const definitions = new DefinitionAssembly([partial, primary]);
     const assembled = definitions.getNamespace('Namespace');
 
     expect(assembled?.definition).toBe(primary);
@@ -135,7 +135,7 @@ describe('Web IDL definition assembly', () => {
       members: [member('h'), member('d')],
     });
 
-    const definitions = assembleDefinitions([b, a, c, partialA]);
+    const definitions = new DefinitionAssembly([b, a, c, partialA]);
     const assembled = definitions.getDictionary('C');
 
     expect(assembled?.parent?.definition).toBe(b);

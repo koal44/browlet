@@ -115,7 +115,7 @@ export function structuredDeserialize(
       if (!definition || !ctx.isInterfaceExposed(definition)) {
         return throwDOMException('DataCloneError');
       }
-      platformRecord = ctx.createPlatformObject(definition);
+      platformRecord = ctx.createPlatformRecord(definition);
       value = platformRecord.platformObject;
       deep = true;
       break;

@@ -2,38 +2,32 @@ import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
 import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembly';
-import {
-  convertToIDL, convertToJavaScript, type ConversionContext,
-} from './conversion';
+import { convertToIDL, convertToJavaScript } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
 import type { OperationMember } from './core/types';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
 import { isNamedPropertiesObject } from './global-platform-object';
+import type { RealmBinding } from './realm-binding';
 import type {
-  ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
-} from './implementation-registry';
+  IndexedPropertySteps, NamedPropertySteps,
+} from './definition-binding';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
 
 export class LegacyPlatformObjectBinding {
-  readonly #context: ConversionContext;
-  readonly #implementations: ImplementationRegistry;
+  readonly #binding: RealmBinding;
 
-  // Project helper: retain the conversion context and implementation registry.
-  constructor(
-    context: ConversionContext,
-    implementations: ImplementationRegistry,
-  ) {
-    this.#context = context;
-    this.#implementations = implementations;
+  // Project helper: retain the owning realm binding.
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
   }
 
   // Project adapter for Web IDL §3.9 Legacy platform objects — install the internal methods as Proxy traps.
   createObject(
     target: object,
     implementation: object,
-    properties: LegacyProperties | null,
+    properties: LegacyPropertyMetadata | null,
   ): object {
     if (!properties) return target;
 
@@ -102,26 +96,26 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Project helper: assemble inherited property declarations, flags, and registered callbacks.
-  createInterfaceProperties(
+  createPropertyMetadata(
     primaryInterface: AssembledInterfaceDefinition,
-  ): LegacyProperties | null {
+  ): LegacyPropertyMetadata | null {
     const indexedGetter = findDerivedSpecialOperation(
       primaryInterface,
       'getter',
       isIndexedOperation,
-      this.#context.definitions,
+      this.#binding.definitions,
     );
     const namedGetter = findDerivedSpecialOperation(
       primaryInterface,
       'getter',
       isNamedOperation,
-      this.#context.definitions,
+      this.#binding.definitions,
     );
     if (!indexedGetter && !namedGetter) return null;
 
     let indexed: IndexedProperties | undefined;
     if (indexedGetter) {
-      const steps = this.#implementations.getIndexedPropertySteps(indexedGetter);
+      const steps = this.#binding.getMemberBinding(primaryInterface, indexedGetter)?.indexedPropertySteps;
       if (!steps) {
         throw new Error('Missing supported property indices implementation');
       }
@@ -132,7 +126,7 @@ export class LegacyPlatformObjectBinding {
           primaryInterface,
           'setter',
           isIndexedOperation,
-          this.#context.definitions,
+          this.#binding.definitions,
         ),
         steps,
       };
@@ -140,7 +134,7 @@ export class LegacyPlatformObjectBinding {
 
     let named: NamedProperties | undefined;
     if (namedGetter) {
-      const steps = this.#implementations.getNamedPropertySteps(namedGetter);
+      const steps = this.#binding.getMemberBinding(primaryInterface, namedGetter)?.namedPropertySteps;
       if (!steps) {
         throw new Error('Missing supported property names implementation');
       }
@@ -149,7 +143,7 @@ export class LegacyPlatformObjectBinding {
           primaryInterface,
           'deleter',
           isNamedOperation,
-          this.#context.definitions,
+          this.#binding.definitions,
         ),
         getter: namedGetter,
         primaryInterface,
@@ -161,7 +155,7 @@ export class LegacyPlatformObjectBinding {
           primaryInterface,
           'setter',
           isNamedOperation,
-          this.#context.definitions,
+          this.#binding.definitions,
         ),
         steps,
         unenumerable: implementsExtendedAttribute(
@@ -180,17 +174,17 @@ export class LegacyPlatformObjectBinding {
       primaryInterface,
       'getter',
       isIndexedOperation,
-      this.#context.definitions,
+      this.#binding.definitions,
     ) !== undefined;
   }
 
   // Project predicate: select indexed and named operations supported by this binding.
   supportsSpecialOperation(operation: OperationMember): boolean {
     if (operation.special === 'deleter') {
-      return isNamedOperation(operation, this.#context.definitions);
+      return isNamedOperation(operation, this.#binding.definitions);
     }
-    return isIndexedOperation(operation, this.#context.definitions) ||
-      isNamedOperation(operation, this.#context.definitions);
+    return isIndexedOperation(operation, this.#binding.definitions) ||
+      isNamedOperation(operation, this.#binding.definitions);
   }
 
   // Project Proxy adapter for ECMAScript §10.1.8.1 OrdinaryGet with legacy [[GetOwnProperty]].
@@ -199,7 +193,7 @@ export class LegacyPlatformObjectBinding {
     implementation: object,
     property: string | symbol,
     receiver: unknown,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): unknown {
     if (typeof property === 'symbol') {
       return Reflect.get(target, property, receiver);
@@ -222,7 +216,7 @@ export class LegacyPlatformObjectBinding {
     target: object,
     implementation: object,
     property: string | symbol,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): boolean {
     if (typeof property === 'symbol') return Reflect.has(target, property);
     if (this.#getOwnProperty(
@@ -240,7 +234,7 @@ export class LegacyPlatformObjectBinding {
     target: object,
     implementation: object,
     property: string | symbol,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
     ignoreNamedProperties = false,
   ): PropertyDescriptor | undefined {
     if (typeof property === 'symbol') {
@@ -294,7 +288,7 @@ export class LegacyPlatformObjectBinding {
       value: convertToJavaScript(
         value,
         properties.getter.returns,
-        this.#context,
+        this.#binding.defaultConversionContext,
       ),
       writable: properties.setter !== undefined,
     };
@@ -307,10 +301,7 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#implementations.getOperationSteps(
-      properties.getter,
-      properties.primaryInterface,
-    );
+    const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
     if (!steps) {
       throw new Error('Missing named property getter implementation');
     }
@@ -321,7 +312,7 @@ export class LegacyPlatformObjectBinding {
       value: convertToJavaScript(
         value,
         properties.getter.returns,
-        this.#context,
+        this.#binding.defaultConversionContext,
       ),
       writable: properties.setter !== undefined,
     };
@@ -334,7 +325,7 @@ export class LegacyPlatformObjectBinding {
     property: string | symbol,
     value: unknown,
     receiver: unknown,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): boolean {
     const receiverTargetsObject = getImplementationObject(receiver) === implementation;
     if (receiverTargetsObject && typeof property === 'string') {
@@ -380,7 +371,7 @@ export class LegacyPlatformObjectBinding {
     implementation: object,
     property: string | symbol,
     descriptor: PropertyDescriptor,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): boolean {
     if (
       properties.indexed &&
@@ -434,7 +425,7 @@ export class LegacyPlatformObjectBinding {
     target: object,
     implementation: object,
     property: string | symbol,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): boolean {
     if (
       properties.indexed &&
@@ -471,7 +462,7 @@ export class LegacyPlatformObjectBinding {
   #ownPropertyKeys(
     target: object,
     implementation: object,
-    properties: LegacyProperties,
+    properties: LegacyPropertyMetadata,
   ): (string | symbol)[] {
     const keys = new Set<string | symbol>();
     if (properties.indexed) {
@@ -526,10 +517,7 @@ export class LegacyPlatformObjectBinding {
     const converted = this.#convertSetterValue(setter, value);
 
     if (setter.name) {
-      const steps = this.#implementations.getOperationSteps(
-        setter,
-        properties.primaryInterface,
-      );
+      const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
       if (!steps) {
         throw new Error('Missing indexed property setter implementation');
       }
@@ -559,10 +547,7 @@ export class LegacyPlatformObjectBinding {
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
     if (setter.name) {
-      const steps = this.#implementations.getOperationSteps(
-        setter,
-        properties.primaryInterface,
-      );
+      const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
       if (!steps) {
         throw new Error('Missing named property setter implementation');
       }
@@ -593,7 +578,7 @@ export class LegacyPlatformObjectBinding {
         valueArgument.type,
         valueArgument.extendedAttributes,
       ),
-      this.#context,
+      this.#binding.defaultConversionContext,
     );
   }
 
@@ -614,15 +599,12 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#implementations.getOperationSteps(
-      deleter,
-      properties.primaryInterface,
-    );
+    const steps = this.#binding.getMemberBinding(properties.primaryInterface, deleter)?.operationSteps;
     if (!steps) throw new Error('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
     const returnType = getUnannotatedType(
       deleter.returns,
-      this.#context.definitions,
+      this.#binding.definitions,
     );
     return returnType.kind !== 'simple' ||
       returnType.name !== 'boolean' ||
@@ -658,10 +640,7 @@ export class LegacyPlatformObjectBinding {
     index: number,
     properties: IndexedProperties,
   ): unknown {
-    const steps = this.#implementations.getOperationSteps(
-      properties.getter,
-      properties.primaryInterface,
-    );
+    const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
     if (!steps) throw new Error('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
@@ -712,7 +691,7 @@ export class LegacyPlatformObjectBinding {
   }
 }
 
-export type LegacyProperties = {
+export type LegacyPropertyMetadata = {
   indexed: IndexedProperties | undefined;
   named: NamedProperties | undefined;
 };

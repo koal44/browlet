@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { getImplementationObject } from '../../src/web-idl/platform-object';
 
 describe('Web IDL legacy platform objects', () => {
@@ -26,24 +25,27 @@ describe('Web IDL legacy platform objects', () => {
       [constructor, getter, length],
     );
     const values = new WeakMap<object, string[]>();
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, ['zero', 'one']);
-    });
-    implementations.setIndexedPropertySteps(getter, {
+
+    const { binding, realm } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, ['zero', 'one']);
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).indexedPropertySteps = {
       getSupportedPropertyIndices() {
         return values.get(this)?.keys() ?? [];
       },
       unsupportedValue: undefined,
-    });
-    implementations.setOperationSteps(getter, function(receiver, index) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, index) {
       return values.get(receiver!.implInst)?.[index as number];
-    });
-    implementations.setAttributeSteps(length, {
+    };
+    interfaceBinding.getOrCreateMemberRecord(length).attributeSteps = {
       get(receiver) { return values.get(receiver!.implInst)?.length ?? 0; },
-    });
-
-    const { binding, realm } = createBinding(interfaceIDL, implementations);
+    };
     const Interface = getInstalledInterface(binding.install(), 'ReadOnlyIndexed');
     const object = construct(Interface);
 
@@ -95,26 +97,29 @@ describe('Web IDL legacy platform objects', () => {
       [constructor, getter, setter],
     );
     const values = new WeakMap<object, Map<number, number>>();
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, new Map([[0, 1]]));
-    });
-    implementations.setIndexedPropertySteps(getter, {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, new Map([[0, 1]]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).indexedPropertySteps = {
       getSupportedPropertyIndices() {
         return values.get(this)?.keys() ?? [];
       },
       supportsIndex(index) {
         return values.get(this)?.has(index) ?? false;
       },
-    });
-    implementations.setOperationSteps(getter, function(receiver, index) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, index) {
       return values.get(receiver!.implInst)?.get(index as number);
-    });
-    implementations.setOperationSteps(setter, function(receiver, index, value) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(setter).operationSteps = function(receiver, index, value) {
       values.get(receiver!.implInst)?.set(index as number, value as number);
-    });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
     const Interface = getInstalledInterface(binding.install(), 'WritableIndexed');
     const object = construct(Interface);
     const implementation = getImplementationObject(object);
@@ -148,14 +153,19 @@ describe('Web IDL legacy platform objects', () => {
     );
     const values = new WeakMap<object, Map<number, string>>();
     const invocations: string[] = [];
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, new Map([[0, 'initial']]));
-    });
-    implementations.setOperationSteps(getter, function(receiver, index) {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, new Map([[0, 'initial']]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, index) {
       return values.get(receiver!.implInst)?.get(index as number);
-    });
-    implementations.setIndexedPropertySteps(getter, {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).indexedPropertySteps = {
       getSupportedPropertyIndices() {
         return values.get(this)?.keys() ?? [];
       },
@@ -168,9 +178,7 @@ describe('Web IDL legacy platform objects', () => {
         invocations.push(`new:${String(index)}`);
         values.get(this)?.set(index, value as string);
       },
-    });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
     const object = construct(getInstalledInterface(binding.install(), 'AnonymousIndexed'));
 
     expect(Reflect.set(object, '0', 'updated')).toBe(true);
@@ -193,26 +201,28 @@ describe('Web IDL legacy platform objects', () => {
       exposed: '*',
       members: [constructor, derivedGetter],
     });
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(derived, () => new IndexedDerivedImpl());
-    implementations.setConstructorSteps(constructor, () => undefined);
-    implementations.setIndexedPropertySteps(baseGetter, {
-      getSupportedPropertyIndices: () => [0],
-      supportsIndex: (index) => index === 0,
-    });
-    implementations.setIndexedPropertySteps(derivedGetter, {
-      getSupportedPropertyIndices: () => [1],
-      supportsIndex: (index) => index === 1,
-    });
-    implementations.setOperationSteps(baseGetter, () => 'base');
-    implementations.setOperationSteps(derivedGetter, () => 'derived');
 
     const binding = new RealmBinding(
-      assembleDefinitions([derived, base]),
+      new DefinitionAssembly([derived, base]),
       new Realm(),
       new BindingWorld([]),
-      implementations,
     );
+    const interfaceBinding = binding.getDefinitionBinding(derived);
+    interfaceBinding.createImplementation = () => new IndexedDerivedImpl();
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseGetter).indexedPropertySteps = {
+      getSupportedPropertyIndices: () => [0],
+      supportsIndex: (index) => index === 0,
+    };
+    interfaceBinding.getOrCreateMemberRecord(derivedGetter).indexedPropertySteps = {
+      getSupportedPropertyIndices: () => [1],
+      supportsIndex: (index) => index === 1,
+    };
+    binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseGetter).operationSteps = () => 'base';
+    interfaceBinding.getOrCreateMemberRecord(derivedGetter).operationSteps = () => 'derived';
     const object = construct(getInstalledInterface(binding.install(), 'IndexedDerived'));
 
     expect(Reflect.has(object, '0')).toBe(false);
@@ -232,27 +242,30 @@ describe('Web IDL legacy platform objects', () => {
       [constructor, getter, length],
     );
     const values = new WeakMap<object, Map<string, string>>();
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, new Map([
-        ['alpha', 'named alpha'],
-        ['length', 'named length'],
-        ['toString', 'named toString'],
-      ]));
-    });
-    implementations.setNamedPropertySteps(getter, {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, new Map([
+          ['alpha', 'named alpha'],
+          ['length', 'named length'],
+          ['toString', 'named toString'],
+        ]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).namedPropertySteps = {
       getSupportedPropertyNames() {
         return new Set(values.get(this)?.keys());
       },
-    });
-    implementations.setOperationSteps(getter, function(receiver, name) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, name) {
       return values.get(receiver!.implInst)?.get(name as string);
-    });
-    implementations.setAttributeSteps(length, {
+    };
+    interfaceBinding.getOrCreateMemberRecord(length).attributeSteps = {
       get(receiver) { return values.get(receiver!.implInst)?.size ?? 0; },
-    });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
     const Interface = getInstalledInterface(binding.install(), 'ReadOnlyNamed');
     const object = construct(Interface);
 
@@ -294,31 +307,46 @@ describe('Web IDL legacy platform objects', () => {
       [constructor, legacyGetter],
     );
     class LegacyNamedImpl {}
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(legacy, () => new LegacyNamedImpl());
-    implementations.setConstructorSteps(constructor, () => undefined);
-    implementations.setNamedPropertySteps(globalGetter, {
-      getSupportedPropertyNames: () => new Set(['shared']),
-    });
-    implementations.setNamedPropertySteps(legacyGetter, {
-      getSupportedPropertyNames: () => new Set(['shared']),
-    });
-    implementations.setOperationSteps(globalGetter, () => 'global');
-    implementations.setOperationSteps(legacyGetter, () => 'legacy');
 
-    const definitions = assembleDefinitions([window, legacy]);
+    const definitions = new DefinitionAssembly([window, legacy]);
     const globalBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
-      implementations,
     );
+    const globalBindingInterfaceBinding = globalBinding.getDefinitionBinding(legacy);
+    globalBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
+    globalBindingInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    globalBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    };
+    globalBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    };
+    globalBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
+    globalBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).operationSteps = () => 'legacy';
     const legacyBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
-      implementations,
     );
+    const legacyBindingInterfaceBinding = legacyBinding.getDefinitionBinding(legacy);
+    legacyBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
+    legacyBindingInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    legacyBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    };
+    legacyBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    };
+    legacyBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
+    legacyBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).operationSteps = () => 'legacy';
     const global = globalBinding.projectGlobalObject(
       {},
       globalBinding.resolveInterface('Window'),
@@ -359,35 +387,38 @@ describe('Web IDL legacy platform objects', () => {
       members: [constructor, getter, setter, deleter, length, fixed],
     });
     const values = new WeakMap<object, Map<string, unknown>>();
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, new Map([
-        ['alpha', 'named alpha'],
-        ['length', 'named length'],
-        ['toString', 'named toString'],
-        ['fixed', 'named fixed'],
-        ['locked', 'locked'],
-      ]));
-    });
-    implementations.setNamedPropertySteps(getter, {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, new Map([
+          ['alpha', 'named alpha'],
+          ['length', 'named length'],
+          ['toString', 'named toString'],
+          ['fixed', 'named fixed'],
+          ['locked', 'locked'],
+        ]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).namedPropertySteps = {
       getSupportedPropertyNames() {
         return new Set(values.get(this)?.keys());
       },
-    });
-    implementations.setOperationSteps(getter, function(receiver, name) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, name) {
       return values.get(receiver!.implInst)?.get(name as string);
-    });
-    implementations.setOperationSteps(setter, function(receiver, name, value) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(setter).operationSteps = function(receiver, name, value) {
       values.get(receiver!.implInst)?.set(name as string, value);
-    });
-    implementations.setOperationSteps(deleter, function(receiver, name) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(deleter).operationSteps = function(receiver, name) {
       if (name === 'locked') return false;
       return values.get(receiver!.implInst)?.delete(name as string) ?? false;
-    });
-    implementations.setAttributeSteps(length, { get: () => 5 });
-    implementations.setAttributeSteps(fixed, { get: () => 'fixed attribute' });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
+    interfaceBinding.getOrCreateMemberRecord(length).attributeSteps = { get: () => 5 };
+    interfaceBinding.getOrCreateMemberRecord(fixed).attributeSteps = { get: () => 'fixed attribute' };
     const Interface = getInstalledInterface(binding.install(), 'OverridingNamed');
     const object = construct(Interface);
 
@@ -426,18 +457,18 @@ describe('Web IDL legacy platform objects', () => {
       'StringifyingNamed',
       [constructor, getter, stringifier],
     );
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, () => undefined);
-    implementations.setNamedPropertySteps(getter, {
-      getSupportedPropertyNames: () => new Set(['toString']),
-    });
-    implementations.setOperationSteps(getter, () => 'named');
-    implementations.setStringificationBehavior(
-      stringifier,
-      () => 'stringified',
-    );
 
-    const { binding } = createBinding(interfaceIDL, implementations);
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).namedPropertySteps = {
+      getSupportedPropertyNames: () => new Set(['toString']),
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = () => 'named';
+    interfaceBinding.getOrCreateMemberRecord(stringifier).stringificationBehavior = () => 'stringified';
     const object = construct(getInstalledInterface(binding.install(), 'StringifyingNamed'));
     const descriptor = Reflect.getOwnPropertyDescriptor(object, 'toString');
 
@@ -465,14 +496,19 @@ describe('Web IDL legacy platform objects', () => {
     );
     const values = new WeakMap<object, Map<string, string>>();
     const invocations: string[] = [];
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      values.set(this, new Map([['existing', 'initial']]));
-    });
-    implementations.setOperationSteps(getter, function(receiver, name) {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        values.set(this, new Map([['existing', 'initial']]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).operationSteps = function(receiver, name) {
       return values.get(receiver!.implInst)?.get(name as string);
-    });
-    implementations.setNamedPropertySteps(getter, {
+    };
+    interfaceBinding.getOrCreateMemberRecord(getter).namedPropertySteps = {
       deleteExisting(name) {
         invocations.push(`delete:${name}`);
         return values.get(this)?.delete(name) ?? false;
@@ -488,9 +524,7 @@ describe('Web IDL legacy platform objects', () => {
         invocations.push(`new:${name}`);
         values.get(this)?.set(name, value as string);
       },
-    });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
     const object = construct(getInstalledInterface(binding.install(), 'AnonymousNamed'));
 
     expect(Reflect.set(object, 'existing', 'updated')).toBe(true);
@@ -512,40 +546,43 @@ describe('Web IDL legacy platform objects', () => {
     ]);
     const indices = new WeakMap<object, Map<number, string>>();
     const names = new WeakMap<object, Map<string, string>>();
-    const implementations = new ImplementationRegistry();
-    implementations.setConstructorSteps(constructor, function() {
-      indices.set(this, new Map([[0, 'indexed zero']]));
-      names.set(this, new Map([
-        ['0', 'named zero'], ['1', 'named one'], ['alpha', 'named alpha'],
-      ]));
-    });
-    implementations.setIndexedPropertySteps(indexGetter, {
+
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function() {
+        indices.set(this, new Map([[0, 'indexed zero']]));
+        names.set(this, new Map([
+          ['0', 'named zero'], ['1', 'named one'], ['alpha', 'named alpha'],
+        ]));
+      },
+    };
+    interfaceBinding.getOrCreateMemberRecord(indexGetter).indexedPropertySteps = {
       getSupportedPropertyIndices() {
         return indices.get(this)?.keys() ?? [];
       },
       supportsIndex(index) {
         return indices.get(this)?.has(index) ?? false;
       },
-    });
-    implementations.setNamedPropertySteps(nameGetter, {
+    };
+    interfaceBinding.getOrCreateMemberRecord(nameGetter).namedPropertySteps = {
       getSupportedPropertyNames() {
         return new Set(names.get(this)?.keys());
       },
-    });
-    implementations.setOperationSteps(indexGetter, function(receiver, index) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(indexGetter).operationSteps = function(receiver, index) {
       return indices.get(receiver!.implInst)?.get(index as number);
-    });
-    implementations.setOperationSteps(indexSetter, function(receiver, index, value) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(indexSetter).operationSteps = function(receiver, index, value) {
       indices.get(receiver!.implInst)?.set(index as number, value as string);
-    });
-    implementations.setOperationSteps(nameGetter, function(receiver, name) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(nameGetter).operationSteps = function(receiver, name) {
       return names.get(receiver!.implInst)?.get(name as string);
-    });
-    implementations.setOperationSteps(nameSetter, function(receiver, name, value) {
+    };
+    interfaceBinding.getOrCreateMemberRecord(nameSetter).operationSteps = function(receiver, name, value) {
       names.get(receiver!.implInst)?.set(name as string, value as string);
-    });
-
-    const { binding } = createBinding(interfaceIDL, implementations);
+    };
     const Interface = getInstalledInterface(binding.install(), 'IndexedAndNamed');
     const object = construct(Interface);
     const other = construct(Interface);
@@ -575,23 +612,23 @@ describe('Web IDL legacy platform objects', () => {
     const indexGetter = indexedGetter('item', idlType.DOMString);
     const nameGetter = namedGetter('namedItem', idlType.DOMString);
     const interfaceIDL = legacyInterface('SharedLegacy', [constructor, indexGetter, nameGetter]);
-    const definitions = assembleDefinitions([interfaceIDL]);
+    const definitions = new DefinitionAssembly([interfaceIDL]);
     const objects = ['first', 'second'].map((name, index) => {
-      const implementations = new ImplementationRegistry();
-      implementations.setImplementationCreationSteps(interfaceIDL, () => new SharedLegacyImpl());
-      implementations.setConstructorSteps(constructor, () => undefined);
-      implementations.setIndexedPropertySteps(indexGetter, {
+      const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]));
+      const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+      interfaceBinding.createImplementation = () => new SharedLegacyImpl();
+      interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
+        kind: 'initialize', steps: () => undefined,
+      };
+      interfaceBinding.getOrCreateMemberRecord(indexGetter).indexedPropertySteps = {
         getSupportedPropertyIndices: () => [index],
         supportsIndex: (candidate) => candidate === index,
-      });
-      implementations.setNamedPropertySteps(nameGetter, {
+      };
+      interfaceBinding.getOrCreateMemberRecord(nameGetter).namedPropertySteps = {
         getSupportedPropertyNames: () => new Set([name]),
-      });
-      implementations.setOperationSteps(indexGetter, () => name);
-      implementations.setOperationSteps(nameGetter, () => name);
-      const binding = new RealmBinding(
-        definitions, new Realm(), new BindingWorld([]), implementations,
-      );
+      };
+      interfaceBinding.getOrCreateMemberRecord(indexGetter).operationSteps = () => name;
+      interfaceBinding.getOrCreateMemberRecord(nameGetter).operationSteps = () => name;
       return construct(getInstalledInterface(binding.install(), 'SharedLegacy'));
     });
 
@@ -693,20 +730,14 @@ function noArguments(name: string) {
 
 function createBinding(
   interfaceIDL: InterfaceDefinition,
-  implementations: ImplementationRegistry,
 ): { binding: RealmBinding; realm: Realm; } {
   class LegacyCollectionImpl {}
-  implementations.setImplementationCreationSteps(interfaceIDL, () => new LegacyCollectionImpl());
   const realm = new Realm();
-  return {
-    binding: new RealmBinding(
-      assembleDefinitions([interfaceIDL]),
-      realm,
-      new BindingWorld([]),
-      implementations,
-    ),
-    realm,
-  };
+  const binding = new RealmBinding(
+    new DefinitionAssembly([interfaceIDL]), realm, new BindingWorld([]),
+  );
+  binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new LegacyCollectionImpl();
+  return { binding, realm };
 }
 
 function construct(target: object): object {

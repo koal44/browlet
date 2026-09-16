@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
-  idlType, promise as promiseType,
+  idlType, promise as promiseType, sequence,
 } from '../../src/web-idl/core/index';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
@@ -21,17 +19,18 @@ import {
 
 describe('Web IDL promises', () => {
   it('wraps JavaScript values in a target-realm PromiseCapability', async () => {
-    const { binding, realm } = createBinding();
+    const ctx = createContext();
+    const { realm } = ctx;
     const value = convertToIDL(
       { then(resolve: (value: string) => void) { resolve('fulfilled'); } },
       promiseType(idlType.DOMString),
-      binding,
+      ctx,
     );
     const promise = requirePromiseRecord(value);
     const javaScriptValue = convertToJavaScript(
       promise,
       promiseType(idlType.DOMString),
-      binding,
+      ctx,
     );
 
     expect(javaScriptValue).toBeInstanceOf(realm.intrinsics.promise.constructor);
@@ -39,68 +38,69 @@ describe('Web IDL promises', () => {
     expect(convertToJavaScript(
       promise,
       promiseType(idlType.DOMString),
-      binding,
+      ctx,
     )).toBe(javaScriptValue);
     await expect(javaScriptValue).resolves.toBe('fulfilled');
   });
 
   it('creates, resolves, rejects, and reacts to typed promises', async () => {
-    const { binding, realm } = createBinding();
-    const resolved = createResolvedPromise(4, idlType.long, binding);
+    const ctx = createContext();
+    const { realm } = ctx;
+    const resolved = createResolvedPromise(4, idlType.long, ctx);
     await expect(toJavaScriptPromise(resolved)).resolves.toBe(4);
 
     const reason = new Error('rejected');
-    const rejected = createRejectedPromise(reason, idlType.long, binding);
+    const rejected = createRejectedPromise(reason, idlType.long, ctx);
     await expect(toJavaScriptPromise(rejected)).rejects.toBe(reason);
     await expect(toJavaScriptPromise(reactToPromise(
       rejected,
       idlType.long,
       {},
-      binding,
+      ctx,
     ))).rejects.toBe(reason);
 
     const input = requirePromiseRecord(convertToIDL(
       '4.9',
       promiseType(idlType.long),
-      binding,
+      ctx,
     ));
     const reaction = reactToPromise(
       input,
       idlType.long,
       { fulfilled: (value) => Number(value) + 1 },
-      binding,
+      ctx,
     );
     await expect(toJavaScriptPromise(reaction)).resolves.toBe(5);
 
     const invalid = requirePromiseRecord(convertToIDL(
       '😞',
       promiseType(idlType.ByteString),
-      binding,
+      ctx,
     ));
     const failedConversion = reactToPromise(
       invalid,
       idlType.ByteString,
       {},
-      binding,
+      ctx,
     );
     await expect(toJavaScriptPromise(failedConversion)).rejects
       .toBeInstanceOf(realm.intrinsics.typeError);
   });
 
   it('tracks capability resolution rather than native promise settlement', async () => {
-    const { binding } = createBinding();
+    const ctx = createContext();
     let resolveAdopted: ((value: string) => void) | undefined;
     const adopted = new Promise<string>((resolve) => {
       resolveAdopted = resolve;
     });
-    const capability = createPromise(idlType.any, binding);
+    const capability = createPromise(idlType.any, ctx);
     let settled = false;
     void toJavaScriptPromise(capability).then(() => {
       settled = true;
     });
 
     expect(isPromiseUnresolved(capability)).toBe(true);
-    resolvePromise(capability, adopted, binding);
+    resolvePromise(capability, adopted, ctx);
     expect(isPromiseUnresolved(capability)).toBe(false);
     await Promise.resolve();
     expect(settled).toBe(false);
@@ -110,11 +110,11 @@ describe('Web IDL promises', () => {
   });
 
   it('adopts an internal promise capability when resolving a promise', async () => {
-    const { binding } = createBinding();
-    const inner = createPromise(idlType.any, binding);
-    const created = createResolvedPromise(inner, idlType.any, binding);
-    const resolved = createPromise(idlType.any, binding);
-    resolvePromise(resolved, inner, binding);
+    const ctx = createContext();
+    const inner = createPromise(idlType.any, ctx);
+    const created = createResolvedPromise(inner, idlType.any, ctx);
+    const resolved = createPromise(idlType.any, ctx);
+    resolvePromise(resolved, inner, ctx);
 
     let settled = false;
     void Promise.all([
@@ -126,20 +126,20 @@ describe('Web IDL promises', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
 
-    resolvePromise(inner, 'adopted', binding);
+    resolvePromise(inner, 'adopted', ctx);
     await expect(Promise.all([
       toJavaScriptPromise(created),
       toJavaScriptPromise(resolved),
     ])).resolves.toEqual(['adopted', 'adopted']);
   });
 
-  it('runs fulfillment and rejection steps in the promise realm', async () => {
-    const { binding } = createBinding();
+  it('runs fulfillment and rejection steps', async () => {
+    const ctx = createContext();
     let fulfilledValue: unknown;
     const fulfilled = uponPromiseFulfillment(
-      createResolvedPromise(2, idlType.long, binding),
+      createResolvedPromise(2, idlType.long, ctx),
       (value) => { fulfilledValue = value; },
-      binding,
+      ctx,
     );
     await expect(toJavaScriptPromise(fulfilled)).resolves.toBeUndefined();
     expect(fulfilledValue).toBe(2);
@@ -147,21 +147,54 @@ describe('Web IDL promises', () => {
     const reason = new Error('recover');
     let rejectedValue: unknown;
     const recovered = uponPromiseRejection(
-      createRejectedPromise(reason, idlType.long, binding),
+      createRejectedPromise(reason, idlType.long, ctx),
       (value) => { rejectedValue = value; },
-      binding,
+      ctx,
     );
     await expect(toJavaScriptPromise(recovered)).resolves.toBeUndefined();
     expect(rejectedValue).toBe(reason);
   });
 
+  it('converts a resolution value in the resolving context without moving the promise', async () => {
+    const world = new BindingWorld([]);
+    const first = createContext(world);
+    const second = createContext(world);
+    const promise = createPromise(sequence(idlType.long), first);
+
+    resolvePromise(promise, [1, 2], second);
+    const value = await promise.promise;
+
+    expect(promise.promise).toBeInstanceOf(first.realm.intrinsics.promise.constructor);
+    expect(value).toEqual([1, 2]);
+    expect(value).toBeInstanceOf(second.realm.intrinsics.array);
+    expect(value).not.toBeInstanceOf(first.realm.intrinsics.array);
+  });
+
+  it.each(['fulfilled', 'rejected'] as const)('converts a %s reaction result in the registering context while keeping the source promise realm', async (reaction) => {
+    const world = new BindingWorld([]);
+    const first = createContext(world);
+    const second = createContext(world);
+    const source = reaction === 'fulfilled'
+      ? createResolvedPromise(undefined, idlType.undefined, first)
+      : createRejectedPromise('rejected', idlType.undefined, first);
+    const result = reactToPromise(source, sequence(idlType.long), {
+      [reaction]: () => [1, 2],
+    }, second);
+    const value = await result.promise;
+
+    expect(result.promise).toBeInstanceOf(first.realm.intrinsics.promise.constructor);
+    expect(value).toEqual([1, 2]);
+    expect(value).toBeInstanceOf(second.realm.intrinsics.array);
+    expect(value).not.toBeInstanceOf(first.realm.intrinsics.array);
+  });
+
   it('omits the fulfillment argument for Promise<undefined>', async () => {
-    const { binding } = createBinding();
+    const ctx = createContext();
     let argumentCount = -1;
     const reaction = uponPromiseFulfillment(
-      createResolvedPromise(undefined, idlType.undefined, binding),
+      createResolvedPromise(undefined, idlType.undefined, ctx),
       function() { argumentCount = arguments.length; },
-      binding,
+      ctx,
     );
 
     await expect(toJavaScriptPromise(reaction)).resolves
@@ -170,8 +203,8 @@ describe('Web IDL promises', () => {
   });
 
   itPassesWith('v26+', 'explicitQueues')('reacts without consulting author-defined Promise constructors', async () => {
-    const { binding } = createBinding();
-    const promise = createResolvedPromise(1, idlType.long, binding);
+    const ctx = createContext();
+    const promise = createResolvedPromise(1, idlType.long, ctx);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
       get() { throw new Error('constructor was consulted'); },
     })).toBe(true);
@@ -180,21 +213,22 @@ describe('Web IDL promises', () => {
       promise,
       idlType.long,
       { fulfilled: (value) => value },
-      binding,
+      ctx,
     );
     await expect(toJavaScriptPromise(reaction)).resolves.toBe(1);
   });
 
   it('waits for typed promises in list order and handles an empty list later', async () => {
-    const { binding, realm } = createBinding();
+    const ctx = createContext();
+    const { realm } = ctx;
     const promises = [
-      createResolvedPromise(2, idlType.long, binding),
-      createResolvedPromise(1, idlType.long, binding),
+      createResolvedPromise(2, idlType.long, ctx),
+      createResolvedPromise(1, idlType.long, ctx),
     ];
     const aggregate = getPromiseForWaitingForAll(
       promises,
       idlType.long,
-      binding,
+      ctx,
     );
     const values = await toJavaScriptPromise(aggregate);
 
@@ -215,7 +249,7 @@ describe('Web IDL promises', () => {
           }
         },
         reject,
-        binding,
+        ctx,
       );
     });
     synchronous = false;
@@ -223,28 +257,28 @@ describe('Web IDL promises', () => {
   });
 
   it('rejects an aggregate with the first rejected promise', async () => {
-    const { binding } = createBinding();
+    const ctx = createContext();
     const first = new Error('first');
     const second = new Error('second');
     const aggregate = getPromiseForWaitingForAll([
-      createRejectedPromise(first, idlType.long, binding),
-      createRejectedPromise(second, idlType.long, binding),
-    ], idlType.long, binding);
+      createRejectedPromise(first, idlType.long, ctx),
+      createRejectedPromise(second, idlType.long, ctx),
+    ], idlType.long, ctx);
 
     await expect(toJavaScriptPromise(aggregate)).rejects.toBe(first);
   });
 
   it('marks the underlying JavaScript promise as handled', async () => {
-    const { binding } = createBinding();
-    const promise = createRejectedPromise('ignored', idlType.undefined, binding);
+    const ctx = createContext();
+    const promise = createRejectedPromise('ignored', idlType.undefined, ctx);
 
     expect(() => markPromiseAsHandled(promise)).not.toThrow();
     await Promise.resolve();
   });
 
   itPassesWith('v26+', 'explicitQueues')('marks a promise handled without consulting author properties', () => {
-    const { binding } = createBinding();
-    const promise = createPromise(idlType.undefined, binding);
+    const ctx = createContext();
+    const promise = createPromise(idlType.undefined, ctx);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
       get() { throw new Error('constructor was consulted'); },
     })).toBe(true);
@@ -253,16 +287,10 @@ describe('Web IDL promises', () => {
   });
 });
 
-function createBinding(): { binding: RealmBinding; realm: Realm; } {
+function createContext(world = new BindingWorld([])) {
   const realm = new Realm();
-  return {
-    binding: new RealmBinding(
-      assembleDefinitions([]),
-      realm,
-      new BindingWorld([]),
-    ),
-    realm,
-  };
+  world.register(realm);
+  return world.getRealmBinding(realm)!.defaultConversionContext;
 }
 
 function requirePromiseRecord(value: unknown): IDLPromiseRecord {

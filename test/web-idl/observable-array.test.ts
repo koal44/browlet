@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, observableArray, reference,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
-import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { getPlatformRecord } from '../../src/web-idl/platform-object';
 
 describe('Web IDL observable arrays', () => {
@@ -31,16 +30,15 @@ describe('Web IDL observable arrays', () => {
       fixture.attribute,
     )).toEqual([1, 2]);
 
-    const other = fixture.binding.createPlatformObject(fixture.binding.resolveInterface('NumberArrays'));
+    const other = fixture.binding.createPlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
     expect(getValues(other)).not.toBe(first);
   });
 
   it('runs indexed implementation steps around backing-list mutations', () => {
     const operations: string[] = [];
     const receivers: object[] = [];
-    const implementations = new ImplementationRegistry();
-    const fixture = createNumberArrayBinding(implementations);
-    implementations.setObservableArraySteps(fixture.attribute, {
+    const fixture = createNumberArrayBinding();
+    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         receivers.push(this);
         operations.push(`delete ${index} ${String(value)}`);
@@ -49,7 +47,7 @@ describe('Web IDL observable arrays', () => {
         receivers.push(this);
         operations.push(`set ${index} ${String(value)}`);
       },
-    });
+    };
     const values = getValues(fixture.object);
 
     values.push(1);
@@ -70,14 +68,13 @@ describe('Web IDL observable arrays', () => {
   it('preserves deletions completed before a later delete step throws', () => {
     const deleted: number[] = [];
     const exception = new Error('stop deleting');
-    const implementations = new ImplementationRegistry();
-    const fixture = createNumberArrayBinding(implementations);
-    implementations.setObservableArraySteps(fixture.attribute, {
+    const fixture = createNumberArrayBinding();
+    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(_value, index) {
         deleted.push(index);
         if (index === 1) throw exception;
       },
-    });
+    };
     const values = getValues(fixture.object);
     values.push(1, 2, 3);
 
@@ -88,16 +85,15 @@ describe('Web IDL observable arrays', () => {
 
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
-    const implementations = new ImplementationRegistry();
-    const fixture = createNumberArrayBinding(implementations);
-    implementations.setObservableArraySteps(fixture.attribute, {
+    const fixture = createNumberArrayBinding();
+    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         operations.push(`delete ${index} ${String(value)}`);
       },
       set(value, index) {
         operations.push(`set ${index} ${String(value)}`);
       },
-    });
+    };
     const values = getValues(fixture.object);
     values.push(1);
     operations.length = 0;
@@ -220,17 +216,16 @@ describe('Web IDL observable arrays', () => {
       members: [workers],
     });
     const realm = new Realm();
-    const implementations = new ImplementationRegistry();
-    implementations.setImplementationCreationSteps(employee, () => new EmployeeImpl());
-    implementations.setImplementationCreationSteps(building, () => new BuildingImpl());
+
     const binding = new RealmBinding(
-      assembleDefinitions([employee, building]),
+      new DefinitionAssembly([employee, building]),
       realm,
       new BindingWorld([]),
-      implementations,
     );
-    const object = binding.createPlatformObject(binding.resolveInterface('Building'));
-    const employeeObject = binding.createPlatformObject(binding.resolveInterface('Employee'));
+    binding.getDefinitionBinding(employee).createImplementation = () => new EmployeeImpl();
+    binding.getDefinitionBinding(building).createImplementation = () => new BuildingImpl();
+    const object = binding.createPlatformRecord(binding.resolveInterface('Building')).platformObject!;
+    const employeeObject = binding.createPlatformRecord(binding.resolveInterface('Employee')).platformObject!;
     const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
     const values = getArray(object, 'workers');
     const backingList = binding.getObservableArrayBackingList(object, workers);
@@ -246,9 +241,7 @@ describe('Web IDL observable arrays', () => {
   });
 });
 
-function createNumberArrayBinding(
-  implementations = new ImplementationRegistry(),
-): NumberArrayFixture {
+function createNumberArrayBinding(): NumberArrayFixture {
   class NumberArraysImpl {}
   const attribute = {
     kind: 'attribute',
@@ -260,18 +253,18 @@ function createNumberArrayBinding(
     exposed: '*',
     members: [attribute],
   });
-  implementations.setImplementationCreationSteps(definition, () => new NumberArraysImpl());
   const realm = new Realm();
   const binding = new RealmBinding(
-    assembleDefinitions([definition]),
+    new DefinitionAssembly([definition]),
     realm,
     new BindingWorld([]),
-    implementations,
   );
+  binding.getDefinitionBinding(definition).createImplementation = () => new NumberArraysImpl();
   return {
     attribute,
     binding,
-    object: binding.createPlatformObject(binding.resolveInterface('NumberArrays')),
+    definition,
+    object: binding.createPlatformRecord(binding.resolveInterface('NumberArrays')).platformObject!,
     realm,
   };
 }
@@ -287,6 +280,7 @@ function getArray(object: object, name: string): unknown[] {
 }
 
 type NumberArrayFixture = {
+  definition: ReturnType<typeof defineInterface>;
   attribute: AttributeMember;
   binding: RealmBinding;
   object: object;
