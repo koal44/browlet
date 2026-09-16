@@ -15,8 +15,7 @@ import { convertToIDL } from '../../../src/web-idl/conversion';
 import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
-import { PlatformObjectRegistry } from
-  '../../../src/web-idl/platform-object';
+import { BindingWorld } from '../../../src/web-idl/binding-world';
 import type { PolicyContainer } from
   '../../../src/browlet/browsing/policy/container';
 import type { ModuleMap } from
@@ -88,7 +87,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const incumbentContext = new RealmBinding(
       definitions,
       incumbentRealm.realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     let observation: {
       readonly incumbent: object;
@@ -182,7 +181,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const context = new RealmBinding(
       definitions,
       entry.realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
       convertToIDL(value, reference('LifecycleCallback'), context));

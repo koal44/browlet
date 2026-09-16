@@ -258,6 +258,46 @@ describe('ordinary readable-stream implementation', () => {
 });
 
 describe('readable-stream projection', () => {
+  it('preserves a borrowed enqueue failure across the stream\'s rejected promises', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const foreign = new Browlet({ route: () => '' });
+    Reflect.set(browlet.window, 'foreignStreamRealm', foreign.window);
+
+    const result = await browlet.evaluate(async () => {
+      const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;
+      let controller!: ReadableStreamDefaultController;
+      const reader = new ReadableStream({
+        start(value) { controller = value; },
+      }, { size: () => -1 }).getReader();
+      const closed = reader.closed.catch((error: unknown) => error);
+      let caught: unknown;
+      try {
+        other.ReadableStreamDefaultController.prototype.enqueue.call(controller, 'chunk');
+      } catch (error) {
+        caught = error;
+      }
+      if (!(caught instanceof other.RangeError)) {
+        throw new Error('Expected a RangeError from the borrowed method\'s realm');
+      }
+      caught.message = 'changed after catching';
+      const readError = await reader.read().catch((error: unknown) => error);
+      const closedError = await closed;
+      const secondReadError = await reader.read().catch((error: unknown) => error);
+      return {
+        readIsCaught: readError === caught,
+        closedIsCaught: closedError === caught,
+        secondReadIsCaught: secondReadError === caught,
+        mutationPreserved: readError instanceof other.RangeError &&
+          readError.message === 'changed after catching',
+      };
+    });
+
+    expect(result).toEqual({
+      readIsCaught: true, closedIsCaught: true,
+      secondReadIsCaught: true, mutationPreserved: true,
+    });
+  });
+
   it('shares a realm-owned pipe failure between cancellation and rejection', async () => {
     const window = new Browlet({ route: () => '' }).window;
     let cancellationReason: unknown;

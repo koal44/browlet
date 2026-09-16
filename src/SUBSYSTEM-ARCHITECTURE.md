@@ -50,6 +50,11 @@ Infra's `Stamper` base supplies the constructor-return mechanism shared by
 Web IDL and JS Engine. Each concrete stamper owns its private fields and record
 types in its subsystem; Infra has no dependency on those records.
 
+Binding's `PromiseStamper` attaches projection records to source promises without
+adding public properties. The records preserve author Promise identity per
+world, realm, result type, and allocation policy; JS Engine's `PromiseValue`
+continues to carry only implementation execution state in its own fields.
+
 ## The actors
 
 ### Implementation
@@ -112,7 +117,7 @@ owns the reader and cancellation policy. The declaration names the implementatio
 factory and whether to expose `return()`. Web IDL adapts the internal iterator's
 methods and owns author identity, call ordering, and result projection; it has
 no dependency on Streams. That binding state lives privately on each author
-iterator, retaining its owning registry to check binding-world membership.
+iterator, retaining its owning `BindingWorld` to check world membership.
 Internal iterator completions reach Binding without outgoing promise projection.
 Binding observes them in the method's realm, converts the item, and resolves the
 author's result Promise. Streams owns the explicit adoption of author thenable
@@ -224,13 +229,12 @@ which makes a subsystem work.
 ### Binding World
 
 A Binding World is the lifecycle boundary for platform-object identity. It owns
-one platform-object registry and can contain several realm registrations.
+the realm-to-binding WeakMap and can contain several realm registrations.
 Definitions and capability registrations can be shared across worlds, but a
 platform-object association belongs to exactly one world.
 
-The registry retains the single realm-to-binding index. Each Realm Binding
-owns its Binding Context, including runtime composition; the index receives
-the binding only after declaration setup succeeds.
+Each Realm Binding owns its Binding Context, including runtime composition;
+the world's index receives the binding only after declaration setup succeeds.
 
 Browlet's composition root currently owns one main `BindingWorld` spanning the
 realms in its Node VM. It is not owned by an HTML Agent: the host can synchronously

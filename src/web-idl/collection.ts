@@ -532,7 +532,7 @@ export class CollectionBinding {
   ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.platformObjects !== this.#context.platformObjects) {
+    if (record?.binding.world !== this.#context.world) {
       this.#throwTypeError('Illegal invocation');
     }
     this.#context.realm.performSecurityCheck(value, identifier, type);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { invokeCallbackFunction } from '../../src/web-idl/callback';
 import { isCallbackFunctionValue } from '../../src/web-idl/callback-value';
@@ -11,7 +12,6 @@ import {
 } from '../../src/web-idl/common-definitions';
 import { convertToIDL } from '../../src/web-idl/conversion';
 import { reference } from '../../src/web-idl/core/index';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import { serializeDefinitions } from '../../src/web-idl/core/index';
 
 describe('Web IDL common definitions', () => {
@@ -38,7 +38,7 @@ callback VoidFunction = undefined();`);
     const binding = new RealmBinding(
       assembleDefinitions(webIDLCommonDefinitions),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const function_ = convertToIDL(
       realm.evaluate(

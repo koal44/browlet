@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL namespace objects', () => {
   it('projects namespace members and legacy-namespaced interfaces', () => {
@@ -71,7 +71,7 @@ describe('Web IDL namespace objects', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
 

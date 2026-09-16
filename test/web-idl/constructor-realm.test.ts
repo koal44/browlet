@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import type { JSFunction } from '../../src/js-engine/index';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { ctor, defineInterface, impl } from '../../src/web-idl/core/index';
-import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/platform-object';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { TestRealm, getInstalledInterface } from './test-realm';
 
@@ -106,9 +107,9 @@ function createBindings() {
       name: 'Example', exposed: '*', implementation: impl(ExampleImpl), members: [ctor()],
     }),
   ]);
-  const objects = new PlatformObjectRegistry();
-  const first = new RealmBinding(definitions, new TestRealm(), objects);
-  const second = new RealmBinding(definitions, new TestRealm(), objects);
+  const world = new BindingWorld([]);
+  const first = new RealmBinding(definitions, new TestRealm(), world);
+  const second = new RealmBinding(definitions, new TestRealm(), world);
   registerDefinitionBindings(first);
   registerDefinitionBindings(second);
   const target = second.realm.evaluate('(function Target() {})', 'target.js') as JSFunction;

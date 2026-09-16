@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, definePartialInterface, idlType, type AttributeMember,
@@ -8,7 +9,6 @@ import {
   type StringifierMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL initial objects', () => {
   it('uses an interface\'s overridden constructor steps', () => {
@@ -21,7 +21,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     implementations.setOverriddenConstructorSteps(
@@ -60,7 +60,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
 
     binding.install();
@@ -90,7 +90,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
 
@@ -125,12 +125,12 @@ describe('Web IDL initial objects', () => {
     const windowBinding = new RealmBinding(
       definitions,
       windowRealm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const workerBinding = new RealmBinding(
       definitions,
       workerRealm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
 
     windowBinding.install();
@@ -163,7 +163,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     implementations.setConstructorSteps(factory, function(value) {
@@ -225,7 +225,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL, partial]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
 
@@ -259,13 +259,13 @@ describe('Web IDL initial objects', () => {
       members: [attribute, operation],
     });
     const definitions = assembleDefinitions([interfaceIDL]);
-    const platformObjects = new PlatformObjectRegistry();
+    const world = new BindingWorld([]);
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
     const binding = new RealmBinding(
       definitions,
       realm,
-      platformObjects,
+      world,
       implementations,
     );
     binding.install();
@@ -294,7 +294,7 @@ describe('Web IDL initial objects', () => {
     const foreign = new RealmBinding(
       definitions,
       new Realm(),
-      platformObjects,
+      world,
       implementations,
     );
     foreign.install();
@@ -339,7 +339,7 @@ describe('Web IDL initial objects', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     binding.install();

@@ -4,6 +4,7 @@ import type {
   PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember,
   PartialInterfaceMixinDefinition, NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
 } from './core/declarations';
+import type { Capability, CapabilityRegistration } from './capability';
 
 // Project helper: build our indexed representation of IDL definitions.
 export function assembleDefinitions(
@@ -24,8 +25,8 @@ export class DefinitionAssembly {
   #namespaces = new Map<string, AssembledNamespaceDefinition>();
   #dictionaries = new Map<string, AssembledDictionaryDefinition>();
 
-  // Project helper: index primary definitions, partials, and includes statements.
-  constructor(definitions: Definition[]) {
+  // Project helper: index declarations and register per-interface capabilities.
+  constructor(definitions: Definition[], capabilities: CapabilityRegistration[] = []) {
     for (const definition of definitions) {
       switch (definition.kind) {
         case 'partial-interface':
@@ -46,6 +47,23 @@ export class DefinitionAssembly {
         default:
           this.#definitions.set(definition.name, definition);
       }
+    }
+
+    for (const registration of capabilities) {
+      const primaryInterface = this.getInterface(registration.definition.name);
+      if (primaryInterface?.definition !== registration.definition) {
+        throw new TypeError(
+          `Capability ${registration.capability.name} targets unknown ` +
+          `interface definition ${registration.definition.name}`,
+        );
+      }
+      if (primaryInterface.capabilities.has(registration.capability)) {
+        throw new TypeError(
+          `Interface ${registration.definition.name} has a duplicate ` +
+          `${registration.capability.name} capability registration`,
+        );
+      }
+      primaryInterface.capabilities.set(registration.capability, registration.value);
     }
   }
 
@@ -75,6 +93,7 @@ export class DefinitionAssembly {
     if (definition?.kind !== 'interface') return;
 
     const primaryInterface: AssembledInterfaceDefinition = {
+      capabilities: new Map(),
       definition,
       includes: [],
       members: [],
@@ -227,6 +246,7 @@ export type AssembledInterfaceDefinition = {
   partials: PartialInterfaceDefinition[];
   includes: IncludedMixin[];
   members: AssembledInterfaceMember[];
+  capabilities: Map<Capability<unknown>, unknown>;
 };
 
 export type AssembledInterfaceMember = {

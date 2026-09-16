@@ -125,9 +125,9 @@ method's realm or the iterator's mutable prototype.
 
 Asynchronous iterators carry their internal iterator, interface, kind, ongoing
 promise, and completion state in a private field on the author iterator. The
-state also retains its owning registry to check binding-world membership;
-the internal iterator itself needs no binding record. The registry has no
-separate iterator-state map. Promise ordering and result allocation remain
+state also retains its owning `BindingWorld` to check world membership;
+the internal iterator itself needs no binding record. There is no separate
+iterator-state map. Promise ordering and result allocation remain
 binding work.
 
 ```text
@@ -216,8 +216,8 @@ Ordinary interfaces retain a null result to avoid repeated legacy checks.
 
 ### Binding worlds
 
-A `BindingWorld` owns one platform-object registry and the realm registrations
-which share that identity. Definitions and capability registrations may be
+A `BindingWorld` owns the realm registrations which share platform-object
+identity. Definitions and capability registrations may be
 reused by many worlds. An implementation instance belongs to one world and
 always recovers the same platform object. Attempting to associate it with a
 second world throws; that world must construct its own implementation instance.
@@ -225,18 +225,20 @@ second world throws; that world must construct its own implementation instance.
 `new BindingWorld(definitions, options)` creates this owner. Its
 `BindingWorldOptions` configures shared capabilities and host-defined interfaces;
 realm registration supplies the realm-specific options.
+Capability values live on the world's assembled interface definitions. Realm
+bindings share those values; other worlds can configure the same raw declarations
+independently.
 
 `world.register(realm)` returns the world's shared `BindingContext` for that
 realm; `world.forRealm(realm)` retrieves it without registering. Installation
 and global-object projection are context methods. Registering the same realm
 in another world produces a separate context for that world's own instances.
 
-The platform-object registry holds the world's single realm-to-binding index.
-Only registration and realm lookup remain instance methods on the registry;
-the remaining stored state is the promise-projection cache. Record access and
-stamping belong to module functions and the concrete stampers.
+`BindingWorld` directly owns the single realm-to-binding WeakMap. Promise
+projections live on their source promises. Record access and stamping belong
+to module functions and the concrete stampers; they need no registry.
 Each `RealmBinding` constructs and retains its `BindingContext` directly;
-`BindingWorld` queries that index rather than retaining another context map.
+the world queries its index rather than retaining another context map.
 Runtime composition and declaration setup complete before the binding enters
 the index, so a failed setup leaves the realm unregistered. Low-level binding
 setup uses the same owned context through `registerDefinitionBindings(binding)`.
@@ -365,7 +367,7 @@ For a constructible interface:
 1. Web IDL converts author arguments.
 2. The implementation constructor or declared creation steps create `FooImpl`.
 3. Web IDL allocates the platform object in the target realm.
-4. The registry associates the two identities.
+4. Binding stamps the shared platform record onto both identities.
 5. The author receives the platform object.
 
 An author subclass changes the platform object's prototype chain. It must not replace
@@ -472,13 +474,24 @@ promise in the receiver's relevant realm. A retained implementation promise
 keeps one projection per result type and realm within its binding world.
 That cache preserves observable identity for `reader.closed`, `writer.ready`,
 and `writer.closed`, including borrowed getters and settlement. It also ensures
-fulfillment conversion happens once. The exception cache separately preserves
-one realm-owned error when the same internal failure reaches multiple results.
+fulfillment conversion happens once. The exception stamp separately preserves
+one realm-owned error when the same internal failure reaches multiple results,
+including results observed in another realm.
 Dictionary results can be ordinary records, including `{ value, done }` from
 stream reads; binding creates the realm-owned result and projects its members.
 
 `conversion.ts` owns `projectPromise` and its fulfillment conversion. Projection
-returns the author Promise directly; the cache retains that same Promise.
+returns the author Promise directly. `PromiseStamper` in `promise-record.ts`
+privately attaches `PromiseProjectionRecord` entries to the source native
+Promise or `PromiseValue`. Each entry
+retains an `IDLPromiseRecord`, its binding world, and the buffer-allocation policy;
+the IDL record supplies the realm, result type, and author Promise. Repeated
+projection retrieves the matching record without stamping the source again.
+The stamp changes neither visible properties nor the source's prototype and
+also works on frozen sources. Records live with their source, so an externally
+retained source also retains its projected promises and their binding owners,
+even after the host drops the world. This differs from the former world-owned
+WeakMap, which could release its entries when the world became unreachable.
 `promise-record.ts` supplies the retained capability and settlement operations;
 `promise.ts` builds the higher-level promise algorithms on those values and
 conversion. Conversion does not depend on the promise algorithms.
@@ -680,13 +693,16 @@ Imported exception constructors request realm-owned failures from specification
 algorithms. Native errors remain appropriate for internal invariant failures;
 no import or declaration replaces the global error constructors.
 
-The binding realizes a request in the executing method's realm for synchronous
-calls, or the promise's realm when rejecting an internal promise. Existing
-JavaScript exceptions retain their identity, including author-thrown errors.
-The realized error is no longer a request, so forwarding it does not allocate
-another exception. Each realm binding also remembers the realization of a
-request, so separately projected promises rejected with the same request
-expose the same error object in that realm.
+The binding first realizes a request in the executing method's realm for
+synchronous calls, or the promise's realm when rejecting an internal promise.
+`ExceptionStamper` retains that realized error in a private field on the original
+internal exception. Subsequent boundaries reuse the same error, even in another
+realm, preserving both its identity and author changes. For example, a borrowed
+stream `enqueue()` method throws the same error that later rejects the stream's
+`read()` and `closed` promises. There is no per-realm exception lookup map.
+Frozen internal exceptions support the stamp without acquiring visible properties.
+Existing JavaScript exceptions, including author-thrown errors and errors already
+realized by Binding, pass through unchanged.
 
 ## Special object categories
 
@@ -821,7 +837,7 @@ It records migration work, not permanent architecture.
 
 | Area | Current state | Remaining check |
 | --- | --- | --- |
-| Ordinary platform identity | Core registry and recursive result projection use separate implementation and platform objects | Extend the same rule to unprojected CSSOM and later interfaces |
+| Ordinary platform identity | Shared stamped records and recursive result projection connect separate implementation and platform objects | Extend the same rule to unprojected CSSOM and later interfaces |
 | Binding-world ownership | Browlet's composition root owns one main `BindingWorld` spanning its Node VM realms; it is neither Agent- nor AgentCluster-owned | Add explicit additional worlds only with an isolated-world or separate-runtime consumer |
 | Post-conversion implementation types | AbortSignal and the EventTarget signal path retain `AbortSignalImpl` | Remove remaining ambient platform types which reappear inside implementation algorithms |
 | Ambient `implements` and stubs | Removed from Window, EventTarget, Event, and CustomEvent. Node and collection classes no longer repeat ambient `implements` clauses; unfinished node stubs remain | Audit `asDocument`, `Document & DocumentImpl`, factory overload intersections, and similar type fictions |

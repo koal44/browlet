@@ -548,7 +548,7 @@ function containsImplementedInterface(
     const primaryInterface = context.definitions.getInterface(candidate.name);
     if (primaryInterface) {
       const record = getPlatformRecord(value);
-      return record?.binding.platformObjects === context.platformObjects &&
+      return record?.binding.world === context.world &&
         record.implements(primaryInterface);
     }
     return context.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;

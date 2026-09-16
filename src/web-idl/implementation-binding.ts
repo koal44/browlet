@@ -42,7 +42,7 @@ export function registerDefinitionBindings(binding: RealmBinding): void {
       binding.context,
     );
   }
-  binding.platformObjects.registerRealm(binding);
+  binding.world.registerRealm(binding);
 }
 
 // Project helper: connect interface declarations to implementation members and factories.

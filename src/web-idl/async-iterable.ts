@@ -1,6 +1,7 @@
 import { isObject, PromiseValue, type JSFunction } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
+import type { BindingWorld } from './binding-world';
 import { endOfIteration } from './async-sequence';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
@@ -13,9 +14,7 @@ import type {
   AsyncIteratorSteps, ImplementationRegistry,
 } from './implementation-registry';
 import { missingArgument } from './overload';
-import {
-  getPlatformRecord, type StampedImplInstance, type PlatformObjectRegistry,
-} from './platform-object';
+import { getPlatformRecord, type StampedImplInstance } from './platform-object';
 import {
   createIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
@@ -114,7 +113,7 @@ export class AsynchronousIterableBinding {
           primaryInterface,
           kind,
           ongoing: null,
-          platformObjects: this.#context.platformObjects,
+          world: this.#context.world,
         });
       },
       { length: 0, name },
@@ -410,12 +409,12 @@ export class AsynchronousIterableBinding {
     identifier: string,
   ): AsyncIteratorRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(value)?.binding.platformObjects === this.#context.platformObjects) {
+    if (getPlatformRecord(value)?.binding.world === this.#context.world) {
       this.#context.realm.performSecurityCheck(value, identifier, 'method');
     }
     const state = AsyncIteratorStamper.get(value);
     if (!state || state.primaryInterface !== primaryInterface ||
-      state.platformObjects !== this.#context.platformObjects) {
+      state.world !== this.#context.world) {
       this.#throwTypeError('Illegal invocation');
     }
     return state;
@@ -429,7 +428,7 @@ export class AsynchronousIterableBinding {
   ): StampedImplInstance {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.platformObjects !== this.#context.platformObjects) {
+    if (record?.binding.world !== this.#context.world) {
       this.#throwTypeError('Illegal invocation');
     }
     this.#context.realm.performSecurityCheck(value, identifier, 'method');
@@ -518,7 +517,7 @@ type AsyncIteratorRecord = {
   primaryInterface: AssembledInterfaceDefinition;
   kind: IterationKind;
   ongoing: IDLPromiseRecord | null;
-  platformObjects: PlatformObjectRegistry;
+  world: BindingWorld;
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';

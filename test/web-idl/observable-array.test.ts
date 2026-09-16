@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, observableArray, reference,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/platform-object';
 
 describe('Web IDL observable arrays', () => {
   it('creates one realm Array per platform object and attribute', () => {
@@ -225,7 +226,7 @@ describe('Web IDL observable arrays', () => {
     const binding = new RealmBinding(
       assembleDefinitions([employee, building]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = binding.createPlatformObject(binding.resolveInterface('Building'));
@@ -264,7 +265,7 @@ function createNumberArrayBinding(
   const binding = new RealmBinding(
     assembleDefinitions([definition]),
     realm,
-    new PlatformObjectRegistry(),
+    new BindingWorld([]),
     implementations,
   );
   return {

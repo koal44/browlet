@@ -15,7 +15,6 @@ import {
   reference, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL async sequences', () => {
   it('supplies converted dictionary records to implementation iteration steps', async () => {
@@ -178,7 +177,7 @@ describe('Web IDL async sequences', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = binding.createPlatformObject(binding.resolveInterface(definition.name));
@@ -202,7 +201,7 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
     binding: new RealmBinding(
       assembleDefinitions([]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     ),
     realm,
   };

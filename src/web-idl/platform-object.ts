@@ -1,9 +1,9 @@
-import { isObject, type JSRealm, type PromiseValue } from '../js-engine/index';
+import { isObject } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../infra/observable-array';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { RealmBinding } from './realm-binding';
-import type { AttributeMember, WebIDLType } from './core/index';
+import type { AttributeMember } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';
 
 /** An implementation instance stamped with its private platform record. */
@@ -22,40 +22,15 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
   return PlatformObjectStamper.get(platformObject) !== undefined;
 }
 
-/**
- * Realm registrations and promise projections shared within one binding world.
- * Implementation and platform objects carry their own records; this registry's
- * identity scopes those records to their world.
- */
-export class PlatformObjectRegistry {
-  #realmBindings = new WeakMap<JSRealm, RealmBinding>();
-
-  // Retained promises share a projection per result type and realm in this world.
-  promiseProjections?: WeakMap<Promise<unknown> | PromiseValue<unknown>, PromiseProjection[]>;
-
-  // Project helper: publish a realm binding after its declaration setup succeeds.
-  registerRealm(binding: RealmBinding): void {
-    if (this.#realmBindings.has(binding.realm)) {
-      throw new TypeError('Realm already has a registered binding');
-    }
-    this.#realmBindings.set(binding.realm, binding);
-  }
-
-  // Project helper: look up a realm's binding.
-  getRealmBinding(realm: JSRealm): RealmBinding | undefined {
-    return this.#realmBindings.get(realm);
-  }
-}
-
 /** The shared record for an implementation instance and its eventual platform object. */
 export class PlatformRecord<T extends object = object> {
   readonly implInst: StampedImplInstance<T>;
   readonly primaryInterface: AssembledInterfaceDefinition;
   binding: RealmBinding;
   platformObject?: StampedPlatformObject;
-  // Per-object IDL state follows the object when its associated realm changes.
+  // Lazily allocated storage for maplike, setlike, and observable-array members.
   declare mapEntries?: Map<unknown, unknown>;
-  declare observableArrays?: WeakMap<AttributeMember, ObservableArrayHandle<unknown, unknown>>;
+  declare observableArrays?: Map<AttributeMember, ObservableArrayHandle<unknown, unknown>>;
   declare setEntries?: Set<unknown>;
 
   constructor(
@@ -204,10 +179,3 @@ class PlatformObjectStamper extends Stamper {
     return isObject(platformObject) && #record in platformObject ? platformObject.#record : undefined;
   }
 }
-
-type PromiseProjection = {
-  realm: WebIDLRealmHost;
-  type: WebIDLType;
-  promise: Promise<unknown>;
-  newBufferResult: boolean;
-};

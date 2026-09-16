@@ -8,7 +8,6 @@ import {
   type AttributeMember, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL global platform objects', () => {
@@ -96,7 +95,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([widget, window, base]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const implementation = Reflect.construct(realm.intrinsics.object, []);
@@ -195,7 +194,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([window, base]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const global = binding.projectGlobalObject(
@@ -248,7 +247,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const implementation = Reflect.construct(realm.intrinsics.object, []);
@@ -293,7 +292,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const global = binding.projectGlobalObject(
@@ -351,7 +350,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([globalIDL, base]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
@@ -385,7 +384,7 @@ describe('Web IDL global platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition, partial]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const global = binding.projectGlobalObject(
@@ -441,7 +440,7 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
     binding: new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     ),
     realm,

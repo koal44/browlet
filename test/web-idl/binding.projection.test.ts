@@ -13,9 +13,10 @@ import {
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import type { SecurityCheckType } from '../../src/web-idl/realm-host';
-import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/platform-object';
 
 describe('Web IDL ordinary interface projection', () => {
   it('projects constructors, inheritance, fragments, members, and descriptors', () => {
@@ -113,7 +114,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([partial, include, derived, mixin, base]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const installed = binding.install();
@@ -196,7 +197,7 @@ describe('Web IDL ordinary interface projection', () => {
         defineIncludes({ interface: 'SecondHost', mixin: 'SharedMembers' }),
       ]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const installed = binding.install();
@@ -275,7 +276,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([constants]),
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       new ImplementationRegistry(),
     );
     const Constants = getInstalledInterface(binding.install(), 'ConstantValues');
@@ -306,19 +307,19 @@ describe('Web IDL ordinary interface projection', () => {
     implementations.setImplementationCreationSteps(interfaceIDL, () => new CrossRealmImpl());
     implementations.setConstructorSteps(constructor, () => undefined);
     implementations.setOperationSteps(operation, () => 'ok');
-    const platformObjects = new PlatformObjectRegistry();
+    const world = new BindingWorld([]);
     const firstRealm = new RecordingRealm();
     const secondRealm = new RecordingRealm();
     const first = new RealmBinding(
       definitions,
       firstRealm,
-      platformObjects,
+      world,
       implementations,
     );
     const second = new RealmBinding(
       definitions,
       secondRealm,
-      platformObjects,
+      world,
       implementations,
     );
     const First = getInstalledInterface(first.install(), 'CrossRealmInterface');
@@ -370,7 +371,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const prototype = binding.getInterfacePrototypeObject(primaryInterface);
@@ -445,7 +446,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([derived, base]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const Interface = getInstalledInterface(binding.install(), 'JSONDerived');
@@ -483,17 +484,17 @@ describe('Web IDL ordinary interface projection', () => {
     const implementations = new ImplementationRegistry();
     implementations.setImplementationCreationSteps(point, () => new JSONPointImpl());
     implementations.setImplementationCreationSteps(holder, () => new JSONHolderImpl());
-    const platformObjects = new PlatformObjectRegistry();
+    const world = new BindingWorld([]);
     const local = new RealmBinding(
       definitions,
       new Realm(),
-      platformObjects,
+      world,
       implementations,
     );
     const foreign = new RealmBinding(
       definitions,
       new Realm(),
-      platformObjects,
+      world,
       implementations,
     );
     const pointObject = local.createPlatformObject(local.resolveInterface('JSONPoint'));
@@ -540,7 +541,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const Interface = getInstalledInterface(binding.install(), 'FrozenArrayInterface');
@@ -579,7 +580,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const Interface = getInstalledInterface(binding.install(), 'BufferSourceInterface');
@@ -655,7 +656,7 @@ describe('Web IDL ordinary interface projection', () => {
     const binding = new RealmBinding(
       assembleDefinitions([enumeration, interfaceIDL]),
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const Interface = getInstalledInterface(binding.install(), 'ExtendedInterface');
@@ -755,7 +756,7 @@ describe('Web IDL ordinary interface projection', () => {
     const insecure = new RealmBinding(
       definitions,
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const insecureInstalled = insecure.install();
     const insecurePrototype = getPrototype(
@@ -771,7 +772,7 @@ describe('Web IDL ordinary interface projection', () => {
     const privileged = new RealmBinding(
       definitions,
       new Realm({ crossOriginIsolated: true, secureContext: true }),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const privilegedInstalled = privileged.install();
     const privilegedPrototype = getPrototype(
@@ -806,7 +807,7 @@ describe('Web IDL ordinary interface projection', () => {
         workerInterface, workletInterface, windowInterface,
       ]),
       new Realm({ globalNames: ['Worker', 'Worklet'] }),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
 
     expect([...binding.install().keys()]).toEqual([
