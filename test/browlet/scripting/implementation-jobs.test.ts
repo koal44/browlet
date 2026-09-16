@@ -49,7 +49,7 @@ describe('implementation Promise delivery', () => {
     const realm = getRelevantRealm(browlet.window);
     new BindingWorld([initializationIDL]).register(realm).install(realm.global);
     const trace: string[] = [];
-    browlet.expose('record', (value: string) => { trace.push(value); });
+    Reflect.set(realm.globalObject, 'record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
     expect(trace).toEqual(['ready']);
   });

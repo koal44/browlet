@@ -429,13 +429,12 @@ describe('Browlet', () => {
     ]);
   });
 
-  it('exposes and replaces host values', () => {
+  it('sets page globals using explicit evaluation arguments', async () => {
     const browlet = new Browlet({ route: () => '' });
 
-    browlet.expose('bridge', 'first');
-    browlet.expose('bridge', 'second');
-
-    expect(Reflect.get(browlet.window, 'bridge')).toBe('second');
+    await browlet.evaluate((value) => { Reflect.set(globalThis, 'bridge', value); }, 'first');
+    await browlet.evaluate((value) => { Reflect.set(globalThis, 'bridge', value); }, 'second');
+    expect(await browlet.evaluate(() => Reflect.get(globalThis, 'bridge') as string)).toBe('second');
   });
 
   it('executes inline scripts against the partial document', async () => {
@@ -444,7 +443,7 @@ describe('Browlet', () => {
       route: () => [
         '<main id="before"></main>',
         '<script>',
-        'observe(document.getElementById("before"));',
+        'observe(document.getElementById("before")?.getAttribute("id"));',
         'observe(document.getElementById("after"));',
         'observe(window === self && self === globalThis);',
         '</script>',
@@ -452,12 +451,12 @@ describe('Browlet', () => {
       ].join(''),
     });
 
-    browlet.expose('observe', (value: unknown) => observations.push(value));
+    await browlet.exposeFunction('observe', (value: unknown) => observations.push(value));
 
     const window = await browlet.navigate('https://example.test/page');
 
     expect(observations).toEqual([
-      browlet.document.getElementById('before'),
+      'before',
       null,
       true,
     ]);
@@ -476,7 +475,7 @@ describe('Browlet', () => {
         '<main id="after"></main>',
       ].join(''),
     });
-    browlet.expose('observe', (value: unknown) => observations.push(value));
+    await browlet.exposeFunction('observe', (value: unknown) => observations.push(value));
 
     await browlet.navigate('https://example.test/page');
 
@@ -499,7 +498,7 @@ describe('Browlet', () => {
       },
     });
 
-    browlet.expose('observe', (value: unknown) => observations.push(value));
+    await browlet.exposeFunction('observe', (value: unknown) => observations.push(value));
     await browlet.navigate('https://example.test/page');
 
     expect(requests).toEqual([
@@ -541,15 +540,15 @@ describe('Browlet', () => {
     const browlet = new Browlet({
       route: () => [
         '<main id="named"></main>',
-        '<script>observe(named)</script>',
+        '<script>observe(named === document.getElementById("named"))</script>',
       ].join(''),
     });
 
-    browlet.expose('observe', (value: unknown) => observations.push(value));
+    await browlet.exposeFunction('observe', (value: unknown) => observations.push(value));
     await browlet.navigate('https://example.test/page');
 
     expect(observations).toEqual([
-      browlet.document.getElementById('named'),
+      true,
     ]);
   });
 
@@ -574,7 +573,7 @@ describe('Browlet', () => {
     expect(second?.nextElementSibling).toBe(after);
   });
 
-  it('preserves the original script error when navigation fails', async () => {
+  it('preserves script error details when navigation fails', async () => {
     let scriptError: unknown;
     const browlet = new Browlet({
       route: () => [
@@ -585,12 +584,13 @@ describe('Browlet', () => {
         '</script>',
       ].join(''),
     });
-    browlet.expose('recordError', (error: unknown) => { scriptError = error; });
+    await browlet.exposeFunction('recordError', (error: unknown) => { scriptError = error; });
 
     const navigation = browlet.navigate('https://example.test/page');
     await expect(navigation).rejects.toThrow('distinctive failure');
     expect(scriptError).toBeDefined();
-    await expect(navigation).rejects.toBe(scriptError);
+    expect(scriptError).toBeInstanceOf(TypeError);
+    await expect(navigation).rejects.toMatchObject({ name: 'TypeError', message: 'distinctive failure' });
   });
 
   it('reports inline script positions relative to the document source', async () => {
@@ -604,7 +604,7 @@ describe('Browlet', () => {
       ].join('\n'),
     });
 
-    browlet.expose('observe', (stack: unknown) => stacks.push(String(stack)));
+    await browlet.exposeFunction('observe', (stack: unknown) => stacks.push(String(stack)));
     await browlet.navigate('https://example.test/page');
 
     expect(stacks[0]).toContain('https://example.test/page:3');

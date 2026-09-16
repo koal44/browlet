@@ -154,6 +154,26 @@ Tests of stored incumbents must use the bound-platform-callback case for which
 the backup stack is decisive, rather than pretending that an ordinary author
 function has no script-having context.
 
+### Host commands and callback completion
+
+[`PageEvaluation`](../automation/evaluation.ts) routes external commands and
+callback completions through an `automation` task source. Each task brackets
+page execution with `runScriptEvaluation`; result observation is installed
+before the outer script entry's cleanup checkpoint. The bridge copies values
+across the boundary and returns a native Node Promise to its host caller.
+
+An exposed host callback has a page-owned function and Promise. Its host-side
+work stays on Node's queue. When that work settles, the bridge queues an HTML
+task to deliver the result into the page. Queueing this task requests a normal
+event-loop turn even when the page was idle. No ambient enqueue hook or manual
+draining of Node's queue is needed. Navigation removes pending bridge tasks,
+rejects outstanding host evaluations, and discards late callback delivery.
+
+The parser still calls `Realm.evaluate()` directly as part of HTML's script
+execution. Low-level tests also use it when they need actual realm objects or
+explicit checkpoint control. Those calls do not provide the host command
+boundary of `Browlet.evaluate()`.
+
 ## Runtime integration and accommodations
 
 Fallback entries use the project-wide `ACCOMMODATION(identifier)` convention

@@ -1,22 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { performTestMicrotaskCheckpoint } from '../test-runtime';
-import { itPassesWith } from '../../test-runtime';
 
 describe('WindowOrWorkerGlobalScope', () => {
-  itPassesWith('explicitQueues')('shares the Agent queue with Promise jobs', () => {
+  it('orders explicit microtasks alongside page Promise jobs', async () => {
     const browlet = createBrowlet();
-    const { window } = browlet;
-    const order: string[] = [];
-    browlet.expose('record', (value: string) => { order.push(value); });
-
-    getRelevantRealm(window).evaluate(`
-      queueMicrotask(() => record('microtask'));
-      Promise.resolve().then(() => record('promise'));
-      record('synchronous');
-    `, 'shared-agent-queue.js');
+    const order = await browlet.evaluate(() => {
+      const order: string[] = [];
+      queueMicrotask(() => order.push('microtask'));
+      void Promise.resolve().then(() => order.push('promise'));
+      order.push('synchronous');
+      return order;
+    });
 
     expect(order).toEqual([
       'synchronous',

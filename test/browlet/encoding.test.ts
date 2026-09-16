@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Browlet } from '../../src/browlet/browlet';
-import { getRelevantRealm } from '../../src/browlet/bindings';
 import { singleByteDecodeDigests } from '../encoding/gen/single-byte-vectors';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
@@ -141,27 +140,23 @@ describe('Encoding projection', () => {
     ['gb18030', [0x94, 0x39, 0xfc, 0x36, 0x81, 0x30], '😀\ufffd'],
     ['big5', [0x88, 0x62, 0x81], '\u00ca\u0304\ufffd'],
   ] as const)('streams %s through bindings and flushes an incomplete final sequence', async (label, bytes, expected) => {
-    const window = createWindow();
-    const result = getRelevantRealm(window).evaluate(`
-      (async () => {
-        const stream = new TextDecoderStream(${JSON.stringify(label)});
-        const reader = stream.readable.getReader();
-        const writer = stream.writable.getWriter();
-        const reading = (async () => {
-          let text = '';
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) return text;
-            text += value;
-          }
-        })();
-        for (const byte of ${JSON.stringify(bytes)}) await writer.write(Uint8Array.of(byte));
-        await writer.close();
-        return await reading;
-      })()
-    `, 'chinese-decoder-stream.js') as Promise<unknown>;
-    const completion = observeBrowletPromise(window, result);
-    performTestMicrotaskCheckpoint(window);
+    const browlet = new Browlet({ route: () => '' });
+    const completion = browlet.evaluate(async ({ label, bytes }) => {
+      const stream = new TextDecoderStream(label);
+      const reader = stream.readable.getReader();
+      const writer = stream.writable.getWriter();
+      const reading = (async () => {
+        let text = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return text;
+          text += value;
+        }
+      })();
+      for (const byte of bytes) await writer.write(Uint8Array.of(byte));
+      await writer.close();
+      return await reading;
+    }, { label, bytes });
     await expect(completion).resolves.toBe(expected);
   });
 
@@ -213,27 +208,23 @@ describe('Encoding projection', () => {
     ['shift_jis', [0x82, 0xa0, 0x82], 'あ\ufffd'],
     ['euc-kr', [0xc7, 0xd1, 0x81], '한\ufffd'],
   ] as const)('streams %s through bindings, including incomplete final input', async (label, bytes, expected) => {
-    const window = createWindow();
-    const result = getRelevantRealm(window).evaluate(`
-      (async () => {
-        const stream = new TextDecoderStream(${JSON.stringify(label)});
-        const reader = stream.readable.getReader();
-        const writer = stream.writable.getWriter();
-        const reading = (async () => {
-          let text = '';
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) return text;
-            text += value;
-          }
-        })();
-        for (const byte of ${JSON.stringify(bytes)}) await writer.write(Uint8Array.of(byte));
-        await writer.close();
-        return await reading;
-      })()
-    `, 'japanese-korean-decoder-stream.js') as Promise<unknown>;
-    const completion = observeBrowletPromise(window, result);
-    performTestMicrotaskCheckpoint(window);
+    const browlet = new Browlet({ route: () => '' });
+    const completion = browlet.evaluate(async ({ label, bytes }) => {
+      const stream = new TextDecoderStream(label);
+      const reader = stream.readable.getReader();
+      const writer = stream.writable.getWriter();
+      const reading = (async () => {
+        let text = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return text;
+          text += value;
+        }
+      })();
+      for (const byte of bytes) await writer.write(Uint8Array.of(byte));
+      await writer.close();
+      return await reading;
+    }, { label, bytes });
     await expect(completion).resolves.toBe(expected);
   });
 
@@ -288,45 +279,37 @@ describe('Encoding projection', () => {
     ['utf-16be', [0xfe, 0xff, 0, 0x41, 0xd8, 0x3d, 0xde, 0, 0], 'A😀\ufffd'],
     ['x-user-defined', [0x41, 0x80, 0xff], 'A\uf780\uf7ff'],
   ] as const)('streams %s through the public bindings and flushes incomplete data', async (label, bytes, expected) => {
-    const window = createWindow();
-    const result = getRelevantRealm(window).evaluate(`
-      (async () => {
-        const stream = new TextDecoderStream(${JSON.stringify(label)});
-        const reader = stream.readable.getReader();
-        const writer = stream.writable.getWriter();
-        const reading = (async () => {
-          let text = '';
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) return text;
-            text += value;
-          }
-        })();
-        for (const byte of ${JSON.stringify(bytes)}) await writer.write(Uint8Array.of(byte));
-        await writer.close();
-        return await reading;
-      })()
-    `, 'miscellaneous-decoder-stream.js') as Promise<unknown>;
-    const completion = observeBrowletPromise(window, result);
-    performTestMicrotaskCheckpoint(window);
+    const browlet = new Browlet({ route: () => '' });
+    const completion = browlet.evaluate(async ({ label, bytes }) => {
+      const stream = new TextDecoderStream(label);
+      const reader = stream.readable.getReader();
+      const writer = stream.writable.getWriter();
+      const reading = (async () => {
+        let text = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return text;
+          text += value;
+        }
+      })();
+      for (const byte of bytes) await writer.write(Uint8Array.of(byte));
+      await writer.close();
+      return await reading;
+    }, { label, bytes });
     await expect(completion).resolves.toBe(expected);
   });
 
   it.each(['utf-16le', 'utf-16be'])('%s rejects an incomplete fatal stream in the owner realm', async (label) => {
-    const window = createWindow();
-    const result = getRelevantRealm(window).evaluate(`
-      (async () => {
-        const stream = new TextDecoderStream(${JSON.stringify(label)}, { fatal: true });
-        const reader = stream.readable.getReader();
-        const writer = stream.writable.getWriter();
-        const reading = reader.read().then(() => false, error => error instanceof TypeError);
-        await writer.write(Uint8Array.of(0));
-        const closing = writer.close().then(() => false, error => error instanceof TypeError);
-        return [await reading, await closing];
-      })()
-    `, 'utf16-fatal-stream.js') as Promise<unknown>;
-    const completion = observeBrowletPromise(window, result);
-    performTestMicrotaskCheckpoint(window);
+    const browlet = new Browlet({ route: () => '' });
+    const completion = browlet.evaluate(async (label) => {
+      const stream = new TextDecoderStream(label, { fatal: true });
+      const reader = stream.readable.getReader();
+      const writer = stream.writable.getWriter();
+      const reading = reader.read().then(() => false, (error: unknown) => error instanceof TypeError);
+      await writer.write(Uint8Array.of(0));
+      const closing = writer.close().then(() => false, (error: unknown) => error instanceof TypeError);
+      return [await reading, await closing];
+    }, label);
     await expect(completion).resolves.toEqual([true, true]);
   });
 
@@ -636,39 +619,35 @@ describe('Encoding projection', () => {
   });
 
   it('creates encoded bytes in the encoder realm before downstream callbacks', async () => {
-    const window = createWindow();
-    const result = getRelevantRealm(window).evaluate(`
-      (async () => {
-        const encoder = new TextEncoderStream();
-        let seen;
-        let arrayInRealm = false;
-        let bufferInRealm = false;
-        const downstream = new TransformStream({
-          transform(chunk, controller) {
-            seen = chunk;
-            arrayInRealm = chunk instanceof Uint8Array;
-            bufferInRealm = chunk.buffer instanceof ArrayBuffer;
-            controller.enqueue(chunk);
-          },
-        });
-        const reader = encoder.readable.pipeThrough(downstream).getReader();
-        const writer = encoder.writable.getWriter();
-        const read = reader.read();
-        await writer.write('A');
-        const first = await read;
-        const end = reader.read();
-        await writer.close();
-        await end;
-        return {
-          arrayInRealm,
-          bufferInRealm,
-          sameChunk: first.value === seen,
-          bytes: Array.from(first.value),
-        };
-      })()
-    `, 'encoding-stream-callback.js') as Promise<unknown>;
-    const completion = observeBrowletPromise(window, result);
-    performTestMicrotaskCheckpoint(window);
+    const browlet = new Browlet({ route: () => '' });
+    const completion = browlet.evaluate(async () => {
+      const encoder = new TextEncoderStream();
+      let seen: Uint8Array | undefined;
+      let arrayInRealm = false;
+      let bufferInRealm = false;
+      const downstream = new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          seen = chunk;
+          arrayInRealm = chunk instanceof Uint8Array;
+          bufferInRealm = chunk.buffer instanceof ArrayBuffer;
+          controller.enqueue(chunk);
+        },
+      });
+      const reader = encoder.readable.pipeThrough(downstream).getReader();
+      const writer = encoder.writable.getWriter();
+      const read = reader.read();
+      await writer.write('A');
+      const first = await read;
+      const end = reader.read();
+      await writer.close();
+      await end;
+      return {
+        arrayInRealm,
+        bufferInRealm,
+        sameChunk: first.value === seen,
+        bytes: Array.from(first.value!),
+      };
+    });
 
     await expect(completion).resolves.toEqual({
       arrayInRealm: true,

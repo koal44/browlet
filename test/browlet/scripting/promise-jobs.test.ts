@@ -11,7 +11,7 @@ describe('HTML Promise jobs', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
     const observations: string[] = [];
-    browlet.expose('thenable', {
+    await browlet.exposeFunction('host', () => ({
       then(resolve: (value: string) => void, reject: (reason: string) => void) {
         observations.push('thenable');
         queueGlobalTask(networkingTaskSource, realm.globalObject, () => {
@@ -21,11 +21,12 @@ describe('HTML Promise jobs', () => {
         });
         observations.push('thenable finished');
       },
+    }));
+    const result = await browlet.evaluate(() => {
+      const host = Reflect.get(globalThis, 'host') as () => Promise<string>;
+      return host().then((value) => value, (reason: string) => reason);
     });
-    browlet.expose('observe', (value: string) => { observations.push(value); });
-
-    realm.evaluate('Promise.resolve(thenable).then(value => observe(value), reason => observe(reason))',
-      'host-settlement-task.js');
+    observations.push(result);
 
     await expect.poll(() => observations).toEqual([
       'thenable', 'thenable finished', 'task',
@@ -33,31 +34,23 @@ describe('HTML Promise jobs', () => {
     ]);
   });
 
-  it.each(['fulfill', 'reject'] as const)('resumes an idle Window after a Node thenable settles its Promise (%s)', async (settlement) => {
+  it.each(['fulfill', 'reject'] as const)('resumes an idle Window after a bridged Node thenable settles (%s)', async (settlement) => {
     const browlet = new Browlet({ route: () => '' });
-    const realm = getRelevantRealm(browlet.window);
     const observations: string[] = [];
-    browlet.expose('thenable', {
+    await browlet.exposeFunction('host', () => ({
       then(resolve: (value: string) => void, reject: (reason: string) => void) {
         observations.push('thenable');
         if (settlement === 'fulfill') resolve('fulfilled');
         else reject('rejected');
         observations.push('thenable finished');
       },
+    }));
+    const result = await browlet.evaluate(() => {
+      const host = Reflect.get(globalThis, 'host') as () => Promise<string>;
+      return host().then((value) => value, (reason: string) => reason);
     });
-    browlet.expose('observe', (value: string) => { observations.push(value); });
-
-    try {
-      realm.evaluate('Promise.resolve(thenable).then(value => observe(value), reason => observe(reason))',
-        'host-thenable.js');
-
-      await expect.poll(() => observations).toEqual([
-        'thenable', 'thenable finished', settlement === 'fulfill' ? 'fulfilled' : 'rejected',
-      ]);
-    } finally {
-      // Drain any stranded job after the assertion, so a failure cannot leak work.
-      realm.agent.eventLoop.performMicrotaskCheckpoint();
-    }
+    expect(result).toBe(settlement === 'fulfill' ? 'fulfilled' : 'rejected');
+    expect(observations).toEqual(['thenable', 'thenable finished']);
   });
 
   itPassesWith('hostHooks')('runs thenables and reactions as separate HTML microtasks with script cleanup', () => {
@@ -67,7 +60,8 @@ describe('HTML Promise jobs', () => {
     const observations: { label: string; task: Task | null; }[] = [];
     const prepare = vi.spyOn(loop, 'prepareToRunCallback');
     const cleanup = vi.spyOn(loop, 'cleanUpAfterRunningCallback');
-    browlet.expose('observe', (label: string) => {
+    // Synchronous instrumentation deliberately inspects the active internal task.
+    Reflect.set(realm.globalObject, 'observe', (label: string) => {
       observations.push({ label, task: loop.currentlyRunningTask });
     });
 
@@ -112,7 +106,7 @@ describe('HTML Promise jobs', () => {
       }, document);
     });
     const observed: unknown[] = [];
-    browlet.expose('observe', (value: unknown) => { observed.push(value); });
+    Reflect.set(realm.globalObject, 'observe', (value: unknown) => { observed.push(value); });
 
     realm.evaluate('Promise.resolve(17).then().then(value => observe(value))',
       'handlerless-promise.js');
@@ -129,7 +123,7 @@ describe('HTML Promise jobs', () => {
     const entries = [1, 2].map((value) => {
       const browlet = new Browlet({ route: () => '' });
       const realm = getRelevantRealm(browlet.window);
-      browlet.expose('observe', () => { observations.push(value); });
+      Reflect.set(realm.globalObject, 'observe', () => { observations.push(value); });
       const settle = realm.evaluate(`
         const pending = Promise.withResolvers();
         pending.promise.then(() => observe());

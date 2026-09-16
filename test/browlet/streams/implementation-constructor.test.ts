@@ -4,17 +4,18 @@ import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-r
 
 describe('Streams callback dictionary bindings', () => {
   it('completes a read after a delayed source callback without manual checkpoints', async () => {
-    const results = await runInPage(`
-      const stream = new ReadableStream({
+    const browlet = new Browlet({ route: () => '' });
+    const results = await browlet.evaluate(async () => {
+      const stream = new ReadableStream<string>({
         async start(controller) {
-          await new Promise(resolve => setTimeout(resolve, 0));
+          await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
           controller.enqueue('ready');
           controller.close();
         },
       });
       const reader = stream.getReader();
       return [await reader.read(), await reader.read()];
-    `);
+    });
 
     expect(results).toEqual([
       { value: 'ready', done: false },
@@ -23,25 +24,26 @@ describe('Streams callback dictionary bindings', () => {
   });
 
   it('delivers a delayed source rejection and permits subsequent reads', async () => {
-    const results = await runInPage(`
+    const browlet = new Browlet({ route: () => '' });
+    const results = await browlet.evaluate(async () => {
       const failure = new Error('source failed');
       const stream = new ReadableStream({
         async start() {
-          await new Promise(resolve => setTimeout(resolve, 0));
+          await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
           throw failure;
         },
       });
       const caught = await stream.getReader().read().then(
-        () => false, reason => reason === failure,
+        () => false, (reason: unknown) => reason === failure,
       );
-      const next = new ReadableStream({
+      const next = new ReadableStream<string>({
         start(controller) {
           controller.enqueue('next');
           controller.close();
         },
       });
       return [caught, await next.getReader().read()];
-    `);
+    });
 
     expect(results).toEqual([true, { value: 'next', done: false }]);
   });
@@ -102,14 +104,3 @@ describe('Streams callback dictionary bindings', () => {
     expect(receivers).toEqual([sink, sink]);
   });
 });
-
-async function runInPage(source: string): Promise<unknown> {
-  const completion = Promise.withResolvers<unknown>();
-  const browlet = new Browlet({
-    route: () => `<script>(async () => {${source}})().then(complete, fail);</script>`,
-  });
-  browlet.expose('complete', completion.resolve);
-  browlet.expose('fail', completion.reject);
-  await browlet.navigate('https://example.test/');
-  return completion.promise;
-}

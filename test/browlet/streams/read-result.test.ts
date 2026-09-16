@@ -43,7 +43,7 @@ describe('stream read Promise boundaries', () => {
       const entries = [first, second].map((fixture) => {
         const consumer = new ReadConsumerImpl();
         const object = bindings.register(fixture.realm).project(ReadConsumerImpl, consumer);
-        fixture.browlet.expose('reader', fixture.reader);
+        Reflect.set(fixture.realm.globalObject, 'reader', fixture.reader);
         const callback = fixture.realm.evaluate('() => reader.read()', 'read-callback.js') as () => Promise<unknown>;
         const argument = method === 'invoke' ? callback : callback();
         const result = Reflect.apply(Reflect.get(object, method) as CallableFunction, object, [argument]) as Promise<unknown>;
