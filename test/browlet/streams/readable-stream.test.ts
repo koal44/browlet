@@ -453,8 +453,8 @@ describe('readable-stream projection', () => {
     const window = browlet.window;
     const calls: string[] = [];
     const reason = new Error('chunk failed');
-    browlet.expose('recordThen', () => { calls.push('then'); });
-    browlet.expose('chunkError', reason);
+    Reflect.set(window, 'recordThen', () => { calls.push('then'); });
+    Reflect.set(window, 'chunkError', reason);
     const chunk = getRelevantRealm(window).evaluate(`({
       then(resolve, reject) {
         recordThen();

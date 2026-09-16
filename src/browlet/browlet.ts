@@ -23,11 +23,13 @@ import type { Realm } from './scripting/realm';
 import { installHostHooks } from './scripting/host-hooks';
 import { UserAgent } from './user-agent';
 import { requestNodeEventLoopTurn } from './integration/scripting';
+import { PageEvaluation } from './automation/evaluation';
 import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 
 export class Browlet {
-  readonly #exposures = new Map<string, unknown>();
+  readonly #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
+  #evaluation: PageEvaluation;
   #route: BrowletRoute;
   readonly #traversable: TopLevelTraversable;
   readonly #userAgent: UserAgent;
@@ -53,6 +55,7 @@ export class Browlet {
     ) {
       throw new Error('Initial top-level traversable is incomplete');
     }
+    this.#evaluation = new PageEvaluation(getRelevantRealm(this.window));
   }
 
   get document(): Document {
@@ -75,13 +78,22 @@ export class Browlet {
     this.#route = route;
   }
 
-  expose(name: string, value: unknown): void {
-    this.#exposures.set(name, value);
-    Object.defineProperty(this.window, name, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+  /** Evaluate page code, await its result, and return a copy to the host. */
+  evaluate<Result = unknown, Argument = unknown>(
+    expression: string | ((argument: Argument) => Result), argument?: Argument,
+  ): Promise<Awaited<Result>> {
+    return this.#evaluation.evaluate(String(expression), typeof expression === 'function', argument) as Promise<Awaited<Result>>;
+  }
+
+  /** Install an asynchronous page-to-host callback, including after navigation. */
+  // eslint-disable-next-line no-restricted-syntax, @typescript-eslint/require-await -- Node-facing async API; installation is currently synchronous.
+  async exposeFunction<Arguments extends unknown[], Result>(
+    name: string, callback: (...args: Arguments) => Result,
+  ): Promise<void> {
+    if (this.#exposures.has(name)) throw new Error(`Host function ${name} is already exposed`);
+    const invoke = (args: unknown[]) => callback(...args as Arguments);
+    this.#evaluation.exposeFunction(name, invoke);
+    this.#exposures.set(name, invoke);
   }
 
   navigate(url: string | URL): Promise<WindowProxy> {
@@ -114,7 +126,6 @@ export class Browlet {
     );
     const realm = getRelevantRealm(document);
     const runtime = getBindingContext(realm).getRuntime();
-    this.installExposures(realm.globalObject);
     const historyEntry = createNavigationHistoryEntry(
       document,
       navigationParams,
@@ -125,6 +136,11 @@ export class Browlet {
       navigationParams.userInvolvement,
       historyEntry,
     );
+    this.#evaluation.dispose();
+    this.#evaluation = new PageEvaluation(realm);
+    for (const [name, callback] of this.#exposures) {
+      this.#evaluation.exposeFunction(name, callback);
+    }
 
     const parser = new BrowletParser(
       document,
@@ -168,16 +184,6 @@ export class Browlet {
     document.withWriter(write, () => {
       realm.evaluate(source, scriptURL.href, lineOffset);
     });
-  }
-
-  private installExposures(window: object): void {
-    for (const [name, value] of this.#exposures) {
-      Object.defineProperty(window, name, {
-        configurable: true,
-        writable: true,
-        value,
-      });
-    }
   }
 
   private getRouteSource(url: string | URL): string {

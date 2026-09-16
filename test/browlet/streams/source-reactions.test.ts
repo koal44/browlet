@@ -1,5 +1,5 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { afterEach, describe, expect, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
@@ -8,26 +8,28 @@ import * as scheduling from '../../../src/browlet/integration/scripting';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('ReadableStream source reaction delivery', () => {
-  itPassesWith('explicitQueues')('imports a Node callback result before continuing in the stream\'s HTML queue', async () => {
-    vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation(() => {});
+  it('delivers a Node callback result through the stream\'s HTML task queue', async () => {
+    const turns: (() => void)[] = [];
+    vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation((turn) => { turns.push(turn); });
     const browlet = new Browlet({ route: () => '' });
-    const realm = getRelevantRealm(browlet.window);
     const pending = Promise.withResolvers<void>();
     const results: unknown[] = [];
-    browlet.expose('hostStart', () => pending.promise);
-    browlet.expose('recordResult', (value: unknown) => { results.push(value); });
-    realm.evaluate(`
-      new ReadableStream({
-        start: hostStart,
+    await browlet.exposeFunction('hostStart', () => pending.promise);
+    const result = browlet.evaluate(() => {
+      const hostStart = Reflect.get(globalThis, 'hostStart') as () => Promise<void>;
+      return new ReadableStream<string>({
+        start() { return hostStart(); },
         pull(controller) { controller.enqueue('host chunk'); controller.close(); },
-      }).getReader().read().then(value => recordResult(value));
-    `, 'node-source-result.js');
-    realm.agent.eventLoop.performMicrotaskCheckpoint();
+      }).getReader().read();
+    }).then((value) => { results.push(value); });
+    turns.shift()!();
     pending.resolve();
     // Complete the native backend turn; it must not drain the HTML queue.
     await new Promise<void>((resolve) => { setImmediate(resolve); });
     expect(results).toEqual([]);
-    realm.agent.eventLoop.performMicrotaskCheckpoint();
+    expect(turns).toHaveLength(1);
+    turns.shift()!();
+    await result;
     expect(results).toEqual([{ value: 'host chunk', done: false }]);
   });
 
@@ -104,12 +106,13 @@ function createSource() {
   const callbackReceivers: boolean[] = [];
   const callbackControllers: boolean[] = [];
   const results: unknown[] = [];
-  browlet.expose('recordCallback', (name: string, receiverMatches: boolean, controllerMatches: boolean) => {
+  // These callbacks synchronously inspect internal queue and object identities.
+  Reflect.set(realm.globalObject, 'recordCallback', (name: string, receiverMatches: boolean, controllerMatches: boolean) => {
     calls.push(name);
     callbackReceivers.push(receiverMatches);
     callbackControllers.push(controllerMatches);
   });
-  browlet.expose('recordResult', (value: unknown) => { results.push(value); });
+  Reflect.set(realm.globalObject, 'recordResult', (value: unknown) => { results.push(value); });
   const controls = realm.evaluate(`
     const start = Promise.withResolvers();
     const pull = Promise.withResolvers();

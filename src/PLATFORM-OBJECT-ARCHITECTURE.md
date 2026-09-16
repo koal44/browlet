@@ -40,6 +40,13 @@ for the exposed object. Reserve *wrapper* for discussions of the concrete
 wrapping mechanism, native-engine comparisons, or special wrapper allocation;
 it is not Browlet's general name for the Platform layer.
 
+The host automation boundary is separate from Binding. `Browlet.evaluate()`
+executes author code in the page and copies its result to Node; the copy is
+not another platform identity or an unwrapped implementation. Exposed host
+callbacks also exchange copied data and return page-owned Promises. Passing
+live platform objects across this boundary will require explicit handles.
+See the [automation boundary](./browlet/automation/README.md).
+
 ## The model
 
 An ordinary platform object has two object identities across these layers:

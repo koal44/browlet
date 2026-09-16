@@ -1,6 +1,7 @@
 /* global add_completion_callback, add_result_callback, setup, __wptComplete */
 
-setup({ output: false });
+// Results go to the host callback; this runner does not use parent-window messages.
+setup({ output: false, message_events: [] });
 
 const results = [];
 

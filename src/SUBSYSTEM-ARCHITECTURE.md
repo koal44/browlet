@@ -158,6 +158,15 @@ load completion use `PromiseValue`. The public `Browlet.navigate()` bridges the
 finished internal operation to a native Promise for its Node caller. That
 outer Promise does not schedule the DOM lifecycle.
 
+Host evaluation follows the same boundary. `Browlet.evaluate()` queues a page
+command, awaits its page-owned result, and copies data back to Node.
+`Browlet.exposeFunction()` keeps the callback in Node and installs a page
+function returning a page-owned Promise. Callback completion queues a task
+on that page's HTML event loop before settling the Promise. The
+[automation boundary](./browlet/automation/README.md) owns this
+transport and navigation cancellation; HTML retains task execution and
+checkpoint policy. Direct Node/page object sharing is not its transport.
+
 This is an asynchronous dependency, not a requirement on all stored values.
 `BlobData` is runtime-neutral backing storage. A Blob or File implementation
 retains a runtime for reading that storage, including when constructed by

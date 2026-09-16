@@ -18,7 +18,7 @@ export async function runTest(testPath: string): Promise<WptReport> {
   const { promise: report, resolve: complete } =
     Promise.withResolvers<WptReport>();
 
-  browlet.expose('__wptComplete', complete);
+  await browlet.exposeFunction('__wptComplete', complete);
 
   await browlet.navigate(testUrl);
 
