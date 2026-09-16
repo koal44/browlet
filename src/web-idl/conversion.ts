@@ -19,15 +19,15 @@ import {
 import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
-  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute, SimpleTypeName, WebIDLType,
+  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute,
+  RecordType, SimpleTypeName, UnionType, WebIDLType,
 } from './core/types';
 import type { WebIDLRealmHost } from './realm-host';
-import {
-  getImplementationRecord, getPlatformRecord,
-  type PlatformRecord, type PlatformObjectRegistry,
-} from './platform-object';
+import type { BindingWorld } from './binding-world';
+import { getImplementationRecord, getPlatformRecord, type PlatformRecord } from './platform-object';
 import {
   convertJavaScriptValueToPromise, createIDLPromiseRecord, isIDLPromiseRecord,
+  PromiseStamper, type PromiseSource,
 } from './promise-record';
 import { defineDataProperty } from './property';
 import {
@@ -81,20 +81,20 @@ export function projectPromise(
 ): Promise<unknown> {
   // Web IDL §3.2.24 — an existing capability converts to its Promise field.
   if (isIDLPromiseRecord(value)) return value.promise;
-  const source = value as Promise<unknown> | PromiseValue<unknown>;
-  const promises = context.platformObjects.promiseProjections ??= new WeakMap();
-  let projections = promises.get(source);
+  const source = value as PromiseSource;
+  let projections = PromiseStamper.get(source);
   const existing = projections?.find((entry) =>
-    entry.realm === context.realm && entry.type === type &&
+    entry.world === context.world &&
+    entry.record.realm === context.realm && entry.record.type === type &&
     entry.newBufferResult === newBufferResult);
-  if (existing) return existing.promise;
+  if (existing) return existing.record.promise;
 
   const record = createIDLPromiseRecord(type, context.realm, context.realizeException);
   if (!projections) {
     projections = [];
-    promises.set(source, projections);
+    void PromiseStamper.stamp(source, projections);
   }
-  projections.push({ realm: context.realm, type, promise: record.promise, newBufferResult });
+  projections.push({ world: context.world, record, newBufferResult });
   // These callbacks adapt implementation state; author reactions still run
   // through the projected promise's own realm and queue.
   const onFulfilled = (result: unknown): void => {
@@ -109,14 +109,11 @@ export function projectPromise(
       record.reject(error);
     }
   };
-  const onRejected = (reason: unknown): void => {
-    record.reject(reason);
-  };
   try {
     if (source instanceof PromiseValue) {
-      context.realm.promises.import(source).observe(onFulfilled, onRejected);
+      context.realm.promises.import(source).observe(onFulfilled, record.reject);
     } else {
-      context.realm.observePromise(source, onFulfilled, onRejected);
+      context.realm.observePromise(source, onFulfilled, record.reject);
     }
   } catch (error) {
     record.reject(error);
@@ -202,7 +199,7 @@ export function isPlatformObject(
   value: unknown,
   context: ConversionContext,
 ): boolean {
-  if (getPlatformRecord(value)?.binding.platformObjects === context.platformObjects) return true;
+  if (getPlatformRecord(value)?.binding.world === context.world) return true;
   for (const hostInterface of context.hostDefinedInterfaces.values()) {
     if (hostInterface.is(value)) return true;
   }
@@ -247,7 +244,7 @@ export function materializeDefaultValue(
 export type ConversionContext = {
   definitions: DefinitionAssembly;
   hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
-  platformObjects: PlatformObjectRegistry;
+  world: BindingWorld;
   projectImplementationObject?: (
     implInst: object,
     expectedInterface: AssembledInterfaceDefinition,
@@ -296,22 +293,22 @@ function convertJavaScriptValue(
 // Project dispatcher: convert a JavaScript value using its resolved type and retained extended attributes.
 function convertJavaScriptValueByEffectiveType(
   value: unknown,
-  resolved: EffectiveType,
+  { type, extendedAttributes }: EffectiveType,
   context: ConversionContext,
   legacyCallbackAttribute = false,
 ): unknown {
-  switch (resolved.type.kind) {
+  switch (type.kind) {
     case 'simple':
       return convertJavaScriptValueToSimpleType(
         value,
-        resolved.type.name,
-        resolved.extendedAttributes,
+        type.name,
+        extendedAttributes,
         context,
       );
     case 'reference':
       return convertJavaScriptValueToNamedType(
         value,
-        resolved.type.name,
+        type.name,
         context,
         legacyCallbackAttribute,
       );
@@ -319,22 +316,22 @@ function convertJavaScriptValueByEffectiveType(
     case 'nullable':
       if (
         value === undefined &&
-        includesUndefined(resolved.type.type, context.definitions)
+        includesUndefined(type.type, context.definitions)
       ) return undefined;
       if (value === null || value === undefined) return null;
       return convertJavaScriptValue(
         value,
-        resolved.type.type,
+        type.type,
         context,
-        resolved.extendedAttributes,
+        extendedAttributes,
         legacyCallbackAttribute,
       );
     case 'union':
       return convertJavaScriptValueToUnion(
         value,
-        resolved.type,
+        type,
         context,
-        resolved.extendedAttributes,
+        extendedAttributes,
       );
     // Web IDL §3.2.21 Sequences — JavaScript-to-IDL conversion.
     case 'sequence': {
@@ -345,13 +342,13 @@ function convertJavaScriptValueByEffectiveType(
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createSequenceFromIterable(
         value,
-        resolved.type.type,
+        type.type,
         method,
         context,
       );
     }
     case 'record':
-      return convertJavaScriptValueToRecord(value, resolved.type, context);
+      return convertJavaScriptValueToRecord(value, type, context);
     // Web IDL §3.2.27 Frozen arrays — JavaScript-to-IDL conversion.
     case 'frozen-array': {
       if (!isObject(value)) {
@@ -361,7 +358,7 @@ function convertJavaScriptValueByEffectiveType(
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createFrozenArrayFromIterable(
         value,
-        resolved.type.type,
+        type.type,
         method,
         context,
       );
@@ -369,18 +366,18 @@ function convertJavaScriptValueByEffectiveType(
     case 'promise':
       return convertJavaScriptValueToPromise(
         value,
-        resolved.type.type,
+        type.type,
         context.realm,
         context.realizeException,
       );
     case 'async-sequence':
       return convertJavaScriptValueToAsyncSequence(
         value,
-        resolved.type,
+        type,
         context.realm,
       );
     case 'observable-array':
-      return unsupportedConversion(resolved.type.kind);
+      return unsupportedConversion(type.kind);
   }
 }
 
@@ -401,18 +398,18 @@ function convertIDLValue(
 // Project dispatcher: convert an IDL value using its resolved type and retained extended attributes.
 function convertIDLValueByEffectiveType(
   value: unknown,
-  effectiveType: EffectiveType,
+  { type, extendedAttributes }: EffectiveType,
   context: ConversionContext,
 ): unknown {
   // Realize internal exceptions before exposing them, including as callback arguments.
   if (context.realizeException) value = context.realizeException(value);
-  switch (effectiveType.type.kind) {
+  switch (type.kind) {
     case 'simple':
-      return convertSimpleTypeToJavaScript(value, effectiveType.type.name);
+      return convertSimpleTypeToJavaScript(value, type.name);
     case 'reference':
       return convertNamedTypeToJavaScript(
         value,
-        effectiveType.type.name,
+        type.name,
         context,
       );
     // Web IDL §3.2.20 Nullable types — IDL-to-JavaScript conversion.
@@ -420,39 +417,39 @@ function convertIDLValueByEffectiveType(
       if (value === null) return null;
       return convertIDLValue(
         value,
-        effectiveType.type.type,
+        type.type,
         context,
-        effectiveType.extendedAttributes,
+        extendedAttributes,
       );
     case 'union':
       return convertUnionToJavaScript(
         value,
-        effectiveType.type,
+        type,
         context,
-        effectiveType.extendedAttributes,
+        extendedAttributes,
       );
     case 'sequence':
       return convertSequenceToJavaScript(
         value,
-        effectiveType.type.type,
+        type.type,
         context,
       );
     case 'record':
       return convertRecordToJavaScript(
         value,
-        effectiveType.type.key,
-        effectiveType.type.value,
+        type.key,
+        type.value,
         context,
       );
     // Web IDL §3.2.27 Frozen arrays — preserve the frozen array object.
     case 'frozen-array':
       return value;
     case 'promise':
-      return projectPromise(value, effectiveType.type.type, context);
+      return projectPromise(value, type.type, context);
     case 'async-sequence':
       return convertAsyncSequenceToJavaScript(value);
     case 'observable-array':
-      return unsupportedConversion(effectiveType.type.kind);
+      return unsupportedConversion(type.kind);
   }
 }
 
@@ -588,7 +585,7 @@ function convertJavaScriptValueToNamedType(
       if (
         primaryInterface &&
         record &&
-        record.binding.platformObjects === context.platformObjects &&
+        record.binding.world === context.world &&
         record.implements(primaryInterface)
       ) {
         return record.implInst;
@@ -659,7 +656,7 @@ function convertNamedTypeToJavaScript(
     case 'interface': {
       const primaryInterface = context.definitions.getInterface(name);
       const record = getImplementationRecord(value);
-      const platformObject = record?.binding.platformObjects === context.platformObjects
+      const platformObject = record?.binding.world === context.world
         ? record.platformObject
         : undefined;
       const object = platformObject ??
@@ -772,7 +769,7 @@ function convertDictionaryToJavaScript(
 // Web IDL §3.2.23 Records — convert a JavaScript value to a record.
 function convertJavaScriptValueToRecord(
   value: unknown,
-  type: Extract<EffectiveBaseType, { kind: 'record'; }>,
+  type: RecordType,
   context: ConversionContext,
 ): IDLRecordValue {
   if (!isObject(value)) {
@@ -836,7 +833,7 @@ function convertSequenceToJavaScript(
 // Web IDL §3.2.25 Union types — convert a JavaScript value to a union.
 function convertJavaScriptValueToUnion(
   value: unknown,
-  type: Extract<EffectiveBaseType, { kind: 'union'; }>,
+  type: UnionType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
 ): unknown {
@@ -995,7 +992,7 @@ function convertJavaScriptValueToUnion(
 // Project adapter for Web IDL §3.2.25 Union types — identify our value's specific type, then convert it.
 function convertUnionToJavaScript(
   value: unknown,
-  type: Extract<EffectiveBaseType, { kind: 'union'; }>,
+  type: UnionType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
 ): unknown {
@@ -1016,7 +1013,7 @@ function convertUnionToJavaScript(
   const implementationRecord = getImplementationRecord(value);
   if (
     implementationRecord?.platformObject &&
-    implementationRecord.binding.platformObjects === context.platformObjects
+    implementationRecord.binding.world === context.world
   ) {
     const interfaceType = types.find((candidate) =>
       isImplementedInterfaceRecordType(
@@ -1234,7 +1231,7 @@ function isImplementedInterfaceType(
   const primaryInterface = context.definitions.getInterface(type.type.name);
   if (primaryInterface) {
     const record = getPlatformRecord(value);
-    return record?.binding.platformObjects === context.platformObjects &&
+    return record?.binding.world === context.world &&
       record.implements(primaryInterface);
   }
   return context.hostDefinedInterfaces.get(type.type.name)?.is(value) ?? false;

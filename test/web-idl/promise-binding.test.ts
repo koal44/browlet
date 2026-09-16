@@ -17,7 +17,6 @@ import { TypeError as TypeErrorRequest } from '../../src/js-engine/exceptions';
 import type { Promises, PromiseValue } from '../../src/js-engine/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import {
   createRejectedPromise, createResolvedPromise,
 } from '../../src/web-idl/promise';
@@ -234,7 +233,7 @@ describe('Web IDL promise member binding', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = binding.createPlatformObject(binding.resolveInterface('PromiseOwner'));
@@ -275,7 +274,7 @@ describe('Web IDL promise member binding', () => {
     const binding = new RealmBinding(
       assembleDefinitions([definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = binding.createPlatformObject(binding.resolveInterface('PromiseReceiver'));
@@ -304,7 +303,7 @@ describe('Web IDL promise member binding', () => {
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     registerDefinitionBindings(binding);

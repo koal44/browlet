@@ -9,7 +9,7 @@ import {
 } from '../../src/web-idl/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import type { ValuePair } from '../../src/web-idl/iterable';
-import { getPlatformRecord, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/platform-object';
 
 describe('Web IDL synchronous iterable declarations', () => {
   it.each(['entries', 'keys', 'values', 'forEach'])(
@@ -169,7 +169,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const binding = new RealmBinding(
       definitions,
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const assembledValue = definitions.getInterface('PairValue');
@@ -222,7 +222,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, hidden]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const hiddenPrototype = binding.getInterfacePrototypeObject(binding.resolveInterface(hidden.name));
     expect(Object.hasOwn(hiddenPrototype, 'entries')).toBe(false);
@@ -243,7 +243,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const { binding, iterable, implementations } = createPairBinding();
     const otherRealm = new Realm();
     const otherBinding = new RealmBinding(
-      binding.definitions, otherRealm, new PlatformObjectRegistry(), implementations,
+      binding.definitions, otherRealm, new BindingWorld([]), implementations,
     );
     implementations.setValuePairsSteps(iterable, () => []);
     const object = binding.createPlatformObject(binding.resolveInterface('PairCollection'));
@@ -307,7 +307,7 @@ function createPairBinding(): {
     binding: new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     ),
     implementations,

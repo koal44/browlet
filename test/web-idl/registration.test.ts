@@ -467,6 +467,30 @@ describe('Web IDL interface registration', () => {
       .toBe('parent');
   });
 
+  it('shares capability values across realms without leaking between worlds', () => {
+    const definition = defineInterface({ name: 'SharedCapability', members: [] });
+    const definitions = [definition];
+    const capability = defineCapability<{ owner: string; }>('Test');
+    const firstValue = { owner: 'first' };
+    const secondValue = { owner: 'second' };
+    const firstWorld = new BindingWorld(definitions, {
+      capabilities: [capability.for(definition, firstValue)],
+    });
+    const secondWorld = new BindingWorld(definitions, {
+      capabilities: [capability.for(definition, secondValue)],
+    });
+    const unconfiguredWorld = new BindingWorld(definitions);
+    const first = firstWorld.register(new Realm());
+    const another = firstWorld.register(new Realm());
+    const second = secondWorld.register(new Realm());
+    const unconfigured = unconfiguredWorld.register(new Realm());
+
+    expect(first.getCapability(definition, capability)).toBe(firstValue);
+    expect(another.getCapability(definition, capability)).toBe(firstValue);
+    expect(second.getCapability(definition, capability)).toBe(secondValue);
+    expect(unconfigured.getCapability(definition, capability)).toBeUndefined();
+  });
+
   it('requires an implementation creator to instantiate a declared interface', () => {
     const interfaceIDL = defineInterface({
       name: 'DeclarationOnly', exposed: '*', members: [],

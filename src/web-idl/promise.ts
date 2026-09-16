@@ -275,7 +275,7 @@ function withPromiseRealm(
   return {
     definitions: context.definitions,
     hostDefinedInterfaces: context.hostDefinedInterfaces,
-    platformObjects: context.platformObjects,
+    world: context.world,
     projectImplementationObject: context.projectImplementationObject,
     realizeException: context.realizeException,
     realm: promise.realm,

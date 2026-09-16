@@ -113,25 +113,21 @@ export function getUnannotatedType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
 ): Exclude<WebIDLType, { kind: 'annotated'; }> {
-  let innerType = resolveTypedef(type, definitions);
-  while (innerType.kind === 'annotated') {
-    innerType = resolveTypedef(innerType.type, definitions);
+  let innerType = type;
+  while (true) {
+    if (innerType.kind === 'annotated') {
+      innerType = innerType.type;
+      continue;
+    }
+    if (innerType.kind === 'reference') {
+      const definition = definitions.getDefinition(innerType.name);
+      if (definition?.kind === 'typedef') {
+        innerType = definition.type;
+        continue;
+      }
+    }
+    return innerType;
   }
-  return innerType;
-}
-
-// Project helper for Web IDL §2.11 Typedefs — follow type aliases in the definition assembly.
-export function resolveTypedef(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): WebIDLType {
-  let resolvedType = type;
-  while (resolvedType.kind === 'reference') {
-    const definition = definitions.getDefinition(resolvedType.name);
-    if (definition?.kind !== 'typedef') break;
-    resolvedType = definition.type;
-  }
-  return resolvedType;
 }
 
 type AnnotatedUnionType = AnnotatedType<UnionType>;

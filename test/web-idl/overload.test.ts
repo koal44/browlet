@@ -6,13 +6,13 @@ import {
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import type { HostDefinedInterface } from '../../src/web-idl/conversion';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../src/web-idl/overload';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import { serializeType } from '../../src/web-idl/core/index';
 
 describe('Web IDL effective overload sets', () => {
@@ -239,7 +239,7 @@ function createBinding(
   return new RealmBinding(
     assembleDefinitions(definitions),
     new Realm(),
-    new PlatformObjectRegistry(),
+    new BindingWorld([]),
     new ImplementationRegistry(),
     hostDefinedInterfaces,
   );

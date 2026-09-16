@@ -16,7 +16,7 @@ import {
 } from '../../src/web-idl/core/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { getImplementationObject, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getImplementationObject } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL implementation registration', () => {
@@ -197,7 +197,7 @@ describe('Web IDL implementation registration', () => {
         defineIncludes({ interface: second.name, mixin: common.name }),
       ]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -236,7 +236,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -284,7 +284,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -334,7 +334,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([dependencyIDL, ownerIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -398,7 +398,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -453,7 +453,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([resultIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -604,7 +604,7 @@ describe('Web IDL implementation registration', () => {
         ownerIDL,
       ]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -719,7 +719,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     registerDefinitionBindings(binding);
@@ -783,7 +783,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     registerDefinitionBindings(binding);
@@ -1056,7 +1056,7 @@ describe('Web IDL implementation registration', () => {
         interfaceIDL,
       ]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -1195,7 +1195,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -1329,7 +1329,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([collectionIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -1389,7 +1389,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();
@@ -1411,12 +1411,12 @@ describe('Web IDL implementation registration', () => {
     const first = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     const second = new RealmBinding(
       definitions,
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
 
     const firstContext = first.context;
@@ -1424,8 +1424,8 @@ describe('Web IDL implementation registration', () => {
     registerDefinitionBindings(first);
     registerDefinitionBindings(second);
 
-    expect(first.platformObjects.getRealmBinding(realm)?.context).toBe(firstContext);
-    expect(second.platformObjects.getRealmBinding(realm)?.context).toBe(secondContext);
+    expect(first.world.getRealmBinding(realm)?.context).toBe(firstContext);
+    expect(second.world.getRealmBinding(realm)?.context).toBe(secondContext);
     expect(firstContext).not.toBe(secondContext);
   });
 
@@ -1457,7 +1457,7 @@ describe('Web IDL implementation registration', () => {
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     registerDefinitionBindings(binding);
     binding.install();

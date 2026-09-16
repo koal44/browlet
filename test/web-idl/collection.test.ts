@@ -3,13 +3,13 @@ import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, sequence, type MaplikeMember, type OperationMember,
   type SetlikeMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL collection iterator overrides', () => {
   it.each(['map', 'set'] as const)('honors a replaced %s iterator prototype next', (kind) => {
@@ -208,7 +208,7 @@ describe('Web IDL maplike declarations', () => {
     const binding = new RealmBinding(
       definitions,
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     );
     class CollectionImplementation {}
     const implementation = new CollectionImplementation();
@@ -370,7 +370,7 @@ describe('Web IDL setlike declarations', () => {
     const binding = new RealmBinding(
       assembleDefinitions([readonlyMap, readonlySet]),
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const map = binding.createPlatformObject(binding.resolveInterface(readonlyMap.name));
@@ -476,7 +476,7 @@ function createBinding(
   return new RealmBinding(
     assembleDefinitions([definition]),
     realm,
-    new PlatformObjectRegistry(),
+    new BindingWorld([]),
     implementations,
   );
 }

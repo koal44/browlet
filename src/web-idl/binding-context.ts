@@ -87,8 +87,8 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     definition: InterfaceDefinition<never>,
     capability: Capability<Value>,
   ): Value | undefined {
-    this.#resolveInterface(definition);
-    return this.#binding.capabilities.get(definition, capability);
+    const primaryInterface = this.#resolveInterface(definition);
+    return primaryInterface.capabilities.get(capability) as Value | undefined;
   }
 
   // Project helper: look up a registered interface definition by name.
@@ -109,7 +109,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
    */
   getObjectRecord(value: unknown): Readonly<PlatformRecord> | undefined {
     const record = getPlatformRecord(value) ?? getImplementationRecord(value);
-    return record?.binding.platformObjects === this.#binding.platformObjects ? record : undefined;
+    return record?.binding.world === this.#binding.world ? record : undefined;
   }
 
   // Project helper: construct an implementation with injected arguments and stamp its platform record.
@@ -133,7 +133,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   ): StampedImplInstance<T> | undefined {
     const primaryInterface = this.#getImplementationInterface(implClass);
     const record = getPlatformRecord(platformObject);
-    return record?.binding.platformObjects === this.#binding.platformObjects &&
+    return record?.binding.world === this.#binding.world &&
       record.implements(primaryInterface)
       ? record.implInst as StampedImplInstance<T>
       : undefined;

@@ -4,6 +4,7 @@ import type { PromiseValueCapability } from '../../src/js-engine/index';
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
 import { endOfIteration } from '../../src/web-idl/async-sequence';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
@@ -11,7 +12,6 @@ import {
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
 import { missingArgument } from '../../src/web-idl/overload';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL asynchronously iterable declarations', () => {
   it('projects pair methods, iterator prototypes, arguments, and results', async () => {
@@ -83,7 +83,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
   it.each(['next', 'return'] as const)('accepts %s borrowed from another realm in the same binding world', async (operation) => {
     const { binding, declaration, implementations } = createPairBinding();
     const otherBinding = new RealmBinding(
-      binding.definitions, new Realm(), binding.platformObjects, implementations,
+      binding.definitions, new Realm(), binding.world, implementations,
     );
     implementations.setAsyncIteratorSteps(declaration, {
       create: () => ({}),
@@ -108,7 +108,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const { binding, declaration, implementations } = createPairBinding();
     const otherRealm = new Realm();
     const otherBinding = new RealmBinding(
-      binding.definitions, otherRealm, new PlatformObjectRegistry(), implementations,
+      binding.definitions, otherRealm, new BindingWorld([]), implementations,
     );
     implementations.setAsyncIteratorSteps(declaration, {
       create: () => ({}),
@@ -179,7 +179,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const object = binding.createPlatformObject(binding.resolveInterface('AsyncPairs'));
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const otherBinding = borrowed ? new RealmBinding(
-      binding.definitions, new Realm(), binding.platformObjects, implementations,
+      binding.definitions, new Realm(), binding.world, implementations,
     ) : binding;
     const otherObject = otherBinding.createPlatformObject(otherBinding.resolveInterface('AsyncPairs'));
     const otherIterator = Reflect.apply(getMethod(otherObject, 'entries'), otherObject, []) as object;
@@ -246,7 +246,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     implementations.setAsyncIteratorSteps(declaration, {
@@ -303,7 +303,7 @@ function createPairBinding(): {
     binding: new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     ),
     declaration,

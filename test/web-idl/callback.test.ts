@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   callUserObjectOperation, constructCallbackFunction,
@@ -16,7 +17,6 @@ import {
   integer, nullable, promise as promiseType, reference,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import { isIDLPromiseRecord } from '../../src/web-idl/promise-record';
 
 describe('Web IDL callbacks', () => {
@@ -384,7 +384,7 @@ describe('Web IDL callbacks', () => {
     const binding = new RealmBinding(
       assembleDefinitions([callback, definition]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = binding.createPlatformObject(binding.resolveInterface('CallbackOwner'));
@@ -534,7 +534,7 @@ function createCallbackBinding(): {
     binding: new RealmBinding(
       definitions,
       targetRealm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     ),
     callbackRealm,
     targetRealm,

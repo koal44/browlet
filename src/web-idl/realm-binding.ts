@@ -3,6 +3,7 @@ import {
   SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
   type ByteSequence, type RuntimeContext,
 } from '../js-engine/index';
+import { Stamper } from '../infra/stamper';
 import { DOMException as InternalDOMException } from './core/dom-exception';
 import type {
   AssembledInterfaceDefinition, AssembledInterfaceMember, AssembledNamespaceDefinition,
@@ -38,41 +39,37 @@ import {
 import { ObservableArrayBinding } from './observable-array';
 import {
   associatePlatformObject, getImplementationObject, getImplementationRecord, getPlatformRecord,
-  interfaceImplements, stampImplementation,
-  type PlatformRecord, type PlatformObjectRegistry, type StampedPlatformObject,
+  interfaceImplements, stampImplementation, type PlatformRecord, type StampedPlatformObject,
 } from './platform-object';
+import type { BindingWorld } from './binding-world';
 import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
-import { CapabilityRegistry } from './capability';
 
 export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   readonly definitions: DefinitionAssembly;
   readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   readonly implementations: ImplementationRegistry;
-  readonly capabilities: CapabilityRegistry;
-  readonly platformObjects: PlatformObjectRegistry;
+  readonly world: BindingWorld;
   readonly realizeException: (value: unknown) => unknown;
   readonly realm: Realm;
   readonly context: BindingContext<Realm>;
   readonly #collections: CollectionBinding;
   readonly #asyncIterables: AsynchronousIterableBinding;
-  readonly #initialObjects = new WeakMap<InitialObjectDefinition, DefinitionInitialObjects>();
+  readonly #initialObjects = new Map<InitialObjectDefinition, DefinitionInitialObjects>();
   readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
   readonly #iterables: SynchronousIterableBinding;
   readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
   readonly #observableArrays: ObservableArrayBinding;
-  readonly #realizedExceptions = new WeakMap<object, object>();
 
   // Project helper: assemble the registries, conversion context, and realm binding machinery.
   constructor(
     definitions: DefinitionAssembly,
     realm: Realm,
-    platformObjects: PlatformObjectRegistry,
+    world: BindingWorld,
     implementations = new ImplementationRegistry(),
     hostDefinedInterfaces: HostDefinedInterface[] = [],
-    capabilities = new CapabilityRegistry(definitions, []),
     createRuntime?: (ctx: BindingContext<Realm>) => RuntimeContext,
   ) {
     this.definitions = definitions;
@@ -80,16 +77,15 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       hostDefinedInterfaces.map((hostInterface) => [hostInterface.name, hostInterface]),
     );
     this.implementations = implementations;
-    this.capabilities = capabilities;
     this.realm = realm;
-    this.platformObjects = platformObjects;
+    this.world = world;
     // Promise and callback conversion contexts retain this projection callback.
     this.projectImplementationObject = this.projectImplementationObject.bind(this);
-    // Project adapter: realize internal exceptions once in this realm.
+    // Project adapter: realize internal exceptions once and preserve the error across realms.
     // Web IDL §3.14.3 Creating and throwing exceptions supplies the realm-allocation rules.
     this.realizeException = (value) => {
       if (!isObject(value)) return value;
-      const existing = this.#realizedExceptions.get(value);
+      const existing = ExceptionStamper.get(value);
       if (existing) return existing;
       let error: object;
       if (InternalTypeError.is(value)) {
@@ -103,7 +99,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       } else {
         return value;
       }
-      this.#realizedExceptions.set(value, error);
+      void ExceptionStamper.stamp(value, error);
       return error;
     };
     this.#asyncIterables = new AsynchronousIterableBinding(
@@ -522,7 +518,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   ): StampedPlatformObject | undefined {
     const existing = getImplementationRecord(implInst);
     if (existing) {
-      if (existing.binding.platformObjects !== this.platformObjects) {
+      if (existing.binding.world !== this.world) {
         throw new TypeError('Implementation instance belongs to another binding world');
       }
       return interfaceImplements(existing.primaryInterface, expectedInterface)
@@ -616,7 +612,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     try {
       const realm = getAssociatedRealm(newTarget);
       const binding = realm === this.realm ? this :
-        realm && this.platformObjects.getRealmBinding(realm);
+        realm && this.world.getRealmBinding(realm);
       if (!binding) {
         return this.#throwTypeError('newTarget realm has no registered Web IDL binding');
       }
@@ -728,7 +724,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Web IDL §3.8 Platform objects implementing interfaces — changing a platform object's associated realm.
   changePlatformObjectRealm(platformObject: object): void {
     const record = getPlatformRecord(platformObject);
-    if (record?.binding.platformObjects !== this.platformObjects) {
+    if (record?.binding.world !== this.world) {
       throw new TypeError('Value is not a platform object in this binding world');
     }
 
@@ -788,7 +784,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   getMapEntries(object: object): IDLMapEntries {
     const record = getPlatformRecord(object) ?? getImplementationRecord(object);
     return this.#collections.getMapEntries(
-      record?.binding.platformObjects === this.platformObjects ? record : undefined,
+      record?.binding.world === this.world ? record : undefined,
     );
   }
 
@@ -796,7 +792,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   getSetEntries(object: object): IDLSetEntries {
     const record = getPlatformRecord(object) ?? getImplementationRecord(object);
     return this.#collections.getSetEntries(
-      record?.binding.platformObjects === this.platformObjects ? record : undefined,
+      record?.binding.world === this.world ? record : undefined,
     );
   }
 
@@ -811,7 +807,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       this.definitions,
     );
     if (
-      record?.binding.platformObjects !== this.platformObjects ||
+      record?.binding.world !== this.world ||
       !elementType ||
       !interfaceIncludesMember(record.primaryInterface, attribute)
     ) {
@@ -826,7 +822,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project delegate to Web IDL §3.8 Platform objects implementing interfaces — is a platform object.
   isPlatformObject(platformObject: unknown): boolean {
-    return getPlatformRecord(platformObject)?.binding.platformObjects === this.platformObjects;
+    return getPlatformRecord(platformObject)?.binding.world === this.world;
   }
 
   // Project delegate to Web IDL §3.8 Platform objects implementing interfaces — implements.
@@ -835,7 +831,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     primaryInterface: AssembledInterfaceDefinition,
   ): boolean {
     const record = getPlatformRecord(platformObject);
-    return record?.binding.platformObjects === this.platformObjects &&
+    return record?.binding.world === this.world &&
       record.implements(primaryInterface);
   }
 
@@ -1649,13 +1645,13 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     value: unknown,
   ): PlatformRecord | undefined {
     const direct = getPlatformRecord(value);
-    if (direct?.binding.platformObjects === this.platformObjects) return direct;
+    if (direct?.binding.world === this.world) return direct;
 
     for (const hostInterface of this.hostDefinedInterfaces.values()) {
       if (!hostInterface.is(value)) continue;
       const platformObject = hostInterface.resolveReceiver?.(value);
       const record = getPlatformRecord(platformObject);
-      if (record?.binding.platformObjects === this.platformObjects) return record;
+      if (record?.binding.world === this.world) return record;
     }
     return undefined;
   }
@@ -1778,7 +1774,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     create: () => JSFunction,
   ): JSFunction {
     const initial = this.#getInitialObjects(definition);
-    const members = initial.members ??= new WeakMap();
+    const members = initial.members ??= new Map<InitialObjectMember, MemberInitialObjects>();
     let objects = members.get(member);
     if (!objects) {
       objects = {};
@@ -1795,6 +1791,25 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Project helper: throw a TypeError allocated in this binding's realm.
   #throwTypeError(message: string): never {
     throw new this.realm.intrinsics.typeError(message);
+  }
+}
+
+/** Privately retain the realm-owned error for an internal failure. */
+class ExceptionStamper extends Stamper {
+  #realizedError: object;
+
+  private constructor(exception: object, realizedError: object) {
+    super(exception);
+    this.#realizedError = realizedError;
+  }
+
+  static stamp<T extends object>(exception: T, realizedError: object): T & ExceptionStamper {
+    new ExceptionStamper(exception, realizedError);
+    return exception as T & ExceptionStamper;
+  }
+
+  static get(exception: object): object | undefined {
+    return #realizedError in exception ? exception.#realizedError : undefined;
   }
 }
 
@@ -1825,7 +1840,7 @@ type DefinitionInitialObjects = {
   legacyCallbackInterfaceObject?: JSFunction;
   legacyFactoryFunctions?: Map<string, JSFunction>;
   legacyProperties?: LegacyProperties | null;
-  members?: WeakMap<InitialObjectMember, MemberInitialObjects>;
+  members?: Map<InitialObjectMember, MemberInitialObjects>;
   namedPropertiesObject?: object;
   namespaceObject?: object;
   unforgeablesObject?: object;

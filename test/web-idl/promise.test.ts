@@ -3,12 +3,12 @@ import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType,
 } from '../../src/web-idl/core/index';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
   getPromiseForWaitingForAll, isPromiseUnresolved, markPromiseAsHandled,
@@ -259,7 +259,7 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
     binding: new RealmBinding(
       assembleDefinitions([]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
     ),
     realm,
   };

@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { assembleDefinitions } from '../../src/web-idl/assembly';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { getImplementationObject, PlatformObjectRegistry } from '../../src/web-idl/platform-object';
+import { getImplementationObject } from '../../src/web-idl/platform-object';
 
 describe('Web IDL legacy platform objects', () => {
   it('projects supported indices as read-only virtual own properties', () => {
@@ -209,7 +210,7 @@ describe('Web IDL legacy platform objects', () => {
     const binding = new RealmBinding(
       assembleDefinitions([derived, base]),
       new Realm(),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const object = construct(getInstalledInterface(binding.install(), 'IndexedDerived'));
@@ -309,13 +310,13 @@ describe('Web IDL legacy platform objects', () => {
     const globalBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const legacyBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     );
     const global = globalBinding.projectGlobalObject(
@@ -589,7 +590,7 @@ describe('Web IDL legacy platform objects', () => {
       implementations.setOperationSteps(indexGetter, () => name);
       implementations.setOperationSteps(nameGetter, () => name);
       const binding = new RealmBinding(
-        definitions, new Realm(), new PlatformObjectRegistry(), implementations,
+        definitions, new Realm(), new BindingWorld([]), implementations,
       );
       return construct(getInstalledInterface(binding.install(), 'SharedLegacy'));
     });
@@ -701,7 +702,7 @@ function createBinding(
     binding: new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
-      new PlatformObjectRegistry(),
+      new BindingWorld([]),
       implementations,
     ),
     realm,

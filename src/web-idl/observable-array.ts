@@ -66,7 +66,7 @@ export class ObservableArrayBinding {
   ): ObservableArrayHandle<unknown, unknown> {
     let attributes = record.observableArrays;
     if (!attributes) {
-      attributes = new WeakMap();
+      attributes = new Map();
       record.observableArrays = attributes;
     }
 

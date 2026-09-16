@@ -219,7 +219,7 @@ export class SynchronousIterableBinding {
     thisArgument: unknown,
   ): object {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(thisArgument)?.binding.platformObjects === this.#context.platformObjects) {
+    if (getPlatformRecord(thisArgument)?.binding.world === this.#context.world) {
       this.#context.realm.performSecurityCheck(
         thisArgument,
         'next',
@@ -228,7 +228,7 @@ export class SynchronousIterableBinding {
     }
     const iterator = DefaultIteratorStamper.get(thisArgument);
     if (!iterator || iterator.primaryInterface !== primaryInterface ||
-      getImplementationRecord(iterator.target)?.binding.platformObjects !== this.#context.platformObjects) {
+      getImplementationRecord(iterator.target)?.binding.world !== this.#context.world) {
       this.#throwTypeError('Illegal invocation');
     }
 
@@ -297,7 +297,7 @@ export class SynchronousIterableBinding {
   ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.platformObjects !== this.#context.platformObjects) {
+    if (record?.binding.world !== this.#context.world) {
       this.#throwTypeError('Illegal invocation');
     }
     this.#context.realm.performSecurityCheck(value, identifier, 'method');

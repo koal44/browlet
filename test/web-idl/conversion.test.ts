@@ -13,9 +13,9 @@ import {
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
   sequence, union, xattr,
 } from '../../src/web-idl/core/index';
+import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { ImplementationRegistry } from '../../src/web-idl/implementation-registry';
-import { PlatformObjectRegistry } from '../../src/web-idl/platform-object';
 
 describe('Web IDL value conversion', () => {
   it('preserves the identity of host-defined interface values', () => {
@@ -588,7 +588,7 @@ function createBinding(
   const binding = new RealmBinding(
     assembleDefinitions(definitions),
     realm,
-    new PlatformObjectRegistry(),
+    new BindingWorld([]),
     new ImplementationRegistry(),
     hostDefinedInterfaces,
   );

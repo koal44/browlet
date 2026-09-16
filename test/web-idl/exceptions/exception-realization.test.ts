@@ -46,12 +46,15 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     expect(Exception.is(new native('author exception'))).toBe(false);
   });
 
-  it('realizes a frozen internal exception once and preserves later author changes', () => {
+  it('retains one invisible realization across realms for a frozen internal exception', () => {
     const exception = create();
     Object.freeze(exception);
+    const ownKeys = Reflect.ownKeys(exception);
+    const prototype = Reflect.getPrototypeOf(exception);
 
     const world = new BindingWorld([]);
     const binding = world.register(new TestRealm());
+    const otherBinding = world.register(new TestRealm());
     binding.install(binding.realm.global);
     const error = binding.realizeException(exception);
     const constructor: unknown = Reflect.get(binding.realm.global, name);
@@ -62,9 +65,13 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     expect(error === exception).toBe(false);
 
     Object.defineProperty(error, 'message', { value: 'changed by author' });
+    expect(otherBinding.realizeException(exception)).toBe(error);
     expect(binding.realizeException(exception)).toBe(error);
-    expect(world.register(new TestRealm()).realizeException(error)).toBe(error);
+    expect(otherBinding.realizeException(error)).toBe(error);
     expect(error).toHaveProperty('message', 'changed by author');
+    expect(Reflect.ownKeys(exception)).toEqual(ownKeys);
+    expect(Reflect.getPrototypeOf(exception)).toBe(prototype);
+    expect(Object.isFrozen(exception)).toBe(true);
   });
 
   it('does not recognize forged prototypes or inspect proxies', () => {
