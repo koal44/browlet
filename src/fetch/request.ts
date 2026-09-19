@@ -1,14 +1,15 @@
+import { isomorphicEncode } from '../js-engine/byte-string';
 import type { ReadableStreamImpl } from '../streams/index';
-import type { Origin } from '../url/origin';
-import { serializeURL, type URLRecord } from '../url/url';
+import { areSameOrigin, areSameSite, serializeOrigin, type Origin } from '../url/origin';
+import { copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../url/url';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/index';
-import { BodyMixin, type BodyInitValue, type BodyRecord } from './body';
-import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
-import type { FetchClientSettings } from './infrastructure';
+import { BodyMixin, BodyRecord, type BodyInitValue } from './body';
+import { appendHeader, HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
+import { serializeInteger, type FetchClientSettings } from './infrastructure';
 
 /** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
 export class RequestRecord {
@@ -23,10 +24,10 @@ export class RequestRecord {
   replacesClientId = '';
   traversableForUserPrompts: 'no-traversable' | 'client' | object = 'client';
   keepalive = false;
-  initiatorType: RequestInitiatorType | null = null;
+  initiatorType: RequestInitiator | null = null;
   serviceWorkersMode: 'all' | 'none' = 'all';
   initiator: '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt' = '';
-  destination: RequestDestination | 'serviceworker' | 'webidentity' = '';
+  destination: Destination = '';
   priority: RequestPriority = 'auto';
   internalPriority: object | null = null;
   origin: Origin | 'client' = 'client';
@@ -60,14 +61,7 @@ export class RequestRecord {
   webDriverId: string = crypto.randomUUID();
 
   constructor(url: URLRecord, client: FetchClientSettings | null) {
-    // URL/current URL point into this list. Copy mutable URL components while
-    // retaining the File API's blob URL entry identity.
-    this.urlList = [{
-      ...url,
-      path: typeof url.path === 'string' ? url.path : [...url.path],
-      host: url.host === null ? null : url.host.kind === 'ipv6'
-        ? { ...url.host, pieces: [...url.host.pieces] } : { ...url.host },
-    }];
+    this.urlList = [copyURL(url)];
     this.client = client;
   }
 
@@ -79,10 +73,108 @@ export class RequestRecord {
     return this.urlList[this.urlList.length - 1]!;
   }
 
+  /** https://fetch.spec.whatwg.org/#subresource-request */
+  get isSubresource(): boolean {
+    return subresourceDestinations.has(this.destination);
+  }
+
+  /** https://fetch.spec.whatwg.org/#non-subresource-request */
+  get isNonSubresource(): boolean {
+    return nonSubresourceDestinations.has(this.destination);
+  }
+
+  /** https://fetch.spec.whatwg.org/#navigation-request */
+  get isNavigation(): boolean {
+    return navigationDestinations.has(this.destination);
+  }
+
+  /** https://fetch.spec.whatwg.org/#concept-request-tainted-origin */
+  get redirectTaint(): 'same-origin' | 'same-site' | 'cross-site' {
+    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    let lastURL: URLRecord | null = null;
+    let taint: 'same-origin' | 'same-site' = 'same-origin';
+    for (const url of this.urlList) {
+      if (lastURL === null) {
+        lastURL = url;
+        continue;
+      }
+      const origin = obtainURLOrigin(url);
+      const lastOrigin = obtainURLOrigin(lastURL);
+      if (!areSameSite(origin, lastOrigin) && !areSameSite(this.origin, lastOrigin)) {
+        return 'cross-site';
+      }
+      if (!areSameOrigin(origin, lastOrigin) && !areSameOrigin(this.origin, lastOrigin)) {
+        taint = 'same-site';
+      }
+      lastURL = url;
+    }
+    return taint;
+  }
+
+  /** https://fetch.spec.whatwg.org/#serializing-a-request-origin */
+  serializeOrigin(): string {
+    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    return this.redirectTaint === 'same-origin' ? serializeOrigin(this.origin) : 'null';
+  }
+
+  /** https://fetch.spec.whatwg.org/#byte-serializing-a-request-origin */
+  byteSerializeOrigin(): Uint8Array<ArrayBuffer> {
+    return isomorphicEncode(this.serializeOrigin());
+  }
+
+  /** https://fetch.spec.whatwg.org/#concept-request-clone */
   clone(): RequestRecord {
-    throw new Error('Fetch request cloning is not implemented');
+    const request = new RequestRecord(this.url, this.client);
+    return Object.assign(request, this, {
+      webDriverId: request.webDriverId,
+      headerList: this.headerList.map(([name, value]) => [name, value]),
+      urlList: [request.url, ...this.urlList.slice(1).map(copyURL)],
+      referrer: typeof this.referrer === 'string' ? this.referrer : copyURL(this.referrer),
+      webTransportHashList: this.webTransportHashList.map(({ algorithm, value }) => ({ algorithm, value: new Uint8Array(value) })),
+      navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
+      // Before body extraction, a byte sequence is copied as a value; a body tees its stream.
+      body: this.body === null ? null : this.body instanceof BodyRecord ? this.body.clone() : new Uint8Array(this.body),
+    });
+  }
+
+  /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */
+  addRangeHeader(first: number | bigint, last?: number | bigint): void {
+    if (last !== undefined && first > last) throw new Error('Range start exceeds its end');
+    const value = `bytes=${serializeInteger(first)}-${last === undefined ? '' : serializeInteger(last)}`;
+    appendHeader(['Range', value], this.headerList);
+  }
+
+  /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
+  crossOriginEmbedderPolicyAllowsCredentials(): boolean {
+    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    if (this.mode !== 'no-cors' || this.client === null) return true;
+    if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
+    return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
+      this.redirectTaint === 'same-origin';
   }
 }
+
+/** https://fetch.spec.whatwg.org/#request-destination-script-like */
+export function isScriptLikeDestination(destination: Destination): boolean {
+  return scriptLikeDestinations.has(destination);
+}
+
+/** https://fetch.spec.whatwg.org/#concept-potential-destination-translate */
+export function translatePotentialDestination(destination: PotentialDestination): Destination {
+  return destination === 'fetch' ? '' : destination;
+}
+
+const scriptLikeDestinations = new Set<Destination>([
+  'audioworklet', 'paintworklet', 'script', 'serviceworker', 'sharedworker', 'worker',
+]);
+const subresourceDestinations = new Set<Destination>([
+  '', 'audio', 'audioworklet', 'font', 'image', 'json', 'manifest', 'paintworklet',
+  'script', 'style', 'text', 'track', 'video', 'xslt',
+]);
+const nonSubresourceDestinations = new Set<Destination>([
+  'document', 'embed', 'frame', 'iframe', 'object', 'report', 'serviceworker', 'sharedworker', 'worker',
+]);
+const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame', 'iframe', 'object']);
 
 /*
  * typedef (Request or USVString) RequestInfo;
@@ -162,7 +254,7 @@ export class RequestImpl {
   get method(): string { return this.#request.method; }
   get url(): string { return serializeURL(this.#request.url); }
   get headers(): HeadersImpl { return this.#headers; }
-  get destination(): RequestRecord['destination'] { return this.#request.destination; }
+  get destination(): Destination { return this.#request.destination; }
 
   get referrer(): string {
     const referrer = this.#request.referrer;
@@ -202,13 +294,26 @@ export class RequestImpl {
   getRequest(): RequestRecord { return this.#request; }
 }
 
-export type RequestInitiatorType = 'audio' | 'beacon' | 'body' | 'css' | 'early-hints' |
+export type RequestInitiator = 'audio' | 'beacon' | 'body' | 'css' | 'early-hints' |
   'embed' | 'fetch' | 'font' | 'frame' | 'iframe' | 'image' | 'img' | 'input' | 'link' |
   'object' | 'ping' | 'script' | 'track' | 'video' | 'xmlhttprequest' | 'other';
 
-export type RequestDestination = '' | 'audio' | 'audioworklet' | 'document' | 'embed' |
+/** Fetch's internal destination type includes values outside the public Web IDL enum. */
+export type Destination = RequestDestination | 'serviceworker' | 'webidentity';
+
+export type RequestDestination = EmptyDestination | 'audio' | 'audioworklet' | 'document' | 'embed' |
   'font' | 'frame' | 'iframe' | 'image' | 'json' | 'manifest' | 'object' | 'paintworklet' |
   'report' | 'script' | 'sharedworker' | 'style' | 'text' | 'track' | 'video' | 'worker' | 'xslt';
+
+/**
+ * No specific resource destination, as with fetch(), XHR, and beacons; not an uninitialized value.
+ * https://fetch.spec.whatwg.org/#concept-request-destination
+ */
+export type EmptyDestination = '';
+
+/** https://fetch.spec.whatwg.org/#concept-potential-destination */
+export type PotentialDestination = 'fetch' | Exclude<Destination, EmptyDestination>;
+
 export type RequestMode = 'navigate' | 'same-origin' | 'no-cors' | 'cors';
 export type RequestCredentials = 'omit' | 'same-origin' | 'include';
 export type RequestCache = 'default' | 'no-store' | 'reload' | 'no-cache' | 'force-cache' | 'only-if-cached';

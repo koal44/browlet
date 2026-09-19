@@ -235,8 +235,8 @@ Current implementation sequence:
    across implementation/Node boundaries. Active Script records/restoration
    belong to the later classic-script pipeline; module loading is not a
    prerequisite for Fetch's records.
-7. **Next:** Resume [Fetch slice 4](../fetch/ROADMAP.md#slice-4--requests-and-responses),
-   request/response records and their algorithms. Slices 1–3 are complete;
+7. **Next:** Continue with [Fetch slice 5](../fetch/ROADMAP.md#slice-5--fetch-groups-and-network-infrastructure),
+   authentication entries, fetch groups, and network infrastructure. Slices 1–4 are complete;
    network-independent author APIs and transport follow in Fetch's own order.
 8. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.

@@ -35,8 +35,8 @@ import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import {
   DocumentImpl, type ModuleMap,
 } from '../../../src/browlet/dom/nodes/document';
-import type {
-  PolicyContainer,
+import {
+  createPolicyContainer, type PolicyContainer,
 } from '../../../src/browlet/browsing/policy/container';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import {
@@ -441,13 +441,7 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   readonly #apiBaseURL: URLRecord;
   readonly #moduleMap: ModuleMap = { entries: [] };
   readonly #origin = createOpaqueOrigin();
-  readonly #policyContainer: PolicyContainer = {
-    cspList: [],
-    embedderPolicy: {},
-    referrerPolicy: 'strict-origin-when-cross-origin',
-    integrityPolicy: {},
-    reportOnlyIntegrityPolicy: {},
-  };
+  readonly #policyContainer = createPolicyContainer();
 
   constructor(realm: Realm, creationURL: URLRecord) {
     super({

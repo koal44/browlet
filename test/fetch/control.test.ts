@@ -209,6 +209,7 @@ describe('Fetch §2 offline state and integer serialization', () => {
     expect(isOffline({
       userAgent: { assumeNoInternetConnectivity: userAgent },
       webDriverBiDiNetworkIsOffline,
+      policyContainer: { embedderPolicy: { value: 'unsafe-none' } },
     })).toBe(expected);
     expect(webDriverBiDiNetworkIsOffline).toHaveBeenCalledTimes(userAgent ? 0 : 1);
   });

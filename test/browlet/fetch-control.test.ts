@@ -1,10 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
+import { createPolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { isOffline } from '../../src/fetch/infrastructure';
 import { RequestRecord } from '../../src/fetch/request';
+import { parseURL } from '../../src/url/url';
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 
 describe('Fetch client settings ownership', () => {
+  it('reads the Document\'s current embedder policy through the actual client settings', () => {
+    const { realm, document } = createFetchWindow();
+    const settings = realm.hostDefined!;
+    const request = new RequestRecord(parseURL('https://example.test/').url!, settings);
+    request.origin = settings.origin;
+    const container = document!.getPolicyContainer();
+
+    expect(request.client!.policyContainer).toBe(container);
+    expect(container.embedderPolicy).toEqual({
+      value: 'unsafe-none', reportingEndpoint: '',
+      reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '',
+    });
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+
+    container.embedderPolicy.reportOnlyValue = 'credentialless';
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+
+    container.embedderPolicy.value = 'credentialless';
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
+
+    document!.setPolicyContainer(createPolicyContainer());
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+  });
+
   it('reads the owning browser\'s live offline state even after its browsing context is detached', () => {
     const first = createFetchWindow();
     const second = createFetchWindow();

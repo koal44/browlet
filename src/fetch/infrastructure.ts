@@ -8,6 +8,11 @@ export function isOffline(environment: FetchClientSettings): boolean {
 export type FetchClientSettings = {
   userAgent: FetchUserAgent;
   webDriverBiDiNetworkIsOffline(): boolean;
+  policyContainer: {
+    embedderPolicy: {
+      value: 'unsafe-none' | 'require-corp' | 'credentialless';
+    };
+  };
 };
 
 export type FetchUserAgent = {

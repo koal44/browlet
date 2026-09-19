@@ -35,6 +35,7 @@ export type URLRenderOptions = {
   maxLength?: number;
 };
 
+/** Opaque paths are strings; hierarchical paths are segment lists. https://url.spec.whatwg.org/#url-path */
 type URLPath = string | string[];
 
 type BlobURLEntry = {
@@ -640,6 +641,18 @@ export function serializeURL(
   if (!excludeFragment && url.fragment !== null) output += `#${url.fragment}`;
 
   return output;
+}
+
+/**
+ * Copy mutable components while retaining the cached blob URL entry.
+ */
+export function copyURL(url: URLRecord): URLRecord {
+  return {
+    ...url,
+    path: typeof url.path === 'string' ? url.path : [...url.path],
+    host: url.host === null ? null : url.host.kind === 'ipv6'
+      ? { ...url.host, pieces: [...url.host.pieces] } : { ...url.host },
+  };
 }
 
 /*

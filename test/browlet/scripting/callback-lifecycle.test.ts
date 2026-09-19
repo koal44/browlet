@@ -16,8 +16,7 @@ import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding-world';
-import type { PolicyContainer } from
-  '../../../src/browlet/browsing/policy/container';
+import { createPolicyContainer, type PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
@@ -214,13 +213,7 @@ class TestAgent extends Agent {
 class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   readonly #moduleMap: ModuleMap = { entries: [] };
   readonly #origin = createOpaqueOrigin();
-  readonly #policyContainer: PolicyContainer = {
-    cspList: [],
-    embedderPolicy: {},
-    integrityPolicy: {},
-    referrerPolicy: 'strict-origin-when-cross-origin',
-    reportOnlyIntegrityPolicy: {},
-  };
+  readonly #policyContainer = createPolicyContainer();
 
   get apiBaseURL(): URLRecord {
     return this.creationURL;

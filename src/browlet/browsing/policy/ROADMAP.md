@@ -8,7 +8,7 @@ implemented.
 | --- | --- | --- |
 | `scripting/agents.ts` plus loader response processing | `Origin-Agent-Cluster` parsing, historical key selection, and agent-cluster-key consequences | HTML §7.1.2 |
 | `coop.ts` | Response parsing, enforcement result, browsing-context group switching, reporting | HTML §7.1.3 |
-| `coep.ts` | Embedder-policy value/reporting endpoint, response processing, reporting | HTML §7.1.4 |
+| `coep.ts` | Response processing, inheritance, enforcement, reporting | HTML §7.1.4 |
 | `sandbox.ts` | Parsing sandbox tokens, determining flags, propagation and navigation checks | HTML §7.1.5 |
 | iframe element plus Document ancestry | iframe referrer-policy inheritance and ancestor-origin list construction | HTML §7.1.6 |
 | `permissions.ts` | HTML's policy-controlled feature definitions/default allowlists plus declared, inherited, and container policy checks | HTML §2.2; Permissions Policy; HTML Document, browsing-context, and lifecycle integration |
@@ -18,6 +18,10 @@ Policy data travels with environments, Documents, history entries, responses,
 and navigations. Keep one typed value model here and apply each specification's
 explicit clone or identity rule; do not duplicate policy state in each
 subsystem.
+
+COEP's value and reporting fields now have their specified defaults. Fetch's
+request credentials predicate reads the actual client's embedder-policy value;
+response-header delivery and the remaining policy lifecycle are still pending.
 
 Worker globals receive policy-container and embedder-policy state while their
 top-level script response is processed; worklet settings clone the creator's

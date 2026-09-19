@@ -1,12 +1,18 @@
+import { calculateCacheFreshness, type CacheTiming } from '../http/cache/freshness';
 import type { ReadableStreamImpl } from '../streams/index';
-import { serializeURL, type URLRecord } from '../url/url';
+import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/url';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
   roAttr, staticOp, xattr,
 } from '../web-idl/index';
 import { BodyMixin, type BodyRecord } from './body';
-import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
+import {
+  extractHeaderListValues, getHeader, HeadersImpl, isCORSSafelistedResponseHeaderName,
+  isForbiddenResponseHeaderName, type HeaderList, type HeadersGuard, type HeadersInitValue,
+} from './headers';
+import { isRedirectStatus } from './http/statuses';
+import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 
 /** Fetch §2.2.6: response fields can continue changing after delivery. */
@@ -28,13 +34,132 @@ export class ResponseRecord {
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
   redirectTaint: 'same-origin' | 'same-site' | 'cross-site' = 'same-origin';
 
+  /** https://fetch.spec.whatwg.org/#concept-network-error */
+  static networkError(): ResponseRecord {
+    const response = new ResponseRecord();
+    response.type = 'error';
+    response.status = 0;
+    return response;
+  }
+
+  /** https://fetch.spec.whatwg.org/#concept-aborted-network-error */
+  static abortedNetworkError(): ResponseRecord {
+    const response = ResponseRecord.networkError();
+    response.aborted = true;
+    return response;
+  }
+
+  /** https://fetch.spec.whatwg.org/#appropriate-network-error */
+  static appropriateNetworkError(params: FetchParams): ResponseRecord {
+    if (!params.canceled) throw new Error('Fetch params are not canceled');
+    return params.aborted ? ResponseRecord.abortedNetworkError() : ResponseRecord.networkError();
+  }
+
   get url(): URLRecord | null {
     return this.urlList.at(-1) ?? null;
   }
 
-  clone(): ResponseRecord {
-    throw new Error('Fetch response cloning is not implemented');
+  /** https://fetch.spec.whatwg.org/#serialize-a-response-url-for-reporting */
+  serializeURLForReporting(): string {
+    const url = this.urlList[0];
+    if (url === undefined) throw new Error('Response URL list is empty');
+    return serializeURL({ ...url, username: '', password: '' }, true);
   }
+
+  /**
+   * https://fetch.spec.whatwg.org/#concept-filtered-response
+   * Only the specified overrides belong to the view. Other fields continue to
+   * refer to the internal response, including replacement bodies and timing updates.
+   * Headers are a separate filtered list, as in Blink, Gecko, and WebKit.
+   */
+  filter(type: FilteredResponseType): FilteredResponseRecord {
+    if (this.type === 'error' || isFilteredResponse(this)) {
+      throw new Error('Cannot filter a network error or an already filtered response');
+    }
+    const headerList: HeaderList = type === 'basic' || type === 'cors' ? this.headerList
+      .filter(([name]) => type === 'basic' ? !isForbiddenResponseHeaderName(name)
+        : isCORSSafelistedResponseHeaderName(name, this.corsExposedHeaderNameList))
+      .map(([name, value]) => [name, value]) : [];
+    const overrides: Partial<ResponseRecord> & { internalResponse: ResponseRecord; } = {
+      type, internalResponse: this, headerList,
+    };
+    if (type === 'opaque' || type === 'opaqueredirect') {
+      Object.assign(overrides, {
+        status: 0, statusMessage: '', body: null, bodyInfo: new ResponseBodyInfo(),
+      });
+      if (type === 'opaque') overrides.urlList = [];
+    }
+    // Use the view as the getter receiver so derived fields (notably url) see its overrides.
+    return new Proxy<ResponseRecord>(this, {
+      get(target, key, receiver) {
+        return Reflect.get(Object.hasOwn(overrides, key) ? overrides : target, key, receiver) as unknown;
+      },
+      set(target, key, value) {
+        if (Object.hasOwn(overrides, key)) throw new Error(`Cannot replace filtered response ${String(key)}`);
+        return Reflect.set(target, key, value);
+      },
+      has(target, key) {
+        return Object.hasOwn(overrides, key) || Reflect.has(target, key);
+      },
+    }) as FilteredResponseRecord;
+  }
+
+  /** https://fetch.spec.whatwg.org/#concept-response-clone */
+  clone(): ResponseRecord {
+    if (isFilteredResponse(this)) return this.internalResponse.clone().filter(this.type);
+    return Object.assign(new ResponseRecord(), this, {
+      headerList: this.headerList.map(([name, value]) => [name, value]),
+      urlList: this.urlList.map(copyURL),
+      corsExposedHeaderNameList: [...this.corsExposedHeaderNameList],
+      navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
+      bodyInfo: Object.assign(new ResponseBodyInfo(), this.bodyInfo),
+      serviceWorkerTimingInfo: this.serviceWorkerTimingInfo === null ? null : { ...this.serviceWorkerTimingInfo },
+      body: this.body?.clone() ?? null,
+    });
+  }
+
+  /**
+   * https://fetch.spec.whatwg.org/#concept-fresh-response
+   * https://fetch.spec.whatwg.org/#concept-stale-while-revalidate-response
+   * https://fetch.spec.whatwg.org/#concept-stale-response
+   * The cache transaction supplies its timestamps; this record does not read a clock.
+   */
+  getFreshness(timing: CacheTiming): 'fresh' | 'stale-while-revalidate' | 'stale' {
+    const freshness = calculateCacheFreshness({
+      cacheControl: getHeader('Cache-Control', this.headerList) ?? undefined,
+      date: getHeader('Date', this.headerList) ?? undefined,
+      age: getHeader('Age', this.headerList) ?? undefined,
+      expires: getHeader('Expires', this.headerList) ?? undefined,
+      lastModified: getHeader('Last-Modified', this.headerList) ?? undefined,
+    }, this.status, timing);
+    if (freshness.fresh) return 'fresh';
+    return freshness.staleWhileRevalidate ? 'stale-while-revalidate' : 'stale';
+  }
+
+  /**
+   * https://fetch.spec.whatwg.org/#concept-response-location-url
+   * Undefined means absent; null means extraction or URL parsing failed.
+   */
+  getLocationURL(requestFragment: string | null): URLRecord | undefined | null {
+    if (!isRedirectStatus(this.status)) return undefined;
+    const values = extractHeaderListValues('Location', this.headerList, (value) => [value], false);
+    if (values === undefined || values === null) return values;
+    const url = parseURL(values[0]!, this.url).url;
+    if (url !== null && url.fragment === null) url.fragment = requestFragment;
+    return url;
+  }
+}
+
+export type ResponseType = 'default' | 'error' | FilteredResponseType;
+export type FilteredResponseType = 'basic' | 'cors' | 'opaque' | 'opaqueredirect';
+
+export type FilteredResponseRecord = ResponseRecord & {
+  type: FilteredResponseType;
+  readonly internalResponse: ResponseRecord;
+};
+
+function isFilteredResponse(response: ResponseRecord): response is FilteredResponseRecord {
+  return 'internalResponse' in response;
 }
 
 /*
@@ -118,24 +243,6 @@ export class ResponseImpl {
 
   getResponse(): ResponseRecord { return this.#response; }
 }
-
-/**
- * Filtered responses must refer to their internal response's changing fields.
- * Building that view is deferred; copying a record and setting type is not filtering.
- */
-export function createFilteredResponse(
-  _response: ResponseRecord,
-  _type: FilteredResponseRecord['type'],
-): FilteredResponseRecord {
-  throw new Error('Fetch response filtering is not implemented');
-}
-
-export type ResponseType = 'basic' | 'cors' | 'default' | 'error' | 'opaque' | 'opaqueredirect';
-
-export type FilteredResponseRecord = ResponseRecord & {
-  type: 'basic' | 'cors' | 'opaque' | 'opaqueredirect';
-  readonly internalResponse: ResponseRecord;
-};
 
 /** Post-conversion dictionary; Web IDL supplies status and statusText defaults. */
 export type ResponseInitRecord = {

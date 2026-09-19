@@ -3,7 +3,8 @@
 - **Complete:** [Slice 1 — control and task delivery](#slice-1--control-and-task-delivery).
 - **Complete:** [Slice 2 — HTTP methods, headers, and statuses](#slice-2--http-methods-headers-and-statuses).
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
-- **Next:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
+- **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
+- **Next:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure).
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -203,17 +204,21 @@ URL components while retaining any Blob URL entry reference.
   HTML capabilities in §4.1; these objects are not new Fetch-owned environments
   or policy containers. Clientless requests still need their owning UserAgent
   at network orchestration; do not synthesize an environment or assume online.
-- Request retains a DOM implementation reference for its signal. DOM-dependent
-  signal construction/following is not supplied yet. Referrer Policy's value
-  type/declaration also remains with the browser-policy work. Replace these
-  explicit opaque/string types when connecting their owner, before API exposure.
-- Full BodyInit extraction/consumption, request/response cloning, and author
-  Request/Response construction have declared signatures and throw until their
-  respective slices. Byte-sequence request bodies must be extracted
+- Request retains a DOM implementation reference for its signal, still typed as
+  `object`. `RuntimeContext.createAbortController()` already constructs real
+  DOM controller/signal state, but Request construction and cloning need DOM's
+  dependent-signal algorithm exposed through the runtime. Do not substitute an
+  abort callback bridge for DOM's dependency ordering. Fetch's constructor chooses
+  the Headers guard (`request` or `request-no-cors`); cloning preserves it. These
+  are not client-policy fields. Referrer Policy's value type/declaration also
+  remains with the browser-policy work. Connect these owners before API exposure.
+- Full BodyInit extraction/consumption and author Request/Response construction
+  and cloning have declared signatures and throw until Slice 6. Internal record
+  cloning is implemented in Slice 4. Byte-sequence request bodies must be extracted
   before a Body API can expose their stream.
-- `FilteredResponseRecord` records the internal-response relationship, but its
-  factory throws. Filtering must provide a live restricted view of that record,
-  not copy its current fields or merely change `type`.
+- `FilteredResponseRecord` provides a live restricted view of its internal
+  record. Its specified overrides include a separate filtered header list;
+  other fields, including body replacement and timing updates, remain shared.
 - API IDL is co-located with the implementations and remains uninstalled. The
   public `fetch()` operation and transport are not introduced here.
 
@@ -330,23 +335,49 @@ predicates, and the miscellaneous HTTP concepts. Reuse URL/site operations;
 consume the [HTTP cache freshness helpers](../http/cache/ROADMAP.md).
 Storing a policy field does not implement the later policy check.
 
-**Entry review (2026-09-07):** settle the credentialless-policy check before
-implementing it. [Fetch's current step 5](https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials)
-requires redirect-taint to be *not* `same-origin` when allowing same-origin
-credentials. Taken literally, a same-origin `no-cors` request with no redirects
-loses credentials under `credentialless`. Both
-[Chromium's check](https://github.com/chromium/chromium/blob/main/services/network/url_loader_util.cc#L117)
-and [Gecko's check](https://github.com/mozilla-firefox/firefox/blob/main/dom/security/nsContentSecurityManager.cpp)
-allow that case; the local WPT `html/cross-origin-embedder-policy/credentialless/fetch.https.window.js`
-also expects its cookies. This appears to be a reversed specification condition;
-the evidence is source/test inspection, not a browser run. HTML's
-[`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) is also still an empty
-placeholder. Its value and the request-client relationship need explicit types
-when this check is connected. Independent cloning/filtering work does not depend
-on resolving this policy question.
+**Status: complete (2026-09-19).** Request/destination classifications,
+redirect-taint, origin serialization, request cloning, and Range-header addition
+use the existing URL, header, and body algorithms. Cloning copies owned values
+and lists, retains client/policy owner references, and generates a fresh WebDriver
+ID. Raw byte bodies are copied before extraction; extracted bodies tee their streams.
 
-**Exit proof:** record defaults, clone identity, filtered visibility, location
-parsing, and freshness decisions pass without a network connection.
+Response algorithms cover reporting URLs, network errors, the four filtered
+views, cloning, cache freshness, and Location parsing. An internal Proxy forwards
+unmasked fields to the original response; basic/CORS headers are independently
+filtered lists, matching Blink, Gecko, and WebKit. Opaque views retain the hidden
+body for internal cloning without exposing it. Potential destinations and their
+translation complete §2.2.7.
+
+Freshness uses the existing HTTP cache calculations with explicit `CacheTiming`
+from the future cache transaction. It does not introduce an ambient clock or
+implement cache storage/revalidation. Location parsing follows the reviewed
+header-extraction convention: undefined for absence, null for failure. That
+return-type translation has been reviewed and accepted.
+
+**COEP credentials check (2026-09-19):** implemented on `RequestRecord`, reading
+the actual client's policy container through `FetchClientSettings`. HTML's
+[`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) now holds its four specified
+fields and defaults. Tests cover policy/mode selection, same-origin credentials,
+redirect suppression, and the live Document policy-container relationship.
+
+[Fetch's current step 5](https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials)
+says redirect-taint is *not* `same-origin`; our implementation deliberately uses
+*is* `same-origin`. The literal wording denies a same-origin request without
+redirects and allows a return home after a foreign redirect. The original
+untainted-origin check, WPT, and Chromium/Firefox probes support the correction.
+Reported in [Fetch #1958](https://github.com/whatwg/fetch/issues/1958).
+The retained experimental `fetch-credentials` probe and Scratch review preserve
+the evidence, including WebKit's failing credential-omission control. HTML's
+response-header processing, inheritance, and reporting remain unfinished, as
+does invoking this predicate from network orchestration. A true result here
+does not override the request's credentials mode.
+
+**Exit proof:** `test/fetch/request.test.ts`, `response.test.ts`, and `records.test.ts`
+cover record defaults, owner identity, independent clone data and streamed bytes,
+filtered visibility and live field forwarding, reporting/Location URLs, freshness
+boundaries, and destination translation without a network connection. The byte
+copy regression includes Node buffers, whose `.slice()` would share storage.
+Public API constructors and dependent AbortSignals remain in Slice 6.
 
 ## Slice 5 — fetch groups and network infrastructure
 

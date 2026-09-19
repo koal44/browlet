@@ -1,5 +1,18 @@
-export type EmbedderPolicy = Record<never, never>;
-
+/** https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy */
 export function createEmbedderPolicy(): EmbedderPolicy {
-  return {};
+  return {
+    value: 'unsafe-none',
+    reportingEndpoint: '',
+    reportOnlyValue: 'unsafe-none',
+    reportOnlyReportingEndpoint: '',
+  };
 }
+
+export type EmbedderPolicy = {
+  value: EmbedderPolicyValue;
+  reportingEndpoint: string;
+  reportOnlyValue: EmbedderPolicyValue;
+  reportOnlyReportingEndpoint: string;
+};
+
+export type EmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';

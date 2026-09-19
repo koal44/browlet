@@ -522,6 +522,12 @@ settings object supplies the environment-scoped BiDi query. Host connectivity
 detection and BiDi session lookup are provisional; their replacement work is
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
 
+The same settings object exposes its HTML-owned policy container. Window
+settings read it from the associated Document; Fetch's structural client type
+exposes the embedder-policy value without copying it or importing Browlet.
+`RequestRecord` owns the COEP credentials decision, which needs the request's
+mode, origin, and redirect history as well as that policy value.
+
 Initial-document and navigation algorithms select their Window and retain HTML
 state initialization. Named functions on the composition-root module delegate
 to its main binding world. Document creation reuses the dependencies declared
