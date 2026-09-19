@@ -9,7 +9,8 @@ import {
 } from '../web-idl/index';
 import { BodyMixin, BodyRecord, type BodyInitValue } from './body';
 import { appendHeader, HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
-import { serializeInteger, type FetchClientSettings } from './infrastructure';
+import { serializeInteger, type FetchEnvironmentSettingsObject, type FetchEnvironment } from './infrastructure';
+import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
 
 /** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
 export class RequestRecord {
@@ -18,9 +19,8 @@ export class RequestRecord {
   readonly headerList: HeaderList = [];
   unsafeRequest = false;
   body: Uint8Array | BodyRecord | null = null;
-  client: FetchClientSettings | null;
-  // Other HTML-owned references remain opaque until client/policy integration (§4.1).
-  reservedClient: object | null = null;
+  client: FetchEnvironmentSettingsObject | null;
+  reservedClient: FetchEnvironment | null = null;
   replacesClientId = '';
   traversableForUserPrompts: 'no-traversable' | 'client' | object = 'client';
   keepalive = false;
@@ -60,7 +60,7 @@ export class RequestRecord {
   navigationTimingAllowValuesList: string[][] = [];
   webDriverId: string = crypto.randomUUID();
 
-  constructor(url: URLRecord, client: FetchClientSettings | null) {
+  constructor(url: URLRecord, client: FetchEnvironmentSettingsObject | null) {
     this.urlList = [copyURL(url)];
     this.client = client;
   }
@@ -151,6 +151,12 @@ export class RequestRecord {
     if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
     return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
       this.redirectTaint === 'same-origin';
+  }
+
+  /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */
+  determineNetworkPartitionKey(): NetworkPartitionKey | null {
+    const environment = this.reservedClient ?? this.client;
+    return environment === null ? null : determineNetworkPartitionKey(environment);
   }
 }
 

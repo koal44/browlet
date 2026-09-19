@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   appendHeader, combineHeader, containsHeader, convertHeaderNamesToSortedLowercaseSet,
-  deleteHeader, documentAcceptHeaderValue, extractHeaderListValues, getCORSUnsafeRequestHeaderNames,
+  deleteHeader, documentAcceptHeaderValue, extractHeaderListValues, extractMIMEType, getCORSUnsafeRequestHeaderNames,
   getDecodeAndSplitHeader, getDecodeAndSplitHeaderValue, getEnvironmentDefaultUserAgent, getHeader,
   getStructuredFieldValue, isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
@@ -12,7 +12,38 @@ import {
 } from '../../src/fetch/headers';
 import { parseDeltaSeconds, parseVary } from '../../src/http/cache/fields';
 import type { StructuredBareItem, StructuredField, StructuredItem } from '../../src/http/struct-fields/index';
+import { serializeMIMEType } from '../../src/mime/index';
 import { createRequestRecord } from './record-fixture';
+
+describe('Content-Type extraction (Fetch §3.5)', () => {
+  it.each([
+    ['text/plain;charset=gbk, text/html', 'text/html'],
+    ['text/html;charset=gbk;a=b, text/html;x=y', 'text/html;x=y;charset=gbk'],
+    ['text/html;charset=gbk, x/x, text/html;x=y', 'text/html;x=y'],
+    ['text/html, cannot-parse', 'text/html'],
+    ['text/html, */*', 'text/html'],
+    ['text/html, ', 'text/html'],
+    ['text/html;charset=gbk, text/html;charset=utf-8, text/html', 'text/html;charset=gbk'],
+    ['text/html, text/html;charset=utf-8, text/html', 'text/html'],
+    ['text/html;charset="", text/html', 'text/html;charset=""'],
+    ['text/html;note="a,b"', 'text/html;note="a,b"'],
+    ['cannot-parse, */*, ', null],
+  ] as const)('extracts %s', (value, expected) => {
+    const mimeType = extractMIMEType([['Content-Type', value]]);
+
+    expect(mimeType === null ? null : serializeMIMEType(mimeType)).toBe(expected);
+  });
+
+  it('uses repeated, case-insensitive field names without changing the header list', () => {
+    const headers: HeaderList = [['Content-Type', 'text/html;charset=gbk;a=b'], ['content-type', 'text/html;x=y']];
+    const before = structuredClone(headers);
+    const mimeType = extractMIMEType(headers)!;
+
+    expect(serializeMIMEType(mimeType)).toBe('text/html;x=y;charset=gbk');
+    expect(headers).toEqual(before);
+    expect(extractMIMEType([])).toBeNull();
+  });
+});
 
 describe('header lists (Fetch §2.2.2)', () => {
   it('distinguishes absent and empty values and combines duplicate lines in order', () => {

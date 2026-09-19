@@ -1,3 +1,5 @@
+import type { RuntimeContext } from '../js-engine/runtime-context';
+
 /** Fetch §2, fetch timing info. Timestamps are DOMHighResTimeStamp values. */
 export class FetchTimingInfo {
   startTime = 0;
@@ -31,10 +33,7 @@ export class ResponseBodyInfo {
   contentEncoding = '';
 }
 
-/*
- * Fetch §2.6, connection timing info. Only the record is needed here; obtaining
- * a connection and clamping/coarsening its timings belong to the network slice.
- */
+/** https://fetch.spec.whatwg.org/#connection-timing-info */
 export class ConnectionTimingInfo {
   domainLookupStartTime = 0;
   domainLookupEndTime = 0;
@@ -42,6 +41,30 @@ export class ConnectionTimingInfo {
   connectionEndTime = 0;
   secureConnectionStartTime = 0;
   alpnNegotiatedProtocol = new Uint8Array();
+
+  /** https://fetch.spec.whatwg.org/#clamp-and-coarsen-connection-timing-info */
+  clampAndCoarsen(
+    defaultStartTime: number, crossOriginIsolatedCapability: boolean, runtime: RuntimeContext,
+  ): ConnectionTimingInfo {
+    const result = new ConnectionTimingInfo();
+    result.alpnNegotiatedProtocol = this.alpnNegotiatedProtocol;
+    if (this.connectionStartTime < defaultStartTime) {
+      result.domainLookupStartTime = defaultStartTime;
+      result.domainLookupEndTime = defaultStartTime;
+      result.connectionStartTime = defaultStartTime;
+      result.connectionEndTime = defaultStartTime;
+      result.secureConnectionStartTime = defaultStartTime;
+      return result;
+    }
+
+    result.domainLookupStartTime = runtime.timing.coarsenTime(this.domainLookupStartTime, crossOriginIsolatedCapability);
+    result.domainLookupEndTime = runtime.timing.coarsenTime(this.domainLookupEndTime, crossOriginIsolatedCapability);
+    result.connectionStartTime = runtime.timing.coarsenTime(this.connectionStartTime, crossOriginIsolatedCapability);
+    result.connectionEndTime = runtime.timing.coarsenTime(this.connectionEndTime, crossOriginIsolatedCapability);
+    // Preserve TLS start; the spec currently names connection end here.
+    result.secureConnectionStartTime = runtime.timing.coarsenTime(this.secureConnectionStartTime, crossOriginIsolatedCapability);
+    return result;
+  }
 }
 
 /*

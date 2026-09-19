@@ -1,6 +1,6 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { UserAgent } from '../user-agent';
-import type { FetchClientSettings } from '../../fetch/index';
+import { FetchGroup, type FetchEnvironmentSettingsObject, type FetchEnvironment } from '../../fetch/index';
 import type { EventLoop } from './event-loop';
 import type { JSExecutionContext } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
@@ -17,7 +17,7 @@ import { timerTaskSource } from './timers';
  * An environment carries navigation/client state before a realm, global
  * object, or environment settings object necessarily exists.
  */
-export class Environment {
+export class Environment implements FetchEnvironment {
   id: string = crypto.randomUUID();
   userAgent: UserAgent;
   creationURL: URLRecord;
@@ -45,9 +45,10 @@ export class Environment {
   }
 }
 
-export abstract class EnvironmentSettingsObject extends Environment implements FetchClientSettings {
-  readonly timing: EnvironmentTiming;
-  readonly realmExecutionContext: JSExecutionContext;
+export abstract class EnvironmentSettingsObject extends Environment implements FetchEnvironmentSettingsObject {
+  fetchGroup = new FetchGroup();
+  timing: EnvironmentTiming;
+  realmExecutionContext: JSExecutionContext;
 
   constructor(initialization: EnvironmentSettingsInitialization) {
     super(initialization);
@@ -77,7 +78,7 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
 export class WindowEnvironmentSettingsObject
   extends EnvironmentSettingsObject
 {
-  readonly #window: WindowImpl;
+  #window: WindowImpl;
 
   constructor(
     window: WindowImpl,

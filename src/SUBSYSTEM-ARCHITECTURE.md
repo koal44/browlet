@@ -332,17 +332,24 @@ dependencies through the Runtime Context below. Track the remaining migration in
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
 Promises, buffer allocation, microtasks, task delivery, abort-controller
-construction, structured cloning/serialization/deserialization, and immutable
+construction, time coarsening, structured cloning/serialization/deserialization, and immutable
 native-line-ending configuration.
 It contains no Binding Context, realm object,
 conversion, callback adaptation, or platform-object registry.
 
 The neutral contract and engine-owned buffer operations live in `js-engine/`.
-HTML task policy, DOM aborting, and HTML structured data retain their implementations in
-Browlet. [`integration/runtime.ts`](browlet/integration/runtime.ts) assembles
+HTML task policy, DOM aborting, High Resolution Time coarsening, and HTML structured
+data retain their implementations in Browlet.
+[`integration/runtime.ts`](browlet/integration/runtime.ts) assembles
 them once during Window realm registration, reusing that realm's existing
 Promise facility. Binding exposes the same object through `context.getRuntime()`;
 the `runtimeContext` declaration value supplies it to constructors or methods.
+
+`runtime.timing.coarsenTime(timestamp, crossOriginIsolatedCapability)` exposes
+the same calculation used by High Resolution Time's moments. The consumer
+supplies the isolation capability; JS Engine neither selects timing policy nor
+imports its implementation. Connection timing uses this facility without a
+second clock or rounding algorithm.
 
 Implementations keep lifetime dependencies in a final constructor argument and
 pass the same runtime to children they create. Blob slices retain their source
@@ -515,11 +522,11 @@ HTML's `Environment` retains its owning `UserAgent`, including before a realm
 exists; `EnvironmentSettingsObject` inherits that association. Initial Window
 creation and navigation supply the target browsing-context group's owner.
 This makes HTML's implicit user agent explicit without a Document lookup or a
-process-wide singleton. Fetch's `FetchClientSettings` and `FetchUserAgent` types
-describe narrow views of those same objects; a request retains its actual HTML
-settings object. The UserAgent owns its live connectivity assumption, while the
-settings object supplies the environment-scoped BiDi query. Host connectivity
-detection and BiDi session lookup are provisional; their replacement work is
+process-wide singleton. Fetch's `FetchEnvironmentSettingsObject` and
+`FetchUserAgent` types describe narrow views of those same objects; a request
+retains its actual HTML settings object. The UserAgent owns its live connectivity
+assumption, while the settings object supplies the environment-scoped BiDi query.
+Host connectivity detection and BiDi session lookup are provisional; their replacement work is
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
 
 The same settings object exposes its HTML-owned policy container. Window
@@ -527,6 +534,19 @@ settings read it from the associated Document; Fetch's structural client type
 exposes the embedder-policy value without copying it or importing Browlet.
 `RequestRecord` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
+
+Each `EnvironmentSettingsObject` also owns a `FetchGroup`, exposed through its
+`FetchEnvironmentSettingsObject` view. The group retains request/controller
+records and owns group termination; it has no reverse lookup into HTML. Request
+registration and lifecycle termination calls join through the consuming
+Fetch/HTML algorithms.
+
+The base `Environment` satisfies `FetchEnvironment`, including top-level origin
+and creation URL before a realm exists. Requests retain this actual object as
+their reserved client. Fetch derives network partition keys from it, retaining
+opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
+partitions; they outlive an individual environment. Connection establishment
+and cache response storage remain deferred under Fetch's HTTP roadmap.
 
 Initial-document and navigation algorithms select their Window and retain HTML
 state initialization. Named functions on the composition-root module delegate

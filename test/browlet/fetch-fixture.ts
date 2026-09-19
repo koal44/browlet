@@ -17,8 +17,8 @@ import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/control-fixture';
 import { createRuntime } from '../js-engine/runtime-fixture';
 
-export function createFetchWindow() {
-  const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+export function createFetchWindow(userAgent = new UserAgent()) {
+  const traversable = createNewTopLevelTraversable(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const context = getBindingContext(realm);
   const eventLoop = realm.agent.eventLoop;

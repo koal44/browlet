@@ -6,7 +6,7 @@
  * High Resolution Time §2.1, clocks.
  */
 export class Clock {
-  readonly #readUnsafeCurrentTime: () => number;
+  #readUnsafeCurrentTime: () => number;
 
   constructor(readUnsafeCurrentTime: () => number) {
     this.#readUnsafeCurrentTime = readUnsafeCurrentTime;
@@ -28,9 +28,9 @@ export const monotonicClock = new Clock(() => globalThis.performance.now());
  * High Resolution Time §2.2, moments and durations.
  */
 export class UnsafeMoment {
-  readonly clock: Clock;
-  readonly coarsened = false;
-  readonly milliseconds: number;
+  clock: Clock;
+  coarsened = false as const;
+  milliseconds: number;
 
   constructor(clock: Clock, milliseconds: number) {
     this.clock = clock;
@@ -39,21 +39,14 @@ export class UnsafeMoment {
 
   /** High Resolution Time, coarsen time. */
   coarsen(crossOriginIsolatedCapability = false): Moment {
-    const resolution = crossOriginIsolatedCapability
-      ? FINE_RESOLUTION_MICROSECONDS
-      : COARSE_RESOLUTION_MICROSECONDS;
-    const microseconds = this.milliseconds * 1_000;
-    const coarseMicroseconds = Math.trunc(microseconds / resolution) *
-      resolution;
-
-    return new Moment(this.clock, coarseMicroseconds / 1_000);
+    return new Moment(this.clock, coarsenTime(this.milliseconds, crossOriginIsolatedCapability));
   }
 }
 
 export class Moment {
-  readonly clock: Clock;
-  readonly coarsened = true;
-  readonly milliseconds: number;
+  clock: Clock;
+  coarsened = true as const;
+  milliseconds: number;
 
   constructor(clock: Clock, milliseconds: number) {
     this.clock = clock;
@@ -76,7 +69,7 @@ export class Moment {
 }
 
 export class Duration {
-  readonly milliseconds: number;
+  milliseconds: number;
 
   constructor(milliseconds: number) {
     this.milliseconds = milliseconds;
@@ -86,6 +79,16 @@ export class Duration {
   toTimestamp(): DOMHighResTimeStamp {
     return this.milliseconds;
   }
+}
+
+/** https://w3c.github.io/hr-time/#dfn-coarsen-time */
+export function coarsenTime(timestamp: number, crossOriginIsolatedCapability = false): number {
+  const resolution = crossOriginIsolatedCapability
+    ? FINE_RESOLUTION_MICROSECONDS
+    : COARSE_RESOLUTION_MICROSECONDS;
+  const microseconds = timestamp * 1_000;
+  const coarseMicroseconds = Math.trunc(microseconds / resolution) * resolution;
+  return coarseMicroseconds / 1_000;
 }
 
 const COARSE_RESOLUTION_MICROSECONDS = 100;

@@ -4,6 +4,7 @@ import type { RuntimeContext } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/index';
 import type { WindowImpl } from '../browsing/window/window';
 import { AbortControllerImpl } from '../dom/abort/abort-controller';
+import { coarsenTime } from '../performance/clock';
 import { createTaskSource } from '../scripting/event-loop';
 import type { StructuredCloneSteps } from '../scripting/global-scope';
 import type { Realm } from '../scripting/realm';
@@ -31,6 +32,7 @@ export function createWindowRuntime(
       runInParallel,
     },
     networking: fetchTaskScheduling,
+    timing: { coarsenTime },
     createAbortController: () => context.construct(AbortControllerImpl),
     clone: (value) => window.getWindowOrWorkerGlobalScopeMixin().structuredClone(value),
     ...createRuntimeSerialization(context),

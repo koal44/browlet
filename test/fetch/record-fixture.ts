@@ -1,6 +1,6 @@
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { vi } from 'vitest';
-import type { FetchClientSettings } from '../../src/fetch/infrastructure';
+import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
 import {
   BodyRecord, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
 } from '../../src/fetch/body';
@@ -26,7 +26,7 @@ import { TestRealm } from '../web-idl/test-realm';
 
 export function createRequestRecord(
   url = 'https://example.test/start',
-  client: FetchClientSettings | null = null,
+  client: FetchEnvironmentSettingsObject | null = null,
 ) {
   const parsed = parseURL(url).url;
   if (parsed === null) throw new Error('Invalid fixture URL');

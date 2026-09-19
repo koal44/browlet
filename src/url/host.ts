@@ -6,7 +6,9 @@ import { CodePointCursor, isURLCodePoint } from './cp-cursor';
 import { percentDecodeString, utf8PercentEncode } from './percent-encoding';
 import type { URLValidationError } from './validation-error';
 
-export type Host = Domain | IPv4Address | IPv6Address | OpaqueHost | EmptyHost;
+export type Host = Domain | IPAddress | OpaqueHost | EmptyHost;
+
+export type IPAddress = IPv4Address | IPv6Address;
 
 export type Domain = {
   kind: 'domain';

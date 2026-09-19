@@ -6,9 +6,11 @@ partitioning, and request processing over its request/response records. The
 [cache integration](cache/ROADMAP.md) owns storage, selection, and validation.
 Reusable syntax, dates, and RFC algorithms belong to [HTTP](../../http/ROADMAP.md).
 
-**Status:** methods, ranges, and status classifications support parent Slice 2; header
-lists and their rules live in `../headers.ts`. HTTP transactions and the
-transport adapter remain planned.
+**Status:** methods, ranges, and status classifications support parent Slice 2.
+Slice 5 adds authentication records, IP/localhost resolution, connection reuse,
+network partition derivation, cache partition identities, and port/MIME blocking.
+Header lists and MIME extraction live in `../headers.ts`. New connections, cache
+response storage, HTTP transactions, and the transport adapter remain planned.
 
 ## Sources
 
@@ -32,7 +34,7 @@ belongs to the transport, not another parser in this folder.
 | --- | --- | --- |
 | Fetch classifications (`methods.ts`, `ranges.ts`, `statuses.ts`) | Parent Slice 2, then the consuming transactions | CORS/forbidden methods, method normalization, single-range parsing, and Fetch status classifications. Reuse HTTP's syntax; header-list state and public Headers stay with the parent |
 | Authentication entries and partitions | Parent Slice 5 | Fetch owns keys/records; Browlet supplies client/top-level state and actual credential/store/pool instances |
-| §3 header protocols | Parent Slice 7 | Origin, CORS, Content-Length, MIME extraction, nosniff, CORP, and Sec-Purpose remain Fetch algorithms |
+| §3 header protocols | Parent Slice 7; MIME extraction brought forward in Slice 5 | Origin, CORS, Content-Length, MIME extraction, nosniff, CORP, and Sec-Purpose remain Fetch algorithms |
 | Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../http/cookies/ROADMAP.md); Fetch computes its browser inputs and credentials decisions |
 | Browser policy | Main Fetch and redirects | Call the [policy owner](../../browlet/browsing/policy/ROADMAP.md); do not reimplement its language or infer an HTML environment from Node globals |
 | Cache transactions | §4.6 | Follow the [cache roadmap](cache/ROADMAP.md) |

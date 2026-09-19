@@ -4,9 +4,11 @@ This folder will own storage, selection, validation, and cache transactions over
 Fetch request/response records. Browlet owns configured cache instances and their
 partitioned storage. This is distinct from the service-worker Cache API.
 
-**Status:** the reusable [HTTP cache rules](../../../http/cache/ROADMAP.md) exist.
-Integration still requires request/response cloning and the transport pipeline;
-the body operations alone do not provide either.
+**Status:** the reusable [HTTP cache rules](../../../http/cache/ROADMAP.md) and
+Fetch request/response cloning exist. `partitions.ts` selects browser-owned
+partition identities from the actual client environment, including opaque-site
+separation. A partition currently holds only its key; response storage,
+selection, validation, and transport transactions remain unimplemented.
 
 ## Sources
 

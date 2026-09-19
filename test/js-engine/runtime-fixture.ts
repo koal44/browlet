@@ -23,6 +23,8 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
       queueGlobalTask: (_global, steps) => { setImmediate(steps); },
       runInParallel: (steps) => { setImmediate(steps); },
     },
+    // Tests of timing policy use Browlet's actual runtime or supply their own clock.
+    timing: { coarsenTime: (timestamp) => timestamp },
     createAbortController,
     clone: structuredClone,
     serialize,

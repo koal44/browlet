@@ -1,2 +1,5 @@
 export { FetchController, deserializeAbortReason } from './controller';
-export type { FetchClientSettings, FetchUserAgent } from './infrastructure';
+export { FetchGroup } from './group';
+export { ConnectionPool } from './http/connections';
+export { HTTPCachePartitions } from './http/cache/partitions';
+export type { FetchEnvironmentSettingsObject, FetchEnvironment, FetchUserAgent } from './infrastructure';

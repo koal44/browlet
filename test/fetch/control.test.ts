@@ -13,6 +13,7 @@ import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { parseURL } from '../../src/url/url';
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { createControllerFixture } from './control-fixture';
+import { createClientSettings } from './client-fixture';
 
 describe('Fetch §2 controllers', () => {
   it('starts ongoing with no timing, redirect steps, or serialized abort reason', () => {
@@ -206,11 +207,10 @@ describe('Fetch §2 offline state and integer serialization', () => {
     [false, true, true], [true, true, true],
   ])('combines user-agent %s and BiDi %s offline state', (userAgent, bidi, expected) => {
     const webDriverBiDiNetworkIsOffline = vi.fn(() => bidi);
-    expect(isOffline({
-      userAgent: { assumeNoInternetConnectivity: userAgent },
-      webDriverBiDiNetworkIsOffline,
-      policyContainer: { embedderPolicy: { value: 'unsafe-none' } },
-    })).toBe(expected);
+    const client = createClientSettings();
+    client.userAgent.assumeNoInternetConnectivity = userAgent;
+    client.webDriverBiDiNetworkIsOffline = webDriverBiDiNetworkIsOffline;
+    expect(isOffline(client)).toBe(expected);
     expect(webDriverBiDiNetworkIsOffline).toHaveBeenCalledTimes(userAgent ? 0 : 1);
   });
 

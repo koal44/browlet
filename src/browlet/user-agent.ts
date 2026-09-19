@@ -1,7 +1,7 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
 import type { EventLoopOptions } from './scripting/event-loop';
-import type { FetchUserAgent } from '../fetch/index';
+import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -9,14 +9,17 @@ import type { FetchUserAgent } from '../fetch/index';
  * such host, but these collections outlive any individual realm or Document.
  */
 export class UserAgent implements FetchUserAgent {
-  readonly browsingContextGroupSet = new Set<BrowsingContextGroup>();
-  readonly topLevelTraversableSet = new Set<TopLevelTraversable>();
+  connectionPool = new ConnectionPool();
+  httpCachePartitions = new HTTPCachePartitions();
+  browsingContextGroupSet = new Set<BrowsingContextGroup>();
+  topLevelTraversableSet = new Set<TopLevelTraversable>();
+  eventLoopOptions: EventLoopOptions | null;
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
 
-  constructor(
-    readonly eventLoopOptions: EventLoopOptions | null = null,
-  ) {}
+  constructor(eventLoopOptions: EventLoopOptions | null = null) {
+    this.eventLoopOptions = eventLoopOptions;
+  }
 
   createBrowsingContextGroup(): BrowsingContextGroup {
     const group = new BrowsingContextGroup(this);

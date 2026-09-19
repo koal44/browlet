@@ -4,7 +4,7 @@
 - **Complete:** [Slice 2 — HTTP methods, headers, and statuses](#slice-2--http-methods-headers-and-statuses).
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
-- **Next:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure).
+- **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -22,8 +22,8 @@ rules live in the [HTTP project](../http/ROADMAP.md).
 Public package/API exposure waits for a complete interface family. The
 [dependency preflight](PREFLIGHT.md) retains the remaining external work order.
 
-`index.ts` exports the contracts consumed by production outside Fetch, currently
-the structured-data and task-scheduling capabilities. Add exports with their real
+`index.ts` exports the contracts consumed by production outside Fetch, including
+task delivery, client settings, fetch groups, and browser-owned pools/partitions. Add exports with their real
 consumers; focused tests may import internal algorithms without widening this
 surface.
 
@@ -141,7 +141,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchClientSettings` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
+| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironmentSettingsObject` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
@@ -198,9 +198,10 @@ URL components while retaining any Blob URL entry reference.
 
 **Remaining boundaries:**
 
-- `client` retains the actual HTML settings object through `FetchClientSettings`.
-  Reserved-client, traversable, and policy-container fields remain opaque owner
-  references. Further client-derived values and policy operations need narrow
+- `client` retains the actual HTML settings object through
+  `FetchEnvironmentSettingsObject`; `reservedClient` uses `FetchEnvironment`.
+  Traversable and policy-container fields remain opaque owner references.
+  Further client-derived values and policy operations need narrow
   HTML capabilities in §4.1; these objects are not new Fetch-owned environments
   or policy containers. Clientless requests still need their owning UserAgent
   at network orchestration; do not synthesize an environment or assume online.
@@ -355,9 +356,9 @@ header-extraction convention: undefined for absence, null for failure. That
 return-type translation has been reviewed and accepted.
 
 **COEP credentials check (2026-09-19):** implemented on `RequestRecord`, reading
-the actual client's policy container through `FetchClientSettings`. HTML's
-[`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) now holds its four specified
-fields and defaults. Tests cover policy/mode selection, same-origin credentials,
+the actual client's policy container through `FetchEnvironmentSettingsObject`.
+HTML's [`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) now holds its four
+specified fields and defaults. Tests cover policy/mode selection, same-origin credentials,
 redirect suppression, and the live Document policy-container relationship.
 
 [Fetch's current step 5](https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials)
@@ -390,9 +391,60 @@ fetch-group termination's call to §4.12 process deferred fetches, whose full
 feature remains deferred. Network/storage effects require explicit host
 contracts and deterministic fakes.
 
-**Exit proof:** pure blocking/partition algorithms and fetch-group cancellation
-work; each remaining network, storage, or deferred-fetch effect has an explicit
-owner and completion gate.
+**Status: infrastructure implemented (2026-09-19), with the effects below deferred.**
+`http/authentication.ts` defines the shared username/password/realm
+entry shape from §2.3. Credential storage, request associations, and clearing
+remain with the later HTTP authentication integration. `group.ts` contains the
+§2.4 records and ordinary termination. Each HTML environment settings object
+owns its group directly, exposed through `FetchEnvironmentSettingsObject`.
+`FetchGroup` privately processes deferred fetches during termination. It skips
+sent/aborted records and throws at pending processing, which still needs the Fetch entry algorithm and client-task
+integration. It does not mark an unsent request sent or invoke its notification.
+Automatic request registration and lifecycle termination calls remain with
+their Fetch/HTML consumers. No deferred-fetch API is exposed.
+
+`http/connections.ts` implements §2.5's direct IP and localhost resolution.
+External origin resolution explicitly throws until the transport supplies that
+effect. Resolution accepts a tuple origin (the origin kind with a host) and
+represents returned addresses as an array, with null reserved for resolution
+failure. That signature translation retains its pending-review marker.
+
+Each UserAgent owns a `ConnectionPool`. §2.6 reuse compares partition keys,
+origins, credentials, and the unreliable-transport requirement, while forced-new
+settings bypass reuse. A cache miss or forced-new request explicitly throws:
+proxy selection, DNS, connection establishment, certificate policy, ALPN, and
+timing observations join through the Slice 9 transport. No socket is opened here.
+
+`ConnectionTimingInfo.clampAndCoarsen()` hides reused-connection details and
+uses `RuntimeContext.timing.coarsenTime()` for new-connection timestamps.
+Browlet supplies its existing High Resolution Time calculation; JS Engine
+only declares the supplied facility. The accepted behavior preserves TLS start,
+matching Blink, Gecko, and WebKit source. The specification currently uses
+connection end there; the end-of-slice issue candidate remains in Scratch.
+
+§2.7 derives keys from the actual HTML environment's top-level origin or
+creation URL, preferring a request's reserved client over its client. The
+implementation-defined second key is null. Equal sites share a key; opaque
+origins retain their distinct identities. `reservedClient` now has the concrete
+`FetchEnvironment` contract rather than `object`.
+
+§2.8 selects browser-owned `HTTPCachePartition` identities using those keys.
+A clientless request returns null. These objects do not yet store responses;
+the signature's pending-review marker makes that partial representation explicit.
+Storage, selection, validation, and transactions remain in the
+[HTTP cache slice](http/cache/ROADMAP.md#implementation-order).
+
+§§2.9–2.10 implement the complete bad-port table and script-like MIME blocking.
+§3.5 MIME extraction is brought forward for that check, retaining its last-valid
+Content-Type and same-essence charset rules. Main Fetch will invoke the blockers;
+the separate nosniff check remains in Slice 7.
+
+**Exit proof:** `test/fetch/group.test.ts` covers termination; the HTTP tests
+cover resolution, connection reuse, partition identity, and blocking. Header
+tests cover MIME extraction. `test/browlet/fetch-control.test.ts` proves actual
+settings/UserAgent ownership, and `test/browlet/fetch-timing.test.ts` exercises
+the composed runtime. Transport, response storage, and pending deferred-fetch
+processing remain explicit completion gates, not passing network/cache claims.
 
 ## Slice 6 — network-independent platform APIs
 
@@ -543,6 +595,11 @@ does not complete every Fetch branch.
   wait for the HTML lifecycle and Permissions Policy checks. §2.4 termination
   must retain its forward dependency; do not accept deferred records before
   their processing works.
+  Revisit the pending-record processor when Slice 8 supplies the internal Fetch
+  entry algorithm. It also needs the client's global task destination and the
+  deferred-fetch task source's priority over script-running tasks. Slice 9 supplies
+  runnable HTTP transport; full `fetchLater()` activation, quotas, and lifecycle
+  integration remain a separate deferred feature, without a numbered delivery slice.
 - Service Worker interception waits for worker agents, events, and lifecycle.
   Ordinary requests with no applicable worker can use the no-worker path.
 - WebDriver BiDi offline/emulation/interception hooks use their specified

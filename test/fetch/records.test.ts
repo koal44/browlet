@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { BodyMixin } from '../../src/fetch/body';
-import type { FetchClientSettings } from '../../src/fetch/infrastructure';
 import { FetchParams } from '../../src/fetch/params';
 import { RequestImpl, RequestRecord } from '../../src/fetch/request';
 import { ResponseImpl, ResponseRecord } from '../../src/fetch/response';
@@ -9,14 +8,11 @@ import { parseURL } from '../../src/url/url';
 import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createRecordFixture, createRequestRecord } from './record-fixture';
+import { createClientSettings } from './client-fixture';
 
 describe('Fetch request and response records', () => {
   it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
-    const client: FetchClientSettings = {
-      userAgent: { assumeNoInternetConnectivity: false },
-      webDriverBiDiNetworkIsOffline: () => false,
-      policyContainer: { embedderPolicy: { value: 'unsafe-none' } },
-    };
+    const client = createClientSettings();
     const request = createRequestRecord(undefined, client);
     expect(request).toMatchObject({
       method: 'GET', localURLsOnly: false, headerList: [], unsafeRequest: false, body: null,

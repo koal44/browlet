@@ -1,5 +1,5 @@
 import { isomorphicEncode } from '../js-engine/byte-string';
-import { getMIMETypeEssence, parseMIMEType } from '../mime/index';
+import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 import { collectHTTPQuotedString, isHTTPToken } from '../http/syntax';
 import { TextCursor } from '../infra/text-cursor';
 import { parseStructuredField, serializeStructuredField, type StructuredField } from '../http/struct-fields/index';
@@ -74,6 +74,30 @@ export function getDecodeAndSplitHeaderValue(value: string): string[] {
     if (position.eof()) return values;
     position.advance();
   }
+}
+
+/** https://fetch.spec.whatwg.org/#concept-header-extract-mime-type */
+export function extractMIMEType(headers: HeaderList): MIMEType | null {
+  let charset: string | undefined;
+  let essence: MIMETypeEssence | undefined;
+  let mimeType: MIMEType | null = null;
+  const values = getDecodeAndSplitHeader('Content-Type', headers);
+  if (values === null) return null;
+
+  for (const value of values) {
+    const temporaryMimeType = parseMIMEType(value);
+    if (temporaryMimeType === null) continue;
+    const temporaryEssence = getMIMETypeEssence(temporaryMimeType);
+    if (temporaryEssence === '*/*') continue;
+    mimeType = temporaryMimeType;
+    if (temporaryEssence !== essence) {
+      charset = mimeType.parameters.get('charset');
+      essence = temporaryEssence;
+    } else if (!mimeType.parameters.has('charset') && charset !== undefined) {
+      mimeType.parameters.set('charset', charset);
+    }
+  }
+  return mimeType;
 }
 
 export function appendHeader([name, value]: Header, list: HeaderList): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FetchClientSettings } from '../../src/fetch/infrastructure';
+import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
 import {
   isScriptLikeDestination, translatePotentialDestination, type Destination,
   type PotentialDestination, type RequestRecord,
@@ -8,20 +8,19 @@ import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { createRequestRecord } from './record-fixture';
+import { createClientSettings } from './client-fixture';
 
 describe('Fetch request cloning', () => {
   it('copies owned data, retains owner references, and gives the clone a fresh WebDriver ID', () => {
-    const client: FetchClientSettings = {
-      userAgent: { assumeNoInternetConnectivity: false },
-      webDriverBiDiNetworkIsOffline: () => false,
-      policyContainer: { embedderPolicy: { value: 'unsafe-none' } },
-    };
+    const client = createClientSettings();
     const request = createRequestRecord('https://[::1]/start', client);
     request.method = 'POST';
     request.credentialsMode = 'include';
     request.origin = obtainURLOrigin(request.url);
     request.policyContainer = {};
-    request.reservedClient = {};
+    request.reservedClient = {
+      userAgent: client.userAgent, topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
+    };
     request.referrer = parseURL('https://example.test/referrer').url!;
     request.headerList.push(['X-Test', 'first'], ['X-Test', 'second']);
     request.urlList.push(parseURL('https://example.test/end').url!);
@@ -277,11 +276,8 @@ describe('Fetch request origin serialization', () => {
 describe('Fetch request COEP credentials', () => {
   const home = 'https://a.example.test/';
   const foreign = 'https://outside.test/';
-  const client: FetchClientSettings = {
-    userAgent: { assumeNoInternetConnectivity: false },
-    webDriverBiDiNetworkIsOffline: () => false,
-    policyContainer: { embedderPolicy: { value: 'credentialless' } },
-  };
+  const client = createClientSettings();
+  client.policyContainer.embedderPolicy.value = 'credentialless';
 
   it.each<{ name: string; urls: [string, ...string[]]; allowed: boolean; }>([
     { name: 'same-origin without redirects', urls: [home], allowed: true },
@@ -308,7 +304,7 @@ describe('Fetch request COEP credentials', () => {
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
   });
 
-  it.each<FetchClientSettings['policyContainer']['embedderPolicy']['value']>([
+  it.each<FetchEnvironmentSettingsObject['policyContainer']['embedderPolicy']['value']>([
     'unsafe-none', 'require-corp',
   ])('does not restrict credentials under %s', (value) => {
     const request = createRequestRecord(foreign, {

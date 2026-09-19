@@ -5,8 +5,9 @@ and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
 It also defines the neutral [`RuntimeContext`](./runtime-context.ts) contract
-shared by implementations. Browlet composes its task, abort, and structured-data
-providers; their HTML/DOM policy stays above this layer. `serialize()` captures
+shared by implementations. Browlet composes its task, abort, timing, and structured-data
+providers; their specification policy stays above this layer. `timing.coarsenTime()`
+is supplied by Browlet's High Resolution Time implementation. `serialize()` captures
 an opaque record, `deserialize()` reconstructs it in the destination runtime's
 realm, and `clone()` supplies immediate cloning. Engine-owned
 buffer inspection and writes live in [`buffers.ts`](./buffers.ts). Realm-owned

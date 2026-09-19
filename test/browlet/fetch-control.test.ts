@@ -1,12 +1,53 @@
 import { describe, expect, it } from 'vitest';
 
 import { createPolicyContainer } from '../../src/browlet/browsing/policy/container';
+import { UserAgent } from '../../src/browlet/user-agent';
+import { FetchController } from '../../src/fetch/controller';
+import { FetchGroup } from '../../src/fetch/group';
 import { isOffline } from '../../src/fetch/infrastructure';
 import { RequestRecord } from '../../src/fetch/request';
 import { parseURL } from '../../src/url/url';
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 
 describe('Fetch client settings ownership', () => {
+  it('shares networking owners across settings while separating opaque cache partitions', () => {
+    const userAgent = new UserAgent();
+    const first = createFetchWindow(userAgent).realm.hostDefined!;
+    const second = createFetchWindow(userAgent).realm.hostDefined!;
+    const firstRequest = new RequestRecord(first.creationURL, first);
+    const secondRequest = new RequestRecord(second.creationURL, second);
+    const partitions = userAgent.httpCachePartitions;
+    const firstPartition = partitions.determine(firstRequest);
+
+    expect(first.userAgent.connectionPool).toBe(second.userAgent.connectionPool);
+    expect(first.userAgent.httpCachePartitions).toBe(second.userAgent.httpCachePartitions);
+    expect(firstPartition).not.toBeNull();
+    expect(partitions.determine(firstRequest.clone())).toBe(firstPartition);
+    expect(partitions.determine(secondRequest)).not.toBe(firstPartition);
+    expect(new UserAgent().connectionPool).not.toBe(userAgent.connectionPool);
+    expect(new UserAgent().httpCachePartitions.determine(firstRequest)).not.toBe(firstPartition);
+  });
+
+  it('owns a separate fetch group for each settings object in the same user agent', () => {
+    const userAgent = new UserAgent();
+    const first = createFetchWindow(userAgent).realm.hostDefined!;
+    const second = createFetchWindow(userAgent).realm.hostDefined!;
+    const request = new RequestRecord(first.creationURL, first);
+    const controller = new FetchController();
+
+    expect(first.fetchGroup).toBeInstanceOf(FetchGroup);
+    expect(first.fetchGroup).not.toBe(second.fetchGroup);
+    expect(request.client!.fetchGroup).toBe(first.fetchGroup);
+    request.client!.fetchGroup.fetchRecords.push({ request, controller });
+    expect(second.fetchGroup.fetchRecords).toEqual([]);
+    expect(first.fetchGroup.deferredFetchRecords).not.toBe(second.fetchGroup.deferredFetchRecords);
+
+    second.fetchGroup.terminate();
+    expect(controller.state).toBe('ongoing');
+    first.fetchGroup.terminate();
+    expect(controller.state).toBe('terminated');
+  });
+
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
     const settings = realm.hostDefined!;

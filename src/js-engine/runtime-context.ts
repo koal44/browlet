@@ -5,11 +5,14 @@ import type { GlobalObject } from './realm';
 
 /** Implementation facilities composed for one owning realm/global. */
 export type RuntimeContext = {
-  readonly nativeLineEnding: '\n' | '\r\n';
-  readonly promises: Promises;
-  readonly buffers: RuntimeBuffers;
-  readonly fileReading: TaskScheduling;
-  readonly networking: NetworkingTasks;
+  nativeLineEnding: '\n' | '\r\n';
+  promises: Promises;
+  buffers: RuntimeBuffers;
+  fileReading: TaskScheduling;
+  networking: NetworkingTasks;
+  timing: {
+    coarsenTime(timestamp: number, crossOriginIsolatedCapability: boolean): number;
+  };
 
   queueMicrotask(steps: () => void): void;
   createAbortController(): AbortControllerCapability;
