@@ -21,7 +21,7 @@ export class BodyRecord {
   source: Uint8Array | BlobImpl | FormDataImpl | null = null;
   length: number | null = null;
   // Implementation dependency for HTML task delivery, retained across clones.
-  readonly #runtime: RuntimeContext;
+  #runtime: RuntimeContext;
 
   constructor(stream: ReadableStreamImpl, runtime: RuntimeContext) {
     this.stream = stream;
@@ -30,9 +30,8 @@ export class BodyRecord {
 
   /** Fetch §§2.2.4 and 5.2, safely extract an internal byte sequence as a body. */
   static fromBytes(bytes: Uint8Array, runtime: RuntimeContext): BodyRecord {
-    const scheduling = runtime.networking;
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
-    scheduling.runInParallel(() => {
+    runtime.networking.runInParallel(() => {
       if (bytes.length > 0 && !stream.isErrored) {
         stream.enqueueChunk(runtime.buffers.copyUint8Array(bytes));
       }
@@ -60,13 +59,12 @@ export class BodyRecord {
     processBodyError: (error: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
-    const scheduling = this.#runtime.networking;
-    const destination = taskDestination ?? new ParallelQueue(scheduling.runInParallel);
+    const runtime = this.#runtime;
+    const destination = taskDestination ?? new ParallelQueue(runtime.networking.runInParallel);
     const reader = this.stream.getDefaultReader();
     readLoop();
 
     // The next read starts inside the task that processes this chunk.
-    // SPEC_MISMATCH: incrementally-read loop(reader, taskDestination, processBodyChunk, processEndOfBody, processBodyError)
     function readLoop(): void {
       reader.readChunk({
         chunkSteps(chunk) {
@@ -80,10 +78,10 @@ export class BodyRecord {
               readLoop();
             };
           }
-          queueFetchTask(continueAlgorithm, destination, scheduling.queueGlobalTask);
+          queueFetchTask(continueAlgorithm, destination, runtime);
         },
-        closeSteps: () => queueFetchTask(processEndOfBody, destination, scheduling.queueGlobalTask),
-        errorSteps: (error) => queueFetchTask(() => processBodyError(error), destination, scheduling.queueGlobalTask),
+        closeSteps: () => queueFetchTask(processEndOfBody, destination, runtime),
+        errorSteps: (error) => queueFetchTask(() => processBodyError(error), destination, runtime),
       });
     }
   }
@@ -94,12 +92,12 @@ export class BodyRecord {
     processBodyError: (error?: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
-    const scheduling = this.#runtime.networking;
-    const destination = taskDestination ?? new ParallelQueue(scheduling.runInParallel);
+    const runtime = this.#runtime;
+    const destination = taskDestination ?? new ParallelQueue(runtime.networking.runInParallel);
     const successSteps = (bytes: Uint8Array) =>
-      queueFetchTask(() => processBody(bytes), destination, scheduling.queueGlobalTask);
+      queueFetchTask(() => processBody(bytes), destination, runtime);
     const errorSteps = (error?: unknown) =>
-      queueFetchTask(() => processBodyError(error), destination, scheduling.queueGlobalTask);
+      queueFetchTask(() => processBodyError(error), destination, runtime);
     let reader: ReturnType<ReadableStreamImpl['getDefaultReader']>;
     try {
       reader = this.stream.getDefaultReader();
@@ -119,9 +117,9 @@ export type BodyWithType = { body: BodyRecord; type: string | null; };
  */
 // SPEC_MISMATCH: (codings, bytes) -> bytes or failure
 export function handleContentCodings(
-  codings: readonly string[],
+  codings: string[],
   bytes: Uint8Array,
-  decoders: ReadonlyMap<string, (bytes: Uint8Array) => Uint8Array>,
+  decoders: Map<string, (bytes: Uint8Array) => Uint8Array>,
 ): Uint8Array | null {
   const selected = codings.map((coding) => decoders.get(coding.toLowerCase()));
   if (selected.some((decode) => decode === undefined)) return bytes;
@@ -153,7 +151,7 @@ export function handleContentCodings(
  * };
  */
 export class BodyMixin {
-  readonly #record: RequestRecord | ResponseRecord;
+  #record: RequestRecord | ResponseRecord;
 
   // Read the includer's current body and headers, including replacements.
   constructor(record: RequestRecord | ResponseRecord) {

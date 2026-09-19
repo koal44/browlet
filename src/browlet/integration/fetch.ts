@@ -1,6 +1,5 @@
-import {
-  deserializeAbortReason, type FetchTaskScheduling, type QueueGlobalFetchTask,
-} from '../../fetch/index';
+import { deserializeAbortReason } from '../../fetch/index';
+import type { NetworkingTasks } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/index';
 import { Realm } from '../scripting/realm';
 import { networkingTaskSource } from '../scripting/tasks';
@@ -16,13 +15,13 @@ export function deserializeFetchAbortReason(
   );
 }
 
-export const queueGlobalFetchTask: QueueGlobalFetchTask = (global, steps) => {
+export const queueGlobalFetchTask: NetworkingTasks['queueGlobalTask'] = (global, steps) => {
   const realm = Realm.getAssociatedRealm(global);
   if (!realm) throw new Error('A Fetch task destination must have an HTML realm');
   realm.queueGlobalTask(networkingTaskSource, steps);
 };
 
-export const fetchTaskScheduling: FetchTaskScheduling = {
+export const fetchTaskScheduling: NetworkingTasks = {
   queueGlobalTask: queueGlobalFetchTask,
   runInParallel,
 };

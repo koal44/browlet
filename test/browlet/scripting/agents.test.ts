@@ -5,9 +5,6 @@ import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from '../../../src/browlet/scripting/agents';
-import {
-  BrowsingContextGroup,
-} from '../../../src/browlet/browsing/browsing-context';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import {
@@ -75,7 +72,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
   it('creates a site-keyed cluster by default', () => {
     const origin = createTupleOrigin('https', createHost('example.com'));
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
     const key = group.historicalAgentClusterKeyMap.get(origin)!;
@@ -90,7 +87,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
   it('retains the historical site key when OAC is requested later', () => {
     const origin = createTupleOrigin('https', createHost('example.com'));
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const first = obtainSimilarOriginWindowAgent(origin, group, false);
     const second = obtainSimilarOriginWindowAgent(origin, group, true);
@@ -100,7 +97,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
   it('creates an origin-keyed cluster when OAC is requested first', () => {
     const origin = createTupleOrigin('https', createHost('example.com'));
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const agent = obtainSimilarOriginWindowAgent(origin, group, true);
     const agentCluster = group.agentClusterMap.get(origin)!;
@@ -111,7 +108,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
   it('creates an origin-keyed cluster for a cross-origin-isolated group', () => {
     const origin = createTupleOrigin('https', createHost('example.com'));
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
     group.crossOriginIsolationMode = 'logical';
 
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
@@ -129,7 +126,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const secondOrigin = createTupleOrigin(
       'https', createHost('shop.example.com'),
     );
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
     const second = obtainSimilarOriginWindowAgent(secondOrigin, group, false);
@@ -144,7 +141,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const equivalentOrigin = createTupleOrigin(
       'https', createHost('example.com'),
     );
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
     const second = obtainSimilarOriginWindowAgent(
@@ -163,7 +160,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const secondOrigin = createTupleOrigin(
       'https', createHost('example.com'), 9000,
     );
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
     const second = obtainSimilarOriginWindowAgent(secondOrigin, group, false);
@@ -178,7 +175,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const originKey = createTupleOrigin(
       'https', createHost('example.com'),
     );
-    const group = new BrowsingContextGroup();
+    const group = new UserAgent().createBrowsingContextGroup();
 
     const siteAgent = obtainSimilarOriginWindowAgent(
       siteOrigin,

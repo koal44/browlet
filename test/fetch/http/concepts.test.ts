@@ -28,8 +28,8 @@ describe('HTTP methods (Fetch §2.2.1)', () => {
 
 describe('single ranges (Fetch §2.2.2)', () => {
   it.each([
-    ['bytes=0-499', 0n, 499n], ['bytes=0-', 0n, null], ['bytes=-500', null, 500n],
-    ['bytes=-0', null, 0n], ['bytes=0001-0002', 1n, 2n], ['bytes=3-3', 3n, 3n],
+    ['bytes=0-499', 0n, 499n], ['bytes=0-', 0n, undefined], ['bytes=-500', undefined, 500n],
+    ['bytes=-0', undefined, 0n], ['bytes=0001-0002', 1n, 2n], ['bytes=3-3', 3n, 3n],
     ['bytes=9007199254740992-9007199254740993', 9007199254740992n, 9007199254740993n],
   ])('parses %j', (value, start, end) => {
     expect(parseSingleRangeHeaderValue(value, false)).toEqual([start, end]);

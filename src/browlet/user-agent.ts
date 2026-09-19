@@ -1,15 +1,18 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
 import type { EventLoopOptions } from './scripting/event-loop';
+import type { FetchUserAgent } from '../fetch/index';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
  * traversables normally presented as browser windows or tabs. Browlet is one
  * such host, but these collections outlive any individual realm or Document.
  */
-export class UserAgent {
+export class UserAgent implements FetchUserAgent {
   readonly browsingContextGroupSet = new Set<BrowsingContextGroup>();
   readonly topLevelTraversableSet = new Set<TopLevelTraversable>();
+  // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
+  assumeNoInternetConnectivity = false;
 
   constructor(
     readonly eventLoopOptions: EventLoopOptions | null = null,

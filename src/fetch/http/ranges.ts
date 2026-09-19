@@ -11,12 +11,13 @@ export function buildContentRange(
 
 /**
  * Fetch §2.2.2 — parse a single range header value. BigInts preserve the
- * ordering of unbounded decimal offsets; null denotes an omitted endpoint.
+ * ordering of unbounded decimal offsets. Null indicates failure;
+ * an undefined endpoint means omitted.
+ * https://fetch.spec.whatwg.org/#simple-range-header-value
  */
-// SPEC_MISMATCH: (value, allowWhitespace) -> (rangeStartValue, rangeEndValue) or failure
 export function parseSingleRangeHeaderValue(
   value: string, allowWhitespace: boolean,
-): [start: bigint | null, end: bigint | null] | null {
+): [start?: bigint, end?: bigint] | null {
   if (!value.startsWith('bytes')) return null;
   const position = new TextCursor(value, 5);
   if (allowWhitespace) position.consumeWhile(isHTTPTabOrSpace);
@@ -35,9 +36,9 @@ export function parseSingleRangeHeaderValue(
   const endValue = position.slice(end);
   if (!position.eof() || startValue === '' && endValue === '') return null;
 
-  const rangeStart = startValue === '' ? null : BigInt(startValue);
-  const rangeEnd = endValue === '' ? null : BigInt(endValue);
-  if (rangeStart !== null && rangeEnd !== null && rangeStart > rangeEnd) return null;
+  const rangeStart = startValue === '' ? undefined : BigInt(startValue);
+  const rangeEnd = endValue === '' ? undefined : BigInt(endValue);
+  if (rangeStart !== undefined && rangeEnd !== undefined && rangeStart > rangeEnd) return null;
   return [rangeStart, rangeEnd];
 }
 

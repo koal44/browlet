@@ -511,6 +511,17 @@ Binding Context or global passed by the calling algorithm and must not import
 the assembled `browletBindings` singleton or use its forwarding functions to
 rediscover either.
 
+HTML's `Environment` retains its owning `UserAgent`, including before a realm
+exists; `EnvironmentSettingsObject` inherits that association. Initial Window
+creation and navigation supply the target browsing-context group's owner.
+This makes HTML's implicit user agent explicit without a Document lookup or a
+process-wide singleton. Fetch's `FetchClientSettings` and `FetchUserAgent` types
+describe narrow views of those same objects; a request retains its actual HTML
+settings object. The UserAgent owns its live connectivity assumption, while the
+settings object supplies the environment-scoped BiDi query. Host connectivity
+detection and BiDi session lookup are provisional; their replacement work is
+tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
+
 Initial-document and navigation algorithms select their Window and retain HTML
 state initialization. Named functions on the composition-root module delegate
 to its main binding world. Document creation reuses the dependencies declared

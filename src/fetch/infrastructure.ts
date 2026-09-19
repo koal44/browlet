@@ -1,14 +1,18 @@
-/**
- * Fetch §2, is offline. The host supplies the two offline-state values instead
- * of the settings object, keeping HTML and BiDi state outside Fetch.
- */
-// SPEC_MISMATCH: (environment: environment settings object) -> boolean
-export function isOffline(
-  userAgentIsOffline: boolean,
-  webDriverBiDiNetworkIsOffline: boolean,
-): boolean {
-  return userAgentIsOffline || webDriverBiDiNetworkIsOffline;
+/** https://fetch.spec.whatwg.org/#is-offline */
+export function isOffline(environment: FetchClientSettings): boolean {
+  return environment.userAgent.assumeNoInternetConnectivity ||
+    environment.webDriverBiDiNetworkIsOffline();
 }
+
+/** The HTML environment settings object, exposing only what Fetch currently uses. */
+export type FetchClientSettings = {
+  userAgent: FetchUserAgent;
+  webDriverBiDiNetworkIsOffline(): boolean;
+};
+
+export type FetchUserAgent = {
+  assumeNoInternetConnectivity: boolean;
+};
 
 /** Fetch §2, serialize an integer as its shortest decimal representation. */
 export function serializeInteger(integer: number | bigint): string {

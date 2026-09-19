@@ -12,7 +12,7 @@ import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../src/browlet/scripting/agents';
 import {
-  EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
+  Environment, EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../src/browlet/scripting/environment';
 import {
   createNewTopLevelTraversable, Navigable, TopLevelTraversable,
@@ -230,6 +230,7 @@ describe('navigables', () => {
     const settings = realm.hostDefined;
     if (settings === null) throw new Error('Expected Window environment settings');
 
+    expect(settings.userAgent).toBe(userAgent);
     expect(userAgent.topLevelTraversableSet).toEqual(new Set([traversable]));
     expect(userAgent.browsingContextGroupSet)
       .toEqual(new Set([browsingContext.group]));
@@ -303,25 +304,38 @@ describe('environment settings objects', () => {
     expect(settings.executionReady).toBe(true);
   });
 
-  it('associates Window settings with their realm execution context', () => {
+  it('transfers a reserved environment into Window settings with the same user agent', () => {
     const creationURL = requireURL('https://example.test/');
     const origin = createOpaqueOrigin();
+    const userAgent = new UserAgent();
+    const reservedEnvironment = new Environment({
+      userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
+      targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {},
+    });
+    const reservedId = reservedEnvironment.id;
+    expect(reservedEnvironment.userAgent).toBe(userAgent);
     const window = new WindowImpl(new URL('about:blank'));
     const executionContext = createWindowRealm(new WindowAgent(), window);
 
     const settings = setupWindowEnvironmentSettingsObject(
       creationURL,
       executionContext,
-      null,
+      reservedEnvironment,
       creationURL,
       origin,
       createStructuredClone(executionContext.realm),
+      userAgent,
     );
     const document = new DocumentImpl();
     document.setOrigin(origin);
     document.setURL(creationURL);
     window.setAssociatedDocument(document);
 
+    expect(settings.userAgent).toBe(userAgent);
+    expect(settings.id).toBe(reservedId);
+    expect(reservedEnvironment.id).toBe('');
+    expect(settings.targetBrowsingContext).toBe(reservedEnvironment.targetBrowsingContext);
+    expect(settings.activeServiceWorker).toBe(reservedEnvironment.activeServiceWorker);
     expect(settings.realmExecutionContext).toBe(executionContext);
     expect(executionContext.realm.hostDefined).toBe(settings);
     expect(settings.moduleMap).toBe(document.getModuleMap());
@@ -407,6 +421,7 @@ describe('navigation lifecycle', () => {
     expect(document).not.toBe(initialDocument);
     expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
+    expect(realm.hostDefined!.userAgent).toBe(initialRealm.hostDefined!.userAgent);
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
@@ -436,6 +451,7 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
 
   constructor(realm: Realm, creationURL: URLRecord) {
     super({
+      userAgent: new UserAgent(),
       creationURL,
       realmExecutionContext: { realm },
       targetBrowsingContext: null,

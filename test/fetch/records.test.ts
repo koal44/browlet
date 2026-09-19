@@ -11,7 +11,10 @@ import { createRecordFixture, createRequestRecord } from './record-fixture';
 
 describe('Fetch request and response records', () => {
   it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
-    const client = {};
+    const client = {
+      userAgent: { assumeNoInternetConnectivity: false },
+      webDriverBiDiNetworkIsOffline: () => false,
+    };
     const request = createRequestRecord(undefined, client);
     expect(request).toMatchObject({
       method: 'GET', localURLsOnly: false, headerList: [], unsafeRequest: false, body: null,

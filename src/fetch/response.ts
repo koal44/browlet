@@ -68,9 +68,9 @@ export class ResponseRecord {
  * enum ResponseType { "basic", "cors", "default", "error", "opaque", "opaqueredirect" };
  */
 export class ResponseImpl {
-  readonly #response: ResponseRecord;
-  readonly #headers: HeadersImpl;
-  readonly #bodyMixin: BodyMixin;
+  #response: ResponseRecord;
+  #headers: HeadersImpl;
+  #bodyMixin: BodyMixin;
 
   // Internal allocation from an existing response and header guard.
   // SPEC_MISMATCH: create a Response object(response, guard, realm) -> Response

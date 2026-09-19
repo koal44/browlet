@@ -1,6 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
+import { isOffline } from '../../src/fetch/infrastructure';
+import { RequestRecord } from '../../src/fetch/request';
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
+
+describe('Fetch client settings ownership', () => {
+  it('reads the owning browser\'s live offline state even after its browsing context is detached', () => {
+    const first = createFetchWindow();
+    const second = createFetchWindow();
+    const settings = first.realm.hostDefined!;
+    const otherSettings = second.realm.hostDefined!;
+    const request = new RequestRecord(settings.creationURL, settings);
+
+    expect(request.client).toBe(settings);
+    expect(settings.userAgent).not.toBe(otherSettings.userAgent);
+    expect(settings.webDriverBiDiNetworkIsOffline()).toBe(false);
+    expect(isOffline(request.client!)).toBe(false);
+
+    settings.userAgent.assumeNoInternetConnectivity = true;
+    expect(isOffline(request.client!)).toBe(true);
+    expect(isOffline(otherSettings)).toBe(false);
+
+    const context = first.document!.getBrowsingContext()!;
+    expect(context.group!.userAgent).toBe(settings.userAgent);
+    context.group!.remove(context);
+    expect(context.group).toBeNull();
+    expect(isOffline(settings)).toBe(true);
+
+    settings.userAgent.assumeNoInternetConnectivity = false;
+    expect(isOffline(settings)).toBe(false);
+  });
+});
 
 describe('Runtime structured serialization', () => {
   it('reuses a snapshot to reconstruct independent graphs in destination realms', () => {

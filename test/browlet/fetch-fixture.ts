@@ -5,9 +5,7 @@ import {
   createNewTopLevelTraversable,
 } from '../../src/browlet/browsing/navigable';
 import { domExceptionCapabilities } from '../../src/browlet/integration/dom-exception';
-import {
-  deserializeFetchAbortReason, queueGlobalFetchTask,
-} from '../../src/browlet/integration/fetch';
+import { deserializeFetchAbortReason } from '../../src/browlet/integration/fetch';
 import { createRuntimeSerialization } from '../../src/browlet/integration/runtime';
 import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
 import { Realm } from '../../src/browlet/scripting/realm';
@@ -28,7 +26,7 @@ export function createFetchWindow() {
     ...createFetchRealmFixture(context),
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      queueFetchTask(steps, realm.global, queueGlobalFetchTask);
+      queueFetchTask(steps, realm.global, context.getRuntime());
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];

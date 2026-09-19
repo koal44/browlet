@@ -226,16 +226,18 @@ Current implementation sequence:
    without the historical post-creation V8 immutability patch. Cross-origin
    policy and nested browsing contexts remain Priority 7 work; the shared Node
    security token is not browser origin policy.
-6. **Current integration:** The custom Node engine and addon expose job
+6. **Complete for the Fetch prerequisite:** The custom Node engine and addon expose job
    capture, invocation, and scheduling. `scripting/host-hooks.ts` connects
    make/call/enqueue to HTML incumbent settings, callback cleanup, and Agent
    microtask tasks, plus generic/timeout jobs through HTML task and active-time
-   scheduling. Prove ordinary Window Promises, thenables, handlerless
-   propagation, and per-registration state before returning to Fetch. Active
-   Script records/restoration belong to the later classic-script pipeline;
-   module loading is not a prerequisite for this proof.
-7. Implement Fetch's records, author APIs, and first transport slices only
-   after those JS Engine boundary decisions are stable.
+   scheduling. Focused tests cover ordinary Window Promises, thenables,
+   handlerless propagation, per-registration state, and explicit delivery
+   across implementation/Node boundaries. Active Script records/restoration
+   belong to the later classic-script pipeline; module loading is not a
+   prerequisite for Fetch's records.
+7. **Next:** Resume [Fetch slice 4](../fetch/ROADMAP.md#slice-4--requests-and-responses),
+   request/response records and their algorithms. Slices 1–3 are complete;
+   network-independent author APIs and transport follow in Fetch's own order.
 8. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.
 

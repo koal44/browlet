@@ -169,13 +169,15 @@ describe('Fetch §2 task delivery', () => {
     const drains: (() => void)[] = [];
     const queue = new ParallelQueue((steps) => drains.push(steps));
     const queueGlobalTask = vi.fn();
+    const runtime = createRuntime();
+    runtime.networking.queueGlobalTask = queueGlobalTask;
     const order: number[] = [];
 
     queueFetchTask(() => {
       order.push(1);
-      queueFetchTask(() => order.push(3), queue, queueGlobalTask);
-    }, queue, queueGlobalTask);
-    queueFetchTask(() => order.push(2), queue, queueGlobalTask);
+      queueFetchTask(() => order.push(3), queue, runtime);
+    }, queue, runtime);
+    queueFetchTask(() => order.push(2), queue, runtime);
     expect(order).toEqual([]);
     expect(drains).toHaveLength(1);
     drains.shift()!();
@@ -188,8 +190,10 @@ describe('Fetch §2 task delivery', () => {
     const global = {};
     const algorithm = vi.fn();
     const queueGlobalTask = vi.fn();
+    const runtime = createRuntime();
+    runtime.networking.queueGlobalTask = queueGlobalTask;
 
-    queueFetchTask(algorithm, global, queueGlobalTask);
+    queueFetchTask(algorithm, global, runtime);
 
     expect(queueGlobalTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
     expect(algorithm).not.toHaveBeenCalled();
@@ -201,7 +205,12 @@ describe('Fetch §2 offline state and integer serialization', () => {
     [false, false, false], [true, false, true],
     [false, true, true], [true, true, true],
   ])('combines user-agent %s and BiDi %s offline state', (userAgent, bidi, expected) => {
-    expect(isOffline(userAgent, bidi)).toBe(expected);
+    const webDriverBiDiNetworkIsOffline = vi.fn(() => bidi);
+    expect(isOffline({
+      userAgent: { assumeNoInternetConnectivity: userAgent },
+      webDriverBiDiNetworkIsOffline,
+    })).toBe(expected);
+    expect(webDriverBiDiNetworkIsOffline).toHaveBeenCalledTimes(userAgent ? 0 : 1);
   });
 
   it.each([

@@ -1,2 +1,2 @@
 export { FetchController, deserializeAbortReason } from './controller';
-export type { FetchTaskScheduling, QueueGlobalFetchTask } from './tasks';
+export type { FetchClientSettings, FetchUserAgent } from './infrastructure';

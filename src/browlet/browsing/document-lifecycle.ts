@@ -76,6 +76,7 @@ export function createAndInitializeDocument(
       creationURL,
       navigationParams.origin,
       createStructuredClone(realmExecutionContext.realm),
+      group.userAgent,
     );
   }
 

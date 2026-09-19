@@ -110,7 +110,7 @@ export function combineHeader([name, value]: Header, list: HeaderList): void {
   else list.push([name, value]);
 }
 
-export function convertHeaderNamesToSortedLowercaseSet(names: readonly string[]): string[] {
+export function convertHeaderNamesToSortedLowercaseSet(names: string[]): string[] {
   return [...new Set(names.map((name) => name.toLowerCase()))].sort();
 }
 
@@ -161,7 +161,7 @@ export function isCORSSafelistedRequestHeader([name, value]: Header): boolean {
       return !/[^0-9A-Za-z *,\-.;=]/.test(value);
     case 'range': {
       const range = parseSingleRangeHeaderValue(value, false);
-      return range !== null && range[0] !== null;
+      return range !== null && range[0] !== undefined;
     }
     default:
       return false;
@@ -197,7 +197,7 @@ export function isPrivilegedNoCORSRequestHeaderName(name: string): boolean {
   return name.toLowerCase() === 'range';
 }
 
-export function isCORSSafelistedResponseHeaderName(name: string, exposedNames: readonly string[]): boolean {
+export function isCORSSafelistedResponseHeaderName(name: string, exposedNames: string[]): boolean {
   const lower = name.toLowerCase();
   return corsSafelistedResponseHeaderNames.has(lower) ||
     !isForbiddenResponseHeaderName(name) && exposedNames.some((exposed) => exposed.toLowerCase() === lower);
@@ -230,21 +230,21 @@ export function isRequestBodyHeaderName(name: string): boolean {
 
 /**
  * Fetch §2.2.2 — extract header list values. The extra parser and multiplicity
- * arguments supply the field's ABNF rules. A parser returns
- * null on failure; an absent field and a failed extraction remain distinct.
+ * arguments supply the field's ABNF rules. Undefined means the field is absent;
+ * null means extraction failed, including when the parser returns null.
+ * https://fetch.spec.whatwg.org/#extract-header-list-values
  */
-// SPEC_MISMATCH: (name, list) -> values, null, or failure
 export function extractHeaderListValues<T>(
   name: string, list: HeaderList, parseValues: (value: string) => T[] | null, allowMultiple: boolean,
-): T[] | null | 'failure' {
+): T[] | null | undefined {
   const lower = name.toLowerCase();
   const headers = list.filter((header) => header[0].toLowerCase() === lower);
-  if (headers.length === 0) return null;
-  if (!allowMultiple && headers.length > 1) return 'failure';
+  if (headers.length === 0) return undefined;
+  if (!allowMultiple && headers.length > 1) return null;
   const values: T[] = [];
   for (const [, value] of headers) {
     const extracted = parseValues(value);
-    if (extracted === null) return 'failure';
+    if (extracted === null) return null;
     values.push(...extracted);
   }
   return values;
@@ -321,7 +321,7 @@ export class HeadersImpl {
     throw new Error('Headers.set is not implemented');
   }
 
-  getEntryList(): readonly Header[] {
+  getEntryList(): Header[] {
     throw new Error('Headers sorting and combining is not implemented');
   }
 }

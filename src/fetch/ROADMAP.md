@@ -140,7 +140,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `infrastructure.ts`: explicit user-agent/BiDi state inputs and decimal serialization; these precede §2.1 |
+| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchClientSettings` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
@@ -155,9 +155,17 @@ Timing records store DOMHighResTimeStamp values. Reading/coarsening clocks and
 delivering performance entries remain at the later timing producers, using the
 existing [Performance owner](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration).
 Service Worker timing defaults to null; its shared data type records the six
-fields supplied by Service Workers, whose execution remains deferred. Offline
-policy accepts both specified booleans; browser connectivity
-state and real BiDi session lookup remain host integration work.
+fields supplied by Service Workers, whose execution remains deferred.
+`isOffline(environment)` reads the owning UserAgent's live offline assumption
+before querying environment-scoped BiDi state. Browlet's base `Environment`
+retains the UserAgent supplied during construction; Window setup receives the
+target browsing-context group's owner, including across navigation.
+Provisional integration: `UserAgent.assumeNoInternetConnectivity` defaults to
+false; host connectivity detection is not wired yet. The settings object's
+BiDi query follows the no-session path. Replace that query with
+navigable/user-context/session lookup
+when automation owns network emulation. Worker settings and reserved navigation
+environments must receive their owner's UserAgent when those paths are implemented.
 
 **Exit proof:** abort serialization/fallback, controller transitions, timing,
 and deterministic task routing execute without transport or public Fetch APIs.
@@ -178,7 +186,7 @@ explicit errors. This is structural groundwork, not completed §§2.2 or 5 APIs.
 | Fetch params (§2) | Record over those types, `FetchController`, timing info, task destination, and typed processing steps |
 | Headers (§5.1) | `HeadersImpl` class retaining a header list and guard; a Request/Response's Headers shares that record's list |
 | Body mixin (§5.3) | `BodyMixin` supplies shared body behavior over the includer's body; it must not create another body value |
-| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` retain their §2 record; internal allocation uses the Binding Context to construct Headers in the same realm; Request retains a supplied DOM signal reference |
+| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` retain their §2 record and construct their Headers and Body mixin; Binding projects Headers in the receiver's realm; Request retains a supplied DOM signal reference |
 | Unions, enums, dictionaries, callback signatures | Type aliases/record types; Web IDL owns author conversion and defaults |
 
 Header lists retain their identity: mutate their entries rather than replacing
@@ -189,10 +197,12 @@ URL components while retaining any Blob URL entry reference.
 
 **Remaining boundaries:**
 
-- HTML client, reserved-client, traversable, and policy-container fields retain
-  opaque owner references. Client-derived values and policy operations still
-  need narrow HTML capabilities in §4.1; these objects are not new Fetch-owned
-  environments or policy containers.
+- `client` retains the actual HTML settings object through `FetchClientSettings`.
+  Reserved-client, traversable, and policy-container fields remain opaque owner
+  references. Further client-derived values and policy operations need narrow
+  HTML capabilities in §4.1; these objects are not new Fetch-owned environments
+  or policy containers. Clientless requests still need their owning UserAgent
+  at network orchestration; do not synthesize an environment or assume online.
 - Request retains a DOM implementation reference for its signal. DOM-dependent
   signal construction/following is not supplied yet. Referrer Policy's value
   type/declaration also remains with the browser-policy work. Replace these
@@ -210,8 +220,9 @@ URL components while retaining any Blob URL entry reference.
 **Exit proof:** `test/fetch/records.test.ts` covers defaults, independent
 mutable state, live URL/body references, shared Headers, allocation realm, and
 FetchParams cancellation. Tests allocate implementations through the shared
-Binding Context; projection/conversion coverage belongs to Slice 6. Repeated
-setup lives in `test/fetch/record-fixture.ts`.
+Binding Context and check Headers identity and realm through borrowed getters.
+Full API construction/conversion coverage belongs to Slice 6. Repeated setup
+lives in `test/fetch/record-fixture.ts`.
 
 ## Slice 2 — HTTP methods, headers, and statuses
 
@@ -235,7 +246,8 @@ or claim browser response filtering; those belong to their later consumers.
 
 Header-list extraction takes the field's parser and its single/multiple-line
 rule explicitly. It implements absence, duplicate rejection, ordering, and
-whole-field failure; concrete field grammars join it at their consumers.
+whole-field failure, returning undefined for absence and null for failure;
+concrete field grammars join it at their consumers.
 The default User-Agent selector takes the host default and any BiDi emulation
 value explicitly; browser configuration and BiDi lookup remain host work.
 Range endpoints use BigInts to preserve decimal ordering above JavaScript's
@@ -288,9 +300,9 @@ failure.
 
 `BodyRecord.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
 the source/length and creates a byte-stream implementation, filled through supplied
-parallel scheduling. `BodyRecord` retains `FetchTaskScheduling` from construction
-and forwards it when cloning. This implementation dependency supplies HTML global
-networking tasks and parallel execution; the read signatures keep the specified
+parallel scheduling. `BodyRecord` retains its `RuntimeContext` from construction
+and forwards it when cloning. Its networking facilities supply HTML global
+tasks and parallel execution; the read signatures keep the specified
 callbacks and optional destination. An omitted destination starts a new parallel queue.
 
 `handleContentCodings` accepts host decoders keyed by lowercase coding names.

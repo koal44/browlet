@@ -1,4 +1,6 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
+import type { UserAgent } from '../user-agent';
+import type { FetchClientSettings } from '../../fetch/index';
 import type { EventLoop } from './event-loop';
 import type { JSExecutionContext } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
@@ -17,6 +19,7 @@ import { timerTaskSource } from './timers';
  */
 export class Environment {
   id: string = crypto.randomUUID();
+  userAgent: UserAgent;
   creationURL: URLRecord;
   topLevelCreationURL: URLRecord | null;
   topLevelOrigin: Origin | null;
@@ -25,6 +28,7 @@ export class Environment {
   #executionReady = false;
 
   constructor(initialization: EnvironmentInitialization) {
+    this.userAgent = initialization.userAgent;
     this.creationURL = initialization.creationURL;
     this.topLevelCreationURL = initialization.topLevelCreationURL;
     this.topLevelOrigin = initialization.topLevelOrigin;
@@ -41,7 +45,7 @@ export class Environment {
   }
 }
 
-export abstract class EnvironmentSettingsObject extends Environment {
+export abstract class EnvironmentSettingsObject extends Environment implements FetchClientSettings {
   readonly timing: EnvironmentTiming;
   readonly realmExecutionContext: JSExecutionContext;
 
@@ -61,6 +65,12 @@ export abstract class EnvironmentSettingsObject extends Environment {
 
   get responsibleEventLoop(): EventLoop {
     return this.realmExecutionContext.realm.agent.eventLoop;
+  }
+
+  /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
+  webDriverBiDiNetworkIsOffline(): boolean {
+    // PROVISIONAL: no BiDi sessions; replace with the environment's scoped network-condition lookup.
+    return false;
   }
 }
 
@@ -122,6 +132,11 @@ export class WindowEnvironmentSettingsObject
   }
 }
 
+/**
+ * https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+ * The trailing clone and UserAgent arguments supply dependencies implicit in HTML.
+ */
+// SPEC_MISMATCH: (creationURL, execution context, reservedEnvironment, topLevelCreationURL, topLevelOrigin) -> void
 export function setupWindowEnvironmentSettingsObject(
   creationURL: URLRecord,
   executionContext: JSExecutionContext,
@@ -129,6 +144,7 @@ export function setupWindowEnvironmentSettingsObject(
   topLevelCreationURL: URLRecord,
   topLevelOrigin: Origin,
   structuredClone: StructuredCloneSteps,
+  userAgent: UserAgent,
 ): WindowEnvironmentSettingsObject {
   const realm = executionContext.realm;
   const window = realm.windowImplementation;
@@ -138,6 +154,7 @@ export function setupWindowEnvironmentSettingsObject(
   const settings = new WindowEnvironmentSettingsObject(
     window,
     {
+      userAgent,
       activeServiceWorker: reservedEnvironment?.activeServiceWorker ?? null,
       creationURL,
       realmExecutionContext: executionContext,
@@ -165,6 +182,7 @@ export function setupWindowEnvironmentSettingsObject(
 }
 
 export type EnvironmentInitialization = {
+  userAgent: UserAgent;
   creationURL: URLRecord;
   topLevelCreationURL: URLRecord | null;
   topLevelOrigin: Origin | null;

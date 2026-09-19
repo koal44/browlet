@@ -21,6 +21,7 @@ import type { PolicyContainer } from
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import { EnvironmentSettingsObject } from
   '../../../src/browlet/scripting/environment';
 import type { EventLoopOptions, Task } from
@@ -261,6 +262,7 @@ function createTestRealm(
     createGlobalObject: () => ({}),
   });
   const settings = new TestEnvironmentSettingsObject({
+    userAgent: new UserAgent(),
     creationURL: requireURL(`https://${name}.test/`),
     realmExecutionContext: executionContext,
     targetBrowsingContext: null,

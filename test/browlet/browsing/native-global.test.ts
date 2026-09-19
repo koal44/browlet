@@ -9,6 +9,7 @@ import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import type { Realm } from '../../../src/browlet/scripting/realm';
 import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
 import { parseURL } from '../../../src/url/url';
@@ -158,7 +159,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const url = parseURL('https://example.test/').url;
   if (!url) throw new Error('Fixture URL missing');
   setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(),
-    createStructuredClone(realm));
+    createStructuredClone(realm), previous?.realm.hostDefined?.userAgent ?? new UserAgent());
   retargetWindowProxy(proxy, window);
   return { agent, realm, window, platformWindow, document, context };
 }

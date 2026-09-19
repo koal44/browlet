@@ -8,6 +8,7 @@ import {
 } from '../web-idl/index';
 import { BodyMixin, type BodyInitValue, type BodyRecord } from './body';
 import { HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
+import type { FetchClientSettings } from './infrastructure';
 
 /** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
 export class RequestRecord {
@@ -16,8 +17,8 @@ export class RequestRecord {
   readonly headerList: HeaderList = [];
   unsafeRequest = false;
   body: Uint8Array | BodyRecord | null = null;
-  // HTML-owned references remain opaque until client/policy integration (§4.1).
-  client: object | null;
+  client: FetchClientSettings | null;
+  // Other HTML-owned references remain opaque until client/policy integration (§4.1).
   reservedClient: object | null = null;
   replacesClientId = '';
   traversableForUserPrompts: 'no-traversable' | 'client' | object = 'client';
@@ -58,7 +59,7 @@ export class RequestRecord {
   navigationTimingAllowValuesList: string[][] = [];
   webDriverId: string = crypto.randomUUID();
 
-  constructor(url: URLRecord, client: object | null) {
+  constructor(url: URLRecord, client: FetchClientSettings | null) {
     // URL/current URL point into this list. Copy mutable URL components while
     // retaining the File API's blob URL entry identity.
     this.urlList = [{
@@ -143,10 +144,10 @@ export class RequestRecord {
  * enum RequestPriority { "high", "low", "auto" };
  */
 export class RequestImpl {
-  readonly #request: RequestRecord;
-  readonly #headers: HeadersImpl;
-  readonly #signal: object;
-  readonly #bodyMixin: BodyMixin;
+  #request: RequestRecord;
+  #headers: HeadersImpl;
+  #signal: object;
+  #bodyMixin: BodyMixin;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
   // Author RequestInfo/RequestInit processing belongs to the deferred constructor.

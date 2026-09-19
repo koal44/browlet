@@ -203,7 +203,7 @@ function createSiblingWindow(first: Browlet): Window {
   const document = createDocument(execution.realm);
   window.setAssociatedDocument(document);
   setupWindowEnvironmentSettingsObject(settings.creationURL, execution, null,
-    settings.creationURL, settings.origin, createStructuredClone(execution.realm));
+    settings.creationURL, settings.origin, createStructuredClone(execution.realm), settings.userAgent);
   return execution.realm.globalThis as Window;
 }
 

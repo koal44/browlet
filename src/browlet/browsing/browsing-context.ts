@@ -139,6 +139,7 @@ export function createNewBrowsingContextAndDocument(
     topLevelCreationURL,
     topLevelOrigin,
     createStructuredClone(realmExecutionContext.realm),
+    group.userAgent,
   );
   const loadTimingInfo = createDocumentLoadTimingInfo(
     unsafeContextCreationTime.coarsen(settings.crossOriginIsolatedCapability).milliseconds,
@@ -217,7 +218,7 @@ export class BrowsingContextGroup {
   readonly historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
 
-  constructor(readonly userAgent: UserAgent | null = null) {}
+  constructor(readonly userAgent: UserAgent) {}
 
   append(browsingContext: BrowsingContext): void {
     if (
@@ -240,7 +241,7 @@ export class BrowsingContextGroup {
     this.browsingContextSet.delete(browsingContext);
 
     if (this.browsingContextSet.size === 0) {
-      this.userAgent?.removeBrowsingContextGroup(this);
+      this.userAgent.removeBrowsingContextGroup(this);
     }
   }
 }

@@ -9,6 +9,11 @@
   [`../../js-engine/`](../../js-engine/README.md).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
+- Each `Environment` retains its owning UserAgent. Window creation/navigation
+  supplies the target group's owner; this reference does not depend on a live
+  Document or browsing-context association. Settings objects satisfy Fetch's
+  narrow environment contract; their provisional BiDi query returns false
+  until automation supplies scoped network conditions.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
   queues, deterministic task turns, currently-running-task state, task timing
   hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,
@@ -121,7 +126,9 @@ reporting, and FinalizationRegistry cleanup scheduling remain deferred.
 - Worker and worklet environment settings are ordinary settings-object
   specializations whose module map, base URL, origin, policy, isolation, and
   time-origin answers come from their global and creator. Do not make the
-  global scope itself a substitute settings object.
+  global scope itself a substitute settings object. Their construction must
+  retain the creator's UserAgent; service-worker startup must receive it from
+  the owning browser's worker machinery instead of depending on a live Window.
 
 ## Section 8.1.7 definition audit
 

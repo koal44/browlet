@@ -133,7 +133,7 @@ function createRelatedWindow(first: Window): WindowProxy {
   window.setAssociatedDocument(document);
   setupWindowEnvironmentSettingsObject(
     settings.creationURL, executionContext, null, settings.creationURL,
-    settings.origin, createStructuredClone(realm),
+    settings.origin, createStructuredClone(realm), settings.userAgent,
   );
   retargetWindowProxy(proxy, window);
   return proxy;

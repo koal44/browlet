@@ -134,7 +134,7 @@ export function obtainSimilarOriginWindowAgent(
     }
 
     agentCluster.add(new WindowAgent(
-      group.userAgent?.eventLoopOptions ?? null,
+      group.userAgent.eventLoopOptions,
     ));
     group.agentClusterMap.set(key, agentCluster);
   }

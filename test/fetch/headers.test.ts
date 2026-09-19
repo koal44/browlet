@@ -212,11 +212,11 @@ describe('forbidden and request-body headers', () => {
 
 describe('header extraction with the field’s grammar', () => {
   it('distinguishes missing fields, empty lists, and invalid syntax using Vary’s real parser', () => {
-    expect(extractHeaderListValues('Vary', [], parseVary, true)).toBeNull();
+    expect(extractHeaderListValues('Vary', [], parseVary, true)).toBeUndefined();
     expect(extractHeaderListValues('Vary', [['Vary', '']], parseVary, true)).toEqual([]);
     expect(extractHeaderListValues('Vary', [['Vary', 'Accept'], ['VARY', 'X-Variant, Accept-Language']], parseVary, true))
       .toEqual(['accept', 'x-variant', 'accept-language']);
-    expect(extractHeaderListValues('Vary', [['Vary', 'Accept'], ['Vary', 'bad name']], parseVary, true)).toBe('failure');
+    expect(extractHeaderListValues('Vary', [['Vary', 'Accept'], ['Vary', 'bad name']], parseVary, true)).toBeNull();
   });
   it('rejects duplicate singleton fields before parsing and discards all values on a parse failure', () => {
     const parser = vi.fn((value: string) => {
@@ -225,10 +225,10 @@ describe('header extraction with the field’s grammar', () => {
     });
     expect(extractHeaderListValues('Access-Control-Max-Age', [
       ['Access-Control-Max-Age', '10'], ['access-control-max-age', '20'],
-    ], parser, false)).toBe('failure');
+    ], parser, false)).toBeNull();
     expect(parser).not.toHaveBeenCalled();
     expect(extractHeaderListValues('Access-Control-Max-Age', [['ACCESS-CONTROL-MAX-AGE', '10']], parser, false)).toEqual([10]);
-    expect(extractHeaderListValues('Access-Control-Max-Age', [['Access-Control-Max-Age', 'ten']], parser, false)).toBe('failure');
+    expect(extractHeaderListValues('Access-Control-Max-Age', [['Access-Control-Max-Age', 'ten']], parser, false)).toBeNull();
   });
 });
 

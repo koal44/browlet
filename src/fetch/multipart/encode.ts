@@ -14,7 +14,7 @@ import type { FormDataEntry } from '../../xhr/index';
  */
 // SPEC_MISMATCH: (entries, encoding) -> bytes
 export function encodeMultipartFormData(
-  entries: readonly FormDataEntry[],
+  entries: FormDataEntry[],
   encoding: Encoding,
 ): MultipartEncoding {
   const boundary = crypto.randomUUID();
