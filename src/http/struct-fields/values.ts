@@ -8,25 +8,25 @@
 export type StructuredField = StructuredList | StructuredDictionary | StructuredItem;
 
 export type StructuredList = {
-  readonly type: 'list';
-  readonly members: (StructuredItem | StructuredInnerList)[];
+  type: 'list';
+  members: (StructuredItem | StructuredInnerList)[];
 };
 
 export type StructuredDictionary = {
-  readonly type: 'dictionary';
-  readonly members: Map<string, StructuredItem | StructuredInnerList>;
+  type: 'dictionary';
+  members: Map<string, StructuredItem | StructuredInnerList>;
 };
 
 export type StructuredItem = {
-  readonly type: 'item';
-  readonly value: StructuredBareItem;
-  readonly parameters: StructuredParameters;
+  type: 'item';
+  bareItem: StructuredBareItem;
+  parameters: StructuredParameters;
 };
 
 export type StructuredInnerList = {
-  readonly type: 'inner-list';
-  readonly items: StructuredItem[];
-  readonly parameters: StructuredParameters;
+  type: 'inner-list';
+  items: StructuredItem[];
+  parameters: StructuredParameters;
 };
 
 export type StructuredParameters = Map<string, StructuredBareItem>;
@@ -38,11 +38,11 @@ export type StructuredParameters = Map<string, StructuredBareItem>;
  * applies RFC 9651 §4.1.5 rounding. Other invalid values fail serialization.
  */
 export type StructuredBareItem =
-  | { readonly type: 'integer'; readonly value: number; }
-  | { readonly type: 'decimal'; readonly value: number; }
-  | { readonly type: 'string'; readonly value: string; }
-  | { readonly type: 'token'; readonly value: string; }
-  | { readonly type: 'bytes'; readonly value: Uint8Array; }
-  | { readonly type: 'boolean'; readonly value: boolean; }
-  | { readonly type: 'date'; readonly value: number; }
-  | { readonly type: 'display-string'; readonly value: string; };
+  | { type: 'integer'; value: number; }
+  | { type: 'decimal'; value: number; }
+  | { type: 'string'; value: string; }
+  | { type: 'token'; value: string; }
+  | { type: 'bytes'; value: Uint8Array; }
+  | { type: 'boolean'; value: boolean; }
+  | { type: 'date'; value: number; }
+  | { type: 'display-string'; value: string; };

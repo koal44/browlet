@@ -42,7 +42,7 @@ belongs to the transport, not another parser in this folder.
 
 Implement `metadata.ts` over the actual Fetch request record when available.
 It appends `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, and
-`Sec-Fetch-User`. Reuse [structured fields](../../http/struct-fields/ROADMAP.md),
+`Sec-Fetch-User`. Reuse [structured fields](../../http/struct-fields/README.md),
 URL origin/site operations, and the policy owner's trustworthiness operation.
 Client, URL-list/redirect, destination, and activation state must retain their
 provenance from request construction; an ordinary header-setting API does not

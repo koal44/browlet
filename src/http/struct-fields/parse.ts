@@ -16,7 +16,6 @@ import type {
  * Failure discards the whole field. No header-specific interpretation occurs.
  * https://www.rfc-editor.org/rfc/rfc9651.html#section-4.2
  */
-// SPEC_MISMATCH: (input_bytes, field_type) -> array, ordered map, or (bare_item, parameters)
 export function parseStructuredField<T extends StructuredField['type']>(
   input: Uint8Array, type: T,
 ): Extract<StructuredField, { type: T; }> | null;
@@ -38,7 +37,6 @@ export function parseStructuredField(
 }
 
 /** RFC 9651 §4.2.1, Lists. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> array<(item_or_inner_list, parameters)>
 function parseList(input: TextCursor): StructuredList | null {
   const members: StructuredList['members'] = [];
   while (!input.eof()) {
@@ -55,7 +53,6 @@ function parseList(input: TextCursor): StructuredList | null {
 }
 
 /** RFC 9651 §4.2.1.1–§4.2.1.2, Items or Inner Lists. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> (item_or_inner_list, parameters)
 function parseMember(input: TextCursor): StructuredItem | StructuredInnerList | null {
   if (!input.match('(')) return parseItem(input);
   const items: StructuredItem[] = [];
@@ -74,7 +71,6 @@ function parseMember(input: TextCursor): StructuredItem | StructuredInnerList | 
 }
 
 /** RFC 9651 §4.2.2, Dictionaries. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> ordered map<key, (item_or_inner_list, parameters)>
 function parseDictionary(input: TextCursor): StructuredDictionary | null {
   const members: StructuredDictionary['members'] = new Map();
   while (!input.eof()) {
@@ -87,7 +83,11 @@ function parseDictionary(input: TextCursor): StructuredDictionary | null {
     } else {
       const parameters = parseParameters(input);
       if (parameters === null) return null;
-      member = { type: 'item', value: { type: 'boolean', value: true }, parameters };
+      member = {
+        type: 'item',
+        bareItem: { type: 'boolean', value: true },
+        parameters,
+      };
     }
     members.set(key, member);
     input.consumeWhile(isOWS);
@@ -100,16 +100,14 @@ function parseDictionary(input: TextCursor): StructuredDictionary | null {
 }
 
 /** RFC 9651 §4.2.3, Items. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> (bare_item, parameters)
 function parseItem(input: TextCursor): StructuredItem | null {
-  const value = parseBareItem(input);
-  if (value === null) return null;
+  const bareItem = parseBareItem(input);
+  if (bareItem === null) return null;
   const parameters = parseParameters(input);
-  return parameters === null ? null : { type: 'item', value, parameters };
+  return parameters === null ? null : { type: 'item', bareItem, parameters };
 }
 
 /** RFC 9651 §4.2.3.1, Bare Items. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> bare Item
 function parseBareItem(input: TextCursor): StructuredBareItem | null {
   const first = input.peek();
   if (first === '-' || isDigit(first)) return parseNumber(input);
@@ -141,7 +139,6 @@ function parseBareItem(input: TextCursor): StructuredBareItem | null {
 }
 
 /** RFC 9651 §4.2.3.2, Parameters. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> ordered map<key, bare Item>
 function parseParameters(input: TextCursor): StructuredParameters | null {
   const parameters: StructuredParameters = new Map();
   while (input.match(';')) {
@@ -157,7 +154,6 @@ function parseParameters(input: TextCursor): StructuredParameters | null {
 }
 
 /** RFC 9651 §4.2.3.3, Keys. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> key
 function parseKey(input: TextCursor): string | null {
   if (!/^[a-z*]/.test(input.peek())) return null;
   const start = input.pos();
@@ -166,7 +162,6 @@ function parseKey(input: TextCursor): string | null {
 }
 
 /** RFC 9651 §4.2.4, Integers or Decimals. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> Integer or Decimal
 function parseNumber(input: TextCursor): StructuredBareItem | null {
   const start = input.pos();
   input.match('-');
@@ -184,7 +179,6 @@ function parseNumber(input: TextCursor): StructuredBareItem | null {
 }
 
 /** RFC 9651 §4.2.5, Strings. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> unquoted String
 function parseString(input: TextCursor): StructuredBareItem | null {
   input.advance();
   let value = '';
@@ -204,7 +198,6 @@ function parseString(input: TextCursor): StructuredBareItem | null {
 }
 
 /** RFC 9651 §4.2.7, Byte Sequences. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> Byte Sequence
 function parseBytes(input: TextCursor): StructuredBareItem | null {
   input.advance();
   const start = input.pos();
@@ -217,7 +210,6 @@ function parseBytes(input: TextCursor): StructuredBareItem | null {
 }
 
 /** RFC 9651 §4.2.10, Display Strings. */
-// SPEC_MISMATCH: (input_string: mutable ASCII string) -> Unicode code points
 function parseDisplayString(input: TextCursor): StructuredBareItem | null {
   input.advance();
   if (!input.match('"')) return null;

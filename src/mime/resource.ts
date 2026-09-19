@@ -1,81 +1,52 @@
 import { isomorphicDecode } from '../js-engine/byte-string';
 import type { PromiseValue } from '../js-engine/promises';
-import type { RuntimeContext } from '../js-engine/runtime-context';
 import { RangeError } from '../js-engine/exceptions';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
 
-/*
- * MIME Sniffing metadata associated with a resource.
- *
- * The resource itself remains owned by its loader. This record keeps only the
- * state that the MIME Sniffing Standard requires for that resource.
- *
- * https://mimesniff.spec.whatwg.org/#handling-a-resource
- */
-export type ResourceMetadata = {
-  suppliedMIMEType: MIMEType | undefined;
-  checkForApacheBug: boolean;
-  noSniff: boolean;
-  computedMIMEType: MIMEType | undefined;
-  resourceHeader: Uint8Array | undefined;
-};
-
-export type SuppliedMIMETypeSource =
+export type MIMETypeSource =
   | {
     kind: 'http';
     contentTypeHeaders: Uint8Array[];
   }
   | {
-    kind: 'file' | 'other';
+    kind: 'mime-type';
     mimeType: MIMEType | undefined;
   };
 
-export type ResourceMetadataOptions = {
-  noSniff?: boolean;
+export type SuppliedMIMETypeDetection = {
+  suppliedMIMEType: MIMEType | undefined;
+  checkForApacheBug: boolean;
 };
 
 /*
- * Read up to max bytes from the resource without consuming bytes beyond
- * that bound. Resolve null when the resource ends or the host's reasonable
- * read interval elapses. Reject to propagate cancellation or a source error.
- * The loader imports native I/O results through its runtime's promise facility.
+ * Supply successive chunks of 1..maxBytes from the beginning of the resource.
+ * Keep their storage valid and unchanged while the resource header is retained.
+ * The loader preserves these bytes and any excess for later body consumption.
+ *
+ * deadline is an absolute time in milliseconds on the source's monotonic clock.
+ * Resolve null at end-of-input or the deadline, including during a pending read;
+ * later bytes remain available to the loader. Return promises from the source's
+ * runtime and report cancellation or read failures by rejection.
  */
 export type ReadResourceBytes = (
-  max: number,
+  maxBytes: number,
+  deadline: number,
 ) => PromiseValue<Uint8Array | null>;
 
-export function createResourceMetadata(
-  source: SuppliedMIMETypeSource,
-  options: ResourceMetadataOptions = {},
-): ResourceMetadata {
-  const supplied = detectSuppliedMIMEType(source);
-  return {
-    suppliedMIMEType: supplied.suppliedMIMEType,
-    checkForApacheBug: supplied.checkForApacheBug,
-    noSniff: options.noSniff ?? false,
-    computedMIMEType: undefined,
-    resourceHeader: undefined,
-  };
-}
-
 /*
- * Supplied MIME type detection algorithm.
+ * MIME Sniffing §5.1: supplied MIME type detection algorithm.
  *
- * HTTP supplies raw header bytes so the legacy Apache values can be compared
- * exactly before the final value is parsed into a MIME type record. File and
- * other protocol owners supply their already-determined record directly.
+ * HTTP callers retain the raw Content-Type bytes so the legacy Apache values
+ * can be compared exactly before parsing. Other resource owners supply the
+ * MIME type they have already determined.
  *
  * https://mimesniff.spec.whatwg.org/#supplied-mime-type-detection-algorithm
  */
-// SPEC_MISMATCH: supplied MIME type detection algorithm(resource) -> void
 export function detectSuppliedMIMEType(
-  source: SuppliedMIMETypeSource,
-): {
-  suppliedMIMEType: MIMEType | undefined;
-  checkForApacheBug: boolean;
-} {
-  if (source.kind !== 'http') {
+  source: MIMETypeSource,
+): SuppliedMIMETypeDetection {
+  if (source.kind === 'mime-type') {
     return {
       suppliedMIMEType: source.mimeType,
       checkForApacheBug: false,
@@ -98,47 +69,46 @@ export function detectSuppliedMIMEType(
 }
 
 /*
- * Read the resource header.
+ * MIME Sniffing §5.2: read the resource header.
  *
- * The source controls end-of-input and the user agent's reasonable-time
- * decision by resolving null. The maximum passed to each read prevents the
- * MIME layer from consuming body bytes beyond the 1445-byte header.
- * Collection continuations use the supplied runtime's promise queue.
+ * Return the header for the resource owner to retain in its metadata. Reads
+ * share one deadline and the source's promise queue. A single chunk is reused;
+ * a fragmented prefix is copied once into contiguous storage.
  *
  * https://mimesniff.spec.whatwg.org/#read-the-resource-header
  */
-// SPEC_MISMATCH: read the resource header(resource) -> void
 export function readResourceHeader(
-  metadata: ResourceMetadata,
   readBytes: ReadResourceBytes,
-  runtime: RuntimeContext,
+  deadline: number,
 ): PromiseValue<Uint8Array> {
-  return runtime.promises.try(() => {
-    if (metadata.resourceHeader !== undefined) return metadata.resourceHeader;
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  return readNext();
 
-    const buffer = new Uint8Array(maximumResourceHeaderLength);
-    let length = 0;
-    return readNext();
-
-    function readNext(): PromiseValue<Uint8Array> {
-      const max = buffer.length - length;
-      return runtime.promises.try(() => readBytes(max)).then((chunk) => {
-        if (chunk !== null) {
-          if (chunk.length === 0 || chunk.length > max) {
-            throw new RangeError(
-              'A resource byte source must return between 1 and the requested number of bytes',
-            );
-          }
-          buffer.set(chunk, length);
-          length += chunk.length;
-          if (length < buffer.length) return readNext();
+  function readNext(): PromiseValue<Uint8Array> {
+    const maxBytes = maximumResourceHeaderLength - length;
+    return readBytes(maxBytes, deadline).then((chunk) => {
+      if (chunk !== null) {
+        if (chunk.length === 0 || chunk.length > maxBytes) {
+          throw new RangeError(
+            'A resource byte source must return between 1 and the requested number of bytes',
+          );
         }
+        chunks.push(chunk);
+        length += chunk.length;
+        if (length < maximumResourceHeaderLength) return readNext();
+      }
 
-        metadata.resourceHeader = buffer.slice(0, length);
-        return metadata.resourceHeader;
-      });
-    }
-  });
+      if (chunks.length === 1) return chunks[0]!;
+      const header = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        header.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return header;
+    });
+  }
 }
 
 export const maximumResourceHeaderLength = 1445;

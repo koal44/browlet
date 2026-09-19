@@ -13,7 +13,6 @@ import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
 
 // Value pairs use the implementation's existing entry tuples.
-// SPEC_MISMATCH: value pair { key, value }
 export type ValuePair<Key = unknown, Value = unknown> = readonly [key: Key, value: Value];
 
 export class SynchronousIterableBinding {

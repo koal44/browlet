@@ -1,31 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMIMETypeEssence, type MIMEType } from '../../src/mime/mime-type';
 import {
-  getMIMETypeEssence,
-  matchArchiveTypePattern,
-  matchAudioOrVideoTypePattern,
-  matchFontTypePattern,
-  matchImageTypePattern,
-  matchesBytePattern,
-  matchesMP3SignatureWithoutID3,
-  matchesMP4Signature,
-  matchesWebMSignature,
-  type MIMEType,
-} from '../../src/mime';
+  matchArchiveTypePattern, matchAudioOrVideoTypePattern,
+  matchFontTypePattern, matchImageTypePattern,
+  matchesBytePattern, matchesMP3SignatureWithoutID3,
+  matchesMP4Signature, matchesWebMSignature,
+} from '../../src/mime/signatures';
 
-describe('MIME Sniffing §6.1: matching a MIME type pattern', () => {
+describe('MIME Sniffing §6: matching a MIME type pattern', () => {
   it('matches exact and masked bytes', () => {
     expect(matchesBytePattern(
       bytes(0x48, 0x54, 0x4d, 0x4c),
-      bytes(0x48, 0x54, 0x4d, 0x4c),
-      bytes(0xff, 0xff, 0xff, 0xff),
+      [0x48, 0x54, 0x4d, 0x4c],
+      [0xff, 0xff, 0xff, 0xff],
       new Set(),
     )).toBe(true);
 
     expect(matchesBytePattern(
       bytes(0x68, 0x74, 0x6d, 0x6c),
-      bytes(0x48, 0x54, 0x4d, 0x4c),
-      bytes(0xdf, 0xdf, 0xdf, 0xdf),
+      [0x48, 0x54, 0x4d, 0x4c],
+      [0xdf, 0xdf, 0xdf, 0xdf],
       new Set(),
     )).toBe(true);
   });
@@ -35,14 +30,14 @@ describe('MIME Sniffing §6.1: matching a MIME type pattern', () => {
 
     expect(matchesBytePattern(
       bytes(0x20, 0x09, 0x41, 0x42),
-      bytes(0x41, 0x42),
-      bytes(0xff, 0xff),
+      [0x41, 0x42],
+      [0xff, 0xff],
       ignored,
     )).toBe(true);
     expect(matchesBytePattern(
       bytes(0x20, 0x43, 0x41, 0x42),
-      bytes(0x41, 0x42),
-      bytes(0xff, 0xff),
+      [0x41, 0x42],
+      [0xff, 0xff],
       ignored,
     )).toBe(false);
   });
@@ -50,8 +45,8 @@ describe('MIME Sniffing §6.1: matching a MIME type pattern', () => {
   it('rejects truncated input after ignored bytes', () => {
     expect(matchesBytePattern(
       bytes(0x20, 0x41),
-      bytes(0x41, 0x42),
-      bytes(0xff, 0xff),
+      [0x41, 0x42],
+      [0xff, 0xff],
       new Set([0x20]),
     )).toBe(false);
   });
@@ -59,14 +54,14 @@ describe('MIME Sniffing §6.1: matching a MIME type pattern', () => {
   it('requires the pattern and mask to have equal lengths', () => {
     expect(() => matchesBytePattern(
       bytes(0x41),
-      bytes(0x41),
-      bytes(0xff, 0xff),
+      [0x41],
+      [0xff, 0xff],
       new Set(),
     )).toThrow(RangeError);
   });
 });
 
-describe('MIME Sniffing §6.2: image signatures', () => {
+describe('MIME Sniffing §6.1: image signatures', () => {
   const cases = [
     [bytes(0x00, 0x00, 0x01, 0x00), 'image/x-icon'],
     [bytes(0x00, 0x00, 0x02, 0x00), 'image/x-icon'],
@@ -95,7 +90,7 @@ describe('MIME Sniffing §6.2: image signatures', () => {
   }
 });
 
-describe('MIME Sniffing §6.3: audio and video signatures', () => {
+describe('MIME Sniffing §6.2: audio and video signatures', () => {
   const cases = [
     [bytes(
       0x46, 0x4f, 0x52, 0x4d, 1, 2, 3, 4, 0x41, 0x49, 0x46, 0x46,
@@ -136,7 +131,7 @@ describe('MIME Sniffing §6.3: audio and video signatures', () => {
 
 });
 
-describe('MIME Sniffing §6.3.1: MP4 signatures', () => {
+describe('MIME Sniffing §6.2.1: MP4 signatures', () => {
   it('matches an mp4 major brand', () => {
     expect(matchesMP4Signature(bytes(
       0x00, 0x00, 0x00, 0x0c,
@@ -180,22 +175,22 @@ describe('MIME Sniffing §6.3.1: MP4 signatures', () => {
   });
 });
 
-describe('MIME Sniffing §6.3.2: WebM signatures', () => {
+describe('MIME Sniffing §6.2.2: WebM signatures', () => {
   it('matches a WebM document type and its padded form', () => {
     const direct = bytes(
       0x1a, 0x45, 0xdf, 0xa3,
       0x42, 0x82, 0x84,
-      0x77, 0x65, 0x62, 0x6d, 0x00,
+      0x77, 0x65, 0x62, 0x6d,
     );
     const padded = bytes(
       0x1a, 0x45, 0xdf, 0xa3,
       0x42, 0x82, 0x86,
-      0x00, 0x00, 0x77, 0x65, 0x62, 0x6d, 0x00,
+      0x00, 0x00, 0x77, 0x65, 0x62, 0x6d,
     );
     const twoByteVint = bytes(
       0x1a, 0x45, 0xdf, 0xa3,
       0x42, 0x82, 0x40, 0x04,
-      0x77, 0x65, 0x62, 0x6d, 0x00,
+      0x77, 0x65, 0x62, 0x6d,
     );
 
     expect(matchesWebMSignature(direct)).toBe(true);
@@ -217,6 +212,16 @@ describe('MIME Sniffing §6.3.2: WebM signatures', () => {
     ))).toBe(false);
   });
 
+  it('does not match bytes outside the declared document type payload', () => {
+    const input = bytes(
+      0x1a, 0x45, 0xdf, 0xa3,
+      0x42, 0x82, 0x84,
+      0x00, 0x00, 0x77, 0x65, 0x62, 0x6d,
+    );
+
+    expect(matchesWebMSignature(input)).toBe(false);
+  });
+
   it('does not search for the document type beyond byte 37', () => {
     const input = new Uint8Array(50);
     input.set(bytes(0x1a, 0x45, 0xdf, 0xa3));
@@ -226,7 +231,7 @@ describe('MIME Sniffing §6.3.2: WebM signatures', () => {
   });
 });
 
-describe('MIME Sniffing §6.3.3: MP3 signatures without ID3', () => {
+describe('MIME Sniffing §6.2.3: MP3 signatures without ID3', () => {
   it('requires two valid MPEG Layer III headers at the computed boundary', () => {
     const input = new Uint8Array(212);
     input.set(bytes(0xff, 0xfb, 0x50, 0xc4));
@@ -237,6 +242,15 @@ describe('MIME Sniffing §6.3.3: MP3 signatures without ID3', () => {
 
     input[208] = 0;
     expect(matchesMP3SignatureWithoutID3(input)).toBe(false);
+  });
+
+  it('uses the MPEG-2 scale and padding to locate the next header', () => {
+    const input = new Uint8Array(135);
+    const header = bytes(0xff, 0xf3, 0x52, 0xc4);
+    input.set(header);
+    input.set(header, 131);
+
+    expect(matchesMP3SignatureWithoutID3(input)).toBe(true);
   });
 
   it('rejects invalid sync, layer, bitrate, and sample-rate fields', () => {
@@ -251,7 +265,7 @@ describe('MIME Sniffing §6.3.3: MP3 signatures without ID3', () => {
   });
 });
 
-describe('MIME Sniffing §§6.4–6.5: font and archive signatures', () => {
+describe('MIME Sniffing §§6.3–6.4: font and archive signatures', () => {
   const cases = [
     [matchFontTypePattern, bytes(
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,

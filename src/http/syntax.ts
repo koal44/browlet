@@ -4,7 +4,6 @@ import type { TextCursor } from '../infra/text-cursor';
  * Fetch §2.2 — collect an HTTP quoted string, starting at its opening quote.
  * The cursor combines the specification's input string and mutable position.
  */
-// SPEC_MISMATCH: (input, position, extract-value = false) -> string
 export function collectHTTPQuotedString(c: TextCursor, extractValue = false): string {
   const positionStart = c.pos();
   c.advance();
@@ -38,7 +37,7 @@ export function isHTTPWhitespace(character: string): boolean {
   return isHTTPNewline(character) || isHTTPTabOrSpace(character);
 }
 
-export function isHTTPNewline(character: string): boolean {
+function isHTTPNewline(character: string): boolean {
   return character === '\n' || character === '\r';
 }
 

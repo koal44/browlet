@@ -1,25 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  getMIMETypeEssence,
-  isArchiveMIMEType,
-  isAudioOrVideoMIMEType,
-  isFontMIMEType,
-  isHTMLMIMEType,
-  isImageMIMEType,
-  isJavaScriptMIMEType,
-  isJavaScriptMIMETypeEssenceMatch,
-  isJSONMIMEType,
-  isScriptableMIMEType,
-  isXMLMIMEType,
-  isZIPBasedMIMEType,
-  minimizeSupportedMIMEType,
-  parseMIMEType,
-  parseMIMETypeFromBytes,
-  serializeMIMEType,
-  serializeMIMETypeToBytes,
+  getMIMETypeEssence, minimizeSupportedMIMEType,
+  isArchiveMIMEType, isAudioOrVideoMIMEType, isFontMIMEType,
+  isHTMLMIMEType, isImageMIMEType, isScriptableMIMEType,
+  isJavaScriptMIMEType, isJavaScriptMIMETypeEssenceMatch,
+  isJSONMIMEType, isXMLMIMEType, isZIPBasedMIMEType,
+  parseMIMEType, parseMIMETypeFromBytes,
+  serializeMIMEType, serializeMIMETypeToBytes,
   type MIMEType,
-} from '../../src/mime';
+} from '../../src/mime/mime-type';
 
 /*
  * Focused cases derived from:

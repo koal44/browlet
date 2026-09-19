@@ -21,32 +21,15 @@ export {
   type SupportsMIMEType,
 } from './mime-type';
 
-export { matchesBytePattern } from './pattern';
-
 export {
-  createResourceMetadata,
   detectSuppliedMIMEType,
-  maximumResourceHeaderLength,
   readResourceHeader,
+  type MIMETypeSource,
   type ReadResourceBytes,
-  type ResourceMetadata,
-  type ResourceMetadataOptions,
-  type SuppliedMIMETypeSource,
+  type SuppliedMIMETypeDetection,
 } from './resource';
 
 export {
-  matchArchiveTypePattern,
-  matchAudioOrVideoTypePattern,
-  matchFontTypePattern,
-  matchImageTypePattern,
-  matchesMP3SignatureWithoutID3,
-  matchesMP4Signature,
-  matchesWebMSignature,
-} from './signatures';
-
-export {
-  distinguishTextOrBinary,
-  identifyUnknownMIMEType,
   sniffMIMEType,
   sniffMIMETypeInAudioOrVideoContext,
   sniffMIMETypeInBrowsingContext,

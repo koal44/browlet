@@ -57,9 +57,9 @@ function fromMember([value, parameters]: FixtureMember): StructuredItem | Struct
     : fromItem([value, parameters]);
 }
 
-function fromItem([value, parameters]: FixtureItem): StructuredItem {
+function fromItem([bareItem, parameters]: FixtureItem): StructuredItem {
   return {
-    type: 'item', value: fromBareItem(value),
+    type: 'item', bareItem: fromBareItem(bareItem),
     parameters: new Map(parameters.map(([key, value]) => [key, fromBareItem(value)])),
   };
 }

@@ -6,14 +6,14 @@ Browlet. Fetch, MIME, and browser consumers import the particular module they
 need; store instances and browser policy remain with their owning host.
 
 This file owns that boundary and the shared syntax work. The linked submodule
-roadmaps own their detailed contracts, tests, and remaining work.
+notes describe their contracts, tests, and any remaining work.
 
 ## Ownership
 
 | Component | Responsibility |
 | --- | --- |
 | `syntax.ts`, `date.ts` | HTTP tokens, whitespace, quoted strings, and HTTP-date parsing |
-| [Structured fields](struct-fields/ROADMAP.md) | RFC 9651 values, parsing, and serialization |
+| [Structured fields](struct-fields/README.md) | RFC 9651 values, parsing, and serialization |
 | [Cache rules](cache/ROADMAP.md) | RFC 9111/5861 field parsing, freshness, storage eligibility, and request policy |
 | [Cookies](cookies/ROADMAP.md) | Planned cookie records, store, parsing, retrieval, and serialization |
 

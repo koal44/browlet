@@ -16,7 +16,7 @@ Local source: `w3c-reporting/index.bs` under the
 Use its generic and document-centered reporting frameworks, endpoint-header
 processing, delivery algorithms, and Reporting Observers section.
 
-`Reporting-Endpoints` uses [structured fields](../../http/struct-fields/ROADMAP.md),
+`Reporting-Endpoints` uses [structured fields](../../http/struct-fields/README.md),
 URL parsing, and the [policy owner's](../browsing/policy/ROADMAP.md)
 trustworthiness operation. Globals own endpoint/report state as specified;
 HTML supplies settings, lifecycle, and task delivery. The current

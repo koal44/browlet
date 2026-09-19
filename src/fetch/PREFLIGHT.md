@@ -87,7 +87,7 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 
 | Order | Work / authoritative plan | First integration point |
 | --- | --- | --- |
-| 1 | [Structured fields](../http/struct-fields/ROADMAP.md), RFC 9651 | Fetch header operations |
+| 1 | [Structured fields](../http/struct-fields/README.md), RFC 9651 | Fetch header operations |
 | 2 | [Multipart bytes](multipart/ROADMAP.md), RFC 7578 + HTML/Fetch | Body extraction/consumption |
 | 3 | [HTTP foundation](../http/ROADMAP.md) and [cache rules](../http/cache/ROADMAP.md), RFCs 9110/9111/5861 | Response freshness, then [Fetch cache transactions](http/cache/ROADMAP.md) |
 | 4 | [Trustworthiness](../browlet/browsing/policy/ROADMAP.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |
@@ -257,7 +257,7 @@ Existing stubs and planned features remain with their implementation roadmaps.
 | 4 — File reading and serialization — marked | `src/file/package-data.ts` and `src/browlet/integration/file/`, including FileReader and registered serialization steps | File API §§6–7 and Blob/File/FileList serialization; follow immediate HTML/Streams dependencies without auditing those whole subsystems |
 | 5 — HTTP syntax, dates, and cache policy — marked | `src/http/syntax.ts`, `date.ts`, and `cache/` | Fetch's quoted-string algorithm and the implemented RFC 9110/9111/5861 rules; distinguish local policy predicates from named algorithms |
 | 6 — Structured fields — marked | `src/http/struct-fields/parse.ts`, `serialize.ts`, and value representations | RFC 9651 §4 parsing/serialization; include cursor mutation, parse failure, and serialized-result shapes |
-| 7 — MIME — marked | `mime-type.ts`, `resource.ts`, `sniffing.ts`, `signatures.ts`, and `pattern.ts` | MIME Sniffing's parsing, serialization, classification, and sniffing signatures; skip byte-pattern tables and algorithm internals |
+| 7 — MIME — marked | `mime-type.ts`, `resource.ts`, `sniffing.ts`, and `signatures.ts` | MIME Sniffing's parsing, serialization, classification, and sniffing signatures; skip byte-pattern tables and algorithm internals |
 | 8 — Encoding — marked | `src/encoding/encodings.ts`, `codecs/utf-8.ts`, and TextEncoder/TextDecoder stream and non-stream adapters | Encoding's named operations and API declarations; check the adapter contract against Exodus without auditing or replacing its codecs |
 | 9 — XHR/FormData — marked | `src/xhr/form-data.ts` and `src/browlet/html/forms/entry-list.ts` | XHR §4 and HTML's create-an-entry operation, including the supplied capability and Blob/File representations; unimplemented XMLHttpRequest remains out of scope |
 | 10 — Streams used by other specs — marked | `readable-stream-cross-spec.ts`, `writable-stream-cross-spec.ts`, the §9.3 methods on `TransformStreamImpl`, and their exported entry points | Streams' operations for use by other specifications; inspect the immediate creation/read/pipe callers in Fetch, File, and Encoding |

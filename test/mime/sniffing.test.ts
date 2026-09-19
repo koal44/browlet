@@ -1,24 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { getMIMETypeEssence, parseMIMEType, type MIMEType } from '../../src/mime/mime-type';
+import { type SuppliedMIMETypeDetection } from '../../src/mime/resource';
 import {
-  createResourceMetadata,
-  distinguishTextOrBinary,
-  getMIMETypeEssence,
-  identifyUnknownMIMEType,
-  parseMIMEType,
-  sniffMIMEType,
-  sniffMIMETypeInAudioOrVideoContext,
-  sniffMIMETypeInBrowsingContext,
-  sniffMIMETypeInCacheManifestContext,
-  sniffMIMETypeInFontContext,
-  sniffMIMETypeInImageContext,
-  sniffMIMETypeInPluginContext,
-  sniffMIMETypeInScriptContext,
-  sniffMIMETypeInStyleContext,
+  distinguishTextOrBinary, identifyUnknownMIMEType, sniffMIMEType,
+  sniffMIMETypeInAudioOrVideoContext, sniffMIMETypeInBrowsingContext,
+  sniffMIMETypeInCacheManifestContext, sniffMIMETypeInFontContext,
+  sniffMIMETypeInImageContext, sniffMIMETypeInPluginContext,
+  sniffMIMETypeInScriptContext, sniffMIMETypeInStyleContext,
   sniffMIMETypeInTextTrackContext,
-  type MIMEType,
-  type ResourceMetadata,
-} from '../../src/mime';
+} from '../../src/mime/sniffing';
 
 describe('MIME Sniffing §7.1: identifying an unknown MIME type', () => {
   const scriptableCases: [string, string][] = [
@@ -50,9 +41,18 @@ describe('MIME Sniffing §7.1: identifying an unknown MIME type', () => {
     });
   }
 
-  it('requires HTML tag termination and honors the scriptable flag', () => {
-    expect(essence(identifyUnknownMIMEType(ascii('<htmlx'), true)))
-      .toBe('text/plain');
+  it('requires an exact HTML tag-terminating byte', () => {
+    for (const input of ['<html', '<html\t', '<htmlx']) {
+      expect(essence(identifyUnknownMIMEType(ascii(input), true)))
+        .toBe('text/plain');
+    }
+    for (const input of ['<html ', '<html>']) {
+      expect(essence(identifyUnknownMIMEType(ascii(input), true)))
+        .toBe('text/html');
+    }
+  });
+
+  it('honors the scriptable flag', () => {
     expect(essence(identifyUnknownMIMEType(ascii('<html>'), false)))
       .toBe('text/plain');
     expect(essence(identifyUnknownMIMEType(ascii('%PDF-'), false)))
@@ -115,88 +115,105 @@ describe('MIME Sniffing §7: computed MIME types', () => {
 
   it('preserves supplied XML and HTML before every sniffing flag', () => {
     for (const supplied of ['text/html', 'application/example+xml']) {
-      const resource = metadata(supplied, bytes(0x00), {
-        noSniff: true,
-        apache: true,
-      });
-
-      expect(essence(sniffMIMEType(resource, supported))).toBe(supplied);
-      expect(resource.computedMIMEType).toBe(resource.suppliedMIMEType);
+      expect(essence(sniffMIMEType(
+        detection(supplied, true),
+        bytes(0x00),
+        true,
+        supported,
+      ))).toBe(supplied);
     }
-  });
-
-  it('does not require a header for an early supplied-type decision', () => {
-    const html = createResourceMetadata({
-      kind: 'other',
-      mimeType: requiredMIMEType('text/html'),
-    });
-    expect(sniffMIMEType(html, supported)).toBe(html.suppliedMIMEType);
-
-    const noSniff = createResourceMetadata(
-      {
-        kind: 'other',
-        mimeType: requiredMIMEType('application/example'),
-      },
-      { noSniff: true },
-    );
-    expect(sniffMIMEType(noSniff, supported)).toBe(noSniff.suppliedMIMEType);
   });
 
   it('identifies each spelling of an unknown supplied type', () => {
     for (const supplied of [undefined, 'unknown/unknown', 'application/unknown', '*/*']) {
-      const resource = metadata(supplied, ascii('<html>'));
-      expect(essence(sniffMIMEType(resource, supported))).toBe('text/html');
+      expect(essence(sniffMIMEType(
+        detection(supplied),
+        ascii('<html>'),
+        false,
+        supported,
+      ))).toBe('text/html');
     }
   });
 
-  it('uses no-sniff to suppress scriptable unknown-type matching', () => {
-    const resource = metadata(undefined, ascii('<html>'), { noSniff: true });
-    expect(essence(sniffMIMEType(resource, supported))).toBe('text/plain');
+  it('uses no-sniff to suppress only scriptable unknown-type matching', () => {
+    expect(essence(sniffMIMEType(
+      detection(undefined),
+      ascii('<html>'),
+      true,
+      supported,
+    ))).toBe('text/plain');
+
+    expect(essence(sniffMIMEType(
+      detection(undefined),
+      ascii('GIF89a'),
+      true,
+      supported,
+    ))).toBe('image/gif');
   });
 
   it('preserves known types when no-sniff is set', () => {
-    const resource = metadata('image/png', ascii('GIF89a'), { noSniff: true });
-    expect(essence(sniffMIMEType(resource, supported))).toBe('image/png');
+    expect(essence(sniffMIMEType(
+      detection('image/png'),
+      ascii('GIF89a'),
+      true,
+      supported,
+    ))).toBe('image/png');
   });
 
   it('applies the Apache-bug text-or-binary rule without privileged sniffing', () => {
-    const resource = metadata('text/plain', ascii('<html>'), { apache: true });
-    expect(essence(sniffMIMEType(resource, supported))).toBe('text/plain');
+    const supplied = detection('text/plain', true);
+    expect(essence(sniffMIMEType(
+      supplied,
+      ascii('<html>'),
+      false,
+      supported,
+    ))).toBe('text/plain');
 
-    resource.resourceHeader = bytes(0x00);
-    expect(essence(sniffMIMEType(resource, supported)))
+    expect(essence(sniffMIMEType(
+      supplied,
+      bytes(0x00),
+      false,
+      supported,
+    )))
       .toBe('application/octet-stream');
   });
 
   it('sniffs supported image and media types and preserves unsupported ones', () => {
-    const image = metadata('image/example', ascii('GIF89a'));
-    expect(essence(sniffMIMEType(image, supported))).toBe('image/gif');
+    expect(essence(sniffMIMEType(
+      detection('image/example'),
+      ascii('GIF89a'),
+      false,
+      supported,
+    ))).toBe('image/gif');
 
-    const audio = metadata('audio/example', ascii('fLaC'));
-    expect(essence(sniffMIMEType(audio, supported))).toBe('audio/flac');
+    expect(essence(sniffMIMEType(
+      detection('audio/example'),
+      ascii('fLaC'),
+      false,
+      supported,
+    ))).toBe('audio/flac');
 
     const isSupported = vi.fn(() => false);
-    const unsupported = metadata('image/example', ascii('GIF89a'));
-    expect(essence(sniffMIMEType(unsupported, isSupported)))
+    const unsupported = detection('image/example');
+    expect(essence(sniffMIMEType(
+      unsupported,
+      ascii('GIF89a'),
+      false,
+      isSupported,
+    )))
       .toBe('image/example');
     expect(isSupported).toHaveBeenCalledWith(unsupported.suppliedMIMEType);
-  });
-
-  it('requires the resource-header lifecycle before sniffing', () => {
-    const resource = createResourceMetadata({
-      kind: 'other',
-      mimeType: requiredMIMEType('text/plain'),
-    });
-    expect(() => sniffMIMEType(resource, supported)).toThrow(
-      'The resource header must be read before MIME sniffing',
-    );
   });
 });
 
 describe('MIME Sniffing §8: context-specific sniffing', () => {
   it('uses the general algorithm in a browsing context', () => {
-    const resource = metadata(undefined, ascii('<html>'));
-    expect(essence(sniffMIMETypeInBrowsingContext(resource, () => true)))
+    expect(essence(sniffMIMETypeInBrowsingContext(
+      detection(undefined),
+      ascii('<html>'),
+      false,
+      () => true,
+    )))
       .toBe('text/html');
   });
 
@@ -208,28 +225,25 @@ describe('MIME Sniffing §8: context-specific sniffing', () => {
     ] as const;
 
     for (const [sniff, supplied, header, expected] of cases) {
-      const resource = metadata(supplied, header);
-      expect(essence(sniff(resource))).toBe(expected);
-      expect(essence(resource.computedMIMEType)).toBe(expected);
+      expect(essence(sniff(requiredMIMEType(supplied), header))).toBe(expected);
     }
   });
 
   it('preserves XML and unmatched supplied types in pattern contexts', () => {
-    const xml = metadata('image/example+xml', ascii('GIF89a'));
-    expect(sniffMIMETypeInImageContext(xml)).toBe(xml.suppliedMIMEType);
+    const xml = requiredMIMEType('image/example+xml');
+    expect(sniffMIMETypeInImageContext(xml, ascii('GIF89a'))).toBe(xml);
 
-    const unmatched = metadata('audio/example', ascii('not audio'));
-    expect(sniffMIMETypeInAudioOrVideoContext(unmatched))
-      .toBe(unmatched.suppliedMIMEType);
+    const unmatched = requiredMIMEType('audio/example');
+    expect(sniffMIMETypeInAudioOrVideoContext(unmatched, ascii('not audio')))
+      .toBe(unmatched);
   });
 
   it('defaults a missing plugin type to application/octet-stream', () => {
-    const missing = metadata(undefined, new Uint8Array());
-    expect(essence(sniffMIMETypeInPluginContext(missing)))
+    expect(essence(sniffMIMETypeInPluginContext(undefined)))
       .toBe('application/octet-stream');
 
-    const supplied = metadata('application/example', new Uint8Array());
-    expect(sniffMIMETypeInPluginContext(supplied)).toBe(supplied.suppliedMIMEType);
+    const supplied = requiredMIMEType('application/example');
+    expect(sniffMIMETypeInPluginContext(supplied)).toBe(supplied);
   });
 
   it('delegates only unfinished missing style and script types', () => {
@@ -237,45 +251,35 @@ describe('MIME Sniffing §8: context-specific sniffing', () => {
       requiredMIMEType(context === 'style' ? 'text/css' : 'text/javascript')
     );
 
-    const style = metadata(undefined, new Uint8Array());
-    expect(essence(sniffMIMETypeInStyleContext(style, resolve))).toBe('text/css');
+    expect(essence(sniffMIMETypeInStyleContext(undefined, resolve)))
+      .toBe('text/css');
 
-    const script = metadata(undefined, new Uint8Array());
-    expect(essence(sniffMIMETypeInScriptContext(script, resolve)))
+    expect(essence(sniffMIMETypeInScriptContext(undefined, resolve)))
       .toBe('text/javascript');
 
-    const supplied = metadata('application/example', new Uint8Array());
+    const supplied = requiredMIMEType('application/example');
     expect(sniffMIMETypeInScriptContext(supplied, resolve))
-      .toBe(supplied.suppliedMIMEType);
+      .toBe(supplied);
     expect(resolve).toHaveBeenCalledTimes(2);
   });
 
   it('sets the fixed text-track and cache-manifest types', () => {
-    const textTrack = metadata('application/example', new Uint8Array());
-    expect(essence(sniffMIMETypeInTextTrackContext(textTrack)))
+    expect(essence(sniffMIMETypeInTextTrackContext()))
       .toBe('text/vtt');
 
-    const manifest = metadata(undefined, new Uint8Array());
-    expect(essence(sniffMIMETypeInCacheManifestContext(manifest)))
+    expect(essence(sniffMIMETypeInCacheManifestContext()))
       .toBe('text/cache-manifest');
   });
 });
 
-function metadata(
+function detection(
   supplied: string | undefined,
-  header: Uint8Array,
-  options: { noSniff?: boolean; apache?: boolean; } = {},
-): ResourceMetadata {
-  const resource = createResourceMetadata(
-    {
-      kind: 'other',
-      mimeType: supplied === undefined ? undefined : requiredMIMEType(supplied),
-    },
-    { noSniff: options.noSniff },
-  );
-  resource.checkForApacheBug = options.apache ?? false;
-  resource.resourceHeader = header;
-  return resource;
+  checkForApacheBug = false,
+): SuppliedMIMETypeDetection {
+  return {
+    suppliedMIMEType: supplied === undefined ? undefined : requiredMIMEType(supplied),
+    checkForApacheBug,
+  };
 }
 
 function essence(mimeType: MIMEType | undefined): string | undefined {

@@ -148,7 +148,7 @@ describe('RFC 9651 §4.1.4–§4.1.5 and §4.1.10: numbers and dates', () => {
   ])('serializes decimal %s as %s', (value, expected) => {
     const field = item({ type: 'decimal', value });
     expect(serializeStructuredField(field)).toBe(expected);
-    expect(field.value.value).toBe(value);
+    expect(field.bareItem.value).toBe(value);
   });
 
   it.each([1e12, -1e12, 999_999_999_999.9999, -999_999_999_999.9999, NaN, Infinity, -Infinity])(
@@ -198,7 +198,7 @@ describe('RFC 9651 §4.1.6–§4.1.8 and §4.1.11: text and bytes', () => {
 });
 
 function item(
-  value: StructuredBareItem, parameters: StructuredParameters = new Map(),
+  bareItem: StructuredBareItem, parameters: StructuredParameters = new Map(),
 ): StructuredItem {
-  return { type: 'item', value, parameters };
+  return { type: 'item', bareItem, parameters };
 }

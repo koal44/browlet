@@ -13,7 +13,6 @@ import type {
  * The input records are not mutated.
  * https://www.rfc-editor.org/rfc/rfc9651.html#section-4.1
  */
-// SPEC_MISMATCH: (structure) -> ASCII bytes
 export function serializeStructuredField(
   field: StructuredField,
 ): string | null | undefined {
@@ -35,7 +34,7 @@ export function serializeStructuredField(
         if (!isKey(key)) return null;
         if (
           member.type === 'item' &&
-          member.value.type === 'boolean' && member.value.value
+          member.bareItem.type === 'boolean' && member.bareItem.value
         ) {
           const parameters = serializeParameters(member.parameters);
           if (parameters === null) return null;
@@ -54,7 +53,6 @@ export function serializeStructuredField(
 }
 
 /** RFC 9651 §4.1.1.1 and §4.1.3, Inner Lists and Items. */
-// SPEC_MISMATCH: (inner_list, list_parameters) / (bare_item, item_parameters) -> ASCII string
 function serializeMember(member: StructuredItem | StructuredInnerList): string | null {
   let value: string | null;
   if (member.type === 'inner-list') {
@@ -66,7 +64,7 @@ function serializeMember(member: StructuredItem | StructuredInnerList): string |
     }
     value = `(${items.join(' ')})`;
   } else {
-    value = serializeBareItem(member.value);
+    value = serializeBareItem(member.bareItem);
     if (value === null) return null;
   }
 

@@ -1,6 +1,4 @@
-import {
-  isomorphicDecode, isomorphicEncode,
-} from '../js-engine/byte-string';
+import { isomorphicDecode, isomorphicEncode } from '../js-engine/byte-string';
 
 import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/syntax';
 import { TextCursor } from '../infra/text-cursor';
@@ -11,14 +9,18 @@ import { TextCursor } from '../infra/text-cursor';
  * https://mimesniff.spec.whatwg.org/#mime-type-representation
  */
 export type MIMEType = {
-  readonly type: string;
-  readonly subtype: string;
-  readonly parameters: Map<string, string>;
+  type: string;
+  subtype: string;
+  parameters: Map<string, string>;
 };
 
 export type MIMETypeEssence = `${string}/${string}`;
 
 export type SupportsMIMEType = (mimeType: MIMEType) => boolean;
+
+export function createMIMEType(type: string, subtype: string): MIMEType {
+  return { type, subtype, parameters: new Map() };
+}
 
 /*
  * The essence of a MIME type.
@@ -73,11 +75,10 @@ export function parseMIMEType(input: string): MIMEType | null {
   const subtype = trimTrailingHTTPWhitespace(position.slice(subtypeStart));
   if (!isHTTPToken(subtype)) return null;
 
-  const mimeType: MIMEType = {
-    type: toASCIILowercase(type),
-    subtype: toASCIILowercase(subtype),
-    parameters: new Map(),
-  };
+  const mimeType = createMIMEType(
+    toASCIILowercase(type),
+    toASCIILowercase(subtype),
+  );
 
   while (!position.eof()) {
     position.advance();

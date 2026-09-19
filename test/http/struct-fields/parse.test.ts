@@ -195,9 +195,9 @@ describe('RFC 9651 §4.2.5–§4.2.7 and §4.2.10: text and bytes', () => {
 });
 
 function item(
-  value: StructuredBareItem, parameters: StructuredParameters = new Map(),
+  bareItem: StructuredBareItem, parameters: StructuredParameters = new Map(),
 ): StructuredItem {
-  return { type: 'item', value, parameters };
+  return { type: 'item', bareItem, parameters };
 }
 
 function bytes(value: string): Uint8Array {

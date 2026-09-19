@@ -19,6 +19,7 @@ export function parseCacheControl(input: string): CacheDirective[] | null {
     let value: string | null = null;
     if (cursor.match('=')) {
       if (cursor.match('"')) {
+        // Cache-Control rejects malformed quotes; Fetch's collector is forgiving.
         value = '';
         while (true) {
           if (cursor.eof()) return null;
@@ -67,7 +68,7 @@ export function parseVary(input: string): string[] | null {
  * Keep absent (undefined) distinct from invalid/duplicate (null) constraints.
  * bareValue is the meaning of an argument-free directive, e.g. max-stale.
  */
-export function getDeltaDirective(
+export function getDeltaSecondsDirective(
   directives: readonly CacheDirective[],
   name: string,
   bareValue: number | null = null,
@@ -79,6 +80,6 @@ export function getDeltaDirective(
 }
 
 export type CacheDirective = {
-  readonly name: string;
-  readonly value: string | null;
+  name: string;
+  value: string | null;
 };

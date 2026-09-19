@@ -87,7 +87,7 @@ the external dependency work and catalogs its specification sources.
 | DOM abort and HTML structured data | §2 controller state and §5 | Browlet's existing abort/serialization capabilities |
 | Parallel queues and global task destinations | §2 task delivery | Existing `src/infra/parallel-queue.ts` and HTML task lifecycle |
 | Streams, Encoding, and MIME | §§2.2.2–2.2.4 and 5 | Existing subsystem implementations; body processing and header-list integration remain Fetch-owned |
-| Structured fields | §2.2.2 | [Structured fields](../http/struct-fields/ROADMAP.md) |
+| Structured fields | §2.2.2 | [Structured fields](../http/struct-fields/README.md) |
 | HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP syntax](../http/ROADMAP.md); [Fetch Metadata](http/ROADMAP.md#fetch-metadata) |
 | Blob/File bytes and Blob URLs | §§2.2.4, 5 / §4.3 | [File](../file/ROADMAP.md); shared keys come from [Storage](../storage/ROADMAP.md) |
 | FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/ROADMAP.md); [multipart](multipart/ROADMAP.md) owns byte processing |
@@ -220,7 +220,7 @@ setup lives in `test/fetch/record-fixture.ts`.
 Implement HTTP syntax, methods, header lists,
 normalization/combination/extraction, forbidden and safelisted header
 algorithms, range handling, and status classifications in document order.
-The [structured-field algorithms](../http/struct-fields/ROADMAP.md) must be
+The [structured-field algorithms](../http/struct-fields/README.md) must be
 supplied before completing their header-list integration.
 
 **Status:** complete. Methods, header-list operations, quoted-string splitting,

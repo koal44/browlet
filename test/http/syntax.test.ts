@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectHTTPQuotedString, isHTTPNewline, isHTTPTabOrSpace, isHTTPToken, isHTTPWhitespace } from '../../src/http/syntax';
+import {
+  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, isHTTPWhitespace,
+} from '../../src/http/syntax';
 import { TextCursor } from '../../src/infra/text-cursor';
 
 describe('HTTP syntax and quoted strings (Fetch §2.2)', () => {
@@ -11,7 +13,6 @@ describe('HTTP syntax and quoted strings (Fetch §2.2)', () => {
     for (let byte = 0; byte < 256; byte++) {
       const character = String.fromCharCode(byte);
       expect(isHTTPToken(character), `token byte ${byte}`).toBe(alphabet.includes(character));
-      expect(isHTTPNewline(character), `newline byte ${byte}`).toBe([10, 13].includes(byte));
       expect(isHTTPTabOrSpace(character), `space byte ${byte}`).toBe([9, 32].includes(byte));
       expect(isHTTPWhitespace(character), `whitespace byte ${byte}`).toBe([9, 10, 13, 32].includes(byte));
     }

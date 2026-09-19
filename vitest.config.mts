@@ -2,12 +2,14 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    reporters: ['verbose'],
+    reporters: ['default'],
+    slowTestThreshold: 100,
     projects: [
       {
         test: {
           name: 'unit',
           environment: 'node',
+          isolate: false,
           include: [
             'test/lint/**/*.test.mjs',
             'test/selectlet/unit/**/*.test.ts',

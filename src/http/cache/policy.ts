@@ -1,4 +1,4 @@
-import { getDeltaDirective, parseCacheControl, parseVary } from './fields';
+import { getDeltaSecondsDirective, parseCacheControl, parseVary } from './fields';
 import {
   heuristicallyCacheableStatuses, type CacheFields, type CacheFreshness,
 } from './freshness';
@@ -50,9 +50,9 @@ export function evaluateCacheRequest(
   if (directives === null || freshness.requiresValidation ||
     directives.some(({ name }) => name === 'no-cache')) return { canReuse: false, onlyIfCached };
 
-  const maxAge = getDeltaDirective(directives, 'max-age');
-  const minFresh = getDeltaDirective(directives, 'min-fresh');
-  const maxStale = getDeltaDirective(directives, 'max-stale', Infinity);
+  const maxAge = getDeltaSecondsDirective(directives, 'max-age');
+  const minFresh = getDeltaSecondsDirective(directives, 'min-fresh');
+  const maxStale = getDeltaSecondsDirective(directives, 'max-stale', Infinity);
   const { currentAge, freshnessLifetime, fresh } = freshness;
   const canReuse = maxAge !== null && minFresh !== null && maxStale !== null &&
     (maxAge === undefined || currentAge <= maxAge) &&
@@ -71,6 +71,6 @@ export function shouldInvalidateCache(method: string, status: number): boolean {
 }
 
 export type CacheRequestPolicy = {
-  readonly canReuse: boolean;
-  readonly onlyIfCached: boolean;
+  canReuse: boolean;
+  onlyIfCached: boolean;
 };

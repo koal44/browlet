@@ -316,6 +316,6 @@ describe('default request header values', () => {
   });
 });
 
-function structuredItem(value: StructuredBareItem): StructuredItem {
-  return { type: 'item', value, parameters: new Map() };
+function structuredItem(bareItem: StructuredBareItem): StructuredItem {
+  return { type: 'item', bareItem, parameters: new Map() };
 }
