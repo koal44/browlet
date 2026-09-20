@@ -406,7 +406,7 @@ function decode(bytes: Uint8Array, encoding: string): string {
   return new TextDecoder(encoding).decode(bytes);
 }
 
-function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {
+function startsWith(bytes: Uint8Array, prefix: number[]): boolean {
   return prefix.every((byte, index) => bytes[index] === byte);
 }
 

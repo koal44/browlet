@@ -5,10 +5,10 @@ import {
 
 class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
 {
-  readonly warnings: string[] = [];
+  warnings: string[] = [];
   evaluated = false;
-  readonly handledTypes = new Set<string>();
-  readonly serviceWorkerTypes = new Set(['fetch', 'install']);
+  handledTypes = new Set<string>();
+  serviceWorkerTypes = new Set(['fetch', 'install']);
 
   protected get scriptResourceHasEverBeenEvaluated(): boolean {
     return this.evaluated;

@@ -26,14 +26,14 @@ import { WritableStreamImpl } from './writable-stream';
  * };
  */
 export class TransformStreamImpl {
-  readonly state: TransformStreamState = {};
+  state: TransformStreamState = {};
 
   /** Streams §6.2.4, TransformStream(); null allocates for a later setUp call. */
   constructor(
     transformer: TransformerRecord | null = {},
     writableStrategy: QueuingStrategyRecord = {},
     readableStrategy: QueuingStrategyRecord = {},
-    readonly runtime: RuntimeContext,
+    public runtime: RuntimeContext,
   ) {
     if (transformer === null) return;
 
@@ -298,19 +298,19 @@ type TransformStreamState = {
  * };
  */
 export type TransformerRecord = {
-  readonly cancel?: (reason: unknown) => PromiseValue<unknown> | void;
-  readonly flush?: (
+  cancel?: (reason: unknown) => PromiseValue<unknown> | void;
+  flush?: (
     controller: TransformStreamDefaultControllerImpl,
   ) => PromiseValue<unknown> | void;
-  readonly readableType?: unknown;
-  readonly start?: (
+  readableType?: unknown;
+  start?: (
     controller: TransformStreamDefaultControllerImpl,
   ) => unknown;
-  readonly transform?: (
+  transform?: (
     chunk: unknown,
     controller: TransformStreamDefaultControllerImpl,
   ) => PromiseValue<unknown> | void;
-  readonly writableType?: unknown;
+  writableType?: unknown;
 };
 
 export const transformStreamIDL = defineInterface({
@@ -539,7 +539,7 @@ export const transformStreamDefaultControllerIDL = defineInterface({
  * };
  */
 export class GenericTransformStreamMixin {
-  readonly #transform: TransformStreamImpl;
+  #transform: TransformStreamImpl;
 
   constructor(transform: TransformStreamImpl) {
     this.#transform = transform;

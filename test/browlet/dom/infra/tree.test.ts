@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TreeNode } from '../../../../src/browlet/dom/infra/tree';
 
 class TestNode extends TreeNode<TestNode> {
-  constructor(readonly name: string) {
+  constructor(public name: string) {
     super();
   }
 }

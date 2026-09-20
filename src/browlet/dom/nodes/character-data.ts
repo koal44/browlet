@@ -25,9 +25,9 @@ import type { ElementImpl } from './element';
  * };
  */
 export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
-  readonly #childNodeMixin = new ChildNodeMixin(this);
+  #childNodeMixin = new ChildNodeMixin(this);
   #data: string;
-  readonly #nonDocumentTypeChildNodeMixin =
+  #nonDocumentTypeChildNodeMixin =
     new NonDocumentTypeChildNodeMixin(this);
 
   constructor(

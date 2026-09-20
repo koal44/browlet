@@ -162,11 +162,11 @@ The JavaScript-facing queue contract is deliberately independent of Node's VM
 handle:
 
 ```ts
-interface JSMicrotaskQueue {
-  readonly kind: 'explicit' | 'ambient';
+type JSMicrotaskQueue = {
+  kind: 'ambient' | 'explicit';
   enqueueMicrotask(steps: () => void): void;
   performMicrotaskCheckpoint(): void;
-}
+};
 ```
 
 The addon or source-patched Node supplies an explicit V8 queue. Each HTML EventLoop

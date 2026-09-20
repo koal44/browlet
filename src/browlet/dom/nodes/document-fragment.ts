@@ -18,8 +18,8 @@ import type { HTMLCollectionImpl } from './collections';
  * DocumentFragment includes ParentNode;
  */
 export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
-  readonly #host: ElementImpl | null;
-  readonly #parentNodeMixin = new ParentNodeMixin(this);
+  #host: ElementImpl | null;
+  #parentNodeMixin = new ParentNodeMixin(this);
 
   constructor(
     ownerDocument: DocumentImpl,

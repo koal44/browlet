@@ -19,7 +19,7 @@ export function isNamedPropertiesObject(object: object): boolean {
 }
 
 export class GlobalPlatformObjectBinding {
-  readonly #binding: RealmBinding;
+  #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {

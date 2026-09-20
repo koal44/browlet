@@ -10,8 +10,8 @@ import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
 
 export class Navigable {
-  readonly id = Symbol('Navigable');
-  readonly isTopLevelTraversable: boolean = false;
+  id = Symbol('Navigable');
+  isTopLevelTraversable: boolean = false;
   parent: Navigable | null = null;
   currentSessionHistoryEntry!: SessionHistoryEntry;
   #activeSessionHistoryEntry: SessionHistoryEntry | null = null;
@@ -96,16 +96,15 @@ export class Navigable {
 
 export class TraversableNavigable extends Navigable {
   currentSessionHistoryStep = 0;
-  readonly sessionHistoryEntries: SessionHistoryEntry[] = [];
-  readonly sessionHistoryTraversalQueue =
-    new SessionHistoryTraversalQueue();
+  sessionHistoryEntries: SessionHistoryEntry[] = [];
+  sessionHistoryTraversalQueue = new SessionHistoryTraversalQueue();
   runningNestedApplyHistoryStep = false;
   systemVisibilityState: DocumentVisibilityState = 'visible';
   isCreatedByWebContent = false;
 }
 
 export class TopLevelTraversable extends TraversableNavigable {
-  override readonly isTopLevelTraversable = true;
+  override isTopLevelTraversable = true as const;
 }
 
 /*

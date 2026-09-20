@@ -28,11 +28,11 @@ import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 
 export class Browlet {
-  readonly #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
+  #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
   #evaluation: PageEvaluation;
   #route: BrowletRoute;
-  readonly #traversable: TopLevelTraversable;
-  readonly #userAgent: UserAgent;
+  #traversable: TopLevelTraversable;
+  #userAgent: UserAgent;
 
   constructor(config: BrowletConfig) {
     installHostHooks();

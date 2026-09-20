@@ -11,9 +11,9 @@ export type WebIDLRealmHost = JSRealm & {
     prepareToRunScript(): void;
     reportException(exception: unknown): void;
   };
-  readonly crossOriginIsolated: boolean;
-  readonly globalNames: ReadonlySet<string>;
-  readonly isGlobalPrototypeChainMutable: boolean;
+  crossOriginIsolated: boolean;
+  globalNames: ReadonlySet<string>;
+  isGlobalPrototypeChainMutable: boolean;
   readonly secureContext: boolean;
   // Web IDL §3.5 Security — perform a security check.
   performSecurityCheck(

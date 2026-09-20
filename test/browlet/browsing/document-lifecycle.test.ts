@@ -451,10 +451,10 @@ describe('navigation lifecycle', () => {
 });
 
 class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
-  readonly #apiBaseURL: URLRecord;
-  readonly #moduleMap: ModuleMap = { entries: [] };
-  readonly #origin = createOpaqueOrigin();
-  readonly #policyContainer = createPolicyContainer();
+  #apiBaseURL: URLRecord;
+  #moduleMap: ModuleMap = { entries: [] };
+  #origin = createOpaqueOrigin();
+  #policyContainer = createPolicyContainer();
 
   constructor(realm: Realm, creationURL: URLRecord) {
     super({

@@ -4,7 +4,7 @@ import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
 
 /** Encoding §§14.2–14.4 — Shared UTF-16 decoder. BOM handling belongs to its caller. */
 export class UTF16Decoder {
-  readonly #bigEndian: boolean;
+  #bigEndian: boolean;
   #leadingByte: number | null = null;
   #leadingSurrogate: number | null = null;
 

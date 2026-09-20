@@ -607,7 +607,7 @@ function findDescriptor(
 
 // Project helper: adapt each converted argument using its fixed or variadic declaration.
 function adaptArguments(
-  values: readonly unknown[],
+  values: unknown[],
   definitions: ArgumentDefinition[],
   context: BindingContext,
   realmBinding: RealmBinding,

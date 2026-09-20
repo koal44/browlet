@@ -24,7 +24,7 @@ export type RuntimeBuffers = {
 export type JSBufferView<Name extends JSBufferViewName> =
   InstanceType<(typeof globalThis)[Name]>;
 
-export type ByteSequence = Uint8Array | readonly number[];
+export type ByteSequence = Uint8Array | number[];
 
 export type JSBufferTypeName =
   | 'ArrayBuffer'
@@ -49,8 +49,7 @@ const bufferViewElementSizes = {
   Uint8ClampedArray: 1,
 } as const;
 
-export const bufferViewNames = Object.keys(bufferViewElementSizes) as
-  readonly JSBufferViewName[];
+export const bufferViewNames = Object.keys(bufferViewElementSizes) as JSBufferViewName[];
 
 /** Buffer or view with fixed-length backing storage, including shared buffers. */
 export function isFixedBufferSource(
@@ -467,5 +466,5 @@ const typedArrayName = getAccessor(typedArrayPrototype, Symbol.toStringTag);
 const typedArraySet = Reflect.get(
   typedArrayPrototype,
   'set',
-) as (this: object, source: readonly unknown[]) => void;
+) as (this: object, source: ArrayLike<unknown>) => void;
 const emptyArray = Object.freeze([]);

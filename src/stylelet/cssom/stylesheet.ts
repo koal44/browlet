@@ -16,14 +16,14 @@ import type { RuntimeCaps } from '../stylelet';
  * };
  */
 export abstract class StyleSheetImpl {
-  readonly #type: CSSOMString;
+  #type: CSSOMString;
   #location: string | null;
   #ownerNode: Element | ProcessingInstruction | null;
   #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
-  readonly #media: MediaListImpl;
+  #media: MediaListImpl;
   #disabled: boolean;
-  protected readonly runtime: RuntimeCaps;
+  protected runtime: RuntimeCaps;
 
   protected constructor(runtime: RuntimeCaps) {
     if (new.target === StyleSheetImpl) {

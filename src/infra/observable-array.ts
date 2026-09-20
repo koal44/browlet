@@ -20,7 +20,7 @@ export type ObservableArrayHandle<IDLValue, JavaScriptValue = IDLValue> = {
   readonly backingList: IDLValue[];
   readonly value: JavaScriptValue[];
   replace: (value: unknown) => void;
-  replaceValues: (values: readonly IDLValue[]) => void;
+  replaceValues: (values: IDLValue[]) => void;
 };
 
 export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
@@ -183,7 +183,7 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
 
   const observable = new Proxy(target, handler);
 
-  const replaceValues = (values: readonly IDLValue[]): void => {
+  const replaceValues = (values: IDLValue[]): void => {
     setLength(0);
     for (let index = 0; index < values.length; index++) {
       const item = values[index]!;

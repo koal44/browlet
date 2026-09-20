@@ -17,13 +17,13 @@ import type { TreeScope } from './tree-scope';
 export class CascadeEngine {
   // A stand-in for the associated Document's [[registeredPropertySet]],
   // pending integration with a document layer.
-  readonly registeredPropertySet: CustomPropertyRegistry;
+  registeredPropertySet: CustomPropertyRegistry;
 
   // The API base URL of the document-like environment associated with this
   // engine. It is the final fallback for resolving stylesheet resource URLs.
-  readonly environmentBaseUrl: URL | undefined;
+  environmentBaseUrl: URL | undefined;
 
-  readonly context: StyleletContext;
+  context: StyleletContext;
 
   constructor(options: CascadeEngineOptions) {
     this.registeredPropertySet = options.registeredPropertySet ?? new Map();

@@ -60,7 +60,7 @@ export function collectionToArray(nodes: ElementCollection): Element[] {
 
 export function htmlCollectionSource(
   collection: ElementCollection & Iterable<Element>, copy: boolean,
-  toArray?: (collection: ElementCollection & Iterable<Element>) => readonly Element[] | null,
+  toArray?: (collection: ElementCollection & Iterable<Element>) => Element[] | null,
 ): Iterable<Element> {
   const array = toArray?.(collection);
   if (array) return array;

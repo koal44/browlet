@@ -84,7 +84,7 @@ export function consumeOptionalDeclarationValue(
 }
 
 export function isDeclarationValueContents(
-  components: readonly ComponentValue[],
+  components: ComponentValue[],
 ): components is DeclarationComponent[] {
   if (!isAnyValueContents(components)) return false;
 
@@ -101,7 +101,7 @@ export function isDeclarationValueContents(
 }
 
 function isNonEmptyDeclarationValueContents(
-  components: readonly ComponentValue[],
+  components: ComponentValue[],
 ): components is [DeclarationComponent, ...DeclarationComponent[]] {
   return components.length > 0 && isDeclarationValueContents(components);
 }

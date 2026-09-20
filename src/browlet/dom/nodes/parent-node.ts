@@ -23,8 +23,8 @@ import type { ElementImpl } from './element';
  * };
  */
 export class ParentNodeMixin {
-  readonly #children: HTMLCollectionImpl<ElementImpl>;
-  readonly #node: NodeImpl;
+  #children: HTMLCollectionImpl<ElementImpl>;
+  #node: NodeImpl;
 
   constructor(node: NodeImpl) {
     this.#node = node;

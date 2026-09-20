@@ -71,8 +71,8 @@ export function createDocument(
 }
 
 export type DocumentConstructionOptions = {
-  readonly nodeFactory?: DOMNodeFactory;
-  readonly styleletRuntime?: StyleletRuntimeCaps;
+  nodeFactory?: DOMNodeFactory;
+  styleletRuntime?: StyleletRuntimeCaps;
 };
 
 /*
@@ -125,9 +125,9 @@ export type DocumentConstructionOptions = {
  */
 export class DocumentImpl extends NodeImpl {
   #aboutBaseURL: URLRecord | null = null;
-  readonly #activeSandboxingFlagSet = createSandboxingFlagSet();
+  #activeSandboxingFlagSet = createSandboxingFlagSet();
   #allowDeclarativeShadowRoots = false;
-  #ancestorOriginsList: readonly string[] | null = null;
+  #ancestorOriginsList: string[] | null = null;
   #browsingContext: BrowsingContext | null = null;
   #relevantGlobalObject: WindowImpl | null = null;
   #completelyLoadedTime: number | null = null;
@@ -136,8 +136,8 @@ export class DocumentImpl extends NodeImpl {
   #customElementRegistry: CustomElementRegistryImpl | null = null;
   #duringLoadingNavigationID: string | null = null;
   #encoding = 'UTF-8';
-  readonly #fullyActiveObservers = new Set<FullyActiveStateObserver>();
-  #internalAncestorOriginObjectsList: readonly Origin[] | null = null;
+  #fullyActiveObservers = new Set<FullyActiveStateObserver>();
+  #internalAncestorOriginObjectsList: Origin[] | null = null;
   #isInitialAboutBlank = false;
   #loadTimingInfo: DocumentLoadTimingInfo = {
     navigationStartTime: 0,
@@ -160,24 +160,24 @@ export class DocumentImpl extends NodeImpl {
   #readyForPostLoadTasks = false;
   #referrer = '';
   #stylelet: Stylelet | undefined;
-  readonly styleletRuntime: StyleletRuntimeCaps;
-  readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
-  readonly #parentNodeMixin: ParentNodeMixin;
-  readonly #treeScopeResolver: TreeScopeResolver;
+  styleletRuntime: StyleletRuntimeCaps;
+  #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  #parentNodeMixin: ParentNodeMixin;
+  #treeScopeResolver: TreeScopeResolver;
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
-  readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
+  #scriptBlockingStyleSheets = new Set<ElementImpl>();
   #scriptBlockingStyleSheetsReady: PromiseValueCapability<void> | null = null;
-  readonly #nodeFactory: DOMNodeFactory;
+  #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
-  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
+  static #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
     getParent: (target, event) => NodeImpl.is(target) && isDocument(target)
       ? target.getEventParent(event)
       : null,
   });
 
-  static readonly #nodeVirtuals: NodeVirtuals = {
+  static #nodeVirtuals: NodeVirtuals = {
     getBaseURI: (node) => isDocument(node)
       ? node.URL
       : 'about:blank',
@@ -574,19 +574,19 @@ export class DocumentImpl extends NodeImpl {
     this.#customElementRegistry = registry;
   }
 
-  getInternalAncestorOriginObjectsList(): readonly Origin[] | null {
+  getInternalAncestorOriginObjectsList(): Origin[] | null {
     return this.#internalAncestorOriginObjectsList;
   }
 
-  setInternalAncestorOriginObjectsList(origins: readonly Origin[]): void {
+  setInternalAncestorOriginObjectsList(origins: Origin[]): void {
     this.#internalAncestorOriginObjectsList = origins;
   }
 
-  getAncestorOriginsList(): readonly string[] | null {
+  getAncestorOriginsList(): string[] | null {
     return this.#ancestorOriginsList;
   }
 
-  setAncestorOriginsList(origins: readonly string[]): void {
+  setAncestorOriginsList(origins: string[]): void {
     this.#ancestorOriginsList = origins;
   }
 
@@ -766,7 +766,7 @@ export const documentIDL = defineInterface({
       atArg(0, (ctx): DOMNodeFactory => ({
         constructNode<T extends object>(
           implClass: ImplementationClass<T>,
-          argumentsList: readonly unknown[],
+          argumentsList: unknown[],
         ): T {
           return ctx.construct(implClass, ...argumentsList);
         },
@@ -926,7 +926,7 @@ export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
 });
 
 class DocumentTreeScopeResolver implements TreeScopeResolver {
-  readonly #document: DocumentImpl;
+  #document: DocumentImpl;
 
   constructor(document: DocumentImpl) {
     this.#document = document;
@@ -942,14 +942,14 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 export type DOMNodeFactory = {
   constructNode<T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): T;
 };
 
 export const directDOMNodeFactory: DOMNodeFactory = {
   constructNode<T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): T {
     return Reflect.construct(implementation, argumentsList) as T;
   },
@@ -969,7 +969,7 @@ export type ModuleMap = {
   entries: ModuleMapEntry[];
 };
 
-export type ModuleMapKey = readonly [URLRecord, string];
+export type ModuleMapKey = [URLRecord, string];
 
 export type ModuleMapEntry = {
   key: ModuleMapKey;

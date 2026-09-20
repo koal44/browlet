@@ -20,18 +20,18 @@ import {
  * this identity to add Web IDL and HTML policy.
  */
 export class JSRealm {
-  readonly globalPrototypeChain: readonly object[] | undefined;
-  readonly allocatedGlobalObject: GlobalObject | undefined;
-  readonly intrinsics: JSIntrinsics;
-  readonly promises: Promises;
-  readonly #callableFunctionFactory: RealmFunctionFactory;
-  readonly #context: NodeContext;
-  readonly #constructibleFunctionFactory: RealmFunctionFactory;
-  readonly #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
+  globalPrototypeChain: object[] | undefined;
+  allocatedGlobalObject: GlobalObject | undefined;
+  intrinsics: JSIntrinsics;
+  promises: Promises;
+  #callableFunctionFactory: RealmFunctionFactory;
+  #context: NodeContext;
+  #constructibleFunctionFactory: RealmFunctionFactory;
+  #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
   #globalObject: GlobalObject;
   #globalThis: object;
-  readonly #hostGlobal: RealmGlobal;
-  readonly #microtaskQueue: JSMicrotaskQueue;
+  #hostGlobal: RealmGlobal;
+  #microtaskQueue: JSMicrotaskQueue;
 
   constructor(
     microtaskQueue: JSMicrotaskQueue = createMicrotaskQueue(),
@@ -586,7 +586,7 @@ type FallbackIteratorRecord = {
 
 export type JSRealmOptions = {
   reuseGlobalProxyFrom?: JSRealm;
-  globalPrototypeChain?: readonly GlobalPrototypeKind[];
+  globalPrototypeChain?: GlobalPrototypeKind[];
 };
 
 export type GlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';

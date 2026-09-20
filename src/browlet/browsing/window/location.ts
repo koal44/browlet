@@ -27,7 +27,7 @@ export class LocationImpl
   extends withLocationStub(class {})
   implements Location
 {
-  readonly #url: URL;
+  #url: URL;
 
   constructor(url: URL) {
     super();

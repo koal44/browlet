@@ -35,7 +35,7 @@ describe('PromiseValue result projection', () => {
 });
 
 class ResultOwnerImpl {
-  readonly pending: PromiseValueCapability<ResultChildImpl>;
+  pending: PromiseValueCapability<ResultChildImpl>;
   constructor(promises: Promises) { this.pending = promises.withResolvers<ResultChildImpl>(); }
   get result(): PromiseValue<ResultChildImpl> { return this.pending.promise; }
 }

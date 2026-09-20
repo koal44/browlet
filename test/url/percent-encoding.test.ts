@@ -68,9 +68,7 @@ describe('URL Standard section 1.3: percent-encoded bytes', () => {
     ['$%&+,', 'component', '%24%25%26%2B%2C'],
     ['AZaz09*-._', 'form_urlencoded', 'AZaz09*-._'],
     [' ~', 'form_urlencoded', '+%7E'],
-  ] as const satisfies readonly (
-    readonly [string, PercentEncodeSet, string]
-  )[]) {
+  ] as const satisfies [string, PercentEncodeSet, string][]) {
     it(`applies the ${set} percent-encode set`, () => {
       expect(urlAlgorithms().utf8PercentEncode(input, set)).toBe(output);
     });

@@ -90,9 +90,9 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]),
     );
     let observation: {
-      readonly incumbent: object;
-      readonly checkpointCount: number;
-      readonly task: Task | null;
+      incumbent: object;
+      checkpointCount: number;
+      task: Task | null;
     } | undefined;
 
     const observe = callbackRealm.realm.createFunction(
@@ -211,9 +211,9 @@ class TestAgent extends Agent {
 }
 
 class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
-  readonly #moduleMap: ModuleMap = { entries: [] };
-  readonly #origin = createOpaqueOrigin();
-  readonly #policyContainer = createPolicyContainer();
+  #moduleMap: ModuleMap = { entries: [] };
+  #origin = createOpaqueOrigin();
+  #policyContainer = createPolicyContainer();
 
   get apiBaseURL(): URLRecord {
     return this.creationURL;
@@ -248,8 +248,8 @@ function createTestRealm(
   agent: Agent,
   name: string,
 ): {
-  readonly realm: Realm;
-  readonly settings: EnvironmentSettingsObject;
+  realm: Realm;
+  settings: EnvironmentSettingsObject;
 } {
   const executionContext = createRealm(agent, {
     createGlobalObject: () => ({}),

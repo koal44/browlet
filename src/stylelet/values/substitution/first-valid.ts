@@ -38,7 +38,7 @@ export function serializeFirstValid(value: FirstValidValue): string {
   return `first-valid(${args.join(', ')})`;
 }
 
-function requiresFreeFormWrapper(components: readonly ComponentValue[]): boolean {
+function requiresFreeFormWrapper(components: ComponentValue[]): boolean {
   return components.some((component) =>
     isTokenKind(component, TokenKind.Comma) || isBraceBlock(component)
   );

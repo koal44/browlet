@@ -314,7 +314,7 @@ const forbiddenRequestHeaderNames = new Set([
  * };
  */
 export class HeadersImpl {
-  readonly headerList: HeaderList;
+  headerList: HeaderList;
   guard: HeadersGuard;
 
   // Internal allocation. The author constructor's fill algorithm is deferred.

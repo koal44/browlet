@@ -38,15 +38,13 @@ export class CSSStyleDeclarationImpl
   [index: number]: string;
 
   #declarations: PropertyDeclaration[] = [];
-  readonly #computed: boolean;
-  readonly #readonly: boolean;
-  readonly #parentRule: CSSRule | null;
-  readonly #ownerNode: Element | null;
-  readonly #onChange: (
-    declarations: readonly PropertyDeclaration[],
-  ) => void;
+  #computed: boolean;
+  #readonly: boolean;
+  #parentRule: CSSRule | null;
+  #ownerNode: Element | null;
+  #onChange: (declarations: readonly PropertyDeclaration[]) => void;
   #updating = false;
-  readonly #runtime: RuntimeCaps;
+  #runtime: RuntimeCaps;
 
   constructor({
     declarations = [],
@@ -292,7 +290,7 @@ export function parseDeclarationBlock(
 }
 
 function serializeDeclarationBlock(
-  declarations: readonly PropertyDeclaration[],
+  declarations: PropertyDeclaration[],
 ): string {
   return declarations.map(serializeDeclaration).join(' ');
 }

@@ -22,7 +22,7 @@ describe('Web IDL implementation bindings', () => {
   it('retains each dictionary input as callback receiver without changing callback identity', () => {
     type Options = { handler?: (value: unknown) => unknown; raw?: unknown; };
     class CallbackDictionaryImpl {
-      readonly #options: Options;
+      #options: Options;
 
       constructor(options: Options) {
         this.#options = options;
@@ -158,12 +158,12 @@ describe('Web IDL implementation bindings', () => {
 
   it('resolves shared mixin members through each including implementation', () => {
     class FirstImpl {
-      readonly #value = 'first';
+      #value = 'first';
       get value(): string { return this.#value; }
       read(): string { return this.#value; }
     }
     class SecondImpl {
-      readonly #value = 'second';
+      #value = 'second';
       get value(): string { return this.#value; }
       read(): string { return this.#value; }
     }
@@ -211,7 +211,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('constructs declared implementations with converted arguments and newTarget', () => {
     class AutomaticConstructorImpl {
-      readonly #value: string;
+      #value: string;
 
       constructor(value: string) {
         this.#value = value;
@@ -242,7 +242,7 @@ describe('Web IDL implementation bindings', () => {
     const AutomaticConstructor = Reflect.get(
       realm.global,
       interfaceIDL.name,
-    ) as new(value: unknown) => { readonly value: string; };
+    ) as new(value: unknown) => { value: string; };
     class Derived extends AutomaticConstructor {}
     let conversions = 0;
     const input = {
@@ -269,7 +269,7 @@ describe('Web IDL implementation bindings', () => {
   it('injects contextual dependencies into an empty constructor', () => {
     const token = Symbol('context-created');
     class ContextCreatedImpl {
-      constructor(readonly value: symbol) {}
+      constructor(public value: symbol) {}
     }
     const interfaceIDL = defineInterface({
       name: 'ContextCreated',
@@ -302,7 +302,7 @@ describe('Web IDL implementation bindings', () => {
   it('constructs implementations with realm-created dependencies', () => {
     class DependencyImpl {}
     class OwnerImpl {
-      readonly #dependency: DependencyImpl;
+      #dependency: DependencyImpl;
 
       constructor(dependency: DependencyImpl) {
         this.#dependency = dependency;
@@ -346,16 +346,16 @@ describe('Web IDL implementation bindings', () => {
       dependencyIDL.name,
     ) as InterfaceConstructor;
 
-    const owner = new Owner() as { readonly dependency: object; };
+    const owner = new Owner() as { dependency: object; };
 
     expect(owner.dependency).toBeInstanceOf(Dependency);
   });
 
   it('constructs implementations with contextual dependencies', () => {
-    type Environment = { readonly global: object; };
+    type Environment = { global: object; };
     class ContextualDependencyImpl {
-      readonly #environment: Environment;
-      readonly #value: string;
+      #environment: Environment;
+      #value: string;
 
       constructor(
         value: string | undefined,
@@ -420,7 +420,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('injects the current global into new operation results', () => {
     class ResultImpl {
-      readonly #global: object;
+      #global: object;
 
       constructor(global: object) {
         this.#global = global;
@@ -457,7 +457,7 @@ describe('Web IDL implementation bindings', () => {
     registerDefinitionBindings(binding);
     binding.install();
     const Result = Reflect.get(realm.global, resultIDL.name) as {
-      create(): { readonly global: object; };
+      create(): { global: object; };
     };
 
     const result = Result.create();
@@ -467,7 +467,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('projects nested implementation results without exposing their identity', async () => {
     class NestedResultImpl {
-      readonly #label: string;
+      #label: string;
 
       constructor(label: string) {
         this.#label = label;
@@ -607,7 +607,7 @@ describe('Web IDL implementation bindings', () => {
     );
     registerDefinitionBindings(binding);
     binding.install();
-    type NestedResult = { readonly label: string; };
+    type NestedResult = { label: string; };
     const NestedResultOwner = Reflect.get(realm.global, ownerIDL.name) as {
       new(): {
         callbackArguments(
@@ -885,7 +885,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('projects callback functions into ordinary implementation callables', () => {
     type Increment = (this: unknown, value: number) => number;
-    type CallbackOptions = { readonly callback: Increment; };
+    type CallbackOptions = { callback: Increment; };
 
     class CallbackProjectionImpl {
       #callback: Increment | null = null;
@@ -922,7 +922,7 @@ describe('Web IDL implementation bindings', () => {
         return options.callback(3);
       }
 
-      invokeSequence(callbacks: readonly Increment[]): number {
+      invokeSequence(callbacks: Increment[]): number {
         return callbacks.reduce((sum, callback) =>
           sum + callback(sum), 0);
       }
@@ -1059,15 +1059,15 @@ describe('Web IDL implementation bindings', () => {
       realm.global,
       interfaceIDL.name,
     ) as new() => {
-      readonly callback: unknown;
+      callback: unknown;
       construct(callback: unknown): unknown;
       invoke(callback: unknown, value: number, thisArgument: object): number;
       invokeDictionary(options: { callback: unknown; }): number;
       invokeRecord(callbacks: Record<string, unknown>): number;
       invokeSequence(callbacks: unknown[]): number;
       invokeUnion(callback: unknown): number;
-      readonly nativeCallback: (value: number) => number;
-      readonly nativeCallbackUnion: (value: number) => number;
+      nativeCallback: (value: number) => number;
+      nativeCallbackUnion: (value: number) => number;
       preserveAny(value: unknown): unknown;
       report(callback: unknown): void;
       rethrow(callback: unknown): void;
@@ -1230,7 +1230,7 @@ describe('Web IDL implementation bindings', () => {
     new BindingWorld([definition]).register(realm).install(realm.global);
     const Collection = Reflect.get(realm.global, 'Collection') as new() => {
       item(index: number): string | null | undefined;
-      readonly [index: number]: string | undefined;
+      [index: number]: string | undefined;
     };
     const collection = new Collection();
 
@@ -1251,7 +1251,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('uses an index predicate when supported entries can be null or undefined', () => {
     class CollectionImpl {
-      readonly values = new Map<number, unknown>([[3, null], [0, undefined]]);
+      values = new Map<number, unknown>([[3, null], [0, undefined]]);
 
       item(index: number): unknown {
         if (!this.values.has(index)) throw new Error('Unsupported index');
@@ -1290,7 +1290,7 @@ describe('Web IDL implementation bindings', () => {
 
   it('combines declarative legacy hooks with automatic operation binding', () => {
     class CollectionImpl {
-      readonly values = ['first', 'second'];
+      values = ['first', 'second'];
 
       item(index: number): string | null {
         return this.values[index] ?? null;
@@ -1330,8 +1330,8 @@ describe('Web IDL implementation bindings', () => {
     binding.install();
     const Collection = Reflect.get(realm.global, collectionIDL.name) as {
       new(): {
-        readonly [index: number]: string;
-        readonly [name: string]: unknown;
+        [index: number]: string;
+        [name: string]: unknown;
         item(index: number): string | null;
         namedItem(name: string): string | null;
       };
@@ -1551,7 +1551,7 @@ class DeclarativeExampleImpl {
     value.#value = input;
   }
 
-  getEntryList(): readonly [string, string][] {
+  getEntryList(): [string, string][] {
     return [['value', this.#value]];
   }
 

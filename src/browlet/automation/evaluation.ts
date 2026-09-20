@@ -7,9 +7,9 @@ import { copyEvaluationValue } from './evaluation-value';
 
 /** One page execution context and its outstanding host commands. */
 export class PageEvaluation {
-  readonly #realm: Realm;
-  readonly #pending = new Set<(reason: Error) => void>();
-  readonly #tasks = new Set<QueuedTaskHandle>();
+  #realm: Realm;
+  #pending = new Set<(reason: Error) => void>();
+  #tasks = new Set<QueuedTaskHandle>();
   #disposed = false;
 
   constructor(realm: Realm) {

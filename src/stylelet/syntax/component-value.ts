@@ -91,7 +91,7 @@ export function isFunctionBlock(component: Token): component is FunctionBlock {
   return isBlockKind(component, TokenKind.FunctionBlock);
 }
 
-export function serializeComponentValues(values: readonly ComponentValue[]): string {
+export function serializeComponentValues(values: ComponentValue[]): string {
   let result = '';
   let previous = TokenSerializationType.Other;
 

@@ -7,11 +7,11 @@ import type { Promises } from '../js-engine/promises';
 import type { DOMExceptionName } from '../web-idl/core/index';
 
 export class Stylelet {
-  readonly version = 'stylelet-__VERSION__';
-  readonly context: StyleletContext;
-  readonly documentScope: TreeScope;
+  version = 'stylelet-__VERSION__' as const;
+  context: StyleletContext;
+  documentScope: TreeScope;
 
-  readonly #cascade: CascadeEngine;
+  #cascade: CascadeEngine;
 
   constructor(
     document: Document,
@@ -71,7 +71,7 @@ export type TreeCaps = {
 
 /** Execution and failure facilities supplied by the embedding host. */
 export type RuntimeCaps = {
-  readonly promises: Promises;
+  promises: Promises;
   runInParallel(steps: () => void): void;
   createDOMException(name: DOMExceptionName, message?: string): DOMException;
 };

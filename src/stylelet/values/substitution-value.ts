@@ -36,7 +36,7 @@ export function createSubstitutionValue<Value, Context = unknown>(
 }
 
 export function containsSubstitutionFunction(
-  components: readonly ComponentValue[],
+  components: ComponentValue[],
 ): boolean {
   for (const component of components) {
     if (!isComponentBlock(component)) continue;
@@ -102,8 +102,8 @@ function resolveSubstitutionValue<Value, Context>(
 }
 
 function resolveSubstitutionFunction(
-  _components: readonly ComponentValue[],
+  _components: ComponentValue[],
   _context: unknown,
-): readonly ComponentValue[] | GuaranteedInvalidValue {
+): ComponentValue[] | GuaranteedInvalidValue {
   throw new Error('Arbitrary substitution is not implemented');
 }

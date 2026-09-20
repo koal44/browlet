@@ -79,8 +79,8 @@ import type { TextImpl } from './text';
  * };
  */
 export abstract class NodeImpl extends TreeNode<NodeImpl> {
-  readonly #nodeType: NodeType;
-  readonly #virtuals: NodeVirtuals;
+  #nodeType: NodeType;
+  #virtuals: NodeVirtuals;
   #document: DocumentImpl | null;
 
   constructor(
@@ -294,9 +294,9 @@ const nodeEventTargetVirtuals: EventTargetVirtuals = {
 };
 
 export type NodeOptions = {
-  readonly treeVirtuals?: TreeNodeVirtuals<NodeImpl>;
-  readonly eventTargetVirtuals?: EventTargetVirtuals;
-  readonly virtuals?: NodeVirtuals;
+  treeVirtuals?: TreeNodeVirtuals<NodeImpl>;
+  eventTargetVirtuals?: EventTargetVirtuals;
+  virtuals?: NodeVirtuals;
 };
 
 export type NodeVirtuals = {

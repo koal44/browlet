@@ -24,8 +24,8 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
 
 /** The shared record for an implementation instance and its eventual platform object. */
 export class PlatformRecord<T extends object = object> {
-  readonly implInst: StampedImplInstance<T>;
-  readonly primaryInterface: AssembledInterfaceDefinition;
+  implInst: StampedImplInstance<T>;
+  primaryInterface: AssembledInterfaceDefinition;
   binding: RealmBinding;
   platformObject?: StampedPlatformObject;
   // Lazily allocated storage for maplike, setlike, and observable-array members.

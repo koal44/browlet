@@ -76,17 +76,17 @@ export type ConstructorSteps = (
 ) => void;
 
 export type ImplementationConstructorSteps = (
-  values: readonly unknown[],
+  values: unknown[],
 ) => object;
 
 export type ConstructorBehavior =
   | {
-    readonly kind: 'construct';
-    readonly steps: ImplementationConstructorSteps;
+    kind: 'construct';
+    steps: ImplementationConstructorSteps;
   }
   | {
-    readonly kind: 'initialize';
-    readonly steps: ConstructorSteps;
+    kind: 'initialize';
+    steps: ConstructorSteps;
   };
 
 export type StringificationBehavior = (
@@ -96,7 +96,7 @@ export type StringificationBehavior = (
 export type IndexedPropertySteps =
   | {
     getSupportedPropertyIndices(this: object): Iterable<number>;
-    readonly unsupportedValue: null | undefined;
+    unsupportedValue: null | undefined;
     setExisting?(this: object, index: number, value: unknown): void;
     setNew?(this: object, index: number, value: unknown): void;
   }
@@ -139,4 +139,4 @@ export type ObservableArraySteps = {
 
 export type ValuePairsSteps = (
   this: StampedImplInstance,
-) => readonly ValuePair[];
+) => ValuePair[];

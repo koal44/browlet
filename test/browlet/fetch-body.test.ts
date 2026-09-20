@@ -144,9 +144,9 @@ describe('Fetch body errors at the Promise binding boundary', () => {
 // while Request/Response's author-facing body consumption is still unfinished.
 class BodyConsumerImpl {
   constructor(
-    readonly body: BodyRecord,
-    readonly destination: GlobalObject,
-    readonly runtime: RuntimeContext,
+    public body: BodyRecord,
+    public destination: GlobalObject,
+    public runtime: RuntimeContext,
   ) {}
 
   full(): PromiseValue<void> {

@@ -9,7 +9,7 @@ import type { PlatformRecord } from './platform-object';
 import type { RealmBinding } from './realm-binding';
 
 export class ObservableArrayBinding {
-  readonly #binding: RealmBinding;
+  #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {

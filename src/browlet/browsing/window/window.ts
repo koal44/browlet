@@ -82,7 +82,7 @@ export class WindowImpl
 {
   #document: DocumentImpl | null = null;
   #currentEvent: EventImpl | undefined;
-  readonly #location: LocationImpl;
+  #location: LocationImpl;
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
   constructor(url: URL) {
@@ -127,7 +127,7 @@ export class WindowImpl
     return this.#currentEvent;
   }
 
-  readonly getComputedStyle = (
+  getComputedStyle = (
     element: ElementImpl,
     pseudoElement?: string | null,
   ): CSSStyleDeclaration => {
@@ -258,7 +258,7 @@ export class WindowImpl
 
   // -- Private ----------------------------------------------------------
 
-  #createTimerAction(handler: TimerHandler): (argumentsList: readonly unknown[]) => void {
+  #createTimerAction(handler: TimerHandler): (argumentsList: unknown[]) => void {
     if (typeof handler === 'string') {
       return () => {
         throw new Error(

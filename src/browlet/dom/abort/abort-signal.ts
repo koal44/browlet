@@ -37,11 +37,11 @@ export class AbortSignalImpl extends EventTargetImpl
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
   #dependent = false;
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
-  readonly #eventHandlers = new EventHandlerMap(this, [{
+  #eventHandlers = new EventHandlerMap(this, [{
     name: 'onabort',
     type: 'abort',
   }]);
-  readonly #global: object;
+  #global: object;
   #reason: unknown = undefined;
   // A shared WeakRef lets every source/dependent set deduplicate by identity.
   #reference = new WeakRef(this);
@@ -84,7 +84,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
   static any(
     signal: AbortSignalImpl,
-    signals: readonly AbortSignalImpl[],
+    signals: AbortSignalImpl[],
   ): AbortSignalImpl {
     signal.#initializeDependent(signals);
     return signal;
@@ -155,7 +155,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
   // -- Private ----------------------------------------------------------
 
-  #initializeDependent(signals: readonly AbortSignalImpl[]): void {
+  #initializeDependent(signals: AbortSignalImpl[]): void {
     for (const signal of signals) {
       if (signal.aborted) {
         this.#setAbortReason(signal.#reason);

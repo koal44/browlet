@@ -36,10 +36,10 @@ export class Snapshot {
   // caps
   seedsById: SeedIdFn;
   seedsByClass: SeedClassFn;
-  readonly docDesignMode: (doc: Document) => string | undefined;
-  readonly treeVersion: (ctx: QueryContext) => number | undefined;
-  readonly hasTreeVersion: boolean;
-  readonly htmlCollectionArray: HtmlCollectionArray | undefined;
+  docDesignMode: (doc: Document) => string | undefined;
+  treeVersion: (ctx: QueryContext) => number | undefined;
+  hasTreeVersion: boolean;
+  htmlCollectionArray: HtmlCollectionArray | undefined;
   hasCustomState: (e: Element, name: string) => boolean;
 
   checkCacheWatermark: () => void;

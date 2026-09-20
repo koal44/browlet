@@ -8,7 +8,7 @@ import {
 } from '../../../src/js-engine/index';
 import {
   EventLoop, createTaskSource, type EventLoopOptions,
-  type LongTaskReporter, Task, type TaskTimingHooks,
+  type LongTaskReporter, Task, type TaskQueueSelector, type TaskTimingHooks,
 } from '../../../src/browlet/scripting/event-loop';
 import {
   domManipulationTaskSource, navigationAndTraversalTaskSource, networkingTaskSource,
@@ -162,9 +162,7 @@ describe('task queues', () => {
     const second = vi.fn();
     const firstQueue = eventLoop.getTaskQueue(firstSource);
     const secondQueue = eventLoop.getTaskQueue(secondSource);
-    const selectTaskQueue = vi.fn(
-      (queues: readonly ReadonlySet<Task>[]) => queues[1]!,
-    );
+    const selectTaskQueue = vi.fn<TaskQueueSelector>((queues) => queues[1]!);
 
     eventLoop.queueTask(firstSource, null, first);
     eventLoop.queueTask(secondSource, null, second);

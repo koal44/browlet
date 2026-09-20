@@ -6,7 +6,7 @@ import { isElement } from '../../infra/selector-dom';
 import type { Snapshot } from '../snapshot';
 
 export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;
-type ClassCap<R> = (root: R, classes: readonly string[]) => Iterable<Element>;
+type ClassCap<R> = (root: R, classes: string[]) => Iterable<Element>;
 
 export function buildSeedsByClass(caps: SelectletCaps | undefined, snap: Snapshot): SeedClassFn {
   const docCap = caps?.doc?.cachedClasses;

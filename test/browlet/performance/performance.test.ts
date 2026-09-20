@@ -184,5 +184,5 @@ function requireInterface<T extends object>(
 }
 
 type InterfaceConstructor<T extends object> = CallableFunction & {
-  readonly prototype: T;
+  prototype: T;
 };

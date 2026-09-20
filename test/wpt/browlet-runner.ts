@@ -105,6 +105,6 @@ function escapeHtml(value: string): string {
 }
 
 export type WindowAnyTest = {
-  readonly document: string;
-  readonly documentPath: string;
+  document: string;
+  documentPath: string;
 };

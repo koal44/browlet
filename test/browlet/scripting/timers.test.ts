@@ -145,9 +145,9 @@ function createEventLoopOptions(): EventLoopOptions {
 
 class ManualTimerHost implements TimerHost {
   now = 0;
-  readonly requestedDelays: number[] = [];
+  requestedDelays: number[] = [];
   #nextSequence = 0;
-  readonly #wakeUps = new Set<ManualWakeUp>();
+  #wakeUps = new Set<ManualWakeUp>();
 
   scheduleTimeout(milliseconds: number, steps: () => void): () => void {
     this.requestedDelays.push(milliseconds);
@@ -189,8 +189,8 @@ class ManualTimerHost implements TimerHost {
 }
 
 type ManualWakeUp = {
-  readonly at: number;
+  at: number;
   canceled: boolean;
-  readonly sequence: number;
-  readonly steps: () => void;
+  sequence: number;
+  steps: () => void;
 };

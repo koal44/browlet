@@ -288,11 +288,11 @@ export class EventImpl {
     return this.#relatedTarget;
   }
 
-  getTouchTargetList(): readonly (EventTargetImpl | null)[] {
+  getTouchTargetList(): (EventTargetImpl | null)[] {
     return this.#touchTargetList;
   }
 
-  getPath(): readonly EventPathItem[] {
+  getPath(): EventPathItem[] {
     return this.#path;
   }
 
@@ -300,7 +300,7 @@ export class EventImpl {
     invocationTarget: EventTargetImpl,
     shadowAdjustedTarget: EventTargetImpl | null,
     relatedTarget: EventTargetImpl | null,
-    touchTargetList: readonly (EventTargetImpl | null)[],
+    touchTargetList: (EventTargetImpl | null)[],
     slotInClosedTree: boolean,
   ): void {
     const root = invocationTarget.getTreeRoot();
@@ -325,7 +325,7 @@ export class EventImpl {
     this.#relatedTarget = relatedTarget;
   }
 
-  setTouchTargetList(targets: readonly (EventTargetImpl | null)[]): void {
+  setTouchTargetList(targets: (EventTargetImpl | null)[]): void {
     this.#touchTargetList = [...targets];
   }
 
@@ -540,11 +540,11 @@ export const customEventInitIDL = defineDictionary({
 });
 
 export type EventPathItem = {
-  readonly invocationTarget: EventTargetImpl;
-  readonly invocationTargetInShadowTree: boolean;
-  readonly shadowAdjustedTarget: EventTargetImpl | null;
-  readonly relatedTarget: EventTargetImpl | null;
-  readonly touchTargetList: readonly (EventTargetImpl | null)[];
-  readonly rootOfClosedTree: boolean;
-  readonly slotInClosedTree: boolean;
+  invocationTarget: EventTargetImpl;
+  invocationTargetInShadowTree: boolean;
+  shadowAdjustedTarget: EventTargetImpl | null;
+  relatedTarget: EventTargetImpl | null;
+  touchTargetList: (EventTargetImpl | null)[];
+  rootOfClosedTree: boolean;
+  slotInClosedTree: boolean;
 };

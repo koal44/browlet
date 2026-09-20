@@ -22,7 +22,7 @@ import {
 /** HTML §2.7.7, StructuredSerializeWithTransfer. */
 export function structuredSerializeWithTransfer(
   value: unknown,
-  transferList: readonly unknown[],
+  transferList: unknown[],
   ctx: BindingContext<Realm>,
 ): StructuredSerializeWithTransferResult {
   const memory: StructuredSerializeMemory = new Map();

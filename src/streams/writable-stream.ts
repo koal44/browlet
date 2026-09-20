@@ -31,7 +31,7 @@ import { QueueWithSizes } from './queue-with-sizes';
  * };
  */
 export class WritableStreamImpl {
-  readonly state: WritableStreamState = {
+  state: WritableStreamState = {
     backpressure: false,
     state: 'writable',
     writeRequests: [],
@@ -44,7 +44,7 @@ export class WritableStreamImpl {
   constructor(
     underlyingSink: UnderlyingSink | null = {},
     strategy: QueuingStrategyRecord = {},
-    readonly runtime: RuntimeContext,
+    public runtime: RuntimeContext,
   ) {
     if (underlyingSink === null) return;
     if (underlyingSink.type !== undefined) {
@@ -388,9 +388,9 @@ type WritableStreamState = {
 };
 
 type WritableStreamPendingAbortRequest = {
-  readonly promise: PromiseValueCapability<void>;
-  readonly reason: unknown;
-  readonly wasAlreadyErroring: boolean;
+  promise: PromiseValueCapability<void>;
+  reason: unknown;
+  wasAlreadyErroring: boolean;
 };
 
 /*
@@ -403,11 +403,11 @@ type WritableStreamPendingAbortRequest = {
  * };
  */
 export type UnderlyingSink = {
-  readonly abort?: (reason?: unknown) => PromiseValue<unknown> | void;
-  readonly close?: () => PromiseValue<unknown> | void;
-  readonly start?: (controller: WritableStreamDefaultControllerImpl) => unknown;
-  readonly type?: unknown;
-  readonly write?: (
+  abort?: (reason?: unknown) => PromiseValue<unknown> | void;
+  close?: () => PromiseValue<unknown> | void;
+  start?: (controller: WritableStreamDefaultControllerImpl) => unknown;
+  type?: unknown;
+  write?: (
     chunk: unknown,
     controller: WritableStreamDefaultControllerImpl,
   ) => PromiseValue<unknown> | void;
@@ -749,7 +749,7 @@ export class WritableStreamDefaultControllerImpl {
 }
 
 type WritableStreamDefaultControllerState = {
-  readonly queue: QueueWithSizes<unknown>;
+  queue: QueueWithSizes<unknown>;
   abortAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
   abortController: AbortControllerCapability;
   closeAlgorithm?: () => PromiseValue<unknown>;
@@ -996,7 +996,7 @@ export class WritableStreamDefaultWriterImpl {
 }
 
 type WritableStreamDefaultWriterState = {
-  readonly promises: Promises;
+  promises: Promises;
   closedPromise: PromiseValueCapability<void>;
   readyPromise: PromiseValueCapability<void>;
   stream?: WritableStreamImpl;

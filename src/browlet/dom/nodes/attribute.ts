@@ -22,10 +22,10 @@ import { NodeImpl, NodeType } from './node';
  */
 export class AttrImpl extends withAttrStub(NodeImpl) {
   #element: ElementImpl | null = null;
-  readonly #localName: string;
+  #localName: string;
   #value: string;
-  readonly #namespaceURI: string | null;
-  readonly #prefix: string | null;
+  #namespaceURI: string | null;
+  #prefix: string | null;
 
   constructor(
     localName: string,

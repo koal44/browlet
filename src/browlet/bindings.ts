@@ -98,7 +98,7 @@ export function getBindingContext(realm: Realm): BindingContext<Realm> {
 }
 
 class BrowletBindings {
-  readonly #world: BindingWorld<Realm>;
+  #world: BindingWorld<Realm>;
 
   constructor() {
     this.#world = new BindingWorld<Realm>(

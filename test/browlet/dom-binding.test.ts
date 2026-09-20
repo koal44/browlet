@@ -641,12 +641,12 @@ function ownKeys(prototype: object): PropertyKey[] {
     .sort((left, right) => String(left).localeCompare(String(right)));
 }
 
-function exposedNames(global: object, names: readonly string[]): string[] {
+function exposedNames(global: object, names: string[]): string[] {
   return names.filter((name) => Reflect.has(global, name));
 }
 
 type InterfaceConstructor = {
   (...arguments_: unknown[]): unknown;
   new(...arguments_: unknown[]): object;
-  readonly prototype: object;
+  prototype: object;
 };

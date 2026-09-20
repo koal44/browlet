@@ -13,10 +13,10 @@ import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
 
 // Value pairs use the implementation's existing entry tuples.
-export type ValuePair<Key = unknown, Value = unknown> = readonly [key: Key, value: Value];
+export type ValuePair<Key = unknown, Value = unknown> = [key: Key, value: Value];
 
 export class SynchronousIterableBinding {
-  readonly #binding: RealmBinding;
+  #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {
@@ -260,7 +260,7 @@ export class SynchronousIterableBinding {
     implInst: StampedImplInstance,
     primaryInterface: AssembledInterfaceDefinition,
     iterable: IterableMember,
-  ): readonly ValuePair[] {
+  ): ValuePair[] {
     const steps = this.#binding.getMemberBinding(primaryInterface, iterable)?.valuePairsSteps;
     if (!steps) {
       throw new Error(

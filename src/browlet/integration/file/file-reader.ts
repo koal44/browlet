@@ -42,12 +42,12 @@ import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time'
  * };
  */
 export class FileReaderImpl extends EventTargetImpl {
-  readonly #runtime: RuntimeContext;
+  #runtime: RuntimeContext;
   #state: FileReaderState = 'empty';
   #result: string | ArrayBuffer | null = null;
   #error: DOMException | null = null;
   #operation: FileReadOperation | null = null;
-  readonly #eventHandlers = new EventHandlerMap(this, [
+  #eventHandlers = new EventHandlerMap(this, [
     { name: 'onloadstart', type: 'loadstart' },
     { name: 'onprogress', type: 'progress' },
     { name: 'onload', type: 'load' },
@@ -349,8 +349,8 @@ type FileReaderState = 'empty' | 'loading' | 'done';
 type FileReadOperation = {
   cancel(): void;
   loaded: number;
-  readonly tasks: Set<TaskHandle>;
-  readonly total: number;
+  tasks: Set<TaskHandle>;
+  total: number;
 };
 
 const progressInterval = 50;

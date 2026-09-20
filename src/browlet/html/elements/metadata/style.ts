@@ -23,7 +23,7 @@ import type { CSSStyleSheetImpl } from '../../../../stylelet/cssom/css-styleshee
 export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
 {
-  static readonly #linkStyleOptions = {
+  static #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };

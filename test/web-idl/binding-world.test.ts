@@ -259,10 +259,10 @@ describe('Web IDL binding worlds and realm registration', () => {
     const positioned = () => 'positioned';
     class ConstructedImpl {
       constructor(
-        readonly context: BindingContext,
-        readonly global: object,
-        readonly semantic: string,
-        readonly positioned: string,
+        public context: BindingContext,
+        public global: object,
+        public semantic: string,
+        public positioned: string,
       ) {}
     }
     const interfaceIDL = defineInterface({

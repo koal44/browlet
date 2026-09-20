@@ -4,7 +4,7 @@
  * only provides bounded traversal and saved-position restoration.
  */
 export class CodePointCursor {
-  private readonly codePoints: string[];
+  private codePoints: string[];
   private i = 0;
 
   constructor(public readonly input: string) {

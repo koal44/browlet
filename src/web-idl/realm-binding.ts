@@ -48,22 +48,22 @@ import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
 
 export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
-  readonly definitions: DefinitionAssembly;
-  readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
-  readonly world: BindingWorld;
-  readonly realizeException: (value: unknown) => unknown;
-  readonly realm: Realm;
-  readonly context: BindingContext<Realm>;
-  readonly defaultConversionContext: ConversionContext;
-  readonly #collections: CollectionBinding;
-  readonly #asyncIterables: AsynchronousIterableBinding;
-  readonly #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
-  readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
+  definitions: DefinitionAssembly;
+  hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
+  world: BindingWorld;
+  realizeException: (value: unknown) => unknown;
+  realm: Realm;
+  context: BindingContext<Realm>;
+  defaultConversionContext: ConversionContext;
+  #collections: CollectionBinding;
+  #asyncIterables: AsynchronousIterableBinding;
+  #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
+  #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
-  readonly #iterables: SynchronousIterableBinding;
-  readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
-  readonly #observableArrays: ObservableArrayBinding;
+  #iterables: SynchronousIterableBinding;
+  #legacyPlatformObjects: LegacyPlatformObjectBinding;
+  #observableArrays: ObservableArrayBinding;
 
   // Project helper: compose this realm's definition records and binding machinery.
   constructor(
@@ -562,7 +562,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   #constructPlatformObject(
     primaryInterface: AssembledInterfaceDefinition,
     behavior: ConstructorBehavior,
-    values: readonly unknown[],
+    values: unknown[],
     newTarget: object,
   ): StampedPlatformObject {
     if (behavior.kind === 'initialize') {
@@ -1728,10 +1728,10 @@ type MemberOwnerDefinition = AssembledInterfaceDefinition | AssembledNamespaceDe
 type MemberEntry = AssembledInterfaceMember | AssembledNamespaceMember;
 /** Supply before projecting any object that needs these interface prototypes. */
 export type GlobalObjectAllocation = {
-  readonly object: object;
-  readonly prototypes: ReadonlyMap<string, object>;
-  readonly namedProperties?: {
-    readonly object: object;
+  object: object;
+  prototypes: ReadonlyMap<string, object>;
+  namedProperties?: {
+    object: object;
     setDelegate(delegate: object): void;
   };
 };

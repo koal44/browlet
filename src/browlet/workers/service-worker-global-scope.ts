@@ -7,9 +7,9 @@ import {
 // service-worker registration, script resources, and worker event types.
 export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
 {
-  protected abstract readonly scriptResourceHasEverBeenEvaluated: boolean;
-  protected abstract readonly eventTypesToHandle: ReadonlySet<string>;
-  static readonly #eventTargetVirtuals: EventTargetVirtuals = {
+  protected abstract scriptResourceHasEverBeenEvaluated: boolean;
+  protected abstract eventTypesToHandle: ReadonlySet<string>;
+  static #eventTargetVirtuals: EventTargetVirtuals = {
     addingEventListener: (target, type) => {
       (target as ServiceWorkerGlobalScopeImpl).#addingEventListener(type);
     },

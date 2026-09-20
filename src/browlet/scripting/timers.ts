@@ -6,12 +6,12 @@ export const timerTaskSource = createTaskSource('timer');
 
 /** Timer state owned by a WindowOrWorkerGlobalScope mixin. */
 export class GlobalTimers {
-  readonly #activeTimers = new Map<TimerKey, ActiveTimer>();
-  readonly #eventLoop: EventLoop;
-  readonly #host: TimerHost;
-  readonly #idMap = new Map<number, TimerKey>();
-  readonly #queueTask: GlobalTimersOptions['queueTask'];
-  readonly #time: HighResolutionTimeSource;
+  #activeTimers = new Map<TimerKey, ActiveTimer>();
+  #eventLoop: EventLoop;
+  #host: TimerHost;
+  #idMap = new Map<number, TimerKey>();
+  #queueTask: GlobalTimersOptions['queueTask'];
+  #time: HighResolutionTimeSource;
   #fullyActive = false;
   #nextId = 1;
   #nextSequence = 0;
@@ -60,7 +60,7 @@ export class GlobalTimers {
   setTimeout(
     action: TimerAction,
     timeout: number,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): number {
     return this.#initializeTimer(
       action,
@@ -73,7 +73,7 @@ export class GlobalTimers {
   setInterval(
     action: TimerAction,
     timeout: number,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): number {
     return this.#initializeTimer(
       action,
@@ -90,7 +90,7 @@ export class GlobalTimers {
   #initializeTimer(
     action: TimerAction,
     timeout: number,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
     repeat: boolean,
     previousId?: number,
   ): number {
@@ -229,7 +229,7 @@ export class GlobalTimers {
   }
 }
 
-export type TimerAction = (argumentsList: readonly unknown[]) => void;
+export type TimerAction = (argumentsList: unknown[]) => void;
 
 export type TimerHost = {
   scheduleTimeout(
@@ -254,12 +254,12 @@ type HighResolutionTimeSource = {
 
 type ActiveTimer = {
   cancelWakeUp: (() => void) | null;
-  readonly completionSteps: () => void;
+  completionSteps: () => void;
   expiryTime: number;
   readonly key: TimerKey;
-  readonly milliseconds: number;
-  readonly orderingIdentifier: string;
-  readonly sequence: number;
+  milliseconds: number;
+  orderingIdentifier: string;
+  sequence: number;
   suspensionStartTime: number | null;
 };
 
@@ -273,7 +273,7 @@ const nodeTimerHost: TimerHost = {
 };
 
 function isTimerTask(task: Task | null): task is Task & {
-  readonly timerNestingLevel: number;
+  timerNestingLevel: number;
 } {
   return task?.timerNestingLevel !== undefined;
 }

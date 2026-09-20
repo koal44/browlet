@@ -94,7 +94,7 @@ export function getAssociatedRealm(value: object): JSRealm | undefined {
 export function createContext(
   microtaskQueue: JSMicrotaskQueue,
   reuseGlobalProxyFrom?: NodeContext,
-  globalPrototypeChain?: readonly GlobalPrototypeKind[],
+  globalPrototypeChain?: GlobalPrototypeKind[],
 ): NodeContext {
   const handle = microtaskQueue instanceof AddonMicrotaskQueue
     ? microtaskQueue.handle
@@ -140,7 +140,7 @@ export function createCollectionIterator(
     : undefined;
 }
 
-export function getContextPrototypeChain(context: NodeContext): readonly object[] | undefined {
+export function getContextPrototypeChain(context: NodeContext): object[] | undefined {
   return isAddonContextHandle(context) ? context.prototypeChain : undefined;
 }
 
@@ -205,7 +205,7 @@ class JSRuntime {
    * that fallback behind this one queue object. A compatible Node runtime
    * or the addon instead returns an explicit queue from createMicrotaskQueue().
    */
-  readonly #ambientMicrotaskQueue: JSMicrotaskQueue = {
+  #ambientMicrotaskQueue: JSMicrotaskQueue = {
     kind: 'ambient',
     // eslint-disable-next-line no-restricted-syntax -- Stock Node queue backend, used only when explicit queues are unavailable.
     enqueueMicrotask: (steps) => { globalThis.queueMicrotask(steps); },
@@ -340,17 +340,17 @@ export type JSHostHooks<HostDefined> = {
 };
 
 export type JSJobCallback<HostDefined> = {
-  readonly callback: JSFunction;
-  readonly hostDefined: HostDefined;
+  callback: JSFunction;
+  hostDefined: HostDefined;
 };
 
 export type JSJobRegistration = {
-  readonly incumbent: JSRealm | null;
-  readonly hostDefinedOptions: readonly unknown[];
+  incumbent: JSRealm | null;
+  hostDefinedOptions: unknown[];
 };
 
 export type JSMicrotaskQueue = {
-  readonly kind: 'ambient' | 'explicit';
+  kind: 'ambient' | 'explicit';
   enqueueMicrotask(steps: () => void): void;
   performMicrotaskCheckpoint(): void;
 };
@@ -378,8 +378,8 @@ class RealmStamper extends Stamper {
 }
 
 class AddonMicrotaskQueue implements JSMicrotaskQueue {
-  readonly kind = 'explicit';
-  readonly handle: AddonMicrotaskQueueHandle;
+  kind = 'explicit' as const;
+  handle: AddonMicrotaskQueueHandle;
 
   constructor(handle: AddonMicrotaskQueueHandle) {
     this.handle = handle;

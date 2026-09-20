@@ -276,8 +276,8 @@ describe('Browlet DOMException binding', () => {
 });
 
 type BoundQuotaExceededError = DOMException & {
-  readonly quota: number | null;
-  readonly requested: number | null;
+  quota: number | null;
+  requested: number | null;
 };
 
 type BoundQuotaExceededErrorConstructor = {
@@ -285,7 +285,7 @@ type BoundQuotaExceededErrorConstructor = {
     quota?: number;
     requested?: number;
   }): BoundQuotaExceededError;
-  readonly prototype: BoundQuotaExceededError;
+  prototype: BoundQuotaExceededError;
 };
 
 function createBrowlet(): Browlet {

@@ -7,12 +7,12 @@ import {
   parseColorInterpolationMethod, parseColorValue, resolveColorValue,
   serializeColorInterpolationMethod, serializeColorValue,
   tryResolveAbsoluteColor,
-  type AbsoluteColor,
+  type AbsoluteColor, type CustomColorSpace, type HueInterpolationMethod,
   type PredefinedAbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
 
-type ColorVector3 = readonly [number, number, number];
-type ColorVector4 = readonly [number, number, number, number];
+type ColorVector3 = [number, number, number];
+type ColorVector4 = [number, number, number, number];
 type ColorVector = ColorVector3 | ColorVector4;
 
 function promotedVariable(name: string) {
@@ -64,7 +64,7 @@ function expectColorCloseTo(
 
 function expectComponentsCloseTo(
   actual: AbsoluteColor['components'],
-  expected: readonly (number | undefined)[],
+  expected: (number | undefined)[],
   precision: number,
 ): void {
   expected.forEach((component, index) => {
@@ -1372,7 +1372,7 @@ describe('color values', () => {
     const space = {
       name: '--missing',
       keys: ['value'],
-    } as const;
+    } as const satisfies CustomColorSpace;
     const custom: AbsoluteColor<typeof space> = {
       kind: ColorKind.Absolute,
       space,
@@ -1699,7 +1699,7 @@ describe('color values', () => {
       [7, -20.5, 100],
       0.4,
     ],
-  ] as const)(
+  ])(
     'resolves the relative color() WPT case %s',
     (input, space, components, alpha) => {
       const color = resolveColorValue(
@@ -1747,7 +1747,7 @@ describe('color values', () => {
     )).toBeNull();
   });
 
-  it.each([
+  it.each<[string, keyof typeof SPACES, ColorVector3]>([
     [
       'lch(52.2345% 72.2 56.2 / 1)',
       'lch',
@@ -1768,7 +1768,7 @@ describe('color values', () => {
       'xyz-d65',
       [0.472, 0.372, 0.131],
     ],
-  ] as const)(
+  ])(
     'matches the section 15 resolved color example %s',
     (input, space, components) => {
       const color = parseColorValue(input);
@@ -2078,12 +2078,12 @@ describe('color values', () => {
     });
   });
 
-  it.each([
+  it.each<[string, ColorVector3]>([
     ['hsl(0 100% 37.5%)', [0.75, 0, 0]],
     ['hsl(360 100% 37.5%)', [0.75, 0, 0]],
     ['hsl(720 100% 37.5%)', [0.75, 0, 0]],
     ['hsl(-300 100% 37.5%)', [0.75, 0.75, 0]],
-  ] as const)('normalizes the hue in %s', (input, expected) => {
+  ])('normalizes the hue in %s', (input, expected) => {
     expectColorCloseTo(
       parseColorValue(input) as AbsoluteColor,
       expected,
@@ -2200,7 +2200,7 @@ describe('color values', () => {
   it.each([
     ['hwb(30 -10% 20%)', [0.8, 0.35, -0.1]],
     ['hwb(30 20% -10%)', [1.1, 0.65, 0.2]],
-  ] as const)('preserves finite negative components in %s', (input, components) => {
+  ])('preserves finite negative components in %s', (input, components) => {
     const color = parseColorValue(input);
 
     expect(color).toMatchObject({
@@ -2899,7 +2899,7 @@ describe('color values', () => {
     ['lch', [64.7841, 65.6008, 301.364]],
     ['oklch', [0.72601, 0.15661, 264.052]],
     ['srgb', [0.5, 0.5, 1]],
-  ] as const)(
+  ])(
     'mixes white and blue in %s',
     (space, components) => {
       const computed = resolveComputedAbsoluteColor(
@@ -4000,7 +4000,7 @@ describe('color values', () => {
     expectComponentsCloseTo(roundTrip.components, color.components, 12);
   });
 
-  type ColorConversionReference = readonly [
+  type ColorConversionReference = [
     rgb: ColorVector3,
     srgbLch: ColorVector3,
     srgbXyz: ColorVector3,
@@ -4037,7 +4037,7 @@ describe('color values', () => {
     [[1, 1, 0], [97.60712733040384, 94.707781122248, 99.57459669758006], [0.7700325, 0.9278251, 0.1385259], [97.36564894741473, 123.27189762543868, 98.13571529011946], [0.7522386418173093, 0.9207130859062552, 0.04511338185890264]],
     [[1, 1, 0.5], [98.1277751014117, 61.22609652360603, 101.47173621025149], [0.8086535482857629, 0.9432735193143051, 0.34193007336894155], [97.93976302926873, 71.24063681412848, 100.89159287690555], [0.7946652956121643, 0.9376837474241972, 0.26856042517847206]],
     [[1, 1, 1], [100.00000357370622, 0.00002939455720908227, 157.3786019654702], [0.95047, 1.0000001, 1.08883], [99.99983352742068, 0.014636497416960078, 254.8841151652981], [0.9504559270516717, 1.0000000000000002, 1.0890577507598787]],
-  ] as const satisfies readonly ColorConversionReference[];
+  ] as const satisfies ColorConversionReference[];
 
   it.each(colorConversionReferences)(
     'matches the CSS Working Group conversion references for RGB %j',
@@ -4551,7 +4551,7 @@ describe('color values', () => {
     expect(deltaEOK(reference, sample)).toBeCloseTo(0.3, 12);
   });
 
-  it.each([
+  it.each<[ColorVector3, ColorVector3, number]>([
     [[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425],
     [[50, 3.1571, -77.2803], [50, 0, -82.7485], 2.8615],
     [[50, 2.8361, -74.02], [50, 0, -82.7485], 3.4412],
@@ -4586,12 +4586,10 @@ describe('color values', () => {
     [[90.9257, -0.5406, -0.9208], [88.6381, -0.8985, -0.7239], 1.5381],
     [[6.7747, -0.2908, -2.4247], [5.8714, -0.0985, -2.2286], 0.6377],
     [[2.0776, 0.0795, -1.135], [0.9033, -0.0636, -0.5514], 0.9082],
-  ] as const)(
+  ])(
     'matches the Sharma ΔE2000 reference %j and %j',
     (reference, sample, expected) => {
-      const color = (
-        components: readonly [number, number, number]
-      ): AbsoluteColor => ({
+      const color = (components: ColorVector3): AbsoluteColor => ({
         kind: ColorKind.Absolute,
         space: SPACES.lab,
         components: [...components],
@@ -5283,12 +5281,12 @@ describe('color values', () => {
     },
   );
 
-  it.each([
+  it.each<[HueInterpolationMethod, ColorVector3, ColorVector3, ColorVector3]>([
     ['shorter', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 60]],
     ['longer', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 240]],
     ['increasing', [0.5, 0.1, 30], [0.7, 0.1, 190], [0.6, 0.1, 110]],
     ['decreasing', [0.5, 0.1, 30], [0.7, 0.1, 190], [0.6, 0.1, 290]],
-  ] as const)(
+  ])(
     'matches the %s hue interpolation example',
     (method, a, b, expected) => {
       const result = interpolateColors(
@@ -5600,10 +5598,10 @@ describe('color values', () => {
     [[0.99, 0.8, 195], [0.8409, 1, 1]],
     [[0.99, 0.8, 328], [1, 0.9567, 1]],
     [[0.99, 0.8, 110], [1, 1, 0.3386]],
-  ] as const satisfies readonly (readonly [
+  ] as const satisfies [
     oklch: ColorVector3,
     srgb: ColorVector3,
-  ])[];
+  ][];
 
   it.each(binarySearchGamutMappingReferences)(
     'matches the WPT binary-search gamut mapping reference %j',
@@ -5669,10 +5667,10 @@ describe('color values', () => {
       [[-0.1, 1.1, 60], [0, 0, 0]],
       [[1, 110, 60], [1, 1, 1]],
       [[1.1, 110, 60], [1, 1, 1]],
-    ] as const satisfies readonly (readonly [
+    ] as const satisfies [
       oklch: ColorVector3,
       srgb: ColorVector3,
-    ])[];
+    ][];
 
     for (const [oklch, srgb] of cases) {
       const mapped = gamutMapColor({

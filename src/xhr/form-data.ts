@@ -8,7 +8,7 @@ import {
 } from '../web-idl/index';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
-export type FormDataEntry = readonly [
+export type FormDataEntry = [
   name: ScalarValueString,
   value: FormDataEntryValue,
 ];
@@ -48,9 +48,9 @@ export const createFormDataEntry =
  * };
  */
 export class FormDataImpl {
-  readonly #createEntry: CreateFormDataEntry;
-  readonly #entryList: FormDataEntry[] = [];
-  readonly #runtime: RuntimeContext;
+  #createEntry: CreateFormDataEntry;
+  #entryList: FormDataEntry[] = [];
+  #runtime: RuntimeContext;
 
   // SPEC_MISMATCH: FormData(form?, submitter = null) -> FormData
   constructor(
@@ -129,7 +129,7 @@ export class FormDataImpl {
   // -- Internal methods -------------------------------------------------
 
   /** XHR §4 — value pairs to iterate over; also used by Fetch BodyInit extraction. */
-  getEntryList(): readonly FormDataEntry[] {
+  getEntryList(): FormDataEntry[] {
     return this.#entryList;
   }
 }

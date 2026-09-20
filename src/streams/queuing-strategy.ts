@@ -12,8 +12,8 @@ import { RangeError } from '../js-engine/exceptions';
  * };
  */
 export type QueuingStrategyRecord = {
-  readonly highWaterMark?: number;
-  readonly size?: QueuingStrategySize;
+  highWaterMark?: number;
+  size?: QueuingStrategySize;
 };
 
 /** Streams §7.4, ExtractHighWaterMark. */
@@ -51,7 +51,7 @@ export type QueuingStrategySize<Value = unknown> = (chunk: Value) => number;
  * };
  */
 type QueuingStrategyInit = {
-  readonly highWaterMark: number;
+  highWaterMark: number;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -95,7 +95,7 @@ export const queuingStrategyInitIDL = defineDictionary({
  * };
  */
 export class ByteLengthQueuingStrategyImpl {
-  readonly #highWaterMark: number;
+  #highWaterMark: number;
 
   constructor(init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
@@ -138,7 +138,7 @@ export const byteLengthQueuingStrategyIDL = defineInterface({
  * };
  */
 export class CountQueuingStrategyImpl {
-  readonly #highWaterMark: number;
+  #highWaterMark: number;
 
   constructor(init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;

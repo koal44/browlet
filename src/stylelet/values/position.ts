@@ -688,7 +688,7 @@ function createPositionOffsets(
 }
 
 function usesLogicalAxisOrder(
-  components: readonly PositionComponent[],
+  components: PositionComponent[],
 ): boolean {
   return components.some((component) => {
     if (!isPositionKeyword(component)) {
@@ -728,7 +728,7 @@ const FULL = { type: 'percentage', value: 100 } as const;
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
 export function serializePosition(value: PositionValue): string {
-  let components: readonly PositionComponent[] = value.offsets !== undefined
+  let components: PositionComponent[] = value.offsets !== undefined
     ? value.offsets
     : value.components;
 

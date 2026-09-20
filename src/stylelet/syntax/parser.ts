@@ -54,7 +54,7 @@ export type SyntaxAtRuleList = SyntaxAtRule[];
 export type SyntaxDeclarationRuleList = Array<SyntaxDeclarationList | SyntaxAtRule>;
 export type SyntaxRuleList = Array<SyntaxQualifiedRule | SyntaxAtRule>;
 
-export type ParserInput = string | readonly Token[];
+export type ParserInput = string | Token[];
 
 export function createComponentParser<T>(
   consumer: TryConsumer<T>,
@@ -170,7 +170,7 @@ export function parseComponentValue(input: ParserInput): ComponentValue | null {
 }
 
 // 5.4.9. Parse a list of component values
-export function parseListOfComponentValues(input: ParserInput): readonly ComponentValue[] {
+export function parseListOfComponentValues(input: ParserInput): ComponentValue[] {
   if (typeof input !== 'string' && input.every(isComponentValue)) {
     return input;
   }
@@ -332,7 +332,7 @@ function consumeQualifiedRule<Value extends Token>(
   }
 }
 
-function looksLikeCustomProperty(prelude: readonly ComponentValue[]): boolean {
+function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
   const values = prelude.filter((value) => !isWhitespaceToken(value));
 
   return values.length >= 2 &&
@@ -518,7 +518,7 @@ function consumeImportantFlag(declaration: SyntaxDeclaration): number {
 }
 
 function lastNonWhitespaceIndex(
-  values: readonly ComponentValue[],
+  values: ComponentValue[],
   start: number,
 ): number {
   for (let i = start; i >= 0; i--) {
@@ -538,7 +538,7 @@ function trimTrailingWhitespace(values: ComponentValue[]): number {
   return start - values.length;
 }
 
-function hasDisallowedTopLevelBraceBlock(values: readonly ComponentValue[]): boolean {
+function hasDisallowedTopLevelBraceBlock(values: ComponentValue[]): boolean {
   const significant = values.filter((value) => !isWhitespaceToken(value));
   const braces = significant.filter(isBraceBlock);
 

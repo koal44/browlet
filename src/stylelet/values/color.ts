@@ -56,7 +56,7 @@ export type AbsoluteColorSpace =
   | DeviceCmykSpace;
 
 export type CustomColorSpace<
-  Keys extends readonly string[] = readonly string[],
+  Keys extends string[] = string[],
 > = ColorSpace<DashedIdentValue['value'], Keys>;
 
 export type PredefinedAbsoluteColor = AbsoluteColor<PredefinedColorSpace>;
@@ -70,12 +70,12 @@ export type ColorProfileSpace =
   | DeviceCmykSpace['name'];
 
 export type ColorProfileComponentValues<
-  Components extends readonly string[] = readonly string[],
-> = Readonly<SameArityTuple<Components, number>>;
+  Components extends string[] = string[],
+> = SameArityTuple<Components, number>;
 
 export type ColorProfile<
   Space extends ColorProfileSpace = ColorProfileSpace,
-  Components extends readonly string[] = readonly string[],
+  Components extends string[] = string[],
 > = {
   space: Space;
   components: Components;
@@ -91,7 +91,7 @@ type WhitePoint = 'd50' | 'd65';
 
 export type ColorSpace<
   Name extends string = string,
-  Keys extends readonly string[] = readonly string[],
+  Keys extends string[] = string[],
 > = {
   name: Name;
   keys: Keys;
@@ -112,7 +112,7 @@ const PROPHOTO_RGB_SPACE = defineColorSpace('prophoto-rgb', ['r', 'g', 'b'], 'd5
 const REC2020_SPACE = defineColorSpace('rec2020', ['r', 'g', 'b'], 'd65');
 const XYZ_D50_SPACE = defineColorSpace('xyz-d50', ['x', 'y', 'z'], 'd50');
 const XYZ_D65_SPACE = defineColorSpace('xyz-d65', ['x', 'y', 'z'], 'd65');
-const DEVICE_CMYK_SPACE = { name: 'device-cmyk', keys: ['c', 'm', 'y', 'k'] } as const;
+const DEVICE_CMYK_SPACE = { name: 'device-cmyk', keys: ['c', 'm', 'y', 'k'] } as const satisfies ColorSpace;
 
 type SrgbSpace = typeof SRGB_SPACE;
 type LinearSrgbSpace = typeof LINEAR_SRGB_SPACE;
@@ -178,7 +178,7 @@ export const SPACES = {
 
 function defineColorSpace<
   const Name extends string,
-  const Keys extends readonly string[],
+  const Keys extends string[],
 >(
   name: Name,
   keys: Keys,
@@ -242,7 +242,7 @@ export enum ColorKind {
 
 export function defineColorProfile<
   const Space extends ColorProfileSpace,
-  const Components extends readonly string[],
+  const Components extends string[],
 >(
   profile: ColorProfile<Space, Components>,
 ): ColorProfile<Space, Components> {
@@ -268,8 +268,8 @@ function builtinColorProfile<
   const Third extends string,
 >(
   space: Space,
-  components: readonly [First, Second, Third],
-): ColorProfile<Space, readonly [First, Second, Third]> {
+  components: [First, Second, Third],
+): ColorProfile<Space, [First, Second, Third]> {
   return defineColorProfile({
     space,
     components,
@@ -836,7 +836,7 @@ const SystemColorNames = [
   'visitedtext',
 ] as const;
 
-const SystemColorNameSet: ReadonlySet<string> = new Set(SystemColorNames);
+const SystemColorNameSet = new Set<string>(SystemColorNames);
 
 /*
  * <deprecated-color>
@@ -2243,7 +2243,7 @@ const quirkyColorConsumer: TryConsumer<HexColor> = oneOf(
 // ██     ██ ████████ ████████ ██     ██    ██    ████    ███    ████████
 
 type RelativeColorParserContext = {
-  relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
+  relativeColorVariables?: Map<string, NumericVariable>;
 } & ColorValueContext;
 
 function consumeRelativeColorOrigin(
@@ -2279,7 +2279,7 @@ const relativeColorKeywordConsumer = adaptConsumer(
 
 function contextWithRelativeColorVariables(
   context: unknown,
-  components: readonly string[],
+  components: string[],
   includeAlpha = true,
 ): RelativeColorParserContext {
   const outer = colorValueContextFor(context);
@@ -2322,7 +2322,7 @@ function contextWithColorFnRelativeVariables(
 }
 
 function relativeColorVariableNames(
-  components: readonly string[],
+  components: string[],
   includeAlpha = true,
 ): string[] {
   return includeAlpha ? [...components, 'alpha'] : [...components];
@@ -2347,7 +2347,7 @@ function relativeColorVariablesFor(
 type ColorMetadata = {
   fnName: string;
   space: PredefinedColorSpace | null;
-  components: readonly ColorComponentMetadata[];
+  components: ColorComponentMetadata[];
   /** Whether exact integer syntax can be retained in 8-bit storage. */
   supports8BitEncoding: boolean;
   /** Whether an absolute color in this space must be coerced to sRGB. */
@@ -2644,7 +2644,7 @@ const COLOR_METADATA = {
 
 type ColorMetadataTable = typeof COLOR_METADATA;
 type DerivedColorMetadataTable = {
-  readonly [Kind in keyof ColorMetadataTable]: ColorMetadata;
+  [Kind in keyof ColorMetadataTable]: ColorMetadata;
 };
 
 const ORIGIN_COLOR_METADATA = deriveColorMetadataTable(
@@ -2726,9 +2726,9 @@ export function resolveColorValue(
 
 export type ColorContext = {
   currentColor?: AbsoluteColor;
-  systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
+  systemColors?: Map<SystemColorName, AbsoluteColor>;
   colorScheme?: ColorScheme;
-  colorProfiles?: ReadonlyMap<ColorProfileSpace, ColorProfile>;
+  colorProfiles?: Map<ColorProfileSpace, ColorProfile>;
 };
 
 export type ColorValueContext = ColorContext & MathContext;
@@ -3029,7 +3029,7 @@ function relativeColorChannelValues(
   reference: AbsoluteColor,
   context: ColorContext,
   metadata: ColorMetadata,
-): ReadonlyMap<string, NumberLiteral | 'none'> | null {
+): Map<string, NumberLiteral | 'none'> | null {
   if (value.kind === ColorKind.AlphaFn) {
     return new Map([[
       'alpha',
@@ -3111,7 +3111,7 @@ function relativeChannelValue(
 
 function relativeColorMathContext(
   context: ColorValueContext,
-  channelValues: ReadonlyMap<string, NumberLiteral | 'none'>,
+  channelValues: Map<string, NumberLiteral | 'none'>,
 ): ColorValueContext {
   return {
     ...context,
@@ -3131,9 +3131,9 @@ function relativeColorMathContext(
  * A map enables relative resolution with the origin's channel values.
  */
 type RelativeColorChannelValues =
-  ReadonlyMap<string, NumberLiteral | 'none'> | null;
+  Map<string, NumberLiteral | 'none'> | null;
 
-type AbsoluteColorFunctionComponents = readonly [
+type AbsoluteColorFunctionComponents = [
   ...coordinates: AbsoluteComponent[],
   alpha: AbsoluteComponent,
 ];
@@ -3217,7 +3217,7 @@ function createAbsoluteColorConverter(
 }
 
 function tryLowerTo8BitAbsoluteColor(
-  components: readonly SyntaxComponent[],
+  components: SyntaxComponent[],
   alpha: SyntaxComponent,
   metadata: ColorMetadata,
 ): AbsoluteColor | null {
@@ -3542,7 +3542,7 @@ function canonicalizeAsPercentage(
 }
 
 function scaleComponents(
-  components: readonly [
+  components: [
     ...components: SyntaxComponent[],
     alpha: SyntaxComponent,
   ],
@@ -3668,7 +3668,7 @@ function convertToLegacySrgb(
 
 function absoluteColorInPredefinedSpace(
   space: PredefinedColorSpace,
-  components: readonly AbsoluteComponent[],
+  components: AbsoluteComponent[],
   alpha: number | undefined,
   isLegacySrgb = false,
 ): PredefinedAbsoluteColor {
@@ -3687,7 +3687,7 @@ function absoluteColorInPredefinedSpace(
 function absoluteColorInCustomSpace(
   space: CustomColorSpace['name'],
   profile: ColorProfile,
-  components: readonly AbsoluteComponent[],
+  components: AbsoluteComponent[],
   alpha: number | undefined,
   coordinateCount = components.length,
 ): AbsoluteColor<CustomColorSpace> {
@@ -4130,7 +4130,7 @@ function serializeColorFunction(value: ColorFunction): string {
 }
 
 function serializeComponents(
-  components: readonly SyntaxComponent[],
+  components: SyntaxComponent[],
   metadata: ColorMetadata,
 ): (string | null)[] {
   const alphaIndex = components.length - 1;
@@ -4153,7 +4153,7 @@ function serializeComponents(
 function serializeColorNotation(
   name: string,
   args: string[],
-  components: readonly (string | null)[],
+  components: (string | null)[],
   useLegacySyntax = false,
 ): string {
   const alpha = components.at(-1) ?? null;
@@ -4345,10 +4345,10 @@ function serializeAbsoluteColorAlpha(value: number | undefined): string | null {
 
 type ColorVector = [number, number, number];
 
-type ColorMatrix = readonly [
-  readonly [number, number, number],
-  readonly [number, number, number],
-  readonly [number, number, number],
+type ColorMatrix = [
+  [number, number, number],
+  [number, number, number],
+  [number, number, number],
 ];
 
 export function convertAbsoluteColor(
@@ -6214,7 +6214,7 @@ export type ResolvedColorMixItem = {
 };
 
 export function calculateColorMix(
-  items: readonly ResolvedColorMixItem[],
+  items: ResolvedColorMixItem[],
   method: ColorInterpolationMethod = { space: 'oklab' },
   context: ColorContext = {},
 ): AbsoluteColor {

@@ -16,7 +16,7 @@ import { AbortSignalImpl } from './abort-signal';
  */
 export class AbortControllerImpl
 {
-  readonly #signal: AbortSignalImpl;
+  #signal: AbortSignalImpl;
 
   constructor(signal: AbortSignalImpl) {
     this.#signal = signal;

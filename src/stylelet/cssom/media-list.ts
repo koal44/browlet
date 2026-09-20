@@ -20,7 +20,7 @@ export class MediaListImpl implements MediaList {
 
   #queries: MediaQuery[] = [];
   #indexedLength = 0;
-  readonly #runtime: RuntimeCaps;
+  #runtime: RuntimeCaps;
 
   constructor(text: CSSOMString | null, runtime: RuntimeCaps) {
     this.#runtime = runtime;

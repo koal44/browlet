@@ -185,7 +185,7 @@ describe('URL Standard section 4.1: URL record components', () => {
         query: null, fragment: null,
       },
     ],
-  ] as const satisfies readonly (readonly [string, URLSnapshot])[]) {
+  ] as const satisfies [string, URLSnapshot][]) {
     it(`represents the components of ${input}`, () => {
       const result = urlAlgorithms().parseURL(input);
 

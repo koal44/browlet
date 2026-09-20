@@ -4,24 +4,24 @@ import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 
 export class CSSStyleRuleImpl implements CSSStyleRule {
-  readonly STYLE_RULE = 1 as const;
-  readonly CHARSET_RULE = 2 as const;
-  readonly IMPORT_RULE = 3 as const;
-  readonly MEDIA_RULE = 4 as const;
-  readonly FONT_FACE_RULE = 5 as const;
-  readonly PAGE_RULE = 6 as const;
-  readonly KEYFRAMES_RULE = 7 as const;
-  readonly KEYFRAME_RULE = 8 as const;
-  readonly MARGIN_RULE = 9 as const;
-  readonly NAMESPACE_RULE = 10 as const;
-  readonly COUNTER_STYLE_RULE = 11 as const;
-  readonly SUPPORTS_RULE = 12 as const;
-  readonly FONT_FEATURE_VALUES_RULE = 14 as const;
+  STYLE_RULE = 1 as const;
+  CHARSET_RULE = 2 as const;
+  IMPORT_RULE = 3 as const;
+  MEDIA_RULE = 4 as const;
+  FONT_FACE_RULE = 5 as const;
+  PAGE_RULE = 6 as const;
+  KEYFRAMES_RULE = 7 as const;
+  KEYFRAME_RULE = 8 as const;
+  MARGIN_RULE = 9 as const;
+  NAMESPACE_RULE = 10 as const;
+  COUNTER_STYLE_RULE = 11 as const;
+  SUPPORTS_RULE = 12 as const;
+  FONT_FEATURE_VALUES_RULE = 14 as const;
 
   selectorText = '';
 
-  readonly #style: CSSStyleDeclarationImpl;
-  readonly #cssRules = new CSSRuleListImpl();
+  #style: CSSStyleDeclarationImpl;
+  #cssRules = new CSSRuleListImpl();
 
   constructor(rule: StyleRule | undefined, runtime: RuntimeCaps) {
     this.#style = new CSSStyleDeclarationImpl({

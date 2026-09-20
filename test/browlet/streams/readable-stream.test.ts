@@ -836,7 +836,7 @@ class TestAbortSignal
 {
   aborted = false;
   reason: unknown = undefined;
-  readonly #algorithms = new Set<() => void>();
+  #algorithms = new Set<() => void>();
 
   abort(reason: unknown): void {
     this.aborted = true;
@@ -857,8 +857,8 @@ const defaultPipeOptions = {
 };
 
 type ReadableStreamReadResult = {
-  readonly done: boolean;
-  readonly value: unknown;
+  done: boolean;
+  value: unknown;
 };
 
 function readResult(

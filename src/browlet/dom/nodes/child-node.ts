@@ -12,7 +12,7 @@ import type { NodeImpl } from './node';
  * };
  */
 export class ChildNodeMixin {
-  readonly #node: NodeImpl;
+  #node: NodeImpl;
 
   constructor(node: NodeImpl) {
     this.#node = node;

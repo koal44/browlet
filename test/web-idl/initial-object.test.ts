@@ -462,7 +462,7 @@ function requireFunction(value: unknown): RealmFunction {
 type RealmFunction = {
   (...argumentsList: unknown[]): unknown;
   new (...argumentsList: unknown[]): object;
-  readonly length: number;
-  readonly name: string;
-  readonly prototype: object;
+  length: number;
+  name: string;
+  prototype: object;
 };

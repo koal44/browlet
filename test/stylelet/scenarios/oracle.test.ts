@@ -1643,7 +1643,7 @@ async function readNestedSelectorText(
     document.head.append(style);
 
     const outer = style.sheet?.cssRules[0] as
-      | (CSSStyleRule & { readonly cssRules: CSSRuleList; })
+      | (CSSStyleRule & { cssRules: CSSRuleList; })
       | undefined;
     const nested = outer?.cssRules[0];
     const result = nested !== undefined && 'selectorText' in nested

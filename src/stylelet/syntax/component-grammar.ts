@@ -37,17 +37,17 @@ type MultiplierOptions<T> = {
 type ContextAfter<T> =
   (value: T, context: unknown) => unknown;
 
-type SequenceValue<P extends readonly AnyMultiplier[]> = {
-  -readonly [I in keyof P]: MultiplierOutputOf<P[I]>;
+type SequenceValue<P extends AnyMultiplier[]> = {
+  [I in keyof P]: MultiplierOutputOf<P[I]>;
 };
 
-type AllOfValue<P extends readonly AnyMultiplier[]> = SequenceValue<P>;
+type AllOfValue<P extends AnyMultiplier[]> = SequenceValue<P>;
 
-type SomeOfValue<P extends readonly AnyMultiplier[]> = {
-  -readonly [I in keyof P]: MultiplierOutputOf<P[I]> | undefined;
+type SomeOfValue<P extends AnyMultiplier[]> = {
+  [I in keyof P]: MultiplierOutputOf<P[I]> | undefined;
 };
 
-type AlternativeValue<P extends readonly AnyMultiplier[]> =
+type AlternativeValue<P extends AnyMultiplier[]> =
   MultiplierOutputOf<P[number]>;
 
 type AnyMultiplier = Multiplier<any, any>;
@@ -68,7 +68,7 @@ type Projector<Value, R> =
  * Multipliers are greedy. Callers must factor productions where an earlier
  * multiplier can consume input required by a later component.
  */
-export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
+export function sequenceOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
 ): TryConsumer<R> {
@@ -80,14 +80,14 @@ export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
  *
  * Shares the greedy multiplier behavior of `sequenceOf`.
  */
-export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
+export function requiredSequenceOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
 ): TryConsumer<R> {
   return consumeSequenceOf(true, consumers, project);
 }
 
-function consumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
+function consumeSequenceOf<const P extends AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
@@ -141,7 +141,7 @@ function consumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
  * Alternatives are tried in order and commit to the first success. Callers
  * must factor productions where one alternative can accept a prefix of another.
  */
-export function oneOf<const P extends readonly AnyMultiplier[], R>(
+export function oneOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<AlternativeValue<P>, R>,
 ): TryConsumer<R> {
@@ -194,7 +194,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
  * Components are tried in declaration order. Callers must factor productions
  * whose components can consume the same leading input.
  */
-export function allOf<const P extends readonly AnyMultiplier[], R>(
+export function allOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
 ): TryConsumer<R> {
@@ -206,14 +206,14 @@ export function allOf<const P extends readonly AnyMultiplier[], R>(
  *
  * Shares the overlapping-component constraint of `allOf`.
  */
-export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
+export function requiredAllOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
 ): TryConsumer<R> {
   return consumeAllOf(true, consumers, project);
 }
 
-function consumeAllOf<const P extends readonly AnyMultiplier[], R>(
+function consumeAllOf<const P extends AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
@@ -267,7 +267,7 @@ function consumeAllOf<const P extends readonly AnyMultiplier[], R>(
  * Components are tried in declaration order. Callers must factor productions
  * whose components can consume the same leading input.
  */
-export function someOf<const P extends readonly AnyMultiplier[], R>(
+export function someOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
 ): TryConsumer<R> {
@@ -279,14 +279,14 @@ export function someOf<const P extends readonly AnyMultiplier[], R>(
  *
  * Shares the overlapping-component constraint of `someOf`.
  */
-export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
+export function requiredSomeOf<const P extends AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
 ): TryConsumer<R> {
   return consumeSomeOf(true, consumers, project);
 }
 
-function consumeSomeOf<const P extends readonly AnyMultiplier[], R>(
+function consumeSomeOf<const P extends AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
@@ -758,7 +758,7 @@ type UnorderedConsumeResult = {
   seen: Set<number>;
 };
 
-function consumeUnordered<const P extends readonly AnyMultiplier[]>(
+function consumeUnordered<const P extends AnyMultiplier[]>(
   c: TokenCursor,
   consumers: P,
 ): UnorderedConsumeResult {

@@ -14,7 +14,7 @@ import type { CustomElementRegistryImpl } from '../../html/custom-elements/regis
  * CSSOM contributes the styleSheets and adoptedStyleSheets partial members.
  */
 export class DocumentOrShadowRootMixin {
-  readonly #options: DocumentOrShadowRootMixinOptions;
+  #options: DocumentOrShadowRootMixinOptions;
 
   constructor(options: DocumentOrShadowRootMixinOptions) {
     this.#options = options;

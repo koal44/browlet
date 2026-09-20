@@ -16,7 +16,7 @@ import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/n
 export class RequestRecord {
   method = 'GET';
   localURLsOnly = false;
-  readonly headerList: HeaderList = [];
+  headerList: HeaderList = [];
   unsafeRequest = false;
   body: Uint8Array | BodyRecord | null = null;
   client: FetchEnvironmentSettingsObject | null;

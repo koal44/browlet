@@ -36,11 +36,11 @@ export function createRealm(
 }
 
 export class Realm extends JSRealm implements WebIDLRealmHost {
-  readonly agent: Agent;
-  readonly callbacks: WebIDLRealmHost['callbacks'];
-  readonly crossOriginIsolated: boolean;
-  readonly globalNames: ReadonlySet<string>;
-  readonly isGlobalPrototypeChainMutable: boolean;
+  agent: Agent;
+  callbacks: WebIDLRealmHost['callbacks'];
+  crossOriginIsolated: boolean;
+  globalNames: ReadonlySet<string>;
+  isGlobalPrototypeChainMutable: boolean;
   #environment: Environment | null;
   #hostDefined: EnvironmentSettingsObject | null = null;
   #windowImplementation: WindowImpl | undefined;
@@ -255,7 +255,7 @@ export type RealmOptions = {
   reuseGlobalProxyFrom?: Realm;
   agent?: Agent;
   crossOriginIsolated?: boolean;
-  globalNames?: readonly string[];
+  globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;
   environment?: Environment;
 };

@@ -16,7 +16,7 @@ import {
 } from './types';
 
 export class LegacyPlatformObjectBinding {
-  readonly #binding: RealmBinding;
+  #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {

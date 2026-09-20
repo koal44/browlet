@@ -10,7 +10,7 @@ import { getPlatformRecord, type PlatformRecord } from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
 
 export class CollectionBinding {
-  readonly #context: ConversionContext;
+  #context: ConversionContext;
 
   // Project helper: retain the conversion context for collection members.
   constructor(context: ConversionContext) {

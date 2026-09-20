@@ -46,7 +46,7 @@ const elementInterfaces = compileElementInterfaces([
 ]);
 
 function compileElementInterfaces(
-  interfaces: readonly ElementInterface[],
+  interfaces: ElementInterface[],
 ): ElementInterfaceRegistry {
   const namespaces = new Map<string, Map<string, ElementInterface>>();
 

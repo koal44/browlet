@@ -61,7 +61,7 @@ type MathLiteralByType = {
   'frequency-percentage': FrequencyLiteral | PercentageLiteral;
 };
 
-export type MathRange = readonly [
+export type MathRange = [
   minimum: number,
   maximum: number,
 ];
@@ -465,7 +465,7 @@ type VariableLeaf = {
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface CalculationNodeWithChildren<
   Type extends string,
-  Children extends readonly CalculationTree[],
+  Children extends CalculationTree[],
 > {
   type: Type;
   children: Children;
@@ -475,7 +475,7 @@ interface CalculationNodeWithChildren<
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface MathFunctionNodeWithArguments<
   Type extends string,
-  Arguments extends readonly CalculationTree[],
+  Arguments extends CalculationTree[],
 > {
   type: Type;
   arguments: Arguments;
@@ -752,7 +752,7 @@ function createBinaryMathFunctionConsumer<
 >(
   name: Name,
   typeRule: MathFunctionTypeRule,
-  argumentCategories?: readonly MathCategory[],
+  argumentCategories?: MathCategory[],
 ): TryConsumer<
   MathBinaryFunctionNode<Name> | NumericLeaf
 > {
@@ -778,7 +778,7 @@ function createUnaryMathFunctionConsumer<
 >(
   name: Name,
   typeRule: MathFunctionTypeRule,
-  argumentCategories?: readonly MathCategory[],
+  argumentCategories?: MathCategory[],
 ): TryConsumer<
   MathUnaryFunctionNode<Name> | NumericLeaf
 > {
@@ -947,9 +947,9 @@ function createMathFunctionNode<
   Node extends MathFunctionNode,
 >(
   node: Omit<Node, 'hints'>,
-  calculations: readonly CalculationTree[],
+  calculations: CalculationTree[],
   typeRule: MathFunctionTypeRule,
-  argumentCategories?: readonly MathCategory[],
+  argumentCategories?: MathCategory[],
 ): Node | null {
   const hints = calculations.map(mathHintsOf);
   const categories = hints.map(mathCategory);
@@ -1424,10 +1424,10 @@ export type MathBase =
   (typeof MATH_BASES)[number];
 
 type MathExponent =
-  readonly [base: MathBase, power: number];
+  [base: MathBase, power: number];
 
 type MathHints = {
-  exponents: readonly MathExponent[];
+  exponents: MathExponent[];
   percentHint: MathBase | null;
 };
 
@@ -1552,7 +1552,7 @@ function withMathHints<Calculation extends CalculationTree>(
 }
 
 function addMathHints(
-  hints: readonly (MathHints | null)[],
+  hints: (MathHints | null)[],
 ): MathHints | null {
   const [first, ...rest] = hints;
 
@@ -1584,7 +1584,7 @@ function addMathHints(
 }
 
 function multiplyMathHints(
-  hints: readonly (MathHints | null)[],
+  hints: (MathHints | null)[],
 ): MathHints | null {
   let result = numberMathHints();
 
@@ -1878,7 +1878,7 @@ function numberMathHints(): MathHints {
 }
 
 function createMathHints(
-  exponents: readonly MathExponent[],
+  exponents: MathExponent[],
   percentHint: MathBase | null,
 ): MathHints {
   const powers = new Map<MathBase, number>(exponents);
@@ -2707,7 +2707,7 @@ function areResolvedNumericArguments(
 }
 
 function combineComparableNumericArguments(
-  args: readonly CalculationTree[],
+  args: CalculationTree[],
   operation: 'min' | 'max',
   context: MathContext,
 ): CalculationTree[] {
@@ -2788,7 +2788,7 @@ function isPixelDimension(
 
 function haveSameMathHintsAndUnit(
   first: NumericLeaf,
-  ...rest: readonly NumericLeaf[]
+  ...rest: NumericLeaf[]
 ): boolean {
   return rest.every((value) =>
     first.type === value.type &&
@@ -2802,7 +2802,7 @@ function haveSameMathHintsAndUnit(
 function roundingBounds(
   input: number,
   step: number,
-): readonly [lower: number, upper: number] {
+): [lower: number, upper: number] {
   if (
     Number.isNaN(input) ||
     Number.isNaN(step) ||
@@ -3043,7 +3043,7 @@ function createNegateNode(
 }
 
 function combineLikeNumericLeaves(
-  children: readonly CalculationTree[],
+  children: CalculationTree[],
 ): CalculationTree[] {
   const totals = new Map<string, {
     value: number;
@@ -3126,7 +3126,7 @@ function numericUnitKey(value: NumericLeaf): string {
 }
 
 function combineProductNumbers(
-  children: readonly CalculationTree[],
+  children: CalculationTree[],
 ): CalculationTree[] {
   const numbers = children.filter(
     (child): child is NumericLeaf & NumberLiteral => child.type === 'number',
@@ -3177,7 +3177,7 @@ function combineProductNumbers(
 }
 
 function sortCalculationChildren(
-  children: readonly CalculationTree[],
+  children: CalculationTree[],
 ): CalculationTree[] {
   return children
     .map((child, index) => ({ child, index }))
@@ -3221,7 +3221,7 @@ function calculationChildSortRank(value: CalculationTree): number {
 }
 
 function evaluateNumericProduct(
-  children: readonly CalculationTree[],
+  children: CalculationTree[],
   mathHints: MathHints,
 ): NumericLeaf | null {
   if (!children.every(isNumericProductFactor)) {

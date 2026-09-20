@@ -20,7 +20,7 @@ export function createBodyFixture() {
     tasks,
     parallelSteps,
     global: context.realm.global,
-    createBody: (chunks: readonly unknown[] = []) => {
+    createBody: (chunks: unknown[] = []) => {
       const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime);
       for (const chunk of chunks) stream.enqueueChunk(chunk);
       return new BodyRecord(stream, runtime);

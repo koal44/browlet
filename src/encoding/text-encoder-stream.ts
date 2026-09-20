@@ -15,9 +15,9 @@ import {
  * TextEncoderStream includes GenericTransformStream;
  */
 export class TextEncoderStreamImpl {
-  readonly #generic: GenericTransformStreamMixin;
-  readonly #runtime: RuntimeContext;
-  readonly #transform: TransformStreamImpl;
+  #generic: GenericTransformStreamMixin;
+  #runtime: RuntimeContext;
+  #transform: TransformStreamImpl;
   #leadingSurrogate = '';
 
   constructor(runtime: RuntimeContext) {

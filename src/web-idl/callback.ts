@@ -171,7 +171,7 @@ export function convertWebIDLArguments(
   return result;
 }
 
-export type WebIDLArgumentsList = readonly unknown[];
+export type WebIDLArgumentsList = unknown[];
 
 export const missingArgument: unique symbol = Symbol(
   'missing Web IDL argument',

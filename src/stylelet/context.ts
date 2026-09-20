@@ -5,45 +5,45 @@ import { Promises } from '../js-engine/promises';
 import type { RuntimeCaps, StyleletOptions } from './stylelet';
 
 export class StyleletContext {
-  readonly document: Document;
-  readonly isHtml: boolean;
-  readonly runtime: RuntimeCaps;
+  document: Document;
+  isHtml: boolean;
+  runtime: RuntimeCaps;
 
-  readonly documentDesignMode: (document: Document) => string | undefined;
-  readonly treeVersion: (root: Node) => number | undefined;
-  readonly hasTreeVersion: boolean;
+  documentDesignMode: (document: Document) => string | undefined;
+  treeVersion: (root: Node) => number | undefined;
+  hasTreeVersion: boolean;
 
-  readonly getId: (element: Element) => string;
-  readonly getClass: (element: Element) => string;
-  readonly getLocalName: (element: Element) => string;
-  readonly getNamespaceURI: (element: Element) => string | null;
-  readonly getAttribute: (element: Element, name: string) => string | null;
-  readonly getAttributeNS: (
+  getId: (element: Element) => string;
+  getClass: (element: Element) => string;
+  getLocalName: (element: Element) => string;
+  getNamespaceURI: (element: Element) => string | null;
+  getAttribute: (element: Element, name: string) => string | null;
+  getAttributeNS: (
     element: Element,
     namespace: string | null,
     localName: string,
   ) => string | null;
-  readonly hasAttribute: (element: Element, name: string) => boolean;
-  readonly hasAttributeNS: (
+  hasAttribute: (element: Element, name: string) => boolean;
+  hasAttributeNS: (
     element: Element,
     namespace: string | null,
     localName: string,
   ) => boolean;
-  readonly hasCustomState: (element: Element, name: string) => boolean;
+  hasCustomState: (element: Element, name: string) => boolean;
 
   hoverTarget: Element | null = null;
   activeTarget: Element | null = null;
   focusTarget: Element | null = null;
 
-  readonly runtimeCache = new RuntimeCache();
+  runtimeCache = new RuntimeCache();
 
   #compiledSelectors = new WeakMap<object, unknown>();
-  readonly #caseSensitiveRegexes = new Map<string, RegExp>();
-  readonly #caseInsensitiveRegexes = new Map<string, RegExp>();
-  readonly #caseSensitiveClassRegexes = new Map<string, RegExp>();
-  readonly #caseInsensitiveClassRegexes = new Map<string, RegExp>();
-  readonly #caseSensitiveTokenRegexes = new Map<string, RegExp>();
-  readonly #caseInsensitiveTokenRegexes = new Map<string, RegExp>();
+  #caseSensitiveRegexes = new Map<string, RegExp>();
+  #caseInsensitiveRegexes = new Map<string, RegExp>();
+  #caseSensitiveClassRegexes = new Map<string, RegExp>();
+  #caseInsensitiveClassRegexes = new Map<string, RegExp>();
+  #caseSensitiveTokenRegexes = new Map<string, RegExp>();
+  #caseInsensitiveTokenRegexes = new Map<string, RegExp>();
 
   constructor(document: Document, options: StyleletOptions = {}) {
     const documentCaps = options.document;

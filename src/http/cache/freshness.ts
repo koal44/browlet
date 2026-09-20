@@ -79,11 +79,11 @@ export type CacheFreshness = {
 };
 
 // RFC 9110 §15.1. Storage still needs the method and other cacheability rules.
-export const heuristicallyCacheableStatuses: readonly number[] = [200, 203, 204, 206, 300, 301, 308, 404, 405, 410, 414, 501];
+export const heuristicallyCacheableStatuses: number[] = [200, 203, 204, 206, 300, 301, 308, 404, 405, 410, 414, 501];
 
 function getFreshnessLifetime(
   fields: CacheFields,
-  directives: readonly CacheDirective[],
+  directives: CacheDirective[],
   status: number,
   date: number,
   responseTime: number,

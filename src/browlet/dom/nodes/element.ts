@@ -83,18 +83,18 @@ import { SlottableMixin } from './slottable';
  * };
  */
 export class ElementImpl extends withElementStub(NodeImpl) {
-  readonly #childNodeMixin = new ChildNodeMixin(this);
+  #childNodeMixin = new ChildNodeMixin(this);
   #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
-  readonly #linkStyleMixin: LinkStyleMixin | undefined;
-  readonly #nonDocumentTypeChildNodeMixin =
+  #linkStyleMixin: LinkStyleMixin | undefined;
+  #nonDocumentTypeChildNodeMixin =
     new NonDocumentTypeChildNodeMixin(this);
-  readonly #parentNodeMixin = new ParentNodeMixin(this);
-  readonly #attributes: NamedNodeMapImpl;
-  readonly #localName: string;
-  readonly #namespaceURI: string;
-  readonly #slottableMixin = new SlottableMixin();
+  #parentNodeMixin = new ParentNodeMixin(this);
+  #attributes: NamedNodeMapImpl;
+  #localName: string;
+  #namespaceURI: string;
+  #slottableMixin = new SlottableMixin();
 
-  static readonly #nodeOptions: NodeOptions = {
+  static #nodeOptions: NodeOptions = {
     eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
       getParent: (target, event) => NodeImpl.is(target) && isElement(target)
         ? target.getEventParent(event)
@@ -448,28 +448,28 @@ function normalizeNamespace(namespaceURI: string | null): string | null {
 }
 
 export type LinkStyleInit = {
-  readonly options: LinkStyleOptions;
-  readonly treeScopeResolver: TreeScopeResolver;
+  options: LinkStyleOptions;
+  treeScopeResolver: TreeScopeResolver;
 };
 
 export type ElementCreationContext = {
-  readonly document: DocumentImpl;
-  readonly localName: string;
-  readonly namespaceURI: string;
-  readonly treeScopeResolver: TreeScopeResolver;
+  document: DocumentImpl;
+  localName: string;
+  namespaceURI: string;
+  treeScopeResolver: TreeScopeResolver;
 };
 
 export type ElementInterface = {
-  readonly definition: InterfaceDefinition;
-  readonly implementation: ElementImplementation;
-  readonly localNames: readonly string[];
-  readonly namespaceURI: string;
+  definition: InterfaceDefinition;
+  implementation: ElementImplementation;
+  localNames: string[];
+  namespaceURI: string;
 };
 
 type ElementInterfaceOptions = {
-  readonly definition: InterfaceDefinition;
-  readonly localNames?: readonly string[];
-  readonly namespaceURI: string;
+  definition: InterfaceDefinition;
+  localNames?: string[];
+  namespaceURI: string;
 };
 
 type ElementImplementation = abstract new (

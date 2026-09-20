@@ -213,7 +213,7 @@ describe('component value combinators', () => {
   });
 
   it('does not interleave inside grouped components', () => {
-    const groupedBC: TryConsumer<readonly ['b', 'c']> = (c: TokenCursor) => {
+    const groupedBC: TryConsumer<['b', 'c']> = (c: TokenCursor) => {
       const start = c.pos();
 
       const bv = consumeB(c);

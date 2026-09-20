@@ -19,7 +19,7 @@ import type { EnvironmentTiming } from './high-resolution-time';
 export class PerformanceImpl
   extends withPerformanceStub(EventTargetImpl)
 {
-  readonly #timing: EnvironmentTiming;
+  #timing: EnvironmentTiming;
 
   constructor(timing: EnvironmentTiming) {
     super();

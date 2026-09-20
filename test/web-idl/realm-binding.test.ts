@@ -848,7 +848,7 @@ describe('Web IDL realm interface bindings', () => {
 });
 
 class RecordingRealm extends Realm {
-  readonly checks: SecurityCheck[] = [];
+  checks: SecurityCheck[] = [];
 
   override performSecurityCheck(
     object: object,

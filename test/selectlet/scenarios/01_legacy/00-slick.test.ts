@@ -14,7 +14,7 @@ const fixtures = {
 } as const;
 
 type TemplateKey = 'html-standard' | 'html-almost' | 'html-quirks' | 'xhtml' | 'html-transitional' | 'xml' | 'svg';
-type TemplateTuple = readonly [TemplateKey, string];
+type TemplateTuple = [TemplateKey, string];
 
 const allTemplates: TemplateTuple[] = [
   ['html-transitional', fixtures.htmlTransitional],

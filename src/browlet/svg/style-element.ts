@@ -20,7 +20,7 @@ import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
 export class SVGStyleElementImpl
   extends withSVGStyleElementStub(SVGElementImpl)
 {
-  static readonly #linkStyleOptions = {
+  static #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };

@@ -207,8 +207,8 @@ const unusedDeserializationContext: DeserializationContext = {
 };
 
 type QuotaExceededError = DOMException & {
-  readonly quota: number | null;
-  readonly requested: number | null;
+  quota: number | null;
+  requested: number | null;
 };
 
 type QuotaExceededErrorConstructor = {

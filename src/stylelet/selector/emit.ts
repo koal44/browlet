@@ -534,7 +534,7 @@ function emitDirPseudoTest(
 }
 
 function emitLanguageRangesPseudoTest(
-  ranges: readonly string[],
+  ranges: string[],
   context: StyleletContext,
 ): CompiledMatcher {
   return createMatcher(

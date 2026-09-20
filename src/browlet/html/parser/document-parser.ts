@@ -11,12 +11,12 @@ import {
 } from './tree-adapter';
 
 export class BrowletParser {
-  readonly document: DocumentImpl;
-  readonly #handleScript: ScriptHandler;
-  readonly #eventLoop: EventLoop;
-  readonly #stream: ParserStream<HTMLTreeAdapterMap>;
-  readonly #treeAdapter: HTMLTreeAdapter;
-  readonly #runtime: RuntimeContext;
+  document: DocumentImpl;
+  #handleScript: ScriptHandler;
+  #eventLoop: EventLoop;
+  #stream: ParserStream<HTMLTreeAdapterMap>;
+  #treeAdapter: HTMLTreeAdapter;
+  #runtime: RuntimeContext;
 
   constructor(
     document: DocumentImpl,

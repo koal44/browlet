@@ -15,12 +15,12 @@ import type { EventImpl } from '../dom/events/event';
  * body/frameset Window-target rules remain separate HTML integrations.
  */
 export class EventHandlerMap {
-  readonly #handlers = new Map<string, EventHandlerRecord>();
-  readonly #target: EventTargetImpl;
+  #handlers = new Map<string, EventHandlerRecord>();
+  #target: EventTargetImpl;
 
   constructor(
     target: EventTargetImpl,
-    handlers: readonly EventHandlerDefinition[],
+    handlers: EventHandlerDefinition[],
   ) {
     this.#target = target;
     for (const { name, type } of handlers) {
@@ -99,14 +99,14 @@ export const eventHandlerIDL = defineTypedef({
 });
 
 type EventHandlerDefinition = {
-  readonly name: string;
-  readonly type: string;
+  name: string;
+  type: string;
 };
 
 type EventHandlerRecord = {
   callback: EventHandlerCallback | null;
   listener: ((this: EventTargetImpl, event: EventImpl) => void) | null;
-  readonly type: string;
+  type: string;
 };
 
 export type EventHandlerCallback = (

@@ -5,7 +5,7 @@
  */
 
 export function normalizeMixPercentages(
-  percentages: readonly (number | undefined)[],
+  percentages: (number | undefined)[],
   forceNormalization = false,
 ): {
   percentages: number[];
@@ -35,7 +35,7 @@ export function normalizeMixPercentages(
 }
 
 export function completeMixPercentages(
-  percentages: readonly (number | undefined)[],
+  percentages: (number | undefined)[],
 ): number[] {
   const specifiedSum = Math.min(
     percentages.reduce<number>(

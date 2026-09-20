@@ -173,7 +173,7 @@ export function resolveMediaQuery(
 }
 
 export function resolveMediaQueryList(
-  queries: readonly MediaQuery[],
+  queries: MediaQuery[],
   stage: ValueStage,
   context: MathContext = {},
 ): MediaQuery[] {
@@ -199,7 +199,7 @@ export function serializeMediaQuery(query: MediaQuery): string {
 }
 
 export function serializeMediaQueryList(
-  queries: readonly MediaQuery[],
+  queries: MediaQuery[],
 ): string {
   return queries.map(serializeMediaQuery).join(', ');
 }

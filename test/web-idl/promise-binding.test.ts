@@ -137,7 +137,7 @@ describe('Web IDL promise member binding', () => {
       }
     }
     class ItemsImpl {
-      constructor(readonly item: ItemImpl, readonly promises: Promises) {}
+      constructor(public item: ItemImpl, public promises: Promises) {}
       createIterator() {
         return { next: () => this.promises.try(() => this.item) };
       }
@@ -363,7 +363,7 @@ function createOrdinaryPromiseFixture() {
 }
 
 class OrdinaryPromiseOwnerImpl {
-  readonly pending = Promise.withResolvers<PromiseChildImpl>();
+  pending = Promise.withResolvers<PromiseChildImpl>();
   received: PromiseChildImpl | undefined;
   returned: unknown;
 

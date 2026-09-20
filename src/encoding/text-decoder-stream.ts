@@ -19,8 +19,8 @@ import { TextDecoderCommonMixin, type TextDecoderOptions } from './text-decoder'
  * TextDecoderStream includes GenericTransformStream;
  */
 export class TextDecoderStreamImpl {
-  readonly #common: TextDecoderCommonMixin;
-  readonly #generic: GenericTransformStreamMixin;
+  #common: TextDecoderCommonMixin;
+  #generic: GenericTransformStreamMixin;
 
   constructor(
     label: string,

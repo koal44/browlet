@@ -17,10 +17,10 @@ import {
 
 /** A realm's Web IDL operations and implementation runtime within one binding world. */
 export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
-  readonly realm: Realm;
-  readonly promises: Promises;
-  readonly #binding: RealmBinding<Realm>;
-  readonly #runtime: RuntimeContext | undefined;
+  realm: Realm;
+  promises: Promises;
+  #binding: RealmBinding<Realm>;
+  #runtime: RuntimeContext | undefined;
 
   // Project helper: retain a realm binding and compose its implementation runtime.
   constructor(

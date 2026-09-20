@@ -20,7 +20,7 @@ import type { RealmBinding } from './realm-binding';
 import { getTypeWithApplicableExtendedAttributes } from './types';
 
 export class AsynchronousIterableBinding {
-  readonly #binding: RealmBinding;
+  #binding: RealmBinding;
 
   // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {

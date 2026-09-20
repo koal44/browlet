@@ -36,7 +36,7 @@ import type { CSSStyleSheetImpl } from '../../../../stylelet/cssom/css-styleshee
 export class HTMLLinkElementImpl
   extends withHTMLLinkElementStub(HTMLElementImpl)
 {
-  static readonly #linkStyleOptions = {
+  static #linkStyleOptions = {
     attributes: new Set([
       'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
       'rel', 'title', 'type',

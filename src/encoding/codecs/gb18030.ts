@@ -115,7 +115,7 @@ export class GB18030Decoder {
 
 /** Encoding §§10.1.2, 10.2.2 — GBK restricts this encoder to its two-byte repertoire. */
 export class GB18030Encoder {
-  readonly #isGBK: boolean;
+  #isGBK: boolean;
 
   constructor(isGBK = false) {
     this.#isGBK = isGBK;

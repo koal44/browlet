@@ -35,7 +35,7 @@ import type { CSSOMString } from './string';
 export class CSSStyleSheetImpl
   extends StyleSheetImpl
 {
-  readonly #rules: CSSRuleListImpl;
+  #rules: CSSRuleListImpl;
   #interpretedStyleSheet: InterpretedStyleSheet;
 
   #ownerRule: CSSRule | null;

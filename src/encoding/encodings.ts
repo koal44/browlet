@@ -291,7 +291,7 @@ export function encodeOrFail(
 type BOMEncoding = 'UTF-8' | 'UTF-16BE' | 'UTF-16LE';
 
 /** The §6.1 BOM table, shared by immediate bytes and queue lookahead. */
-function detectBOM(bytes: Uint8Array | readonly number[]): BOMEncoding | null {
+function detectBOM(bytes: Uint8Array | number[]): BOMEncoding | null {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return 'UTF-8';
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return 'UTF-16BE';
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return 'UTF-16LE';

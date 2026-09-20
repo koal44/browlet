@@ -9,8 +9,8 @@ import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
 
 /** Encoding Standard §9 — Stateless single-byte handlers, processed in chunks. */
 export class SingleByteCodec {
-  readonly #index: EncodingIndex;
-  readonly #encoding: Encoding;
+  #index: EncodingIndex;
+  #encoding: Encoding;
   #decoder?: TextDecoder;
   #decodeTable?: Uint16Array;
   #reverse?: Uint8Array;

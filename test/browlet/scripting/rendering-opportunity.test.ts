@@ -132,9 +132,9 @@ describe('Window rendering producer', () => {
 });
 
 function createWindowFixture(): {
-  readonly agent: WindowAgent;
-  readonly document: NonNullable<Navigable['activeDocument']>;
-  readonly navigable: Navigable;
+  agent: WindowAgent;
+  document: NonNullable<Navigable['activeDocument']>;
+  navigable: Navigable;
 } {
   const navigable = createNewTopLevelTraversable(
     new UserAgent(),
@@ -155,13 +155,13 @@ function createWindowFixture(): {
 }
 
 function createManualRenderingHost(times: UnsafeMoment[]): {
-  readonly host: RenderingOpportunityHost;
-  readonly setOpportunities: (navigables: readonly Navigable[]) => void;
-  readonly signal: (navigables: readonly Navigable[]) => void;
+  host: RenderingOpportunityHost;
+  setOpportunities: (navigables: Navigable[]) => void;
+  signal: (navigables: Navigable[]) => void;
 } {
-  let notify: ((navigables: readonly Navigable[]) => void) | null = null;
+  let notify: ((navigables: Navigable[]) => void) | null = null;
   let opportunities = new Set<Navigable>();
-  const setOpportunities = (navigables: readonly Navigable[]): void => {
+  const setOpportunities = (navigables: Navigable[]): void => {
     opportunities = new Set(navigables);
   };
   return {

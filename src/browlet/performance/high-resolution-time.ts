@@ -2,8 +2,8 @@ import { UnsafeMoment, monotonicClock, wallClock } from './clock';
 import type { Clock, Duration, Moment } from './clock';
 
 export class EnvironmentTiming {
-  readonly #host: EnvironmentTimingHost;
-  readonly #estimatedMonotonicTimeOfUnixEpoch: Moment;
+  #host: EnvironmentTimingHost;
+  #estimatedMonotonicTimeOfUnixEpoch: Moment;
 
   constructor(
     host: EnvironmentTimingHost,

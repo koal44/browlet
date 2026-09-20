@@ -103,8 +103,8 @@ function createFixture(type: WebIDLType, existingResultPolicy?: boolean) {
 
 class BufferResultImpl {
   // The returned bytes occupy only part of their backing buffer.
-  readonly bytes = Uint8Array.of(0, 1, 2, 3, 4, 0).subarray(1, 5);
-  readonly pending = Promise.resolve(this.bytes);
+  bytes = Uint8Array.of(0, 1, 2, 3, 4, 0).subarray(1, 5);
+  pending = Promise.resolve(this.bytes);
 
   create(): Uint8Array {
     return this.bytes;

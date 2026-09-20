@@ -195,7 +195,7 @@ export class UTF8Encoder {
 /** §7.4 — Write whole scalar values directly into an existing Uint8Array. */
 export { writeUTF8Into as utf8EncodeInto } from '../../js-engine/byte-string';
 
-function hasBOM(bytes: Uint8Array | readonly number[]): boolean {
+function hasBOM(bytes: Uint8Array | number[]): boolean {
   return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 }
 

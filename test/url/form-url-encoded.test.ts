@@ -17,7 +17,7 @@ describe('URL Standard section 5: application/x-www-form-urlencoded', () => {
     ['a%26b=c%3Dd', [['a&b', 'c=d']]],
     ['a=1&a=2', [['a', '1'], ['a', '2']]],
     ['%E2%80%BD=%F0%9F%92%A9', [['‽', '💩']]],
-  ] as const satisfies readonly (readonly [string, readonly FormTuple[]])[]) {
+  ] as const satisfies [string, FormTuple[]][]) {
     it(`parses ${JSON.stringify(input)}`, () => {
       expect(urlAlgorithms().parseFormUrlEncoded([...encoder.encode(input)]))
         .toEqual(output);
@@ -48,7 +48,7 @@ describe('URL Standard section 5: application/x-www-form-urlencoded', () => {
     [[['a&b', 'c=d']], 'a%26b=c%3Dd'],
     [[['~', '*-._']], '%7E=*-._'],
     [[['q', '🏳️‍🌈']], 'q=%F0%9F%8F%B3%EF%B8%8F%E2%80%8D%F0%9F%8C%88'],
-  ] as const satisfies readonly (readonly [readonly FormTuple[], string])[]) {
+  ] as const satisfies [FormTuple[], string][]) {
     it(`serializes ${JSON.stringify(tuples)}`, () => {
       expect(urlAlgorithms().serializeFormUrlEncoded([...tuples]))
         .toBe(output);

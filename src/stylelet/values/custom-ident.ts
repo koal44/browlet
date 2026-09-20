@@ -27,7 +27,7 @@ const RESERVED_CUSTOM_IDENT_KEYWORDS: ReadonlySet<string> = new Set([
 
 export function parseCustomIdent(
   input: ParserInput,
-  excluded: readonly string[] = [],
+  excluded: string[] = [],
   context: unknown = undefined,
 ): CustomIdentValue | null {
   return parseAsComponentGrammar(
@@ -44,7 +44,7 @@ export function consumeCustomIdent(
 }
 
 export function createCustomIdentConsumer(
-  excluded: readonly string[] = [],
+  excluded: string[] = [],
 ): TryConsumer<CustomIdentValue> {
   const excludedKeywords = new Set(excluded.map(asciiLower));
 

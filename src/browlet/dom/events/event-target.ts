@@ -39,7 +39,7 @@ import {
 export class EventTargetImpl {
   #eventListenerList: EventListenerRecord[] = [];
   #createEvent: EventFactory = createStandaloneEvent;
-  readonly #virtuals: EventTargetVirtuals;
+  #virtuals: EventTargetVirtuals;
 
   constructor(virtuals: EventTargetVirtuals = {}) {
     this.#virtuals = virtuals;
@@ -250,7 +250,7 @@ export class EventTargetImpl {
 
   #innerInvoke(
     event: EventImpl,
-    listeners: readonly EventListenerRecord[],
+    listeners: EventListenerRecord[],
     phase: EventPhase,
     invocationTargetInShadowTree: boolean,
   ): boolean {
@@ -643,52 +643,52 @@ function isNodeInShadowTree(target: EventTargetImpl | null): boolean {
 }
 
 export type EventTargetVirtuals = {
-  readonly getParent?: (
+  getParent?: (
     target: EventTargetImpl,
     event: EventImpl,
   ) => EventTargetImpl | null;
-  readonly isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
-  readonly isNode?: (target: EventTargetImpl) => boolean;
-  readonly isWindow?: (target: EventTargetImpl) => boolean;
-  readonly getLegacyTargetOverride?: (
+  isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
+  isNode?: (target: EventTargetImpl) => boolean;
+  isWindow?: (target: EventTargetImpl) => boolean;
+  getLegacyTargetOverride?: (
     target: EventTargetImpl,
   ) => EventTargetImpl;
-  readonly getTreeRoot?: (
+  getTreeRoot?: (
     target: EventTargetImpl,
   ) => EventTargetImpl | null;
-  readonly getShadowRootHost?: (
+  getShadowRootHost?: (
     target: EventTargetImpl,
   ) => EventTargetImpl | null;
-  readonly getShadowRootMode?: (
+  getShadowRootMode?: (
     target: EventTargetImpl,
   ) => ShadowRootMode | null;
-  readonly getAssignedSlot?: (
+  getAssignedSlot?: (
     target: EventTargetImpl,
   ) => EventTargetImpl | null;
-  readonly isShadowIncludingInclusiveAncestor?: (
+  isShadowIncludingInclusiveAncestor?: (
     ancestor: EventTargetImpl,
     target: EventTargetImpl,
   ) => boolean;
-  readonly addingEventListener?: (
+  addingEventListener?: (
     target: EventTargetImpl,
     type: string,
   ) => void;
-  readonly removingEventListener?: (
+  removingEventListener?: (
     target: EventTargetImpl,
     type: string,
   ) => void;
-  readonly eventListenerListChanged?: (
+  eventListenerListChanged?: (
     target: EventTargetImpl,
     type: string,
   ) => void;
-  readonly activationBehavior?: (
+  activationBehavior?: (
     target: EventTargetImpl,
     event: EventImpl,
   ) => void;
-  readonly legacyPreActivationBehavior?: (
+  legacyPreActivationBehavior?: (
     target: EventTargetImpl,
   ) => void;
-  readonly legacyCanceledActivationBehavior?: (
+  legacyCanceledActivationBehavior?: (
     target: EventTargetImpl,
   ) => void;
 };
@@ -700,22 +700,16 @@ type EventListenerInput =
 
 type EventListenerRecord = {
   abortAlgorithm: AbortAlgorithmHandle | null;
-  readonly type: string;
-  readonly callback: EventListenerValue | null;
-  readonly capture: boolean;
+  type: string;
+  callback: EventListenerValue | null;
+  capture: boolean;
   passive: boolean | null;
-  readonly once: boolean;
-  readonly signal: AbortSignalImpl | null;
+  once: boolean;
+  signal: AbortSignalImpl | null;
   removed: boolean;
 };
 
-export type EventImplConstructor = {
-  readonly prototype: EventImpl;
-} & (abstract new (
-  type: string,
-  init?: EventInit,
-  timeStamp?: DOMHighResTimeStamp,
-) => EventImpl);
+export type EventImplConstructor = typeof EventImpl;
 
 type EventPhase = 'capturing' | 'bubbling';
 
@@ -724,11 +718,11 @@ type EventFactory = (
 ) => EventImpl;
 
 type EventListenerRealm = {
-  readonly callbacks: {
+  callbacks: {
     reportException(exception: unknown): void;
   };
-  readonly global: object;
-  readonly globalNames: ReadonlySet<string>;
+  global: object;
+  globalNames: ReadonlySet<string>;
 };
 
 type WindowEventListenerRealm = EventListenerRealm & {
@@ -770,20 +764,20 @@ function flattenMore(
 }
 
 type FlattenedEventListenerOptions = {
-  readonly capture: boolean;
-  readonly passive: boolean | null;
-  readonly once: boolean;
-  readonly signal: AbortSignalImpl | null;
+  capture: boolean;
+  passive: boolean | null;
+  once: boolean;
+  signal: AbortSignalImpl | null;
 };
 
 type EventListenerOptionsRecord = {
-  readonly capture?: boolean;
+  capture?: boolean;
 };
 
 type AddEventListenerOptionsRecord = EventListenerOptionsRecord & {
-  readonly once?: boolean;
-  readonly passive?: boolean;
-  readonly signal?: AbortSignalImpl;
+  once?: boolean;
+  passive?: boolean;
+  signal?: AbortSignalImpl;
 };
 
 const DEFAULT_PASSIVE_EVENT_TYPES = new Set([
@@ -803,10 +797,7 @@ const LEGACY_EVENT_TYPES = new Map([
 function createStandaloneEvent(
   EventConstructor: EventImplConstructor = EventImpl,
 ): EventImpl {
-  const event = Reflect.construct(
-    EventConstructor,
-    ['', {}, unsafeSharedCurrentTime().milliseconds],
-  ) as EventImpl;
+  const event = new EventConstructor('', {}, unsafeSharedCurrentTime().milliseconds);
   event.setTrusted(true);
   return event;
 }
@@ -814,7 +805,7 @@ function createStandaloneEvent(
 class EventListenerValue {
   readonly object: object;
   readonly realm: EventListenerRealm | undefined;
-  readonly #invoke: (
+  #invoke: (
     event: EventImpl,
     currentTarget: EventTargetImpl,
   ) => void;

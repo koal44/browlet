@@ -2,8 +2,8 @@ import { TypeError } from './exceptions';
 
 /** Promise allocation, adoption, and observation in one supplied destination. */
 export class Promises {
-  readonly #Promise: PromiseConstructor;
-  readonly observeNative: NativePromiseObserver;
+  #Promise: PromiseConstructor;
+  observeNative: NativePromiseObserver;
 
   constructor(promiseConstructor: PromiseConstructor, observeNative: NativePromiseObserver) {
     this.#Promise = promiseConstructor;
@@ -56,7 +56,7 @@ export class Promises {
     } catch (error) { return this.reject(error); }
   }
 
-  all<T>(values: readonly PromiseValue<T>[]): PromiseValue<T[]> {
+  all<T>(values: PromiseValue<T>[]): PromiseValue<T[]> {
     const result = this.withResolvers<T[]>();
     const items: T[] = [];
     let remaining = values.length;
@@ -85,8 +85,8 @@ export type NativePromiseObserver = (
 
 /** Internal chains retain their destination. Native async/await is not an internal consumer. */
 export class PromiseValue<T> {
-  readonly #backing: Promise<Payload<T>>;
-  readonly #promises: Promises;
+  #backing: Promise<Payload<T>>;
+  #promises: Promises;
 
   constructor(backing: Promise<Payload<T>>, promises: Promises) {
     this.#backing = backing;
@@ -147,7 +147,7 @@ export class PromiseValue<T> {
 type Payload<T> = { value: T; };
 
 export type PromiseValueCapability<T> = {
-  readonly promise: PromiseValue<T>;
+  promise: PromiseValue<T>;
   /** Settlement is synchronous: internal payloads never undergo thenable adoption. */
   readonly pending: boolean;
   resolve: (value: T) => void;

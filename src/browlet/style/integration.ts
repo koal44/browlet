@@ -14,7 +14,7 @@ export function createStyleletRuntime(runtime: RuntimeContext): StyleletRuntimeC
 }
 
 export class ElementCSSInlineStyleMixin {
-  readonly style: CSSStyleDeclarationImpl;
+  style: CSSStyleDeclarationImpl;
 
   constructor(element: ElementImpl, runtime: StyleletRuntimeCaps) {
     this.style = new CSSStyleDeclarationImpl({
@@ -39,9 +39,9 @@ export class ElementCSSInlineStyleMixin {
  * };
  */
 export class LinkStyleMixin {
-  readonly #owner;
-  readonly #options;
-  readonly #treeScopeResolver;
+  #owner;
+  #options;
+  #treeScopeResolver;
   #sheet: CSSStyleSheetImpl | null = null;
   #scope: TreeScope | null = null;
   #deferred = false;
@@ -143,8 +143,8 @@ export class LinkStyleMixin {
 }
 
 export type LinkStyleOptions = {
-  readonly attributes: ReadonlySet<string>;
-  readonly children?: boolean;
+  attributes: ReadonlySet<string>;
+  children?: boolean;
 };
 
 export type TreeScopeResolver = {

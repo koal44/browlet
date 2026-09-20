@@ -4,7 +4,7 @@ import { consumeIdentToken } from '../syntax/component-consumers';
 import { adaptConsumer } from '../syntax/component-grammar';
 
 export function createKeywordConsumer<
-  const Keywords extends readonly [string, ...string[]],
+  const Keywords extends [string, ...string[]],
 >(
   ...keywords: Keywords
 ): TryConsumer<Keywords[number]> {

@@ -54,9 +54,9 @@ export function setWindowProxyWindow(
 }
 
 export type WindowProxy = Window & {
-  readonly frames: WindowProxy;
-  readonly parent: WindowProxy;
-  readonly self: WindowProxy;
+  frames: WindowProxy;
+  parent: WindowProxy;
+  self: WindowProxy;
   readonly top: WindowProxy;
   readonly window: WindowProxy;
 };
@@ -68,7 +68,7 @@ const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
  * traps implement forwarding only for the plain-Node fallback.
  */
 class WindowProxyHandler implements ProxyHandler<object> {
-  readonly windowProxy: WindowProxy;
+  windowProxy: WindowProxy;
   #window: WindowAssociation | null = null;
 
   constructor(nativeProxy?: object) {
@@ -167,8 +167,8 @@ class WindowProxyHandler implements ProxyHandler<object> {
 }
 
 type WindowAssociation = {
-  readonly implementation: WindowImpl;
-  readonly object: Window;
+  implementation: WindowImpl;
+  object: Window;
 };
 
 const windowProxyReferences = new Set<PropertyKey>([

@@ -11,7 +11,7 @@ import {
 } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 
-function preservedKinds(values: readonly ComponentValue[]): TokenKind[] {
+function preservedKinds(values: ComponentValue[]): TokenKind[] {
   return values
     .filter((value): value is PreservedToken => !isComponentBlock(value))
     .map((value) => value.type);

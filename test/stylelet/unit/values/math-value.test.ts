@@ -1964,7 +1964,7 @@ describe('calc', () => {
 });
 
 type ExpectedMathHints = {
-  exponents: readonly (readonly [base: MathBase, power: number])[];
+  exponents: [base: MathBase, power: number][];
   percentHint: MathBase | null;
 };
 

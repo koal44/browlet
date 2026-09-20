@@ -19,9 +19,9 @@ import { SlottableMixin } from './slottable';
  * };
  */
 export class TextImpl extends withTextStub(CharacterDataImpl) {
-  readonly #slottableMixin = new SlottableMixin();
+  #slottableMixin = new SlottableMixin();
 
-  static readonly #nodeOptions: NodeOptions = {
+  static #nodeOptions: NodeOptions = {
     eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
       getParent: (target, event) => NodeImpl.is(target) && isText(target)
         ? target.getEventParent(event)

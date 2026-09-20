@@ -1109,7 +1109,7 @@ function createNestingSelectorExpansion(
   };
 }
 
-function containsAmpersand(values: readonly ComponentValue[]): boolean {
+function containsAmpersand(values: ComponentValue[]): boolean {
   for (const value of values) {
     if (isDelimToken(value, '&')) return true;
     if (isComponentBlock(value) && containsAmpersand(value.value)) return true;
@@ -1539,7 +1539,7 @@ function canonicalPseudoClassName(rawName: string): PseudoClassName | null {
 
 function createPseudoClassSelector(
   rawName: string,
-  value: readonly ComponentValue[] | null,
+  value: ComponentValue[] | null,
   context: SelectorParserContext,
 ): TryConsumerResult<PseudoClassSelector> {
   const name = canonicalPseudoClassName(rawName);
@@ -1887,7 +1887,7 @@ function createPseudoClassSelector(
 
 function createNoArgumentPseudoClassSelector(
   name: string,
-  value: readonly ComponentValue[] | null,
+  value: ComponentValue[] | null,
   specificity: Specificity = SpecificityB,
 ): TryConsumerResult<PseudoClassSelector> {
   if (value !== null) {
@@ -1904,7 +1904,7 @@ function createNoArgumentPseudoClassSelector(
 
 function createArgumentPseudoClassSelector<T extends PseudoArgument>(
   name: PseudoClassName,
-  value: readonly ComponentValue[] | null,
+  value: ComponentValue[] | null,
   context: SelectorParserContext,
   parseArgument: PseudoArgumentParser<T>,
   specificity: Specificity | ((argument: T) => Specificity) = SpecificityB,
@@ -1964,7 +1964,7 @@ function canonicalPseudoElementName(rawName?: string): PseudoElementName | null 
 
 function createPseudoElementSelector(
   rawName: string,
-  value: readonly ComponentValue[] | null,
+  value: ComponentValue[] | null,
   legacy: boolean,
   context: SelectorParserContext,
 ): TryConsumerResult<PseudoElementSelector> {
@@ -2114,7 +2114,7 @@ function createPseudoElementSelector(
 
 function createNoArgumentPseudoElementSelector(
   name: string,
-  value: readonly ComponentValue[] | null,
+  value: ComponentValue[] | null,
   legacy: boolean,
   specificity: Specificity = SpecificityC,
 ): TryConsumerResult<PseudoElementSelector> {
@@ -2173,7 +2173,7 @@ type PseudoArgument =
   | CustomIdentPseudoArgument;
 
 type PseudoArgumentParser<T extends PseudoArgument> = (
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ) => T | null;
 
@@ -2192,7 +2192,7 @@ type ForgivingSelectorArm = ComplexRealSelector | UnparsedSelector;
 
 export type UnparsedSelector = {
   kind: SelectorKind.UnparsedSelector;
-  value: readonly ComponentValue[];
+  value: ComponentValue[];
   hasAmpersand: boolean;
 };
 
@@ -2226,7 +2226,7 @@ type IdentPseudoArgument = {
 // --------------------------------------
 
 function parseForgivingSelectorListArgument(
-  arg: readonly ComponentValue[],
+  arg: ComponentValue[],
   context: SelectorParserContext,
 ): ForgivingSelectorListPseudoArgument {
   const argumentContext = contextForSelectorArgument(context);
@@ -2260,7 +2260,7 @@ function parseForgivingSelectorListArgument(
 }
 
 function parseStrictComplexRealSelectorListArgument(
-  arg: readonly ComponentValue[],
+  arg: ComponentValue[],
   context: SelectorParserContext,
 ): TryConsumerResult<ComplexRealSelectorList> {
   const argumentContext = contextForSelectorArgument(context);
@@ -2294,7 +2294,7 @@ function parseStrictComplexRealSelectorListArgument(
 }
 
 function parseRestrictedCompoundSelectorArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): CompoundSelector | null {
   const argumentContext = contextForSelectorArgument(context, 'compound');
@@ -2318,7 +2318,7 @@ function parseRestrictedCompoundSelectorArgument(
 }
 
 function parseCompoundSelectorListArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): CompoundSelectorListPseudoArgument | null {
   const selectors = parseCompoundSelectorList(
@@ -2397,7 +2397,7 @@ type NthChildPseudoArgument = {
 };
 
 function parseAnPlusBArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): AnPlusBPseudoArgument | null {
   const anb = parseAsComponentGrammar(value, withTrivia(consumeAnPlusB), context);
@@ -2413,7 +2413,7 @@ function parseAnPlusBArgument(
 }
 
 function parseNthChildArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): NthChildPseudoArgument | null {
   return parseAsComponentGrammar(value, consumeNthChildArgument, context);
@@ -2490,7 +2490,7 @@ type IntegerListPseudoArgument = {
 };
 
 function parseIdentArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): IdentPseudoArgument | null {
   const ident = parseAsComponentGrammar(value, withTrivia(consumeIdentToken), context);
@@ -2506,7 +2506,7 @@ function parseIdentArgument(
 }
 
 function parseIntegerArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): IntegerPseudoArgument | null {
   const integer = parseAsComponentGrammar(value, withTrivia(integerConsumer), context);
@@ -2522,7 +2522,7 @@ function parseIntegerArgument(
 }
 
 function parseNonNegativeIntegerArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): IntegerPseudoArgument | null {
   const argument = parseIntegerArgument(value, context);
@@ -2530,7 +2530,7 @@ function parseNonNegativeIntegerArgument(
 }
 
 function parseIntegerListArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): IntegerListPseudoArgument | null {
   const parsed = parseAsComponentGrammar(
@@ -2564,7 +2564,7 @@ type LanguageRange = string;
 
 
 function parseLanguageRangeListArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): LanguageRangeListPseudoArgument | null {
   const parsed = parseAsComponentGrammar(
@@ -2598,7 +2598,7 @@ type DirectionPseudoArgument = {
 };
 
 function parseDirectionArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): DirectionPseudoArgument | null {
   const parsed = parseAsComponentGrammar(value, withTrivia(consumeIdentToken), context);
@@ -2623,7 +2623,7 @@ type PartNameListPseudoArgument = {
 };
 
 function parsePartNameListArgument(
-  value: readonly ComponentValue[],
+  value: ComponentValue[],
   context: SelectorParserContext,
 ): PartNameListPseudoArgument | null {
   const names = parseAsComponentGrammar(value, consumePartNameList, context);
@@ -2805,7 +2805,7 @@ function addSpecificity(left: Specificity, right: Specificity): Specificity {
 }
 
 function sumSpecificity(
-  values: readonly (Specificity | null | undefined)[],
+  values: (Specificity | null | undefined)[],
 ): Specificity {
   let specificity = Specificity0;
 
@@ -2822,7 +2822,7 @@ function compareSpecificity(left: Specificity, right: Specificity): number {
   return left.a - right.a || left.b - right.b || left.c - right.c;
 }
 
-function maxSpecificity(values: readonly Specificity[]): Specificity {
+function maxSpecificity(values: Specificity[]): Specificity {
   let max = Specificity0;
 
   for (const value of values) {

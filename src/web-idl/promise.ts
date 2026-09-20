@@ -165,7 +165,7 @@ export function uponPromiseRejection(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — wait for all.
 export function waitForAll(
-  promises: readonly IDLPromiseRecord[],
+  promises: IDLPromiseRecord[],
   successSteps: (values: unknown[]) => void,
   failureSteps: (reason: unknown) => void,
   context: ConversionContext,
@@ -207,7 +207,7 @@ export function waitForAll(
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — get a promise for waiting for all.
 export function getPromiseForWaitingForAll(
-  promises: readonly IDLPromiseRecord[],
+  promises: IDLPromiseRecord[],
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromiseRecord {

@@ -47,8 +47,8 @@ export class QueueWithSizes<Value> {
 }
 
 type QueueEntry<Value> = {
-  readonly size: number;
-  readonly value: Value;
+  size: number;
+  value: Value;
 };
 
 function isNonNegativeNumber(value: unknown): value is number {

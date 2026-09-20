@@ -21,7 +21,7 @@ import { obtainURLOrigin, parseURL } from './url';
  * };
  */
 export class OriginImpl {
-  readonly #origin: Origin;
+  #origin: Origin;
 
   constructor(origin: Origin = createOpaqueOrigin()) {
     this.#origin = origin;

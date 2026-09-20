@@ -1,6 +1,6 @@
 export class TextCursor {
   constructor(
-    public readonly input: string,
+    public input: string,
     private i = 0,
   ) {}
 

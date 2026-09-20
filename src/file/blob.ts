@@ -42,7 +42,7 @@ import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
  */
 export class BlobImpl {
   #data: BlobData;
-  readonly #runtime: RuntimeContext;
+  #runtime: RuntimeContext;
   #snapshotState: BlobSnapshotState;
   #type: string;
 

@@ -12,18 +12,17 @@ import type { EnvironmentSettingsObject } from './environment';
  */
 export class EventLoop {
   /* HTML §8.1.3.3 — Backup incumbent settings object stack. */
-  readonly #backupIncumbentSettingsObjectStack:
-  EnvironmentSettingsObject[] = [];
-  readonly #jsExecutionContextStack: TrackedExecutionContext[] = [];
+  #backupIncumbentSettingsObjectStack: EnvironmentSettingsObject[] = [];
+  #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
   #schedulingOptions: EventLoopOptions | null = null;
   #turnRequested = false;
-  readonly #taskQueues = new Set<Set<Task>>();
-  readonly #taskQueueBySource = new Map<TaskSource, Set<Task>>();
+  #taskQueues = new Set<Set<Task>>();
+  #taskQueueBySource = new Map<TaskSource, Set<Task>>();
 
-  constructor(readonly microtaskQueue: JSMicrotaskQueue) {}
+  constructor(public microtaskQueue: JSMicrotaskQueue) {}
 
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
@@ -89,7 +88,7 @@ export class EventLoop {
       );
     }
 
-    let taskError: { readonly value: unknown; } | null = null;
+    let taskError: { value: unknown; } | null = null;
     this.#currentlyRunningTask = oldestTask;
     try {
       oldestTask.steps();
@@ -392,15 +391,15 @@ export class EventLoop {
 }
 
 export type EventLoopOptions = {
-  readonly createMicrotaskQueue: () => JSMicrotaskQueue;
-  readonly longTaskReporter?: LongTaskReporter;
-  readonly requestEventLoopTurn: (
+  createMicrotaskQueue: () => JSMicrotaskQueue;
+  longTaskReporter?: LongTaskReporter;
+  requestEventLoopTurn: (
     this: void,
     steps: () => void,
   ) => void;
-  readonly selectTaskQueue?: TaskQueueSelector;
-  readonly taskTiming?: TaskTimingHooks;
-  readonly unsafeSharedCurrentTime: (this: void) => UnsafeMoment;
+  selectTaskQueue?: TaskQueueSelector;
+  taskTiming?: TaskTimingHooks;
+  unsafeSharedCurrentTime: (this: void) => UnsafeMoment;
 };
 
 export type TaskTimingHooks = {
@@ -438,16 +437,15 @@ export type LongTaskReporter = {
 };
 
 export type TaskQueueSelector = (
-  runnableTaskQueues: readonly ReadonlySet<Task>[],
+  runnableTaskQueues: ReadonlySet<Task>[],
 ) => ReadonlySet<Task>;
 
 export class Task {
-  readonly document: DocumentImpl | null;
-  readonly scriptEvaluationEnvironmentSettingsObjectSet =
-    new Set<EnvironmentSettingsObject>();
+  document: DocumentImpl | null;
+  scriptEvaluationEnvironmentSettingsObjectSet = new Set<EnvironmentSettingsObject>();
   readonly source: TaskSource;
-  readonly steps: () => void;
-  readonly timerNestingLevel?: number;
+  steps: () => void;
+  timerNestingLevel?: number;
 
   constructor(
     source: TaskSource,
@@ -472,14 +470,14 @@ export class Task {
  * does not participate in equality: two specifications can use the same name
  * without accidentally serializing their tasks together.
  */
-export type TaskSource = Readonly<{ name: string; }>;
+export type TaskSource = { name: string; };
 
 export function createTaskSource(name: string): TaskSource {
-  return Object.freeze({ name });
+  return { name };
 }
 
 export type TaskCreationOptions = {
-  readonly timerNestingLevel?: number;
+  timerNestingLevel?: number;
 };
 
 const microtaskTaskSource = createTaskSource('microtask');
@@ -490,19 +488,19 @@ type TrackedExecutionContext =
   | ScriptHavingExecutionContext;
 
 type RealmExecutionContextEntry = {
-  readonly kind: 'realm';
-  readonly settings: EnvironmentSettingsObject;
-  readonly task: Task | null;
+  kind: 'realm';
+  settings: EnvironmentSettingsObject;
+  task: Task | null;
 };
 
 type ScriptHavingExecutionContext = {
-  readonly kind: 'script';
-  readonly settings: EnvironmentSettingsObject;
+  kind: 'script';
+  settings: EnvironmentSettingsObject;
   skipWhenDeterminingIncumbent: number;
 };
 
 function findTopmostScriptHavingExecutionContext(
-  stack: readonly TrackedExecutionContext[],
+  stack: TrackedExecutionContext[],
 ): ScriptHavingExecutionContext | undefined {
   return stack.findLast((context) => context.kind === 'script');
 }
@@ -517,7 +515,7 @@ function findFirstRunnableTask(
 }
 
 function selectFirstTaskQueue(
-  runnableTaskQueues: readonly ReadonlySet<Task>[],
+  runnableTaskQueues: ReadonlySet<Task>[],
 ): ReadonlySet<Task> {
   const [taskQueue] = runnableTaskQueues;
   if (taskQueue === undefined) {

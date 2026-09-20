@@ -27,7 +27,7 @@ import { endOfQueue, IOQueue, type Decoder } from './io-queue';
  * TextDecoder includes TextDecoderCommon;
  */
 export class TextDecoderImpl {
-  readonly #common: TextDecoderCommonMixin;
+  #common: TextDecoderCommonMixin;
 
   constructor(label: string, options: TextDecoderOptions) {
     this.#common = new TextDecoderCommonMixin(label, options);
@@ -61,9 +61,9 @@ export class TextDecoderImpl {
  * };
  */
 export class TextDecoderCommonMixin {
-  readonly #encoding: Encoding;
-  readonly #fatal: boolean;
-  readonly #ignoreBOM: boolean;
+  #encoding: Encoding;
+  #fatal: boolean;
+  #ignoreBOM: boolean;
   // The first decode initializes these through the same branch as a later reset.
   #decoder!: Decoder;
   #input!: IOQueue<Uint8Array>;

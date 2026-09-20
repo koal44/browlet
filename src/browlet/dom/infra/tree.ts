@@ -10,7 +10,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   #lastChild: TNode | null = null;
   #previousSibling: TNode | null = null;
   #nextSibling: TNode | null = null;
-  readonly #virtuals: TreeNodeVirtuals<TNode>;
+  #virtuals: TreeNodeVirtuals<TNode>;
 
   constructor(
     eventTargetVirtuals: EventTargetVirtuals = {},
@@ -227,7 +227,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 }
 
 export type TreeNodeVirtuals<TNode> = {
-  readonly insertedInto?: (node: TNode, parent: TNode) => void;
-  readonly removedFrom?: (node: TNode, parent: TNode) => void;
-  readonly childrenChanged?: (node: TNode) => void;
+  insertedInto?: (node: TNode, parent: TNode) => void;
+  removedFrom?: (node: TNode, parent: TNode) => void;
+  childrenChanged?: (node: TNode) => void;
 };

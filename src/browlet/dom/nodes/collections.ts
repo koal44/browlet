@@ -6,7 +6,7 @@ import { HTML_NAMESPACE } from '../../../infra/index';
 import type { ElementImpl } from './element';
 
 export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl> extends Array<T> {
-  readonly #collect: (() => Iterable<T>) | undefined;
+  #collect: (() => Iterable<T>) | undefined;
   #refreshing = false;
 
   constructor(collect?: () => Iterable<T>) {

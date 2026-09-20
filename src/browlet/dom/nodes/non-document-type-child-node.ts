@@ -11,7 +11,7 @@ import type { ElementImpl } from './element';
  * };
  */
 export class NonDocumentTypeChildNodeMixin {
-  readonly #node: NodeImpl;
+  #node: NodeImpl;
 
   constructor(node: NodeImpl) {
     this.#node = node;

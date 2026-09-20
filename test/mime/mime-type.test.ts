@@ -53,7 +53,7 @@ const parsingCases = [
   ['\n\r\t x/x;x=x\n\r\t ', 'x/x;x=x'],
   ['text/html;test=ÿ;charset=gbk', 'text/html;test="ÿ";charset=gbk'],
   ['x/x;test=�;x=x', 'x/x;x=x'],
-] as const satisfies readonly (readonly [input: string, output: string])[];
+] as const satisfies [input: string, output: string][];
 
 const failureCases = [
   '\vx/x',

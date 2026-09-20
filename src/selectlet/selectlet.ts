@@ -76,14 +76,14 @@ export type SelectletCaps<
 
 export type DocumentCaps<E extends Element, D extends Document> = {
   cachedIds?: (doc: D, id: string) => Iterable<E>;
-  cachedClasses?: (doc: D, classes: readonly string[]) => Iterable<E>;
+  cachedClasses?: (doc: D, classes: string[]) => Iterable<E>;
   designMode?: (doc: D) => string | undefined;
   treeVersion?: (doc: D) => number | undefined;
 };
 
 export type FragmentCaps<E extends Element, F extends DocumentFragment> = {
   cachedIds?: (frag: F, id: string) => Iterable<E>;
-  cachedClasses?: (frag: F, classes: readonly string[]) => Iterable<E>;
+  cachedClasses?: (frag: F, classes: string[]) => Iterable<E>;
 };
 
 export type ElementCaps<E extends Element> = {
@@ -105,7 +105,7 @@ export type TreeCaps<N extends QueryContext = QueryContext> = {
 };
 
 export type HtmlCollectionArray<E extends Element = Element> =
-  (collection: unknown) => readonly E[] | null;
+  (collection: unknown) => E[] | null;
 
 export type CustomPseudoPredicate = (element: Element) => boolean;
 

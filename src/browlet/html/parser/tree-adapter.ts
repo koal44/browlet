@@ -12,7 +12,7 @@ import {
 } from '../../dom/nodes/node';
 
 export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
-  readonly #document: DocumentImpl;
+  #document: DocumentImpl;
   #pendingUnpushedElement: ElementImpl | null = null;
 
   constructor(document: DocumentImpl) {

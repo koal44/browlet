@@ -61,13 +61,13 @@ export function consumeAnyValue(
 }
 
 export function isAnyValueComponents(
-  components: readonly ComponentValue[],
+  components: ComponentValue[],
 ): components is AnyValueComponents {
   return components.length > 0 && isAnyValueContents(components);
 }
 
 export function isAnyValueContents(
-  components: readonly ComponentValue[],
+  components: ComponentValue[],
 ): components is AnyValueContents {
   return components.every(isAnyValueComponent);
 }

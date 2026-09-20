@@ -22,7 +22,7 @@ describe('Web IDL synchronous iterable declarations', () => {
         },
       });
       class PairsImpl {
-        getEntryList(): readonly [string, number][] { return pairs; }
+        getEntryList(): [string, number][] { return pairs; }
         entries(): IterableIterator<[string, number]> { return pairs.values(); }
       }
       const definition = defineInterface({

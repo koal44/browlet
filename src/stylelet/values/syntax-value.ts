@@ -62,7 +62,7 @@ type ParsedSyntaxKeyword = {
 type ParsedSyntaxList = {
   type: 'parsed-syntax-list';
   multiplier: SyntaxMultiplier;
-  values: readonly [ParsedSyntaxComponent, ...ParsedSyntaxComponent[]];
+  values: [ParsedSyntaxComponent, ...ParsedSyntaxComponent[]];
 };
 
 type UniversalSyntaxValue = {

@@ -211,10 +211,10 @@ function createSiblingWindow(first: Browlet): Window {
 class OwnershipProbeImpl {
   observe = () => {};
   constructor(
-    readonly name: string,
-    readonly pending: PromiseValue<string>,
-    readonly trace: string[],
-    readonly promises: Promises,
+    public name: string,
+    public pending: PromiseValue<string>,
+    public trace: string[],
+    public promises: Promises,
   ) {}
 
   get result(): PromiseValue<string> { return this.read(); }
@@ -264,7 +264,7 @@ const operationIDL = defineInterface({
 });
 
 class InitializationProbeImpl {
-  readonly #ready: PromiseValue<string>;
+  #ready: PromiseValue<string>;
 
   constructor(promises: Promises) {
     this.#ready = promises.resolve().then(() => promises.resolve().then(() => 'ready'));

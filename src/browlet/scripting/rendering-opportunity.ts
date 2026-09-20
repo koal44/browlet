@@ -14,9 +14,9 @@ import { renderingTaskSource } from './tasks';
  * https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
  */
 export class WindowRenderingProducer {
-  readonly #agent: WindowAgent;
-  readonly #host: RenderingOpportunityHost;
-  readonly #update: RenderingUpdateHooks;
+  #agent: WindowAgent;
+  #host: RenderingOpportunityHost;
+  #update: RenderingUpdateHooks;
   #stopObserving: (() => void) | null = null;
 
   constructor(
@@ -44,7 +44,7 @@ export class WindowRenderingProducer {
     this.#stopObserving = null;
   }
 
-  #produceRenderingTasks(navigables: readonly Navigable[]): void {
+  #produceRenderingTasks(navigables: Navigable[]): void {
     const realms = new Set<Realm>();
     for (const navigable of navigables) {
       if (!this.#host.hasRenderingOpportunity(navigable)) continue;
@@ -126,7 +126,7 @@ export type RenderingOpportunityHost = {
   hasRenderingOpportunity(this: void, navigable: Navigable): boolean;
   observeRenderingOpportunities(
     this: void,
-    notify: (navigables: readonly Navigable[]) => void,
+    notify: (navigables: Navigable[]) => void,
   ): () => void;
   unsafeSharedCurrentTime(this: void): UnsafeMoment;
 };
@@ -135,22 +135,22 @@ export type RenderingUpdateHooks = Readonly<Partial<Record<
   RenderingUpdatePhase,
   (context: RenderingUpdateContext) => void
 >>> & {
-  readonly filters?: RenderingDocumentFilters;
+  filters?: RenderingDocumentFilters;
 };
 
 export type RenderingUpdateContext = {
-  readonly document: DocumentImpl;
-  readonly frameTimestamp: UnsafeMoment;
-  readonly unsafeStyleAndLayoutStartTime: UnsafeMoment | null;
+  document: DocumentImpl;
+  frameTimestamp: UnsafeMoment;
+  unsafeStyleAndLayoutStartTime: UnsafeMoment | null;
 };
 
 export type RenderingDocumentFilters = {
-  readonly hasAnimationFrameCallbacks?: DocumentPredicate;
-  readonly hasHiddenVisibilityState?: DocumentPredicate;
-  readonly isRenderBlocked?: DocumentPredicate;
-  readonly isRenderingSuppressedForViewTransitions?: DocumentPredicate;
-  readonly shouldSkipRendering?: DocumentPredicate;
-  readonly wouldRenderingHaveVisibleEffect?: DocumentPredicate;
+  hasAnimationFrameCallbacks?: DocumentPredicate;
+  hasHiddenVisibilityState?: DocumentPredicate;
+  isRenderBlocked?: DocumentPredicate;
+  isRenderingSuppressedForViewTransitions?: DocumentPredicate;
+  shouldSkipRendering?: DocumentPredicate;
+  wouldRenderingHaveVisibleEffect?: DocumentPredicate;
 };
 
 export type RenderingUpdatePhase =

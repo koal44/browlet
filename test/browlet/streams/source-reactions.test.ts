@@ -147,7 +147,7 @@ function createSource() {
 }
 
 type SourceControls = {
-  readonly failure: Error;
+  failure: Error;
   resolveStart(): void;
   resolvePull(): void;
   reject(stage: 'start' | 'pull'): void;

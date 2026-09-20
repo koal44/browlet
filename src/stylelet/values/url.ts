@@ -135,7 +135,7 @@ function contextForUrlFunctionArguments(): UrlFunctionParserContext {
 }
 
 function urlModifiersFromArray(
-  values: readonly UrlModifierValue[],
+  values: UrlModifierValue[],
 ): RequestUrlModifiers {
   const modifiers: RequestUrlModifiers = {};
 

@@ -44,10 +44,10 @@ export const slotAssignmentModeIDL = defineEnumeration({
  * ShadowRoot includes DocumentOrShadowRoot;
  */
 export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
-  readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
-  readonly #mode: ShadowRootMode;
+  #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  #mode: ShadowRootMode;
 
-  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
+  static #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
     getParent: (target, event) => ShadowRootImpl.is(target)
       ? target.getEventParent(event)
       : null,

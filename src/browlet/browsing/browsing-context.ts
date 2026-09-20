@@ -36,7 +36,7 @@ import {
  */
 export class BrowsingContext {
   #windowProxy: WindowProxy | undefined;
-  readonly popupSandboxingFlagSet: SandboxingFlagSet = new Set();
+  popupSandboxingFlagSet: SandboxingFlagSet = new Set();
   openerBrowsingContext: BrowsingContext | null = null;
   openerOriginAtCreation: Origin | null = null;
   isPopup = false;
@@ -210,12 +210,12 @@ export function createNewTopLevelBrowsingContextAndDocument(
  * allocation state for their agent clusters.
  */
 export class BrowsingContextGroup {
-  readonly browsingContextSet = new Set<BrowsingContext>();
-  readonly agentClusterMap = new AgentClusterMap();
-  readonly historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
+  browsingContextSet = new Set<BrowsingContext>();
+  agentClusterMap = new AgentClusterMap();
+  historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
 
-  constructor(readonly userAgent: UserAgent) {}
+  constructor(public userAgent: UserAgent) {}
 
   append(browsingContext: BrowsingContext): void {
     if (
@@ -249,7 +249,7 @@ class AgentClusterMap {
    * keys with value equality, so this retains clusters for the lifetime of the
    * browsing context group until Browlet implements cluster collection.
    */
-  readonly #values = new Map<string | symbol, AgentCluster>();
+  #values = new Map<string | symbol, AgentCluster>();
 
   get(key: AgentClusterKey): AgentCluster | undefined {
     return this.#values.get(obtainAgentClusterMapKey(key));
@@ -261,7 +261,7 @@ class AgentClusterMap {
 }
 
 class HistoricalAgentClusterKeyMap {
-  readonly #values = new Map<string | symbol, AgentClusterKey>();
+  #values = new Map<string | symbol, AgentClusterKey>();
 
   get(origin: Origin): AgentClusterKey | undefined {
     return this.#values.get(obtainOriginMapKey(origin));
@@ -348,7 +348,7 @@ function createInternalAncestorOriginObjectsList(
   _document: DocumentImpl,
   _referrerPolicy: string,
   embedder: ElementImpl | null,
-): readonly Origin[] {
+): Origin[] {
   if (embedder !== null) {
     throw new Error('Nested Document ancestry is not implemented');
   }
@@ -357,7 +357,7 @@ function createInternalAncestorOriginObjectsList(
 
 function createAncestorOriginsList(
   document: DocumentImpl,
-): readonly string[] {
+): string[] {
   const origins = document.getInternalAncestorOriginObjectsList();
   if (origins === null) {
     throw new Error('Document has no internal ancestor origin objects list');

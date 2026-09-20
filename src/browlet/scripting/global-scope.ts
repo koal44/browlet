@@ -47,10 +47,10 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
  * };
  */
 export class WindowOrWorkerGlobalScopeMixin {
-  readonly timers: GlobalTimers;
+  timers: GlobalTimers;
   #settings: EnvironmentSettingsObject;
-  readonly #performance: PerformanceImpl;
-  readonly #structuredClone: StructuredCloneSteps;
+  #performance: PerformanceImpl;
+  #structuredClone: StructuredCloneSteps;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
     this.#settings = initialization.settings;
@@ -75,7 +75,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   setTimeout(
     action: TimerAction,
     timeout: number,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): number {
     return this.timers.setTimeout(action, timeout, argumentsList);
   }
@@ -83,7 +83,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   setInterval(
     action: TimerAction,
     timeout: number,
-    argumentsList: readonly unknown[],
+    argumentsList: unknown[],
   ): number {
     return this.timers.setInterval(action, timeout, argumentsList);
   }
@@ -118,7 +118,7 @@ export type WindowOrWorkerGlobalScopeInitialization = {
 
 export type StructuredCloneSteps = (
   value: unknown,
-  transferList: readonly object[],
+  transferList: object[],
 ) => unknown;
 
 // -- Web IDL ------------------------------------------------------------

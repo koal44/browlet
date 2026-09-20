@@ -5,7 +5,7 @@ import {
 
 export type TokenSource = {
   text: string;
-  ranges: readonly TokenSourceRange[];
+  ranges: TokenSourceRange[];
 };
 
 export type TokenCursorOptions = {
@@ -34,11 +34,11 @@ export type TryConsumerResult<T> = T | null;
 
 export class TokenCursor<Value extends Token = ComponentValue> {
   private i: number;
-  private readonly source?: TokenSource;
+  private source?: TokenSource;
   context: unknown;
 
   constructor(
-    private readonly input: readonly Value[],
+    private input: Value[],
     options: TokenCursorOptions = {},
   ) {
     this.i = options.position ?? 0;

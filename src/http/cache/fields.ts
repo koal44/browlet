@@ -69,7 +69,7 @@ export function parseVary(input: string): string[] | null {
  * bareValue is the meaning of an argument-free directive, e.g. max-stale.
  */
 export function getDeltaSecondsDirective(
-  directives: readonly CacheDirective[],
+  directives: CacheDirective[],
   name: string,
   bareValue: number | null = null,
 ): number | null | undefined {

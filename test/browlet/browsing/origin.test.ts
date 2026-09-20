@@ -45,7 +45,7 @@ describe('Origin interface', () => {
 });
 
 type OriginObject = {
-  readonly opaque: boolean;
+  opaque: boolean;
   isSameOrigin(other: OriginObject): boolean;
   isSameSite(other: OriginObject): boolean;
 };

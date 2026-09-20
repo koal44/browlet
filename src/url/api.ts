@@ -399,7 +399,7 @@ export class URLSearchParamsImpl implements URLSearchParams {
   }
 
   /** URL §6.2 — value pairs to iterate over. */
-  getEntryList(): readonly FormTuple[] {
+  getEntryList(): FormTuple[] {
     return this.#list;
   }
 

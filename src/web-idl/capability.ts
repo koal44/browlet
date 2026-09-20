@@ -13,24 +13,24 @@ export function defineCapability<Value>(
   name: string,
   options: CapabilityOptions = {},
 ): Capability<Value> {
-  const capability: Capability<Value> = Object.freeze({
+  const capability: Capability<Value> = {
     // Project helper: associate a capability value with an interface definition.
     for(definition: InterfaceDefinition<never>, value: Value) {
       options.validate?.(definition);
       return { capability, definition, value };
     },
     name,
-  }) as Capability<Value>;
+  } as Capability<Value>;
   return capability;
 }
 
 export type Capability<Value> = {
-  readonly name: string;
+  name: string;
   for(
     definition: InterfaceDefinition<never>,
     value: Value,
   ): CapabilityRegistration;
-  readonly [capabilityValueType]: Value;
+  [capabilityValueType]: Value;
 };
 
 // The definition is an identity key; capability lookup never invokes its callbacks.

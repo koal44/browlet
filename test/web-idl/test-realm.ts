@@ -9,11 +9,11 @@ import type {
  * Web IDL while JSRealm supplies realm identity and JavaScript execution.
  */
 export class TestRealm extends JSRealm implements WebIDLRealmHost {
-  readonly callbacks: WebIDLRealmHost['callbacks'];
-  readonly crossOriginIsolated: boolean;
-  readonly globalNames: ReadonlySet<string>;
-  readonly isGlobalPrototypeChainMutable: boolean;
-  readonly secureContext: boolean;
+  callbacks: WebIDLRealmHost['callbacks'];
+  crossOriginIsolated: boolean;
+  globalNames: ReadonlySet<string>;
+  isGlobalPrototypeChainMutable: boolean;
+  secureContext: boolean;
 
   constructor(options: TestRealmOptions = {}) {
     /* Vitest owns this unit harness's asynchronous lifecycle. */
@@ -60,7 +60,7 @@ export function getInstalledInterface(
 type TestRealmOptions = {
   microtaskQueue?: JSMicrotaskQueue;
   crossOriginIsolated?: boolean;
-  globalNames?: readonly string[];
+  globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;
   secureContext?: boolean;
 };

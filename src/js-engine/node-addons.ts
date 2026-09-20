@@ -80,14 +80,14 @@ export type AddonContextHandle = {
   readonly realm: object;
   readonly globalProxy: object;
   readonly globalObject?: object;
-  readonly prototypeChain?: readonly object[];
+  readonly prototypeChain?: object[];
   detachGlobal(): object;
 };
 
 type AddonContextOptions = {
   microtaskQueue?: AddonMicrotaskQueueHandle;
   reuseGlobalProxyFrom?: NodeContext;
-  globalPrototypeChain?: readonly GlobalPrototypeKind[];
+  globalPrototypeChain?: GlobalPrototypeKind[];
 };
 
 /** Evaluation options shared by node:vm and the compatibility addon. */
@@ -100,7 +100,7 @@ export type ContextEvaluationOptions = {
 type AddonHostHooks<HostDefined> = {
   makeJobCallback?(
     callback: JSFunction,
-    registration: { incumbent: object | null; hostDefinedOptions: readonly unknown[]; },
+    registration: { incumbent: object | null; hostDefinedOptions: unknown[]; },
   ): JSJobCallback<HostDefined>;
   callJobCallback?(
     record: JSJobCallback<HostDefined>, receiver: unknown, argumentsList: unknown[],

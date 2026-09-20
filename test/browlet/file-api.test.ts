@@ -562,7 +562,7 @@ function requireObject(object: object, name: string): object {
   return value;
 }
 
-function concatenate(chunks: readonly Uint8Array[]): Uint8Array {
+function concatenate(chunks: Uint8Array[]): Uint8Array {
   const byteLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const bytes = new Uint8Array(byteLength);
   let offset = 0;

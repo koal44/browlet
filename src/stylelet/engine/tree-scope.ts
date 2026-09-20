@@ -7,9 +7,9 @@ import {
 import type { CascadeEngine } from './cascade-engine';
 
 export class TreeScope {
-  readonly #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
+  #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
   #headerStyleSheetCount = 0;
-  readonly #adoptedStyleSheets: ObservableArrayHandle<CSSStyleSheetImpl>;
+  #adoptedStyleSheets: ObservableArrayHandle<CSSStyleSheetImpl>;
   #lastStyleSheetSetName: string | null = null;
   #preferredStyleSheetSetName = '';
 

@@ -2,9 +2,9 @@ import { Buffer } from 'node:buffer';
 
 /** Encoding Standard §5 — An index, expanded only when a codec needs it. */
 export class EncodingIndex {
-  readonly #packed: string;
-  readonly #length: number;
-  readonly #width: 2 | 4;
+  #packed: string;
+  #length: number;
+  #width: 2 | 4;
   #values?: Uint16Array | Uint32Array;
   #pointers?: Uint16Array | Uint32Array;
 

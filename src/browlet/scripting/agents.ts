@@ -16,9 +16,9 @@ import type { WindowImpl } from '../browsing/window/window';
  * https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-formalism
  */
 export abstract class Agent {
-  readonly canBlock: boolean;
-  readonly eventLoop: EventLoop;
-  readonly signifier: symbol;
+  canBlock: boolean;
+  eventLoop: EventLoop;
+  signifier: symbol;
   #agentCluster: AgentCluster | null = null;
 
   protected constructor(
@@ -57,7 +57,7 @@ export abstract class Agent {
  * potentially reach each other, either directly or through document.domain.
  */
 export class WindowAgent extends Agent {
-  readonly windowObjects = new Set<WindowImpl>();
+  windowObjects = new Set<WindowImpl>();
 
   constructor(eventLoopOptions: EventLoopOptions | null = null) {
     super(false, eventLoopOptions);
@@ -155,8 +155,8 @@ export function obtainSimilarOriginWindowAgent(
  * https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
  */
 export class AgentCluster {
-  readonly agents = new Set<Agent>();
-  readonly crossOriginIsolationMode: CrossOriginIsolationMode;
+  agents = new Set<Agent>();
+  crossOriginIsolationMode: CrossOriginIsolationMode;
   isOriginKeyed = false;
 
   constructor(crossOriginIsolationMode: CrossOriginIsolationMode) {

@@ -98,7 +98,7 @@ function call(owner: object, name: string, ...args: unknown[]): unknown {
 class ChildImpl {}
 
 class SourceImpl {
-  constructor(readonly promises: Promises) {}
+  constructor(public promises: Promises) {}
 
   send(callback: (values: ChildImpl[]) => void): void { callback([new ChildImpl()]); }
   invokeNumber(callback: () => number): number { return callback(); }

@@ -7,7 +7,7 @@ import {
 /** HTML §2.7.10, structuredClone(value, options). */
 export function structuredClone(
   value: unknown,
-  transferList: readonly unknown[],
+  transferList: unknown[],
   ctx: BindingContext<Realm>,
 ): unknown {
   const serialized = structuredSerializeWithTransfer(

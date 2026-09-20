@@ -46,7 +46,7 @@ import type { TransformStreamImpl } from './transform-stream';
  * };
  */
 export class ReadableStreamImpl {
-  readonly #state: ReadableStreamState;
+  #state: ReadableStreamState;
 
   /**
    * Streams §4.2.4, ReadableStream(underlyingSource, strategy).
@@ -55,7 +55,7 @@ export class ReadableStreamImpl {
   constructor(
     underlyingSource: UnderlyingSource | null = {},
     strategy: QueuingStrategyRecord = {},
-    readonly runtime: RuntimeContext,
+    public runtime: RuntimeContext,
   ) {
     this.#state = { disturbed: false, state: 'readable' };
     if (underlyingSource === null) return;
@@ -198,11 +198,11 @@ export class ReadableStreamImpl {
   }
 
   getReader(
-    options: { readonly mode: 'byob'; },
+    options: { mode: 'byob'; },
   ): ReadableStreamBYOBReaderImpl;
 
   getReader(
-    options?: { readonly mode?: undefined; },
+    options?: { mode?: undefined; },
   ): ReadableStreamDefaultReaderImpl;
 
   getReader(
@@ -475,7 +475,7 @@ export class ReadableStreamImpl {
     };
 
     const isOrBecomesErrored = (
-      state: { readonly state: string; readonly storedError?: unknown; },
+      state: { state: string; storedError?: unknown; },
       promise: PromiseValue<unknown>,
       action: (reason: unknown) => void,
     ): void => {
@@ -487,7 +487,7 @@ export class ReadableStreamImpl {
     };
 
     const isOrBecomesClosed = (
-      state: { readonly state: string; },
+      state: { state: string; },
       promise: PromiseValue<unknown>,
       action: () => void,
     ): void => {
@@ -643,7 +643,7 @@ export class ReadableStreamImpl {
     let reason2: unknown = undefined;
     const cancelPromise = this.runtime.promises.withResolvers<void>();
 
-    const settleCancelPromise = (reason: readonly unknown[]): void => {
+    const settleCancelPromise = (reason: unknown[]): void => {
       void this.cancelInternal([...reason]).then(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error));
     };
 
@@ -1203,7 +1203,7 @@ type ReadableStreamState = {
  * };
  */
 export type ReadableStreamGetReaderOptions = {
-  readonly mode?: 'byob';
+  mode?: 'byob';
 };
 
 /*
@@ -1212,7 +1212,7 @@ export type ReadableStreamGetReaderOptions = {
  * };
  */
 export type ReadableStreamIteratorOptions = {
-  readonly preventCancel: boolean;
+  preventCancel: boolean;
 };
 
 /*
@@ -1222,8 +1222,8 @@ export type ReadableStreamIteratorOptions = {
  * };
  */
 export type ReadableWritablePair = {
-  readonly readable: ReadableStreamImpl;
-  readonly writable: WritableStreamImpl;
+  readable: ReadableStreamImpl;
+  writable: WritableStreamImpl;
 };
 
 /*
@@ -1235,10 +1235,10 @@ export type ReadableWritablePair = {
  * };
  */
 export type StreamPipeOptions = {
-  readonly preventAbort: boolean;
-  readonly preventCancel: boolean;
-  readonly preventClose: boolean;
-  readonly signal?: AbortSignalCapability;
+  preventAbort: boolean;
+  preventCancel: boolean;
+  preventClose: boolean;
+  signal?: AbortSignalCapability;
 };
 
 /*
@@ -1253,19 +1253,19 @@ export type StreamPipeOptions = {
 export type UnderlyingSource = UnderlyingDefaultSource | UnderlyingByteSource;
 
 export type UnderlyingDefaultSource = UnderlyingSourceSteps<ReadableStreamDefaultControllerImpl> & {
-  readonly autoAllocateChunkSize?: number;
-  readonly type?: undefined;
+  autoAllocateChunkSize?: number;
+  type?: undefined;
 };
 
 export type UnderlyingByteSource = UnderlyingSourceSteps<ReadableByteStreamControllerImpl> & {
-  readonly autoAllocateChunkSize?: number;
-  readonly type: 'bytes';
+  autoAllocateChunkSize?: number;
+  type: 'bytes';
 };
 
 type UnderlyingSourceSteps<Controller> = {
-  readonly cancel?: (reason?: unknown) => PromiseValue<unknown> | void;
-  readonly pull?: (controller: Controller) => PromiseValue<unknown> | void;
-  readonly start?: (controller: Controller) => unknown;
+  cancel?: (reason?: unknown) => PromiseValue<unknown> | void;
+  pull?: (controller: Controller) => PromiseValue<unknown> | void;
+  start?: (controller: Controller) => unknown;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -1441,8 +1441,8 @@ export const underlyingSourceIDL = defineDictionary({
 // =============================================================================
 
 class ReadableStreamIterator {
-  readonly #reader: ReadableStreamDefaultReaderImpl;
-  readonly #preventCancel: boolean;
+  #reader: ReadableStreamDefaultReaderImpl;
+  #preventCancel: boolean;
 
   constructor(reader: ReadableStreamDefaultReaderImpl, preventCancel: boolean) {
     this.#reader = reader;
@@ -1752,7 +1752,7 @@ export class ReadableStreamDefaultControllerImpl {
 }
 
 type ReadableStreamDefaultControllerState = {
-  readonly queue: QueueWithSizes<unknown>;
+  queue: QueueWithSizes<unknown>;
   cancelAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
   closeRequested: boolean;
   pullAgain: boolean;
@@ -2662,7 +2662,7 @@ export class ReadableStreamGenericReaderMixin {
 }
 
 type ReadableStreamGenericReaderState = {
-  readonly promises: Promises;
+  promises: Promises;
   closedPromise: PromiseValueCapability<void>;
   stream?: ReadableStreamImpl;
 };
@@ -2694,7 +2694,7 @@ export const readableStreamGenericReaderIDL = defineInterfaceMixin({
  * ReadableStreamDefaultReader includes ReadableStreamGenericReader;
  */
 export class ReadableStreamDefaultReaderImpl {
-  readonly #genericReader: ReadableStreamGenericReaderMixin;
+  #genericReader: ReadableStreamGenericReaderMixin;
   #readRequests: ReadRequest[] = [];
 
   /**
@@ -2947,7 +2947,7 @@ export const readableStreamReadResultIDL = defineDictionary({
  * ReadableStreamBYOBReader includes ReadableStreamGenericReader;
  */
 export class ReadableStreamBYOBReaderImpl {
-  readonly #genericReader: ReadableStreamGenericReaderMixin;
+  #genericReader: ReadableStreamGenericReaderMixin;
   #readIntoRequests: ReadIntoRequest[] = [];
 
   /**
@@ -3114,7 +3114,7 @@ export type ReadIntoRequest = {
  * };
  */
 export type ReadableStreamBYOBReaderReadOptions = {
-  readonly min: number;
+  min: number;
 };
 
 export const readableStreamBYOBReaderIDL = defineInterface({

@@ -22,7 +22,7 @@ export class ResponseRecord {
   urlList: URLRecord[] = [];
   status = 200;
   statusMessage = '';
-  readonly headerList: HeaderList = [];
+  headerList: HeaderList = [];
   body: BodyRecord | null = null;
   cacheState: '' | 'local' | 'validated' = '';
   corsExposedHeaderNameList: string[] = [];

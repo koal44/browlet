@@ -13,7 +13,7 @@ import type { DocumentImpl } from './document';
  * };
  */
 export class DocumentTypeImpl extends withDocumentTypeStub(NodeImpl) {
-  readonly #childNodeMixin = new ChildNodeMixin(this);
+  #childNodeMixin = new ChildNodeMixin(this);
   #name: string;
   #publicId: string;
   #systemId: string;

@@ -12,7 +12,7 @@ export class StyleSheetListImpl<
 > {
   [index: number]: T;
 
-  readonly #styleSheets: T[] = [];
+  #styleSheets: T[] = [];
 
   item(index: number): T | null {
     return this.#styleSheets[index] ?? null;
