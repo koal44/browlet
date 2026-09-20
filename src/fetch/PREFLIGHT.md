@@ -358,13 +358,15 @@ behavior or context ownership was changed by this pass.
 
 ## Rejoin Fetch, then finish browser policy
 
-After structured fields, multipart bytes, and independent HTTP cache policy,
-resume the [Fetch slices](ROADMAP.md#slice-1--control-and-task-delivery).
+The trustworthiness and cookie-core detour is complete. Resume
+[Fetch Slice 6](ROADMAP.md#slice-6--network-independent-platform-apis), starting
+with `Headers`, then Body extraction/consumption, `Request`, and `Response`.
 The remaining work-order entries above are gates for their named consumers,
-not prerequisites for starting §2. Cache storage/selection likewise resumes
-when Fetch supplies its request, response, header-list, and body records.
-Follow their order for records, APIs, and request processing. Complete the
-consumer integration gates in each owning roadmap with real Fetch inputs;
+not a requirement to finish all browser integration before those APIs.
+Resolve `Request`'s Referrer Policy declaration and dependent AbortSignal
+requirements within Slice 6. Cookie header algorithms follow in Slice 7;
+network cookie processing and cache transactions remain in Slice 9.
+Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 
 Finish the policy stage in this order:

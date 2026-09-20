@@ -20,6 +20,7 @@
     { "path": "../file" },
     { "path": "../xhr" },
     { "path": "../fetch" },
+    { "path": "../http" },
     { "path": "../stylelet" }
   ]
 }

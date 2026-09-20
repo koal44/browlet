@@ -1,6 +1,6 @@
 import { isomorphicDecode, isomorphicEncode } from '../js-engine/byte-string';
 
-import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/syntax';
+import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
 
 /*

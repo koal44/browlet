@@ -1,13 +1,16 @@
 # Cookies roadmap
 
-This submodule will own cookie records, the cookie store, and parsing, storage,
+This submodule owns cookie records, the cookie store, and the parsing, storage,
 retrieval, and serialization algorithms. Fetch and HTML consume the same
 implementation. Browlet owns store instances and supplies browser policy;
 this project must not discover a process-global cookie jar or import Browlet.
 
-**Status:** planned; no implementation or library has been selected.
-Cookies are next in the agreed Fetch dependency detour, after Window secure
-contexts. Resume Fetch Slice 6 after the chosen prerequisite work.
+**Status:** §§5.1–5.4 implemented: cookie records and predicates, store limits,
+eviction, subcomponent parsing/matching, and the main parse/store/retrieve/serialize
+algorithms. Each Browlet UserAgent owns a store. Browser access remains ahead.
+The standalone prerequisite is complete; resume
+[Fetch Slice 6](../../fetch/ROADMAP.md#slice-6--network-independent-platform-apis).
+Browser integration follows at its Fetch and HTML consumers.
 
 ## Sources
 
@@ -15,9 +18,13 @@ Use [Cookies: HTTP State Management Mechanism](https://httpwg.org/http-extension
 the layered-cookies draft currently referenced by Fetch. Record its revision
 when implementing; it is a draft, not a published replacement RFC yet.
 
-Preparation reviewed 2026-09-20 against the live draft and local checkout
-`1057fe0f1570aa539eb90502411995e28ba304c7`. Recheck the source revision when
-implementation starts.
+First slice implemented against the live draft and local checkout
+`1057fe0f1570aa539eb90502411995e28ba304c7`, rechecked 2026-09-20.
+The §5.3 slice follows the live draft retrieved 2026-09-20, which has since
+corrected default-path cloning and changed path matching to compare segments.
+Those corrections are not yet in that local revision.
+The §5.4 slice follows the live draft dated 2026-09-17, retrieved 2026-09-20,
+with the reviewed corrections below.
 
 Local sources under the [reference root](../../fetch/PREFLIGHT.md#local-reference-inventory):
 
@@ -29,32 +36,141 @@ Local sources under the [reference root](../../fetch/PREFLIGHT.md#local-referenc
   and other browser-owned decisions. The draft's non-browser user-agent
   defaults must not replace these rules.
 
+## Requirements outside §5
+
+Reviewed §§1–4 and §§6–9 on 2026-09-20:
+
+- **§§1–4:** §3 directs browsers to the lenient consumer algorithms. Do not
+  turn §4's producer grammar into an incoming-cookie validator or a second
+  record model. Keep `Set-Cookie` fields separate; cookies alone do not make
+  responses uncacheable (§4.1).
+- **§6:** structured API guidance fits the planned records; no additional
+  browser algorithm.
+- **§7:** Browlet owns cookie management and disabling controls (SHOULD).
+  Disabling MUST suppress outbound `Cookie` and inbound `Set-Cookie`
+  processing. An optional session-only mode MUST treat received cookies as
+  having null expiry. Decide third-party policy before browser integration;
+  §7.1 recommends restrictions but prescribes no particular mechanism.
+- **§8:** security guidance adds no browser algorithm. Keep cross-port sharing
+  and arbitrary cookie paths in tests; paths are not security boundaries.
+- **§9:** header registration only; no runtime work.
+
 ## Implementation order
 
-1. **Records, limits, and eviction (§§5.1–5.2).** Start here, in document order.
-   Model the cookie record and store, expiry, per-host/global limits, and
-   removal order. Supply time explicitly; reuse URL host equality. Replacement
-   belongs to the later store algorithm, rather than a second insertion path.
-2. **Subcomponent algorithms (§5.3).** Implement cookie dates, domain matching,
-   default paths, and path matching. Cookie-date parsing has its own rules;
-   a platform date parser is not sufficient evidence of equivalence.
-3. **Parse/store/retrieve/serialize (§5.4).** Follow the draft's main algorithms,
-   including Secure, HttpOnly, SameSite, and all four name prefixes,
-   ordering, deletion, and eviction. A `Set-Cookie` value is processed
+1. **Complete: records, limits, and eviction (§§5.1–5.2).** `HTTPCookie`
+   retains byte strings, URL paths, and Unix millisecond timestamps.
+   `CookieStore` defaults to 50 cookies per host, 3000 total, and a 400-day age
+   limit; applying the age limit belongs to parsing in §5.4. Eviction returns
+   the original records in removal order and preserves survivor order.
+2. **Complete: subcomponent algorithms (§5.3).** Cookie dates use the specified
+   byte-token grammar, fixed two-digit-year rules, and strict calendar checks.
+   Domain matching uses parsed hosts. Default paths copy the input; path
+   matching compares URL segments without allocating a serialized path or clone.
+3. **Complete: parse/store/retrieve/serialize (§5.4).** Includes Secure,
+   HttpOnly, SameSite, all four name prefixes, overwrite protection,
+   replacement, ordering, deletion, and eviction. A `Set-Cookie` value is processed
    separately; it must not be treated as a comma-combinable field.
-4. **Browser integration.** Fetch supplies request/response and credentials
-   decisions through its [HTTP integration](../../fetch/http/ROADMAP.md).
+4. **Deferred: browser integration at its consumers.**
+   [Fetch Slice 7](../../fetch/ROADMAP.md#slice-7--http-extensions) supplies §3.1's
+   cookie header algorithms; Slice 9 connects them to network request/response
+   processing and credentials decisions through its
+   [HTTP integration](../../fetch/http/ROADMAP.md).
    Browlet's Document implementation supplies non-HTTP access and the
    required browser context. The core does not infer those contexts from
    whichever realm happens to be executing.
+   Preflight on 2026-09-20 reached a SameSite policy review: Fetch's current
+   algorithm excludes Strict cookies on same-site navigations, excludes Lax on
+   cross-site navigations, and omits the client/target-site check for ordinary
+   subresources. Its GET/POST assertion and reuse of retrieval mode for storage
+   also disagree with browser behavior. Review sending versus accepting cookies,
+   clientless requests, and unset-SameSite policy before implementing these hooks.
+   The reproducible browser probe and findings are in the independent experimental
+   repository's `cookies/same-site-context.mjs` and `cookies/README.md`.
+
+## Representation choices
+
+- Names and values use byte strings, as Fetch headers do: each U+0000–U+00FF
+  code unit represents one byte. Convert bytes isomorphically, not through
+  UTF-8 decoding. Preserve their case; only the reserved-prefix checks are
+  case-insensitive. Construction and expiration read `Date.now()` directly.
+- An absent host is `undefined`; a failed host parse is `null`. These must stay
+  distinct for §5.4: a later Domain attribute can override a failed one; storage
+  rejects a final failed host. `StoredHTTPCookie` narrows the same cookie's host
+  to a domain or IP address; it does not allocate a second record.
+- The store uses an insertion-ordered `Set` for direct removal by identity.
+  Host eviction, global eviction, and sending order differ, and retrieval changes
+  access times. Sort temporary lists when needed and preserve survivor order.
+  Storage establishes uniqueness by name, host, host-only, and path. Even an indistinguishable
+  replacement installs the new record, preserves creation time, and refreshes
+  access time; its null result means no observable change, not necessarily rejection.
+- `parseCookieDate` accepts the same byte-string representation and returns a
+  Unix millisecond timestamp or `null` for failure. It cannot use `parseHTTPDate`:
+  cookies ignore weekday/timezone labels, recognize more token forms, use a
+  fixed year cutoff, and reject leap seconds. Sharing only their small calendar
+  check would not simplify either parser.
+- Cookie hosts retain URL's parsed domain/IP values. Matching, public-suffix
+  decisions, and IP-specific host-only rules use that classification and
+  canonical value, rather than depending on a serialized spelling. Reviewed
+  §5.3.2's string parameter against §5.4's parsed-host callers; retain the
+  parsed representation.
+- `HTTPCookie.matchesDomain(host)` and `matchesPath(requestPath)` test the
+  supplied host/path against the cookie's own scope. Host-only and public-suffix
+  restrictions remain storage/retrieval decisions. `HTTPCookie.getDefaultPath`
+  is static because parsing needs it before constructing a cookie; its input
+  is a non-empty URL path list. Matching does not serialize, decode, or normalize
+  paths. An unassigned/failed cookie host or an opaque cookie path cannot match.
+- `HTTPCookie.parse(input, path, cookieAgeLimit)` constructs a cookie without
+  depending on a store. Its trailing age limit is supplied in days; the draft's
+  unused `isSecure` and `host` arguments are omitted. `CookieStore.parseAndStoreCookie`
+  supplies its current limit, then applies storage policy. It returns null on
+  parse failure, consistently with its storage result and the draft's caller.
+  These signature adaptations have been reviewed and accepted.
+- Parsing takes a non-empty URL path list. Retrieval accepts `URLPath` and
+  returns no cookies for an opaque path, without updating access times. Storage
+  also rejects an opaque cookie path because no request can match it.
+- `HTTPCookie.serialize(cookies)` formats the supplied list as a byte string.
+  Retrieval selects and orders cookies; serialization neither selects nor normalizes them.
+- Gecko's `CookieStorage` is the closest ownership comparison. Its eviction
+  code also prioritizes insecure cookies, but groups by base domain and adds
+  quota/tie-break policy. Chromium has further priority and batch-purge rules;
+  WebKit storage depends on its backend. Follow the draft's exact host equality
+  and stable last-access ordering here, without importing those extensions.
+
+## Draft corrections and browser comparison
+
+Reviewed with Eric on 2026-09-20; these are deliberate departures from the
+2026-09-17 draft, not literal implementations of its mistakes:
+
+- **§5.4.2, Max-Age:** keep `maxAgeSeen` outside the attribute loop so a valid
+  Max-Age overrides Expires regardless of their order. Invalid later attributes
+  do not erase a previously valid value.
+- **§5.4.2, Expires:** check the parsed `expiryTime` for failure, not the original
+  attribute string. Clamp to `now + cookieAgeLimit`, not the duration alone.
+- **§5.4.5, ordering:** compare serialized path lengths, including slashes,
+  rather than URL path segment counts. Break ties by creation time.
+
+Fresh Playwright probes confirmed Max-Age precedence and serialized-path ordering
+in Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5. Chromium and Firefox
+capped the far-future Expires value at 400 days; this WebKit build retained it.
+We retain the draft's 400-day limit. The reproducible probe and observations are
+in the independent experimental repository under `cookies/`.
+
+Source comparisons: Gecko's `CookieParser::GetExpiry` gives Max-Age precedence,
+and `CookieCommons::MaybeCapExpiry` adds the duration to the current time.
+[Chromium's expiration parser](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/net/cookies/canonical_cookie.cc)
+also prioritizes Max-Age, while its
+[cookie sorter](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/net/cookies/cookie_monster.cc)
+compares serialized path lengths.
+
+Retrieval also excludes expired cookies between garbage-collection passes.
+The draft lists eviction separately and Fetch does not clean the store before
+retrieval. Filtering prevents stale cookies from being exposed without consuming
+the removal report: garbage collection still returns those original records.
 
 ## Dependencies and stopping points
 
-- URL already supplies parsed hosts, host equality, public-suffix lookup, URL
-  paths, and site comparisons. Cookie domain/path matching and cookie dates
-  still need their own specified algorithms.
-- Add a cookie TypeScript project when source is introduced: HTTP's current
-  syntax/cache project has no URL dependency and does not include this folder.
+- URL supplies parsed hosts, host equality, public-suffix lookup, URL paths,
+  and site comparisons. The completed cookie core uses these directly.
 - Keep cookie `isSecure` separate from `Environment.isSecureContext`. The
   current Fetch §3.1 callers derive it from the request URL's HTTPS scheme.
 - Full browser integration requires HTML's cross-site-ancestor answer, which
@@ -67,22 +183,27 @@ Local sources under the [reference root](../../fetch/PREFLIGHT.md#local-referenc
   partition field. Review CHIPS and browser storage-partition policy separately
   before adding partition state or treating that coverage as complete.
 
-Evaluate any candidate library against these algorithms and the selected
-draft revision. General RFC 6265 compatibility is not enough to establish
-coverage of the current browser contract.
-
 ## Exit proof and later scope
 
-Use table-driven tests for parsing, rejected cookies, replacement/deletion,
-domain/path boundaries, expiry, retrieval ordering, prefixes, secure/HTTP-only
-access, and SameSite. Then test real Fetch/Document consumers
+`test/http/cookies/` covers record defaults, prefix predicates, the strict
+expiration boundary, eviction priority/order, limits, and domain/IP host
+equality. It also covers date-token ordering, every delimiter byte, year/calendar
+limits, domain suffix boundaries, default-path ownership, and literal path
+segment matching. Parsing/storage/retrieval tests cover byte and attribute limits,
+precedence, public suffixes, IP hosts, all prefixes, secure and HTTP-only overwrite
+protection, unchanged replacements, deletion, SameSite modes, expiry, and path
+ordering. Serialization preserves the supplied ordering and byte values.
+`test/browlet/fetch-control.test.ts` checks shared ownership across
+Window settings and separation between UserAgents.
+
+At browser integration, test real Fetch/Document consumers
 against a shared Browlet-owned store, including credentials omission and
 redirect handling.
 
 Network cookie handling does not require implementing the separate Cookie
-Store API. Persistent storage and user controls can follow an in-memory store
-with explicit policy inputs; their absence must not silently change the
-specified acceptance/retrieval rules.
+Store API or persistent storage. The core uses an in-memory store;
+browser integration must address the §7 controls and policy above,
+including tests for disabled cookies. Track any deferred controls explicitly.
 
 Remove this roadmap when the core and reached browser consumers are covered,
 with any remaining public API or persistence work assigned to its owner.

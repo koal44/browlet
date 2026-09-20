@@ -417,10 +417,11 @@ each algorithm's specification provenance; consumers supply host scheduling
 and retain their own policy and lifecycle.
 See the [Infra translation notes](./infra/NOTES.md) for representation and
 algorithm-translation guidance.
-[HTTP](./http/ROADMAP.md) owns reusable protocol algorithms below Fetch; MIME
-imports its syntax directly. Structured Fields keeps a nested build boundary.
-Fetch-specific policy and transactions remain with Fetch rather than creating
-a reverse dependency from the HTTP foundation.
+[HTTP](./http/ROADMAP.md) owns reusable protocol algorithms below Fetch,
+including syntax consumed by MIME. One TypeScript project covers its modules;
+one index exposes the public algorithms and types. Fetch-specific policy and
+transactions remain with Fetch. The UserAgent owns its cookie store alongside
+its networking state; Fetch/HTML will supply browser access policy.
 
 When a complete platform implementation spans a host-neutral subsystem and
 Browlet-owned facilities, keep its implementation state and IDL together on

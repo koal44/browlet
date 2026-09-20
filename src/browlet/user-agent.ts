@@ -2,6 +2,7 @@ import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
+import { CookieStore } from '../http/index';
 import { areSameOrigin, type Origin, type TupleOrigin } from '../url/origin';
 import { obtainURLOrigin, type URLRecord } from '../url/url';
 
@@ -17,6 +18,7 @@ export class UserAgent implements FetchUserAgent {
 
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
+  cookieStore = new CookieStore();
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
   // Applies to tuple origins supplied by an authenticated protocol implementation.

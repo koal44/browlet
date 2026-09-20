@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import type {
   StructuredBareItem, StructuredField, StructuredInnerList, StructuredItem,
-} from '../../../src/http/struct-fields';
+} from '../../../src/http/struct-fields/values';
 
 export function readFixtures(filename: string): Fixture[] {
   // The native reviver's source text distinguishes JSON 1.0 from JSON 1.

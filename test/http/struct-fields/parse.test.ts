@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseStructuredField, type StructuredBareItem, type StructuredInnerList,
-  type StructuredItem, type StructuredParameters,
-} from '../../../src/http/struct-fields';
+import { parseStructuredField } from '../../../src/http/struct-fields/parse';
+import type {
+  StructuredBareItem, StructuredInnerList, StructuredItem, StructuredParameters,
+} from '../../../src/http/struct-fields/values';
 
 describe('RFC 9651 §4.2: parsing structured fields', () => {
   it.each([

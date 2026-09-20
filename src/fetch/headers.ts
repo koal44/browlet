@@ -1,8 +1,10 @@
 import { isomorphicEncode } from '../js-engine/byte-string';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
-import { collectHTTPQuotedString, isHTTPToken } from '../http/syntax';
+import {
+  collectHTTPQuotedString, isHTTPToken, parseStructuredField, serializeStructuredField,
+  type StructuredField,
+} from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
-import { parseStructuredField, serializeStructuredField, type StructuredField } from '../http/struct-fields/index';
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,

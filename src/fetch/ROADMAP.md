@@ -5,6 +5,7 @@
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
+- **Next:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), starting with `Headers`. The trustworthiness and cookie-core detour is complete; cookie header integration remains in Slice 7.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,

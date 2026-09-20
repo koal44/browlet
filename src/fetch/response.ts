@@ -1,4 +1,4 @@
-import { calculateCacheFreshness, type CacheTiming } from '../http/cache/freshness';
+import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/url';
 import {

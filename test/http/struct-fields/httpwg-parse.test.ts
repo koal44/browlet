@@ -2,7 +2,8 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { parseStructuredField, serializeStructuredField } from '../../../src/http/struct-fields';
+import { parseStructuredField } from '../../../src/http/struct-fields/parse';
+import { serializeStructuredField } from '../../../src/http/struct-fields/serialize';
 import { fromFixture, readFixtures } from './fixtures';
 
 const fixtureDirectory = join(__dirname, './fixtures/httpwg/parsing-tests');

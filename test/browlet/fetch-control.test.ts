@@ -21,11 +21,13 @@ describe('Fetch client settings ownership', () => {
 
     expect(first.userAgent.connectionPool).toBe(second.userAgent.connectionPool);
     expect(first.userAgent.httpCachePartitions).toBe(second.userAgent.httpCachePartitions);
+    expect(first.userAgent.cookieStore).toBe(second.userAgent.cookieStore);
     expect(firstPartition).not.toBeNull();
     expect(partitions.determine(firstRequest.clone())).toBe(firstPartition);
     expect(partitions.determine(secondRequest)).not.toBe(firstPartition);
     expect(new UserAgent().connectionPool).not.toBe(userAgent.connectionPool);
     expect(new UserAgent().httpCachePartitions.determine(firstRequest)).not.toBe(firstPartition);
+    expect(new UserAgent().cookieStore).not.toBe(userAgent.cookieStore);
   });
 
   it('owns a separate fetch group for each settings object in the same user agent', () => {

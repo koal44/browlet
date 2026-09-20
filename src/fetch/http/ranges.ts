@@ -1,4 +1,4 @@
-import { isHTTPTabOrSpace } from '../../http/syntax';
+import { isHTTPTabOrSpace } from '../../http/index';
 import { TextCursor } from '../../infra/text-cursor';
 import { serializeInteger } from '../infrastructure';
 

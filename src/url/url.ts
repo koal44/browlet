@@ -36,7 +36,7 @@ export type URLRenderOptions = {
 };
 
 /** Opaque paths are strings; hierarchical paths are segment lists. https://url.spec.whatwg.org/#url-path */
-type URLPath = string | string[];
+export type URLPath = string | string[];
 
 type BlobURLEntry = {
   environment: {

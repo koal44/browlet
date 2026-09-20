@@ -2,8 +2,8 @@
 
 This project groups reusable HTTP syntax, structured fields, cache rules, and
 cookies. Its modules do not depend on Fetch request/response records or on
-Browlet. Fetch, MIME, and browser consumers import the particular module they
-need; store instances and browser policy remain with their owning host.
+Browlet. Fetch, MIME, and browser consumers use the public exports in
+`index.ts`; store instances and browser policy remain with their owning host.
 
 This file owns that boundary and the shared syntax work. The linked submodule
 notes describe their contracts, tests, and any remaining work.
@@ -15,7 +15,7 @@ notes describe their contracts, tests, and any remaining work.
 | `syntax.ts`, `date.ts` | HTTP tokens, whitespace, quoted strings, and HTTP-date parsing |
 | [Structured fields](struct-fields/README.md) | RFC 9651 values, parsing, and serialization |
 | [Cache rules](cache/ROADMAP.md) | RFC 9111/5861 field parsing, freshness, storage eligibility, and request policy |
-| [Cookies](cookies/ROADMAP.md) | Planned cookie records, store, parsing, retrieval, and serialization |
+| [Cookies](cookies/ROADMAP.md) | Cookie records, parsing, storage, retrieval, serialization, store limits, and eviction |
 
 [Fetch HTTP](../fetch/http/ROADMAP.md) retains CORS and forbidden-method rules,
 Fetch status/range classifications, header protocols, and transactions. Its
@@ -23,10 +23,9 @@ Fetch status/range classifications, header protocols, and transactions. Its
 over Fetch records, validation, and network processing. MIME retains MIME type
 parsing/sniffing; XHR retains its API and Fetch-consuming state machine.
 
-`http/tsconfig.json` builds syntax, dates, and independent cache rules.
-Structured Fields keeps its own nested TypeScript project and UTF-8 dependency;
-MIME's dependency on HTTP syntax does not pull in that project. Cookies has
-only a roadmap until its implementation requires a build boundary.
+`http/tsconfig.json` builds the whole HTTP subsystem. The subfolders organize
+related algorithms within that project; `index.ts` defines its public API.
+Internal imports and focused tests can refer directly to individual modules.
 
 ## Sources
 

@@ -12,7 +12,6 @@
     { "path": "../encoding" },
     { "path": "../file" },
     { "path": "../http" },
-    { "path": "../http/struct-fields" },
     { "path": "../infra" },
     { "path": "../js-engine" },
     { "path": "../mime" },

@@ -10,8 +10,9 @@ import {
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
   normalizeHeaderValue, setHeader, setStructuredFieldValue, sortAndCombineHeaders, type HeaderList,
 } from '../../src/fetch/headers';
-import { parseDeltaSeconds, parseVary } from '../../src/http/cache/fields';
-import type { StructuredBareItem, StructuredField, StructuredItem } from '../../src/http/struct-fields/index';
+import {
+  parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
+} from '../../src/http/index';
 import { serializeMIMEType } from '../../src/mime/index';
 import { createRequestRecord } from './record-fixture';
 

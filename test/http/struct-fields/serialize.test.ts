@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  serializeStructuredField, type StructuredBareItem, type StructuredDictionary,
-  type StructuredField, type StructuredItem, type StructuredParameters,
-} from '../../../src/http/struct-fields';
+import { serializeStructuredField } from '../../../src/http/struct-fields/serialize';
+import type {
+  StructuredBareItem, StructuredDictionary, StructuredField, StructuredItem, StructuredParameters,
+} from '../../../src/http/struct-fields/values';
 
 describe('RFC 9651 §4.1: serializing structured fields', () => {
   it.each([
