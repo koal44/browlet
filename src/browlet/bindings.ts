@@ -1,5 +1,6 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
+import { fetchIDLDefinitions } from '../fetch/index';
 import { addon } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
@@ -271,6 +272,7 @@ const browletDefinitions = [
   fileReaderIDL,
   ...xhrIDLDefinitions,
   ...urlIDLDefinitions,
+  ...fetchIDLDefinitions,
 ];
 
 const browletBindings = new BrowletBindings();

@@ -4,7 +4,7 @@ import {
   appendHeader, combineHeader, containsHeader, convertHeaderNamesToSortedLowercaseSet,
   deleteHeader, documentAcceptHeaderValue, extractHeaderListValues, extractMIMEType, getCORSUnsafeRequestHeaderNames,
   getDecodeAndSplitHeader, getDecodeAndSplitHeaderValue, getEnvironmentDefaultUserAgent, getHeader,
-  getStructuredFieldValue, isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
+  getStructuredFieldValue, HeadersImpl, isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
   isForbiddenResponseHeaderName, isHeaderName, isHeaderValue, isNoCORSSafelistedRequestHeader,
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
@@ -345,6 +345,123 @@ describe('default request header values', () => {
     expect(getEnvironmentDefaultUserAgent('Browlet', 'Emulated')).toBe('Emulated');
     expect(getEnvironmentDefaultUserAgent('Browlet', '')).toBe('');
     expect(documentAcceptHeaderValue).toBe('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+  });
+});
+
+describe('Headers implementation (Fetch §5.1)', () => {
+  it('mutates its shared list while supplying sorted copies for iteration', () => {
+    const list: HeaderList = [];
+    const headers = new HeadersImpl(list);
+    headers.append('Z', ' \t first\r\n');
+    headers.append('a', '');
+    headers.append('z', 'second');
+    expect(headers.headerList).toBe(list);
+    expect(list).toEqual([['Z', 'first'], ['a', ''], ['Z', 'second']]);
+    expect(headers.get('z')).toBe('first, second');
+    expect(headers.has('A')).toBe(true);
+    expect(headers.get('missing')).toBeNull();
+
+    const entries = headers.getEntryList();
+    entries[0]![1] = 'copy';
+    expect(headers.get('a')).toBe('');
+    headers.set('Z', ' replacement ');
+    expect(list).toEqual([['Z', 'replacement'], ['a', '']]);
+    headers.delete('z');
+    expect(headers.getEntryList()).toEqual([['a', '']]);
+  });
+
+  it('fills in order and retains earlier entries when a later pair is malformed', () => {
+    const headers = new HeadersImpl();
+    expect(() => headers.fill([['first', 'value'], ['malformed'], ['last', 'unreached']]))
+      .toThrow(/exactly two/);
+    expect(headers.headerList).toEqual([['first', 'value']]);
+    headers.fill({ first: 'second', last: ' \t value ' });
+    expect(headers.getEntryList()).toEqual([['first', 'value, second'], ['last', 'value']]);
+  });
+
+  it('keeps Set-Cookie values separate and returns an independent list', () => {
+    const headers = new HeadersImpl();
+    expect(headers.getSetCookie()).toEqual([]);
+    headers.append('Set-Cookie', 'a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT');
+    headers.append('set-cookie', 'b=2');
+    const cookies = headers.getSetCookie();
+    expect(headers.get('SET-COOKIE')).toBe(`${cookies[0]}, b=2`);
+    cookies.push('not stored');
+    expect(headers.getSetCookie()).toHaveLength(2);
+    headers.set('set-cookie', 'c=3');
+    expect(headers.getSetCookie()).toEqual(['c=3']);
+  });
+
+  it('validates syntax before immutable guards and keeps reads available', () => {
+    const headers = new HeadersImpl([['X', 'value']], 'immutable');
+    for (const method of ['append', 'set'] as const) {
+      expect(() => headers[method]('bad name', 'value')).toThrow('Invalid header name');
+      expect(() => headers[method]('X', 'bad\nvalue')).toThrow('Invalid header value');
+      expect(() => headers[method]('X', 'value')).toThrow('Headers are immutable');
+    }
+    expect(() => headers.delete('bad name')).toThrow('Invalid header name');
+    expect(() => headers.delete('missing')).toThrow('Headers are immutable');
+    expect(headers.get('x')).toBe('value');
+    expect(headers.has('x')).toBe(true);
+  });
+
+  it('applies request guards, including value-dependent forbidden methods', () => {
+    const headers = new HeadersImpl([['Cookie', 'existing']], 'request');
+    headers.fill({ Host: 'example.test', 'X-Custom': 'allowed', 'Sec-Fetch-Site': 'same-origin' });
+    headers.append('Cookie', 'new');
+    headers.set('Cookie', 'new');
+    headers.delete('Cookie');
+    headers.append('X-HTTP-Method-Override', 'GET');
+    headers.append('X-HTTP-Method-Override', 'TRACE');
+    headers.set('X-HTTP-Method-Override', 'TRACK');
+    expect(headers.get('X-HTTP-Method-Override')).toBe('GET');
+    headers.delete('X-HTTP-Method-Override');
+    expect(headers.headerList).toEqual([['Cookie', 'existing'], ['X-Custom', 'allowed']]);
+    expect(() => headers.append('Host', 'bad\nvalue')).toThrow('Invalid header value');
+  });
+
+  it('applies response guards without removing existing forbidden fields', () => {
+    const headers = new HeadersImpl([['Set-Cookie', 'existing=1']], 'response');
+    for (const name of ['Set-Cookie', 'Set-Cookie2']) {
+      headers.append(name, 'new=2');
+      headers.set(name, 'new=2');
+      headers.delete(name);
+    }
+    headers.append('Content-Type', 'text/plain');
+    expect(headers.getSetCookie()).toEqual(['existing=1']);
+    expect(headers.get('Content-Type')).toBe('text/plain');
+  });
+
+  it('checks the combined no-CORS append value but only the new set value', () => {
+    const headers = new HeadersImpl([['Accept', 'a'.repeat(126)]], 'request-no-cors');
+    headers.append('Accept', 'b');
+    expect(headers.get('Accept')).toBe('a'.repeat(126));
+    headers.append('Accept', '');
+    expect(headers.get('Accept')).toBe(`${'a'.repeat(126)}, `);
+    headers.set('Accept', 'b');
+    expect(headers.get('Accept')).toBe('b');
+    headers.fill({ 'Content-Type': 'application/json', 'X-Custom': 'ignored' });
+    headers.append('Content-Language', 'en_US');
+    expect(headers.headerList).toEqual([['Accept', 'b']]);
+  });
+
+  it.each(['append', 'set', 'delete'] as const)(
+    'removes privileged no-CORS headers after a successful %s', (method) => {
+      const headers = new HeadersImpl([['Range', 'bytes=0-9'], ['Accept', '*/*']], 'request-no-cors');
+      headers[method]('Accept', 'text/plain');
+      expect(headers.has('Range')).toBe(false);
+    },
+  );
+
+  it('preserves privileged no-CORS headers after ignored or absent mutations', () => {
+    const headers = new HeadersImpl([['Range', 'bytes=0-9'], ['X-Custom', 'existing']], 'request-no-cors');
+    headers.append('X-Custom', 'ignored');
+    headers.set('Accept', '"unsafe"');
+    headers.delete('X-Custom');
+    headers.delete('Accept');
+    expect(headers.headerList).toEqual([['Range', 'bytes=0-9'], ['X-Custom', 'existing']]);
+    headers.delete('rAnGe');
+    expect(headers.headerList).toEqual([['X-Custom', 'existing']]);
   });
 });
 

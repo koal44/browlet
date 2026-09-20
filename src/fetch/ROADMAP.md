@@ -5,7 +5,7 @@
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
-- **Next:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), starting with `Headers`. The trustworthiness and cookie-core detour is complete; cookie header integration remains in Slice 7.
+- **In progress:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), starting with `Headers`. The trustworthiness and cookie-core detour is complete; cookie header integration remains in Slice 7.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -20,7 +20,7 @@ must not cross Browlet's implementation or Web IDL boundaries.
 
 This project contains multipart algorithms; reusable HTTP foundations and cache
 rules live in the [HTTP project](../http/ROADMAP.md).
-Public package/API exposure waits for a complete interface family. The
+Completion of the public Fetch API family waits for Slice 6's exit proof. The
 [dependency preflight](PREFLIGHT.md) retains the remaining external work order.
 
 `index.ts` exports the contracts consumed by production outside Fetch, including
@@ -74,7 +74,7 @@ When an algorithm reaches a missing external dependency:
 | `schemes/` | `about:`, `blob:`, `data:`, `file:`, and HTTP(S) scheme dispatch | §§4.3 and 6 |
 | `fetch.ts` | Main Fetch orchestration, response-processing callbacks, task destinations, and ongoing-fetch control | §§4.1–4.2 and “Using fetch in other standards” |
 | `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
-| Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, and declaration signatures; install the family only when Slice 6 is complete | §§5.1–5.5 |
+| Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, declaration signatures, and staged Browlet installation during Slice 6 | §§5.1–5.5 |
 | Public `fetch()` binding (planned) | Realm-correct orchestration and abort handling | §5.6 |
 
 ## Dependency ledger
@@ -451,6 +451,20 @@ processing remain explicit completion gates, not passing network/cache claims.
 
 **Specification:** Fetch §§5.1–5.5. This is the deliberate document-order
 departure described above.
+
+Work in three reviewable parts: **6a Headers**, **6b Body extraction and
+consumption**, then **6c Request and Response**. These are subdivisions of
+Slice 6, not new prerequisites for its first part.
+
+**6a complete (2026-09-20):** Headers construction, mutation guards, reads,
+Set-Cookie lists, and live sorted iteration are implemented and installed in
+Browlet. Borrowed operations retain receiver-realm return allocation, matching
+Chromium and Windows WebKit for `getSetCookie()`; Firefox uses the method realm.
+The projection regression records our receiver-realm choice while Web IDL issues
+[#135](https://github.com/whatwg/webidl/issues/135) and
+[#371](https://github.com/whatwg/webidl/issues/371) remain unresolved.
+Headers returns its string list through ordinary Web IDL conversion.
+After the allocation cleanup and declaration-helper review, continue with 6b.
 
 Implement:
 

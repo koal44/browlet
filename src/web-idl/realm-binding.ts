@@ -1265,6 +1265,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
               false,
             )
             : null;
+          // Return containers use the receiver's realm, or the method's without a receiver.
+          // Keep this policy while the broader realm rules remain unresolved:
+          // https://github.com/whatwg/webidl/issues/135
           resultContext = (receiver?.binding ?? this).defaultConversionContext;
 
           const overload = resolveOverload(

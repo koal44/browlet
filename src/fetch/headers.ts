@@ -1,4 +1,5 @@
 import { isomorphicEncode } from '../js-engine/byte-string';
+import { TypeError } from '../js-engine/exceptions';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 import {
   collectHTTPQuotedString, isHTTPToken, parseStructuredField, serializeStructuredField,
@@ -314,41 +315,109 @@ const forbiddenRequestHeaderNames = new Set([
  * };
  */
 export class HeadersImpl {
+  /** The shared request/response list, or a list owned by these headers. */
   headerList: HeaderList;
+  /** Restrictions applied to author mutations, without filtering reads. */
   guard: HeadersGuard;
 
-  // Internal allocation. The author constructor's fill algorithm is deferred.
+  /** Retain a header list and its mutation guard. */
   constructor(headerList: HeaderList = [], guard: HeadersGuard = 'none') {
     this.headerList = headerList;
     this.guard = guard;
   }
 
-  append(_name: string, _value: string): void {
-    throw new Error('Headers.append is not implemented');
+  /** Append a normalized value if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#concept-headers-append
+  append(name: string, value: string): void {
+    value = normalizeHeaderValue(value);
+    if (!this.#validate(name, value)) return;
+
+    if (this.guard === 'request-no-cors') {
+      const existingValue = getHeader(name, this.headerList);
+      const temporaryValue = existingValue === null ? value : `${existingValue}, ${value}`;
+      if (!isNoCORSSafelistedRequestHeader([name, temporaryValue])) return;
+    }
+
+    appendHeader([name, value], this.headerList);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
   }
 
-  delete(_name: string): void {
-    throw new Error('Headers.delete is not implemented');
+  /** Delete all matching values if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#dom-headers-delete
+  delete(name: string): void {
+    if (!this.#validate(name, '')) return;
+    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeaderName(name) &&
+      !isPrivilegedNoCORSRequestHeaderName(name)) return;
+    if (!containsHeader(name, this.headerList)) return;
+
+    deleteHeader(name, this.headerList);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
   }
 
-  get(_name: string): string | null {
-    throw new Error('Headers.get is not implemented');
+  /** Combine matching values, or return null when the name is absent. */
+  // https://fetch.spec.whatwg.org/#dom-headers-get
+  get(name: string): string | null {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    return getHeader(name, this.headerList);
   }
 
+  /** Return separate Set-Cookie values in their original order. */
+  // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
   getSetCookie(): string[] {
-    throw new Error('Headers.getSetCookie is not implemented');
+    return this.headerList.filter(([name]) => name.toLowerCase() === 'set-cookie')
+      .map(([, value]) => value);
   }
 
-  has(_name: string): boolean {
-    throw new Error('Headers.has is not implemented');
+  /** Test whether the list contains the case-insensitive name. */
+  // https://fetch.spec.whatwg.org/#dom-headers-has
+  has(name: string): boolean {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    return containsHeader(name, this.headerList);
   }
 
-  set(_name: string, _value: string): void {
-    throw new Error('Headers.set is not implemented');
+  /** Replace matching values with one normalized value if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#dom-headers-set
+  set(name: string, value: string): void {
+    value = normalizeHeaderValue(value);
+    if (!this.#validate(name, value)) return;
+    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeader([name, value])) return;
+
+    setHeader([name, value], this.headerList);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
   }
 
+  /** Append already-converted initial entries, respecting this list's guard. */
+  // https://fetch.spec.whatwg.org/#concept-headers-fill
+  fill(init: HeadersInitValue): void {
+    if (Array.isArray(init)) {
+      for (const header of init) {
+        if (header.length !== 2) throw new TypeError('A header entry must contain exactly two items');
+        this.append(header[0]!, header[1]!);
+      }
+    } else {
+      for (const [name, value] of Object.entries(init)) this.append(name, value);
+    }
+  }
+
+  /** Supply the current sorted and combined entries to Web IDL iteration. */
+  // https://fetch.spec.whatwg.org/#headers-class
   getEntryList(): Header[] {
-    throw new Error('Headers sorting and combining is not implemented');
+    return sortAndCombineHeaders(this.headerList);
+  }
+
+  // https://fetch.spec.whatwg.org/#headers-validate
+  #validate(name: string, value: string): boolean {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    if (!isHeaderValue(value)) throw new TypeError('Invalid header value');
+    if (this.guard === 'immutable') throw new TypeError('Headers are immutable');
+    if (this.guard === 'request' && isForbiddenRequestHeader([name, value])) return false;
+    if (this.guard === 'response' && isForbiddenResponseHeaderName(name)) return false;
+    return true;
+  }
+
+  // https://fetch.spec.whatwg.org/#concept-headers-remove-privileged-no-cors-request-headers
+  #removePrivilegedNoCORSRequestHeaders(): void {
+    deleteHeader('Range', this.headerList);
   }
 }
 
@@ -370,7 +439,10 @@ export const headersIDL = defineInterface({
   implementation: impl(HeadersImpl),
   members: [
     ctor([arg('init', reference('HeadersInit'), { optional: true })], {
-      invoke() { throw new Error('Headers construction from HeadersInit is not implemented'); },
+      // https://fetch.spec.whatwg.org/#dom-headers
+      invoke(_ctx, init) {
+        if (init !== undefined) (this as HeadersImpl).fill(init as HeadersInitValue);
+      },
     }),
     op('append', idlType.undefined, [arg('name', idlType.ByteString), arg('value', idlType.ByteString)]),
     op('delete', idlType.undefined, [arg('name', idlType.ByteString)]),
