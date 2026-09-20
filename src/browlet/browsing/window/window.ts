@@ -114,6 +114,10 @@ export class WindowImpl
     throw new Error('Browlet navigation is not implemented');
   }
 
+  get isSecureContext(): boolean {
+    return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
+  }
+
   get performance(): PerformanceImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().performance;
   }

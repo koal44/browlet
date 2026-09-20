@@ -256,6 +256,7 @@ function createTestRealm(
   });
   const settings = new TestEnvironmentSettingsObject({
     userAgent: new UserAgent(),
+    isSecureContext: false,
     creationURL: requireURL(`https://${name}.test/`),
     realmExecutionContext: executionContext,
     targetBrowsingContext: null,

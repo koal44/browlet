@@ -5,7 +5,7 @@ import { OriginImpl } from '../../src/url/origin-api';
 import {
   areSameOrigin, areSameOriginDomain, areSameSite,
   areSchemelesslySameSite, createOpaqueOrigin, effectiveDomain,
-  isRegistrableDomainSuffixOfOrEqualTo, obtainSite, serializeSite,
+  isRegistrableDomainSuffixOfOrEqualTo, obtainSite, serializeOrigin, serializeSite,
   sitesAreSameSite, type TupleOrigin,
 } from '../../src/url/origin';
 
@@ -40,6 +40,19 @@ describe('origin comparisons', () => {
 
     expect(areSameOrigin(first, second)).toBe(false);
     expect(areSameOriginDomain(first, second)).toBe(true);
+  });
+
+  it('keeps opaque-origin trust separate from identity and serialization', () => {
+    const untrusted = createOpaqueOrigin();
+    const trusted = createOpaqueOrigin(true);
+
+    expect(untrusted.potentiallyTrustworthy).toBe(false);
+    expect(trusted.potentiallyTrustworthy).toBe(true);
+    expect(areSameOrigin(trusted, createOpaqueOrigin(true))).toBe(false);
+    expect(areSameOrigin(trusted, { ...trusted, potentiallyTrustworthy: false })).toBe(true);
+    expect(areSameOriginDomain(trusted, untrusted)).toBe(false);
+    expect(serializeOrigin(trusted)).toBe('null');
+    expect(obtainSite(trusted)).toBe(trusted);
   });
 });
 

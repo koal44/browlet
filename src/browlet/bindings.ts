@@ -34,6 +34,7 @@ import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
 import type { WindowAgent } from './scripting/agents';
+import type { Environment } from './scripting/environment';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
   highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
@@ -54,9 +55,10 @@ import { svgIDLDefinitions } from './svg/web-idl';
 export function createWindowRealm(
   agent: WindowAgent,
   window: WindowImpl,
+  environment: Environment,
   previousRealm?: Realm,
 ): JSExecutionContext {
-  return browletBindings.createWindowRealm(agent, window, previousRealm);
+  return browletBindings.createWindowRealm(agent, window, environment, previousRealm);
 }
 
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
@@ -122,6 +124,7 @@ class BrowletBindings {
   createWindowRealm(
     agent: WindowAgent,
     window: WindowImpl,
+    environment: Environment,
     previousRealm?: Realm,
   ): JSExecutionContext {
     const useAddonGlobals = !!(
@@ -131,6 +134,7 @@ class BrowletBindings {
     if (useAddonGlobals) previousRealm?.detachGlobal();
     const realm = new Realm({
       agent,
+      environment,
       reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
       // Window.prototype -> named properties -> EventTarget.prototype.
       globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,

@@ -10,8 +10,6 @@ import type { Origin } from '../../url/origin';
 import { parseURL, type URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
-import { WindowOrWorkerGlobalScopeMixin, type StructuredCloneSteps } from './global-scope';
-import { timerTaskSource } from './timers';
 
 /*
  * An environment carries navigation/client state before a realm, global
@@ -25,6 +23,7 @@ export class Environment implements FetchEnvironment {
   topLevelOrigin: Origin | null;
   targetBrowsingContext: BrowsingContext | null;
   activeServiceWorker: object | null;
+  #isSecureContext: boolean;
   #executionReady = false;
 
   constructor(initialization: EnvironmentInitialization) {
@@ -34,6 +33,12 @@ export class Environment implements FetchEnvironment {
     this.topLevelOrigin = initialization.topLevelOrigin;
     this.targetBrowsingContext = initialization.targetBrowsingContext;
     this.activeServiceWorker = initialization.activeServiceWorker ?? null;
+    this.#isSecureContext = initialization.isSecureContext;
+  }
+
+  /** https://html.spec.whatwg.org/multipage/webappapis.html#secure-context */
+  get isSecureContext(): boolean {
+    return this.#isSecureContext;
   }
 
   get executionReady(): boolean {
@@ -135,27 +140,29 @@ export class WindowEnvironmentSettingsObject
 
 /**
  * https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
- * The trailing clone and UserAgent arguments supply dependencies implicit in HTML.
+ * Return the settings so Window initialization can use the newly established owner.
  */
-// SPEC_MISMATCH: (creationURL, execution context, reservedEnvironment, topLevelCreationURL, topLevelOrigin) -> void
 export function setupWindowEnvironmentSettingsObject(
   creationURL: URLRecord,
   executionContext: JSExecutionContext,
   reservedEnvironment: Environment | null,
   topLevelCreationURL: URLRecord,
   topLevelOrigin: Origin,
-  structuredClone: StructuredCloneSteps,
-  userAgent: UserAgent,
 ): WindowEnvironmentSettingsObject {
   const realm = executionContext.realm;
   const window = realm.windowImplementation;
   if (window === undefined) {
     throw new Error('Window settings require a Window global object');
   }
+  const environment = realm.environment;
+  if (environment === null) {
+    throw new Error('Window settings require an Environment');
+  }
   const settings = new WindowEnvironmentSettingsObject(
     window,
     {
-      userAgent,
+      userAgent: environment.userAgent,
+      isSecureContext: environment.isSecureContext,
       activeServiceWorker: reservedEnvironment?.activeServiceWorker ?? null,
       creationURL,
       realmExecutionContext: executionContext,
@@ -170,20 +177,13 @@ export function setupWindowEnvironmentSettingsObject(
     settings.id = reservedEnvironment.id;
     reservedEnvironment.id = '';
   }
-  window.setWindowOrWorkerGlobalScopeMixin(
-    new WindowOrWorkerGlobalScopeMixin({
-      eventLoop: realm.agent.eventLoop,
-      queueTimerTask: (steps, options) => realm.queueGlobalTask(timerTaskSource, steps, options),
-      structuredClone,
-      timing: settings.timing,
-    }),
-  );
   realm.setHostDefined(settings);
   return settings;
 }
 
 export type EnvironmentInitialization = {
   userAgent: UserAgent;
+  isSecureContext: boolean;
   creationURL: URLRecord;
   topLevelCreationURL: URLRecord | null;
   topLevelOrigin: Origin | null;

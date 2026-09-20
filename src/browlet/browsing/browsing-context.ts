@@ -3,11 +3,10 @@ import type {
 } from '../scripting/agents';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
-  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
-  retargetWindowProxy,
+  createDocument, getRelevantRealm, retargetWindowProxy,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
+import { createWindowEnvironment } from '../scripting/window-environment';
 import { serializeSite } from '../../url/origin';
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
@@ -15,7 +14,7 @@ import {
   getWindowProxyWindow,
   type WindowProxy,
 } from './window/window-proxy';
-import { WindowImpl } from './window/window';
+import type { WindowImpl } from './window/window';
 import {
   DocumentMode, type DocumentImpl, type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
@@ -120,31 +119,29 @@ export function createNewBrowsingContextAndDocument(
   const origin = determineAboutBlankOrigin(sandboxFlags, creatorOrigin);
   const permissionsPolicy = createPermissionsPolicy(embedder, origin);
   const agent = obtainSimilarOriginWindowAgent(origin, group, false);
-  const window = new WindowImpl(new URL('about:blank'));
   const aboutBlankURL = requireURLRecord('about:blank');
-  const realmExecutionContext = createWindowRealm(agent, window);
-  browsingContext.initializeWindowProxy(
-    realmExecutionContext.realm.globalThis as WindowProxy,
-  );
   const topLevelCreationURL = embedder === null
     ? aboutBlankURL
     : getEmbedderTopLevelCreationURL(embedder);
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
-  const settings = setupWindowEnvironmentSettingsObject(
-    aboutBlankURL,
-    realmExecutionContext,
-    null,
+  const { window, settings } = createWindowEnvironment(agent, {
+    userAgent: group.userAgent,
+    creationURL: aboutBlankURL,
+    origin,
+    parent: embedder?.getNodeDocument()?.getRelevantGlobalObject() ?? null,
     topLevelCreationURL,
     topLevelOrigin,
-    createStructuredClone(realmExecutionContext.realm),
-    group.userAgent,
+  });
+  const { realm } = settings.realmExecutionContext;
+  browsingContext.initializeWindowProxy(
+    realm.globalThis as WindowProxy,
   );
   const loadTimingInfo = createDocumentLoadTimingInfo(
     unsafeContextCreationTime.coarsen(settings.crossOriginIsolatedCapability).milliseconds,
   );
-  const document = createDocument(realmExecutionContext.realm);
+  const document = createDocument(realm);
 
   document.setType('html');
   document.setContentType('text/html');

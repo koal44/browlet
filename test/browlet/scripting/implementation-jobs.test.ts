@@ -7,11 +7,10 @@ import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
+  createDocument, getRelevantRealm,
 } from '../../../src/browlet/bindings';
-import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
+import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
@@ -198,13 +197,15 @@ function createSiblingWindow(first: Browlet): Window {
   const firstRealm = getRelevantRealm(first.window);
   const { agent, hostDefined: settings } = firstRealm;
   if (!(agent instanceof WindowAgent) || !settings) throw new Error('Expected a Window agent');
-  const window = new WindowImpl(new URL('about:blank'));
-  const execution = createWindowRealm(agent, window);
-  const document = createDocument(execution.realm);
+  const { window, settings: siblingSettings } = createWindowEnvironment(agent, {
+    userAgent: settings.userAgent, creationURL: settings.creationURL,
+    origin: settings.origin, parent: null,
+    topLevelCreationURL: settings.creationURL, topLevelOrigin: settings.origin,
+  });
+  const { realm } = siblingSettings.realmExecutionContext;
+  const document = createDocument(realm);
   window.setAssociatedDocument(document);
-  setupWindowEnvironmentSettingsObject(settings.creationURL, execution, null,
-    settings.creationURL, settings.origin, createStructuredClone(execution.realm), settings.userAgent);
-  return execution.realm.globalThis as Window;
+  return realm.globalThis as Window;
 }
 
 class OwnershipProbeImpl {

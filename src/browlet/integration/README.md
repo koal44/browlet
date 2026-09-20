@@ -6,13 +6,16 @@ assembles their capability providers with Web IDL definitions, host-defined
 interfaces, and realm bindings.
 
 The named functions exported by `bindings.ts` forward to its main
-`BrowletBindings` instance. HTML lifecycle code selects the Window and owns its
-document/settings state. `createWindowRealm()` composes that Window's engine
-allocation and bindings; `createDocument()` obtains the node factory and
+`BrowletBindings` instance. HTML's `createWindowEnvironment()` constructs the
+Window, gives its Environment to `createWindowRealm()` for engine allocation
+and binding, then sets up settings and the global-scope mixin. The Realm reads
+security from the Environment before Web IDL installs properties; settings
+inherit that decision. The Document lifecycle algorithms retain their own
+initialization. `createDocument()` obtains the node factory and
 Stylelet runtime through Document's existing construction declaration. Record
-creation initializes its realm-owned event factory without projecting it. Environment
-setup receives prepared structured-clone steps, rather than a Binding Context
-or the complete realm binding.
+creation initializes its realm-owned event factory without projecting it.
+Window initialization supplies prepared structured-clone steps to the mixin,
+rather than a Binding Context or the complete realm binding.
 
 A standalone subsystem owns the contract for each capability it consumes. A
 provider module here connects that contract to Browlet-owned behavior. The
@@ -35,7 +38,7 @@ Domain-local behavior still remains with its owning subsystem.
   structured cloning. Binding registration retains that one context and
   declaration bindings supply it to implementations. It also prepares the
   global's structured-clone steps with explicit destination-realm bindings;
-  HTML environment setup owns the global-scope mixin which consumes them.
+  HTML Window initialization supplies them to the global-scope mixin.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('WindowOrWorkerGlobalScope', () => {
@@ -90,6 +91,43 @@ describe('WindowOrWorkerGlobalScope', () => {
     await new Promise<void>((resolve) => { setTimeout(resolve, 10); });
 
     expect(callback).toHaveBeenCalledOnce();
+  });
+
+  it('exposes isSecureContext as a readonly attribute in both secure and insecure Windows', async () => {
+    const insecure = createBrowlet();
+    const secure = createBrowlet();
+    await secure.navigate('https://example.test/');
+
+    for (const [browlet, expected] of [[secure, true], [insecure, false]] as const) {
+      const result = await browlet.evaluate(() => {
+        const descriptor = Object.getOwnPropertyDescriptor(window, 'isSecureContext')!;
+        return {
+          value: isSecureContext,
+          getter: typeof descriptor.get,
+          setter: typeof descriptor.set,
+          enumerable: descriptor.enumerable,
+          configurable: descriptor.configurable,
+          assigned: Reflect.set(window, 'isSecureContext', !isSecureContext),
+        };
+      });
+      expect(result).toEqual({
+        value: expected, getter: 'function', setter: 'undefined',
+        enumerable: true, configurable: true, assigned: false,
+      });
+    }
+  });
+
+  it('uses the receiver\'s secure context when another Window\'s getter is borrowed', async () => {
+    const insecure = createBrowlet();
+    const secure = createBrowlet();
+    await secure.navigate('https://example.test/');
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- borrowing the getter tests receiver ownership
+    const getter = Object.getOwnPropertyDescriptor(secure.window, 'isSecureContext')!.get!;
+
+    expect(Reflect.apply(getter, insecure.window, [])).toBe(false);
+    expect(Reflect.apply(getter, secure.window, [])).toBe(true);
+    expect(() => { Reflect.apply(getter, {}, []); })
+      .toThrow(getRelevantRealm(secure.window).intrinsics.typeError);
   });
 });
 

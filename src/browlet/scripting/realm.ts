@@ -5,7 +5,7 @@ import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
 import { type Agent, WindowAgent } from './agents';
-import type { EnvironmentSettingsObject } from './environment';
+import type { Environment, EnvironmentSettingsObject } from './environment';
 import type { TaskCreationOptions, TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import { WindowImpl } from '../browsing/window/window';
@@ -41,7 +41,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   readonly crossOriginIsolated: boolean;
   readonly globalNames: ReadonlySet<string>;
   readonly isGlobalPrototypeChainMutable: boolean;
-  readonly secureContext: boolean;
+  #environment: Environment | null;
   #hostDefined: EnvironmentSettingsObject | null = null;
   #windowImplementation: WindowImpl | undefined;
 
@@ -56,7 +56,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
       options.isGlobalPrototypeChainMutable ?? false;
-    this.secureContext = options.secureContext ?? false;
+    this.#environment = options.environment ?? null;
     this.callbacks = {
       /* Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3. */
       captureContext: () => {
@@ -111,6 +111,14 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
 
   get hostDefined(): EnvironmentSettingsObject | null {
     return this.#hostDefined;
+  }
+
+  get environment(): Environment | null {
+    return this.#environment;
+  }
+
+  get secureContext(): boolean {
+    return this.#environment?.isSecureContext ?? false;
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
@@ -208,6 +216,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   }
 
   setHostDefined(settings: EnvironmentSettingsObject): void {
+    this.#environment = settings;
     this.#hostDefined = settings;
   }
 
@@ -248,7 +257,7 @@ export type RealmOptions = {
   crossOriginIsolated?: boolean;
   globalNames?: readonly string[];
   isGlobalPrototypeChainMutable?: boolean;
-  secureContext?: boolean;
+  environment?: Environment;
 };
 
 type SecurityCheckType = Parameters<

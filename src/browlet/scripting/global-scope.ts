@@ -3,9 +3,8 @@ import {
   emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr,
 } from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
-import type { EnvironmentTiming } from '../performance/high-resolution-time';
 import type { DocumentImpl } from '../dom/nodes/document';
-import type { EventLoop } from './event-loop';
+import type { EnvironmentSettingsObject } from './environment';
 import { GlobalTimers, type GlobalTimersOptions, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 
@@ -49,19 +48,24 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
  */
 export class WindowOrWorkerGlobalScopeMixin {
   readonly timers: GlobalTimers;
-  readonly #eventLoop: EventLoop;
+  #settings: EnvironmentSettingsObject;
   readonly #performance: PerformanceImpl;
   readonly #structuredClone: StructuredCloneSteps;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
-    this.#eventLoop = initialization.eventLoop;
-    this.#performance = new PerformanceImpl(initialization.timing);
+    this.#settings = initialization.settings;
+    this.#performance = new PerformanceImpl(initialization.settings.timing);
     this.#structuredClone = initialization.structuredClone;
     this.timers = new GlobalTimers({
-      eventLoop: initialization.eventLoop,
+      eventLoop: initialization.settings.responsibleEventLoop,
       queueTask: initialization.queueTimerTask,
-      time: initialization.timing,
+      time: initialization.settings.timing,
     });
+  }
+
+  /** https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext */
+  get isSecureContext(): boolean {
+    return this.#settings.isSecureContext;
   }
 
   get performance(): PerformanceImpl {
@@ -89,7 +93,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   }
 
   queueMicrotask(callback: VoidFunction): void {
-    this.#eventLoop.queueMicrotask(() => { callback(); });
+    this.#settings.responsibleEventLoop.queueMicrotask(() => { callback(); });
   }
 
   structuredClone(
@@ -107,10 +111,9 @@ export class WindowOrWorkerGlobalScopeMixin {
 }
 
 export type WindowOrWorkerGlobalScopeInitialization = {
-  eventLoop: EventLoop;
+  settings: EnvironmentSettingsObject;
   queueTimerTask: GlobalTimersOptions['queueTask'];
   structuredClone: StructuredCloneSteps;
-  timing: EnvironmentTiming;
 };
 
 export type StructuredCloneSteps = (
@@ -132,6 +135,7 @@ export const timerHandlerIDL = defineTypedef({
 export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
+    roAttr('isSecureContext', idlType.boolean),
     op('setTimeout', idlType.long, [
       arg('handler', reference('TimerHandler'), onError('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),

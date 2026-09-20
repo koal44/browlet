@@ -84,10 +84,14 @@ describe('URL Standard sections 4.5 through 4.7', () => {
     expect(first).not.toBe(second);
   });
 
-  it('uses an opaque origin for file URLs', () => {
-    const origin = urlAlgorithms().obtainOrigin(parse('file:///C:/example.txt'));
+  it('uses distinct, potentially trustworthy opaque origins for file URLs', () => {
+    const url = parse('file:///C:/example.txt');
+    const origin = urlAlgorithms().obtainOrigin(url);
+    const other = urlAlgorithms().obtainOrigin(url);
 
-    expect(origin.kind).toBe('opaque');
+    expect(origin).toMatchObject({ kind: 'opaque', potentiallyTrustworthy: true });
+    expect(other).toMatchObject({ kind: 'opaque', potentiallyTrustworthy: true });
+    expect(origin).not.toEqual(other);
     expect(urlAlgorithms().serializeOrigin(origin)).toBe('null');
   });
 

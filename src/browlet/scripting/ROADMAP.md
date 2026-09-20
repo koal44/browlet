@@ -9,6 +9,8 @@
   [`../../js-engine/`](../../js-engine/README.md).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
+- `window-environment.ts` shares Window, realm, settings, and global-scope
+  initialization between the initial browsing-context and navigation paths.
 - Each `Environment` retains its owning UserAgent. Window creation/navigation
   supplies the target group's owner; this reference does not depend on a live
   Document or browsing-context association. Settings objects satisfy Fetch's
@@ -34,8 +36,8 @@
   each event loop owns their queue associations. `Realm.queueGlobalTask()`
   derives the destination from its Agent and current associated Document.
 - `timers.ts`: `GlobalTimers`, owned directly by the global-scope mixin,
-  supplies ordered active-time timeouts and Window function timers. Environment
-  setup supplies its timer-task delivery callback for that Realm.
+  supplies ordered active-time timeouts and Window function timers. Window
+  initialization supplies its timer-task delivery callback for that Realm.
 - `rendering-opportunity.ts`: the independently driven Window rendering
   producer, rendering task source, document filtering seams, and spec-ordered
   update pipeline.
@@ -77,9 +79,11 @@ reporting, and FinalizationRegistry cleanup scheduling remain deferred.
   return through a task queued for the target global and its responsible event
   loop. This is the boundary Fetch, loaders, messaging, and workers must use.
 - Scripting-enabled, secure-context, and cross-origin-isolated answers derive
-  from the environment, policy, and agent cluster. Realm exposure checks must
-  not preserve independent constructor flags that can disagree with those
-  sources once the lifecycle supplies them.
+  from the environment, policy, and agent cluster. `Environment` owns its fixed
+  security decision before realm allocation. The Realm references it for Web IDL
+  exposure, then settings setup transfers that reference to the settings object,
+  preserving the decision for `isSecureContext`. Worker/worklet
+  creation must supply its own specified inheritance decision at the same seam.
 - The microtask queue is separate from task queues. A microtask checkpoint also
   coordinates rejected-promise reporting, MutationObserver delivery, custom
   element reactions, and JavaScript kept-object cleanup. Stock Node's ambient
@@ -192,7 +196,7 @@ adding a DOM timer path.
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | existing `agents.ts` | Obtain worker/worklet agents with the specified new/shared agent-cluster and `[[CanBlock]]` rules | HTML §8.1.2.2 |
-| existing `environment.ts` | Complete Window, worker, and worklet environment/settings algorithms, scripting enablement, secure-context integration, policy, and execution readiness | HTML §8.1.3; HTML §§10.2.6.2 and 11.3.1.3; Secure Contexts |
+| existing `environment.ts` | Complete Window, worker, and worklet environment/settings algorithms, scripting enablement, worker/worklet secure-context inheritance, policy, and execution readiness | HTML §8.1.3; HTML §§10.2.6.2 and 11.3.1.3; Secure Contexts |
 | `script.ts` | Script records and shared script state | HTML §8.1.4 |
 | `classic-script.ts` | Creating/fetching/running classic scripts | HTML §§8.1.4.1–8.1.4.5 |
 | `module-script.ts` | JavaScript module scripts and module graph fetching | HTML §§8.1.4.1–8.1.5 |

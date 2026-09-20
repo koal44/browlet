@@ -4,7 +4,7 @@ import {
   BrowsingContext,
 } from '../../../src/browlet/browsing/browsing-context';
 import {
-  createStructuredClone, createWindowRealm, unwrap, project,
+  createWindowRealm, unwrap, project,
   getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
@@ -14,6 +14,7 @@ import {
 import {
   Environment, EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../src/browlet/scripting/environment';
+import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
 import {
   createNewTopLevelTraversable, Navigable, TopLevelTraversable,
 } from '../../../src/browlet/browsing/navigable';
@@ -40,7 +41,7 @@ import {
 } from '../../../src/browlet/browsing/policy/container';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import {
-  parseURL, serializeURL, type URLRecord,
+  obtainURLOrigin, parseURL, serializeURL, type URLRecord,
 } from '../../../src/url/url';
 import { itPassesWith } from '../../test-runtime';
 
@@ -91,9 +92,13 @@ describe('browsing context groups', () => {
 
   it('gives a Window realm its Window and WindowProxy identities', () => {
     const agent = new WindowAgent();
-    const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createWindowRealm(agent, window);
-    const realm = executionContext.realm;
+    const creationURL = requireURL('about:blank');
+    const origin = createOpaqueOrigin();
+    const { window, settings } = createWindowEnvironment(agent, {
+      userAgent: new UserAgent(), creationURL, origin, parent: null,
+      topLevelCreationURL: creationURL, topLevelOrigin: origin,
+    });
+    const { realm } = settings.realmExecutionContext;
     const context = new BrowsingContext(realm.globalThis as InternalWindowProxy);
 
     expect(realm.agent).toBe(agent);
@@ -110,12 +115,16 @@ describe('browsing context groups', () => {
     const group = userAgent.createBrowsingContextGroup();
     const origin = createOpaqueOrigin();
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
-    const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createWindowRealm(agent, window);
+    const creationURL = requireURL('about:blank');
+    const { window, settings } = createWindowEnvironment(agent, {
+      userAgent, creationURL, origin, parent: null,
+      topLevelCreationURL: creationURL, topLevelOrigin: origin,
+    });
+    const { realm } = settings.realmExecutionContext;
     window.setAssociatedDocument(new DocumentImpl());
 
-    expect(Reflect.has(executionContext.realm.globalObject, 'SharedArrayBuffer')).toBe(false);
-    expect(executionContext.realm.intrinsics.bufferSource.sharedArrayBuffer)
+    expect(Reflect.has(realm.globalObject, 'SharedArrayBuffer')).toBe(false);
+    expect(realm.intrinsics.bufferSource.sharedArrayBuffer)
       .toBeTypeOf('function');
   });
 
@@ -306,16 +315,19 @@ describe('environment settings objects', () => {
 
   it('transfers a reserved environment into Window settings with the same user agent', () => {
     const creationURL = requireURL('https://example.test/');
-    const origin = createOpaqueOrigin();
+    const origin = obtainURLOrigin(creationURL);
     const userAgent = new UserAgent();
     const reservedEnvironment = new Environment({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
-      targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {},
+      targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {}, isSecureContext: true,
     });
     const reservedId = reservedEnvironment.id;
     expect(reservedEnvironment.userAgent).toBe(userAgent);
     const window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createWindowRealm(new WindowAgent(), window);
+    const executionContext = createWindowRealm(new WindowAgent(), window, reservedEnvironment);
+    expect(executionContext.realm.environment).toBe(reservedEnvironment);
+    expect(executionContext.realm.hostDefined).toBeNull();
+    expect(executionContext.realm.secureContext).toBe(true);
 
     const settings = setupWindowEnvironmentSettingsObject(
       creationURL,
@@ -323,8 +335,6 @@ describe('environment settings objects', () => {
       reservedEnvironment,
       creationURL,
       origin,
-      createStructuredClone(executionContext.realm),
-      userAgent,
     );
     const document = new DocumentImpl();
     document.setOrigin(origin);
@@ -338,6 +348,9 @@ describe('environment settings objects', () => {
     expect(settings.activeServiceWorker).toBe(reservedEnvironment.activeServiceWorker);
     expect(settings.realmExecutionContext).toBe(executionContext);
     expect(executionContext.realm.hostDefined).toBe(settings);
+    expect(executionContext.realm.environment).toBe(settings);
+    expect(executionContext.realm.secureContext).toBe(true);
+    expect(settings.isSecureContext).toBe(true);
     expect(settings.moduleMap).toBe(document.getModuleMap());
     expect(settings.policyContainer)
       .toBe(document.getPolicyContainer());
@@ -446,6 +459,7 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   constructor(realm: Realm, creationURL: URLRecord) {
     super({
       userAgent: new UserAgent(),
+      isSecureContext: false,
       creationURL,
       realmExecutionContext: { realm },
       targetBrowsingContext: null,

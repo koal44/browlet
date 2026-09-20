@@ -809,8 +809,19 @@ while each Window retains its own platform-object record in the same binding
 world. `Realm` retains its Window implementation explicitly for settings and
 callback lifecycle work.
 
-`createWindowRealm()` in Browlet's composition root combines that allocation
-with the Window binding. A browsing context receives its proxy once the initial realm exists;
+`createWindowEnvironment()` shares Window, realm, settings, and global-scope
+initialization between HTML's initial browsing-context and navigation paths.
+The Document algorithms retain their separate initialization steps.
+`Environment` owns the fixed secure-context decision, available before a realm
+exists. A new Window environment uses the selected origin and parent Window;
+a reserved environment already carries its decision.
+`createWindowRealm()` in Browlet's composition root combines engine allocation
+with the Window binding and gives the Realm that Environment. Web IDL reads
+`Realm.secureContext` through it before installing properties. Settings setup
+preserves the decision and updates both the Realm's Environment reference and
+its `[[HostDefined]]` settings. The `isSecureContext` getter reads those settings,
+so both consumers agree without a separate realm-owned security value.
+A browsing context receives its proxy once the initial realm exists;
 later realms reuse that identity. Internal task scheduling uses the owning
 Realm's Agent and Window directly. Retained callbacks for an old Window keep
 that destination after WindowProxy is retargeted.

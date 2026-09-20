@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createDocument, createStructuredClone, createWindowRealm, unwrap,
+  createDocument, unwrap,
   project, retargetWindowProxy,
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
@@ -11,7 +11,7 @@ import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import type { Realm } from '../../../src/browlet/scripting/realm';
-import { setupWindowEnvironmentSettingsObject } from '../../../src/browlet/scripting/environment';
+import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import type { StampedPlatformObject } from '../../../src/web-idl/index';
@@ -148,18 +148,20 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
 
 function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const agent = previous?.agent ?? new WindowAgent();
-  const window = new WindowImpl(new URL('https://example.test/'));
-  const { realm } = createWindowRealm(agent, window, previous?.realm);
+  const creationURL = parseURL('https://example.test/').url!;
+  const origin = createOpaqueOrigin();
+  const { window, settings } = createWindowEnvironment(agent, {
+    userAgent: previous?.realm.hostDefined?.userAgent ?? new UserAgent(),
+    creationURL, origin, parent: null,
+    topLevelCreationURL: creationURL, topLevelOrigin: origin, previousRealm: previous?.realm,
+  });
+  const { realm } = settings.realmExecutionContext;
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
   const document = createDocument(realm);
   document.setBrowsingContext(context);
   window.setAssociatedDocument(document);
-  const url = parseURL('https://example.test/').url;
-  if (!url) throw new Error('Fixture URL missing');
-  setupWindowEnvironmentSettingsObject(url, { realm }, null, url, createOpaqueOrigin(),
-    createStructuredClone(realm), previous?.realm.hostDefined?.userAgent ?? new UserAgent());
   retargetWindowProxy(proxy, window);
   return { agent, realm, window, platformWindow, document, context };
 }

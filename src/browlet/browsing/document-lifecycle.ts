@@ -6,17 +6,15 @@ import type { PermissionsPolicy } from './policy/permissions';
 import { areSameOriginDomain } from '../../url/origin';
 import { serializeURL } from '../../url/url';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
-import {
-  createDocument, createStructuredClone, createWindowRealm, getRelevantRealm,
-} from '../bindings';
+import { createDocument, getRelevantRealm } from '../bindings';
 import type { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
+import { createWindowEnvironment } from '../scripting/window-environment';
 import type {
   NavigationParams, NavigationRequest, NavigationResponse,
 } from './navigation/navigation';
 import { TopLevelTraversable } from './navigable';
-import { WindowImpl } from './window/window';
+import type { WindowImpl } from './window/window';
 import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
 
 export function createAndInitializeDocument(
@@ -63,21 +61,16 @@ export function createAndInitializeDocument(
       group,
       requestsOAC,
     );
-    window = new WindowImpl(new URL(serializeURL(creationURL)));
-    const realmExecutionContext = createWindowRealm(
-      agent,
-      window,
-      getRelevantRealm(activeDocument),
-    );
-    setupWindowEnvironmentSettingsObject(
+    window = createWindowEnvironment(agent, {
+      userAgent: group.userAgent,
       creationURL,
-      realmExecutionContext,
-      navigationParams.reservedEnvironment,
-      creationURL,
-      navigationParams.origin,
-      createStructuredClone(realmExecutionContext.realm),
-      group.userAgent,
-    );
+      origin: navigationParams.origin,
+      parent: navigationParams.navigable.parent?.activeWindow ?? null,
+      topLevelCreationURL: creationURL,
+      topLevelOrigin: navigationParams.origin,
+      reservedEnvironment: navigationParams.reservedEnvironment,
+      previousRealm: getRelevantRealm(activeDocument),
+    }).window;
   }
 
   const document = createDocument(getRelevantRealm(window));

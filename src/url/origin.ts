@@ -14,6 +14,9 @@ export type Origin = OpaqueOrigin | TupleOrigin;
 export type OpaqueOrigin = {
   kind: 'opaque';
   identity: symbol;
+  // Retains the creator's trust decision without changing opaque-origin identity.
+  // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
+  potentiallyTrustworthy: boolean;
 };
 
 export type TupleOrigin = {
@@ -33,8 +36,8 @@ export type Site = OpaqueOrigin | SchemeAndHost;
  *
  * https://html.spec.whatwg.org/multipage/browsers.html#concept-origin-opaque
  */
-export function createOpaqueOrigin(): OpaqueOrigin {
-  return { kind: 'opaque', identity: Symbol('opaque origin') };
+export function createOpaqueOrigin(potentiallyTrustworthy = false): OpaqueOrigin {
+  return { kind: 'opaque', identity: Symbol('opaque origin'), potentiallyTrustworthy };
 }
 
 /*

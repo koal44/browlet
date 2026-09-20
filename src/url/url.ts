@@ -672,10 +672,12 @@ export function urlsEqual(
 /*
  * The origin of a URL.
  *
- * The URL Standard leaves file origins to the user agent. This implementation
- * follows its conservative fallback and returns a new opaque origin.
+ * The URL Standard leaves file origins to the user agent. Browlet gives them
+ * distinct opaque identities while retaining Secure Contexts' trust in the
+ * file scheme. This classifies the source, without inspecting file contents.
  *
  * https://url.spec.whatwg.org/#concept-url-origin
+ * https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
  */
 export function obtainURLOrigin(url: URLRecord): Origin {
   switch (url.scheme) {
@@ -708,6 +710,9 @@ export function obtainURLOrigin(url: URLRecord): Origin {
         port: url.port,
         domain: null,
       };
+
+    case 'file':
+      return createOpaqueOrigin(true);
 
     default:
       return createOpaqueOrigin();

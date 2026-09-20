@@ -58,7 +58,6 @@ src/
     │   └── policy/
     │       ├── ROADMAP.md
     │       ├── container.ts
-    │       ├── secure-contexts.ts
     │       ├── referrer-policy.ts
     │       ├── integrity-policy.ts
     │       ├── hsts.ts
@@ -77,7 +76,8 @@ src/
 The HTTP roadmap owns the boundary between reusable protocol work and Fetch's
 processing. Multipart and cache transactions remain within Fetch. Storage has
 its own substrate; browser policy, report delivery, and timing remain in
-Browlet. Store instances still belong to the appropriate browser lifetime;
+Browlet. Origin/URL trustworthiness lives on Browlet's UserAgent. Store
+instances still belong to the appropriate browser lifetime;
 a shared source project does not imply shared process-global state.
 
 ## Work order

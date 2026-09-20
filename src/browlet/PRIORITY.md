@@ -235,7 +235,10 @@ Current implementation sequence:
    across implementation/Node boundaries. Active Script records/restoration
    belong to the later classic-script pipeline; module loading is not a
    prerequisite for Fetch's records.
-7. **Next:** Continue with [Fetch slice 6](../fetch/ROADMAP.md#slice-6--network-independent-platform-apis),
+7. **Current detour:** Follow [Fetch's dependency preflight](../fetch/PREFLIGHT.md#work-order).
+   Window trustworthiness and secure-context exposure are complete for the
+   supported lifecycle; [cookies](../http/cookies/ROADMAP.md) are next.
+   Then resume [Fetch slice 6](../fetch/ROADMAP.md#slice-6--network-independent-platform-apis),
    the network-independent author APIs. Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.
    HTTP extensions and transport follow in Fetch's own order.

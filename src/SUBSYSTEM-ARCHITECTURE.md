@@ -204,7 +204,7 @@ extends the JavaScript realm contract with binding policy, and Browlet's HTML
 `Realm` subclasses `JSRealm` to add its Agent, environment settings object,
 callback lifecycle, and global task routing. Its `queueGlobalTask()` method
 uses those existing owner links and captures the associated Document at queueing.
-The global-scope mixin owns `GlobalTimers`; environment setup supplies task
+The global-scope mixin owns `GlobalTimers`; Window initialization supplies task
 delivery, and AbortSignal's declaration supplies its timeout-scheduling dependency.
 The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
@@ -221,6 +221,9 @@ Binding is a one-time construction input, not another environment or registry.
 `createWindowRealm()` in Browlet's composition root is the entry point for this
 allocation and its binding; it does not put Window policy in the engine or
 construct Window implementation state inside Binding.
+HTML's `createWindowEnvironment()` composes that entry point with Window
+construction, settings setup, and global-scope initialization. The two Document
+creation algorithms keep their own Document initialization.
 See the [global-object notes](./PLATFORM-OBJECT-ARCHITECTURE.md#special-object-categories)
 for the current adoption boundary.
 
@@ -518,9 +521,14 @@ Binding Context or global passed by the calling algorithm and must not import
 the assembled `browletBindings` singleton or use its forwarding functions to
 rediscover either.
 
-HTML's `Environment` retains its owning `UserAgent`, including before a realm
-exists; `EnvironmentSettingsObject` inherits that association. Initial Window
-creation and navigation supply the target browsing-context group's owner.
+HTML's `Environment` retains its owning `UserAgent` and fixed `isSecureContext`
+decision, including before a realm exists; `EnvironmentSettingsObject` inherits
+both. The HTML Realm references that Environment, and its Web IDL
+`secureContext` getter reads the decision from there. Settings setup preserves
+it while replacing the Realm's Environment reference and assigning its
+`[[HostDefined]]` settings; the early Environment is never `[[HostDefined]]`.
+Initial Window creation and navigation supply the target browsing-context
+group's owner.
 This makes HTML's implicit user agent explicit without a Document lookup or a
 process-wide singleton. Fetch's `FetchEnvironmentSettingsObject` and
 `FetchUserAgent` types describe narrow views of those same objects; a request
@@ -548,13 +556,21 @@ opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
 partitions; they outlive an individual environment. Connection establishment
 and cache response storage remain deferred under Fetch's HTTP roadmap.
 
+Secure Contexts' origin/URL trustworthiness algorithms are methods on Browlet's
+`UserAgent`, alongside its trust exceptions. URL owns the origin records,
+including a trust flag on opaque origins; file origins set it without changing
+their distinct identities. URL does not import browser policy. HTML Window
+initialization combines the UserAgent's origin trust decision with the parent
+Window's security decision, which includes its ancestry. Iframe/popup and
+worker/worklet lifecycle completion remains in the browsing policy roadmap.
+
 Initial-document and navigation algorithms select their Window and retain HTML
 state initialization. Named functions on the composition-root module delegate
 to its main binding world. Document creation reuses the dependencies declared
 for its Web IDL constructor; the root also prepares structured-clone steps
-through `integration/runtime.ts`. Environment-settings setup accepts those steps and
-constructs its global-scope mixin without receiving a realm binding. The
-Document retains its node factory. The factory uses `context.construct()`
+through `integration/runtime.ts`. `createWindowEnvironment()` supplies those
+steps to the global-scope mixin after settings setup, without retaining a realm
+binding. The Document retains its node factory. The factory uses `context.construct()`
 to establish node ownership and initialize its realm-owned event factory.
 Document and node platform objects are allocated when projection is needed.
 Internal fragment creation supplies its owning

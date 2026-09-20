@@ -1,8 +1,8 @@
 # Browsing policy roadmap
 
-The current files hold real slots and default values needed by Document and
-navigation. Their policy languages and enforcement algorithms are not yet
-implemented.
+The current files hold policy slots and defaults needed by Document and
+navigation. UserAgent owns origin/URL trustworthiness. The remaining policy
+languages and enforcement algorithms are tracked below.
 
 | File | Missing contract | Specification |
 | --- | --- | --- |
@@ -52,19 +52,34 @@ explicit integration. Implementation order is in the
 [Fetch preflight](../../../fetch/PREFLIGHT.md#work-order).
 
 Source paths below are relative to that preflight's local reference root.
-These algorithms are planned; existing slots are not working enforcement.
+Except for trustworthiness, these algorithms are planned; existing slots are
+not working enforcement.
 
 ### Trustworthiness
 
-Read [Secure Contexts](https://w3c.github.io/webappsec-secure-contexts/), local
-`w3c-secure-contexts/index.bs`. Implement URL/origin trustworthiness first,
-then environment classification over real settings, ancestry, and creator
-state. Reuse URL records; a context cannot always be classified from its own
-URL or its existing supplied boolean alone.
+[Secure Contexts](https://w3c.github.io/webappsec-secure-contexts/), local
+`w3c-secure-contexts/index.bs`, defines the trustworthiness methods on
+[`UserAgent`](../../user-agent.ts). Origin/URL trustworthiness is
+implemented and tested for secure schemes, loopback/localhost, opaque origins,
+files, special URLs, blob creator origins, and configured trust exceptions.
+The UserAgent owns authenticated schemes and exact trusted-origin overrides.
+File origins retain distinct opaque identities with a potentially-trustworthy
+flag; the flag does not itself classify an environment as secure.
 
-Test HTTPS, loopback/localhost, opaque origins, relevant non-network schemes,
-and configured trust exceptions. Add ancestry/worker cases with those
-lifecycles. Referrer Policy and Fetch Metadata consume the same classifier.
+`createWindowEnvironment()` shares Window initialization between initial
+browsing-context creation and navigation. `Environment` owns the fixed security
+decision before realm creation; the Realm reads it for Web IDL exposure, and
+settings inherit it for `WindowOrWorkerGlobalScope.isSecureContext`. A reserved
+environment supplies its existing decision. Otherwise the helper classifies
+the selected origin and parent Window. The parent's decision includes its
+ancestors, so an insecure intermediate frame prevents a secure descendant.
+Navigation creates a new decision when it creates a new Window.
+
+Tests cover the supported top-level lifecycle, inherited origins and composed
+parent/child Windows, and `[SecureContext]` interface/member exposure. Full
+iframe/popup creation, sandbox origin derivation and trust inheritance, and
+worker/worklet inheritance remain with those unfinished lifecycles. Referrer
+Policy and Fetch Metadata will consume the same trustworthiness algorithms.
 
 ### Referrer Policy
 
