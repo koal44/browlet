@@ -76,10 +76,15 @@ export class ResponseRecord {
     if (this.type === 'error' || isFilteredResponse(this)) {
       throw new Error('Cannot filter a network error or an already filtered response');
     }
-    const headerList: HeaderList = type === 'basic' || type === 'cors' ? this.headerList
-      .filter(([name]) => type === 'basic' ? !isForbiddenResponseHeaderName(name)
-        : isCORSSafelistedResponseHeaderName(name, this.corsExposedHeaderNameList))
-      .map(([name, value]) => [name, value]) : [];
+    const headerList: HeaderList = [];
+    if (type === 'basic' || type === 'cors') {
+      for (const [name, value] of this.headerList) {
+        if (type === 'basic' ? !isForbiddenResponseHeaderName(name)
+          : isCORSSafelistedResponseHeaderName(name, this.corsExposedHeaderNameList)) {
+          headerList.push([name, value]);
+        }
+      }
+    }
     const overrides: Partial<ResponseRecord> & { internalResponse: ResponseRecord; } = {
       type, internalResponse: this, headerList,
     };

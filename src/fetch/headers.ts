@@ -49,9 +49,13 @@ export function containsHeader(name: string, list: HeaderList): boolean {
 
 export function getHeader(name: string, list: HeaderList): string | null {
   const lower = name.toLowerCase();
-  const values = list.filter((header) => header[0].toLowerCase() === lower)
-    .map((header) => header[1]);
-  return values.length === 0 ? null : values.join(', ');
+  let combined: string | null = null;
+  for (const [headerName, value] of list) {
+    if (headerName.toLowerCase() === lower) {
+      combined = combined === null ? value : `${combined}, ${value}`;
+    }
+  }
+  return combined;
 }
 
 export function getDecodeAndSplitHeader(name: string, list: HeaderList): string[] | null {
@@ -138,14 +142,17 @@ export function combineHeader([name, value]: Header, list: HeaderList): void {
 }
 
 export function convertHeaderNamesToSortedLowercaseSet(names: string[]): string[] {
-  return [...new Set(names.map((name) => name.toLowerCase()))].sort();
+  const unique = new Set<string>();
+  for (const name of names) unique.add(name.toLowerCase());
+  return [...unique].sort();
 }
 
 /** Set-Cookie lines stay separate, even when their values contain commas. */
 export function sortAndCombineHeaders(list: HeaderList): HeaderList {
   const headers: HeaderList = [];
-  const names = convertHeaderNamesToSortedLowercaseSet(list.map((header) => header[0]));
-  for (const name of names) {
+  const names = new Set<string>();
+  for (const [name] of list) names.add(name.toLowerCase());
+  for (const name of [...names].sort()) {
     if (name === 'set-cookie') {
       for (const [headerName, value] of list) {
         if (headerName.toLowerCase() === name) headers.push([name, value]);
@@ -364,8 +371,11 @@ export class HeadersImpl {
   /** Return separate Set-Cookie values in their original order. */
   // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
   getSetCookie(): string[] {
-    return this.headerList.filter(([name]) => name.toLowerCase() === 'set-cookie')
-      .map(([, value]) => value);
+    const values: string[] = [];
+    for (const [name, value] of this.headerList) {
+      if (name.toLowerCase() === 'set-cookie') values.push(value);
+    }
+    return values;
   }
 
   /** Test whether the list contains the case-insensitive name. */

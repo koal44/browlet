@@ -526,6 +526,17 @@ describe('Encoding projection', () => {
     expect(Reflect.apply(encode, encoder, ['A\uD800'])).not.toBe(bytes);
   });
 
+  it('ignores author-defined storage getters while encoding into the result realm', () => {
+    const window = createWindow();
+    const prototype = requireObject(requireFunction(window, 'Uint8Array'), 'prototype');
+    for (const name of ['buffer', 'byteOffset', 'byteLength']) {
+      Object.defineProperty(prototype, name, { get() { throw new Error(`Read ${name}`); } });
+    }
+    const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;
+    const bytes = call(encoder, 'encode', ['A😀']) as Uint8Array;
+    expect(Array.from(bytes)).toEqual([65, 240, 159, 152, 128]);
+  });
+
   it.each([false, true])('writes directly into an offset destination (shared=%s)', (shared) => {
     const window = createWindow();
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;

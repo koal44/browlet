@@ -125,10 +125,11 @@ export class RequestRecord {
   /** https://fetch.spec.whatwg.org/#concept-request-clone */
   clone(): RequestRecord {
     const request = new RequestRecord(this.url, this.client);
+    for (let i = 1; i < this.urlList.length; i++) request.urlList.push(copyURL(this.urlList[i]!));
     return Object.assign(request, this, {
       webDriverId: request.webDriverId,
       headerList: this.headerList.map(([name, value]) => [name, value]),
-      urlList: [request.url, ...this.urlList.slice(1).map(copyURL)],
+      urlList: request.urlList,
       referrer: typeof this.referrer === 'string' ? this.referrer : copyURL(this.referrer),
       webTransportHashList: this.webTransportHashList.map(({ algorithm, value }) => ({ algorithm, value: new Uint8Array(value) })),
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),

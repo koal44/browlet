@@ -1,10 +1,11 @@
 import {
   getBufferSourceByteLength, getBufferSourceByteOffset, getBufferSourceUnderlyingBuffer,
+  type RuntimeContext,
 } from '../js-engine/index';
 import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 import {
-  arg, ctor, defineDictionary, defineIncludes, defineInterface,
-  defineInterfaceMixin, dictMember, idlType, impl, newBufferResult, op,
+  arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface,
+  defineInterfaceMixin, dictMember, idlType, impl, op,
   roAttr, reference, xattr,
 } from '../web-idl/index';
 
@@ -29,13 +30,19 @@ import {
  * };
  */
 export class TextEncoderImpl {
+  #runtime: RuntimeContext;
+
+  constructor(runtime: RuntimeContext) {
+    this.#runtime = runtime;
+  }
+
   get encoding(): string {
     return 'utf-8';
   }
 
-  /** Encode bytes; the member binding allocates the returned typed array. */
+  /** Encode directly into the returned typed array in the receiver's realm. */
   encode(input: string): Uint8Array {
-    return utf8Encode(input);
+    return utf8Encode(input, this.#runtime);
   }
 
   encodeInto(
@@ -70,12 +77,14 @@ export const textEncoderCommonIDL = defineInterfaceMixin({
 export const textEncoderIDL = defineInterface({
   name: 'TextEncoder',
   exposed: '*',
-  implementation: impl(TextEncoderImpl),
+  implementation: impl(TextEncoderImpl, {
+    constructWith: [atArg(0, (ctx) => ctx.getRuntime())],
+  }),
   members: [
     ctor(),
     op('encode', idlType.Uint8Array,
       [arg('input', idlType.USVString, { default: '', optional: true })],
-      { ...xattr('NewObject'), ...newBufferResult() },
+      xattr('NewObject'),
     ),
     op('encodeInto', reference('TextEncoderEncodeIntoResult'), [
       arg('source', idlType.USVString),

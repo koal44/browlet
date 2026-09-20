@@ -199,8 +199,9 @@ class MemoryBlobByteSource implements BlobByteSource {
 
   read(start: number, length: number): Promise<Uint8Array> {
     requireRange(this.size, start, length);
+    // BlobData.read copies this immutable backing range into its result.
     // eslint-disable-next-line no-restricted-globals -- Memory reads share the native Promise contract of asynchronous backing sources.
-    return Promise.resolve(this.#bytes.slice(start, start + length));
+    return Promise.resolve(this.#bytes.subarray(start, start + length));
   }
 }
 

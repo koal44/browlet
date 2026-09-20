@@ -1,6 +1,7 @@
 import { Buffer, isUtf8 } from 'node:buffer';
 import { endianness } from 'node:os';
 import { TextEncoder } from 'node:util';
+import { getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset } from './buffers';
 
 /** Infra — Isomorphic decode maps each byte to the code point with the same value. */
 export function isomorphicDecode(input: Uint8Array): string {
@@ -30,7 +31,11 @@ export function utf8ByteLength(input: string): number {
 
 /** Write complete UTF-8 sequences into existing storage and return the byte count. */
 export function writeUTF8(input: string, destination: Uint8Array): number {
-  return Buffer.from(destination.buffer, destination.byteOffset, destination.byteLength).write(input, 'utf8');
+  return Buffer.from(
+    getArrayBufferViewBuffer(destination),
+    getArrayBufferViewByteOffset(destination),
+    getArrayBufferViewByteLength(destination),
+  ).write(input, 'utf8');
 }
 
 /** Write complete UTF-8 sequences and report UTF-16 code units read and bytes written. */

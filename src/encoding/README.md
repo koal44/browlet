@@ -54,8 +54,10 @@ prepends unread input in order. Collection reads currently available output;
 `bomSniff` peeks without consuming and needs three bytes or EOF: streaming callers
 wait for that lookahead rather than repeatedly retrying a shorter prefix.
 
-Web IDL owns author conversion and result projection. Runtime facilities allocate
-retained buffers and callback-visible stream chunks in their owning realm. Raw
+Web IDL owns author conversion and result projection. TextEncoder writes directly
+into its result buffer through its construction runtime; return conversion preserves
+that typed array. Runtime facilities also allocate retained buffers and
+callback-visible stream chunks in their owning realm. Raw
 codecs preserve BOMs; the higher-level decoding operations and TextDecoder apply
 their respective BOM policies.
 

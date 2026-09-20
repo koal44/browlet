@@ -536,8 +536,9 @@ FileReader differs from a fresh method return: it retains one final ArrayBuffer
 created through `runtime.buffers` before firing completion events. Its plain
 getter returns that same object, including after mutation or detachment; there
 is no FileReader-specific projection map. Its error getter realizes the retained
-failure through Binding. Likewise, TextEncoderStream allocates
-its chunks before downstream callbacks can observe their realm. Buffer slot
+failure through Binding. TextEncoder writes directly into its runtime-owned result
+buffer, avoiding a second allocation and copy during return conversion.
+TextEncoderStream allocates its chunks before downstream callbacks can observe their realm. Buffer slot
 inspection, copying, transfer, and allocation live in JS Engine; Web IDL owns
 BufferSource conversion and result-declaration policy.
 
