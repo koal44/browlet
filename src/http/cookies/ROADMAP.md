@@ -8,8 +8,8 @@ this project must not discover a process-global cookie jar or import Browlet.
 **Status:** §§5.1–5.4 implemented: cookie records and predicates, store limits,
 eviction, subcomponent parsing/matching, and the main parse/store/retrieve/serialize
 algorithms. Each Browlet UserAgent owns a store. Browser access remains ahead.
-The standalone prerequisite is complete; resume
-[Fetch Slice 6](../../fetch/ROADMAP.md#slice-6--network-independent-platform-apis).
+The standalone prerequisite and Fetch Slice 6 are complete; resume
+[Fetch Slice 7](../../fetch/ROADMAP.md#slice-7--http-extensions).
 Browser integration follows at its Fetch and HTML consumers.
 
 ## Sources
@@ -86,6 +86,19 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    clientless requests, and unset-SameSite policy before implementing these hooks.
    The reproducible browser probe and findings are in the independent experimental
    repository's `cookies/same-site-context.mjs` and `cookies/README.md`.
+
+   Browser source review on 2026-09-21 confirms the separate decisions:
+   [Chromium](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/net/cookies/cookie_util.cc#L908)
+   computes request and response contexts separately; ordinary top-level
+   navigation responses can set Strict/Lax cookies even when the request
+   could not send Strict cookies. Gecko likewise separates
+   [`ProcessSameSiteCookieForForeignRequest`](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/netwerk/cookie/CookieService.cpp#L141)
+   from `CookieValidation::ValidateInContextInternal`. Its configurable
+   `network.cookie.sameSite.laxByDefault` is off in this checkout, consistent
+   with the probe's unset-cookie result. [WebKit](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/platform/network/SameSiteInfo.cpp#L34)
+   passes same-site, top-level-navigation, and safe-method
+   facts to its platform cookie backend; the Windows curl lookup ignores
+   `SameSiteInfo`, so its divergent result is not a Safari policy oracle.
 
 ## Representation choices
 

@@ -73,6 +73,29 @@ describe('Document', () => {
     expect(text.baseURI).toBe(second.baseURI);
   });
 
+  it('inherits the about base URL only for about:blank, including a query or fragment', () => {
+    const document = new DocumentImpl();
+    document.setAboutBaseURL(documentURL('https://example.test/parent/'));
+    for (const url of ['about:blank', 'about:blank?query#fragment']) {
+      document.setURL(documentURL(url));
+      expect(document.baseURI).toBe('https://example.test/parent/');
+    }
+    for (const url of ['https://example.test/page', 'about:srcdoc', 'about:other']) {
+      document.setURL(documentURL(url));
+      expect(document.baseURI).toBe(url);
+    }
+  });
+
+  it('uses an iframe srcdoc document\'s inherited base independently of its current URL', () => {
+    const document = new DocumentImpl();
+    document.setAboutBaseURL(documentURL('https://example.test/parent/'));
+    document.setIsIframeSrcdocDocument(true);
+    for (const url of ['about:srcdoc', 'about:srcdoc#fragment']) {
+      document.setURL(documentURL(url));
+      expect(document.baseURI).toBe('https://example.test/parent/');
+    }
+  });
+
   it('uses its relevant Window as its event parent while it has a browsing context', () => {
     const document = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));

@@ -8,10 +8,17 @@ export function findElementById(
   root: NodeImpl,
   id: string,
 ): ElementImpl | null {
+  return findElement(root, (element) => element.getAttribute('id') === id);
+}
+
+export function findElement(
+  root: NodeImpl,
+  matches: (element: ElementImpl) => boolean,
+): ElementImpl | null {
   let result: ElementImpl | null = null;
 
   walkElements(root, (element) => {
-    if (element.getAttribute('id') !== id) return true;
+    if (!matches(element)) return true;
 
     result = element;
     return false;

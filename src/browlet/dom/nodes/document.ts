@@ -51,7 +51,7 @@ import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../infra/index';
 import {
-  isDocument, isDocumentType, isElement, NodeImpl, type NodeVirtuals, NodeType,
+  isDocument, isDocumentType, isElement, NodeImpl, NodeType,
 } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
@@ -59,10 +59,11 @@ import {
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { TextImpl } from './text';
 import {
-  findElementById, findElementsByClassName, findElementsByTagName,
+  findElement, findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
 import { resolveElementInterface } from '../../element-interfaces';
+import { HTMLBaseElementImpl } from '../../html/elements/metadata/base';
 import { InternalError } from '../../../infra/internal-error';
 
 export function createDocument(
@@ -138,8 +139,10 @@ export class DocumentImpl extends NodeImpl {
   #customElementRegistry: CustomElementRegistryImpl | null = null;
   #duringLoadingNavigationID: string | null = null;
   #encoding = 'UTF-8';
+  #firstBaseElement: HTMLBaseElementImpl | null = null;
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   #internalAncestorOriginObjectsList: Origin[] | null = null;
+  #isIframeSrcdocDocument = false;
   #isInitialAboutBlank = false;
   #loadTimingInfo: DocumentLoadTimingInfo = {
     navigationStartTime: 0,
@@ -179,12 +182,6 @@ export class DocumentImpl extends NodeImpl {
       : null,
   });
 
-  static #nodeVirtuals: NodeVirtuals = {
-    getBaseURI: (node) => isDocument(node)
-      ? node.URL
-      : 'about:blank',
-  };
-
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
     styleletRuntime: StyleletRuntimeCaps = defaultStyleletRuntimeCaps,
@@ -194,7 +191,6 @@ export class DocumentImpl extends NodeImpl {
       null,
       {
         eventTargetVirtuals: DocumentImpl.#eventTargetVirtuals,
-        virtuals: DocumentImpl.#nodeVirtuals,
       },
     );
     this.setNodeDocument(this);
@@ -217,10 +213,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   override get baseURI(): string {
-    // HTML's full document base URL algorithm additionally consults the first
-    // applicable <base href> element. Until that element behavior exists, an
-    // about base URL takes precedence over the document URL.
-    return serializeURL(this.#aboutBaseURL ?? this.#url);
+    return serializeURL(this.getBaseURL());
   }
 
   get characterSet(): string {
@@ -427,6 +420,39 @@ export class DocumentImpl extends NodeImpl {
 
   // -- Internal ---------------------------------------------------------
 
+  /** The URL used to resolve relative URLs in this document. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url
+  getBaseURL(): URLRecord {
+    return this.#firstBaseElement === null ? this.getFallbackBaseURL() : this.#firstBaseElement.frozenBaseURL;
+  }
+
+  /** The base for resolving a base element's own href, or URLs without a base element. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fallback-base-url
+  getFallbackBaseURL(): URLRecord {
+    if (this.#isIframeSrcdocDocument) {
+      if (this.#aboutBaseURL === null) throw new InternalError('A srcdoc document must have an about base URL');
+      return this.#aboutBaseURL;
+    }
+    const url = this.#url;
+    if (
+      this.#aboutBaseURL !== null && url.scheme === 'about' && url.path === 'blank' &&
+      url.username === '' && url.password === '' && url.host === null
+    ) {
+      return this.#aboutBaseURL;
+    }
+    return url;
+  }
+
+  // https://html.spec.whatwg.org/multipage/semantics.html#frozen-base-url
+  updateBaseElement(changedHref?: HTMLBaseElementImpl): void {
+    const first = findElement(this, (element) =>
+      element instanceof HTMLBaseElementImpl && element.hasAttributeNS(null, 'href')
+    ) as HTMLBaseElementImpl | null;
+    if (first === this.#firstBaseElement && first !== changedHref) return;
+    this.#firstBaseElement = first;
+    first?.setFrozenBaseURL();
+  }
+
   setURL(url: URLRecord): void {
     this.#url = url;
   }
@@ -562,6 +588,11 @@ export class DocumentImpl extends NodeImpl {
 
   setAboutBaseURL(aboutBaseURL: URLRecord | null): void {
     this.#aboutBaseURL = aboutBaseURL;
+  }
+
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#an-iframe-srcdoc-document
+  setIsIframeSrcdocDocument(isSrcdoc: boolean): void {
+    this.#isIframeSrcdocDocument = isSrcdoc;
   }
 
   allowsDeclarativeShadowRoots(): boolean {

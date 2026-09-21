@@ -48,6 +48,13 @@ describe('Fetch Request construction', () => {
     await browlet.navigate('https://example.test/page');
     const window = browlet.window as Window & typeof globalThis;
     expect(new window.Request('resource').url).toBe('https://example.test/base/resource');
+    const base = window.document.getElementsByTagName('base')[0]!;
+    base.href = '/changed/';
+    const request = new window.Request('resource', { referrer: 'from' });
+    expect(request.url).toBe('https://example.test/changed/resource');
+    expect(request.referrer).toBe('https://example.test/changed/from');
+    base.remove();
+    expect(new window.Request('resource').url).toBe('https://example.test/resource');
   });
 
   it('normalizes standard methods, retains extension methods, and converts options', () => {

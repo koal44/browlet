@@ -5,7 +5,8 @@
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
-- **In progress:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis). Headers and Body are complete; Request/Response implementation is awaiting HTML's document-base-URL dependency. Cookie header integration remains in Slice 7.
+- **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
+- **Next:** [Slice 7 — HTTP extensions](#slice-7--http-extensions), starting with cookie header integration and its browser-owned SameSite inputs.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -20,7 +21,8 @@ must not cross Browlet's implementation or Web IDL boundaries.
 
 This project contains multipart algorithms; reusable HTTP foundations and cache
 rules live in the [HTTP project](../http/ROADMAP.md).
-Completion of the public Fetch API family waits for Slice 6's exit proof. The
+The network-independent API objects are complete; the public `fetch()` operation
+remains in Slice 9. The
 [dependency preflight](PREFLIGHT.md) retains the remaining external work order.
 
 `index.ts` exports the contracts consumed by production outside Fetch, including
@@ -486,13 +488,14 @@ Coverage is in `test/fetch/body-init.test.ts`, `body-consumption.test.ts`,
 All six unit configurations pass: Node 24.19.0, 26.8.1, and the custom build,
 each with stock and compatibility runtimes. The 9,708 cases include 81 new
 passing cases; existing expected failures/skips are unchanged. Typecheck and lint pass.
-**6c implemented; dependency gate open:** Request/Response author constructors,
+**6c complete:** Request/Response author constructors,
 static factories, cloning, dependent AbortSignals, and the ReferrerPolicy enum
 are installed in Browlet. Binding supplies the constructor's actual HTML settings
 object; Request retains that client. Response.redirect receives its API base URL.
-The internal factories' explicit settings/base-URL arguments remain marked for
-callable-shape review. Internal priority updates use a narrow `update(priority)`
-contract; network scheduling will supply its implementation.
+The constructor's explicit settings dependency has been reviewed; the redirect
+factory's base-URL argument retains its callable-shape marker. Internal priority
+updates use a narrow `update(priority)` contract; network scheduling will supply
+its implementation.
 
 `new Request(existing)` proxies the input body and disturbs/locks its stream;
 `clone()` tees it. Copied bodies/signals use the new constructor's runtime;
@@ -508,18 +511,16 @@ agree on input consumption, cloned body contents, dependent-signal ordering,
 and clone/factory realms. Firefox's tested build does not expose Request.body;
 stream identity/locking was checked in Chromium and Windows WebKit.
 
-Validation: all 9,773 unit cases ran on Node 24.19.0, 26.8.1, and the custom
-build, each with stock and compatibility runtimes. Every configuration has
-only the ordinary base-element failure below; existing expected failures and
-skips are unchanged. Typecheck and full-project lint pass.
+The HTML base-URL gate is complete
+([element roadmap](../browlet/html/elements/ROADMAP.md)). Settings read the
+document's base URL record directly, and the original Request failure now passes.
+Coverage includes base mutations and borrowed Response.redirect factories;
+Fetch contains no duplicate base-element selection rules. CSP `base-uri`
+enforcement remains pending with CSP. Resume with Slice 7's HTTP extensions.
 
-**Next dependency:** HTML's document base URL and `HTMLBaseElement`
-([element roadmap](../browlet/html/elements/ROADMAP.md)). The settings object
-currently reads `Document.baseURI`, which deliberately ignores `<base href>`.
-The ordinary failing test `uses the document base element when resolving Request
-URLs` expects `/base/resource` but gets `/resource`. Keep it failing until that
-HTML work lands; do not duplicate base-element rules in Fetch or mark 6c complete.
-Per review, finish the independent checks now and address this dependency next turn.
+Validation: all 9,798 unit cases ran on Node 24.19.0, 26.8.1, and the custom
+build, each with stock and compatibility runtimes, with no ordinary failures.
+Existing expected failures/skips are unchanged. Typecheck and changed-file lint pass.
 
 Implement:
 
@@ -561,13 +562,19 @@ escaping.
 
 Return to document order and implement:
 
-1. Cookie header integration seams from §3.1, while keeping cookie parsing,
-   storage, retrieval, and policy with the cookie subsystem.
+1. Cookie header integration from §3.1, using the cookie subsystem's parsing,
+   storage, and retrieval, with browser policy supplied by Browlet.
 2. Origin-header serialization and referrer-policy integration from §3.2.
 3. CORS protocol definitions, safelists, credentials behavior, new-header
    syntax, and checks from §3.3.
 4. `Content-Length`, MIME extraction for `Content-Type`, `nosniff`, CORP, and
    `Sec-Purpose` behavior from §§3.4–3.8.
+
+Start §3.1 by completing HTML's cross-site-ancestor query and exposing the
+UserAgent's existing cookie store and browser policy to Fetch. Review the
+[cookie roadmap's browser comparison](../http/cookies/ROADMAP.md#implementation-order)
+before implementing SameSite decisions: sending and accepting cookies need
+distinct rules, and omitted-SameSite behavior still needs a policy choice.
 
 Use pure deterministic tests for header and CORS algorithms. Policy-owned
 questions must call named host capabilities so the default no-policy test host

@@ -26,12 +26,25 @@ IDL constructors and element-specific reflected members still have to be
 added eventually; the generic implementation is sequencing, not a claim of
 full conformance.
 
-**Next Fetch prerequisite:** implement the document base URL and `HTMLBaseElement`
-(HTML §§2.4.3 and 4.2.3). Fetch 6c reads the settings object's API base URL, but
-`Document.baseURI` currently uses only the about-base/document URL. The ordinary
-failing case in `test/browlet/fetch-request.test.ts` preserves this gap. Implement
-first-base selection, fallback and frozen-base behavior, and attribute/tree-change
-hooks here; Request and Response.redirect should continue reading the shared result.
+**Completed Fetch prerequisite:** the document base URL and `HTMLBaseElement`
+(HTML §§2.4.3 and 4.2.3) now supply `Document.baseURI` and the settings object's
+API base URL. First-base selection and frozen URLs follow attribute changes,
+insertion, removal, and reordering, including whole subtrees. `Attr.value` and
+`NamedNodeMap` changes use the same element notification as `setAttribute`.
+The original Request regression and Response.redirect integration tests pass.
+
+Pending integrations stay with their owners: CSP's `base-uri` check, setting
+srcdoc document state during iframe creation, DOM adoption, HTML constructors/
+custom-element reactions, and base-change consumers such as hyperlink state and
+speculation rules. The fallback algorithm distinguishes explicit srcdoc document
+state from a URL that merely spells `about:srcdoc`.
+
+The 2026-09-21 Playwright probe found divergent frozen-URL behavior. After changing
+the document URL, Chromium and WebKit refreshed the first base when a later base's
+href changed; Firefox did not refresh on a same-value assignment to the first base.
+Windows WebKit also accepted a `data:` base. Per review, the tests retain HTML's
+written rules: refresh on becoming first or changing that element's href (including
+same-value assignments), ignore later bases, and reject `data:`/`javascript:`.
 
 `iframe` is intentionally the first nested-browsing consumer. Its element
 module stores element state and invokes the specified processing hooks;

@@ -7,7 +7,7 @@ import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import type { WindowImpl } from '../browsing/window/window';
 import type { Origin } from '../../url/origin';
-import { parseURL, type URLRecord } from '../../url/url';
+import type { URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
@@ -95,11 +95,7 @@ export class WindowEnvironmentSettingsObject
   }
 
   get apiBaseURL(): URLRecord {
-    const url = parseURL(
-      this.#window.getAssociatedDocument().baseURI,
-    ).url;
-    if (url === null) throw new InternalError('Window Document has an invalid base URL');
-    return url;
+    return this.#window.getAssociatedDocument().getBaseURL();
   }
 
   get moduleMap(): ModuleMap {

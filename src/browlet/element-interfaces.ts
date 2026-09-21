@@ -8,6 +8,7 @@ import { isValidCustomElementName } from './html/custom-elements/names';
 import { htmlElementInterface } from './html/elements/html-element';
 import { htmlUnknownElementInterface } from './html/elements/html-unknown-element';
 import { htmlHeadElementInterface } from './html/elements/metadata/head';
+import { htmlBaseElementInterface } from './html/elements/metadata/base';
 import { htmlLinkElementInterface } from './html/elements/metadata/link';
 import { htmlStyleElementInterface } from './html/elements/metadata/style';
 import { mathMLElementInterface } from './mathml/element';
@@ -41,6 +42,7 @@ export function resolveElementInterface(
 
 const elementInterfaces = compileElementInterfaces([
   htmlHeadElementInterface,
+  htmlBaseElementInterface,
   htmlLinkElementInterface,
   htmlStyleElementInterface,
   svgStyleElementInterface,

@@ -103,10 +103,10 @@ Existing foundations are indexed in Fetch's
 [FormData entry list](../xhr/ROADMAP.md) and Blob/File bytes already exist;
 their remaining multipart and Blob URL work has the owners linked above.
 
-Slice 6c exposed one additional HTML gate: the settings object's API base URL
-must honor the document's first applicable `<base href>`. That algorithm and
-`HTMLBaseElement` belong to the [element roadmap](../browlet/html/elements/ROADMAP.md).
-The focused Request regression remains failing until that dependency is implemented.
+Slice 6c's HTML base-URL gate is complete: the settings object's API base URL
+honors the first applicable `<base href>`, and Request/Response.redirect share
+the document's result. The [element roadmap](../browlet/html/elements/ROADMAP.md)
+retains CSP `base-uri` and later HTML lifecycle integrations.
 
 ## Signature audit
 
@@ -363,15 +363,14 @@ behavior or context ownership was changed by this pass.
 
 ## Rejoin Fetch, then finish browser policy
 
-The trustworthiness and cookie-core detour is complete. Resume
-[Fetch Slice 6](ROADMAP.md#slice-6--network-independent-platform-apis), starting
-with `Headers`, then Body extraction/consumption, `Request`, and `Response`.
+The trustworthiness and cookie-core detour and Fetch Slice 6 are complete,
+including Request/Response construction, Referrer Policy's declaration,
+dependent AbortSignals, and HTML's document-base-URL dependency. Resume
+[Fetch Slice 7](ROADMAP.md#slice-7--http-extensions), starting with §3.1's
+cookie header algorithms and their browser-owned SameSite inputs.
 The remaining work-order entries above are gates for their named consumers,
-not a requirement to finish all browser integration before those APIs.
-`Request`'s Referrer Policy declaration and dependent AbortSignal integration
-are implemented in Slice 6c; its document-base-URL gate remains open.
-Cookie header algorithms follow in Slice 7;
-network cookie processing and cache transactions remain in Slice 9.
+not a requirement to finish all browser policy before proceeding.
+Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 

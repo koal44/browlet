@@ -74,6 +74,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     if (index < 0) throwDOMException(DOMExceptionNames.notFound);
     const attribute = this.splice(index, 1)[0]!;
     attribute.setOwnerElement(null);
+    this.#element?.attributeChanged(attribute.localName, attribute.value, null, attribute.namespaceURI);
     return attribute;
   }
 
@@ -85,9 +86,8 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
       throwDOMException(DOMExceptionNames.inUseAttribute);
     }
 
-    const previous = attribute.namespaceURI === null
-      ? this.getNamedItem(attribute.name)
-      : this.getNamedItemNS(attribute.namespaceURI, attribute.localName);
+    const previous = this.getNamedItemNS(attribute.namespaceURI, attribute.localName);
+    if (previous === attribute) return attribute;
     if (previous) {
       this.splice(this.indexOf(previous), 1, attribute);
       previous.setOwnerElement(null);
@@ -95,6 +95,9 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
       this.push(attribute);
     }
     attribute.setOwnerElement(this.#element);
+    this.#element?.attributeChanged(
+      attribute.localName, previous?.value ?? null, attribute.value, attribute.namespaceURI,
+    );
     return previous;
   }
 

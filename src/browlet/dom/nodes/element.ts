@@ -106,10 +106,10 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     }),
     treeVirtuals: {
       insertedInto: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.update();
+        (node as ElementImpl).insertedInto();
       },
       removedFrom: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.update();
+        (node as ElementImpl).removedFrom();
       },
       childrenChanged: (node) => {
         (node as ElementImpl).#linkStyleMixin?.childrenChanged();
@@ -217,8 +217,6 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     const attribute = this.attributes.find(
       (candidate) => candidate.name === qualifiedName,
     );
-    const oldValue = attribute?.value ?? null;
-
     if (attribute) {
       attribute.value = value;
     } else {
@@ -228,31 +226,16 @@ export class ElementImpl extends withElementStub(NodeImpl) {
       }
       const created = ownerDocument.createAttribute(qualifiedName);
       created.value = value;
-      created.setOwnerElement(this);
-      this.attributes.push(created);
+      this.appendAttribute(created);
     }
-
-    if (qualifiedName === 'style') {
-      this.#inlineStyleMixin?.attributeChanged(value);
-    }
-    this.#attributeChanged(qualifiedName, oldValue, value);
   }
 
   removeAttribute(qualifiedName: string): void {
     qualifiedName = this.#normalizeAttributeName(qualifiedName);
 
-    const index = this.attributes.findIndex(
-      (attribute) => attribute.name === qualifiedName,
-    );
-    if (index < 0) return;
-
-    const oldValue = this.attributes[index]!.value;
-    const [removed] = this.attributes.splice(index, 1);
-    if (removed) removed.setOwnerElement(null);
-    if (qualifiedName === 'style') {
-      this.#inlineStyleMixin?.attributeChanged(null);
+    if (this.attributes.getNamedItem(qualifiedName)) {
+      this.attributes.removeNamedItem(qualifiedName);
     }
-    this.#attributeChanged(qualifiedName, oldValue, null);
   }
 
   getElementsByClassName(classNames: string): HTMLCollectionOf<Element> {
@@ -302,6 +285,21 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     this.#linkStyleMixin?.finishParsingChildren();
   }
 
+  // https://dom.spec.whatwg.org/#concept-element-attributes-set-value
+  setAttributeValue(
+    localName: string, value: string,
+    prefix: string | null = null, namespace: string | null = null,
+  ): void {
+    const attribute = this.attributes.getNamedItemNS(namespace, localName);
+    if (attribute) {
+      attribute.value = value;
+    } else {
+      this.appendAttribute(this.getNodeDocument()!.createAttributeNode(
+        localName, value, namespace, prefix,
+      ));
+    }
+  }
+
   appendAttribute(attribute: AttrImpl): void {
     if (attribute.ownerElement !== null) {
       throw new InternalError('Cannot append an attribute owned by another element');
@@ -309,10 +307,17 @@ export class ElementImpl extends withElementStub(NodeImpl) {
 
     this.#attributes.push(attribute);
     attribute.setOwnerElement(this);
-    if (attribute.localName === 'style') {
-      this.#inlineStyleMixin?.attributeChanged(attribute.value);
-    }
-    this.#attributeChanged(attribute.localName, null, attribute.value);
+    this.attributeChanged(attribute.localName, null, attribute.value, attribute.namespaceURI);
+  }
+
+  // https://dom.spec.whatwg.org/#concept-element-attributes-change-ext
+  attributeChanged(
+    localName: string, _oldValue: string | null, newValue: string | null,
+    namespace: string | null,
+  ): void {
+    if (namespace !== null) return;
+    if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
+    this.#linkStyleMixin?.attributeChanged(localName);
   }
 
   getInlineStyle(): CSSStyleDeclarationImpl {
@@ -326,15 +331,15 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     return this.#linkStyleMixin?.sheet ?? null;
   }
 
-  // -- Private ----------------------------------------------------------
-
-  #attributeChanged(
-    qualifiedName: string,
-    _oldValue: string | null,
-    _newValue: string | null,
-  ): void {
-    this.#linkStyleMixin?.attributeChanged(qualifiedName);
+  protected insertedInto(): void {
+    this.#linkStyleMixin?.update();
   }
+
+  protected removedFrom(): void {
+    this.#linkStyleMixin?.update();
+  }
+
+  // -- Private ----------------------------------------------------------
 
   #normalizeAttributeName(qualifiedName: string): string {
     return this.namespaceURI === HTML_NAMESPACE

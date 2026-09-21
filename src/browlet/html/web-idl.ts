@@ -4,6 +4,7 @@ import {
 } from './elements/html-element';
 import { htmlUnknownElementIDL } from './elements/html-unknown-element';
 import { htmlHeadElementIDL } from './elements/metadata/head';
+import { htmlBaseElementIDL } from './elements/metadata/base';
 import {
   htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
 } from './elements/metadata/link';
@@ -16,6 +17,7 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlElementIncludesElementCSSInlineStyleIDL,
   htmlUnknownElementIDL,
   htmlHeadElementIDL,
+  htmlBaseElementIDL,
   htmlStyleElementIDL,
   htmlStyleElementIncludesLinkStyleIDL,
   htmlLinkElementIDL,

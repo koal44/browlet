@@ -92,6 +92,19 @@ describe('Fetch Response factories', () => {
     expect(() => window.Response.redirect('/next', 200)).toThrow(window.RangeError);
   });
 
+  it('uses the method realm\'s current document base for a borrowed redirect factory', async () => {
+    const owner = new Browlet({ route: () => '<base href="/owner/">' });
+    const other = new Browlet({ route: () => '<base href="/other/">' });
+    await owner.navigate('https://owner.test/page');
+    await other.navigate('https://other.test/page');
+    const ownerWindow = owner.window as Window & typeof globalThis;
+    const otherWindow = other.window as Window & typeof globalThis;
+    expect(otherWindow.Response.redirect.call(ownerWindow.Response, 'next').headers.get('Location'))
+      .toBe('https://other.test/other/next');
+    otherWindow.document.getElementsByTagName('base')[0]!.href = '/changed/';
+    expect(otherWindow.Response.redirect('next').headers.get('Location')).toBe('https://other.test/changed/next');
+  });
+
   it('serializes JSON before initialization and respects explicit response headers', async () => {
     const browlet = new Browlet({ route: () => '' });
     expect(await browlet.evaluate(async () => {

@@ -54,7 +54,9 @@ export class AttrImpl extends withAttrStub(NodeImpl) {
   }
 
   set value(value: string) {
+    const oldValue = this.#value;
     this.#value = value;
+    this.#element?.attributeChanged(this.#localName, oldValue, value, this.#namespaceURI);
   }
 
   get namespaceURI(): string | null {
