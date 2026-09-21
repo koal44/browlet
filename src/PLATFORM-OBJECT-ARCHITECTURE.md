@@ -532,7 +532,7 @@ conversion paths; an `object` result preserves the supplied JavaScript value.
 
 Blob retains its Runtime Context at construction. Its `stream()` and private
 read operation use that context; `text()`, `bytes()`, and `arrayBuffer()` share
-the read result through JS Engine's `PromiseValue<T>`. Backing `BlobData` remains
+the read result through Infra's `PromiseValue<T>`. Backing `BlobData` remains
 runtime-neutral; `BlobData.stream(runtime)` selects the stream's owner per call.
 Slices retain the source runtime, while deserialization creates
 an implementation with the destination runtime before restoring its data.
@@ -789,8 +789,8 @@ is allocated as an Error exotic
 in the owning realm.
 
 Web IDL's `core/dom-exception.ts` owns the shared names, legacy codes,
-and DOMException-request helpers. JS Engine's
-[`exceptions.ts`](./js-engine/exceptions.ts) provides distinguishable
+and DOMException-request helpers. Infra's
+[`exceptions.ts`](./infra/exceptions.ts) provides distinguishable
 `RangeError`, `SyntaxError`, and `TypeError` requests without importing Web IDL.
 Translate dependency failures into requests at the dependency call.
 

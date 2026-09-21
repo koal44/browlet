@@ -2,8 +2,9 @@ import type { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
-import { parseURL } from '../url/url';
-import { createMicrotaskQueue, type PromiseValue } from '../js-engine/index';
+import { parseURL } from '../url/index';
+import { createMicrotaskQueue } from '../js-engine/index';
+import type { PromiseValue } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getBindingContext, getRelevantRealm } from './bindings';
 import {

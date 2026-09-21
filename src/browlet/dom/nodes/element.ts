@@ -6,8 +6,7 @@ import {
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
-import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
-import type { CSSStyleDeclarationImpl } from '../../../stylelet/cssom/declaration';
+import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { HTMLCollectionImpl } from './collections';
 import {
   ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,

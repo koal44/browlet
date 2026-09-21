@@ -1,8 +1,7 @@
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { PolicyContainer } from '../policy/container';
 import type { ReferrerPolicy } from '../../../fetch/index';
-import type { Origin } from '../../../url/origin';
-import { parseURL, type URLRecord } from '../../../url/url';
+import { type Origin, parseURL, type URLRecord } from '../../../url/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /*

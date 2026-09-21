@@ -5,7 +5,7 @@ import { SVG_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
 import { withSVGStyleElementStub } from '../stubs';
 import { isSVGElement, SVGElementImpl } from './element';
-import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
+import type { CSSStyleSheetImpl } from '../../stylelet/index';
 
 /*
  * [Exposed=Window]

@@ -1,5 +1,5 @@
 import { getMethod, isObject, type JSMethod } from '../js-engine/index';
-import type { PromiseValue } from '../js-engine/promises';
+import type { PromiseValue } from '../infra/promises';
 
 import {
   idlType, type AsyncSequenceType, type WebIDLType,

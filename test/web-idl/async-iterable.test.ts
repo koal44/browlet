@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PromiseValueCapability } from '../../src/js-engine/index';
+import type { PromiseValueCapability } from '../../src/infra/promises';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { endOfIteration } from '../../src/web-idl/async-sequence';

@@ -1,6 +1,6 @@
 import type { TaskScheduling } from '../infra/scheduling';
 import type { RuntimeBuffers } from './buffers';
-import type { Promises } from './promises';
+import type { Promises } from '../infra/promises';
 import type { GlobalObject } from './realm';
 
 /** Implementation facilities composed for one owning realm/global. */

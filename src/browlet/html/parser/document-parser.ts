@@ -1,7 +1,8 @@
 import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
-import { bindAsyncContext, type PromiseValue, type RuntimeContext } from '../../../js-engine/index';
+import { bindAsyncContext, type RuntimeContext } from '../../../js-engine/index';
+import type { PromiseValue } from '../../../infra/promises';
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { ElementImpl } from '../../dom/nodes/element';
 import type { EventLoop } from '../../scripting/event-loop';

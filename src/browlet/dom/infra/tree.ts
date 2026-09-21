@@ -6,10 +6,16 @@ import { InternalError } from '../../../infra/internal-error';
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
 {
+  // Preserve node-link types when checking the emitted JavaScript.
+  /** @type {TreeNode | null} */
   #parent: TNode | null = null;
+  /** @type {TreeNode | null} */
   #firstChild: TNode | null = null;
+  /** @type {TreeNode | null} */
   #lastChild: TNode | null = null;
+  /** @type {TreeNode | null} */
   #previousSibling: TNode | null = null;
+  /** @type {TreeNode | null} */
   #nextSibling: TNode | null = null;
   #virtuals: TreeNodeVirtuals<TNode>;
 

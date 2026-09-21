@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { codeUnitsToString } from '../../js-engine/byte-string';
+import { codeUnitsToString } from '../../js-engine/index';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
 
 /** Encoding §§14.2–14.4 — Shared UTF-16 decoder. BOM handling belongs to its caller. */

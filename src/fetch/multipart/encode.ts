@@ -1,7 +1,7 @@
-import { isomorphicDecode, isomorphicEncode } from '../../js-engine/byte-string';
-import { type Encoding, encode } from '../../encoding/encodings';
+import { isomorphicDecode, isomorphicEncode } from '../../js-engine/index';
+import { type Encoding, encode } from '../../encoding/index';
 import { BlobData } from '../../file/index';
-import { percentEncodeByte } from '../../url/percent-encoding';
+import { percentEncodeByte } from '../../url/index';
 import type { FormDataEntry } from '../../xhr/index';
 
 /*

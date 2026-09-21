@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getMethod, isAccessorDescriptor, isCallable, isConstructor,
-  isDataDescriptor, isObject, JSRealm, ordinarySetWithOwnDescriptor,
-  toBigInt, toNumber,
-  toPrimitive, toString, SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
+  getMethod, isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, JSRealm,
+  ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
 } from '../../src/js-engine/index';
+import { SyntaxError as InternalSyntaxError, TypeError as InternalTypeError } from '../../src/infra/exceptions';
 
 describe('ECMAScript abstract operations', () => {
   it('recognizes ECMAScript Object values', () => {

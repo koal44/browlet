@@ -1,5 +1,4 @@
-import { obtainSite, sitesAreSameSite, type Site } from '../../url/origin';
-import { obtainURLOrigin } from '../../url/url';
+import { obtainSite, sitesAreSameSite, type Site, obtainURLOrigin } from '../../url/index';
 import type { FetchEnvironment } from '../infrastructure';
 import { InternalError } from '../../infra/internal-error';
 

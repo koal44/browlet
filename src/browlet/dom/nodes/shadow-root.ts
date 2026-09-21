@@ -6,8 +6,7 @@ import {
 } from '../../../web-idl/index';
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
-import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
-import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
+import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { NodeImpl } from './node';
 import {

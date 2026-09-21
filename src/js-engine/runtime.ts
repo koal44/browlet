@@ -9,7 +9,7 @@ import {
 import type {
   CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSRealm,
 } from './realm';
-import { TypeError } from './exceptions';
+import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 const getNativeRealm = addon.getMethod('getRealm');

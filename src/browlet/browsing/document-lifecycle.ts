@@ -3,8 +3,7 @@ import type {
   DocumentImpl, DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
-import { areSameOriginDomain } from '../../url/origin';
-import { serializeURL } from '../../url/url';
+import { areSameOriginDomain, serializeURL } from '../../url/index';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import { createDocument, getRelevantRealm } from '../bindings';
 import type { BrowsingContext } from './browsing-context';

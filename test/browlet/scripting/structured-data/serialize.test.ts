@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TypeError as TypeErrorRequest } from '../../../../src/js-engine/exceptions';
+import { TypeError as TypeErrorRequest } from '../../../../src/infra/exceptions';
 
 import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,

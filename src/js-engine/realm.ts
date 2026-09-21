@@ -5,7 +5,7 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
   type RuntimeBuffers,
 } from './buffers';
-import { Promises } from './promises';
+import { Promises } from '../infra/promises';
 import { isObject } from './abstract-operations';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm,

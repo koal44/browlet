@@ -1,7 +1,7 @@
 import { escapeRegExp } from '../infra/strings';
 import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
-import { Promises } from '../js-engine/promises';
+import { Promises } from '../infra/promises';
 import type { RuntimeCaps, StyleletOptions } from './stylelet';
 
 export class StyleletContext {

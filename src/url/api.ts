@@ -11,7 +11,7 @@ import {
   arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
   sequence, staticOp, stringifier, union, xattr, type Definition,
 } from '../web-idl/index';
-import { TypeError } from '../js-engine/exceptions';
+import { TypeError } from '../infra/exceptions';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this

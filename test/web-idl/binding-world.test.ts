@@ -7,7 +7,7 @@ import {
   reference, roAttr, xattr, type BindingContext,
 } from '../../src/web-idl/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
-import { TypeError as InternalTypeError } from '../../src/js-engine/index';
+import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
 
 describe('Web IDL binding worlds and realm registration', () => {
   it('composes the implementation runtime once per realm registration', () => {

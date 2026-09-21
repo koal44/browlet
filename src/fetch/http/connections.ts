@@ -1,6 +1,7 @@
-import { obtainPublicSuffix, type IPAddress } from '../../url/host';
-import { areSameOrigin, type Origin, type TupleOrigin } from '../../url/origin';
-import { obtainURLOrigin, type URLRecord } from '../../url/url';
+import {
+  obtainPublicSuffix, type IPAddress, areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin,
+  type URLRecord,
+} from '../../url/index';
 import type { WebTransportHash } from '../request';
 import type { ConnectionTimingInfo } from '../timing';
 import { networkPartitionKeysEqual, type NetworkPartitionKey } from './network-partition';

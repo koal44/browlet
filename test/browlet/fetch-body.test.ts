@@ -4,19 +4,19 @@ import { itPassesWith } from '../test-runtime';
 import { FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
-import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
+import type { GlobalObject, RuntimeContext } from '../../src/js-engine/index';
+import type { PromiseValue } from '../../src/infra/promises';
 import {
   defineInterface, idlType, impl, op, promise, BindingWorld,
 } from '../../src/web-idl/index';
 import { createFetchWindow } from './fetch-fixture';
-import { performTestMicrotaskCheckpoint } from './test-runtime';
+import { performTestMicrotaskCheckpoint, observeBrowletPromise } from './test-runtime';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../../src/browlet/bindings';
 import { queueGlobalFetchTask } from '../../src/browlet/integration/fetch';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { createFetchRequest, fetchDefinitions } from '../fetch/fetch-fixture';
-import { observeBrowletPromise } from './test-runtime';
 
 describe('Fetch body delivery through HTML', () => {
   it('delivers extracted bytes inside the owning HTML task', () => {

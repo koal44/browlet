@@ -4,7 +4,7 @@ import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
   type Origin,
-} from '../../url/origin';
+} from '../../url/index';
 import type { WindowImpl } from '../browsing/window/window';
 import { InternalError } from '../../infra/internal-error';
 

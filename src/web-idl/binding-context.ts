@@ -1,5 +1,5 @@
-import type { Promises } from '../js-engine/promises';
-import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { Promises } from '../infra/promises';
+import type { RuntimeContext } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
 import type { Capability } from './capability';

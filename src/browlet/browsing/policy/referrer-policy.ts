@@ -1,8 +1,7 @@
 import { isLocalScheme, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
-import { areSameOrigin } from '../../../url/origin';
-import { copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../../../url/url';
+import { areSameOrigin, copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../../../url/index';
 import { defineEnumeration } from '../../../web-idl/index';
 
 // Referrer Policy supplies this declaration to Fetch's Request API.

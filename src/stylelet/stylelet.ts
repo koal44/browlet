@@ -3,7 +3,7 @@ import type { CSSStyleSheetImpl } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { StyleletContext } from './context';
-import type { Promises } from '../js-engine/promises';
+import type { Promises } from '../infra/promises';
 import type { DOMExceptionName } from '../web-idl/core/index';
 
 export class Stylelet {
@@ -80,6 +80,6 @@ export type RuntimeCaps = {
 
 // Hosts can configure the small Promise facility without loading JSRealm or JSRuntime.
 export { defaultRuntimeCaps, StyleletContext } from './context';
-export { Promises } from '../js-engine/promises';
-export type { NativePromiseObserver, PromiseValue } from '../js-engine/promises';
+export { Promises } from '../infra/promises';
+export type { NativePromiseObserver, PromiseValue } from '../infra/promises';
 export type { DOMExceptionName };

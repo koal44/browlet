@@ -1,9 +1,13 @@
 import { toScalarValueString } from '../infra/index';
 import {
-  bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject, PromiseValue,
-  RangeError as InternalRangeError, SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
-  toBigInt, toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
+  bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject, toBigInt,
+  toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
 } from '../js-engine/index';
+import { PromiseValue } from '../infra/promises';
+import {
+  RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
+  TypeError as InternalTypeError,
+} from '../infra/exceptions';
 import type { AssembledDictionaryDefinition, DefinitionAssembly } from './assembly';
 import {
   convertAsyncSequenceToJavaScript,

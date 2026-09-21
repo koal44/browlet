@@ -1,8 +1,8 @@
+import { getAssociatedRealm, isObject, type JSFunction, type RuntimeContext } from '../js-engine/index';
 import {
-  getAssociatedRealm, isObject, RangeError as InternalRangeError,
-  SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
-  type JSFunction, type RuntimeContext,
-} from '../js-engine/index';
+  RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
+  TypeError as InternalTypeError,
+} from '../infra/exceptions';
 import { Stamper } from '../infra/stamper';
 import { DOMException as InternalDOMException } from './core/dom-exception';
 import type {

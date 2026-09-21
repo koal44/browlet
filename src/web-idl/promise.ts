@@ -1,4 +1,4 @@
-import type { PromiseValue, Promises } from '../js-engine/index';
+import type { PromiseValue, Promises } from '../infra/promises';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';

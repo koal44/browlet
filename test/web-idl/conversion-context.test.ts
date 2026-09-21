@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding-world';
-import { TypeError as InternalTypeError } from '../../src/js-engine/exceptions';
-import type { Promises, PromiseValue } from '../../src/js-engine/index';
+import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
+import type { Promises, PromiseValue } from '../../src/infra/promises';
 import {
   arg, defineCallbackFunction, defineInterface, idlType, impl, onError, op,
   promise, reference, sequence,

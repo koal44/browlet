@@ -1,7 +1,7 @@
 import * as JSEngine from '../js-engine/index';
 import { hasExtendedAttribute } from './core/helpers';
 import type { BufferTypeName, BufferViewTypeName, ExtendedAttribute } from './core/types';
-import { TypeError } from '../js-engine/exceptions';
+import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.

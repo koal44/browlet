@@ -13,8 +13,8 @@ import {
   type AttributeMember, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
-import { TypeError as TypeErrorRequest } from '../../src/js-engine/exceptions';
-import type { Promises, PromiseValue } from '../../src/js-engine/index';
+import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
+import type { Promises, PromiseValue } from '../../src/infra/promises';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import {
   createRejectedPromise, createResolvedPromise,

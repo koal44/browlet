@@ -1,5 +1,5 @@
 import { createRuntime } from '../../js-engine/runtime-fixture';
-import type { PromiseValue } from '../../../src/js-engine/index';
+import type { PromiseValue } from '../../../src/infra/promises';
 import { TestRealm } from '../../web-idl/test-realm';
 import {
   type QueuingStrategyRecord, TransformStreamImpl, type TransformerRecord,

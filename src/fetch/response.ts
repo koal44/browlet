@@ -1,10 +1,11 @@
 import type { BlobImpl } from '../file/index';
-import { utf8Encode } from '../encoding/codecs/utf-8';
+import { utf8Encode } from '../encoding/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
-import type { PromiseValue, RuntimeContext } from '../js-engine/index';
-import { RangeError, TypeError } from '../js-engine/exceptions';
+import type { PromiseValue } from '../infra/promises';
+import type { RuntimeContext } from '../js-engine/index';
+import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
-import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/url';
+import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,

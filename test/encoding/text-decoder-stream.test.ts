@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
-import { TypeError as InternalTypeError } from '../../src/js-engine/exceptions';
+import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([

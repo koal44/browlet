@@ -1,15 +1,11 @@
-import type { TreeScope } from '../../../stylelet/engine/tree-scope';
-import type {
-  PromiseValue, PromiseValueCapability, RuntimeContext,
-} from '../../../js-engine/index';
 import {
-  defaultRuntimeCaps as defaultStyleletRuntimeCaps, Stylelet,
-  type RuntimeCaps as StyleletRuntimeCaps,
-} from '../../../stylelet/stylelet';
+  type TreeScope, defaultRuntimeCaps as defaultStyleletRuntimeCaps, Stylelet,
+  type RuntimeCaps as StyleletRuntimeCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
+} from '../../../stylelet/index';
+import type { PromiseValue, PromiseValueCapability } from '../../../infra/promises';
+import type { RuntimeContext } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletRuntime, type TreeScopeResolver } from '../../style/integration';
-import type { CSSStyleSheetImpl } from '../../../stylelet/cssom/css-stylesheet';
-import type { StyleSheetListImpl } from '../../../stylelet/cssom/stylesheet-list';
 import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
@@ -38,8 +34,7 @@ import {
   dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
   DOMExceptionNames, throwDOMException, type ImplementationClass,
 } from '../../../web-idl/index';
-import { createOpaqueOrigin, type Origin } from '../../../url/origin';
-import { parseURL, serializeURL, type URLRecord } from '../../../url/url';
+import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';

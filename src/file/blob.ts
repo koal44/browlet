@@ -1,8 +1,6 @@
-import { utf8Decode, utf8Encode } from '../encoding/codecs/utf-8';
-import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
-import {
-  type PromiseValue, type RuntimeContext, getBufferSourceCopy,
-} from '../js-engine/index';
+import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
+import type { PromiseValue } from '../infra/promises';
+import { type RuntimeContext, getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,

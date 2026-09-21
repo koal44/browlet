@@ -5,7 +5,7 @@ import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import { withHTMLLinkElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
-import type { CSSStyleSheetImpl } from '../../../../stylelet/cssom/css-stylesheet';
+import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
 
 /*
  * [Exposed=Window]

@@ -1,6 +1,6 @@
-import { isomorphicDecode } from '../../js-engine/byte-string';
+import { isomorphicDecode } from '../../js-engine/index';
 
-import { utf8DecodeWithoutBOMOrFail } from '../../encoding/codecs/utf-8';
+import { utf8DecodeWithoutBOMOrFail } from '../../encoding/index';
 import { forgivingBase64Decode } from '../../infra/base64';
 import { TextCursor } from '../../infra/text-cursor';
 

@@ -1,4 +1,5 @@
-import { isObject, PromiseValue, type JSFunction } from '../js-engine/index';
+import { isObject, type JSFunction } from '../js-engine/index';
+import { PromiseValue } from '../infra/promises';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import { endOfIteration } from './async-sequence';

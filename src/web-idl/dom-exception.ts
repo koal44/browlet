@@ -1,4 +1,4 @@
-import { RangeError } from '../js-engine/exceptions';
+import { RangeError } from '../infra/exceptions';
 import {
   DOMExceptionCodes, DOMExceptionNames,
 } from './core/dom-exception';

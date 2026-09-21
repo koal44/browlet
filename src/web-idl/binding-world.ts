@@ -11,8 +11,7 @@ import {
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
 import { registerDefinitionBindings } from './implementation-binding';
-import type { RuntimeContext } from '../js-engine/runtime-context';
-import type { JSRealm } from '../js-engine/index';
+import type { RuntimeContext, JSRealm } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 
 /**

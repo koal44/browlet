@@ -1,15 +1,14 @@
-import { utf8Decode, utf8Encode } from '../encoding/codecs/utf-8';
-import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
+import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 import { BlobData, BlobImpl } from '../file/index';
 import { ParallelQueue } from '../infra/parallel-queue';
 import {
-  type GlobalObject, type PromiseValue, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
+  type GlobalObject, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
 } from '../js-engine/index';
-import { TypeError } from '../js-engine/exceptions';
+import type { PromiseValue } from '../infra/promises';
+import { TypeError } from '../infra/exceptions';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
-import { URLSearchParamsImpl } from '../url/api';
-import { parseFormUrlEncoded } from '../url/form-url-encoded';
+import { URLSearchParamsImpl, parseFormUrlEncoded } from '../url/index';
 import {
   allocateIn, defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
   union, xattr,

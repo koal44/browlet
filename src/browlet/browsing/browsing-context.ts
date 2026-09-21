@@ -1,13 +1,16 @@
-import type {
-  AgentCluster, AgentClusterKey, CrossOriginIsolationMode,
+import {
+  type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode,
+  obtainSimilarOriginWindowAgent,
 } from '../scripting/agents';
-import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
   createDocument, getRelevantRealm, retargetWindowProxy,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import { createWindowEnvironment } from '../scripting/window-environment';
-import { serializeSite } from '../../url/origin';
+import {
+  serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
+  type URLRecord,
+} from '../../url/index';
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
 import {
@@ -23,10 +26,6 @@ import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
 import type { ReferrerPolicy } from '../../fetch/index';
 import { HTML_NAMESPACE } from '../../infra/index';
-import {
-  createOpaqueOrigin, serializeOrigin, type Origin,
-} from '../../url/origin';
-import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import {
   currentCoarsenedWallTime, unsafeSharedCurrentTime,
 } from '../performance/high-resolution-time';

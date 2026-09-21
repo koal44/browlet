@@ -1,13 +1,13 @@
 import type {
   AbortControllerCapability, AbortSignalCapability, RuntimeContext,
-} from '../js-engine/runtime-context';
-import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
+} from '../js-engine/index';
+import type { PromiseValue, PromiseValueCapability, Promises } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, nullable, op, promise,
   roAttr, reference, xattr,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../js-engine/exceptions';
+import { RangeError, TypeError } from '../infra/exceptions';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,

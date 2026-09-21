@@ -84,7 +84,8 @@ Internal payloads are boxed so they are not accidentally adopted as thenables.
 Capabilities expose a read-only `pending` flag maintained by their resolving
 functions, so callers do not duplicate settlement tracking. This describes
 internal boxed settlement, not the resolution state of an adopted author Promise.
-The generic machinery lives in [promises.ts](./promises.ts); see the shared
+The generic machinery lives in Infra's [promises.ts](../infra/promises.ts);
+JS Engine supplies the native constructor and settlement observer. See the shared
 [return boundary](../PLATFORM-OBJECT-ARCHITECTURE.md#return-projection).
 
 `bindAsyncContext(steps)` retains Node's scheduling-time async context for an

@@ -1,7 +1,8 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createMicrotaskQueue, type PromiseValue } from '../../src/js-engine/index';
+import { createMicrotaskQueue } from '../../src/js-engine/index';
+import type { PromiseValue } from '../../src/infra/promises';
 import { BindingWorld } from '../../src/web-idl/index';
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { TestRealm } from '../web-idl/test-realm';

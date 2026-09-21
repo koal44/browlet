@@ -1,9 +1,5 @@
-import {
-  encodeOrFailSync, getEncoder, getEncoding,
-} from '../encoding/encodings';
-import { IOQueue } from '../encoding/io-queue';
-import { utf8Encode } from '../encoding/codecs/utf-8';
-import { RangeError } from '../js-engine/exceptions';
+import { encodeOrFailSync, getEncoder, getEncoding, IOQueue, utf8Encode } from '../encoding/index';
+import { RangeError } from '../infra/exceptions';
 
 /*
  * Percent-encoded bytes.

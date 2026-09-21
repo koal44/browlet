@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
-} from '../../../src/js-engine/exceptions';
+} from '../../../src/infra/exceptions';
 import {
   createDOMException, DOMException as InternalDOMException,
 } from '../../../src/web-idl/core/dom-exception';

@@ -1,6 +1,6 @@
 import { Buffer, isAscii } from 'node:buffer';
 import { TextDecoder } from 'node:util';
-import { codeUnitsToString } from '../../js-engine/byte-string';
+import { codeUnitsToString } from '../../js-engine/index';
 
 import type { Encoding } from '../encodings';
 import type { EncodingIndex } from '../indexes';

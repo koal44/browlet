@@ -33,9 +33,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import { asciiLower } from '../infra/ascii';
-import { RangeError } from '../js-engine/exceptions';
-import type { PromiseValue } from '../js-engine/promises';
-import type { RuntimeContext } from '../js-engine/runtime-context';
+import { RangeError } from '../infra/exceptions';
+import type { PromiseValue } from '../infra/promises';
+import type { RuntimeContext } from '../js-engine/index';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 import { GB18030Decoder, GB18030Encoder } from './codecs/gb18030';
 import { Big5Decoder, Big5Encoder } from './codecs/big5';

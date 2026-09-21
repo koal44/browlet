@@ -1,9 +1,8 @@
-import { isomorphicDecode } from '../js-engine/byte-string';
+import { isomorphicDecode, type RuntimeContext } from '../js-engine/index';
 
-import { decode, getEncoding } from '../encoding/encodings';
+import { decode, getEncoding } from '../encoding/index';
 import { parseMIMEType } from '../mime/index';
 import { forgivingBase64Encode } from '../infra/index';
-import type { RuntimeContext } from '../js-engine/index';
 
 /** File API §6.3 — Package data. */
 export function packageData(

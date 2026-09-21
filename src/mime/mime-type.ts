@@ -1,4 +1,4 @@
-import { isomorphicDecode, isomorphicEncode } from '../js-engine/byte-string';
+import { isomorphicDecode, isomorphicEncode } from '../js-engine/index';
 
 import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/index';
 import { TextCursor } from '../infra/text-cursor';

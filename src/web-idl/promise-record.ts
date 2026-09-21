@@ -1,5 +1,5 @@
 import { Stamper } from '../infra/stamper';
-import type { PromiseValue } from '../js-engine/index';
+import type { PromiseValue } from '../infra/promises';
 import type { BindingWorld } from './binding-world';
 import type { WebIDLType } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';

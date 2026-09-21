@@ -1,7 +1,10 @@
-import type {
-  AbortAlgorithmHandle, AbortSignalCapability, RuntimeContext,
-} from '../js-engine/runtime-context';
-import type { PromiseValue, PromiseValueCapability, Promises } from '../js-engine/promises';
+import {
+  type AbortAlgorithmHandle, type AbortSignalCapability, type RuntimeContext,
+  getBufferSourceByteLength, getBufferSourceUnderlyingBuffer, type JSBufferViewName,
+  getArrayBufferViewElementSize, getBufferTypeName, isBufferSourceDetached,
+  getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
+} from '../js-engine/index';
+import type { PromiseValue, PromiseValueCapability, Promises } from '../infra/promises';
 import {
   arg, atArg, asyncIter, asyncSequence, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
@@ -9,18 +12,13 @@ import {
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
   endOfIteration, type AsyncSequenceValue,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../js-engine/exceptions';
+import { RangeError, TypeError } from '../infra/exceptions';
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
 } from './queuing-strategy';
 import type { WritableStreamImpl } from './writable-stream';
 import { QueueWithSizes } from './queue-with-sizes';
-import {
-  getBufferSourceByteLength, getBufferSourceUnderlyingBuffer, type JSBufferViewName,
-  getArrayBufferViewElementSize, getBufferTypeName, isBufferSourceDetached,
-  getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
-} from '../js-engine/index';
 import type { TransformStreamImpl } from './transform-stream';
 import { InternalError } from '../infra/internal-error';
 

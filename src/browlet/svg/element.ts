@@ -2,7 +2,7 @@ import { defineElementInterface, ElementImpl } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
 import { withSVGElementStub } from '../stubs';
-import type { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
+import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
 
 /*
  * [Exposed=Window]

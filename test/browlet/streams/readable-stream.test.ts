@@ -1,5 +1,5 @@
 import { createRuntime } from '../../js-engine/runtime-fixture';
-import type { PromiseValue } from '../../../src/js-engine/promises';
+import type { PromiseValue } from '../../../src/infra/promises';
 import { endOfIteration } from '../../../src/web-idl/index';
 import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';

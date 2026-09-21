@@ -2,7 +2,7 @@ import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
-import type { PromiseValue } from '../../../src/js-engine/index';
+import type { PromiseValue } from '../../../src/infra/promises';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
   ReadableStreamDefaultReaderImpl, readableStreamReadResultIDL,

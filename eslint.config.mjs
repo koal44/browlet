@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs';
+import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
 
 const runtimeGlobals = [
   { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
@@ -51,7 +52,10 @@ export default defineConfig(
       '@typescript-eslint': tseslint.plugin,
       '@stylistic': stylistic,
       browlet: {
-        rules: { 'web-idl-operation-layout': webIDLOperationLayout },
+        rules: {
+          'web-idl-operation-layout': webIDLOperationLayout,
+          'subsystem-imports': subsystemImports,
+        },
       },
     },
     rules: {
@@ -218,6 +222,16 @@ export default defineConfig(
           regex: '(^|/)web-idl/(?!(?:core/)?index$)',
           message: 'Use web-idl/core/index for declarations or web-idl/index for the full binding API.',
         }],
+      }],
+    },
+  },
+
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'browlet/subsystem-imports': ['error', {
+        unrestrictedSubsystems: ['infra'],
+        entryPoints: { 'web-idl': ['index', 'core/index'] },
       }],
     },
   },

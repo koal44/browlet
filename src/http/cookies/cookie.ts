@@ -1,6 +1,7 @@
 import { asciiLower } from '../../infra/ascii';
-import { hostsEqual, obtainPublicSuffix, parseHost, type Domain, type IPAddress } from '../../url/host';
-import type { URLPath } from '../../url/url';
+import {
+  hostsEqual, obtainPublicSuffix, parseHost, type Domain, type IPAddress, type URLPath,
+} from '../../url/index';
 import { parseCookieDate } from './date';
 
 /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2 */

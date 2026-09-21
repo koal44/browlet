@@ -1,6 +1,7 @@
-import { codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8 } from '../../js-engine/byte-string';
-import type { PromiseValue } from '../../js-engine/promises';
-import type { RuntimeContext } from '../../js-engine/runtime-context';
+import {
+  codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8, type RuntimeContext,
+} from '../../js-engine/index';
+import type { PromiseValue } from '../../infra/promises';
 import { endOfQueue, IOQueue, processQueue, type QueueResult } from '../io-queue';
 
 /** Complete-input convenience for Encoding §6 — UTF-8 decode. */
@@ -193,7 +194,7 @@ export class UTF8Encoder {
 }
 
 /** §7.4 — Write whole scalar values directly into an existing Uint8Array. */
-export { writeUTF8Into as utf8EncodeInto } from '../../js-engine/byte-string';
+export { writeUTF8Into as utf8EncodeInto } from '../../js-engine/index';
 
 function hasBOM(bytes: Uint8Array | number[]): boolean {
   return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;

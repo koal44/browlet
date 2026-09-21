@@ -5,7 +5,7 @@ import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindin
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
 } from '../../../src/streams/index';
-import { RangeError, TypeError } from '../../../src/js-engine/exceptions';
+import { RangeError, TypeError } from '../../../src/infra/exceptions';
 import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
 
 describe('transform-stream implementation', () => {

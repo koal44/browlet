@@ -1,5 +1,5 @@
 import { Buffer, isAscii } from 'node:buffer';
-import { codeUnitsToString } from '../../js-engine/byte-string';
+import { codeUnitsToString } from '../../js-engine/index';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
 
 /** Encoding §14.1 — One error on nonempty input, then finish after the next item. */

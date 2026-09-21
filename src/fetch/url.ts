@@ -1,6 +1,6 @@
 import { HTTPCookie } from '../http/index';
 import { InternalError } from '../infra/internal-error';
-import { serializeURLPath, type URLRecord } from '../url/url';
+import { serializeURLPath, type URLRecord } from '../url/index';
 
 /** Fetch §2.1, local scheme. */
 export function isLocalScheme(scheme: string): boolean {

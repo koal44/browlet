@@ -54,7 +54,7 @@ Infra has no dependency on those records.
 
 Binding's `PromiseProjectionStamper` attaches projection records to source
 promises without adding public properties. The records preserve author Promise
-identity per world, realm, result type, and allocation policy; JS Engine's `PromiseValue`
+identity per world, realm, result type, and allocation policy; Infra's `PromiseValue`
 continues to carry only implementation execution state in its own fields.
 
 ## The actors
@@ -135,10 +135,10 @@ Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
 Composition exposes the required operations through `runtime.buffers` and
 `runtime.promises`, without passing a realm into implementation algorithms.
-JS Engine also owns internal simple-exception requests; their realization into
+Infra owns internal simple-exception requests; their realization into
 realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
-Asynchronous implementations receive JS Engine's `Promises` dependency for
+Asynchronous implementations receive Infra's `Promises` dependency for
 allocation, adoption, and continuation placement. A realm owns one facility;
 Binding supplies it through Runtime Context at construction or operation
 composition. Streams and Blobs retain that context and pass it to derived
@@ -447,9 +447,18 @@ Do not split a declaration from its implementation merely to reproduce the
 document boundary between specifications. Introduce an integration seam only
 for a genuine dependency edge or composition decision.
 
+Cross-subsystem imports go through the owner's index, including type imports.
+Infra is an explicit exception: consumers may select its independent foundation
+modules directly. Internal imports and tests can also use implementation modules
+directly. Narrower entry points, such as `web-idl/core/index`, are deliberate
+subsystem surfaces. ESLint enforces these boundaries across source subsystems.
+Source indexes serve internal composition; package entry points separately
+choose their public exports.
+
 Likewise, group related foundations by their consumers and dependency direction.
 `infra/` contains Infra Standard algorithms and small realm-neutral foundations
-such as text cursors, general utilities, `InternalError` diagnostics, and HTML's parallel queue. Preserve
+such as text cursors, general utilities, `InternalError` diagnostics, exception
+requests, internal Promise values, and HTML's parallel queue. Preserve
 each algorithm's specification provenance; consumers supply host scheduling
 and retain their own policy and lifecycle.
 See the [Infra translation notes](./infra/NOTES.md) for representation and

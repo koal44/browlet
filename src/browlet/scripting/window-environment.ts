@@ -1,8 +1,7 @@
 import { createStructuredClone, createWindowRealm } from '../bindings';
 import { WindowImpl } from '../browsing/window/window';
 import type { UserAgent } from '../user-agent';
-import type { Origin } from '../../url/origin';
-import { serializeURL, type URLRecord } from '../../url/url';
+import { type Origin, serializeURL, type URLRecord } from '../../url/index';
 import type { WindowAgent } from './agents';
 import {
   Environment, setupWindowEnvironmentSettingsObject, type WindowEnvironmentSettingsObject,

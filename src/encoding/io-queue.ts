@@ -1,5 +1,5 @@
-import type { PromiseValue } from '../js-engine/promises';
-import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { PromiseValue } from '../infra/promises';
+import type { RuntimeContext } from '../js-engine/index';
 
 /** Encoding Standard §3 — A persistent end marker, distinct from an empty open queue. */
 export const endOfQueue = Symbol('end-of-queue');

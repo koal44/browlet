@@ -2,8 +2,7 @@ import type { FetchGroup } from './group';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { CookieStore } from '../http/index';
-import type { Origin } from '../url/origin';
-import type { URLRecord } from '../url/url';
+import type { Origin, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 

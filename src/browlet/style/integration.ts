@@ -1,10 +1,10 @@
 import type { ElementImpl } from '../dom/nodes/element';
 import { isText, type NodeImpl } from '../dom/nodes/node';
-import { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
-import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
-import type { TreeScope } from '../../stylelet/engine/tree-scope';
-import type { RuntimeCaps as StyleletRuntimeCaps } from '../../stylelet/stylelet';
-import type { RuntimeContext } from '../../js-engine/runtime-context';
+import {
+  CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
+  type RuntimeCaps as StyleletRuntimeCaps,
+} from '../../stylelet/index';
+import type { RuntimeContext } from '../../js-engine/index';
 import { createDOMException } from '../../web-idl/index';
 import type { Realm } from '../scripting/realm';
 import { domManipulationTaskSource } from '../scripting/tasks';

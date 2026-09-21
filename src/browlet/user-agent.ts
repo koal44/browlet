@@ -3,8 +3,7 @@ import type { TopLevelTraversable } from './browsing/navigable';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
 import { CookieStore } from '../http/index';
-import { areSameOrigin, type Origin, type TupleOrigin } from '../url/origin';
-import { obtainURLOrigin, type URLRecord } from '../url/url';
+import { areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, type URLRecord } from '../url/index';
 import { InternalError } from '../infra/internal-error';
 
 /*

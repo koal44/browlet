@@ -1,4 +1,4 @@
-import type { PromiseValue } from '../js-engine/index';
+import type { PromiseValue } from '../infra/promises';
 import type { AssembledDictionaryDefinition, AssembledInterfaceDefinition } from './assembly';
 import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';

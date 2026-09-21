@@ -1,4 +1,5 @@
-import type { JSFunction, PromiseValue } from '../js-engine/index';
+import type { JSFunction } from '../js-engine/index';
+import type { PromiseValue } from '../infra/promises';
 import type {
   CallbackInterfaceDefinition, InterfaceDefinition, InterfaceMember, NamespaceDefinition,
 } from './core/declarations';

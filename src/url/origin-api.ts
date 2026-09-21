@@ -6,7 +6,7 @@ import {
   areSameOrigin, areSameSite, createOpaqueOrigin, type Origin,
 } from './origin';
 import { obtainURLOrigin, parseURL } from './url';
-import { TypeError } from '../js-engine/exceptions';
+import { TypeError } from '../infra/exceptions';
 
 /*
  * [Exposed=*]

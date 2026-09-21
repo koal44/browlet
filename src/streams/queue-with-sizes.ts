@@ -1,4 +1,4 @@
-import { RangeError } from '../js-engine/exceptions';
+import { RangeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 /** Streams §8.1, a queue that tracks the total size of its values. */

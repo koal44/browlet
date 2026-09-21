@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/js-engine/index';
-import { TypeError as TypeErrorRequest } from '../../src/js-engine/exceptions';
+import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/infra/promises';
+import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import {
   defineInterface, idlType, impl, promise, reference, roAttr,

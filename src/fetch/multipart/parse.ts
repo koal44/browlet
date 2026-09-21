@@ -1,8 +1,7 @@
-import { isomorphicDecode } from '../../js-engine/byte-string';
-import { TypeError } from '../../js-engine/exceptions';
-import { utf8DecodeWithoutBOM } from '../../encoding/codecs/utf-8';
+import { isomorphicDecode, type RuntimeContext } from '../../js-engine/index';
+import { TypeError } from '../../infra/exceptions';
+import { utf8DecodeWithoutBOM } from '../../encoding/index';
 import { FileImpl } from '../../file/index';
-import type { RuntimeContext } from '../../js-engine/index';
 import { toScalarValueString } from '../../infra/index';
 import type { MIMEType } from '../../mime/index';
 import { TextCursor } from '../../infra/text-cursor';

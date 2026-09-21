@@ -1,5 +1,5 @@
-import { isomorphicEncode } from '../js-engine/byte-string';
-import { TypeError } from '../js-engine/exceptions';
+import { isomorphicEncode } from '../js-engine/index';
+import { TypeError } from '../infra/exceptions';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 import {
   collectHTTPQuotedString, isHTTPToken, parseStructuredField, serializeStructuredField,

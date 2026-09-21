@@ -1,5 +1,4 @@
-import type { BlobImpl } from '../file/blob';
-import { FileImpl } from '../file/file';
+import { type BlobImpl, FileImpl } from '../file/index';
 import { toScalarValueString, type ScalarValueString } from '../infra/index';
 import type { RuntimeContext } from '../js-engine/index';
 import {

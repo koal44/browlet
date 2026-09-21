@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '../js-engine/runtime-context';
+import type { RuntimeContext } from '../js-engine/index';
 
 /** Fetch §2, fetch timing info. Timestamps are DOMHighResTimeStamp values. */
 export class FetchTimingInfo {

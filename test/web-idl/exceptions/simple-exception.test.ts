@@ -4,7 +4,7 @@ import { InternalError } from '../../../src/infra/internal-error';
 import {
   RangeError as RangeErrorRequest, SyntaxError as SyntaxErrorRequest,
   TypeError as TypeErrorRequest,
-} from '../../../src/js-engine/exceptions';
+} from '../../../src/infra/exceptions';
 import { TestRealm } from '../test-realm';
 
 describe('Web IDL simple exceptions', () => {

@@ -18,7 +18,7 @@ import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr,
 } from '../../../src/web-idl/index';
-import type { Promises, PromiseValue } from '../../../src/js-engine/index';
+import type { Promises, PromiseValue } from '../../../src/infra/promises';
 
 describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {

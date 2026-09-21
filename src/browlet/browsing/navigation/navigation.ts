@@ -7,8 +7,7 @@ import {
 } from '../policy/coop';
 import type { SandboxingFlagSet } from '../policy/sandbox';
 import type { ReferrerPolicy } from '../../../fetch/index';
-import { areSameOrigin, type Origin } from '../../../url/origin';
-import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
+import { areSameOrigin, type Origin, obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/index';
 import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
 import type { Environment } from '../../scripting/environment';
 import {

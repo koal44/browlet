@@ -1,5 +1,4 @@
-import { hostsEqual } from '../../url/host';
-import type { URLPath } from '../../url/url';
+import { hostsEqual, type URLPath } from '../../url/index';
 import { HTTPCookie, type CookieHost, type CookieSameSite, type StoredHTTPCookie } from './cookie';
 
 /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.1 */

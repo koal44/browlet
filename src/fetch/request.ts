@@ -1,11 +1,13 @@
 import type { BlobImpl } from '../file/index';
 import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
-import type { AbortSignalCapability, PromiseValue, RuntimeContext } from '../js-engine/index';
-import { TypeError } from '../js-engine/exceptions';
-import { isomorphicEncode } from '../js-engine/byte-string';
+import { type AbortSignalCapability, type RuntimeContext, isomorphicEncode } from '../js-engine/index';
+import type { PromiseValue } from '../infra/promises';
+import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
-import { areSameOrigin, areSameSite, serializeOrigin, type Origin } from '../url/origin';
-import { copyURL, obtainURLOrigin, parseURL, serializeURL, type URLRecord } from '../url/url';
+import {
+  areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin, parseURL,
+  serializeURL, type URLRecord,
+} from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,

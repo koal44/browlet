@@ -2,10 +2,9 @@ import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
 import { addon } from '../js-engine/index';
-import { styleletIDLDefinitions } from '../stylelet/web-idl';
+import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
-import { urlIDLDefinitions } from '../url/api';
-import { originIDL } from '../url/origin-api';
+import { urlIDLDefinitions, originIDL } from '../url/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
   BindingWorld, type GlobalObjectAllocation,
