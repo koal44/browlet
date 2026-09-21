@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType } from '../../../src/fetch/http/blocking';
+import {
+  shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff,
+} from '../../../src/fetch/http/blocking';
 import type { Destination } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/url';
@@ -80,5 +82,60 @@ describe('Fetch MIME type blocking', () => {
     expect(shouldBlockDueToMIMEType(response, request)).toBe('allowed');
     response.headerList.list.push(['Content-Type', 'audio/ogg, invalid']);
     expect(shouldBlockDueToMIMEType(response, request)).toBe('blocked');
+  });
+});
+
+describe('Fetch nosniff blocking', () => {
+  it.each<Destination>(['script', 'audioworklet', 'paintworklet', 'serviceworker', 'sharedworker', 'worker'])(
+    'requires a JavaScript MIME type for %s', (destination) => {
+      const request = createFetchRequest();
+      request.destination = destination;
+      const response = new FetchResponse();
+      response.headerList.append('X-Content-Type-Options', 'nosniff');
+      expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
+      for (const type of ['TEXT/JAVASCRIPT;charset=utf-8', 'application/ecmascript', 'text/javascript1.5']) {
+        response.headerList.set('Content-Type', type);
+        expect(shouldBlockDueToNosniff(response, request)).toBe('allowed');
+      }
+      for (const type of ['text/plain', 'text/css', 'application/json', 'application/javascriptx', '*/*', 'invalid']) {
+        response.headerList.set('Content-Type', type);
+        expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
+      }
+    },
+  );
+
+  it('requires CSS for stylesheets and uses the last valid MIME type', () => {
+    const request = createFetchRequest();
+    request.destination = 'style';
+    const response = new FetchResponse();
+    response.headerList.append('X-Content-Type-Options', 'nosniff');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
+    response.headerList.append('Content-Type', 'text/plain');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
+    response.headerList.append('Content-Type', 'TEXT/CSS;charset=utf-8, invalid');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('allowed');
+    response.headerList.append('Content-Type', 'text/javascript');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
+  });
+
+  it.each<Destination>(['', 'image', 'font', 'audio', 'video', 'document', 'json'])(
+    'does not apply this check to %s', (destination) => {
+      const request = createFetchRequest();
+      request.destination = destination;
+      const response = new FetchResponse();
+      response.headerList.append('X-Content-Type-Options', 'nosniff');
+      expect(shouldBlockDueToNosniff(response, request)).toBe('allowed');
+    },
+  );
+
+  it('leaves a script unblocked when nosniff is absent or not the first value', () => {
+    const request = createFetchRequest();
+    request.destination = 'script';
+    const response = new FetchResponse();
+    expect(shouldBlockDueToNosniff(response, request)).toBe('allowed');
+    response.headerList.append('X-Content-Type-Options', 'invalid, nosniff');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('allowed');
+    response.headerList.set('X-Content-Type-Options', 'NOSNIFF, invalid');
+    expect(shouldBlockDueToNosniff(response, request)).toBe('blocked');
   });
 });

@@ -365,10 +365,16 @@ behavior or context ownership was changed by this pass.
 
 The trustworthiness and cookie-core detour and Fetch Slice 6 are complete,
 including Request/Response construction, Referrer Policy's declaration,
-dependent AbortSignals, and HTML's document-base-URL dependency. Resume
-[Fetch Slice 7](ROADMAP.md#slice-7--http-extensions): 7a's cookie header
+dependent AbortSignals, and HTML's document-base-URL dependency.
+[Fetch Slice 7](ROADMAP.md#slice-7--http-extensions) is complete with the
+integration deferrals below; resume [Slice 8](ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes)
+after the bounded test-reliability review. 7a's cookie header
 algorithms and Window ancestry inputs are complete. 7b's Origin headers and
-Referrer Policy algorithms are implemented; proceed to 7c. The srcdoc container
+Referrer Policy algorithms are implemented. 7c's header algorithms and CORP
+checks are implemented. Their `settings.queueReport()` capability currently
+discards reports through an explicitly provisional no-op, approved for this
+stage. The [Reporting roadmap](../browlet/reporting/ROADMAP.md) owns generation,
+queuing, observers, and later Fetch-based network delivery. The srcdoc container
 accessor is provisional, with an expected failing loaded-iframe referrer test.
 The browsing roadmap owns that HTML lifecycle; Fetch and policy roadmaps retain
 its replacement conditions and the later main-fetch/redirect call sites.

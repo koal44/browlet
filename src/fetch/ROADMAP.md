@@ -6,7 +6,8 @@
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
-- **In progress:** [Slice 7 — HTTP extensions](#slice-7--http-extensions): 7a and 7b complete, with srcdoc integration provisional; 7c is next.
+- **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
+- **Next:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes).
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -565,8 +566,9 @@ Return to document order and implement:
 1. Cookie header integration from §3.1, using the cookie subsystem's parsing,
    storage, and retrieval, with browser policy supplied by Browlet.
 2. Origin-header serialization and referrer-policy integration from §3.2.
-3. CORS protocol definitions, safelists, credentials behavior, new-header
-   syntax, and checks from §3.3.
+3. CORS protocol definitions and new-header syntax from §3.3, using §2's
+   safelists. The actual CORS/preflight checks are in §§4.8–4.10, implemented
+   with their network callers in Slice 9.
 4. `Content-Length`, MIME extraction for `Content-Type`, `nosniff`, CORP, and
    `Sec-Purpose` behavior from §§3.4–3.8.
 
@@ -655,13 +657,54 @@ the provisional accessor and expected-failure designation, then cover nested
 srcdoc and containers retained in an inactive predecessor Document. Do not
 substitute the API base URL or `parent.activeDocument`.
 
-**Next: 7c's CORS and remaining header protocols.** Main-fetch and HTTP-redirect
-callers remain in Slices 8–9, including resolving an empty request policy before
-referrer calculation. Element/response policy delivery remains with HTML's loaders.
+Main-fetch and HTTP-redirect callers remain in Slices 8–9, including resolving
+an empty request policy before referrer calculation. Element/response policy
+delivery remains with HTML's loaders.
 
 Validation: the full unit suite passes on all six Node configurations, with
 the authorized srcdoc expected failure and existing expected failures/skips.
 Typecheck and lint pass.
+
+**7c complete, Reporting integration provisional:**
+
+- §3.3's CORS response token-list grammar supplies header-list extraction for
+  Allow-Methods, Allow-Headers, and Expose-Headers. It preserves case and `*`
+  for the later consumer, ignores empty list members, and rejects the whole
+  extraction on malformed syntax. Max-Age uses HTTP's existing delta-seconds
+  parser. Credentials and wildcard interpretation, Allow-Origin comparison,
+  and preflight/cache integration remain at their §4 algorithms in Slice 9.
+- §3.4 Content-Length extraction distinguishes unavailable/unusable values
+  (`undefined`) from conflicting field values (`null`), and returns `bigint`
+  without rounding. Repeated values must match as strings before numeric
+  interpretation. The return mapping has been reviewed and accepted.
+- §3.5 MIME extraction already existed. Legacy encoding extraction now uses
+  the selected charset with Encoding's label lookup and the caller's fallback.
+- §3.6 determines nosniff from the first field value and enforces JavaScript
+  and CSS MIME types for script-like and style destinations respectively.
+- §3.7's CORP internal check handles exact field values, duplicate/invalid
+  fields, same-origin and schemeless same-site comparisons, the HTTPS rule,
+  credentialless, and nested navigation. Policy comparison uses the final URL.
+  Per Eric's reviewed choice, it reuses HTML's site algorithm in URL, including
+  same-IP/different-port cases. A real-navigation probe confirms that Firefox
+  151 and Playwright Windows WebKit 26.5 allow this case; Chromium 149 blocks it.
+- §3.8's `Sec-Purpose: prefetch` uses the existing structured-field token
+  serializer/parser. Setting it belongs to the later HTML prefetch caller.
+
+The outer check and report-producing method live in `response.ts`.
+`isBlockedByCORP()` and `isBlockedByCORPInternal()` return true for blocking;
+`queueCORPViolationReport()` submits the selected endpoint and report body
+through `settings.queueReport()`. Fetch's contract exposes HTML's existing
+enforcing and report-only policy fields. The settings method is an explicitly
+provisional no-op, approved for this stage; the [Reporting roadmap](../browlet/reporting/ROADMAP.md)
+owns replacing it with report generation, queues, observers, and delivery.
+Tests with a reporting spy verify Fetch's decisions, not real report generation.
+
+Focused coverage is in `test/fetch/headers.test.ts`,
+`test/fetch/http/blocking.test.ts`, and `test/fetch/http/corp.test.ts`.
+The focused tests supply the Reporting capability to verify Fetch's decision,
+report-only/enforcing behavior, endpoint selection, ordering, and URL stripping.
+The six Node variants, typecheck, and repository-wide lint cover the completed
+contracts; passing them does not clear the provisional Reporting integration.
 
 **Exit proof:** every Fetch §3 header protocol and check is either executable
 or stops at a named external-policy/storage capability with its inputs fully

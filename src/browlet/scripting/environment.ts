@@ -79,6 +79,12 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
     return this.creationURL;
   }
 
+  /** Submit a report for this environment; currently discards reports pending Reporting integration. */
+  // https://w3c.github.io/reporting/#generate-report
+  queueReport(_type: string, _endpoint: string, _body: Record<string, string>): void {
+    // PROVISIONAL: ../reporting/ROADMAP.md owns report generation, queues, observers, and delivery.
+  }
+
   /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
   webDriverBiDiNetworkIsOffline(): boolean {
     // PROVISIONAL: no BiDi sessions; replace with the environment's scoped network-condition lookup.

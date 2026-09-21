@@ -28,6 +28,8 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   webDriverBiDiNetworkIsOffline(): boolean;
   /** Client's live policy container, exposing the policies currently consumed by Fetch. */
   policyContainer: FetchPolicyContainer;
+  /** Submit a report for this client using the string-valued body fields produced by Fetch. */
+  queueReport(type: string, endpoint: string, body: Record<string, string>): void;
 };
 
 /** Prompt destination, exposing what Request construction currently needs. */
@@ -42,11 +44,20 @@ export type FetchPolicyContainer = {
   /** Cross-origin embedder policy applied by the client. */
   embedderPolicy: {
     /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
-    value: 'unsafe-none' | 'require-corp' | 'credentialless';
+    value: FetchEmbedderPolicyValue;
+    /** Endpoint name for violations of the enforced policy. */
+    reportingEndpoint: string;
+    /** COEP mode checked for reporting without blocking responses. */
+    reportOnlyValue: FetchEmbedderPolicyValue;
+    /** Endpoint name for violations of the report-only policy. */
+    reportOnlyReportingEndpoint: string;
   };
   /** Default referrer disclosure policy inherited by requests. */
   referrerPolicy: ReferrerPolicy;
 };
+
+// https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy-value
+export type FetchEmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';
 
 // https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
 export type ReferrerPolicy = '' | 'no-referrer' | 'no-referrer-when-downgrade' | 'same-origin' |

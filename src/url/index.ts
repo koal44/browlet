@@ -5,7 +5,7 @@ export {
   type URLPath, type URLRecord,
 } from './url';
 export {
-  areSameOrigin, areSameOriginDomain, areSameSite, createOpaqueOrigin, isOrigin,
+  areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, createOpaqueOrigin, isOrigin,
   obtainSite, serializeOrigin, serializeSite, sitesAreSameSite,
   type Origin, type Site, type TupleOrigin,
 } from './origin';

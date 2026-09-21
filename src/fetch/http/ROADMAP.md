@@ -11,6 +11,10 @@ Slice 5 adds authentication records, IP/localhost resolution, connection reuse,
 network partition derivation, cache partition identities, and port/MIME blocking.
 Header lists and MIME extraction live in `../headers.ts`. New connections, cache
 response storage, HTTP transactions, and the transport adapter remain planned.
+Slice 7 adds cookie/Origin integration, CORS token-list syntax, Content-Length,
+legacy encoding extraction, and nosniff blocking. CORP checks and violation
+submission are on FetchResponse; report generation remains behind the
+settings object's provisional Reporting hook.
 
 ## Sources
 
@@ -34,7 +38,7 @@ belongs to the transport, not another parser in this folder.
 | --- | --- | --- |
 | Fetch classifications (`methods.ts`, `ranges.ts`, `statuses.ts`) | Parent Slice 2, then the consuming transactions | CORS/forbidden methods, method normalization, single-range parsing, and Fetch status classifications. Reuse HTTP's syntax; header-list state and public Headers stay with the parent |
 | Authentication entries and partitions | Parent Slice 5 | Fetch owns keys/records; Browlet supplies client/top-level state and actual credential/store/pool instances |
-| §3 header protocols | Parent Slice 7; MIME extraction brought forward in Slice 5 | Origin, CORS, Content-Length, MIME extraction, nosniff, CORP, and Sec-Purpose remain Fetch algorithms |
+| §3 header protocols | Parent Slice 7; algorithms implemented | CORP uses a provisional Reporting hook; §4 CORS/preflight checks belong to Slice 9 |
 | Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../http/cookies/ROADMAP.md); Fetch computes its browser inputs and credentials decisions |
 | Browser policy | Main Fetch and redirects | Call the [policy owner](../../browlet/browsing/policy/ROADMAP.md); do not reimplement its language or infer an HTML environment from Node globals |
 | Cache transactions | §4.6 | Follow the [cache roadmap](cache/ROADMAP.md) |

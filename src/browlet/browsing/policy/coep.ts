@@ -1,3 +1,5 @@
+import type { FetchEmbedderPolicyValue } from '../../../fetch/index';
+
 /** https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy */
 export function createEmbedderPolicy(): EmbedderPolicy {
   return {
@@ -15,4 +17,4 @@ export type EmbedderPolicy = {
   reportOnlyReportingEndpoint: string;
 };
 
-export type EmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';
+export type EmbedderPolicyValue = FetchEmbedderPolicyValue;

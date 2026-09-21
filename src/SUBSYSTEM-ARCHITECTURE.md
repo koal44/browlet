@@ -400,6 +400,12 @@ inputs, not additions to RuntimeContext. Dependent-signal construction does belo
 to the runtime: Browlet allocates the signal in that owner and calls DOM's
 existing dependency algorithm, without a parallel Fetch-owned signal graph.
 
+Fetch's CORP check submits violations through the actual settings object's
+`queueReport()` capability. Browlet connects that recipient to Reporting's
+document/worker lifecycle and global-owned observer state; Fetch supplies
+the report type, endpoint name, and body without receiving the global itself.
+This dependency belongs to Reporting, not RuntimeContext.
+
 `serialize(value)` captures a value using the source runtime;
 `deserialize(record)` reconstructs it in the destination runtime's realm.
 Consumers retain the record opaquely; HTML owns its representation. Fetch uses

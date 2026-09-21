@@ -17,7 +17,13 @@ export function createClientSettings(url = 'https://example.test/'): FetchEnviro
     topLevelOrigin: obtainURLOrigin(topLevelCreationURL),
     topLevelCreationURL,
     webDriverBiDiNetworkIsOffline: () => false,
-    policyContainer: { embedderPolicy: { value: 'unsafe-none' }, referrerPolicy: 'strict-origin-when-cross-origin' },
+    policyContainer: {
+      embedderPolicy: {
+        value: 'unsafe-none', reportingEndpoint: '', reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '',
+      },
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    },
+    queueReport() {},
   };
 }
 

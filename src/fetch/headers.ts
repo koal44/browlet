@@ -1,4 +1,5 @@
 import { isomorphicEncode } from '../js-engine/index';
+import { getEncoding, type Encoding } from '../encoding/index';
 import { TypeError } from '../infra/exceptions';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 import {
@@ -144,6 +145,17 @@ export class FetchHeaders {
     return value === null ? null : getDecodeAndSplitHeaderValue(value);
   }
 
+  /** Extract a length; undefined means absent/unusable, and null means conflicting values. */
+  // https://fetch.spec.whatwg.org/#extract-a-length
+  extractLength(): bigint | undefined | null {
+    const values = this.getDecodeAndSplit('Content-Length');
+    if (values === null) return undefined;
+    const candidate = values[0]!;
+    if (values.some((value) => value !== candidate)) return null;
+    if (candidate === '' || nonDigitPattern.test(candidate)) return undefined;
+    return BigInt(candidate);
+  }
+
   /** Extract Content-Type, preserving charset across repeated matching MIME types. */
   // https://fetch.spec.whatwg.org/#concept-header-extract-mime-type
   extractMIMEType(): MIMEType | null {
@@ -167,6 +179,12 @@ export class FetchHeaders {
       }
     }
     return mimeType;
+  }
+
+  /** Require MIME checking only when the first field value is nosniff, ignoring ASCII case. */
+  // https://fetch.spec.whatwg.org/#determine-nosniff
+  determineNosniff(): boolean {
+    return this.getDecodeAndSplit('X-Content-Type-Options')?.[0]?.toLowerCase() === 'nosniff';
   }
 
   /** Undefined means absent; null means invalid syntax or disallowed multiplicity. */
@@ -350,11 +368,31 @@ export function getDecodeAndSplitHeaderValue(value: string): string[] {
       temporaryValue += collectHTTPQuotedString(position);
       if (!position.eof()) continue;
     }
-    values.push(temporaryValue.replace(/^[ \t]+|[ \t]+$/g, ''));
+    values.push(temporaryValue.replace(surroundingHTTPWhitespace, ''));
     temporaryValue = '';
     if (position.eof()) return values;
     position.advance();
   }
+}
+
+/** Parse the CORS Allow-Methods, Allow-Headers, and Expose-Headers token-list grammar. */
+// https://fetch.spec.whatwg.org/#http-new-header-syntax
+export function parseCORSTokenList(value: string): string[] | null {
+  const tokens: string[] = [];
+  for (const member of value.split(',')) {
+    const token = member.replace(surroundingHTTPWhitespace, '');
+    if (token === '') continue;
+    if (!isHTTPToken(token)) return null;
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+/** Select the charset's encoding, retaining the fallback when it is absent or unrecognized. */
+// https://fetch.spec.whatwg.org/#legacy-extract-an-encoding
+export function legacyExtractEncoding(mimeType: MIMEType | null, fallbackEncoding: Encoding): Encoding {
+  const charset = mimeType?.parameters.get('charset');
+  return charset === undefined ? fallbackEncoding : getEncoding(charset) ?? fallbackEncoding;
 }
 
 export function convertHeaderNamesToSortedLowercaseSet(names: string[]): string[] {
@@ -455,6 +493,9 @@ export function getEnvironmentDefaultUserAgent(defaultValue: string, emulatedVal
 }
 
 export const documentAcceptHeaderValue = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
+const nonDigitPattern = /[^0-9]/;
+const surroundingHTTPWhitespace = /^[ \t]+|[ \t]+$/g;
 
 const corsSafelistedResponseHeaderNames = new Set([
   'cache-control', 'content-language', 'content-length', 'content-type', 'expires', 'last-modified', 'pragma',

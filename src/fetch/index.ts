@@ -14,7 +14,7 @@ export { ConnectionPool } from './http/connections';
 export { HTTPCachePartitions } from './http/cache/partitions';
 export type {
   FetchEnvironmentSettingsObject, FetchEnvironment, FetchUserAgent,
-  FetchPolicyContainer, FetchPromptTarget, ReferrerPolicy,
+  FetchPolicyContainer, FetchPromptTarget, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './infrastructure';
 export { fetchEnvironmentSettingsObject } from './infrastructure';
 export { requestIDL, type FetchRequest } from './request';

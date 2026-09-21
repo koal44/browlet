@@ -5,7 +5,10 @@ import type { PromiseValue } from '../infra/promises';
 import type { RuntimeContext } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
-import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/index';
+import {
+  areSameOrigin, areSchemelesslySameSite, copyURL, obtainURLOrigin, parseURL, serializeURL,
+  type Origin, type URLRecord,
+} from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
@@ -18,7 +21,9 @@ import {
   isForbiddenResponseHeaderName, type HeadersGuard, type HeadersInitValue,
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
-import { getFetchEnvironmentSettingsObject } from './infrastructure';
+import {
+  getFetchEnvironmentSettingsObject, type FetchEmbedderPolicyValue, type FetchEnvironmentSettingsObject,
+} from './infrastructure';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
@@ -194,6 +199,59 @@ export class FetchResponse {
       userAgent.cookieStore.parseAndStoreCookie(value, scheme === 'https', host, path, true, false, sameSiteStrictOrLaxAllowed);
       userAgent.cookieStore.garbageCollectCookies(host);
     }
+  }
+
+  /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
+  // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
+  isBlockedByCORP(
+    origin: Origin, settings: FetchEnvironmentSettingsObject, destination: string, forNavigation = false,
+  ): boolean {
+    const policy = settings.policyContainer.embedderPolicy;
+    if (this.isBlockedByCORPInternal(origin, 'unsafe-none', forNavigation)) {
+      return true;
+    }
+    if (this.isBlockedByCORPInternal(origin, policy.reportOnlyValue, forNavigation)) {
+      this.queueCORPViolationReport(settings, destination, true);
+    }
+    if (!this.isBlockedByCORPInternal(origin, policy.value, forNavigation)) {
+      return false;
+    }
+    this.queueCORPViolationReport(settings, destination, false);
+    return true;
+  }
+
+  /** Whether CORP blocks this response under one embedder policy, without reporting violations. */
+  // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-internal-check
+  isBlockedByCORPInternal(
+    origin: Origin, embedderPolicyValue: FetchEmbedderPolicyValue, forNavigation: boolean,
+  ): boolean {
+    if (forNavigation && embedderPolicyValue === 'unsafe-none') return false;
+    let policy = this.headerList.get('Cross-Origin-Resource-Policy');
+    if (policy !== 'same-origin' && policy !== 'same-site' && policy !== 'cross-origin') policy = null;
+    if (policy === null && (embedderPolicyValue === 'require-corp' ||
+      (embedderPolicyValue === 'credentialless' && (this.requestIncludesCredentials || forNavigation)))) {
+      policy = 'same-origin';
+    }
+    if (policy === null || policy === 'cross-origin') return false;
+    const url = this.url;
+    if (url === null) throw new InternalError('CORP origin comparison requires a response URL');
+    const responseOrigin = obtainURLOrigin(url);
+    if (policy === 'same-origin') return !areSameOrigin(origin, responseOrigin);
+    return origin.kind !== 'tuple' || !areSchemelesslySameSite(origin, responseOrigin) ||
+      (origin.scheme !== 'https' && url.scheme === 'https');
+  }
+
+  /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
+  // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
+  queueCORPViolationReport(
+    settings: FetchEnvironmentSettingsObject, destination: string, reportOnly: boolean,
+  ): void {
+    const policy = settings.policyContainer.embedderPolicy;
+    const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
+    settings.queueReport('coep', endpoint, {
+      type: 'corp', blockedURL: this.serializeURLForReporting(), destination,
+      disposition: reportOnly ? 'reporting' : 'enforce',
+    });
   }
 }
 

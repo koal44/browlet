@@ -317,7 +317,9 @@ describe('Fetch request COEP credentials', () => {
     'unsafe-none', 'require-corp',
   ])('does not restrict credentials under %s', (value) => {
     const request = createFetchRequest(foreign, {
-      ...client, policyContainer: { ...client.policyContainer, embedderPolicy: { value } },
+      ...client, policyContainer: {
+        ...client.policyContainer, embedderPolicy: { ...client.policyContainer.embedderPolicy, value },
+      },
     });
     request.origin = obtainURLOrigin(parseURL(home).url!);
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);

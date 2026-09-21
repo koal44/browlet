@@ -245,8 +245,13 @@ Current implementation sequence:
    the [cookie core](../http/cookies/ROADMAP.md) are implemented.
    Fetch 7a is complete. 7b's Origin and Referrer Policy algorithms are
    implemented, with a provisional srcdoc container accessor and an expected
-   failing iframe integration test. Proceed to 7c's CORS and remaining headers;
-   complete the container relationship with HTML's child-navigable lifecycle.
+   failing iframe integration test. 7c's header algorithms and CORP checks are
+   implemented. Their settings-owned Reporting hook is provisionally a no-op;
+   the [Reporting roadmap](reporting/ROADMAP.md) owns its replacement with
+   report generation, queues, observers, and later Fetch-based delivery.
+   Slice 7 is complete with those integration deferrals; Slice 8 is next after
+   the bounded review of test reliability and compiler-test costs.
+   Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.
    Resolve remaining [preflight dependencies](../fetch/PREFLIGHT.md#work-order)

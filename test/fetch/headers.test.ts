@@ -7,12 +7,12 @@ import {
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
   isForbiddenResponseHeaderName, isHeaderName, isHeaderValue, isNoCORSSafelistedRequestHeader,
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
-  normalizeHeaderValue,
+  legacyExtractEncoding, normalizeHeaderValue, parseCORSTokenList,
 } from '../../src/fetch/headers';
 import {
   parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
 } from '../../src/http/index';
-import { serializeMIMEType } from '../../src/mime/index';
+import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchRequest } from './fetch-fixture';
@@ -310,6 +310,63 @@ describe('structured fields over Fetch headers', () => {
   });
 });
 
+describe('CORS response token lists (Fetch §3.3.4)', () => {
+  it.each(['Access-Control-Allow-Methods', 'Access-Control-Allow-Headers', 'Access-Control-Expose-Headers'])(
+    'extracts %s without changing case or assigning wildcard meaning', (name) => {
+      const headers = new FetchHeaders([[name, 'GET, x-Custom'], [name.toLowerCase(), '\t*, GET ']]);
+      expect(headers.extractValues(name, parseCORSTokenList, true)).toEqual(['GET', 'x-Custom', '*', 'GET']);
+      expect(new FetchHeaders().extractValues(name, parseCORSTokenList, true)).toBeUndefined();
+    },
+  );
+
+  it('accepts empty list elements and HTTP token punctuation', () => {
+    expect(parseCORSTokenList('')).toEqual([]);
+    expect(parseCORSTokenList(', \t,')).toEqual([]);
+    expect(parseCORSTokenList(", GET ,, !#$%&'*+-.^_`|~09AZaz, ")).toEqual(['GET', "!#$%&'*+-.^_`|~09AZaz"]);
+  });
+
+  it.each(['bad name', '"GET"', 'name:value', 'name/value', 'é', 'X\r', 'X\n', '\vX', '\fX'])(
+    'rejects the whole list containing %j', (invalid) => {
+      const headers = new FetchHeaders([['Access-Control-Allow-Headers', 'X-Good'],
+        ['Access-Control-Allow-Headers', `X-Other, ${invalid}`]]);
+      expect(headers.extractValues('Access-Control-Allow-Headers', parseCORSTokenList, true)).toBeNull();
+    },
+  );
+});
+
+describe('Content-Length extraction (Fetch §3.4)', () => {
+  it.each<[string, bigint]>([
+    ['0', 0n], ['42', 42n], ['00042', 42n], [' \t42\t ', 42n], ['42, 42', 42n],
+    ['9007199254740993', 9007199254740993n], ['18446744073709551616', 18446744073709551616n],
+  ])('extracts %j without integer rounding', (value, expected) => {
+    expect(new FetchHeaders([['Content-Length', value]]).extractLength()).toBe(expected);
+  });
+
+  it('compares repeated field values and preserves the list', () => {
+    const headers = new FetchHeaders([['Content-Length', '42'], ['content-length', ' 42 ']]);
+    expect(headers.extractLength()).toBe(42n);
+    expect(headers.list).toEqual([['Content-Length', '42'], ['content-length', ' 42 ']]);
+    headers.append('CONTENT-LENGTH', '43');
+    expect(headers.extractLength()).toBeNull();
+  });
+
+  it('returns no usable length when the field is absent', () => {
+    expect(new FetchHeaders().extractLength()).toBeUndefined();
+  });
+
+  it.each(['', ' ', 'ten', '-1', '+1', '1.0', '1e3', '0x10', '"42"', '4 2', '４２', '42\n', ','])(
+    'returns no usable length for %j', (value) => {
+      expect(new FetchHeaders([['Content-Length', value]]).extractLength()).toBeUndefined();
+    },
+  );
+
+  it.each(['42,43', '042,42', ',42', '42,', 'bad,42', '42,bad', '"42,42",42'])(
+    'fails conflicting values %j before numeric interpretation', (value) => {
+      expect(new FetchHeaders([['Content-Length', value]]).extractLength()).toBeNull();
+    },
+  );
+});
+
 describe('Content-Type extraction (Fetch §3.5)', () => {
   it.each([
     ['text/plain;charset=gbk, text/html', 'text/html'],
@@ -337,6 +394,60 @@ describe('Content-Type extraction (Fetch §3.5)', () => {
     expect(serializeMIMEType(mimeType)).toBe('text/html;x=y;charset=gbk');
     expect(headers.list).toEqual(before);
     expect(new FetchHeaders().extractMIMEType()).toBeNull();
+  });
+});
+
+describe('legacy encoding extraction (Fetch §3.5)', () => {
+  it.each([
+    ['utf8', 'UTF-8'], ['ISO-8859-1', 'windows-1252'], [' Shift_JIS ', 'Shift_JIS'],
+    ['UTF-16', 'UTF-16LE'], ['replacement', 'replacement'],
+  ])('resolves the charset label %j', (label, expected) => {
+    const mimeType = parseMIMEType(`text/plain;charset="${label}"`);
+    expect(legacyExtractEncoding(mimeType, 'UTF-8')).toBe(expected);
+  });
+
+  it.each([null, 'text/plain', 'text/plain;charset=""', 'text/plain;charset=unknown'])(
+    'retains the caller fallback for %j', (value) => {
+      const mimeType = value === null ? null : parseMIMEType(value);
+      expect(legacyExtractEncoding(mimeType, 'windows-1252')).toBe('windows-1252');
+    },
+  );
+
+  it('uses the charset selected across repeated Content-Type fields', () => {
+    const headers = new FetchHeaders([['Content-Type', 'text/html;charset=gbk, text/html']]);
+    expect(legacyExtractEncoding(headers.extractMIMEType(), 'UTF-8')).toBe('GBK');
+  });
+});
+
+describe('nosniff detection (Fetch §3.6)', () => {
+  it.each(['nosniff', 'NoSnIfF', '\tNOSNIFF ', 'nosniff, invalid'])(
+    'recognizes the first value in %j', (value) => {
+      expect(new FetchHeaders([['x-content-type-options', value]]).determineNosniff()).toBe(true);
+    },
+  );
+
+  it.each(['', 'invalid, nosniff', ', nosniff', '"nosniff"', 'nosniff;other', 'nosniffx'])(
+    'does not recognize %j', (value) => {
+      expect(new FetchHeaders([['X-Content-Type-Options', value]]).determineNosniff()).toBe(false);
+    },
+  );
+
+  it('uses field order, including an empty first value, and treats absence as false', () => {
+    expect(new FetchHeaders().determineNosniff()).toBe(false);
+    const headers = new FetchHeaders([['X-Content-Type-Options', ''], ['x-content-type-options', 'nosniff']]);
+    expect(headers.determineNosniff()).toBe(false);
+    headers.list.reverse();
+    expect(headers.determineNosniff()).toBe(true);
+  });
+});
+
+describe('Sec-Purpose (Fetch §3.8)', () => {
+  it('uses a structured-field token for prefetch', () => {
+    const headers = new FetchHeaders();
+    const prefetch = structuredItem({ type: 'token', value: 'prefetch' });
+    headers.setStructuredFieldValue('Sec-Purpose', prefetch);
+    expect(headers.get('Sec-Purpose')).toBe('prefetch');
+    expect(headers.getStructuredFieldValue('Sec-Purpose', 'item')).toEqual(prefetch);
   });
 });
 

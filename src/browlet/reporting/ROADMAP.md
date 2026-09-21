@@ -9,6 +9,13 @@ owns the shared lifecycle.
 **Status:** planned. Policy placeholders and console logging do not implement
 report generation or delivery.
 
+Fetch 7c has reached the first concrete consumer: COEP's CORP violation reports.
+FetchResponse implements the policy checks and submits violations through
+`settings.queueReport()`. EnvironmentSettingsObject currently discards those
+reports through an explicitly provisional no-op, approved for this stage.
+Replace that method with real generation and queuing during step 2 below;
+network delivery still needs the later Fetch pipeline.
+
 ## Sources and dependencies
 
 Local source: `w3c-reporting/index.bs` under the
@@ -21,6 +28,16 @@ URL parsing, and the [policy owner's](../browsing/policy/ROADMAP.md)
 trustworthiness operation. Globals own endpoint/report state as specified;
 HTML supplies settings, lifecycle, and task delivery. The current
 document-centered reports follow their document/worker lifetime.
+
+Before implementing that ownership, reconcile the current text: Fetch's CORP
+report algorithm passes a global, Reporting §3.4.1 accepts a Document/worker,
+and Reporting §3.1 declares the queues on WindowOrWorkerGlobalScope. Keep this
+adaptation within Browlet rather than exposing DOM ownership details to Fetch.
+The actual settings object already reaches its global through
+`realmExecutionContext.realm.globalObject`; Fetch does not need that field in
+its narrowed contract. Queued report records are distinct from HTML tasks:
+observer callbacks require task delivery, while network delivery batches
+pending reports according to the user agent's schedule.
 
 ## Implementation order
 

@@ -1,4 +1,4 @@
-import { getMIMETypeEssence } from '../../mime/index';
+import { getMIMETypeEssence, isJavaScriptMIMEType } from '../../mime/index';
 import { isScriptLikeDestination, type FetchRequest } from '../request';
 import type { FetchResponse } from '../response';
 import { isHTTPScheme } from '../url';
@@ -18,6 +18,20 @@ export function shouldBlockDueToMIMEType(response: FetchResponse, request: Fetch
     essence.startsWith('audio/') || essence.startsWith('image/') ||
     essence.startsWith('video/') || essence === 'text/csv'
   )) return 'blocked';
+  return 'allowed';
+}
+
+/** Block script-like and style responses whose declared MIME type violates nosniff. */
+// https://fetch.spec.whatwg.org/#should-response-to-request-be-blocked-due-to-nosniff?
+export function shouldBlockDueToNosniff(response: FetchResponse, request: FetchRequest): 'blocked' | 'allowed' {
+  if (!response.headerList.determineNosniff()) return 'allowed';
+  const mimeType = response.headerList.extractMIMEType();
+  if (isScriptLikeDestination(request.destination) && (mimeType === null || !isJavaScriptMIMEType(mimeType))) {
+    return 'blocked';
+  }
+  if (request.destination === 'style' && (mimeType === null || getMIMETypeEssence(mimeType) !== 'text/css')) {
+    return 'blocked';
+  }
   return 'allowed';
 }
 
