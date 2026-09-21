@@ -1,16 +1,22 @@
-import type { BlobImpl } from '../file/index';
+import { utf8Decode, utf8Encode } from '../encoding/codecs/utf-8';
+import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
+import { BlobData, BlobImpl } from '../file/index';
 import { ParallelQueue } from '../infra/parallel-queue';
 import {
-  type GlobalObject, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
+  type GlobalObject, type PromiseValue, type RuntimeContext, getBufferSourceCopy, getBufferTypeName,
 } from '../js-engine/index';
 import { TypeError } from '../js-engine/exceptions';
+import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
-import type { URLSearchParamsImpl } from '../url/api';
+import { URLSearchParamsImpl } from '../url/api';
+import { parseFormUrlEncoded } from '../url/form-url-encoded';
 import {
-  defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
+  allocateIn, defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
   union, xattr,
 } from '../web-idl/index';
-import type { FormDataImpl } from '../xhr/index';
+import { FormDataImpl, type FormDataEntry } from '../xhr/index';
+import { encodeMultipartFormData } from './multipart/encode';
+import { parseMultipartFormData } from './multipart/parse';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
 import { queueFetchTask } from './tasks';
@@ -41,6 +47,40 @@ export class FetchBody {
     body.source = bytes;
     body.length = bytes.length;
     return body;
+  }
+
+  /** Extract a converted BodyInit value, retaining its replay source and inferred Content-Type. */
+  // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
+  // Internal byte sequences use fromBytes(); a BodyInit BufferSource must be copied.
+  static extract(object: BodyInitValue, keepalive = false, runtime: RuntimeContext): BodyWithType {
+    if (object instanceof ReadableStreamImpl) {
+      if (keepalive) throw new TypeError('A keepalive request cannot have a streaming body');
+      if (object.disturbed || object.locked) throw new TypeError('Body stream is disturbed or locked');
+      return { body: new FetchBody(object, runtime), type: null };
+    }
+    if (object instanceof BlobImpl) {
+      const body = new FetchBody(object.stream(), runtime);
+      body.source = object;
+      body.length = object.size;
+      return { body, type: object.type || null };
+    }
+    if (object instanceof FormDataImpl) {
+      const { boundary, data } = encodeMultipartFormData(object.getEntryList(), 'UTF-8');
+      const body = new FetchBody(data.stream(runtime), runtime);
+      body.source = object;
+      body.length = data.size;
+      return { body, type: `multipart/form-data; boundary=${boundary}` };
+    }
+    if (object instanceof URLSearchParamsImpl) {
+      return {
+        body: FetchBody.fromBytes(utf8Encode(object.toString()), runtime),
+        type: 'application/x-www-form-urlencoded;charset=UTF-8',
+      };
+    }
+    if (typeof object === 'string') {
+      return { body: FetchBody.fromBytes(utf8Encode(object), runtime), type: 'text/plain;charset=UTF-8' };
+    }
+    return { body: FetchBody.fromBytes(getBufferSourceCopy(object), runtime), type: null };
   }
 
   clone(): FetchBody {
@@ -88,13 +128,13 @@ export class FetchBody {
 
   /** Fetch §2.2.4, fully read a body. */
   fullyRead(
-    processBody: (bytes: Uint8Array) => void,
+    processBody: (bytes: Uint8Array<ArrayBuffer>) => void,
     processBodyError: (error?: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
     const runtime = this.#runtime;
     const destination = taskDestination ?? new ParallelQueue(runtime.networking.runInParallel);
-    const successSteps = (bytes: Uint8Array) =>
+    const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
       queueFetchTask(() => processBody(bytes), destination, runtime);
     const errorSteps = (error?: unknown) =>
       queueFetchTask(() => processBodyError(error), destination, runtime);
@@ -152,55 +192,114 @@ export function handleContentCodings(
  */
 export class BodyMixin {
   #record: FetchRequest | FetchResponse;
+  #runtime: RuntimeContext;
 
   // Read the includer's current body and headers, including replacements.
-  constructor(record: FetchRequest | FetchResponse) {
+  constructor(record: FetchRequest | FetchResponse, runtime: RuntimeContext) {
     this.#record = record;
+    this.#runtime = runtime;
   }
 
+  // https://fetch.spec.whatwg.org/#dom-body-body
   get body(): ReadableStreamImpl | null {
-    return this.#bodyRecord()?.stream ?? null;
+    return this.#getBody()?.stream ?? null;
   }
 
+  // https://fetch.spec.whatwg.org/#dom-body-bodyused
   get bodyUsed(): boolean {
-    const body = this.#bodyRecord();
+    const body = this.#getBody();
     return body !== null && body.stream.disturbed;
   }
 
+  // https://fetch.spec.whatwg.org/#body-unusable
   get unusable(): boolean {
-    const body = this.#bodyRecord();
+    const body = this.#getBody();
     return body !== null && (body.stream.disturbed || body.stream.locked);
   }
 
-  arrayBuffer(): object {
-    throw new Error('Body.arrayBuffer is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-arraybuffer
+  // The binding allocates the ArrayBuffer from these bytes in the receiver realm.
+  arrayBuffer(): PromiseValue<Uint8Array> {
+    return this.#consume((bytes) => bytes);
   }
 
-  blob(): object {
-    throw new Error('Body.blob is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-blob
+  blob(): PromiseValue<BlobImpl> {
+    return this.#consume((bytes) => {
+      const type = this.#record.headerList.extractMIMEType();
+      const data = BlobData.fromOwnedBytes(bytes);
+      return BlobImpl.create(data, type === null ? '' : serializeMIMEType(type), undefined, this.#runtime);
+    });
   }
 
-  bytes(): object {
-    throw new Error('Body.bytes is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-bytes
+  bytes(): PromiseValue<Uint8Array> {
+    return this.#consume((bytes) => bytes);
   }
 
-  formData(): object {
-    throw new Error('Body.formData is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-formdata
+  formData(): PromiseValue<FormDataImpl> {
+    return this.#consume((bytes) => {
+      const type = this.#record.headerList.extractMIMEType();
+      if (type?.type === 'multipart' && type.subtype === 'form-data') {
+        return FormDataImpl.fromEntries(
+          parseMultipartFormData(bytes, type, this.#runtime), this.#runtime,
+        );
+      }
+      if (type?.type === 'application' && type.subtype === 'x-www-form-urlencoded') {
+        // URL's parser UTF-8-decodes both strings, so they are already scalar values.
+        const entries = parseFormUrlEncoded(bytes) as FormDataEntry[];
+        return FormDataImpl.fromEntries(entries, this.#runtime);
+      }
+      throw new TypeError('Body Content-Type is not multipart/form-data or application/x-www-form-urlencoded');
+    });
   }
 
-  json(): object {
-    throw new Error('Body.json is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-json
+  // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
+  json(): PromiseValue<unknown> {
+    return this.#consume((bytes) => this.#runtime.parseJSON(utf8Decode(bytes)));
   }
 
-  text(): object {
-    throw new Error('Body.text is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-body-text
+  text(): PromiseValue<string> {
+    return this.#consume(utf8Decode);
   }
 
+  // https://fetch.spec.whatwg.org/#dom-body-textstream
   textStream(): ReadableStreamImpl {
-    throw new Error('Body.textStream is not implemented');
+    if (this.unusable) throw new TypeError('Body is disturbed or locked');
+    const body = this.#getBody();
+    if (body === null) {
+      const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, this.#runtime);
+      stream.close();
+      return stream;
+    }
+    const decoder = new TextDecoderStreamImpl(
+      'utf-8', { fatal: false, ignoreBOM: false }, this.#runtime,
+    );
+    return body.stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
 
-  #bodyRecord(): FetchBody | null {
+  // https://fetch.spec.whatwg.org/#concept-body-consume-body
+  #consume<Result>(convert: (bytes: Uint8Array<ArrayBuffer>) => Result): PromiseValue<Result> {
+    const { promises } = this.#runtime;
+    if (this.unusable) return promises.reject(new TypeError('Body is disturbed or locked'));
+    const result = promises.withResolvers<Result>();
+    const success = (bytes: Uint8Array<ArrayBuffer>) => {
+      try {
+        result.resolve(convert(bytes));
+      } catch (error) {
+        result.reject(error);
+      }
+    };
+    const body = this.#getBody();
+    if (body === null) success(new Uint8Array());
+    else body.fullyRead(success, result.reject, this.#runtime.global);
+    return result.promise;
+  }
+
+  #getBody(): FetchBody | null {
     const body = this.#record.body;
     if (body !== null && !(body instanceof FetchBody)) {
       throw new Error('Fetch request body bytes must be extracted before API use');
@@ -233,9 +332,9 @@ export const bodyIDL = defineInterfaceMixin({
   members: [
     roAttr('body', nullable(reference('ReadableStream'))),
     roAttr('bodyUsed', idlType.boolean),
-    op('arrayBuffer', promise(idlType.ArrayBuffer), [], xattr('NewObject')),
+    op('arrayBuffer', promise(idlType.ArrayBuffer), [], { ...xattr('NewObject'), ...allocateIn('receiver') }),
     op('blob', promise(reference('Blob')), [], xattr('NewObject')),
-    op('bytes', promise(idlType.Uint8Array), [], xattr('NewObject')),
+    op('bytes', promise(idlType.Uint8Array), [], { ...xattr('NewObject'), ...allocateIn('receiver') }),
     op('formData', promise(reference('FormData')), [], xattr('NewObject')),
     op('json', promise(idlType.any), [], xattr('NewObject')),
     op('text', promise(idlType.USVString), [], xattr('NewObject')),

@@ -8,7 +8,7 @@ import {
 } from '../../src/web-idl/conversion';
 import {
   decimal, defineEnumeration, defineIncludes, defineInterface,
-  defineInterfaceMixin, definePartialInterface, frozenArray, idlType, integer,
+  defineInterfaceMixin, definePartialInterface, frozenArray, idlType, impl, integer,
   negativeInfinity, notANumber, positiveInfinity, reference,
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../src/web-idl/core/index';
@@ -477,12 +477,13 @@ describe('Web IDL realm interface bindings', () => {
     expect(Reflect.ownKeys(json as object)).not.toContain('nonJSONValue');
   });
 
-  it('creates default toJSON results in the function realm', () => {
+  it.each([false, true])('creates default toJSON results in the function realm while preserving child ownership (projected: %s)', (projected) => {
     class JSONPointImpl {}
     class JSONHolderImpl {}
     const pointToJSON = operationMember('toJSON', [], idlType.object);
     const point = defineInterface({
       name: 'JSONPoint',
+      implementation: impl(JSONPointImpl),
       exposed: '*', members: [pointToJSON],
     });
     const pointAttribute = attributeMember(
@@ -516,14 +517,15 @@ describe('Web IDL realm interface bindings', () => {
     );
     foreign.getDefinitionBinding(point).createImplementation = () => new JSONPointImpl();
     foreign.getDefinitionBinding(holder).createImplementation = () => new JSONHolderImpl();
-    const pointObject = local.createPlatformRecord(local.resolveInterface('JSONPoint')).platformObject!;
-    const pointRecord = getPlatformRecord(pointObject);
-    if (!pointRecord) throw new Error('Missing JSONPoint platform record');
+    const pointObject = projected
+      ? local.createPlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
+      : undefined;
+    const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
     local.getDefinitionBinding(holder).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
-      get() { return pointRecord.implInst; },
+      get() { return pointImpl; },
     };
     foreign.getDefinitionBinding(holder).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
-      get() { return pointRecord.implInst; },
+      get() { return pointImpl; },
     };
     const holderObject = local.createPlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
 
@@ -534,7 +536,9 @@ describe('Web IDL realm interface bindings', () => {
     );
 
     expect(json).toBeInstanceOf(foreign.realm.intrinsics.object);
-    expect(Reflect.get(json as object, 'point')).toBe(pointObject);
+    const child = Reflect.get(json as object, 'point') as object;
+    expect(getPlatformRecord(child)?.binding).toBe(local);
+    if (pointObject) expect(child).toBe(pointObject);
   });
 
   it('converts frozen array attributes once and returns them by identity', () => {

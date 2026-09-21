@@ -5,6 +5,8 @@ import type { GlobalObject } from './realm';
 
 /** Implementation facilities composed for one owning realm/global. */
 export type RuntimeContext = {
+  /** The owning global object, including when selected as an HTML task destination. */
+  global: GlobalObject;
   nativeLineEnding: '\n' | '\r\n';
   promises: Promises;
   buffers: RuntimeBuffers;
@@ -16,6 +18,8 @@ export type RuntimeContext = {
 
   queueMicrotask(steps: () => void): void;
   createAbortController(): AbortControllerCapability;
+  /** Parse JSON in the owner's realm without calling an author-replaced JSON.parse. */
+  parseJSON(text: string): unknown;
   /** HTML structured cloning into the owner's realm. */
   clone(value: unknown): unknown;
   /** HTML structured serialization; the provider owns the opaque record. */

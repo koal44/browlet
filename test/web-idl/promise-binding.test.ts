@@ -127,7 +127,10 @@ describe('Web IDL promise member binding', () => {
     expect(fixture.implementation.returned).toBe('stop');
   });
 
-  it.each([false, true])('projects async iterator items before native promise resolution (borrowed: %s)', async (borrowed) => {
+  it.each([
+    { borrowed: false, stamped: true }, { borrowed: true, stamped: true },
+    { borrowed: false, stamped: false }, { borrowed: true, stamped: false },
+  ])('projects async iterator items before native promise resolution ($borrowed borrowed, $stamped stamped)', async ({ borrowed, stamped }) => {
     const calls: string[] = [];
     class ItemImpl {
       get value(): number { return 7; }
@@ -153,7 +156,7 @@ describe('Web IDL promise member binding', () => {
     const realm = new Realm();
     const world = new BindingWorld([itemIDL, itemsIDL]);
     const binding = world.register(realm);
-    const item = binding.construct(ItemImpl);
+    const item = stamped ? binding.construct(ItemImpl) : new ItemImpl();
     const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.promises));
     const iterator = call(owner, 'values') as object;
     const methodRealm = borrowed ? new Realm() : realm;
@@ -162,12 +165,13 @@ describe('Web IDL promise member binding', () => {
     ), 'values') as object : iterator;
     const pending = Reflect.apply(
       Reflect.get(methodOwner, 'next') as CallableFunction, iterator, [],
-    ) as Promise<IteratorResult<object>>;
+    ) as Promise<IteratorResult<object, undefined>>;
     expect(pending).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
     const result = await pending;
 
     expect(Reflect.getPrototypeOf(result)).toBe(methodRealm.intrinsics.objectPrototype);
     expect(result.done).toBe(false);
+    expect(world.getRealm(result.value!)).toBe(realm);
     expect(result.value).toBe(binding.project(ItemImpl, item));
     expect(calls).toEqual([]);
   });

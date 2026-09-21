@@ -1,17 +1,16 @@
 import { isObject, PromiseValue, type JSFunction } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
-import type { BindingWorld } from './binding-world';
 import { endOfIteration } from './async-sequence';
 import {
-  convertToIDL, convertToJavaScript, materializeDefaultValue,
+  convertToIDL, convertToJavaScript, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import {
   idlType, type ArgumentDefinition, type AsyncIterableMember,
 } from './core/index';
 import type { AsyncIteratorSteps } from './definition-binding';
 import { missingArgument } from './overload';
-import { getPlatformRecord, type StampedImplInstance } from './platform-object';
+import { getPlatformRecord, type PlatformRecord } from './platform-object';
 import {
   createIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
@@ -76,7 +75,7 @@ export class AsynchronousIterableBinding {
   ): JSFunction<StampedAsyncIterator> {
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const target = this.#unwrapReceiver(
+        const receiver = this.#getReceiverRecord(
           thisArgument,
           primaryInterface,
           securityIdentifier,
@@ -86,7 +85,7 @@ export class AsynchronousIterableBinding {
         );
         const steps = this.#requireSteps(primaryInterface, declaration);
         const implementationIterator = steps.create(
-          target,
+          receiver.implInst,
           this.#convertArguments(declaration.arguments ?? [], argumentsList),
         );
         return AsyncIteratorStamper.stamp(iterator, {
@@ -95,7 +94,7 @@ export class AsynchronousIterableBinding {
           primaryInterface,
           kind,
           ongoing: null,
-          world: this.#binding.world,
+          binding: receiver.binding,
         });
       },
       { length: 0, name },
@@ -222,7 +221,9 @@ export class AsynchronousIterableBinding {
           );
         }
         return this.#binding.realm.createIteratorResultObject(
-          this.#convertResult(next, declaration, state.kind),
+          this.#convertResult(next, declaration, state.kind, {
+            binding: state.binding, realm: this.#binding.realm,
+          }),
           false,
         );
       },
@@ -362,9 +363,10 @@ export class AsynchronousIterableBinding {
     next: unknown,
     declaration: AsyncIterableMember,
     kind: IterationKind,
+    context: ConversionContext,
   ): unknown {
     if (declaration.key === undefined) {
-      return convertToJavaScript(next, declaration.value, this.#binding.defaultConversionContext);
+      return convertToJavaScript(next, declaration.value, context);
     }
     if (!Array.isArray(next) || next.length < 2) {
       throw new Error('Pair asynchronous iterator produced a non-pair value');
@@ -372,10 +374,10 @@ export class AsynchronousIterableBinding {
 
     const key = kind === 'value'
       ? undefined
-      : convertToJavaScript(next[0], declaration.key, this.#binding.defaultConversionContext);
+      : convertToJavaScript(next[0], declaration.key, context);
     const value = kind === 'key'
       ? undefined
-      : convertToJavaScript(next[1], declaration.value, this.#binding.defaultConversionContext);
+      : convertToJavaScript(next[1], declaration.value, context);
     if (kind === 'key') return key;
     if (kind === 'value') return value;
 
@@ -398,18 +400,18 @@ export class AsynchronousIterableBinding {
     }
     const state = AsyncIteratorStamper.get(value);
     if (!state || state.primaryInterface !== primaryInterface ||
-      state.world !== this.#binding.world) {
+      state.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
     return state;
   }
 
   // Project adapter for the receiver and security checks in Web IDL §3.7.10 Asynchronous iterable declarations.
-  #unwrapReceiver(
+  #getReceiverRecord(
     value: unknown,
     primaryInterface: AssembledInterfaceDefinition,
     identifier: string,
-  ): StampedImplInstance {
+  ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
     if (record?.binding.world !== this.#binding.world) {
@@ -419,7 +421,7 @@ export class AsynchronousIterableBinding {
     if (!record.implements(primaryInterface)) {
       this.#throwTypeError('Illegal invocation');
     }
-    return record.implInst;
+    return record;
   }
 
   // Project helper: retrieve the declared asynchronous iterator implementation steps.
@@ -496,7 +498,7 @@ type AsyncIteratorRecord = {
   primaryInterface: AssembledInterfaceDefinition;
   kind: IterationKind;
   ongoing: IDLPromiseRecord | null;
-  world: BindingWorld;
+  binding: RealmBinding;
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';

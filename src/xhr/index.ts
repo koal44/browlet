@@ -4,8 +4,8 @@ import {
 } from './form-data';
 
 export {
-  createFormDataEntry, formDataEntryValueIDL, formDataIDL, FormDataImpl,
-  type CreateFormDataEntry, type FormDataEntry, type FormDataEntryValue,
+  formDataEntryValueIDL, formDataIDL, FormDataImpl,
+  type FormDataEntry, type FormDataEntryValue,
 } from './form-data';
 
 export const xhrIDLDefinitions: Definition[] = [

@@ -5,7 +5,7 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
-  defineInterface, idlType, observableArray, reference,
+  defineInterface, idlType, impl, observableArray, reference, roAttr,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
 import { getPlatformRecord } from '../../src/web-idl/platform-object';
@@ -32,6 +32,30 @@ describe('Web IDL observable arrays', () => {
 
     const other = fixture.binding.createPlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
     expect(getValues(other)).not.toBe(first);
+  });
+
+  it('preserves the receiver owner when a borrowed getter first exposes the array', () => {
+    class ValueImpl {}
+    class ValuesImpl {
+      get values(): never { throw new Error('Observable arrays use the binding-owned backing list'); }
+    }
+    const attribute = roAttr('values', observableArray(reference('Value')));
+    const world = new BindingWorld([
+      defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
+      defineInterface({ name: 'Values', implementation: impl(ValuesImpl), members: [attribute] }),
+    ]);
+    const owner = world.register(new Realm());
+    const other = world.register(new Realm());
+    const object = owner.project(ValuesImpl, new ValuesImpl());
+    const foreign = other.project(ValuesImpl, new ValuesImpl());
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- explicitly apply the borrowed getter to the owner
+    const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreign), 'values')!.get!;
+    const values = Reflect.apply(getter, object, []) as object[];
+    const value = new ValueImpl();
+    world.getRealmBinding(owner.realm)!.getObservableArrayBackingList(object, attribute).push(value);
+
+    expect(world.getRealm(values[0]!)).toBe(owner.realm);
+    expect(values[0]).toBe(owner.project(ValueImpl, value));
   });
 
   it('runs indexed implementation steps around backing-list mutations', () => {

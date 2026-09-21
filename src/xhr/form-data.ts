@@ -1,10 +1,10 @@
 import type { BlobImpl } from '../file/blob';
-import type { FileImpl } from '../file/file';
-import type { ScalarValueString } from '../infra/index';
+import { FileImpl } from '../file/file';
+import { toScalarValueString, type ScalarValueString } from '../infra/index';
 import type { RuntimeContext } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
-  reference, sequence, union, defineCapability, type InterfaceDefinition,
+  reference, sequence, union,
 } from '../web-idl/index';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
@@ -12,17 +12,6 @@ export type FormDataEntry = [
   name: ScalarValueString,
   value: FormDataEntryValue,
 ];
-
-export type CreateFormDataEntry = (
-  name: string,
-  value: BlobImpl | string,
-  filename: ScalarValueString | undefined,
-  runtime: RuntimeContext,
-) => FormDataEntry;
-
-/* HTML supplies its create-an-entry algorithm to XHR's FormData. */
-export const createFormDataEntry =
-  defineCapability<CreateFormDataEntry>('HTML create an entry');
 
 /*
  * XMLHttpRequest Standard §4 — Interface FormData
@@ -48,7 +37,6 @@ export const createFormDataEntry =
  * };
  */
 export class FormDataImpl {
-  #createEntry: CreateFormDataEntry;
   #entryList: FormDataEntry[] = [];
   #runtime: RuntimeContext;
 
@@ -56,10 +44,8 @@ export class FormDataImpl {
   constructor(
     form: object | undefined = undefined,
     _submitter: object | null = null,
-    createEntry: CreateFormDataEntry,
     runtime: RuntimeContext,
   ) {
-    this.#createEntry = createEntry;
     this.#runtime = runtime;
 
     /*
@@ -81,9 +67,7 @@ export class FormDataImpl {
     value: BlobImpl | ScalarValueString,
     filename?: ScalarValueString,
   ): void {
-    this.#entryList.push(
-      this.#createEntry(name, value, filename, this.#runtime),
-    );
+    this.#entryList.push(this.#createEntry(name, value, filename));
   }
 
   delete(name: ScalarValueString): void {
@@ -111,7 +95,7 @@ export class FormDataImpl {
     value: BlobImpl | ScalarValueString,
     filename?: ScalarValueString,
   ): void {
-    const entry = this.#createEntry(name, value, filename, this.#runtime);
+    const entry = this.#createEntry(name, value, filename);
     const first = this.#entryList.findIndex((candidate) =>
       candidate[0] === name);
 
@@ -128,9 +112,30 @@ export class FormDataImpl {
 
   // -- Internal methods -------------------------------------------------
 
+  /** Adopt parsed entries without running HTML's entry-creation algorithm again. */
+  static fromEntries(entries: FormDataEntry[], runtime: RuntimeContext): FormDataImpl {
+    const formData = new FormDataImpl(undefined, null, runtime);
+    formData.#entryList = entries;
+    return formData;
+  }
+
   /** XHR §4 — value pairs to iterate over; also used by Fetch BodyInit extraction. */
   getEntryList(): FormDataEntry[] {
     return this.#entryList;
+  }
+
+  // HTML, create an entry: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#append-an-entry
+  // New Files use this FormData's runtime; an unchanged File keeps its owner.
+  #createEntry(name: string, value: BlobImpl | string, filename?: ScalarValueString): FormDataEntry {
+    const entryName = toScalarValueString(name);
+    if (typeof value === 'string') return [entryName, toScalarValueString(value)];
+    if (FileImpl.is(value) && filename === undefined) return [entryName, value];
+
+    const lastModified = FileImpl.is(value) ? value.lastModified : undefined;
+    return [entryName, new FileImpl(
+      [value], filename ?? toScalarValueString('blob'),
+      { lastModified, type: value.type }, this.#runtime,
+    )];
   }
 }
 
@@ -140,18 +145,11 @@ export const formDataEntryValueIDL = defineTypedef({
   type: union(reference('File'), idlType.USVString),
 });
 
-export const formDataIDL: InterfaceDefinition = defineInterface({
+export const formDataIDL = defineInterface({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {
-    constructWith: [
-      atArg(2, (ctx) => {
-        const createEntry = ctx.getCapability(formDataIDL, createFormDataEntry);
-        if (!createEntry) throw new Error('FormData has no HTML create-an-entry capability');
-        return createEntry;
-      }),
-      atArg(3, (ctx) => ctx.getRuntime()),
-    ],
+    constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
   }),
   members: [
     /*

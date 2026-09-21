@@ -214,10 +214,10 @@ URL components while retaining any Blob URL entry reference.
   the Headers guard (`request` or `request-no-cors`); cloning preserves it. These
   are not client-policy fields. Referrer Policy's value type/declaration also
   remains with the browser-policy work. Connect these owners before API exposure.
-- Full BodyInit extraction/consumption and author Request/Response construction
-  and cloning have declared signatures and throw until Slice 6. Internal record
-  cloning is implemented in Slice 4. Byte-sequence request bodies must be extracted
-  before a Body API can expose their stream.
+- BodyInit extraction and Body consumption are implemented in Slice 6b. Author
+  Request/Response construction and cloning remain in 6c. Internal record cloning
+  is implemented in Slice 4. Byte-sequence request bodies must be extracted before
+  a Body API can expose their stream.
 - `FilteredFetchResponse` provides a live restricted view of its internal
   record. Its specified overrides include a separate filtered header list;
   other fields, including body replacement and timing updates, remain shared.
@@ -319,7 +319,7 @@ Tests supply actual Node gzip, deflate, and Brotli codecs. The transport adapter
 will choose its codec set and retain decoder state across network chunks in
 §4.7; this slice proves decoding complete byte sequences.
 
-The full `BodyInit` union and public Body mixin operations remain in Slice 6.
+The full `BodyInit` union and public Body mixin operations are implemented in Slice 6b.
 
 **Exit proof:** `test/fetch/body.test.ts` covers tee identity, branch isolation
 and cancellation, byte/BYOB extraction, global and parallel delivery, byte copies,
@@ -465,7 +465,31 @@ The projection regression records our receiver-realm choice while Web IDL issues
 [#371](https://github.com/whatwg/webidl/issues/371) remain unresolved.
 Headers returns its string list through ordinary Web IDL conversion.
 Allocation cleanup and the `allocateIn('receiver' | 'method')` declaration review
-are complete. Continue with 6b.
+are complete.
+
+**6b complete (2026-09-20):** `FetchBody.extract()` handles converted BodyInit
+values; `fromBytes()` remains the internal byte-sequence path. Multipart extraction
+captures the boundary, exact length, text, and File data without reading Files
+synchronously. File and multipart streams share the existing bounded Blob-data reader.
+`BodyMixin` implements all seven consumption methods, including incremental
+`TextDecoderStream` decoding. Its owner supplies one RuntimeContext, including
+the relevant global; FormData owns entry creation. JSON uses a captured parse
+intrinsic from that runtime's realm. Body completion targets the receiver's HTML
+networking tasks even when the stream belongs to another realm.
+
+The new multipart integration tests exposed two corrected gaps: parsing errors
+needed realm-neutral exception requests, and borrowed iterators needed the
+collection's binding owner when first projecting File values. Iterator result
+allocation retains its existing method-realm behavior. Chromium 149, Firefox 151,
+and Windows WebKit 26.5 confirmed File ownership for borrowed FormData iteration.
+
+Coverage is in `test/fetch/body-init.test.ts`, `body-consumption.test.ts`,
+`test/browlet/fetch-body.test.ts`, and `test/web-idl/iterable.test.ts`.
+All six unit configurations pass: Node 24.19.0, 26.8.1, and the custom build,
+each with stock and compatibility runtimes. The 9,708 cases include 81 new
+passing cases; existing expected failures/skips are unchanged. Typecheck and lint pass.
+Continue with **6c**: Request/Response author constructors, static factories,
+cloning, dependent AbortSignal construction, and the Referrer Policy declaration.
 
 Implement:
 
@@ -493,7 +517,7 @@ their constructor, conversion, mutation, clone, body-consumption, abort, and
 exception tests with no network transport installed and no Node public object
 escaping.
 
-- [ ] **Multipart File realm ownership:** exercise `Request.formData()` and
+- [x] **Multipart File realm ownership:** exercise `Request.formData()` and
   `Response.formData()` with multipart bodies. The parser receives the consuming
   runtime and constructs `FileImpl` values with it; integration must give the
   FormData and its Files the producing Request/Response's realm. Verify first File exposure through

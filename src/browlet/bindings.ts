@@ -29,7 +29,6 @@ import { fileReaderIDL } from './integration/file/file-reader';
 import {
   createStructuredClone as createStructuredCloneSteps, createWindowRuntime,
 } from './integration/runtime';
-import { xhrCapabilities } from './integration/xhr';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
@@ -242,7 +241,6 @@ const hostDefinedInterfaces = [{
 const browletCapabilities = [
   ...domExceptionCapabilities,
   ...fileCapabilities,
-  ...xhrCapabilities,
 ];
 
 const browletDefinitions = [

@@ -8,6 +8,7 @@ import { TestRealm } from '../web-idl/test-realm';
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
 export function createRuntime(realm = new TestRealm()): RuntimeContext {
   return {
+    global: realm.global,
     nativeLineEnding: '\n',
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
@@ -26,6 +27,7 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
     // Tests of timing policy use Browlet's actual runtime or supply their own clock.
     timing: { coarsenTime: (timestamp) => timestamp },
     createAbortController,
+    parseJSON: (text) => realm.parseJSON(text),
     clone: structuredClone,
     serialize,
     deserialize: (record): unknown => deserialize(record as Uint8Array),

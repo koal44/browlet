@@ -1,3 +1,7 @@
+import type { RuntimeContext } from '../js-engine/index';
+import { ReadableStreamImpl } from '../streams/index';
+import { DOMExceptionNames, createDOMException } from '../web-idl/index';
+
 /*
  * Immutable backing data for File API Blob objects.
  *
@@ -77,6 +81,55 @@ export class BlobData {
       position = segmentEnd;
     }
     return new BlobData(segments);
+  }
+
+  /** Stream retained Blob data, including multipart data, without an intermediate Blob object. */
+  // File API's get stream algorithm, shared with Fetch's multipart body extraction.
+  // https://w3c.github.io/FileAPI/#dfn-get-stream
+  stream(runtime: RuntimeContext): ReadableStreamImpl {
+    const scheduling = runtime.fileReading;
+    let canceled = false;
+    const stream = ReadableStreamImpl.createWithByteReadingSupport(
+      undefined, () => { canceled = true; }, 0, runtime,
+    );
+
+    // Backend awaits resume on Node's microtask queue. File-reading tasks deliver
+    // bytes, completion, and failure to the stream's owning HTML event loop.
+    // eslint-disable-next-line no-restricted-syntax -- Node schedules backing reads; queueTask controls delivery to the stream.
+    const readChunks = async (): Promise<void> => {
+      let offset = 0;
+      try {
+        while (!canceled && offset < this.size) {
+          const byteLength = Math.min(this.size - offset, blobReadChunkSize);
+          // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
+          const bytes = await this.read(offset, byteLength);
+          offset += bytes.length;
+          scheduling.queueTask(() => {
+            if (canceled) return;
+            try {
+              // Byte-stream enqueue transfers this read's storage into the stream runtime.
+              stream.enqueueChunk(bytes);
+            } catch (error) {
+              canceled = true;
+              stream.error(error);
+            }
+          });
+        }
+        if (!canceled) {
+          scheduling.queueTask(() => {
+            if (!canceled) stream.close();
+          });
+        }
+      } catch (error) {
+        scheduling.queueTask(() => {
+          if (canceled) return;
+          canceled = true;
+          stream.error(realizeReadFailure(error));
+        });
+      }
+    };
+    scheduling.runInParallel(() => { void readChunks(); });
+    return stream;
   }
 
   // eslint-disable-next-line no-restricted-syntax -- Backing I/O uses Node's queue; Blob.stream() queues delivery to the owning runtime.
@@ -215,3 +268,17 @@ function requireRange(size: number, start: number, length: number): void {
     throw new RangeError('Blob byte range is outside the source');
   }
 }
+
+function realizeReadFailure(error: unknown): unknown {
+  if (!(error instanceof BlobReadFailure)) return error;
+
+  const failure = error;
+  const name = failure.reason === 'NotFound'
+    ? DOMExceptionNames.notFound
+    : failure.reason === 'UnsafeFile' || failure.reason === 'TooManyReads'
+      ? DOMExceptionNames.security
+      : DOMExceptionNames.notReadable;
+  return createDOMException(name, failure.message);
+}
+
+const blobReadChunkSize = 64 * 1024;

@@ -78,6 +78,7 @@ export class JSRealm {
       'EvalError',
     ) as EvalErrorConstructor;
     const Array_ = Reflect.get(this.#hostGlobal, 'Array') as ArrayConstructor;
+    const JSON_ = Reflect.get(this.#hostGlobal, 'JSON') as JSON;
     const Object_ = Reflect.get(this.#hostGlobal, 'Object') as ObjectConstructor;
     const Promise_ = Reflect.get(
       this.#hostGlobal,
@@ -175,6 +176,7 @@ export class JSRealm {
       evalError: EvalError_,
       function: Function_,
       functionPrototype: Function_.prototype,
+      jsonParse: JSON_.parse,
       iteration: {
         arrayEntries: Reflect.get(
           arrayPrototype,
@@ -304,6 +306,11 @@ export class JSRealm {
     }
     associateObjectRealm(object, this);
     return object;
+  }
+
+  /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */
+  parseJSON(text: string): unknown {
+    return this.intrinsics.jsonParse(text);
   }
 
   /** ECMAScript CreateIterResultObject, using this realm's Object prototype. */
@@ -612,6 +619,7 @@ export type JSIntrinsics = {
   evalError: EvalErrorConstructor;
   function: FunctionConstructor;
   functionPrototype: object;
+  jsonParse(text: string): unknown;
   iteration: {
     arrayEntries: JSMethod;
     arrayForEach: JSMethod;

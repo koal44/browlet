@@ -7,7 +7,7 @@ import { fileListIDL } from './file-list';
 
 export {
   blobIDL, blobPartIDL, blobPropertyBagIDL, BlobImpl,
-  convertLineEndingsToNative, endingTypeIDL, processBlobParts,
+  convertLineEndingsToNative, endingTypeIDL,
   type BlobPart, type BlobPropertyBag,
   type BlobSerializationState, type EndingType,
 } from './blob';

@@ -3,7 +3,7 @@ import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
-import { convertToIDL, convertToJavaScript } from './conversion';
+import { convertToIDL, convertToJavaScript, type ConversionContext } from './conversion';
 import { reference, type IterableMember } from './core/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance,
@@ -138,6 +138,7 @@ export class SynchronousIterableBinding {
         if (!isCallbackFunctionValue(callback)) {
           throw new Error('Function conversion did not produce a callback');
         }
+        const context = { binding: receiver.binding, realm: this.#binding.realm };
         let pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
         for (let index = 0; index < pairs.length; index++) {
           const [key, value] = pairs[index]!;
@@ -147,12 +148,12 @@ export class SynchronousIterableBinding {
               convertToJavaScript(
                 value,
                 iterable.value,
-                this.#binding.defaultConversionContext,
+                context,
               ),
               convertToJavaScript(
                 key,
                 iterable.key!,
-                this.#binding.defaultConversionContext,
+                context,
               ),
               receiver.platformObject,
             ],
@@ -208,8 +209,9 @@ export class SynchronousIterableBinding {
       );
     }
     const iterator = DefaultIteratorStamper.get(thisArgument);
+    const receiver = iterator && getImplementationRecord(iterator.target);
     if (!iterator || iterator.primaryInterface !== primaryInterface ||
-      getImplementationRecord(iterator.target)?.binding.world !== this.#binding.world) {
+      receiver?.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
 
@@ -227,8 +229,11 @@ export class SynchronousIterableBinding {
 
     const pair = pairs[iterator.index]!;
     iterator.index++;
+    // The collection owns unprojected interface values. Iterator result allocation
+    // still belongs to the next method's realm, independently of those identities.
+    const context = { binding: receiver.binding, realm: this.#binding.realm };
     return this.#binding.realm.createIteratorResultObject(
-      this.#convertPairResult(pair, iterable, iterator.kind),
+      this.#convertPairResult(pair, iterable, iterator.kind, context),
       false,
     );
   }
@@ -238,13 +243,14 @@ export class SynchronousIterableBinding {
     [key, value]: ValuePair,
     iterable: IterableMember,
     kind: IterationKind,
+    context: ConversionContext,
   ): unknown {
     const convertedKey = kind === 'value'
       ? undefined
-      : convertToJavaScript(key, iterable.key!, this.#binding.defaultConversionContext);
+      : convertToJavaScript(key, iterable.key!, context);
     const convertedValue = kind === 'key'
       ? undefined
-      : convertToJavaScript(value, iterable.value, this.#binding.defaultConversionContext);
+      : convertToJavaScript(value, iterable.value, context);
 
     if (kind === 'key') return convertedKey;
     if (kind === 'value') return convertedValue;

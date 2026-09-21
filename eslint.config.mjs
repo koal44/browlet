@@ -5,6 +5,11 @@ import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs';
 
+const runtimeGlobals = [
+  { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
+  { name: 'queueMicrotask', message: 'Use the supplied Promise or task scheduling dependency.' },
+];
+
 export default defineConfig(
   {
     ignores: [
@@ -215,10 +220,7 @@ export default defineConfig(
     files: ['src/**/*.{ts,js,mjs,cjs}'],
     ignores: ['src/**/scripts/**'],
     rules: {
-      'no-restricted-globals': ['error',
-        { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
-        { name: 'queueMicrotask', message: 'Use the supplied Promise or task scheduling dependency.' },
-      ],
+      'no-restricted-globals': ['error', ...runtimeGlobals],
       'no-restricted-syntax': ['error',
         {
           selector: ':function[async=true], AwaitExpression',
@@ -228,6 +230,20 @@ export default defineConfig(
           selector: 'MemberExpression[object.name="globalThis"][property.name=/^(Promise|queueMicrotask)$/]',
           message: 'Use the supplied Promise or task scheduling dependency.',
         },
+      ],
+    },
+  },
+
+  {
+    files: ['src/fetch/**/*.ts'],
+    rules: {
+      // Fetch's author-visible errors must be realized by Binding in the result's realm.
+      // Ordinary Error remains available for implementation invariants and unfinished branches.
+      'no-restricted-globals': ['error',
+        ...runtimeGlobals,
+        ...['TypeError', 'RangeError', 'SyntaxError'].map((name) => ({
+          name, message: 'Import the exception request from js-engine/exceptions so Binding selects its realm.',
+        })),
       ],
     },
   },

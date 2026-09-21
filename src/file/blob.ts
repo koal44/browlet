@@ -3,13 +3,13 @@ import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
 import {
   type PromiseValue, type RuntimeContext, getBufferSourceCopy,
 } from '../js-engine/index';
-import { ReadableStreamImpl } from '../streams/index';
+import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   allocateIn, dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
-  reference, roAttr, sequence, union, xattr, DOMExceptionNames, createDOMException,
+  reference, roAttr, sequence, union, xattr,
 } from '../web-idl/index';
-import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
+import { BlobData, type BlobSnapshotState } from './blob-data';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -52,7 +52,7 @@ export class BlobImpl {
     runtime: RuntimeContext,
   ) {
     this.#runtime = runtime;
-    this.#data = processBlobParts(blobParts, options, runtime);
+    this.#data = this.#processParts(blobParts, options);
     this.#snapshotState = this.#data.captureSnapshotState();
     this.#type = normalizeBlobType(options.type ?? '');
   }
@@ -84,54 +84,7 @@ export class BlobImpl {
 
   /** File API §3, get stream. */
   stream(): ReadableStreamImpl {
-    const scheduling = this.#runtime.fileReading;
-    const data = this.#data;
-    let canceled = false;
-    const stream = ReadableStreamImpl.createWithByteReadingSupport(
-      undefined,
-      () => { canceled = true; },
-      0,
-      this.#runtime,
-    );
-
-    // Backend awaits resume on Node's microtask queue. File-reading tasks deliver
-    // bytes, completion, and failure to the stream's owning HTML event loop.
-    scheduling.runInParallel(() => { void readChunks(); });
-    return stream;
-
-    // eslint-disable-next-line no-restricted-syntax -- Node schedules backing reads; queueTask controls delivery to the stream.
-    async function readChunks(): Promise<void> {
-      let offset = 0;
-      try {
-        while (!canceled && offset < data.size) {
-          const byteLength = Math.min(data.size - offset, blobReadChunkSize);
-          // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
-          const bytes = await data.read(offset, byteLength);
-          offset += bytes.length;
-          scheduling.queueTask(() => {
-            if (canceled) return;
-            try {
-              // Byte-stream enqueue transfers this read's storage into the stream runtime.
-              stream.enqueueChunk(bytes);
-            } catch (error) {
-              canceled = true;
-              stream.error(error);
-            }
-          });
-        }
-        if (!canceled) {
-          scheduling.queueTask(() => {
-            if (!canceled) stream.close();
-          });
-        }
-      } catch (error) {
-        scheduling.queueTask(() => {
-          if (canceled) return;
-          canceled = true;
-          stream.error(realizeReadFailure(error));
-        });
-      }
-    }
+    return this.#data.stream(this.#runtime);
   }
 
   text(): PromiseValue<string> {
@@ -202,6 +155,24 @@ export class BlobImpl {
   static is(value: unknown): value is BlobImpl {
     return value !== null && typeof value === 'object' && #data in value;
   }
+
+  // File API, process blob parts: https://w3c.github.io/FileAPI/#process-blob-parts
+  #processParts(parts: Iterable<BlobPart>, options: BlobPropertyBag): BlobData {
+    const data: BlobData[] = [];
+    for (const element of parts) {
+      if (typeof element === 'string') {
+        const string = options.endings === 'native'
+          ? convertLineEndingsToNative(element, this.#runtime)
+          : element;
+        data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
+      } else if (BlobImpl.is(element)) {
+        data.push(element.data);
+      } else {
+        data.push(BlobData.fromOwnedBytes(getBufferSourceCopy(element)));
+      }
+    }
+    return BlobData.concatenate(data);
+  }
 }
 
 export type EndingType = 'transparent' | 'native';
@@ -219,47 +190,15 @@ export type BlobSerializationState = {
   type: string;
 };
 
-/** File API §3.1, process blob parts into immutable backing segments. */
-export function processBlobParts(
-  parts: Iterable<BlobPart>,
-  options: BlobPropertyBag,
-  runtime: RuntimeContext,
-): BlobData {
-  const data: BlobData[] = [];
-  for (const element of parts) {
-    if (typeof element === 'string') {
-      const string = options.endings === 'native'
-        ? convertLineEndingsToNative(element, runtime)
-        : element;
-      data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
-    } else if (BlobImpl.is(element)) {
-      data.push(element.data);
-    } else {
-      data.push(BlobData.fromOwnedBytes(getBufferSourceCopy(element)));
-    }
-  }
-  return BlobData.concatenate(data);
-}
-
 /** File API §3.1, convert line endings to native. */
 export function convertLineEndingsToNative(
   value: string,
   runtime: RuntimeContext,
 ): string {
-  return value.replace(/\r\n|\r|\n/g, runtime.nativeLineEnding);
+  return value.replace(lineEndingPattern, runtime.nativeLineEnding);
 }
 
-function realizeReadFailure(error: unknown): unknown {
-  if (!(error instanceof BlobReadFailure)) return error;
-
-  const failure = error;
-  const name = failure.reason === 'NotFound'
-    ? DOMExceptionNames.notFound
-    : failure.reason === 'UnsafeFile' || failure.reason === 'TooManyReads'
-      ? DOMExceptionNames.security
-      : DOMExceptionNames.notReadable;
-  return createDOMException(name, failure.message);
-}
+const lineEndingPattern = /\r\n|\r|\n/g;
 
 function normalizeSlicePosition(
   value: number | undefined,
@@ -357,5 +296,3 @@ export const blobIDL = defineInterface({
     ),
   ],
 });
-
-const blobReadChunkSize = 64 * 1024;

@@ -65,6 +65,7 @@ export class ObservableArrayBinding {
     const existing = attributes.get(attribute);
     if (existing) return existing;
 
+    const context = { binding: record.binding, realm: this.#binding.realm };
     const steps = this.#binding.getMemberBinding(record.primaryInterface, attribute)?.observableArraySteps;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const deleteSteps = steps?.delete;
@@ -92,7 +93,7 @@ export class ObservableArrayBinding {
       toJavaScript: (value) => convertToJavaScript(
         value,
         elementType,
-        this.#binding.defaultConversionContext,
+        context,
       ),
       toNumber: (value) => convertToIDL(
         value,

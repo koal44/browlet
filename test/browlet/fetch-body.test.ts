@@ -2,6 +2,8 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import { FetchBody } from '../../src/fetch/body';
+import { RequestImpl } from '../../src/fetch/request';
+import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import type { GlobalObject, PromiseValue, RuntimeContext } from '../../src/js-engine/index';
 import {
   defineInterface, idlType, impl, op, promise, BindingWorld,
@@ -13,6 +15,8 @@ import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../../src/browlet/bindings';
 import { queueGlobalFetchTask } from '../../src/browlet/integration/fetch';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
+import { createFetchRequest, fetchDefinitions } from '../fetch/fetch-fixture';
+import { observeBrowletPromise } from './test-runtime';
 
 describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', async () => {
@@ -91,6 +95,43 @@ describe('Fetch body delivery through HTML', () => {
     await completed;
     expect(chunks).toEqual([[1, 2]]);
     expect(fixture.networkingTasks()).toHaveLength(0);
+  });
+
+  it.each(['Request', 'Response'])('delivers borrowed %s consumption to the receiver Window even when the body stream belongs elsewhere', async (kind) => {
+    const owner = createFetchWindow();
+    const source = createFetchWindow();
+    const bindings = new BindingWorld(fetchDefinitions);
+    const ownerBinding = bindings.register(owner.realm, { createRuntime: () => owner.context.getRuntime() });
+    const otherBinding = bindings.register(source.realm, { createRuntime: () => source.context.getRuntime() });
+    const create = (context: typeof ownerBinding, body: FetchBody | null) => {
+      if (kind === 'Request') {
+        const request = createFetchRequest();
+        request.body = body;
+        return context.project(RequestImpl, context.construct(RequestImpl, request, 'request', {}));
+      }
+      const response = new FetchResponse();
+      response.body = body;
+      return context.project(ResponseImpl, context.construct(ResponseImpl, response, 'response'));
+    };
+    const body = FetchBody.fromBytes(Uint8Array.of(65, 66), source.context.getRuntime());
+    const receiver = create(ownerBinding, body);
+    const foreign = create(otherBinding, null);
+    const text = Reflect.get(foreign, 'text') as () => Promise<string>;
+    await nextTurn();
+    let result: Promise<string> | undefined;
+    owner.queueTask(() => { result = Reflect.apply(text, receiver, []); });
+    owner.runTask();
+    expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
+    const completion = observeBrowletPromise(owner.realm.global, result!);
+    // The foreign stream's reads complete in its own queue before scheduling
+    // the receiver's networking task. Stock Node drains its ambient queue here.
+    await nextTurn();
+    performTestMicrotaskCheckpoint(source.realm.global);
+    expect(source.networkingTasks()).toHaveLength(0);
+    expect(owner.networkingTasks()).toHaveLength(1);
+    expect(owner.networkingTasks()[0]!.document).toBe(owner.document);
+    owner.runTask();
+    expect(await completion).toBe('AB');
   });
 });
 

@@ -1,5 +1,4 @@
 import { createRuntime } from '../js-engine/runtime-fixture';
-import { vi } from 'vitest';
 import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
 import {
   FetchBody, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
@@ -33,23 +32,17 @@ export function createFetchRequest(
   return new FetchRequest(parsed, client);
 }
 
-export function createFetchFixture() {
-  const bindings = new BindingWorld([
-    ...streamsIDLDefinitions, ...fileIDLDefinitions, ...xhrIDLDefinitions, ...urlIDLDefinitions,
-    headersInitIDL, headersIDL, xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
-    requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
-    requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
-    requestIDL, requestIncludesBodyIDL, responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
-  ]);
+export function createFetchFixture(world?: BindingWorld) {
+  const bindings = world ?? new BindingWorld(fetchDefinitions);
   const realm = new TestRealm();
-  const context = bindings.register(realm);
-  const scheduling = { queueGlobalTask: vi.fn(), runInParallel: vi.fn() };
-  const runtime = { ...createRuntime(realm), networking: scheduling };
+  const context = bindings.register(realm, { createRuntime: () => createRuntime(realm) });
+  const runtime = context.getRuntime();
   // This fixture allocates implementations. The incomplete API family is not installed.
   return {
     bindings,
     realm,
     context,
+    runtime,
     createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime), runtime),
     createRequest: (record: FetchRequest, signal: object, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
@@ -58,3 +51,11 @@ export function createFetchFixture() {
     createHeaders: () => context.construct(HeadersImpl),
   };
 }
+
+export const fetchDefinitions = [
+  ...streamsIDLDefinitions, ...fileIDLDefinitions, ...xhrIDLDefinitions, ...urlIDLDefinitions,
+  headersInitIDL, headersIDL, xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
+  requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
+  requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
+  requestIDL, requestIncludesBodyIDL, responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
+];

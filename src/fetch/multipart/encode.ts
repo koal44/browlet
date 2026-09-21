@@ -12,7 +12,6 @@ import type { FormDataEntry } from '../../xhr/index';
  * The boundary and encoded length are available immediately; normalization
  * never changes the entry list.
  */
-// SPEC_MISMATCH: (entries, encoding) -> bytes
 export function encodeMultipartFormData(
   entries: FormDataEntry[],
   encoding: Encoding,
@@ -21,12 +20,12 @@ export function encodeMultipartFormData(
   const lineEnding = BlobData.fromOwnedBytes(isomorphicEncode('\r\n'));
   const parts: BlobData[] = [];
   for (const [name, value] of entries) {
-    const normalizedName = name.replace(/\r\n|\r|\n/g, '\r\n');
+    const normalizedName = name.replace(lineEndingPattern, '\r\n');
     let header = `--${boundary}\r\nContent-Disposition: form-data; name="${escapeName(normalizedName, encoding)}"`;
     if (typeof value === 'string') {
       parts.push(
         BlobData.fromOwnedBytes(isomorphicEncode(header + '\r\n\r\n')),
-        BlobData.fromOwnedBytes(encode(value.replace(/\r\n|\r|\n/g, '\r\n'), encoding)),
+        BlobData.fromOwnedBytes(encode(value.replace(lineEndingPattern, '\r\n'), encoding)),
       );
     } else {
       header += `; filename="${escapeName(value.name, encoding)}"\r\n`;
@@ -45,6 +44,9 @@ export type MultipartEncoding = {
 };
 
 function escapeName(value: string, encoding: Encoding): string {
-  return isomorphicDecode(encode(value, encoding)).replace(/[\r\n"]/g,
+  return isomorphicDecode(encode(value, encoding)).replace(nameEscapePattern,
     (char) => percentEncodeByte(char.charCodeAt(0)));
 }
+
+const lineEndingPattern = /\r\n|\r|\n/g;
+const nameEscapePattern = /[\r\n"]/g;

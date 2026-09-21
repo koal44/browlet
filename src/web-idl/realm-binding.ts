@@ -1335,6 +1335,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     const result = this.realm.createOrdinaryObject(
       this.realm.intrinsics.objectPrototype,
     );
+    const context = { binding: receiver.binding, realm: this.realm };
 
     for (const ancestor of getInheritance(primaryInterface)) {
       const hasDefaultToJSON = ancestor.members.some(({ member }) =>
@@ -1366,7 +1367,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         defineProperty(result, attribute.name, {
           configurable: true,
           enumerable: true,
-          value: convertToJavaScript(idlValue, attribute.type, this.defaultConversionContext),
+          value: convertToJavaScript(idlValue, attribute.type, context),
           writable: true,
         });
       }

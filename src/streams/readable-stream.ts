@@ -2811,7 +2811,7 @@ export class ReadableStreamDefaultReaderImpl {
 
   /** Streams §9.1.2, read all bytes from a default reader. */
   readAllBytes(
-    successSteps: (bytes: Uint8Array) => void,
+    successSteps: (bytes: Uint8Array<ArrayBuffer>) => void,
     failureSteps: (reason: unknown) => void,
   ): void {
     const chunks: Uint8Array[] = [];

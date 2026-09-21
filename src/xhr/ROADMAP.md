@@ -11,8 +11,8 @@ transport.
 The Fetch-independent File API foundation is implemented through `Blob`,
 `File`, and `FileList`. XHR §5 `ProgressEvent` and the no-form portion of §4
 `FormData` are also implemented. `FormData(form, submitter)` remains blocked
-on HTML forms; [multipart body work](../fetch/multipart/ROADMAP.md) remains
-a Fetch implementation responsibility.
+on HTML forms; [multipart body work](../fetch/multipart/ROADMAP.md) is integrated
+with Fetch Body extraction and consumption.
 
 Do not expose `XMLHttpRequest` merely because its declaration can be assembled:
 its useful behavior begins at the Fetch integration boundary.
@@ -130,10 +130,9 @@ dispatch machinery.
 - Implemented the no-argument constructor, `append`, `delete`, `get`, `getAll`,
   `has`, `set`, and iterable behavior in specification order.
 - Applied the HTML create-an-entry algorithm for strings and Blob/File values,
-  including default filename and supplied filename behavior, through a narrow
-  declared capability rather than copied HTML logic. The algorithm and the
-  deferred construct-the-entry-list boundary live together under
-  `src/browlet/html/forms/entry-list.ts`.
+  including default filename and supplied filename behavior, directly on
+  `FormDataImpl`. This algorithm needs no browser-owned state; new Files use
+  FormData's runtime and unchanged Files retain their original owner.
 - Projected the overloads and iterable declaratively through Web IDL.
 - Exported the implementation entry-list access that Fetch needs for Body
   extraction;

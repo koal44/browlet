@@ -4,8 +4,8 @@ This folder owns multipart encoding and parsing for Fetch body
 extraction/consumption. It reuses the existing FormData entry list and File
 objects; it does not define another author-facing FormData class.
 
-**Status:** slices 1 (encoding) and 2 (parsing) implemented. Fetch Body integration
-remains planned. The entry-list API already exists in [XHR](../../xhr/ROADMAP.md).
+**Status:** all three slices are implemented, including Fetch Body integration
+in 6b. The entry-list API already exists in [XHR](../../xhr/ROADMAP.md).
 
 ## Sources
 
@@ -33,7 +33,7 @@ are `whatwg-html/source`, `whatwg-fetch/fetch.bs`, and
 2. **Parsing — implemented.** Parse complete bodies into string/File entries
    with Fetch's UTF-8 and Content-Type rules. The strict rejection policy and
    remaining specification gaps are recorded below.
-3. **Body integration — deferred to [Fetch Slice 6](../ROADMAP.md#slice-6--network-independent-platform-apis).**
+3. **Body integration — implemented in [Fetch Slice 6](../ROADMAP.md#slice-6--network-independent-platform-apis).**
    Connect encoding to extraction and parsing to consumption using Fetch's Body
    records and existing Web IDL projection.
    Preserve stream errors, unusable-body checks, lengths, and realm ownership.
@@ -70,7 +70,7 @@ operations without creating a platform Blob or a substitute Fetch stream API.
 complete byte sequence backed by an `ArrayBuffer` and a parsed `MIMEType`.
 It returns `FormDataEntry[]`, constructing `FileImpl` values directly with the
 consuming runtime. File bytes are copied; text is decoded as UTF-8 without BOM stripping.
-Entry order and repeated names are preserved. Fetch's future Body consumer owns
+Entry order and repeated names are preserved. Fetch's Body consumer owns
 FormData construction, File realm ownership, and realization of a parsing
 TypeError in its realm. The required realm tests are recorded in
 [Fetch Slice 6](../ROADMAP.md#slice-6--network-independent-platform-apis).
@@ -122,7 +122,7 @@ outside this slice.
   strict policy above; browser behavior is not substituted for Fetch's rules.
 - **Fetch still has gaps.** Its FormData extraction step marks body length
   as unclear (HTML issue 6424), and its parsing description remains an
-  approximation. Streamed Body integration stays in slice 3; the bounded
+  approximation. Streamed Body integration is covered by slice 3; the bounded
   parser does not claim a settled browser-compatibility algorithm for every
   malformed input or the RFC's wider mail/legacy extensions.
 
@@ -146,7 +146,72 @@ failing before tightening the header/body offset check.
 
 The multipart/File test run passes all 99 tests; lint/typecheck also passes.
 
-Then test real Body extraction/`formData()` consumption, including the
+Integration tests now cover real Body extraction/`formData()` consumption, including the
 Content-Type boundary, File results, author entry-list preservation, rejected
-streams, and cross-realm projection. Remove this roadmap when both algorithms
-and that integration pass their focused tests.
+streams, and cross-realm projection. Retain this roadmap until its review is complete;
+the provisional README below is material for a later documentation pass.
+
+## Provisional README
+
+Fetch owns multipart body extraction and consumption. XHR owns the FormData
+entry list; File owns Blob/File backing data and its stream reader.
+
+### Contracts
+
+`encodeMultipartFormData(entries, encoding)` implements
+[HTML's multipart encoding algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart/form-data-encoding-algorithm).
+It returns `{ boundary, data: BlobData }`: names, headers, and text are encoded
+immediately; immutable File byte sources are retained for later reads. Extraction
+gets Content-Type and exact length without reading Files or mutating FormData.
+It streams that data through the same bounded reader used by Blob.
+
+The boundary uses `crypto.randomUUID()`, without scanning File contents for
+collisions. Names and string values undergo CRLF normalization; filenames do
+not. After character encoding, CR, LF, and quotation marks are escaped in
+names and filenames. Literal percent signs and backslashes remain. HTML's
+`_charset_` control processing belongs to form entry-list construction.
+
+`parseMultipartFormData(bytes, mimeType, runtime)` implements the multipart
+branch of [Body.formData()](https://fetch.spec.whatwg.org/#dom-body-formdata).
+It returns ordered `FormDataEntry[]`, constructing Files with the consuming
+runtime. Body supplies the Promise and FormData construction; Binding supplies
+projection and exception realization. Borrowed FormData iterators preserve the
+producing FormData's ownership on a File's first exposure.
+
+### Parsing choices
+
+- [RFC 7578](https://www.rfc-editor.org/rfc/rfc7578.html) defines form-data parts;
+  [RFC 2046 §5.1](https://www.rfc-editor.org/rfc/rfc2046#section-5.1) supplies
+  delimiter framing and [RFC 2183](https://www.rfc-editor.org/rfc/rfc2183.html)
+  supplies Content-Disposition. Header tokens and parameters use
+  [RFC 2045 §5.1](https://www.rfc-editor.org/rfc/rfc2045#section-5.1) and RFC 822's
+  quoted pairs and comments.
+- Boundaries are case-sensitive. CRLF framing, transport padding, preamble,
+  epilogue, and optional CRLF after the closing delimiter are supported.
+  An empty FormData emits only the closing delimiter, matching
+  [Blink](https://github.com/chromium/chromium/blob/1136757f47c7e2b6cc593f871a5d79fc0e9834b4/third_party/blink/renderer/core/html/forms/form_data.cc#L347),
+  [Gecko](https://github.com/mozilla-firefox/firefox/blob/d92a7ec0e622782fe62529bb3a4809780da01d6c/dom/html/HTMLFormSubmission.cpp#L370),
+  and [WebKit](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/platform/network/FormData.cpp#L287).
+- Text uses UTF-8, preserves a leading BOM, and replaces malformed sequences.
+  A part's charset, `_charset_` field, or Content-Type does not change this.
+  A filename, including an empty one, produces a File. Its type defaults to
+  `text/plain` only if Content-Type is absent.
+- Header names and filenames use UTF-8 and quoted-pair unescaping. Percent
+  escapes and character references remain literal. Transfer encodings,
+  `filename*`, and nested multipart/mixed interpretation are unsupported.
+- Malformed or truncated input fails the whole parse. The agreed strict policy
+  also rejects duplicate disposition parameters and duplicate
+  Content-Disposition/Content-Type headers. Browser recovery differs: WebKit
+  can ignore a bad part; Blink and Gecko fail it. Fetch's parsing description
+  remains approximate, so these tests do not claim exhaustive browser parity.
+
+Fetch still marks the FormData body length as unclear (HTML issue 6424); our
+retained data supplies its exact encoded length without reading File contents.
+
+### Tests
+
+`test/fetch/multipart/` covers independent encoding/parsing fixtures and malformed
+input. `test/fetch/body-init.test.ts` checks boundary/length agreement, lazy File
+reads, snapshots, and failures. `body-consumption.test.ts` checks Promise errors,
+FormData mutation, and first File exposure through borrowed getters and iterators.
+`test/browlet/fetch-body.test.ts` verifies HTML networking-task delivery across realms.

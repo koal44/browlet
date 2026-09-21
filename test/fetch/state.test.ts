@@ -8,6 +8,7 @@ import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
 import { parseURL } from '../../src/url/url';
 import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
+import { createRuntime } from '../js-engine/runtime-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientSettings } from './client-fixture';
 
@@ -129,7 +130,7 @@ describe('Fetch state/API sharing', () => {
   it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
     const fixture = createFetchFixture();
     const foreignRealm = new TestRealm();
-    const foreign = fixture.bindings.register(foreignRealm);
+    const foreign = fixture.bindings.register(foreignRealm, { createRuntime: () => createRuntime(foreignRealm) });
     const createObject = (context: BindingContext) => name === 'Request'
       ? context.project(RequestImpl, context.construct(RequestImpl, createFetchRequest(), 'request', {}))
       : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
@@ -152,7 +153,7 @@ describe('Fetch state/API sharing', () => {
     const fixture = createFetchFixture();
     const record = new FetchResponse();
     const response = fixture.createResponse(record);
-    const mixin = new BodyMixin(record);
+    const mixin = new BodyMixin(record, fixture.runtime);
     const first = fixture.createBody();
     expect(first.source).toBeNull();
     expect(first.length).toBeNull();

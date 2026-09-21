@@ -529,7 +529,8 @@ conversion paths; an `object` result preserves the supplied JavaScript value.
 Blob retains its Runtime Context at construction. Its `stream()` and private
 read operation use that context; `text()`, `bytes()`, and `arrayBuffer()` share
 the read result through JS Engine's `PromiseValue<T>`. Backing `BlobData` remains
-runtime-neutral. Slices retain the source runtime, while deserialization creates
+runtime-neutral; `BlobData.stream(runtime)` selects the stream's owner per call.
+Slices retain the source runtime, while deserialization creates
 an implementation with the destination runtime before restoring its data.
 The value retains native settlement state and the `Promises` facility from
 the receiver's Runtime Context. It supports `.then()`, `.catch()`, and terminal
@@ -601,6 +602,19 @@ converts only the selected pair. It creates fresh author-facing entry arrays
 without copying the backing list. FormData also uses this entry-list accessor
 for Fetch BodyInit extraction.
 
+Pair conversion uses the collection's binding owner and the iteration method's
+allocation realm separately. Unprojected interface values, such as Files retained
+by a parsed FormData, acquire the collection's owner on first exposure; values
+with an existing owner retain it. Borrowing `entries()`, `values()`, `next()`, or
+`forEach()` therefore cannot relocate a retained File. The iterator result objects
+and fresh entry arrays continue to use the method realm.
+
+Maplike/setlike result conversion, observable-array element projection, and
+default `toJSON` attribute conversion use the same split: the receiver supplies
+ownership of fresh interface values, while existing allocation rules remain
+in place. An observable array retains that owner even if a borrowed getter
+first creates its handle before the implementation adds elements.
+
 An `async iterable` declaration names its implementation factory with `create`.
 Binding calls that method with converted arguments and adapts the internal
 iterator's `next()` and `return()` methods. `return: true` declares the return
@@ -609,7 +623,8 @@ The implementation owns its cursor and resource state. Binding retains the
 author iterator's identity, iteration kind, completion flag, and ongoing Promise
 in its private stamp. Borrowed iterator methods therefore
 share completion and call ordering across realms in that world. The method's
-realm supplies the returned Promise and iterator result object.
+realm supplies the returned Promise and iterator result object. The iterator
+record retains the collection's binding for projection of fresh interface values.
 
 The iterator's completion can be a `PromiseValue` or a native Promise. Binding
 observes it in the method's realm and converts the item before resolving the

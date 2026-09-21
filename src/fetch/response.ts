@@ -1,11 +1,14 @@
+import type { BlobImpl } from '../file/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
+import type { PromiseValue, RuntimeContext } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/url';
 import {
-  arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
+  arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
   roAttr, staticOp, xattr,
 } from '../web-idl/index';
+import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, type FetchBody } from './body';
 import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
@@ -204,10 +207,12 @@ export class ResponseImpl {
 
   // Internal allocation from an existing response and header guard.
   // SPEC_MISMATCH: create a Response object(response, guard, realm) -> Response
-  constructor(response: FetchResponse, guard: HeadersGuard) {
+  constructor(
+    response: FetchResponse, guard: HeadersGuard, runtime: RuntimeContext,
+  ) {
     this.#response = response;
     this.#headers = new HeadersImpl(response.headerList, guard);
-    this.#bodyMixin = new BodyMixin(response);
+    this.#bodyMixin = new BodyMixin(response, runtime);
   }
 
   static error(): ResponseImpl {
@@ -236,12 +241,12 @@ export class ResponseImpl {
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(): object { return this.#bodyMixin.arrayBuffer(); }
-  blob(): object { return this.#bodyMixin.blob(); }
-  bytes(): object { return this.#bodyMixin.bytes(); }
-  formData(): object { return this.#bodyMixin.formData(); }
-  json(): object { return this.#bodyMixin.json(); }
-  text(): object { return this.#bodyMixin.text(); }
+  arrayBuffer(): PromiseValue<Uint8Array> { return this.#bodyMixin.arrayBuffer(); }
+  blob(): PromiseValue<BlobImpl> { return this.#bodyMixin.blob(); }
+  bytes(): PromiseValue<Uint8Array> { return this.#bodyMixin.bytes(); }
+  formData(): PromiseValue<FormDataImpl> { return this.#bodyMixin.formData(); }
+  json(): PromiseValue<unknown> { return this.#bodyMixin.json(); }
+  text(): PromiseValue<string> { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
   // -- Internal ---------------------------------------------------------
@@ -275,7 +280,9 @@ export const responseTypeIDL = defineEnumeration({
 export const responseIDL = defineInterface({
   name: 'Response',
   exposed: ['Window', 'Worker'],
-  implementation: impl(ResponseImpl),
+  implementation: impl(ResponseImpl, {
+    constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
+  }),
   members: [
     ctor([
       arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),

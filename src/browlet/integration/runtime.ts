@@ -23,6 +23,7 @@ export function createWindowRuntime(
   const { realm } = context;
   // Global installation completes after registration. Host operations run later.
   return {
+    get global() { return realm.global; },
     nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
@@ -34,6 +35,7 @@ export function createWindowRuntime(
     networking: fetchTaskScheduling,
     timing: { coarsenTime },
     createAbortController: () => context.construct(AbortControllerImpl),
+    parseJSON: (text) => realm.parseJSON(text),
     clone: (value) => window.getWindowOrWorkerGlobalScopeMixin().structuredClone(value),
     ...createRuntimeSerialization(context),
   };

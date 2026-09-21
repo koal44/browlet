@@ -88,7 +88,7 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 | Order | Work / authoritative plan | First integration point |
 | --- | --- | --- |
 | 1 | [Structured fields](../http/struct-fields/README.md), RFC 9651 | Fetch header operations |
-| 2 | [Multipart bytes](multipart/ROADMAP.md), RFC 7578 + HTML/Fetch | Body extraction/consumption |
+| 2 | [Multipart bytes](multipart/ROADMAP.md), RFC 7578 + HTML/Fetch | Body extraction/consumption, complete in Fetch 6b |
 | 3 | [HTTP foundation](../http/ROADMAP.md) and [cache rules](../http/cache/ROADMAP.md), RFCs 9110/9111/5861 | Response freshness, then [Fetch cache transactions](http/cache/ROADMAP.md) |
 | 4 | [Trustworthiness](../browlet/browsing/policy/ROADMAP.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |
 | 5 | [Cookies](../http/cookies/ROADMAP.md), the current HTTPWG draft + HTML/Fetch | HTTP cookie processing, then HTML consumers |
@@ -222,8 +222,8 @@ Streams boundary remains in Slice 10.
 
 **Slice 9 coverage:** FormData's constructor, both append/set overloads,
 delete/get/getAll/has, entry-list iteration/access, and HTML's create-an-entry
-capability and implementation. One new marker on the constructor for the
-supplied capability; its form/submitter branch remains explicitly deferred.
+algorithm, implemented directly on FormData. The constructor marker remains
+for its deferred form/submitter branch.
 HTML's string/Blob inputs and name/value tuple match the implementation-layer
 representations, so create-an-entry needed no marker. The unresolved HTML
 forms branch and unimplemented XMLHttpRequest were excluded.
@@ -259,7 +259,7 @@ Existing stubs and planned features remain with their implementation roadmaps.
 | 6 — Structured fields — marked | `src/http/struct-fields/parse.ts`, `serialize.ts`, and value representations | RFC 9651 §4 parsing/serialization; include cursor mutation, parse failure, and serialized-result shapes |
 | 7 — MIME — marked | `mime-type.ts`, `resource.ts`, `sniffing.ts`, and `signatures.ts` | MIME Sniffing's parsing, serialization, classification, and sniffing signatures; skip byte-pattern tables and algorithm internals |
 | 8 — Encoding — marked | `src/encoding/encodings.ts`, `codecs/utf-8.ts`, and TextEncoder/TextDecoder stream and non-stream adapters | Encoding's named operations and API declarations; check the adapter contract against Exodus without auditing or replacing its codecs |
-| 9 — XHR/FormData — marked | `src/xhr/form-data.ts` and `src/browlet/html/forms/entry-list.ts` | XHR §4 and HTML's create-an-entry operation, including the supplied capability and Blob/File representations; unimplemented XMLHttpRequest remains out of scope |
+| 9 — XHR/FormData — marked | `src/xhr/form-data.ts` | XHR §4 and HTML's create-an-entry operation, including Blob/File representations; unimplemented XMLHttpRequest remains out of scope |
 | 10 — Streams used by other specs — marked | `readable-stream-cross-spec.ts`, `writable-stream-cross-spec.ts`, the §9.3 methods on `TransformStreamImpl`, and their exported entry points | Streams' operations for use by other specifications; inspect the immediate creation/read/pipe callers in Fetch, File, and Encoding |
 
 Sources are the [local inventory](#local-reference-inventory), plus

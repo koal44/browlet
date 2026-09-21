@@ -219,6 +219,7 @@ export class CollectionBinding {
           this.getMapEntries(receiver),
           declaration,
           kind,
+          { binding: receiver.binding, realm: this.#context.realm },
         );
       },
       { length: 0, name },
@@ -244,6 +245,7 @@ export class CollectionBinding {
           this.getSetEntries(receiver),
           declaration,
           kind,
+          { binding: receiver.binding, realm: this.#context.realm },
         );
       },
       { length: 0, name },
@@ -267,10 +269,11 @@ export class CollectionBinding {
         if (typeof callback !== 'function') {
           this.#throwTypeError('Callback is not callable');
         }
+        const context = { binding: receiver.binding, realm: this.#context.realm };
         this.getMapEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            convertToJavaScript(value, declaration.value, this.#context),
-            convertToJavaScript(key, declaration.key, this.#context),
+            convertToJavaScript(value, declaration.value, context),
+            convertToJavaScript(key, declaration.key, context),
             receiver.platformObject,
           ]);
         });
@@ -297,11 +300,12 @@ export class CollectionBinding {
         if (typeof callback !== 'function') {
           this.#throwTypeError('Callback is not callable');
         }
+        const context = { binding: receiver.binding, realm: this.#context.realm };
         this.getSetEntries(receiver).forEach((value) => {
           const javaScriptValue = convertToJavaScript(
             value,
             declaration.value,
-            this.#context,
+            context,
           );
           Reflect.apply(callback, argumentsList[1], [
             javaScriptValue,
@@ -333,7 +337,7 @@ export class CollectionBinding {
         return convertToJavaScript(
           entries.get(key),
           declaration.value,
-          this.#context,
+          { binding: receiver.binding, realm: this.#context.realm },
         );
       },
       { length: 1, name: 'get' },
@@ -482,6 +486,7 @@ export class CollectionBinding {
     entries: IDLMapEntries,
     declaration: MaplikeMember,
     kind: MapIterationKind,
+    context: ConversionContext,
   ): object {
     const iterator = entries.entries();
     return this.#context.realm.createCollectionIterator('map', () => {
@@ -491,8 +496,8 @@ export class CollectionBinding {
       }
 
       const [idlKey, idlValue] = result.value;
-      const key = convertToJavaScript(idlKey, declaration.key, this.#context);
-      const value = convertToJavaScript(idlValue, declaration.value, this.#context);
+      const key = convertToJavaScript(idlKey, declaration.key, context);
+      const value = convertToJavaScript(idlValue, declaration.value, context);
       return this.#context.realm.createIteratorResultObject(
         kind === 'key' ? key : kind === 'value' ? value :
           createRealmArray(this.#context, [key, value]),
@@ -506,6 +511,7 @@ export class CollectionBinding {
     entries: IDLSetEntries,
     declaration: SetlikeMember,
     kind: SetIterationKind,
+    context: ConversionContext,
   ): object {
     const iterator = entries.values();
     return this.#context.realm.createCollectionIterator('set', () => {
@@ -514,7 +520,7 @@ export class CollectionBinding {
         return this.#context.realm.createIteratorResultObject(undefined, true);
       }
 
-      const value = convertToJavaScript(result.value, declaration.value, this.#context);
+      const value = convertToJavaScript(result.value, declaration.value, context);
       return this.#context.realm.createIteratorResultObject(
         kind === 'value' ? value : createRealmArray(this.#context, [value, value]),
         false,

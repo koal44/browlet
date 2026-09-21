@@ -1,4 +1,5 @@
 import { isomorphicDecode } from '../../js-engine/byte-string';
+import { TypeError } from '../../js-engine/exceptions';
 import { utf8DecodeWithoutBOM } from '../../encoding/codecs/utf-8';
 import { FileImpl } from '../../file/index';
 import type { RuntimeContext } from '../../js-engine/index';
@@ -14,7 +15,6 @@ import type { FormDataEntry } from '../../xhr/index';
  * Parse a complete body into entries whose Files retain the consuming runtime.
  * Fetch's Body integration owns FormData creation, projection, and rejection.
  */
-// SPEC_MISMATCH: Body.formData() -> Promise<FormData>
 export function parseMultipartFormData(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: MIMEType,
@@ -24,7 +24,7 @@ export function parseMultipartFormData(
   if (
     mimeType.type !== 'multipart' || mimeType.subtype !== 'form-data' ||
     boundary === undefined ||
-    !/^[0-9A-Za-z'()+_,\-./:=? ]{0,69}[0-9A-Za-z'()+_,\-./:=?]$/.test(boundary)
+    !boundaryPattern.test(boundary)
   ) throw new TypeError('Invalid multipart boundary or MIME type');
 
   // One code unit per byte keeps delimiter offsets exact, including binary
@@ -77,13 +77,13 @@ function parsePartHeaders(input: string) {
   let disposition: string | undefined;
   let contentType: string | undefined;
   // RFC 822 unfolding removes CRLF before continuation whitespace.
-  for (const line of input.replace(/\r\n(?=[ \t])/g, '').split('\r\n')) {
+  for (const line of input.replace(headerFoldingPattern, '').split('\r\n')) {
     const colon = line.indexOf(':');
     const name = line.slice(0, colon);
-    if (colon === -1 || !/^[\x21-\x39\x3b-\x7e]+$/.test(name) || /[\r\n]/.test(line)) {
+    if (colon === -1 || !headerNamePattern.test(name) || lineBreakPattern.test(line)) {
       throw new TypeError('Invalid multipart header');
     }
-    const value = line.slice(colon + 1).replace(/^[ \t]+|[ \t]+$/g, '');
+    const value = line.slice(colon + 1).replace(headerEdgeWhitespacePattern, '');
     switch (name.toLowerCase()) {
       case 'content-disposition':
         if (disposition !== undefined) throw new TypeError('Duplicate Content-Disposition');
@@ -175,3 +175,9 @@ function skipWhitespaceAndComments(cursor: TextCursor): void {
     }
   }
 }
+
+const boundaryPattern = /^[0-9A-Za-z'()+_,\-./:=? ]{0,69}[0-9A-Za-z'()+_,\-./:=?]$/;
+const headerFoldingPattern = /\r\n(?=[ \t])/g;
+const headerNamePattern = /^[\x21-\x39\x3b-\x7e]+$/;
+const lineBreakPattern = /[\r\n]/;
+const headerEdgeWhitespacePattern = /^[ \t]+|[ \t]+$/g;

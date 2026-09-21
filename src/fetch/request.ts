@@ -1,12 +1,15 @@
+import type { BlobImpl } from '../file/index';
+import type { PromiseValue, RuntimeContext } from '../js-engine/index';
 import { isomorphicEncode } from '../js-engine/byte-string';
 import type { ReadableStreamImpl } from '../streams/index';
 import { areSameOrigin, areSameSite, serializeOrigin, type Origin } from '../url/origin';
 import { copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../url/url';
 import {
-  arg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
+  arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/index';
+import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
 import { serializeInteger, type FetchEnvironmentSettingsObject, type FetchEnvironment } from './infrastructure';
@@ -251,11 +254,13 @@ export class RequestImpl {
   // Internal allocation from a request, guard, and DOM-owned signal.
   // Author RequestInfo/RequestInit processing belongs to the deferred constructor.
   // SPEC_MISMATCH: create a Request object(request, guard, signal, realm) -> Request
-  constructor(request: FetchRequest, guard: HeadersGuard, signal: object) {
+  constructor(
+    request: FetchRequest, guard: HeadersGuard, signal: object, runtime: RuntimeContext,
+  ) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
-    this.#bodyMixin = new BodyMixin(request);
+    this.#bodyMixin = new BodyMixin(request, runtime);
   }
 
   get method(): string { return this.#request.method; }
@@ -288,12 +293,12 @@ export class RequestImpl {
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(): object { return this.#bodyMixin.arrayBuffer(); }
-  blob(): object { return this.#bodyMixin.blob(); }
-  bytes(): object { return this.#bodyMixin.bytes(); }
-  formData(): object { return this.#bodyMixin.formData(); }
-  json(): object { return this.#bodyMixin.json(); }
-  text(): object { return this.#bodyMixin.text(); }
+  arrayBuffer(): PromiseValue<Uint8Array> { return this.#bodyMixin.arrayBuffer(); }
+  blob(): PromiseValue<BlobImpl> { return this.#bodyMixin.blob(); }
+  bytes(): PromiseValue<Uint8Array> { return this.#bodyMixin.bytes(); }
+  formData(): PromiseValue<FormDataImpl> { return this.#bodyMixin.formData(); }
+  json(): PromiseValue<unknown> { return this.#bodyMixin.json(); }
+  text(): PromiseValue<string> { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
   // -- Internal ---------------------------------------------------------
@@ -329,6 +334,7 @@ export type RequestDuplex = 'half';
 export type RequestPriority = 'high' | 'low' | 'auto';
 export type WebTransportHash = { algorithm: string; value: Uint8Array; };
 
+/** Converted RequestInfo: an existing Request implementation or a URL string. */
 export type FetchRequestInfo = RequestImpl | string;
 export type FetchRequestInit = {
   method?: string;
@@ -380,7 +386,9 @@ export const requestInitIDL = defineDictionary({
 export const requestIDL = defineInterface({
   name: 'Request',
   exposed: ['Window', 'Worker'],
-  implementation: impl(RequestImpl),
+  implementation: impl(RequestImpl, {
+    constructWith: [atArg(3, (ctx) => ctx.getRuntime())],
+  }),
   members: [
     ctor([
       arg('input', reference('RequestInfo')),

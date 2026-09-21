@@ -204,6 +204,40 @@ describe('Web IDL synchronous iterable declarations', () => {
     expect(seen[0]?.[2]).toBe(collection);
   });
 
+  it.each(['entries', 'values', 'forEach', 'borrowed next'])(
+    '%s gives unprojected interface values their collection owner while allocating iterator results in the method realm',
+    (method) => {
+      class ValueImpl {}
+      class PairsImpl {
+        value = new ValueImpl();
+        getEntryList(): [string, ValueImpl][] { return [['key', this.value]]; }
+      }
+      const bindings = new BindingWorld([
+        defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
+        defineInterface({ name: 'Pairs', implementation: impl(PairsImpl), members: [iter(reference('Value'), { key: idlType.DOMString })] }),
+      ]);
+      const owner = bindings.register(new Realm());
+      const other = bindings.register(new Realm());
+      const implInst = owner.construct(PairsImpl);
+      const object = owner.project(PairsImpl, implInst);
+      const foreign = other.project(PairsImpl, other.construct(PairsImpl));
+      let value: object | undefined;
+      if (method === 'forEach') {
+        Reflect.apply(getMethod(foreign, 'forEach'), object, [(item: object) => { value = item; }]);
+      } else {
+        const operation = method === 'values' ? 'values' : 'entries';
+        const iterator = Reflect.apply(getMethod(method === 'borrowed next' ? object : foreign, operation), object, []) as object;
+        const foreignIterator = Reflect.apply(getMethod(foreign, operation), foreign, []) as object;
+        const result = Reflect.apply(getMethod(foreignIterator, 'next'), iterator, []) as IteratorResult<unknown>;
+        expect(Object.getPrototypeOf(result)).toBe(other.realm.intrinsics.objectPrototype);
+        if (operation === 'entries') expect(result.value).toBeInstanceOf(other.realm.intrinsics.array);
+        value = (operation === 'values' ? result.value : (result.value as unknown[])[1]) as object;
+      }
+      expect(bindings.getRealm(value!)).toBe(owner.realm);
+      expect(value).toBe(owner.project(ValueImpl, implInst.value));
+    },
+  );
+
   it('brands methods and honors iterable exposure modifiers', () => {
     const hiddenIterable = {
       extendedAttributes: [{ kind: 'no-arguments', name: 'SecureContext' }],

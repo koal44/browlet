@@ -6,8 +6,8 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
-  defineInterface, idlType, sequence, type MaplikeMember, type OperationMember,
-  type SetlikeMember,
+  defineInterface, idlType, impl, maplike, reference, sequence, setlike,
+  type MaplikeMember, type OperationMember, type SetlikeMember,
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL collection iterator overrides', () => {
@@ -417,6 +417,54 @@ describe('Web IDL setlike declarations', () => {
     expect(staticCalls).toBe(1);
     expect(call(object, 'add', [1])).toBe(object);
     expect(call(object, 'has', [1])).toBe(true);
+  });
+});
+
+describe('Web IDL collection result ownership', () => {
+  it.each([
+    ['map', 'get'], ['map', 'entries'], ['map', 'values'], ['map', 'forEach'],
+    ['set', 'entries'], ['set', 'values'], ['set', 'forEach'],
+  ])('borrowed %s %s preserves the collection owner of an unprojected value', (kind, method) => {
+    class ValueImpl {}
+    class CollectionImpl {}
+    const world = new BindingWorld([
+      defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
+      defineInterface({
+        name: 'Collection', implementation: impl(CollectionImpl),
+        members: [kind === 'map'
+          ? maplike(idlType.DOMString, reference('Value'))
+          : setlike(reference('Value'))],
+      }),
+    ]);
+    const owner = world.register(new Realm());
+    const other = world.register(new Realm());
+    const object = owner.project(CollectionImpl, new CollectionImpl());
+    const foreign = other.project(CollectionImpl, new CollectionImpl());
+    const value = new ValueImpl();
+    const binding = world.getRealmBinding(owner.realm)!;
+    if (kind === 'map') binding.getMapEntries(object).set('key', value);
+    else binding.getSetEntries(object).add(value);
+
+    let result: object;
+    if (method === 'forEach') {
+      const seen: object[] = [];
+      Reflect.apply(getMethod(foreign, method), object, [(item: object) => { seen.push(item); }]);
+      result = seen[0]!;
+    } else if (method === 'get') {
+      result = Reflect.apply(getMethod(foreign, method), object, ['key']) as object;
+    } else {
+      const iterator = Reflect.apply(getMethod(foreign, method), object, []) as object;
+      const item = callNext(iterator);
+      expect(Object.getPrototypeOf(item)).toBe(other.realm.intrinsics.objectPrototype);
+      if (method === 'entries') {
+        expect(item.value).toBeInstanceOf(other.realm.intrinsics.array);
+        result = (item.value as object[])[1]!;
+      } else {
+        result = item.value as object;
+      }
+    }
+    expect(world.getRealm(result)).toBe(owner.realm);
+    expect(result).toBe(owner.project(ValueImpl, value));
   });
 });
 

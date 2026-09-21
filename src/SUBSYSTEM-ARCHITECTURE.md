@@ -334,9 +334,12 @@ dependencies through the Runtime Context below. Track the remaining migration in
 ### Runtime Context
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
-Promises, buffer allocation, microtasks, task delivery, abort-controller
+Promises, buffer allocation, JSON parsing, microtasks, task delivery, abort-controller
 construction, time coarsening, structured cloning/serialization/deserialization, and immutable
 native-line-ending configuration.
+Its `global` identifies that owner when a specification selects it as a task
+destination. Browlet reads it through a getter because Window installation
+finishes after the runtime is composed.
 It contains no Binding Context, realm object,
 conversion, callback adaptation, or platform-object registry.
 
@@ -362,6 +365,21 @@ the Blob, while retaining its own runtime for result allocation and event tasks.
 Invocation-specific information, such as Fetch's explicit task destination,
 remains an operation argument. Borrowing another realm's method does not change
 the receiver's runtime.
+
+Fetch's Body mixin selects `runtime.global` for consumption task delivery.
+The global identifies the Window; the networking task source selects a task
+category within its event loop. Body reading can also receive another global
+or a parallel queue explicitly. FormData implements HTML's create-an-entry
+algorithm alongside its entry list; string and Blob/File normalization need
+only its existing runtime. Fetch constructs FormData directly, without an
+entry-creation capability on constructors or RuntimeContext. Constructing an
+entry list from an HTML form remains browser-owned work deferred until forms exist.
+`runtime.parseJSON(text)` uses the owning realm's captured intrinsic, so nested
+objects and syntax failures have that realm without a second parse or clone.
+Multipart extraction and Blob streaming use `BlobData.stream(runtime)`;
+backing data retains no runtime and each stream uses its caller's runtime.
+Blob constructor part processing stays on `BlobImpl`, which owns the part and
+option interpretation, including native line ending policy.
 
 `serialize(value)` captures a value using the source runtime;
 `deserialize(record)` reconstructs it in the destination runtime's realm.
