@@ -446,9 +446,16 @@ The same receiver rule applies to explicit instance-member bindings. Argument
 conversion still belongs to the operation function's Realm, while its member
 binding receives the receiver's Binding Context. Static operations have no
 receiver Realm and use the context in which their function was installed.
-Getters and operations use the receiver record's binding and its
+Getters and operations default to the receiver record's binding and its
 `defaultConversionContext` for result conversion; they do not rediscover the
 binding through a realm lookup.
+An operation's `allocateIn('method')` declaration selects its function's realm
+for result containers and promises while retaining the receiver binding for
+platform-object projection. `allocateIn('receiver')` makes the default realm
+explicit. Static operations use their method realm in either case. This is a
+project allocation policy while [Web IDL #135](https://github.com/whatwg/webidl/issues/135)
+remains unresolved; ordinary declarations, including `Headers.getSetCookie()`,
+keep receiver-realm results.
 Implementations must not accept or retain that context. Existing
 `invokeWith(atArg(0, (ctx) => ctx))` dependencies are migration work. A future dependency
 on the calling script or incumbent settings requires explicit invocation
@@ -526,7 +533,7 @@ through the existing result-type conversion, exception realization, and identity
 cache; it does not add a Blob-specific adapter or another projection cache.
 Capabilities own their settlement flag; stream writers query it instead of
 mirroring it alongside ready/closed promises.
-The byte-result methods retain `newBufferResult()` for their realm-owned
+The byte-result methods declare `allocateIn('receiver')` for their realm-owned
 ArrayBuffer/Uint8Array allocation.
 Streams uses these values throughout, with the Runtime Context retained
 at construction and passed to derived streams. The existing dictionary-result
@@ -632,11 +639,19 @@ queue from an HTML checkpoint to make them pass.
 
 JavaScript buffers and typed arrays retain their existing identity through
 ordinary conversion. A buffer-returning operation can declare
-`newBufferResult()` when its implementation returns internal bytes instead.
+`allocateIn('receiver')` or `allocateIn('method')` when its implementation returns
+internal bytes instead.
 This also applies to bytes delivered by an ordinary implementation promise.
 Binding uses the result realm's engine methods to allocate a fresh buffer and,
 for a view return type, its view. Buffer inspection and construction do not
 belong to Web IDL; conversion and the choice to allocate do.
+The normal converter handles this allocation, including typedefs, nullable
+types, and promises; there is no separate buffer-result conversion pass.
+Sequences, records, and dictionaries use their existing conversion in the
+selected realm, including nested containers. Their object-valued members retain
+ordinary conversion: existing buffers and platform objects keep their identities.
+IDL promise records, frozen arrays, and other retained JavaScript values also
+keep their existing identities; the declaration does not relocate them.
 A retained promise keeps distinct projections for allocating
 and identity-preserving results. This allocation policy is separate from `[NewObject]`, which
 requires a fresh returned object without prescribing its backing buffer.

@@ -6,7 +6,7 @@ import {
 import { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
-  dictMember, emptyDictionary, emptySequence, idlType, impl, newBufferResult, op, promise,
+  allocateIn, dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, union, xattr, DOMExceptionNames, createDOMException,
 } from '../web-idl/index';
 import { BlobData, BlobReadFailure, type BlobSnapshotState } from './blob-data';
@@ -345,7 +345,7 @@ export const blobIDL = defineInterface({
     ),
     op('arrayBuffer', promise(idlType.ArrayBuffer),
       [],
-      { ...xattr('NewObject'), ...newBufferResult() },
+      { ...xattr('NewObject'), ...allocateIn('receiver') },
     ),
     op('textStream', reference('ReadableStream'),
       [],
@@ -353,7 +353,7 @@ export const blobIDL = defineInterface({
     ),
     op('bytes', promise(idlType.Uint8Array),
       [],
-      { ...xattr('NewObject'), ...newBufferResult() },
+      { ...xattr('NewObject'), ...allocateIn('receiver') },
     ),
   ],
 });

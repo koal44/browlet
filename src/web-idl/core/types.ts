@@ -42,7 +42,7 @@ export type OperationMember<Realm = unknown> = {
   // Project metadata: invocation, argument injection, result allocation, and legacy property support.
   invoke?: DeclarationCallback<'operation-invoke', Realm>;
   invokeWith?: InjectedArgument<Realm>[];
-  newBufferResult?: boolean;
+  allocateIn?: 'receiver' | 'method';
   indexedGetter?: IndexedGetterDeclaration;
   getSupportedPropertyNames?: SupportedPropertyNamesSteps;
 };

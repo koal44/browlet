@@ -4,7 +4,8 @@ import {
   appendHeader, combineHeader, containsHeader, convertHeaderNamesToSortedLowercaseSet,
   deleteHeader, documentAcceptHeaderValue, extractHeaderListValues, extractMIMEType, getCORSUnsafeRequestHeaderNames,
   getDecodeAndSplitHeader, getDecodeAndSplitHeaderValue, getEnvironmentDefaultUserAgent, getHeader,
-  getStructuredFieldValue, HeadersImpl, isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
+  getStructuredFieldValue, headersIDL, headersInitIDL, HeadersImpl,
+  isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
   isForbiddenResponseHeaderName, isHeaderName, isHeaderValue, isNoCORSSafelistedRequestHeader,
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
@@ -14,6 +15,8 @@ import {
   parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
 } from '../../src/http/index';
 import { serializeMIMEType } from '../../src/mime/index';
+import { allocateIn, BindingWorld } from '../../src/web-idl/index';
+import { TestRealm } from '../web-idl/test-realm';
 import { createRequestRecord } from './record-fixture';
 
 describe('Content-Type extraction (Fetch §3.5)', () => {
@@ -463,6 +466,29 @@ describe('Headers implementation (Fetch §5.1)', () => {
     headers.delete('rAnGe');
     expect(headers.headerList).toEqual([['X-Custom', 'existing']]);
   });
+});
+
+it('can opt getSetCookie into method-realm allocation with a declaration', () => {
+  const definition = {
+    ...headersIDL,
+    members: headersIDL.members.map((member) =>
+      member.kind === 'operation' && member.name === 'getSetCookie'
+        ? { ...member, ...allocateIn('method') }
+        : member),
+  };
+  const world = new BindingWorld([headersInitIDL, definition]);
+  const receiverRealm = new TestRealm();
+  const methodRealm = new TestRealm();
+  const context = world.register(receiverRealm);
+  context.install(receiverRealm.global);
+  world.register(methodRealm).install(methodRealm.global);
+  const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
+  const method = Reflect.get(Constructor.prototype, 'getSetCookie');
+  const headers = context.project(HeadersImpl, new HeadersImpl([['Set-Cookie', 'a=1']]));
+  const cookies = Reflect.apply(method, headers, []);
+  expect(cookies).toBeInstanceOf(methodRealm.intrinsics.array);
+  expect(cookies).not.toBeInstanceOf(receiverRealm.intrinsics.array);
+  expect(cookies).toEqual(['a=1']);
 });
 
 function structuredItem(bareItem: StructuredBareItem): StructuredItem {

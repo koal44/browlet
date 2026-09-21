@@ -93,8 +93,8 @@ it('infers projection callbacks and preserves the host realm through registratio
 it('checks declaration options without importing the runtime binding', () => {
   const source = `
     import {
-      arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
-      dictMember, idlType, impl, invokeWith, newBufferResult, op, staticOp,
+      allocateIn, arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
+      dictMember, idlType, impl, invokeWith, op, sequence, staticOp,
     } from '../../src/web-idl/core/index';
 
     declare module '../../src/web-idl/core/types' {
@@ -107,19 +107,22 @@ it('checks declaration options without importing the runtime binding', () => {
     defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
     impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
     ctor([], { constructWith: [atArg(0, () => new Example())] });
-    op('read', idlType.ArrayBuffer, [], newBufferResult());
+    op('read', idlType.ArrayBuffer, [], allocateIn('receiver'));
+    op('names', sequence(idlType.DOMString), [], allocateIn('method'));
     op('run', idlType.undefined, [], invokeWith(atArg(0, () => new Example())));
-    op('existing', idlType.Uint8Array, [], { newBufferResult: false });
+    op('existing', idlType.Uint8Array, [], { allocateIn: undefined });
     staticOp('create', idlType.object, [], invokeWith(atArg(0, () => new Example())));
 
-    // @ts-expect-error A buffer result policy is not a constructor option.
-    ctor([], newBufferResult());
+    // @ts-expect-error A result allocation policy is not a constructor option.
+    ctor([], allocateIn('receiver'));
     // @ts-expect-error Operation dependencies are not constructor dependencies.
     ctor([], invokeWith(atArg(0, () => new Example())));
     // @ts-expect-error Constructor dependencies are not operation dependencies.
     op('run', idlType.undefined, [], { constructWith: [atArg(0, () => new Example())] });
-    // @ts-expect-error A buffer result policy is not an attribute option.
-    attr('value', idlType.object, newBufferResult());
+    // @ts-expect-error A result allocation policy is not an attribute option.
+    attr('value', idlType.object, allocateIn('method'));
+    // @ts-expect-error Result allocation selects the receiver or method realm.
+    allocateIn('caller');
     // @ts-expect-error A declaration cannot carry arbitrary binding metadata.
     ctor([], { binding: { nonsense: true } });
     // @ts-expect-error Injected constructor arguments require explicit positions.

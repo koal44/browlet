@@ -1,7 +1,7 @@
 import {
   getAssociatedRealm, isObject, RangeError as InternalRangeError,
   SyntaxError as InternalSyntaxError, TypeError as InternalTypeError,
-  type ByteSequence, type JSFunction, type RuntimeContext,
+  type JSFunction, type RuntimeContext,
 } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
 import { DOMException as InternalDOMException } from './core/dom-exception';
@@ -14,8 +14,8 @@ import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
 } from './collection';
 import {
-  convertToIDL, convertToJavaScript, createBufferResult, materializeDefaultValue,
-  projectPromise, type ConversionContext, type HostDefinedInterface,
+  convertToIDL, convertToJavaScript, materializeDefaultValue,
+  type ConversionContext, type HostDefinedInterface,
 } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
@@ -1265,8 +1265,8 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
               false,
             )
             : null;
-          // Return containers use the receiver's realm, or the method's without a receiver.
-          // Keep this policy while the broader realm rules remain unresolved:
+          // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
+          // An explicit allocateIn declaration selects a different result realm without changing ownership.
           // https://github.com/whatwg/webidl/issues/135
           resultContext = (receiver?.binding ?? this).defaultConversionContext;
 
@@ -1275,6 +1275,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             argumentsList,
             this.defaultConversionContext,
           );
+          if (overload.callable.allocateIn === 'method') {
+            resultContext = { binding: resultContext.binding, realm: this.realm };
+          }
           const steps = this.getMemberBinding(definition, overload.callable)?.operationSteps;
           if (hasExtendedAttribute(
             overload.callable.extendedAttributes,
@@ -1293,21 +1296,11 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             throw missingImplementation(definition, `operation ${name}`);
           }
           const result = steps(receiver, ...overload.values);
-          if (overload.callable.newBufferResult) {
-            const type = getUnannotatedType(overload.callable.returns, this.definitions);
-            if (type.kind === 'promise') {
-              return projectPromise(result, type.type, resultContext, true);
-            }
-            return createBufferResult(
-              result as ByteSequence,
-              overload.callable.returns,
-              resultContext,
-            );
-          }
           return convertToJavaScript(
             result,
             overload.callable.returns,
             resultContext,
+            overload.callable.allocateIn !== undefined,
           );
         } catch (exception) {
           const returnType = operations[0]?.returns;

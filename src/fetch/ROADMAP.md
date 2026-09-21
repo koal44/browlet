@@ -464,7 +464,8 @@ The projection regression records our receiver-realm choice while Web IDL issues
 [#135](https://github.com/whatwg/webidl/issues/135) and
 [#371](https://github.com/whatwg/webidl/issues/371) remain unresolved.
 Headers returns its string list through ordinary Web IDL conversion.
-After the allocation cleanup and declaration-helper review, continue with 6b.
+Allocation cleanup and the `allocateIn('receiver' | 'method')` declaration review
+are complete. Continue with 6b.
 
 Implement:
 

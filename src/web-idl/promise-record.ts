@@ -78,7 +78,7 @@ export type IDLPromiseRecord = {
 export type PromiseProjectionRecord = {
   world: BindingWorld;
   record: IDLPromiseRecord;
-  newBufferResult: boolean;
+  allocateBuffers: boolean;
 };
 
 /** Privately retain the source promise's author-facing projections. */

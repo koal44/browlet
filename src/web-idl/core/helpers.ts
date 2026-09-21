@@ -320,11 +320,15 @@ export function invokeWith<Realm = unknown>(
 }
 
 /**
- * Project helper: allocate a fresh buffer or view from returned or promised bytes in the result realm.
- * Without this declaration, buffer results retain their JavaScript identity.
+ * Select the realm for result containers and promises. Without a receiver, use the method realm.
+ * Buffer results, including promised buffers, allocate from returned bytes;
+ * without this declaration they retain their JavaScript identity.
+ * Existing objects inside containers keep their identity and ownership.
  */
-export function newBufferResult(): Pick<OperationOptions, 'newBufferResult'> {
-  return { newBufferResult: true };
+export function allocateIn(
+  realm: NonNullable<OperationOptions['allocateIn']>,
+): Pick<OperationOptions, 'allocateIn'> {
+  return { allocateIn: realm };
 }
 
 // Argument adaptation and callback errors

@@ -30,7 +30,7 @@ import {
 import { defineDataProperty } from './property';
 import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
-  getUnannotatedType, includesUndefined,
+  includesUndefined,
 } from './types';
 
 // Project entry point for Web IDL §3.2 JavaScript type mapping; realizes realm-owned failures.
@@ -65,8 +65,9 @@ export function convertToJavaScript(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
+  allocateBuffers = false,
 ): unknown {
-  return convertIDLValue(value, type, context, []);
+  return convertIDLValue(value, type, context, [], allocateBuffers);
 }
 
 // Project adapter: preserve projected promise identity and convert fulfillment values into the target realm.
@@ -75,7 +76,7 @@ export function projectPromise(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
-  newBufferResult = false,
+  allocateBuffers = false,
 ): Promise<unknown> {
   // Web IDL §3.2.24 — an existing capability converts to its Promise field.
   if (isIDLPromiseRecord(value)) return value.promise;
@@ -84,7 +85,7 @@ export function projectPromise(
   const existing = projections?.find((entry) =>
     entry.world === context.binding.world &&
     entry.record.realm === context.realm && entry.record.type === type &&
-    entry.newBufferResult === newBufferResult);
+    entry.allocateBuffers === allocateBuffers);
   if (existing) return existing.record.promise;
 
   const record = createIDLPromiseRecord(type, context.realm, context.binding.realizeException);
@@ -92,17 +93,14 @@ export function projectPromise(
     projections = [];
     void PromiseProjectionStamper.stamp(source, projections);
   }
-  projections.push({ world: context.binding.world, record, newBufferResult });
+  projections.push({ world: context.binding.world, record, allocateBuffers });
   // These callbacks adapt implementation state; author reactions still run
   // through the projected promise's own realm and queue.
   const onFulfilled = (result: unknown): void => {
     try {
-      const resolution = newBufferResult
-        ? createBufferResult(result as ByteSequence, type, context)
-        : result;
-      record.resolve(isIDLPromiseRecord(resolution)
-        ? resolution.promise
-        : convertToJavaScript(resolution, type, context));
+      record.resolve(isIDLPromiseRecord(result)
+        ? result.promise
+        : convertToJavaScript(result, type, context, allocateBuffers));
     } catch (error) {
       record.reject(error);
     }
@@ -117,22 +115,6 @@ export function projectPromise(
     record.reject(error);
   }
   return record.promise;
-}
-
-// Project helper: allocate a fresh buffer result of the declared type in the target realm.
-export function createBufferResult(
-  bytes: ByteSequence,
-  type: WebIDLType,
-  context: ConversionContext,
-): ArrayBufferLike | ArrayBufferView {
-  const resultType = getUnannotatedType(type, context.binding.definitions);
-  if (resultType.kind !== 'simple' || !bufferTypeNames.has(resultType.name)) {
-    throw new TypeError('newBufferResult requires a buffer source return type');
-  }
-  const name = resultType.name as BufferTypeName;
-  if (name === 'ArrayBuffer') return context.realm.createArrayBuffer(bytes);
-  if (name === 'SharedArrayBuffer') return context.realm.createSharedArrayBuffer(bytes);
-  return context.realm.createArrayBufferView(name, bytes);
 }
 
 // Web IDL §3.2.21.1 Creating a sequence from an iterable.
@@ -380,11 +362,13 @@ function convertIDLValue(
   type: WebIDLType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
+  allocateBuffers = false,
 ): unknown {
   return convertIDLValueByEffectiveType(
     value,
     resolveEffectiveType(type, context.binding.definitions, extendedAttributes),
     context,
+    allocateBuffers,
   );
 }
 
@@ -393,12 +377,13 @@ function convertIDLValueByEffectiveType(
   value: unknown,
   { type, extendedAttributes }: EffectiveType,
   context: ConversionContext,
+  allocateBuffers = false,
 ): unknown {
   // Realize internal exceptions before exposing them, including as callback arguments.
   value = context.binding.realizeException(value);
   switch (type.kind) {
     case 'simple':
-      return convertSimpleTypeToJavaScript(value, type.name);
+      return convertSimpleTypeToJavaScript(value, type.name, context, allocateBuffers);
     case 'reference':
       return convertNamedTypeToJavaScript(
         value,
@@ -413,6 +398,7 @@ function convertIDLValueByEffectiveType(
         type.type,
         context,
         extendedAttributes,
+        allocateBuffers,
       );
     case 'union':
       return convertUnionToJavaScript(
@@ -420,6 +406,7 @@ function convertIDLValueByEffectiveType(
         type,
         context,
         extendedAttributes,
+        allocateBuffers,
       );
     case 'sequence':
       return convertSequenceToJavaScript(
@@ -438,7 +425,7 @@ function convertIDLValueByEffectiveType(
     case 'frozen-array':
       return value;
     case 'promise':
-      return projectPromise(value, type.type, context);
+      return projectPromise(value, type.type, context, allocateBuffers);
     case 'async-sequence':
       return convertAsyncSequenceToJavaScript(value);
     case 'observable-array':
@@ -547,9 +534,18 @@ function convertJavaScriptValueToSimpleType(
 function convertSimpleTypeToJavaScript(
   value: unknown,
   name: SimpleTypeName,
+  context: ConversionContext,
+  allocateBuffers: boolean,
 ): unknown {
   if (bufferTypeNames.has(name)) {
-    return convertBufferSourceToJavaScript(value, name as BufferTypeName);
+    const bufferName = name as BufferTypeName;
+    if (allocateBuffers) {
+      const bytes = value as ByteSequence;
+      if (bufferName === 'ArrayBuffer') return context.realm.createArrayBuffer(bytes);
+      if (bufferName === 'SharedArrayBuffer') return context.realm.createSharedArrayBuffer(bytes);
+      return context.realm.createArrayBufferView(bufferName, bytes);
+    }
+    return convertBufferSourceToJavaScript(value, bufferName);
   }
   return name === 'undefined' ? undefined : value;
 }
@@ -983,6 +979,7 @@ function convertUnionToJavaScript(
   type: UnionType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
+  allocateBuffers: boolean,
 ): unknown {
   const types = flattenEffectiveTypes(
     type,
@@ -1064,7 +1061,7 @@ function convertUnionToJavaScript(
     const bufferName = getBufferTypeName(value);
     const buffer = bufferName && types.find((candidate) =>
       isSimpleType(candidate, bufferName));
-    if (buffer) return convertIDLValueByEffectiveType(value, buffer, context);
+    if (buffer) return convertIDLValueByEffectiveType(value, buffer, context, allocateBuffers);
     const object = types.find(isObjectType);
     if (object) return value;
   }

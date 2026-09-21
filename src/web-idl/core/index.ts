@@ -24,7 +24,7 @@ export {
   reference, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated,
   integer, decimal, xattr,
-  impl, atArg, invokeWith, newBufferResult, unwrapArg, cbDict, onError,
+  impl, atArg, invokeWith, allocateIn, unwrapArg, cbDict, onError,
 } from './helpers';
 
 export {
