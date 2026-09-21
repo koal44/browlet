@@ -1,4 +1,4 @@
-import type { RequestRecord } from '../../request';
+import type { FetchRequest } from '../../request';
 import { networkPartitionKeysEqual, type NetworkPartitionKey } from '../network-partition';
 
 /** Browser-owned logical HTTP cache partitions; response storage is still deferred. */
@@ -7,7 +7,7 @@ export class HTTPCachePartitions {
 
   /** https://fetch.spec.whatwg.org/#determine-the-http-cache-partition */
   // SPEC_MISMATCH: (request) -> HTTP cache or null
-  determine(request: RequestRecord): HTTPCachePartition | null {
+  determine(request: FetchRequest): HTTPCachePartition | null {
     const key = request.determineNetworkPartitionKey();
     if (key === null) return null;
     const existing = this.partitions.find((partition) => networkPartitionKeysEqual(partition.key, key));

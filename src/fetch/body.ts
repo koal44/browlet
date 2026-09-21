@@ -11,12 +11,12 @@ import {
   union, xattr,
 } from '../web-idl/index';
 import type { FormDataImpl } from '../xhr/index';
-import type { RequestRecord } from './request';
-import type { ResponseRecord } from './response';
+import type { FetchRequest } from './request';
+import type { FetchResponse } from './response';
 import { queueFetchTask } from './tasks';
 
 /** Fetch §2.2.4: a stream and the source/length retained for replay. */
-export class BodyRecord {
+export class FetchBody {
   stream: ReadableStreamImpl;
   source: Uint8Array | BlobImpl | FormDataImpl | null = null;
   length: number | null = null;
@@ -29,7 +29,7 @@ export class BodyRecord {
   }
 
   /** Fetch §§2.2.4 and 5.2, safely extract an internal byte sequence as a body. */
-  static fromBytes(bytes: Uint8Array, runtime: RuntimeContext): BodyRecord {
+  static fromBytes(bytes: Uint8Array, runtime: RuntimeContext): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
     runtime.networking.runInParallel(() => {
       if (bytes.length > 0 && !stream.isErrored) {
@@ -37,16 +37,16 @@ export class BodyRecord {
       }
       stream.close();
     });
-    const body = new BodyRecord(stream, runtime);
+    const body = new FetchBody(stream, runtime);
     body.source = bytes;
     body.length = bytes.length;
     return body;
   }
 
-  clone(): BodyRecord {
+  clone(): FetchBody {
     const [out1, out2] = this.stream.teeWithCloning();
     this.stream = out1;
-    const clone = new BodyRecord(out2, this.#runtime);
+    const clone = new FetchBody(out2, this.#runtime);
     clone.source = this.source;
     clone.length = this.length;
     return clone;
@@ -109,7 +109,7 @@ export class BodyRecord {
   }
 }
 
-export type BodyWithType = { body: BodyRecord; type: string | null; };
+export type BodyWithType = { body: FetchBody; type: string | null; };
 
 /**
  * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
@@ -151,10 +151,10 @@ export function handleContentCodings(
  * };
  */
 export class BodyMixin {
-  #record: RequestRecord | ResponseRecord;
+  #record: FetchRequest | FetchResponse;
 
   // Read the includer's current body and headers, including replacements.
-  constructor(record: RequestRecord | ResponseRecord) {
+  constructor(record: FetchRequest | FetchResponse) {
     this.#record = record;
   }
 
@@ -200,9 +200,9 @@ export class BodyMixin {
     throw new Error('Body.textStream is not implemented');
   }
 
-  #bodyRecord(): BodyRecord | null {
+  #bodyRecord(): FetchBody | null {
     const body = this.#record.body;
-    if (body !== null && !(body instanceof BodyRecord)) {
+    if (body !== null && !(body instanceof FetchBody)) {
       throw new Error('Fetch request body bytes must be extracted before API use');
     }
     return body;

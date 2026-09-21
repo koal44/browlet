@@ -5,7 +5,7 @@ import { UserAgent } from '../../src/browlet/user-agent';
 import { FetchController } from '../../src/fetch/controller';
 import { FetchGroup } from '../../src/fetch/group';
 import { isOffline } from '../../src/fetch/infrastructure';
-import { RequestRecord } from '../../src/fetch/request';
+import { FetchRequest } from '../../src/fetch/request';
 import { parseURL } from '../../src/url/url';
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 
@@ -14,8 +14,8 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.hostDefined!;
     const second = createFetchWindow(userAgent).realm.hostDefined!;
-    const firstRequest = new RequestRecord(first.creationURL, first);
-    const secondRequest = new RequestRecord(second.creationURL, second);
+    const firstRequest = new FetchRequest(first.creationURL, first);
+    const secondRequest = new FetchRequest(second.creationURL, second);
     const partitions = userAgent.httpCachePartitions;
     const firstPartition = partitions.determine(firstRequest);
 
@@ -34,7 +34,7 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.hostDefined!;
     const second = createFetchWindow(userAgent).realm.hostDefined!;
-    const request = new RequestRecord(first.creationURL, first);
+    const request = new FetchRequest(first.creationURL, first);
     const controller = new FetchController();
 
     expect(first.fetchGroup).toBeInstanceOf(FetchGroup);
@@ -53,7 +53,7 @@ describe('Fetch client settings ownership', () => {
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
     const settings = realm.hostDefined!;
-    const request = new RequestRecord(parseURL('https://example.test/').url!, settings);
+    const request = new FetchRequest(parseURL('https://example.test/').url!, settings);
     request.origin = settings.origin;
     const container = document!.getPolicyContainer();
 
@@ -79,7 +79,7 @@ describe('Fetch client settings ownership', () => {
     const second = createFetchWindow();
     const settings = first.realm.hostDefined!;
     const otherSettings = second.realm.hostDefined!;
-    const request = new RequestRecord(settings.creationURL, settings);
+    const request = new FetchRequest(settings.creationURL, settings);
 
     expect(request.client).toBe(settings);
     expect(settings.userAgent).not.toBe(otherSettings.userAgent);

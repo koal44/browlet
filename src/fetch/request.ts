@@ -7,18 +7,18 @@ import {
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/index';
-import { BodyMixin, BodyRecord, type BodyInitValue } from './body';
-import { appendHeader, HeadersImpl, type HeaderList, type HeadersGuard, type HeadersInitValue } from './headers';
+import { BodyMixin, FetchBody, type BodyInitValue } from './body';
+import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
 import { serializeInteger, type FetchEnvironmentSettingsObject, type FetchEnvironment } from './infrastructure';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
 
 /** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
-export class RequestRecord {
+export class FetchRequest {
   method = 'GET';
   localURLsOnly = false;
-  headerList: HeaderList = [];
+  headerList = new FetchHeaders();
   unsafeRequest = false;
-  body: Uint8Array | BodyRecord | null = null;
+  body: Uint8Array | FetchBody | null = null;
   client: FetchEnvironmentSettingsObject | null;
   reservedClient: FetchEnvironment | null = null;
   replacesClientId = '';
@@ -123,18 +123,18 @@ export class RequestRecord {
   }
 
   /** https://fetch.spec.whatwg.org/#concept-request-clone */
-  clone(): RequestRecord {
-    const request = new RequestRecord(this.url, this.client);
+  clone(): FetchRequest {
+    const request = new FetchRequest(this.url, this.client);
     for (let i = 1; i < this.urlList.length; i++) request.urlList.push(copyURL(this.urlList[i]!));
     return Object.assign(request, this, {
       webDriverId: request.webDriverId,
-      headerList: this.headerList.map(([name, value]) => [name, value]),
+      headerList: this.headerList.clone(),
       urlList: request.urlList,
       referrer: typeof this.referrer === 'string' ? this.referrer : copyURL(this.referrer),
       webTransportHashList: this.webTransportHashList.map(({ algorithm, value }) => ({ algorithm, value: new Uint8Array(value) })),
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
       // Before body extraction, a byte sequence is copied as a value; a body tees its stream.
-      body: this.body === null ? null : this.body instanceof BodyRecord ? this.body.clone() : new Uint8Array(this.body),
+      body: this.body === null ? null : this.body instanceof FetchBody ? this.body.clone() : new Uint8Array(this.body),
     });
   }
 
@@ -142,7 +142,7 @@ export class RequestRecord {
   addRangeHeader(first: number | bigint, last?: number | bigint): void {
     if (last !== undefined && first > last) throw new Error('Range start exceeds its end');
     const value = `bytes=${serializeInteger(first)}-${last === undefined ? '' : serializeInteger(last)}`;
-    appendHeader(['Range', value], this.headerList);
+    this.headerList.append('Range', value);
   }
 
   /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
@@ -243,7 +243,7 @@ const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame
  * enum RequestPriority { "high", "low", "auto" };
  */
 export class RequestImpl {
-  #request: RequestRecord;
+  #request: FetchRequest;
   #headers: HeadersImpl;
   #signal: object;
   #bodyMixin: BodyMixin;
@@ -251,7 +251,7 @@ export class RequestImpl {
   // Internal allocation from a request, guard, and DOM-owned signal.
   // Author RequestInfo/RequestInit processing belongs to the deferred constructor.
   // SPEC_MISMATCH: create a Request object(request, guard, signal, realm) -> Request
-  constructor(request: RequestRecord, guard: HeadersGuard, signal: object) {
+  constructor(request: FetchRequest, guard: HeadersGuard, signal: object) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
@@ -271,7 +271,7 @@ export class RequestImpl {
   }
 
   get referrerPolicy(): string { return this.#request.referrerPolicy; }
-  get mode(): RequestRecord['mode'] { return this.#request.mode; }
+  get mode(): FetchRequest['mode'] { return this.#request.mode; }
   get credentials(): RequestCredentials { return this.#request.credentialsMode; }
   get cache(): RequestCache { return this.#request.cacheMode; }
   get redirect(): RequestRedirect { return this.#request.redirectMode; }
@@ -298,7 +298,7 @@ export class RequestImpl {
 
   // -- Internal ---------------------------------------------------------
 
-  getRequest(): RequestRecord { return this.#request; }
+  getRequest(): FetchRequest { return this.#request; }
 }
 
 export type RequestInitiator = 'audio' | 'beacon' | 'body' | 'css' | 'early-hints' |
@@ -329,8 +329,8 @@ export type RequestDuplex = 'half';
 export type RequestPriority = 'high' | 'low' | 'auto';
 export type WebTransportHash = { algorithm: string; value: Uint8Array; };
 
-export type RequestInfoValue = RequestImpl | string;
-export type RequestInitRecord = {
+export type FetchRequestInfo = RequestImpl | string;
+export type FetchRequestInit = {
   method?: string;
   headers?: HeadersInitValue;
   body?: BodyInitValue | null;

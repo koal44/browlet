@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FetchController } from '../../src/fetch/controller';
 import { FetchGroup, type DeferredFetchRecord } from '../../src/fetch/group';
-import { createRequestRecord } from './record-fixture';
+import { createFetchRequest } from './fetch-fixture';
 
 describe('Fetch groups', () => {
   it('terminates an empty group without invoking any deferred work', () => {
@@ -10,12 +10,12 @@ describe('Fetch groups', () => {
 
   it('terminates only unfinished, non-keepalive requests with controllers', () => {
     const group = new FetchGroup();
-    const active = { request: createRequestRecord(), controller: new FetchController() };
-    const done = { request: createRequestRecord(), controller: new FetchController() };
-    const keepalive = { request: createRequestRecord(), controller: new FetchController() };
+    const active = { request: createFetchRequest(), controller: new FetchController() };
+    const done = { request: createFetchRequest(), controller: new FetchController() };
+    const keepalive = { request: createFetchRequest(), controller: new FetchController() };
     done.request.done = true;
     keepalive.request.keepalive = true;
-    group.fetchRecords.push(active, done, keepalive, { request: createRequestRecord(), controller: null });
+    group.fetchRecords.push(active, done, keepalive, { request: createFetchRequest(), controller: null });
 
     group.terminate();
 
@@ -28,7 +28,7 @@ describe('Fetch groups', () => {
   it.each(['sent', 'aborted'] as const)('does not reprocess deferred requests in state %s', (invokeState) => {
     const group = new FetchGroup();
     const notifyInvoked = vi.fn();
-    group.deferredFetchRecords.push({ request: createRequestRecord(), notifyInvoked, invokeState });
+    group.deferredFetchRecords.push({ request: createFetchRequest(), notifyInvoked, invokeState });
 
     expect(() => group.terminate()).not.toThrow();
     expect(notifyInvoked).not.toHaveBeenCalled();
@@ -37,7 +37,7 @@ describe('Fetch groups', () => {
   it('leaves a pending deferred record intact when it reaches the unimplemented processing step', () => {
     const group = new FetchGroup();
     const record: DeferredFetchRecord = {
-      request: createRequestRecord(), notifyInvoked: vi.fn(), invokeState: 'pending',
+      request: createFetchRequest(), notifyInvoked: vi.fn(), invokeState: 'pending',
     };
     group.deferredFetchRecords.push(record);
 

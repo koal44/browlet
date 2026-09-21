@@ -198,6 +198,11 @@ private methods for work confined to that class, and statics for factories,
 predicates, or class-level algorithms. An internal operation does not need to be
 static merely to distinguish it from the declared platform API.
 
+Fetch's internal `FetchRequest`, `FetchResponse`, and `FetchHeaders` own network
+state and algorithms. The projected APIs use `RequestImpl`, `ResponseImpl`, and
+`HeadersImpl`. A `HeadersImpl` shares the internal `FetchHeaders` while keeping
+its own mutation guard; internal Fetch algorithms operate on the list directly.
+
 ### Binding machinery
 
 Web IDL owns the boundary into the Platform layer:

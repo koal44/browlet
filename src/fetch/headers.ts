@@ -13,55 +13,329 @@ import {
 import { isForbiddenMethod } from './http/methods';
 import { parseSingleRangeHeaderValue } from './http/ranges';
 
-/*
- * Fetch §§2.2.2 and 5.1. Names and values are byte strings: each string code
- * unit represents one byte. The list preserves order, duplicates, and identity.
- */
-export type Header = [name: string, value: string];
-export type HeaderList = Header[];
+/** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
+// https://fetch.spec.whatwg.org/#concept-header-list
+export class FetchHeaders {
+  /** Raw byte-string pairs, preserving duplicate lines and their order. */
+  list: Header[];
 
-/** Fetch §2.2.2 — get a structured field value; absent and invalid both return null. */
-export function getStructuredFieldValue<T extends StructuredField['type']>(
-  name: string, type: T, list: HeaderList,
-): Extract<StructuredField, { type: T; }> | null {
-  const value = getHeader(name, list);
-  return value === null ? null : parseStructuredField(isomorphicEncode(value), type);
-}
+  constructor(list: Header[] = []) {
+    this.list = list;
+  }
 
-/**
- * Fetch §2.2.2 / RFC 9651 §4.1 — set a structured field value. Empty containers
- * omit the field; serialization failure leaves the original header list intact.
- */
-export function setStructuredFieldValue(
-  [name, structuredValue]: [name: string, value: StructuredField], list: HeaderList,
-): void {
-  const value = serializeStructuredField(structuredValue);
-  if (value === null) throw new TypeError('Cannot serialize structured field value');
-  if (value === undefined) deleteHeader(name, list);
-  else setHeader([name, value], list);
-}
+  /** Test whether the case-insensitive name is present. */
+  has(name: string): boolean {
+    const lower = name.toLowerCase();
+    return this.list.some((header) => header[0].toLowerCase() === lower);
+  }
 
-/** Fetch §2.2.2 — header-list operations retain order, duplicates, and list identity. */
-export function containsHeader(name: string, list: HeaderList): boolean {
-  const lower = name.toLowerCase();
-  return list.some((header) => header[0].toLowerCase() === lower);
-}
+  /** Combine matching values, or return null when the name is absent. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-get
+  get(name: string): string | null {
+    const lower = name.toLowerCase();
+    let combined: string | null = null;
+    for (const [headerName, value] of this.list) {
+      if (headerName.toLowerCase() === lower) {
+        combined = combined === null ? value : `${combined}, ${value}`;
+      }
+    }
+    return combined;
+  }
 
-export function getHeader(name: string, list: HeaderList): string | null {
-  const lower = name.toLowerCase();
-  let combined: string | null = null;
-  for (const [headerName, value] of list) {
-    if (headerName.toLowerCase() === lower) {
-      combined = combined === null ? value : `${combined}, ${value}`;
+  /** Append a line using the first matching name's spelling. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-append
+  append(name: string, value: string): void {
+    const lower = name.toLowerCase();
+    const existing = this.list.find((header) => header[0].toLowerCase() === lower);
+    this.list.push([existing?.[0] ?? name, value]);
+  }
+
+  /** Delete every line with the case-insensitive name. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-delete
+  delete(name: string): void {
+    const lower = name.toLowerCase();
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      if (this.list[i]![0].toLowerCase() === lower) this.list.splice(i, 1);
     }
   }
-  return combined;
+
+  /** Replace matches in place, preserving the first entry's spelling and position. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-set
+  set(name: string, value: string): void {
+    const lower = name.toLowerCase();
+    const first = this.list.findIndex((header) => header[0].toLowerCase() === lower);
+    if (first === -1) {
+      this.list.push([name, value]);
+      return;
+    }
+    this.list[first]![1] = value;
+    for (let i = this.list.length - 1; i > first; i--) {
+      if (this.list[i]![0].toLowerCase() === lower) this.list.splice(i, 1);
+    }
+  }
+
+  /** Append to the first matching value without deleting later entries. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-combine
+  combine(name: string, value: string): void {
+    const lower = name.toLowerCase();
+    const existing = this.list.find((header) => header[0].toLowerCase() === lower);
+    if (existing) existing[1] += `, ${value}`;
+    else this.list.push([name, value]);
+  }
+
+  /** Copy the list and its pairs so either copy can be changed independently. */
+  clone(): FetchHeaders {
+    return new FetchHeaders(this.list.map(([name, value]) => [name, value]));
+  }
+
+  [Symbol.iterator](): ArrayIterator<Header> {
+    return this.list[Symbol.iterator]();
+  }
+
+  /** Return sorted copies, combining regular fields and keeping Set-Cookie lines separate. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-sort-and-combine
+  sortAndCombine(): Header[] {
+    const headers: Header[] = [];
+    const names = new Set<string>();
+    for (const [name] of this.list) names.add(name.toLowerCase());
+    for (const name of [...names].sort()) {
+      if (name === 'set-cookie') {
+        for (const [headerName, value] of this.list) {
+          if (headerName.toLowerCase() === name) headers.push([name, value]);
+        }
+      } else {
+        headers.push([name, this.get(name)!]);
+      }
+    }
+    return headers;
+  }
+
+  /** Return separate Set-Cookie values in their original order. */
+  getSetCookie(): string[] {
+    const values: string[] = [];
+    for (const [name, value] of this.list) {
+      if (name.toLowerCase() === 'set-cookie') values.push(value);
+    }
+    return values;
+  }
+
+  /** Parse a structured field; absent and invalid both return null. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-get-structured-header
+  getStructuredFieldValue<T extends StructuredField['type']>(
+    name: string, type: T,
+  ): Extract<StructuredField, { type: T; }> | null {
+    const value = this.get(name);
+    return value === null ? null : parseStructuredField(isomorphicEncode(value), type);
+  }
+
+  /** Set a structured field, omitting empty containers and leaving the list intact on failure. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-set-structured-header
+  setStructuredFieldValue(name: string, structuredValue: StructuredField): void {
+    const value = serializeStructuredField(structuredValue);
+    if (value === null) throw new TypeError('Cannot serialize structured field value');
+    if (value === undefined) this.delete(name);
+    else this.set(name, value);
+  }
+
+  /** Split the combined value at unquoted commas, or return null when absent. */
+  // https://fetch.spec.whatwg.org/#concept-header-list-get-decode-split
+  getDecodeAndSplit(name: string): string[] | null {
+    const value = this.get(name);
+    return value === null ? null : getDecodeAndSplitHeaderValue(value);
+  }
+
+  /** Extract Content-Type, preserving charset across repeated matching MIME types. */
+  // https://fetch.spec.whatwg.org/#concept-header-extract-mime-type
+  extractMIMEType(): MIMEType | null {
+    let charset: string | undefined;
+    let essence: MIMETypeEssence | undefined;
+    let mimeType: MIMEType | null = null;
+    const values = this.getDecodeAndSplit('Content-Type');
+    if (values === null) return null;
+
+    for (const value of values) {
+      const temporaryMimeType = parseMIMEType(value);
+      if (temporaryMimeType === null) continue;
+      const temporaryEssence = getMIMETypeEssence(temporaryMimeType);
+      if (temporaryEssence === '*/*') continue;
+      mimeType = temporaryMimeType;
+      if (temporaryEssence !== essence) {
+        charset = mimeType.parameters.get('charset');
+        essence = temporaryEssence;
+      } else if (!mimeType.parameters.has('charset') && charset !== undefined) {
+        mimeType.parameters.set('charset', charset);
+      }
+    }
+    return mimeType;
+  }
+
+  /** Undefined means absent; null means invalid syntax or disallowed multiplicity. */
+  // The parser and multiplicity arguments supply the field's ABNF rules.
+  // https://fetch.spec.whatwg.org/#extract-header-list-values
+  extractValues<T>(
+    name: string, parseValues: (value: string) => T[] | null, allowMultiple: boolean,
+  ): T[] | null | undefined {
+    const lower = name.toLowerCase();
+    const headers = this.list.filter((header) => header[0].toLowerCase() === lower);
+    if (headers.length === 0) return undefined;
+    if (!allowMultiple && headers.length > 1) return null;
+    const values: T[] = [];
+    for (const [, value] of headers) {
+      const extracted = parseValues(value);
+      if (extracted === null) return null;
+      values.push(...extracted);
+    }
+    return values;
+  }
+
+  /** Collect unsafe names, including safelisted fields when their total exceeds 1024 bytes. */
+  // https://fetch.spec.whatwg.org/#cors-unsafe-request-header-names
+  getCORSUnsafeRequestHeaderNames(): string[] {
+    const unsafeNames: string[] = [];
+    const potentiallyUnsafeNames: string[] = [];
+    let safelistValueSize = 0;
+    for (const header of this.list) {
+      if (!isCORSSafelistedRequestHeader(header)) {
+        unsafeNames.push(header[0]);
+      } else {
+        potentiallyUnsafeNames.push(header[0]);
+        safelistValueSize += header[1].length;
+      }
+    }
+    if (safelistValueSize > 1024) unsafeNames.push(...potentiallyUnsafeNames);
+    return convertHeaderNamesToSortedLowercaseSet(unsafeNames);
+  }
 }
 
-export function getDecodeAndSplitHeader(name: string, list: HeaderList): string[] | null {
-  const value = getHeader(name, list);
-  return value === null ? null : getDecodeAndSplitHeaderValue(value);
+/** Each string code unit represents one byte. */
+export type Header = [name: string, value: string];
+
+/*
+ * typedef (sequence<sequence<ByteString>> or record<ByteString, ByteString>) HeadersInit;
+ *
+ * [Exposed=(Window,Worker)]
+ * interface Headers {
+ *   constructor(optional HeadersInit init);
+ *
+ *   undefined append(ByteString name, ByteString value);
+ *   undefined delete(ByteString name);
+ *   ByteString? get(ByteString name);
+ *   sequence<ByteString> getSetCookie();
+ *   boolean has(ByteString name);
+ *   undefined set(ByteString name, ByteString value);
+ *   iterable<ByteString, ByteString>;
+ * };
+ */
+export class HeadersImpl {
+  /** The shared request/response list, or a list owned by these headers. */
+  headerList: FetchHeaders;
+  /** Restrictions applied to author mutations, without filtering reads. */
+  guard: HeadersGuard;
+
+  /** Retain a header list and its mutation guard. */
+  constructor(headerList: FetchHeaders = new FetchHeaders(), guard: HeadersGuard = 'none') {
+    this.headerList = headerList;
+    this.guard = guard;
+  }
+
+  /** Append a normalized value if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#concept-headers-append
+  append(name: string, value: string): void {
+    value = normalizeHeaderValue(value);
+    if (!this.#validate(name, value)) return;
+
+    if (this.guard === 'request-no-cors') {
+      const existingValue = this.headerList.get(name);
+      const temporaryValue = existingValue === null ? value : `${existingValue}, ${value}`;
+      if (!isNoCORSSafelistedRequestHeader([name, temporaryValue])) return;
+    }
+
+    this.headerList.append(name, value);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
+  }
+
+  /** Delete all matching values if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#dom-headers-delete
+  delete(name: string): void {
+    if (!this.#validate(name, '')) return;
+    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeaderName(name) &&
+      !isPrivilegedNoCORSRequestHeaderName(name)) return;
+    if (!this.headerList.has(name)) return;
+
+    this.headerList.delete(name);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
+  }
+
+  /** Combine matching values, or return null when the name is absent. */
+  // https://fetch.spec.whatwg.org/#dom-headers-get
+  get(name: string): string | null {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    return this.headerList.get(name);
+  }
+
+  /** Return separate Set-Cookie values in their original order. */
+  // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
+  getSetCookie(): string[] {
+    return this.headerList.getSetCookie();
+  }
+
+  /** Test whether the list contains the case-insensitive name. */
+  // https://fetch.spec.whatwg.org/#dom-headers-has
+  has(name: string): boolean {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    return this.headerList.has(name);
+  }
+
+  /** Replace matching values with one normalized value if the guard permits it. */
+  // https://fetch.spec.whatwg.org/#dom-headers-set
+  set(name: string, value: string): void {
+    value = normalizeHeaderValue(value);
+    if (!this.#validate(name, value)) return;
+    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeader([name, value])) return;
+
+    this.headerList.set(name, value);
+    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
+  }
+
+  /** Append already-converted initial entries, respecting this list's guard. */
+  // https://fetch.spec.whatwg.org/#concept-headers-fill
+  fill(init: HeadersInitValue): void {
+    if (Array.isArray(init)) {
+      for (const header of init) {
+        if (header.length !== 2) throw new TypeError('A header entry must contain exactly two items');
+        this.append(header[0]!, header[1]!);
+      }
+    } else {
+      for (const [name, value] of Object.entries(init)) this.append(name, value);
+    }
+  }
+
+  /** Supply the current sorted and combined entries to Web IDL iteration. */
+  // https://fetch.spec.whatwg.org/#headers-class
+  getEntryList(): Header[] {
+    return this.headerList.sortAndCombine();
+  }
+
+  // https://fetch.spec.whatwg.org/#headers-validate
+  #validate(name: string, value: string): boolean {
+    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
+    if (!isHeaderValue(value)) throw new TypeError('Invalid header value');
+    if (this.guard === 'immutable') throw new TypeError('Headers are immutable');
+    if (this.guard === 'request' && isForbiddenRequestHeader([name, value])) return false;
+    if (this.guard === 'response' && isForbiddenResponseHeaderName(name)) return false;
+    return true;
+  }
+
+  // https://fetch.spec.whatwg.org/#concept-headers-remove-privileged-no-cors-request-headers
+  #removePrivilegedNoCORSRequestHeaders(): void {
+    this.headerList.delete('Range');
+  }
 }
+
+export type HeadersGuard = 'immutable' | 'request' | 'request-no-cors' | 'response' | 'none';
+
+/** Binding converts HeadersInit's sequence/record branches to arrays/plain objects. */
+export type HeadersInitValue = string[][] | Record<string, string>;
 
 /** Input is already isomorphically decoded. Most consumers use the list operation. */
 export function getDecodeAndSplitHeaderValue(value: string): string[] {
@@ -83,85 +357,10 @@ export function getDecodeAndSplitHeaderValue(value: string): string[] {
   }
 }
 
-/** https://fetch.spec.whatwg.org/#concept-header-extract-mime-type */
-export function extractMIMEType(headers: HeaderList): MIMEType | null {
-  let charset: string | undefined;
-  let essence: MIMETypeEssence | undefined;
-  let mimeType: MIMEType | null = null;
-  const values = getDecodeAndSplitHeader('Content-Type', headers);
-  if (values === null) return null;
-
-  for (const value of values) {
-    const temporaryMimeType = parseMIMEType(value);
-    if (temporaryMimeType === null) continue;
-    const temporaryEssence = getMIMETypeEssence(temporaryMimeType);
-    if (temporaryEssence === '*/*') continue;
-    mimeType = temporaryMimeType;
-    if (temporaryEssence !== essence) {
-      charset = mimeType.parameters.get('charset');
-      essence = temporaryEssence;
-    } else if (!mimeType.parameters.has('charset') && charset !== undefined) {
-      mimeType.parameters.set('charset', charset);
-    }
-  }
-  return mimeType;
-}
-
-export function appendHeader([name, value]: Header, list: HeaderList): void {
-  const lower = name.toLowerCase();
-  const existing = list.find((header) => header[0].toLowerCase() === lower);
-  list.push([existing?.[0] ?? name, value]);
-}
-
-export function deleteHeader(name: string, list: HeaderList): void {
-  const lower = name.toLowerCase();
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i]![0].toLowerCase() === lower) list.splice(i, 1);
-  }
-}
-
-export function setHeader([name, value]: Header, list: HeaderList): void {
-  const lower = name.toLowerCase();
-  const first = list.findIndex((header) => header[0].toLowerCase() === lower);
-  if (first === -1) {
-    list.push([name, value]);
-    return;
-  }
-  list[first]![1] = value;
-  for (let i = list.length - 1; i > first; i--) {
-    if (list[i]![0].toLowerCase() === lower) list.splice(i, 1);
-  }
-}
-
-/** Combine changes only the first match; unlike set, it does not delete later matches. */
-export function combineHeader([name, value]: Header, list: HeaderList): void {
-  const lower = name.toLowerCase();
-  const existing = list.find((header) => header[0].toLowerCase() === lower);
-  if (existing) existing[1] += `, ${value}`;
-  else list.push([name, value]);
-}
-
 export function convertHeaderNamesToSortedLowercaseSet(names: string[]): string[] {
   const unique = new Set<string>();
   for (const name of names) unique.add(name.toLowerCase());
   return [...unique].sort();
-}
-
-/** Set-Cookie lines stay separate, even when their values contain commas. */
-export function sortAndCombineHeaders(list: HeaderList): HeaderList {
-  const headers: HeaderList = [];
-  const names = new Set<string>();
-  for (const [name] of list) names.add(name.toLowerCase());
-  for (const name of [...names].sort()) {
-    if (name === 'set-cookie') {
-      for (const [headerName, value] of list) {
-        if (headerName.toLowerCase() === name) headers.push([name, value]);
-      }
-    } else {
-      headers.push([name, getHeader(name, list)!]);
-    }
-  }
-  return headers;
 }
 
 export function isHeaderName(name: string): boolean {
@@ -207,22 +406,6 @@ export function isCORSUnsafeRequestHeaderByte(byte: number): boolean {
     '"():<>?@[\\]{}'.includes(String.fromCharCode(byte));
 }
 
-export function getCORSUnsafeRequestHeaderNames(headers: HeaderList): string[] {
-  const unsafeNames: string[] = [];
-  const potentiallyUnsafeNames: string[] = [];
-  let safelistValueSize = 0;
-  for (const header of headers) {
-    if (!isCORSSafelistedRequestHeader(header)) {
-      unsafeNames.push(header[0]);
-    } else {
-      potentiallyUnsafeNames.push(header[0]);
-      safelistValueSize += header[1].length;
-    }
-  }
-  if (safelistValueSize > 1024) unsafeNames.push(...potentiallyUnsafeNames);
-  return convertHeaderNamesToSortedLowercaseSet(unsafeNames);
-}
-
 export function isCORSNonWildcardRequestHeaderName(name: string): boolean {
   return name.toLowerCase() === 'authorization';
 }
@@ -263,28 +446,6 @@ export function isRequestBodyHeaderName(name: string): boolean {
 }
 
 /**
- * Fetch §2.2.2 — extract header list values. The extra parser and multiplicity
- * arguments supply the field's ABNF rules. Undefined means the field is absent;
- * null means extraction failed, including when the parser returns null.
- * https://fetch.spec.whatwg.org/#extract-header-list-values
- */
-export function extractHeaderListValues<T>(
-  name: string, list: HeaderList, parseValues: (value: string) => T[] | null, allowMultiple: boolean,
-): T[] | null | undefined {
-  const lower = name.toLowerCase();
-  const headers = list.filter((header) => header[0].toLowerCase() === lower);
-  if (headers.length === 0) return undefined;
-  if (!allowMultiple && headers.length > 1) return null;
-  const values: T[] = [];
-  for (const [, value] of headers) {
-    const extracted = parseValues(value);
-    if (extracted === null) return null;
-    values.push(...extracted);
-  }
-  return values;
-}
-
-/**
  * Fetch §2.2.2 — environment default User-Agent. The host supplies the default
  * and BiDi emulation values instead of the environment settings object.
  */
@@ -304,137 +465,6 @@ const forbiddenRequestHeaderNames = new Set([
   'connection', 'content-length', 'cookie', 'cookie2', 'date', 'dnt', 'expect', 'host', 'keep-alive',
   'origin', 'referer', 'set-cookie', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'via',
 ]);
-
-/*
- * typedef (sequence<sequence<ByteString>> or record<ByteString, ByteString>) HeadersInit;
- *
- * [Exposed=(Window,Worker)]
- * interface Headers {
- *   constructor(optional HeadersInit init);
- *
- *   undefined append(ByteString name, ByteString value);
- *   undefined delete(ByteString name);
- *   ByteString? get(ByteString name);
- *   sequence<ByteString> getSetCookie();
- *   boolean has(ByteString name);
- *   undefined set(ByteString name, ByteString value);
- *   iterable<ByteString, ByteString>;
- * };
- */
-export class HeadersImpl {
-  /** The shared request/response list, or a list owned by these headers. */
-  headerList: HeaderList;
-  /** Restrictions applied to author mutations, without filtering reads. */
-  guard: HeadersGuard;
-
-  /** Retain a header list and its mutation guard. */
-  constructor(headerList: HeaderList = [], guard: HeadersGuard = 'none') {
-    this.headerList = headerList;
-    this.guard = guard;
-  }
-
-  /** Append a normalized value if the guard permits it. */
-  // https://fetch.spec.whatwg.org/#concept-headers-append
-  append(name: string, value: string): void {
-    value = normalizeHeaderValue(value);
-    if (!this.#validate(name, value)) return;
-
-    if (this.guard === 'request-no-cors') {
-      const existingValue = getHeader(name, this.headerList);
-      const temporaryValue = existingValue === null ? value : `${existingValue}, ${value}`;
-      if (!isNoCORSSafelistedRequestHeader([name, temporaryValue])) return;
-    }
-
-    appendHeader([name, value], this.headerList);
-    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
-  }
-
-  /** Delete all matching values if the guard permits it. */
-  // https://fetch.spec.whatwg.org/#dom-headers-delete
-  delete(name: string): void {
-    if (!this.#validate(name, '')) return;
-    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeaderName(name) &&
-      !isPrivilegedNoCORSRequestHeaderName(name)) return;
-    if (!containsHeader(name, this.headerList)) return;
-
-    deleteHeader(name, this.headerList);
-    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
-  }
-
-  /** Combine matching values, or return null when the name is absent. */
-  // https://fetch.spec.whatwg.org/#dom-headers-get
-  get(name: string): string | null {
-    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
-    return getHeader(name, this.headerList);
-  }
-
-  /** Return separate Set-Cookie values in their original order. */
-  // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
-  getSetCookie(): string[] {
-    const values: string[] = [];
-    for (const [name, value] of this.headerList) {
-      if (name.toLowerCase() === 'set-cookie') values.push(value);
-    }
-    return values;
-  }
-
-  /** Test whether the list contains the case-insensitive name. */
-  // https://fetch.spec.whatwg.org/#dom-headers-has
-  has(name: string): boolean {
-    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
-    return containsHeader(name, this.headerList);
-  }
-
-  /** Replace matching values with one normalized value if the guard permits it. */
-  // https://fetch.spec.whatwg.org/#dom-headers-set
-  set(name: string, value: string): void {
-    value = normalizeHeaderValue(value);
-    if (!this.#validate(name, value)) return;
-    if (this.guard === 'request-no-cors' && !isNoCORSSafelistedRequestHeader([name, value])) return;
-
-    setHeader([name, value], this.headerList);
-    if (this.guard === 'request-no-cors') this.#removePrivilegedNoCORSRequestHeaders();
-  }
-
-  /** Append already-converted initial entries, respecting this list's guard. */
-  // https://fetch.spec.whatwg.org/#concept-headers-fill
-  fill(init: HeadersInitValue): void {
-    if (Array.isArray(init)) {
-      for (const header of init) {
-        if (header.length !== 2) throw new TypeError('A header entry must contain exactly two items');
-        this.append(header[0]!, header[1]!);
-      }
-    } else {
-      for (const [name, value] of Object.entries(init)) this.append(name, value);
-    }
-  }
-
-  /** Supply the current sorted and combined entries to Web IDL iteration. */
-  // https://fetch.spec.whatwg.org/#headers-class
-  getEntryList(): Header[] {
-    return sortAndCombineHeaders(this.headerList);
-  }
-
-  // https://fetch.spec.whatwg.org/#headers-validate
-  #validate(name: string, value: string): boolean {
-    if (!isHeaderName(name)) throw new TypeError('Invalid header name');
-    if (!isHeaderValue(value)) throw new TypeError('Invalid header value');
-    if (this.guard === 'immutable') throw new TypeError('Headers are immutable');
-    if (this.guard === 'request' && isForbiddenRequestHeader([name, value])) return false;
-    if (this.guard === 'response' && isForbiddenResponseHeaderName(name)) return false;
-    return true;
-  }
-
-  // https://fetch.spec.whatwg.org/#concept-headers-remove-privileged-no-cors-request-headers
-  #removePrivilegedNoCORSRequestHeaders(): void {
-    deleteHeader('Range', this.headerList);
-  }
-}
-
-export type HeadersGuard = 'immutable' | 'request' | 'request-no-cors' | 'response' | 'none';
-
-/** Binding converts HeadersInit's sequence/record branches to arrays/plain objects. */
-export type HeadersInitValue = string[][] | Record<string, string>;
 
 // -- Web IDL ------------------------------------------------------------
 

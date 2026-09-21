@@ -3,7 +3,7 @@ import { determineNetworkPartitionKey, networkPartitionKeysEqual } from '../../.
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
 import { createClientSettings } from '../client-fixture';
-import { createRequestRecord } from '../record-fixture';
+import { createFetchRequest } from '../fetch-fixture';
 
 describe('Fetch network partition keys', () => {
   it('uses the top-level origin in preference to the creation URL', () => {
@@ -48,7 +48,7 @@ describe('Fetch network partition keys', () => {
 
   it('prefers the reserved environment, then the client, without using the request URL', () => {
     const client = createClientSettings('https://client.test/');
-    const request = createRequestRecord('https://resource.test/', client);
+    const request = createFetchRequest('https://resource.test/', client);
     const reserved = {
       userAgent: client.userAgent, topLevelOrigin: null,
       topLevelCreationURL: parseURL('https://reserved.test/').url!,
@@ -67,13 +67,13 @@ describe('Fetch HTTP cache partition identity', () => {
   it('returns no partition for a request without a client or reserved client', () => {
     const { httpCachePartitions } = createClientSettings().userAgent;
 
-    expect(httpCachePartitions.determine(createRequestRecord())).toBeNull();
+    expect(httpCachePartitions.determine(createFetchRequest())).toBeNull();
     expect(httpCachePartitions.partitions).toEqual([]);
   });
 
   it('shares a partition for equal sites and separates schemes, sites, and browser owners', () => {
     const client = createClientSettings('https://a.example.com/');
-    const request = createRequestRecord(undefined, client);
+    const request = createFetchRequest(undefined, client);
     const partitions = client.userAgent.httpCachePartitions;
     const first = partitions.determine(request);
     request.client = createClientSettings('https://b.example.com/');
@@ -90,7 +90,7 @@ describe('Fetch HTTP cache partition identity', () => {
   it('keeps two opaque top-level origins in different partitions', () => {
     const client = createClientSettings();
     const partitions = client.userAgent.httpCachePartitions;
-    const request = createRequestRecord(undefined, client);
+    const request = createFetchRequest(undefined, client);
     client.topLevelOrigin = createOpaqueOrigin();
     const first = partitions.determine(request);
 

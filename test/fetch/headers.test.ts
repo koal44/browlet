@@ -1,15 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  appendHeader, combineHeader, containsHeader, convertHeaderNamesToSortedLowercaseSet,
-  deleteHeader, documentAcceptHeaderValue, extractHeaderListValues, extractMIMEType, getCORSUnsafeRequestHeaderNames,
-  getDecodeAndSplitHeader, getDecodeAndSplitHeaderValue, getEnvironmentDefaultUserAgent, getHeader,
-  getStructuredFieldValue, headersIDL, headersInitIDL, HeadersImpl,
+  convertHeaderNamesToSortedLowercaseSet, documentAcceptHeaderValue, FetchHeaders,
+  getDecodeAndSplitHeaderValue, getEnvironmentDefaultUserAgent, headersIDL, headersInitIDL, HeadersImpl,
   isCORSNonWildcardRequestHeaderName, isCORSSafelistedRequestHeader,
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
   isForbiddenResponseHeaderName, isHeaderName, isHeaderValue, isNoCORSSafelistedRequestHeader,
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
-  normalizeHeaderValue, setHeader, setStructuredFieldValue, sortAndCombineHeaders, type HeaderList,
+  normalizeHeaderValue,
 } from '../../src/fetch/headers';
 import {
   parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
@@ -17,102 +15,72 @@ import {
 import { serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
-import { createRequestRecord } from './record-fixture';
-
-describe('Content-Type extraction (Fetch §3.5)', () => {
-  it.each([
-    ['text/plain;charset=gbk, text/html', 'text/html'],
-    ['text/html;charset=gbk;a=b, text/html;x=y', 'text/html;x=y;charset=gbk'],
-    ['text/html;charset=gbk, x/x, text/html;x=y', 'text/html;x=y'],
-    ['text/html, cannot-parse', 'text/html'],
-    ['text/html, */*', 'text/html'],
-    ['text/html, ', 'text/html'],
-    ['text/html;charset=gbk, text/html;charset=utf-8, text/html', 'text/html;charset=gbk'],
-    ['text/html, text/html;charset=utf-8, text/html', 'text/html'],
-    ['text/html;charset="", text/html', 'text/html;charset=""'],
-    ['text/html;note="a,b"', 'text/html;note="a,b"'],
-    ['cannot-parse, */*, ', null],
-  ] as const)('extracts %s', (value, expected) => {
-    const mimeType = extractMIMEType([['Content-Type', value]]);
-
-    expect(mimeType === null ? null : serializeMIMEType(mimeType)).toBe(expected);
-  });
-
-  it('uses repeated, case-insensitive field names without changing the header list', () => {
-    const headers: HeaderList = [['Content-Type', 'text/html;charset=gbk;a=b'], ['content-type', 'text/html;x=y']];
-    const before = structuredClone(headers);
-    const mimeType = extractMIMEType(headers)!;
-
-    expect(serializeMIMEType(mimeType)).toBe('text/html;x=y;charset=gbk');
-    expect(headers).toEqual(before);
-    expect(extractMIMEType([])).toBeNull();
-  });
-});
+import { createFetchRequest } from './fetch-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {
   it('distinguishes absent and empty values and combines duplicate lines in order', () => {
-    const list: HeaderList = [['A', 'one'], ['B', ''], ['a', 'two']];
-    expect(containsHeader('a', list)).toBe(true);
-    expect(containsHeader('c', list)).toBe(false);
-    expect(getHeader('A', list)).toBe('one, two');
-    expect(getHeader('b', list)).toBe('');
-    expect(getHeader('c', list)).toBeNull();
-    expect(getDecodeAndSplitHeader('b', list)).toEqual(['']);
-    expect(getDecodeAndSplitHeader('c', list)).toBeNull();
+    const list = new FetchHeaders([['A', 'one'], ['B', ''], ['a', 'two']]);
+    expect(list.has('a')).toBe(true);
+    expect(list.has('c')).toBe(false);
+    expect(list.get('A')).toBe('one, two');
+    expect(list.get('b')).toBe('');
+    expect(list.get('c')).toBeNull();
+    expect(list.getDecodeAndSplit('b')).toEqual(['']);
+    expect(list.getDecodeAndSplit('c')).toBeNull();
   });
 
   it('mutates the actual request list, preserving the first spelling and existing entry', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     const list = request.headerList;
-    appendHeader(['X-First', 'one'], list);
-    const first = list[0];
-    appendHeader(['B', 'other'], list);
-    appendHeader(['x-FIRST', 'two'], list);
-    expect(list).toEqual([['X-First', 'one'], ['B', 'other'], ['X-First', 'two']]);
-    setHeader(['x-first', 'replacement'], list);
+    list.append('X-First', 'one');
+    const first = list.list[0];
+    list.append('B', 'other');
+    list.append('x-FIRST', 'two');
+    expect(list.list).toEqual([['X-First', 'one'], ['B', 'other'], ['X-First', 'two']]);
+    list.set('x-first', 'replacement');
     expect(request.headerList).toBe(list);
-    expect(list[0]).toBe(first);
-    expect(list).toEqual([['X-First', 'replacement'], ['B', 'other']]);
-    setHeader(['C', 'new'], list);
-    deleteHeader('x-FIRST', list);
-    expect(request.headerList).toEqual([['B', 'other'], ['C', 'new']]);
+    expect(list.list[0]).toBe(first);
+    expect(list.list).toEqual([['X-First', 'replacement'], ['B', 'other']]);
+    list.set('C', 'new');
+    list.delete('x-FIRST');
+    expect(request.headerList.list).toEqual([['B', 'other'], ['C', 'new']]);
   });
 
   it('deletes all matches without skipping adjacent duplicates', () => {
-    const list: HeaderList = [['A', '1'], ['a', '2'], ['B', '3'], ['A', '4']];
-    deleteHeader('a', list);
-    deleteHeader('missing', list);
-    expect(list).toEqual([['B', '3']]);
+    const list = new FetchHeaders([['A', '1'], ['a', '2'], ['B', '3'], ['A', '4']]);
+    list.delete('a');
+    list.delete('missing');
+    expect(list.list).toEqual([['B', '3']]);
   });
 
   it('combine appends to the first matching value without deleting later entries', () => {
-    const list: HeaderList = [['A', 'one'], ['B', 'other'], ['a', 'two']];
-    combineHeader(['a', 'three'], list);
-    combineHeader(['C', 'new'], list);
-    expect(list).toEqual([['A', 'one, three'], ['B', 'other'], ['a', 'two'], ['C', 'new']]);
+    const list = new FetchHeaders([['A', 'one'], ['B', 'other'], ['a', 'two']]);
+    list.combine('a', 'three');
+    list.combine('C', 'new');
+    expect(list.list).toEqual([['A', 'one, three'], ['B', 'other'], ['a', 'two'], ['C', 'new']]);
   });
 
   it('sorts and combines regular fields while preserving separate Set-Cookie lines', () => {
-    const list: HeaderList = [
+    const list = new FetchHeaders([
       ['Z', 'first'], ['Set-Cookie', 'a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT'],
       ['A', 'value'], ['set-cookie', 'b=2; Path=/'], ['z', 'second'],
-    ];
-    const before = list.map((header) => [...header]);
-    const sorted = sortAndCombineHeaders(list);
+    ]);
+    const before = list.list.map((header) => [...header]);
+    const sorted = list.sortAndCombine();
     expect(sorted).toEqual([
       ['a', 'value'], ['set-cookie', 'a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT'],
       ['set-cookie', 'b=2; Path=/'], ['z', 'first, second'],
     ]);
-    expect(list).toEqual(before);
+    expect(list.list).toEqual(before);
     sorted[0]![1] = 'changed';
-    expect(list).toEqual(before);
+    expect(list.list).toEqual(before);
     // The general get operation still joins all values; sort-and-combine has the exception.
-    expect(getHeader('set-cookie', list)).toBe('a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT, b=2; Path=/');
+    expect(list.get('set-cookie')).toBe('a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT, b=2; Path=/');
   });
 
   it('sorts names by byte order after lowercasing and removing duplicates', () => {
     expect(convertHeaderNamesToSortedLowercaseSet(['Z', 'a', 'A', '_X', '9', 'x'])).toEqual(['9', '_x', 'a', 'x', 'z']);
-    expect(sortAndCombineHeaders([])).toEqual([]);
+    expect(new FetchHeaders().sortAndCombine()).toEqual([]);
   });
 
   it.each([
@@ -124,11 +92,11 @@ describe('header lists (Fetch §2.2.2)', () => {
     ['"\\', ['"\\']],
   ])('decodes/splits %j with the specified quote and whitespace rules', (value, expected) => {
     expect(getDecodeAndSplitHeaderValue(value)).toEqual(expected);
-    expect(getDecodeAndSplitHeader('A', [['A', value]])).toEqual(expected);
+    expect(new FetchHeaders([['A', value]]).getDecodeAndSplit('A')).toEqual(expected);
   });
 
   it('combines field lines before quote-aware splitting', () => {
-    expect(getDecodeAndSplitHeader('A', [['A', 'text/html;"'], ['B', 'ignored'], ['A', 'x/x']]))
+    expect(new FetchHeaders([['A', 'text/html;"'], ['B', 'ignored'], ['A', 'x/x']]).getDecodeAndSplit('A'))
       .toEqual(['text/html;", x/x']);
   });
 });
@@ -183,16 +151,16 @@ describe('CORS header classifications', () => {
     expect(isCORSSafelistedRequestHeader([name, value])).toBe(safelisted);
   });
   it('promotes safelisted names only when their aggregate values exceed 1024 bytes', () => {
-    const list: HeaderList = Array.from({ length: 8 }, () => ['Accept', 'a'.repeat(128)]);
-    list.push(['X-Unsafe', 'a'.repeat(2000)]);
-    expect(getCORSUnsafeRequestHeaderNames(list)).toEqual(['x-unsafe']);
-    list.push(['Content-Language', 'a']);
-    expect(getCORSUnsafeRequestHeaderNames(list)).toEqual(['accept', 'content-language', 'x-unsafe']);
+    const list = new FetchHeaders(Array.from({ length: 8 }, () => ['Accept', 'a'.repeat(128)]));
+    list.list.push(['X-Unsafe', 'a'.repeat(2000)]);
+    expect(list.getCORSUnsafeRequestHeaderNames()).toEqual(['x-unsafe']);
+    list.list.push(['Content-Language', 'a']);
+    expect(list.getCORSUnsafeRequestHeaderNames()).toEqual(['accept', 'content-language', 'x-unsafe']);
   });
   it('keeps per-line safelist checks separate from combined header checks', () => {
-    const list: HeaderList = [['Content-Type', 'application/json'], ['content-type', 'text/plain']];
-    expect(getCORSUnsafeRequestHeaderNames(list)).toEqual(['content-type']);
-    expect(isCORSSafelistedRequestHeader(['content-type', getHeader('content-type', list)!])).toBe(false);
+    const list = new FetchHeaders([['Content-Type', 'application/json'], ['content-type', 'text/plain']]);
+    expect(list.getCORSUnsafeRequestHeaderNames()).toEqual(['content-type']);
+    expect(isCORSSafelistedRequestHeader(['content-type', list.get('content-type')!])).toBe(false);
   });
   it('distinguishes no-CORS names, privileged Range, and Authorization’s non-wildcard status', () => {
     for (const name of ['Accept', 'Accept-Language', 'Content-Language', 'Content-Type']) {
@@ -247,70 +215,70 @@ describe('forbidden and request-body headers', () => {
 
 describe('header extraction with the field’s grammar', () => {
   it('distinguishes missing fields, empty lists, and invalid syntax using Vary’s real parser', () => {
-    expect(extractHeaderListValues('Vary', [], parseVary, true)).toBeUndefined();
-    expect(extractHeaderListValues('Vary', [['Vary', '']], parseVary, true)).toEqual([]);
-    expect(extractHeaderListValues('Vary', [['Vary', 'Accept'], ['VARY', 'X-Variant, Accept-Language']], parseVary, true))
+    expect(new FetchHeaders().extractValues('Vary', parseVary, true)).toBeUndefined();
+    expect(new FetchHeaders([['Vary', '']]).extractValues('Vary', parseVary, true)).toEqual([]);
+    expect(new FetchHeaders([['Vary', 'Accept'], ['VARY', 'X-Variant, Accept-Language']]).extractValues('Vary', parseVary, true))
       .toEqual(['accept', 'x-variant', 'accept-language']);
-    expect(extractHeaderListValues('Vary', [['Vary', 'Accept'], ['Vary', 'bad name']], parseVary, true)).toBeNull();
+    expect(new FetchHeaders([['Vary', 'Accept'], ['Vary', 'bad name']]).extractValues('Vary', parseVary, true)).toBeNull();
   });
   it('rejects duplicate singleton fields before parsing and discards all values on a parse failure', () => {
     const parser = vi.fn((value: string) => {
       const seconds = parseDeltaSeconds(value);
       return seconds === null ? null : [seconds];
     });
-    expect(extractHeaderListValues('Access-Control-Max-Age', [
+    expect(new FetchHeaders([
       ['Access-Control-Max-Age', '10'], ['access-control-max-age', '20'],
-    ], parser, false)).toBeNull();
+    ]).extractValues('Access-Control-Max-Age', parser, false)).toBeNull();
     expect(parser).not.toHaveBeenCalled();
-    expect(extractHeaderListValues('Access-Control-Max-Age', [['ACCESS-CONTROL-MAX-AGE', '10']], parser, false)).toEqual([10]);
-    expect(extractHeaderListValues('Access-Control-Max-Age', [['Access-Control-Max-Age', 'ten']], parser, false)).toBeNull();
+    expect(new FetchHeaders([['ACCESS-CONTROL-MAX-AGE', '10']]).extractValues('Access-Control-Max-Age', parser, false)).toEqual([10]);
+    expect(new FetchHeaders([['Access-Control-Max-Age', 'ten']]).extractValues('Access-Control-Max-Age', parser, false)).toBeNull();
   });
 });
 
 describe('structured fields over Fetch headers', () => {
   it('combines lines and uses the requested RFC 9651 type', () => {
-    const list: HeaderList = [['Priority', 'u=1'], ['PRIORITY', 'i']];
-    const field = getStructuredFieldValue('priority', 'dictionary', list);
+    const list = new FetchHeaders([['Priority', 'u=1'], ['PRIORITY', 'i']]);
+    const field = list.getStructuredFieldValue('priority', 'dictionary');
     expect(field?.members.get('u')).toEqual(structuredItem({ type: 'integer', value: 1 }));
     expect(field?.members.get('i')).toEqual(structuredItem({ type: 'boolean', value: true }));
-    expect(getStructuredFieldValue('priority', 'item', list)).toBeNull();
+    expect(list.getStructuredFieldValue('priority', 'item')).toBeNull();
   });
   it('returns null for absence or invalid structured data, even if the bytes form a valid ordinary header', () => {
-    expect(getStructuredFieldValue('X', 'list', [])).toBeNull();
-    expect(getStructuredFieldValue('X', 'list', [['X', '\xff']])).toBeNull();
-    expect(getStructuredFieldValue('X', 'list', [['X', 'token'], ['X', '"unterminated']])).toBeNull();
-    expect(getStructuredFieldValue('X', 'list', [['X', '']])).toEqual({ type: 'list', members: [] });
+    expect(new FetchHeaders().getStructuredFieldValue('X', 'list')).toBeNull();
+    expect(new FetchHeaders([['X', '\xff']]).getStructuredFieldValue('X', 'list')).toBeNull();
+    expect(new FetchHeaders([['X', 'token'], ['X', '"unterminated']]).getStructuredFieldValue('X', 'list')).toBeNull();
+    expect(new FetchHeaders([['X', '']]).getStructuredFieldValue('X', 'list')).toEqual({ type: 'list', members: [] });
   });
 
   it('sets the serialized value in place while retaining the first entry’s spelling and position', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     const list = request.headerList;
-    appendHeader(['Priority', 'u=0'], list);
-    appendHeader(['X-Other', 'untouched'], list);
-    appendHeader(['priority', 'i'], list);
-    const first = list[0];
+    list.append('Priority', 'u=0');
+    list.append('X-Other', 'untouched');
+    list.append('priority', 'i');
+    const first = list.list[0];
     const field: StructuredField = {
       type: 'dictionary', members: new Map([
         ['u', structuredItem({ type: 'integer', value: 2 })],
         ['i', structuredItem({ type: 'boolean', value: true })],
       ]),
     };
-    setStructuredFieldValue(['PRIORITY', field], list);
+    list.setStructuredFieldValue('PRIORITY', field);
     expect(request.headerList).toBe(list);
-    expect(list[0]).toBe(first);
-    expect(list).toEqual([['Priority', 'u=2, i'], ['X-Other', 'untouched']]);
-    expect(getStructuredFieldValue('priority', 'dictionary', list)).toEqual(field);
+    expect(list.list[0]).toBe(first);
+    expect(list.list).toEqual([['Priority', 'u=2, i'], ['X-Other', 'untouched']]);
+    expect(list.getStructuredFieldValue('priority', 'dictionary')).toEqual(field);
   });
 
   it.each([
     { type: 'list', members: [] }, { type: 'dictionary', members: new Map() },
   ] satisfies StructuredField[])('omits an empty $type by removing every named field line', (field) => {
-    const list: HeaderList = [['X', 'old'], ['Y', 'keep'], ['x', 'older']];
-    setStructuredFieldValue(['X', field], list);
-    expect(list).toEqual([['Y', 'keep']]);
-    setStructuredFieldValue(['X', field], list);
-    expect(list).toEqual([['Y', 'keep']]);
-    expect(getStructuredFieldValue('X', field.type, list)).toBeNull();
+    const list = new FetchHeaders([['X', 'old'], ['Y', 'keep'], ['x', 'older']]);
+    list.setStructuredFieldValue('X', field);
+    expect(list.list).toEqual([['Y', 'keep']]);
+    list.setStructuredFieldValue('X', field);
+    expect(list.list).toEqual([['Y', 'keep']]);
+    expect(list.getStructuredFieldValue('X', field.type)).toBeNull();
   });
 
   it.each([
@@ -319,26 +287,56 @@ describe('structured fields over Fetch headers', () => {
     [{ type: 'list', members: [{ type: 'inner-list', items: [], parameters: new Map() }] }, '()'],
     [structuredItem({ type: 'display-string', value: 'café' }), '%"caf%c3%a9"'],
   ] satisfies [StructuredField, string][])('retains a serializable item/inner-list value %j', (field, expected) => {
-    const list: HeaderList = [];
-    setStructuredFieldValue(['X', field], list);
-    expect(list).toEqual([['X', expected]]);
-    expect(getStructuredFieldValue('X', field.type, list)).toEqual(field);
+    const list = new FetchHeaders();
+    list.setStructuredFieldValue('X', field);
+    expect(list.list).toEqual([['X', expected]]);
+    expect(list.getStructuredFieldValue('X', field.type)).toEqual(field);
   });
 
   it('throws on serialization failure before changing existing fields or adding a new one', () => {
-    const list: HeaderList = [['X', 'old'], ['Y', 'keep'], ['x', 'older']];
-    const first = list[0];
+    const list = new FetchHeaders([['X', 'old'], ['Y', 'keep'], ['x', 'older']]);
+    const first = list.list[0];
     const field: StructuredField = {
       type: 'dictionary', members: new Map([
         ['valid', structuredItem({ type: 'integer', value: 1 })],
         ['INVALID', structuredItem({ type: 'integer', value: 2 })],
       ]),
     };
-    expect(() => setStructuredFieldValue(['X', field], list)).toThrow(TypeError);
-    expect(() => setStructuredFieldValue(['Z', field], list)).toThrow(TypeError);
-    expect(list).toEqual([['X', 'old'], ['Y', 'keep'], ['x', 'older']]);
-    expect(list[0]).toBe(first);
+    expect(() => list.setStructuredFieldValue('X', field)).toThrow(TypeError);
+    expect(() => list.setStructuredFieldValue('Z', field)).toThrow(TypeError);
+    expect(list.list).toEqual([['X', 'old'], ['Y', 'keep'], ['x', 'older']]);
+    expect(list.list[0]).toBe(first);
     expect([...field.members.keys()]).toEqual(['valid', 'INVALID']);
+  });
+});
+
+describe('Content-Type extraction (Fetch §3.5)', () => {
+  it.each([
+    ['text/plain;charset=gbk, text/html', 'text/html'],
+    ['text/html;charset=gbk;a=b, text/html;x=y', 'text/html;x=y;charset=gbk'],
+    ['text/html;charset=gbk, x/x, text/html;x=y', 'text/html;x=y'],
+    ['text/html, cannot-parse', 'text/html'],
+    ['text/html, */*', 'text/html'],
+    ['text/html, ', 'text/html'],
+    ['text/html;charset=gbk, text/html;charset=utf-8, text/html', 'text/html;charset=gbk'],
+    ['text/html, text/html;charset=utf-8, text/html', 'text/html'],
+    ['text/html;charset="", text/html', 'text/html;charset=""'],
+    ['text/html;note="a,b"', 'text/html;note="a,b"'],
+    ['cannot-parse, */*, ', null],
+  ] as const)('extracts %s', (value, expected) => {
+    const mimeType = new FetchHeaders([['Content-Type', value]]).extractMIMEType();
+
+    expect(mimeType === null ? null : serializeMIMEType(mimeType)).toBe(expected);
+  });
+
+  it('uses repeated, case-insensitive field names without changing the header list', () => {
+    const headers = new FetchHeaders([['Content-Type', 'text/html;charset=gbk;a=b'], ['content-type', 'text/html;x=y']]);
+    const before = structuredClone(headers.list);
+    const mimeType = headers.extractMIMEType()!;
+
+    expect(serializeMIMEType(mimeType)).toBe('text/html;x=y;charset=gbk');
+    expect(headers.list).toEqual(before);
+    expect(new FetchHeaders().extractMIMEType()).toBeNull();
   });
 });
 
@@ -353,13 +351,13 @@ describe('default request header values', () => {
 
 describe('Headers implementation (Fetch §5.1)', () => {
   it('mutates its shared list while supplying sorted copies for iteration', () => {
-    const list: HeaderList = [];
+    const list = new FetchHeaders();
     const headers = new HeadersImpl(list);
     headers.append('Z', ' \t first\r\n');
     headers.append('a', '');
     headers.append('z', 'second');
     expect(headers.headerList).toBe(list);
-    expect(list).toEqual([['Z', 'first'], ['a', ''], ['Z', 'second']]);
+    expect(list.list).toEqual([['Z', 'first'], ['a', ''], ['Z', 'second']]);
     expect(headers.get('z')).toBe('first, second');
     expect(headers.has('A')).toBe(true);
     expect(headers.get('missing')).toBeNull();
@@ -368,7 +366,7 @@ describe('Headers implementation (Fetch §5.1)', () => {
     entries[0]![1] = 'copy';
     expect(headers.get('a')).toBe('');
     headers.set('Z', ' replacement ');
-    expect(list).toEqual([['Z', 'replacement'], ['a', '']]);
+    expect(list.list).toEqual([['Z', 'replacement'], ['a', '']]);
     headers.delete('z');
     expect(headers.getEntryList()).toEqual([['a', '']]);
   });
@@ -377,7 +375,7 @@ describe('Headers implementation (Fetch §5.1)', () => {
     const headers = new HeadersImpl();
     expect(() => headers.fill([['first', 'value'], ['malformed'], ['last', 'unreached']]))
       .toThrow(/exactly two/);
-    expect(headers.headerList).toEqual([['first', 'value']]);
+    expect(headers.headerList.list).toEqual([['first', 'value']]);
     headers.fill({ first: 'second', last: ' \t value ' });
     expect(headers.getEntryList()).toEqual([['first', 'value, second'], ['last', 'value']]);
   });
@@ -395,8 +393,24 @@ describe('Headers implementation (Fetch §5.1)', () => {
     expect(headers.getSetCookie()).toEqual(['c=3']);
   });
 
+  it('shares internal mutations across APIs with independent guards', () => {
+    const list = new FetchHeaders();
+    const requestHeaders = new HeadersImpl(list, 'request');
+    const immutableHeaders = new HeadersImpl(list, 'immutable');
+    list.append('Cookie', 'internal=1');
+    requestHeaders.set('Cookie', 'author=2');
+    expect(immutableHeaders.get('Cookie')).toBe('internal=1');
+    expect(() => immutableHeaders.set('Cookie', 'author=3')).toThrow('Headers are immutable');
+
+    requestHeaders.append('X-Example', 'shared');
+    expect(immutableHeaders.get('X-Example')).toBe('shared');
+    list.set('Cookie', 'internal=4');
+    expect(requestHeaders.get('Cookie')).toBe('internal=4');
+    expect(immutableHeaders.get('Cookie')).toBe('internal=4');
+  });
+
   it('validates syntax before immutable guards and keeps reads available', () => {
-    const headers = new HeadersImpl([['X', 'value']], 'immutable');
+    const headers = new HeadersImpl(new FetchHeaders([['X', 'value']]), 'immutable');
     for (const method of ['append', 'set'] as const) {
       expect(() => headers[method]('bad name', 'value')).toThrow('Invalid header name');
       expect(() => headers[method]('X', 'bad\nvalue')).toThrow('Invalid header value');
@@ -409,7 +423,7 @@ describe('Headers implementation (Fetch §5.1)', () => {
   });
 
   it('applies request guards, including value-dependent forbidden methods', () => {
-    const headers = new HeadersImpl([['Cookie', 'existing']], 'request');
+    const headers = new HeadersImpl(new FetchHeaders([['Cookie', 'existing']]), 'request');
     headers.fill({ Host: 'example.test', 'X-Custom': 'allowed', 'Sec-Fetch-Site': 'same-origin' });
     headers.append('Cookie', 'new');
     headers.set('Cookie', 'new');
@@ -419,12 +433,12 @@ describe('Headers implementation (Fetch §5.1)', () => {
     headers.set('X-HTTP-Method-Override', 'TRACK');
     expect(headers.get('X-HTTP-Method-Override')).toBe('GET');
     headers.delete('X-HTTP-Method-Override');
-    expect(headers.headerList).toEqual([['Cookie', 'existing'], ['X-Custom', 'allowed']]);
+    expect(headers.headerList.list).toEqual([['Cookie', 'existing'], ['X-Custom', 'allowed']]);
     expect(() => headers.append('Host', 'bad\nvalue')).toThrow('Invalid header value');
   });
 
   it('applies response guards without removing existing forbidden fields', () => {
-    const headers = new HeadersImpl([['Set-Cookie', 'existing=1']], 'response');
+    const headers = new HeadersImpl(new FetchHeaders([['Set-Cookie', 'existing=1']]), 'response');
     for (const name of ['Set-Cookie', 'Set-Cookie2']) {
       headers.append(name, 'new=2');
       headers.set(name, 'new=2');
@@ -436,7 +450,7 @@ describe('Headers implementation (Fetch §5.1)', () => {
   });
 
   it('checks the combined no-CORS append value but only the new set value', () => {
-    const headers = new HeadersImpl([['Accept', 'a'.repeat(126)]], 'request-no-cors');
+    const headers = new HeadersImpl(new FetchHeaders([['Accept', 'a'.repeat(126)]]), 'request-no-cors');
     headers.append('Accept', 'b');
     expect(headers.get('Accept')).toBe('a'.repeat(126));
     headers.append('Accept', '');
@@ -445,26 +459,26 @@ describe('Headers implementation (Fetch §5.1)', () => {
     expect(headers.get('Accept')).toBe('b');
     headers.fill({ 'Content-Type': 'application/json', 'X-Custom': 'ignored' });
     headers.append('Content-Language', 'en_US');
-    expect(headers.headerList).toEqual([['Accept', 'b']]);
+    expect(headers.headerList.list).toEqual([['Accept', 'b']]);
   });
 
   it.each(['append', 'set', 'delete'] as const)(
     'removes privileged no-CORS headers after a successful %s', (method) => {
-      const headers = new HeadersImpl([['Range', 'bytes=0-9'], ['Accept', '*/*']], 'request-no-cors');
+      const headers = new HeadersImpl(new FetchHeaders([['Range', 'bytes=0-9'], ['Accept', '*/*']]), 'request-no-cors');
       headers[method]('Accept', 'text/plain');
       expect(headers.has('Range')).toBe(false);
     },
   );
 
   it('preserves privileged no-CORS headers after ignored or absent mutations', () => {
-    const headers = new HeadersImpl([['Range', 'bytes=0-9'], ['X-Custom', 'existing']], 'request-no-cors');
+    const headers = new HeadersImpl(new FetchHeaders([['Range', 'bytes=0-9'], ['X-Custom', 'existing']]), 'request-no-cors');
     headers.append('X-Custom', 'ignored');
     headers.set('Accept', '"unsafe"');
     headers.delete('X-Custom');
     headers.delete('Accept');
-    expect(headers.headerList).toEqual([['Range', 'bytes=0-9'], ['X-Custom', 'existing']]);
+    expect(headers.headerList.list).toEqual([['Range', 'bytes=0-9'], ['X-Custom', 'existing']]);
     headers.delete('rAnGe');
-    expect(headers.headerList).toEqual([['X-Custom', 'existing']]);
+    expect(headers.headerList.list).toEqual([['X-Custom', 'existing']]);
   });
 });
 
@@ -484,7 +498,7 @@ it('can opt getSetCookie into method-realm allocation with a declaration', () =>
   world.register(methodRealm).install(methodRealm.global);
   const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
   const method = Reflect.get(Constructor.prototype, 'getSetCookie');
-  const headers = context.project(HeadersImpl, new HeadersImpl([['Set-Cookie', 'a=1']]));
+  const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
   const cookies = Reflect.apply(method, headers, []);
   expect(cookies).toBeInstanceOf(methodRealm.intrinsics.array);
   expect(cookies).not.toBeInstanceOf(receiverRealm.intrinsics.array);

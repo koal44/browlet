@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { BodyRecord } from '../../src/fetch/body';
+import { FetchBody } from '../../src/fetch/body';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { createTestContext } from '../browlet/streams/environment';
 import { ReadableStreamImpl } from '../../src/streams/index';
@@ -23,7 +23,7 @@ export function createBodyFixture() {
     createBody: (chunks: unknown[] = []) => {
       const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime);
       for (const chunk of chunks) stream.enqueueChunk(chunk);
-      return new BodyRecord(stream, runtime);
+      return new FetchBody(stream, runtime);
     },
     createParallelQueue: () => new ParallelQueue(scheduling.runInParallel),
     runTask: () => tasks.shift()!.steps(),
@@ -31,7 +31,7 @@ export function createBodyFixture() {
   };
 }
 
-export function readBodyBytes(body: BodyRecord): Promise<Uint8Array> {
+export function readBodyBytes(body: FetchBody): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     body.stream.getDefaultReader().readAllBytes(resolve, reject);
   });

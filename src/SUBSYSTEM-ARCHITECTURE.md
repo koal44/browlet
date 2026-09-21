@@ -541,7 +541,7 @@ tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delive
 The same settings object exposes its HTML-owned policy container. Window
 settings read it from the associated Document; Fetch's structural client type
 exposes the embedder-policy value without copying it or importing Browlet.
-`RequestRecord` owns the COEP credentials decision, which needs the request's
+`FetchRequest` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
 
 Each `EnvironmentSettingsObject` also owns a `FetchGroup`, exposed through its

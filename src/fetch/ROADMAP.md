@@ -182,13 +182,13 @@ explicit errors. This is structural groundwork, not completed §§2.2 or 5 APIs.
 
 | Construct | Representation and ownership |
 | --- | --- |
-| Header entry / header list (§2.2.2) | Entry type and an ordered list preserving duplicates; the list has shared identity |
-| Body (§2.2.4) | `BodyRecord` with stream, source, and length; use existing Streams/File representations |
-| Request / response (§§2.2.5–2.2.6) | `RequestRecord` / `ResponseRecord` classes with actual fields and defaults; required inputs stay required |
+| Header entry / header list (§2.2.2) | `Header` pair and `FetchHeaders`, owning an ordered array and unguarded list operations |
+| Body (§2.2.4) | `FetchBody` with stream, source, and length; use existing Streams/File representations |
+| Request / response (§§2.2.5–2.2.6) | `FetchRequest` / `FetchResponse` classes with actual fields and defaults; required inputs stay required |
 | Fetch params (§2) | Record over those types, `FetchController`, timing info, task destination, and typed processing steps |
-| Headers (§5.1) | `HeadersImpl` class retaining a header list and guard; a Request/Response's Headers shares that record's list |
+| Headers (§5.1) | `HeadersImpl` retains shared `FetchHeaders` and applies its own mutation guard |
 | Body mixin (§5.3) | `BodyMixin` supplies shared body behavior over the includer's body; it must not create another body value |
-| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` retain their §2 record and construct their Headers and Body mixin; Binding projects Headers in the receiver's realm; Request retains a supplied DOM signal reference |
+| Request / Response (§§5.4–5.5) | `RequestImpl` / `ResponseImpl` retain their internal `FetchRequest` / `FetchResponse` and construct their Headers and Body mixin; Binding projects Headers in the receiver's realm; Request retains a supplied DOM signal reference |
 | Unions, enums, dictionaries, callback signatures | Type aliases/record types; Web IDL owns author conversion and defaults |
 
 Header lists retain their identity: mutate their entries rather than replacing
@@ -218,18 +218,18 @@ URL components while retaining any Blob URL entry reference.
   and cloning have declared signatures and throw until Slice 6. Internal record
   cloning is implemented in Slice 4. Byte-sequence request bodies must be extracted
   before a Body API can expose their stream.
-- `FilteredResponseRecord` provides a live restricted view of its internal
+- `FilteredFetchResponse` provides a live restricted view of its internal
   record. Its specified overrides include a separate filtered header list;
   other fields, including body replacement and timing updates, remain shared.
 - API IDL is co-located with the implementations and remains uninstalled. The
   public `fetch()` operation and transport are not introduced here.
 
-**Exit proof:** `test/fetch/records.test.ts` covers defaults, independent
+**Exit proof:** `test/fetch/state.test.ts` covers defaults, independent
 mutable state, live URL/body references, shared Headers, allocation realm, and
 FetchParams cancellation. Tests allocate implementations through the shared
 Binding Context and check Headers identity and realm through borrowed getters.
 Full API construction/conversion coverage belongs to Slice 6. Repeated setup
-lives in `test/fetch/record-fixture.ts`.
+lives in `test/fetch/fetch-fixture.ts`.
 
 ## Slice 2 — HTTP methods, headers, and statuses
 
@@ -298,16 +298,16 @@ operations, including header mutation over the real request record. Public
 
 **Specification:** Fetch §2.2.4.
 
-**Status:** complete. `BodyRecord` clones through Streams' tee operation and
+**Status:** complete. `FetchBody` clones through Streams' tee operation and
 supports incremental and full reads. Incremental reading copies each chunk
 before queueing its Fetch task and begins the next read only after that task
 processes the bytes. Full reads reuse Streams' read-all-bytes operation and
 queue either the complete result or the failure, including reader acquisition
 failure.
 
-`BodyRecord.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
+`FetchBody.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
 the source/length and creates a byte-stream implementation, filled through supplied
-parallel scheduling. `BodyRecord` retains its `RuntimeContext` from construction
+parallel scheduling. `FetchBody` retains its `RuntimeContext` from construction
 and forwards it when cloning. Its networking facilities supply HTML global
 tasks and parallel execution; the read signatures keep the specified
 callbacks and optional destination. An omitted destination starts a new parallel queue.
@@ -356,7 +356,7 @@ implement cache storage/revalidation. Location parsing follows the reviewed
 header-extraction convention: undefined for absence, null for failure. That
 return-type translation has been reviewed and accepted.
 
-**COEP credentials check (2026-09-19):** implemented on `RequestRecord`, reading
+**COEP credentials check (2026-09-19):** implemented on `FetchRequest`, reading
 the actual client's policy container through `FetchEnvironmentSettingsObject`.
 HTML's [`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) now holds its four
 specified fields and defaults. Tests cover policy/mode selection, same-origin credentials,
@@ -374,7 +374,7 @@ response-header processing, inheritance, and reporting remain unfinished, as
 does invoking this predicate from network orchestration. A true result here
 does not override the request's credentials mode.
 
-**Exit proof:** `test/fetch/request.test.ts`, `response.test.ts`, and `records.test.ts`
+**Exit proof:** `test/fetch/request.test.ts`, `response.test.ts`, and `state.test.ts`
 cover record defaults, owner identity, independent clone data and streamed bytes,
 filtered visibility and live field forwarding, reporting/Location URLs, freshness
 boundaries, and destination translation without a network connection. The byte

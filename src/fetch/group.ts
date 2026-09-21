@@ -1,5 +1,5 @@
 import type { FetchController } from './controller';
-import type { RequestRecord } from './request';
+import type { FetchRequest } from './request';
 
 /** https://fetch.spec.whatwg.org/#fetch-groups */
 export class FetchGroup {
@@ -26,12 +26,12 @@ export class FetchGroup {
 }
 
 export type FetchRecord = {
-  request: RequestRecord;
+  request: FetchRequest;
   controller: FetchController | null;
 };
 
 export type DeferredFetchRecord = {
-  request: RequestRecord;
+  request: FetchRequest;
   notifyInvoked: () => void;
   invokeState: 'pending' | 'sent' | 'aborted';
 };

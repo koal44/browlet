@@ -1,18 +1,17 @@
 import { getMIMETypeEssence } from '../../mime/index';
-import { extractMIMEType } from '../headers';
-import { isScriptLikeDestination, type RequestRecord } from '../request';
-import type { ResponseRecord } from '../response';
+import { isScriptLikeDestination, type FetchRequest } from '../request';
+import type { FetchResponse } from '../response';
 import { isHTTPScheme } from '../url';
 
 /** https://fetch.spec.whatwg.org/#block-bad-port */
-export function shouldBlockDueToBadPort(request: RequestRecord): 'blocked' | 'allowed' {
+export function shouldBlockDueToBadPort(request: FetchRequest): 'blocked' | 'allowed' {
   const url = request.currentURL;
   return isHTTPScheme(url.scheme) && url.port !== null && badPorts.has(url.port) ? 'blocked' : 'allowed';
 }
 
 /** https://fetch.spec.whatwg.org/#should-response-to-request-be-blocked-due-to-mime-type? */
-export function shouldBlockDueToMIMEType(response: ResponseRecord, request: RequestRecord): 'blocked' | 'allowed' {
-  const mimeType = extractMIMEType(response.headerList);
+export function shouldBlockDueToMIMEType(response: FetchResponse, request: FetchRequest): 'blocked' | 'allowed' {
+  const mimeType = response.headerList.extractMIMEType();
   if (mimeType === null) return 'allowed';
   const essence = getMIMETypeEssence(mimeType);
   if (isScriptLikeDestination(request.destination) && (

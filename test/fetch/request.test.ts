@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest';
 import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
 import {
   isScriptLikeDestination, translatePotentialDestination, type Destination,
-  type PotentialDestination, type RequestRecord,
+  type PotentialDestination, type FetchRequest,
 } from '../../src/fetch/request';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
-import { createRequestRecord } from './record-fixture';
+import { createFetchRequest } from './fetch-fixture';
 import { createClientSettings } from './client-fixture';
 
 describe('Fetch request cloning', () => {
   it('copies owned data, retains owner references, and gives the clone a fresh WebDriver ID', () => {
     const client = createClientSettings();
-    const request = createRequestRecord('https://[::1]/start', client);
+    const request = createFetchRequest('https://[::1]/start', client);
     request.method = 'POST';
     request.credentialsMode = 'include';
     request.origin = obtainURLOrigin(request.url);
@@ -22,7 +22,7 @@ describe('Fetch request cloning', () => {
       userAgent: client.userAgent, topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
     };
     request.referrer = parseURL('https://example.test/referrer').url!;
-    request.headerList.push(['X-Test', 'first'], ['X-Test', 'second']);
+    request.headerList.list.push(['X-Test', 'first'], ['X-Test', 'second']);
     request.urlList.push(parseURL('https://example.test/end').url!);
     request.webTransportHashList.push({ algorithm: 'sha-256', value: Uint8Array.of(1) });
     request.navigationTimingAllowValuesList.push(['https://example.test']);
@@ -37,9 +37,9 @@ describe('Fetch request cloning', () => {
     expect(clone.reservedClient).toBe(request.reservedClient);
     expect(clone.referrer).not.toBe(request.referrer);
 
-    clone.headerList[0]![1] = 'changed';
-    clone.headerList.push(['X-New', 'new']);
-    expect(request.headerList).toEqual([['X-Test', 'first'], ['X-Test', 'second']]);
+    clone.headerList.list[0]![1] = 'changed';
+    clone.headerList.list.push(['X-New', 'new']);
+    expect(request.headerList.list).toEqual([['X-Test', 'first'], ['X-Test', 'second']]);
     clone.currentURL.fragment = 'changed';
     if (!Array.isArray(clone.url.path) || clone.url.host?.kind !== 'ipv6') throw new Error('Expected IPv6 URL');
     clone.url.path.push('changed');
@@ -54,13 +54,13 @@ describe('Fetch request cloning', () => {
   });
 
   it('preserves the identity of a blob URL entry', () => {
-    const request = createRequestRecord('blob:https://example.test/id');
+    const request = createFetchRequest('blob:https://example.test/id');
     request.url.blobURLEntry = { environment: { origin: createOpaqueOrigin() } };
     expect(request.clone().url.blobURLEntry).toBe(request.url.blobURLEntry);
   });
 
   it('copies a byte-sequence body before extraction', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.body = Uint8Array.of(9, 1, 2, 9).subarray(1, 3);
     const clone = request.clone();
     expect(clone.body).toEqual(Uint8Array.of(1, 2));
@@ -69,7 +69,7 @@ describe('Fetch request cloning', () => {
   });
 
   it('copies bytes even when a Node buffer supplies the byte sequence', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.body = Buffer.from([1, 2]);
     request.webTransportHashList.push({ algorithm: 'sha-256', value: Buffer.from([3, 4]) });
     const clone = request.clone();
@@ -81,7 +81,7 @@ describe('Fetch request cloning', () => {
 
   it('tees an extracted body so both requests can consume it independently', async () => {
     const { createBody } = createBodyFixture();
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.body = createBody([Uint8Array.of(1, 2)]);
     request.body.stream.close();
     const originalStream = request.body.stream;
@@ -104,22 +104,22 @@ describe('Fetch request Range headers', () => {
     [0, undefined, 'bytes=0-'], [0, 0, 'bytes=0-0'], [1, 500, 'bytes=1-500'],
     [9007199254740993n, 9007199254740995n, 'bytes=9007199254740993-9007199254740995'],
   ])('adds the inclusive range %s through %s', (first, last, value) => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.addRangeHeader(first, last);
-    expect(request.headerList).toEqual([['Range', value]]);
+    expect(request.headerList.list).toEqual([['Range', value]]);
   });
 
   it('appends using header-list rules instead of replacing a previous range', () => {
-    const request = createRequestRecord();
-    request.headerList.push(['range', 'bytes=0-1']);
+    const request = createFetchRequest();
+    request.headerList.list.push(['range', 'bytes=0-1']);
     request.addRangeHeader(2);
-    expect(request.headerList).toEqual([['range', 'bytes=0-1'], ['range', 'bytes=2-']]);
+    expect(request.headerList.list).toEqual([['range', 'bytes=0-1'], ['range', 'bytes=2-']]);
   });
 
   it('rejects a reversed range before changing headers', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     expect(() => request.addRangeHeader(2, 1)).toThrow('Range start exceeds its end');
-    expect(request.headerList).toEqual([]);
+    expect(request.headerList.list).toEqual([]);
   });
 });
 
@@ -153,7 +153,7 @@ describe('Fetch request classifications', () => {
   };
 
   it.each(Object.keys(classifications) as Destination[])('classifies destination "%s"', (destination) => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.destination = destination;
     expect([
       isScriptLikeDestination(destination), request.isSubresource,
@@ -162,7 +162,7 @@ describe('Fetch request classifications', () => {
   });
 
   it('reads the current destination independently of request mode', () => {
-    const request = createRequestRecord();
+    const request = createFetchRequest();
     request.mode = 'navigate';
     expect(request.isNavigation).toBe(false);
     request.destination = 'document';
@@ -186,7 +186,7 @@ describe('Fetch request redirect-taint', () => {
   const outside = 'https://outside.test/';
   const elsewhere = 'https://elsewhere.test/';
 
-  it.each<{ name: string; urls: [string, ...string[]]; taint: RequestRecord['redirectTaint']; }>([
+  it.each<{ name: string; urls: [string, ...string[]]; taint: FetchRequest['redirectTaint']; }>([
     { name: 'a same-origin request without redirects', urls: [a], taint: 'same-origin' },
     { name: 'a cross-origin request without redirects', urls: [outside], taint: 'same-origin' },
     { name: 'a same-origin redirect', urls: [a, `${a}next`], taint: 'same-origin' },
@@ -202,7 +202,7 @@ describe('Fetch request redirect-taint', () => {
     { name: 'same-site taint escalating to cross-site', urls: [a, b, a, outside, a], taint: 'cross-site' },
     { name: 'origins obtained from blob URLs', urls: [a, 'blob:https://b.example.test/id', a], taint: 'same-site' },
   ])('$name', ({ urls, taint }) => {
-    const request = createRequestRecord(urls[0]);
+    const request = createFetchRequest(urls[0]);
     request.origin = obtainURLOrigin(parseURL(a).url!);
     request.urlList.push(...urls.slice(1).map((url) => parseURL(url).url!));
     expect(request.redirectTaint).toBe(taint);
@@ -210,14 +210,14 @@ describe('Fetch request redirect-taint', () => {
   });
 
   it('uses the request origin, even when it differs from the first URL origin', () => {
-    const request = createRequestRecord(outside);
+    const request = createFetchRequest(outside);
     request.origin = obtainURLOrigin(parseURL(a).url!);
     request.urlList.push(parseURL(a).url!);
     expect(request.redirectTaint).toBe('cross-site');
   });
 
   it('recomputes from the URL list as redirects are appended', () => {
-    const request = createRequestRecord(a);
+    const request = createFetchRequest(a);
     request.origin = obtainURLOrigin(request.url);
     expect(request.redirectTaint).toBe('same-origin');
     expect(request.serializeOrigin()).toBe('https://a.example.test');
@@ -231,7 +231,7 @@ describe('Fetch request redirect-taint', () => {
   });
 
   it('requires a concrete origin even without redirects', () => {
-    const request = createRequestRecord(a);
+    const request = createFetchRequest(a);
     expect(() => request.redirectTaint).toThrow('Fetch request origin is still "client"');
     expect(() => request.serializeOrigin()).toThrow('Fetch request origin is still "client"');
     expect(() => request.byteSerializeOrigin()).toThrow('Fetch request origin is still "client"');
@@ -245,14 +245,14 @@ describe('Fetch request origin serialization', () => {
     ['https://bücher.example/', 'https://xn--bcher-kva.example'],
     ['http://[2001:db8::1]:8080/', 'http://[2001:db8::1]:8080'],
   ])('serializes %s as an ASCII origin and bytes', (url, expected) => {
-    const request = createRequestRecord(url);
+    const request = createFetchRequest(url);
     request.origin = obtainURLOrigin(request.url);
     expect(request.serializeOrigin()).toBe(expected);
     expect(request.byteSerializeOrigin()).toEqual(Uint8Array.from(expected, (c) => c.charCodeAt(0)));
   });
 
   it('serializes an opaque request origin as "null", whether or not redirects taint it', () => {
-    const request = createRequestRecord('https://example.test/');
+    const request = createFetchRequest('https://example.test/');
     request.origin = createOpaqueOrigin();
     expect(request.redirectTaint).toBe('same-origin');
     expect(request.serializeOrigin()).toBe('null');
@@ -265,7 +265,7 @@ describe('Fetch request origin serialization', () => {
   });
 
   it('byte-serializes a tainted tuple origin as "null"', () => {
-    const request = createRequestRecord('https://a.example.test/');
+    const request = createFetchRequest('https://a.example.test/');
     request.origin = obtainURLOrigin(request.url);
     request.urlList.push(parseURL('https://b.example.test/').url!, request.url);
     expect(request.redirectTaint).toBe('same-site');
@@ -289,16 +289,16 @@ describe('Fetch request COEP credentials', () => {
     { name: 'a same-site redirect and return home', urls: [home, 'https://b.example.test/', home], allowed: false },
     { name: 'a port change and return home', urls: [home, 'https://a.example.test:8443/', home], allowed: false },
   ])('$name: credentials allowed = $allowed', ({ urls, allowed }) => {
-    const request = createRequestRecord(urls[0], client);
+    const request = createFetchRequest(urls[0], client);
     request.origin = obtainURLOrigin(parseURL(home).url!);
     request.urlList.push(...urls.slice(1).map((url) => parseURL(url).url!));
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(allowed);
   });
 
-  it.each<RequestRecord['mode']>([
+  it.each<FetchRequest['mode']>([
     'cors', 'same-origin', 'navigate', 'websocket', 'webtransport',
   ])('does not restrict credentials in %s mode', (mode) => {
-    const request = createRequestRecord(foreign, client);
+    const request = createFetchRequest(foreign, client);
     request.origin = obtainURLOrigin(parseURL(home).url!);
     request.mode = mode;
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
@@ -307,7 +307,7 @@ describe('Fetch request COEP credentials', () => {
   it.each<FetchEnvironmentSettingsObject['policyContainer']['embedderPolicy']['value']>([
     'unsafe-none', 'require-corp',
   ])('does not restrict credentials under %s', (value) => {
-    const request = createRequestRecord(foreign, {
+    const request = createFetchRequest(foreign, {
       ...client, policyContainer: { embedderPolicy: { value } },
     });
     request.origin = obtainURLOrigin(parseURL(home).url!);
@@ -315,19 +315,19 @@ describe('Fetch request COEP credentials', () => {
   });
 
   it('does not restrict a clientless request', () => {
-    const request = createRequestRecord(foreign);
+    const request = createFetchRequest(foreign);
     request.origin = obtainURLOrigin(parseURL(home).url!);
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
   });
 
   it('does not treat an opaque request origin as same-origin with the URL', () => {
-    const request = createRequestRecord(home, client);
+    const request = createFetchRequest(home, client);
     request.origin = createOpaqueOrigin();
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
   });
 
   it('requires a concrete origin before checking policy', () => {
-    const request = createRequestRecord(home);
+    const request = createFetchRequest(home);
     expect(() => request.crossOriginEmbedderPolicyAllowsCredentials()).toThrow(
       'Fetch request origin is still "client"',
     );
