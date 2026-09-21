@@ -13,6 +13,7 @@ import {
   type RealmRegistrationOptions,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
+import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
 import {
   type WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
@@ -25,6 +26,7 @@ import { domIDLDefinitions } from './dom/web-idl';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
+import { fetchCapabilities } from './integration/fetch';
 import { fileReaderIDL } from './integration/file/file-reader';
 import {
   createStructuredClone as createStructuredCloneSteps, createWindowRuntime,
@@ -242,6 +244,7 @@ const hostDefinedInterfaces = [{
 const browletCapabilities = [
   ...domExceptionCapabilities,
   ...fileCapabilities,
+  ...fetchCapabilities,
 ];
 
 const browletDefinitions = [
@@ -251,6 +254,7 @@ const browletDefinitions = [
   ...mathMLIDLDefinitions,
   originIDL,
   locationIDL,
+  referrerPolicyIDL,
   domHighResTimeStampIDL,
   epochTimeStampIDL,
   performanceIDL,

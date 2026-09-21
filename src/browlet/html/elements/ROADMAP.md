@@ -26,6 +26,13 @@ IDL constructors and element-specific reflected members still have to be
 added eventually; the generic implementation is sequencing, not a claim of
 full conformance.
 
+**Next Fetch prerequisite:** implement the document base URL and `HTMLBaseElement`
+(HTML §§2.4.3 and 4.2.3). Fetch 6c reads the settings object's API base URL, but
+`Document.baseURI` currently uses only the about-base/document URL. The ordinary
+failing case in `test/browlet/fetch-request.test.ts` preserves this gap. Implement
+first-base selection, fallback and frozen-base behavior, and attribute/tree-change
+hooks here; Request and Response.redirect should continue reading the shared result.
+
 `iframe` is intentionally the first nested-browsing consumer. Its element
 module stores element state and invokes the specified processing hooks;
 `browsing/`, `loader/`, and `browsing/policy/` retain ownership of navigables,

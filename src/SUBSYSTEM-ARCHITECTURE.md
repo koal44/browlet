@@ -334,8 +334,9 @@ dependencies through the Runtime Context below. Track the remaining migration in
 ### Runtime Context
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
-Promises, buffer allocation, JSON parsing, microtasks, task delivery, abort-controller
-construction, time coarsening, structured cloning/serialization/deserialization, and immutable
+Promises, buffer allocation, JSON parsing/serialization, microtasks, task delivery,
+abort-controller and dependent-signal construction, time coarsening,
+structured cloning/serialization/deserialization, and immutable
 native-line-ending configuration.
 Its `global` identifies that owner when a specification selects it as a task
 destination. Browlet reads it through a getter because Window installation
@@ -376,10 +377,23 @@ entry-creation capability on constructors or RuntimeContext. Constructing an
 entry list from an HTML form remains browser-owned work deferred until forms exist.
 `runtime.parseJSON(text)` uses the owning realm's captured intrinsic, so nested
 objects and syntax failures have that realm without a second parse or clone.
+`runtime.stringifyJSON(value)` likewise retains the factory realm for JSON
+serialization failures while preserving exceptions thrown by author code.
+Byte-backed Fetch bodies already have their bytes and queue a networking task
+directly on their owning global to allocate the JavaScript chunk and update
+the stream. The task's checkpoint then runs stream reactions; no separate
+background turn is needed. `runInParallel` itself does not enter an HTML task.
 Multipart extraction and Blob streaming use `BlobData.stream(runtime)`;
 backing data retains no runtime and each stream uses its caller's runtime.
 Blob constructor part processing stays on `BlobImpl`, which owns the part and
 option interpretation, including native line ending policy.
+
+Fetch constructor declarations obtain their relevant HTML settings through a
+registered capability. Request's factory receives the actual settings object;
+Response.redirect receives only its API base URL. These are explicit algorithm
+inputs, not additions to RuntimeContext. Dependent-signal construction does belong
+to the runtime: Browlet allocates the signal in that owner and calls DOM's
+existing dependency algorithm, without a parallel Fetch-owned signal graph.
 
 `serialize(value)` captures a value using the source runtime;
 `deserialize(record)` reconstructs it in the destination runtime's realm.

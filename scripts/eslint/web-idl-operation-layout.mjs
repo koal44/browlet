@@ -4,13 +4,13 @@ export default {
     type: 'layout',
     schema: [],
     messages: {
-      argument: 'Start this operation argument on its own indented line.',
-      closing: 'Close the operation call on its own line.',
+      argument: 'Start this declaration argument on its own indented line.',
+      closing: 'Close the declaration call on its own line.',
     },
   },
   create(context) {
     const source = context.sourceCode;
-    const references = new Set();
+    const references = new Map();
 
     return {
       Program(node) {
@@ -20,22 +20,25 @@ export default {
           for (const variable of source.getDeclaredVariables(statement)) {
             const definition = variable.defs[0].node;
             if (definition.type !== 'ImportSpecifier' ||
-                !['op', 'staticOp'].includes(definition.imported.name)) continue;
-            for (const reference of variable.references) references.add(reference.identifier);
+                !['op', 'staticOp', 'ctor'].includes(definition.imported.name)) continue;
+            const headerLength = definition.imported.name === 'ctor' ? 0 : 2;
+            for (const reference of variable.references) references.set(reference.identifier, headerLength);
           }
         }
       },
       CallExpression(node) {
-        if (!references.has(node.callee) || node.arguments.length < 4) return;
+        const headerLength = references.get(node.callee);
+        if (headerLength === undefined || node.arguments.length < headerLength + 2) return;
 
-        // The name and return type form the header. Multiline argument/binding
-        // groups below it each start a line; the indent rule supplies spacing.
-        const groups = node.arguments.slice(2);
+        // Operations have a name/type header; constructors start with their
+        // argument list. The indent rule supplies spacing for each group.
+        const groups = node.arguments.slice(headerLength);
         if (!groups.some((argument) => argument.loc.start.line !== argument.loc.end.line)) return;
 
-        for (let index = 2; index < node.arguments.length; index++) {
+        for (let index = headerLength; index < node.arguments.length; index++) {
           const argument = node.arguments[index];
-          if (argument.loc.start.line === node.arguments[index - 1].loc.end.line) {
+          const previous = node.arguments[index - 1] ?? node.callee;
+          if (argument.loc.start.line === previous.loc.end.line) {
             context.report({
               loc: source.getFirstToken(argument).loc,
               messageId: 'argument',

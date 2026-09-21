@@ -593,7 +593,7 @@ function requireStateMember<Value>(
 
 /** Streams §9.5, create a proxy for a readable stream. */
 export function createReadableStreamProxy(
-  stream: ReadableStreamImpl,
+  stream: ReadableStreamImpl, runtime: RuntimeContext,
 ): ReadableStreamImpl {
-  return stream.pipeThroughTransform(TransformStreamImpl.createIdentity(stream.runtime));
+  return stream.pipeThroughTransform(TransformStreamImpl.createIdentity(runtime));
 }

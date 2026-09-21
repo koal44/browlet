@@ -17,6 +17,7 @@ import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/control-fixture';
 import { createRuntime } from '../js-engine/runtime-fixture';
 
+/** Create a Window for task inspection; the default UserAgent leaves its event loop unstarted. */
 export function createFetchWindow(userAgent = new UserAgent()) {
   const traversable = createNewTopLevelTraversable(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);

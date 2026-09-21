@@ -478,12 +478,15 @@ export const headersIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   implementation: impl(HeadersImpl),
   members: [
-    ctor([arg('init', reference('HeadersInit'), { optional: true })], {
-      // https://fetch.spec.whatwg.org/#dom-headers
-      invoke(_ctx, init) {
-        if (init !== undefined) (this as HeadersImpl).fill(init as HeadersInitValue);
+    ctor(
+      [arg('init', reference('HeadersInit'), { optional: true })],
+      {
+        // https://fetch.spec.whatwg.org/#dom-headers
+        invoke(_ctx, init) {
+          if (init !== undefined) (this as HeadersImpl).fill(init as HeadersInitValue);
+        },
       },
-    }),
+    ),
     op('append', idlType.undefined, [arg('name', idlType.ByteString), arg('value', idlType.ByteString)]),
     op('delete', idlType.undefined, [arg('name', idlType.ByteString)]),
     op('get', nullable(idlType.ByteString), [arg('name', idlType.ByteString)]),

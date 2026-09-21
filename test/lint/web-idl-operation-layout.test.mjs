@@ -24,6 +24,14 @@ const flattened = `op('item', nullable(reference('File')), [
   },
   { unsupportedValue: null },
 ));`;
+const constructorImport = "import { ctor } from '../../src/web-idl/index';\n";
+const flattenedConstructor = `ctor([
+  arg('input', reference('RequestInfo')),
+], {
+  construct(ctx, input) {
+    return createRequest(ctx, input);
+  },
+});`;
 
 const tester = new RuleTester({
   languageOptions: { parser: tseslint.parser },
@@ -67,10 +75,37 @@ tester.run('web-idl-operation-layout', rule, {
   ),
 );`,
     },
+    {
+      name: 'constructor layout',
+      code: constructorImport + `ctor(
+  [arg('input', reference('RequestInfo'))],
+  {
+    construct(ctx, input) {
+      return createRequest(ctx, input);
+    },
+  },
+);`,
+    },
+    {
+      name: 'compact constructor',
+      code: constructorImport + "ctor([arg('input', type)], { construct: createRequest });",
+    },
+    {
+      name: 'constructor with no binding',
+      code: constructorImport + "ctor([\n  arg('input', type),\n]);",
+    },
     { name: 'unrelated op import', code: "import { op } from 'other';\n" + flattened },
     {
       name: 'shadowed op parameter',
       code: declarationImport + 'function example(op: Function) {\n' + flattened + '\n}',
+    },
+    {
+      name: 'unrelated constructor import',
+      code: "import { ctor } from 'other';\n" + flattenedConstructor,
+    },
+    {
+      name: 'shadowed constructor parameter',
+      code: constructorImport + 'function example(ctor: Function) {\n' + flattenedConstructor + '\n}',
     },
   ],
   invalid: [
@@ -109,6 +144,28 @@ tester.run('web-idl-operation-layout', rule, {
       name: 'inline empty array before multiline binding',
       code: declarationImport + `op('text', type, [], {
   invoke: text,
+});`,
+      errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
+    },
+    {
+      name: 'flattened constructor layout',
+      code: constructorImport + flattenedConstructor,
+      errors: [
+        { messageId: 'argument', line: 2 },
+        { messageId: 'argument', line: 4 },
+        { messageId: 'closing', line: 8 },
+      ],
+    },
+    {
+      name: 'aliased constructor import',
+      code: "import { ctor as constructor } from '../../src/web-idl/core/index.js';\n" +
+        flattenedConstructor.replace('ctor(', 'constructor('),
+      errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
+    },
+    {
+      name: 'inline empty array before multiline constructor binding',
+      code: constructorImport + `ctor([], {
+  construct: createRequest,
 });`,
       errors: [{ messageId: 'argument' }, { messageId: 'argument' }, { messageId: 'closing' }],
     },

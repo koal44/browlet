@@ -87,8 +87,7 @@ describe('Fetch state/API sharing', () => {
   it('retains the same request, signal, and duplicate-preserving Headers list', () => {
     const fixture = createFetchFixture();
     const record = createFetchRequest();
-    // Only signal identity is exercised here; DOM-dependent creation comes later.
-    const signal = {};
+    const signal = fixture.runtime.createAbortController().signal;
     const request = fixture.createRequest(record, signal);
     expect(request.getRequest()).toBe(record);
     expect(request.signal).toBe(signal);
@@ -132,7 +131,9 @@ describe('Fetch state/API sharing', () => {
     const foreignRealm = new TestRealm();
     const foreign = fixture.bindings.register(foreignRealm, { createRuntime: () => createRuntime(foreignRealm) });
     const createObject = (context: BindingContext) => name === 'Request'
-      ? context.project(RequestImpl, context.construct(RequestImpl, createFetchRequest(), 'request', {}))
+      ? context.project(RequestImpl, context.construct(
+        RequestImpl, createFetchRequest(), 'request', context.getRuntime().createAbortController().signal,
+      ))
       : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
     const receiver = createObject(fixture.context);
     const foreignReceiver = createObject(foreign);

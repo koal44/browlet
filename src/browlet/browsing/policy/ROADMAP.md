@@ -89,6 +89,10 @@ Implement header parsing, referrer calculation/stripping, and redirect updates.
 HTML supplies delivery/inheritance and Fetch supplies request/client records.
 Reuse trustworthiness for downgrade decisions.
 
+`referrer-policy.ts` supplies the enum declaration used by Request/RequestInit
+in Fetch 6c. This validates policy values; it does not implement the header
+parser, policy delivery, or outgoing-referrer calculation described here.
+
 Test every policy across same-/cross-origin and trustworthiness changes,
 credential/fragment removal, and redirects. Then test actual loader/element
 delivery; the stored default policy is only the starting value.

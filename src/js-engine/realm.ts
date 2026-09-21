@@ -178,6 +178,7 @@ export class JSRealm {
       function: Function_,
       functionPrototype: Function_.prototype,
       jsonParse: JSON_.parse,
+      jsonStringify: JSON_.stringify,
       iteration: {
         arrayEntries: Reflect.get(
           arrayPrototype,
@@ -312,6 +313,11 @@ export class JSRealm {
   /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */
   parseJSON(text: string): unknown {
     return this.intrinsics.jsonParse(text);
+  }
+
+  /** Serialize JSON with this realm's captured intrinsic and exception constructors. */
+  stringifyJSON(value: unknown): string | undefined {
+    return this.intrinsics.jsonStringify(value);
   }
 
   /** ECMAScript CreateIterResultObject, using this realm's Object prototype. */
@@ -621,6 +627,7 @@ export type JSIntrinsics = {
   function: FunctionConstructor;
   functionPrototype: object;
   jsonParse(text: string): unknown;
+  jsonStringify(value: unknown): string | undefined;
   iteration: {
     arrayEntries: JSMethod;
     arrayForEach: JSMethod;

@@ -18,8 +18,12 @@ export type RuntimeContext = {
 
   queueMicrotask(steps: () => void): void;
   createAbortController(): AbortControllerCapability;
+  /** Create a DOM dependent signal in the owner's realm. */
+  createDependentAbortSignal(signals: AbortSignalCapability[]): AbortSignalCapability;
   /** Parse JSON in the owner's realm without calling an author-replaced JSON.parse. */
   parseJSON(text: string): unknown;
+  /** Serialize using the owner's captured JSON intrinsic. */
+  stringifyJSON(value: unknown): string | undefined;
   /** HTML structured cloning into the owner's realm. */
   clone(value: unknown): unknown;
   /** HTML structured serialization; the provider owns the opaque record. */

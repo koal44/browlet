@@ -1,20 +1,23 @@
 import type { BlobImpl } from '../file/index';
+import { utf8Encode } from '../encoding/codecs/utf-8';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { PromiseValue, RuntimeContext } from '../js-engine/index';
+import { RangeError, TypeError } from '../js-engine/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
 import { copyURL, parseURL, serializeURL, type URLRecord } from '../url/url';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
-  roAttr, staticOp, xattr,
+  roAttr, staticOp, invokeWith, xattr,
 } from '../web-idl/index';
 import type { FormDataImpl } from '../xhr/index';
-import { BodyMixin, type FetchBody } from './body';
+import { BodyMixin, FetchBody, type BodyInitValue, type BodyWithType } from './body';
 import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
   isForbiddenResponseHeaderName, type HeadersGuard, type HeadersInitValue,
 } from './headers';
-import { isRedirectStatus } from './http/statuses';
+import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
+import { getFetchEnvironmentSettingsObject } from './infrastructure';
 import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
@@ -205,27 +208,54 @@ export class ResponseImpl {
   #response: FetchResponse;
   #headers: HeadersImpl;
   #bodyMixin: BodyMixin;
+  #runtime: RuntimeContext;
 
   // Internal allocation from an existing response and header guard.
-  // SPEC_MISMATCH: create a Response object(response, guard, realm) -> Response
+  // https://fetch.spec.whatwg.org/#response-create
   constructor(
     response: FetchResponse, guard: HeadersGuard, runtime: RuntimeContext,
   ) {
     this.#response = response;
     this.#headers = new HeadersImpl(response.headerList, guard);
     this.#bodyMixin = new BodyMixin(response, runtime);
+    this.#runtime = runtime;
   }
 
-  static error(): ResponseImpl {
-    throw new InternalError('Response.error is not implemented');
+  /** Construct a Response from converted author arguments. */
+  // https://fetch.spec.whatwg.org/#dom-response
+  static create(body: BodyInitValue | null, init: FetchResponseInit, runtime: RuntimeContext): ResponseImpl {
+    const response = new ResponseImpl(new FetchResponse(), 'response', runtime);
+    const extracted = body === null ? null : FetchBody.extract(body, false, runtime);
+    response.#initialize(init, extracted);
+    return response;
   }
 
-  static redirect(_url: string, _status: number): ResponseImpl {
-    throw new InternalError('Response.redirect is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-response-error
+  static error(runtime: RuntimeContext): ResponseImpl {
+    return new ResponseImpl(FetchResponse.networkError(), 'immutable', runtime);
   }
 
-  static json(_data: unknown, _init: FetchResponseInit): ResponseImpl {
-    throw new InternalError('Response.json is not implemented');
+  // https://fetch.spec.whatwg.org/#dom-response-redirect
+  // SPEC_MISMATCH: Response.redirect(url, status) -> Response
+  static redirect(url: string, status: number, baseURL: URLRecord, runtime: RuntimeContext): ResponseImpl {
+    const parsedURL = parseURL(url, baseURL).url;
+    if (parsedURL === null) throw new TypeError('Invalid redirect URL');
+    if (!isRedirectStatus(status)) throw new RangeError('Invalid redirect status');
+    const response = new FetchResponse();
+    response.status = status;
+    response.headerList.append('Location', serializeURL(parsedURL));
+    return new ResponseImpl(response, 'immutable', runtime);
+  }
+
+  // https://fetch.spec.whatwg.org/#dom-response-json
+  static json(data: unknown, init: FetchResponseInit, runtime: RuntimeContext): ResponseImpl {
+    // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
+    const json = runtime.stringifyJSON(data);
+    if (json === undefined) throw new TypeError('Value cannot be serialized as JSON');
+    const body = FetchBody.fromBytes(utf8Encode(json), runtime);
+    const response = new ResponseImpl(new FetchResponse(), 'response', runtime);
+    response.#initialize(init, { body, type: 'application/json' });
+    return response;
   }
 
   get type(): ResponseType { return this.#response.type; }
@@ -236,8 +266,10 @@ export class ResponseImpl {
   get statusText(): string { return this.#response.statusMessage; }
   get headers(): HeadersImpl { return this.#headers; }
 
+  // https://fetch.spec.whatwg.org/#dom-response-clone
   clone(): ResponseImpl {
-    throw new InternalError('Response.clone is not implemented');
+    if (this.#bodyMixin.unusable) throw new TypeError('Response body is disturbed or locked');
+    return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#runtime);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -253,7 +285,27 @@ export class ResponseImpl {
   // -- Internal ---------------------------------------------------------
 
   getResponse(): FetchResponse { return this.#response; }
+
+  // https://fetch.spec.whatwg.org/#initialize-a-response
+  #initialize(init: FetchResponseInit, body: BodyWithType | null): void {
+    if (init.status < 200 || init.status > 599) throw new RangeError('Response status must be between 200 and 599');
+    if (invalidStatusText.test(init.statusText)) throw new TypeError('Invalid Response status text');
+    this.#response.status = init.status;
+    this.#response.statusMessage = init.statusText;
+    if (init.headers !== undefined) this.#headers.fill(init.headers);
+    if (body !== null) {
+      if (isNullBodyStatus(init.status)) throw new TypeError('This response status cannot have a body');
+      this.#response.body = body.body;
+      if (body.type !== null && !this.#response.headerList.has('Content-Type')) {
+        this.#response.headerList.append('Content-Type', body.type);
+      }
+    }
+  }
 }
+
+// RFC 9112 reason-phrase = *( HTAB / SP / VCHAR / obs-text ).
+// eslint-disable-next-line no-control-regex -- The HTTP production names byte ranges explicitly.
+const invalidStatusText = /[^\x09\x20-\x7e\x80-\xff]/;
 
 /** Post-conversion dictionary; Web IDL supplies status and statusText defaults. */
 export type FetchResponseInit = {
@@ -285,24 +337,40 @@ export const responseIDL = defineInterface({
     constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
   }),
   members: [
-    ctor([
-      arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),
-      arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
-    ], { invoke() { throw new InternalError('Response construction from BodyInit is not implemented'); } }),
-    staticOp('error', reference('Response'), [], xattr('NewObject')),
+    ctor(
+      [
+        arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),
+        arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
+      ],
+      {
+        construct(ctx, body, init) {
+          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getRuntime());
+        },
+      },
+    ),
+    staticOp('error', reference('Response'),
+      [],
+      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getRuntime())) },
+    ),
     staticOp('redirect', reference('Response'),
       [
         arg('url', idlType.USVString),
         arg('status', idlType.unsignedShort, { optional: true, default: integer(302) }),
       ],
-      xattr('NewObject'),
+      {
+        ...xattr('NewObject'),
+        ...invokeWith(
+          atArg(2, (ctx): URLRecord => getFetchEnvironmentSettingsObject(ctx, responseIDL).apiBaseURL),
+          atArg(3, (ctx) => ctx.getRuntime()),
+        ),
+      },
     ),
     staticOp('json', reference('Response'),
       [
         arg('data', idlType.any),
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
-      xattr('NewObject'),
+      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getRuntime())) },
     ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),

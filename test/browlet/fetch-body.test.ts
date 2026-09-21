@@ -19,7 +19,25 @@ import { createFetchRequest, fetchDefinitions } from '../fetch/fetch-fixture';
 import { observeBrowletPromise } from './test-runtime';
 
 describe('Fetch body delivery through HTML', () => {
-  it('routes a foreign body to the destination Window networking tasks', async () => {
+  it('delivers extracted bytes inside the owning HTML task', () => {
+    const fixture = createFetchWindow();
+    const loop = fixture.realm.agent.eventLoop;
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const chunk = vi.fn();
+    body.stream.getDefaultReader().readChunk({
+      chunkSteps: (value) => { chunk([...value as Uint8Array], loop.currentlyRunningTask); },
+      closeSteps: vi.fn(),
+      errorSteps: vi.fn(),
+    });
+
+    expect(chunk).not.toHaveBeenCalled();
+    const [task] = fixture.networkingTasks();
+    expect(task!.document).toBe(fixture.document);
+    fixture.runTask();
+    expect(chunk).toHaveBeenCalledExactlyOnceWith([1, 2], task);
+  });
+
+  it('routes a foreign body to the destination Window networking tasks', () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2), source.context.getRuntime());
@@ -29,9 +47,9 @@ describe('Fetch body delivery through HTML', () => {
       (bytes) => events.push([...bytes]), () => events.push('end'), error,
       target.realm.global,
     );
-    await nextTurn();
     expect(events).toEqual([]);
-    expect(source.networkingTasks()).toHaveLength(0);
+    expect(source.networkingTasks()).toHaveLength(1);
+    source.runTask();
     expect(target.networkingTasks()).toHaveLength(1);
     expect(target.networkingTasks()[0]!.document).toBe(target.document);
 
@@ -44,10 +62,10 @@ describe('Fetch body delivery through HTML', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
-  it('fully reads on the stream realm checkpoint and queues completion as another task', async () => {
+  it('fully reads on the stream realm checkpoint and queues completion as another task', () => {
     const fixture = createFetchWindow();
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
-    await nextTurn();
+    fixture.runTask();
     const process = vi.fn();
     const error = vi.fn();
     fixture.queueTask(() => body.fullyRead(process, error, fixture.realm.global));
@@ -92,6 +110,7 @@ describe('Fetch body delivery through HTML', () => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);
     });
     expect(chunks).toEqual([]);
+    fixture.runTask();
     await completed;
     expect(chunks).toEqual([[1, 2]]);
     expect(fixture.networkingTasks()).toHaveLength(0);
@@ -107,7 +126,9 @@ describe('Fetch body delivery through HTML', () => {
       if (kind === 'Request') {
         const request = createFetchRequest();
         request.body = body;
-        return context.project(RequestImpl, context.construct(RequestImpl, request, 'request', {}));
+        return context.project(RequestImpl, context.construct(
+          RequestImpl, request, 'request', context.getRuntime().createDependentAbortSignal([]),
+        ));
       }
       const response = new FetchResponse();
       response.body = body;
@@ -117,7 +138,7 @@ describe('Fetch body delivery through HTML', () => {
     const receiver = create(ownerBinding, body);
     const foreign = create(otherBinding, null);
     const text = Reflect.get(foreign, 'text') as () => Promise<string>;
-    await nextTurn();
+    source.runTask();
     let result: Promise<string> | undefined;
     owner.queueTask(() => { result = Reflect.apply(text, receiver, []); });
     owner.runTask();
@@ -181,8 +202,7 @@ describe('Fetch body errors at the Promise binding boundary', () => {
   });
 });
 
-// A test consumer covers real body algorithms and shared Promise projection
-// while Request/Response's author-facing body consumption is still unfinished.
+// A test consumer exposes both full and incremental reads through Promise projection.
 class BodyConsumerImpl {
   constructor(
     public body: FetchBody,

@@ -1,4 +1,5 @@
 import { createRuntime } from '../js-engine/runtime-fixture';
+import type { AbortSignalCapability } from '../../src/js-engine/index';
 import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
 import {
   FetchBody, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
@@ -37,14 +38,14 @@ export function createFetchFixture(world?: BindingWorld) {
   const realm = new TestRealm();
   const context = bindings.register(realm, { createRuntime: () => createRuntime(realm) });
   const runtime = context.getRuntime();
-  // This fixture allocates implementations. The incomplete API family is not installed.
+  // This fixture allocates implementations without installing the browser API.
   return {
     bindings,
     realm,
     context,
     runtime,
     createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime), runtime),
-    createRequest: (record: FetchRequest, signal: object, guard: HeadersGuard = 'request') =>
+    createRequest: (record: FetchRequest, signal: AbortSignalCapability, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new FetchResponse(), guard: HeadersGuard = 'response') =>
       context.construct(ResponseImpl, record, guard),

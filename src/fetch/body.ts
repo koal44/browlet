@@ -38,12 +38,14 @@ export class FetchBody {
   /** Fetch §§2.2.4 and 5.2, safely extract an internal byte sequence as a body. */
   static fromBytes(bytes: Uint8Array, runtime: RuntimeContext): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, runtime);
-    runtime.networking.runInParallel(() => {
+    // The bytes are already available; only delivery to the owning loop is deferred.
+    // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-for-spec-authors
+    queueFetchTask(() => {
       if (bytes.length > 0 && !stream.isErrored) {
         stream.enqueueChunk(runtime.buffers.copyUint8Array(bytes));
       }
       stream.close();
-    });
+    }, runtime.global, runtime);
     const body = new FetchBody(stream, runtime);
     body.source = bytes;
     body.length = bytes.length;
@@ -203,18 +205,18 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-body
   get body(): ReadableStreamImpl | null {
-    return this.#getBody()?.stream ?? null;
+    return this.getBody()?.stream ?? null;
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-bodyused
   get bodyUsed(): boolean {
-    const body = this.#getBody();
+    const body = this.getBody();
     return body !== null && body.stream.disturbed;
   }
 
   // https://fetch.spec.whatwg.org/#body-unusable
   get unusable(): boolean {
-    const body = this.#getBody();
+    const body = this.getBody();
     return body !== null && (body.stream.disturbed || body.stream.locked);
   }
 
@@ -270,7 +272,7 @@ export class BodyMixin {
   // https://fetch.spec.whatwg.org/#dom-body-textstream
   textStream(): ReadableStreamImpl {
     if (this.unusable) throw new TypeError('Body is disturbed or locked');
-    const body = this.#getBody();
+    const body = this.getBody();
     if (body === null) {
       const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, this.#runtime);
       stream.close();
@@ -280,6 +282,17 @@ export class BodyMixin {
       'utf-8', { fatal: false, ignoreBOM: false }, this.#runtime,
     );
     return body.stream.pipeThroughTransform(decoder.getAssociatedTransform());
+  }
+
+  // -- Internal ---------------------------------------------------------
+
+  /** The extracted body shared by the API and its underlying request or response. */
+  getBody(): FetchBody | null {
+    const body = this.#record.body;
+    if (body !== null && !(body instanceof FetchBody)) {
+      throw new InternalError('Fetch request body bytes must be extracted before API use');
+    }
+    return body;
   }
 
   // https://fetch.spec.whatwg.org/#concept-body-consume-body
@@ -294,18 +307,10 @@ export class BodyMixin {
         result.reject(error);
       }
     };
-    const body = this.#getBody();
+    const body = this.getBody();
     if (body === null) success(new Uint8Array());
     else body.fullyRead(success, result.reject, this.#runtime.global);
     return result.promise;
-  }
-
-  #getBody(): FetchBody | null {
-    const body = this.#record.body;
-    if (body !== null && !(body instanceof FetchBody)) {
-      throw new InternalError('Fetch request body bytes must be extracted before API use');
-    }
-    return body;
   }
 }
 

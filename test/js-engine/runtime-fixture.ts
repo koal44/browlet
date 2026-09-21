@@ -27,7 +27,11 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
     // Tests of timing policy use Browlet's actual runtime or supply their own clock.
     timing: { coarsenTime: (timestamp) => timestamp },
     createAbortController,
+    createDependentAbortSignal() {
+      throw new Error('Dependent-signal tests require the DOM runtime');
+    },
     parseJSON: (text) => realm.parseJSON(text),
+    stringifyJSON: (value) => realm.stringifyJSON(value),
     clone: structuredClone,
     serialize,
     deserialize: (record): unknown => deserialize(record as Uint8Array),

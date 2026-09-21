@@ -1,9 +1,10 @@
 import type { BlobImpl } from '../file/index';
-import type { PromiseValue, RuntimeContext } from '../js-engine/index';
+import type { AbortSignalCapability, PromiseValue, RuntimeContext } from '../js-engine/index';
+import { TypeError } from '../js-engine/exceptions';
 import { isomorphicEncode } from '../js-engine/byte-string';
-import type { ReadableStreamImpl } from '../streams/index';
+import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import { areSameOrigin, areSameSite, serializeOrigin, type Origin } from '../url/origin';
-import { copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../url/url';
+import { copyURL, obtainURLOrigin, parseURL, serializeURL, type URLRecord } from '../url/url';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
@@ -12,7 +13,11 @@ import {
 import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
-import { serializeInteger, type FetchEnvironmentSettingsObject, type FetchEnvironment } from './infrastructure';
+import {
+  getFetchEnvironmentSettingsObject, serializeInteger,
+  type FetchEnvironmentSettingsObject, type FetchEnvironment,
+} from './infrastructure';
+import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
 import { InternalError } from '../infra/internal-error';
 
@@ -26,19 +31,19 @@ export class FetchRequest {
   client: FetchEnvironmentSettingsObject | null;
   reservedClient: FetchEnvironment | null = null;
   replacesClientId = '';
-  traversableForUserPrompts: 'no-traversable' | 'client' | object = 'client';
+  traversableForUserPrompts: 'no-traversable' | 'client' | FetchEnvironmentSettingsObject = 'client';
   keepalive = false;
   initiatorType: RequestInitiator | null = null;
   serviceWorkersMode: 'all' | 'none' = 'all';
   initiator: '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt' = '';
   destination: Destination = '';
   priority: RequestPriority = 'auto';
-  internalPriority: object | null = null;
+  internalPriority: RequestInternalPriority | null = null;
   origin: Origin | 'client' = 'client';
   topLevelNavigationInitiatorOrigin: Origin | null = null;
   policyContainer: object | 'client' = 'client';
   referrer: URLRecord | 'no-referrer' | 'client' = 'client';
-  // Referrer Policy owns this enum; its declaration joins the API family later.
+  // Referrer Policy supplies the enum declaration at the browser composition root.
   referrerPolicy = '';
   mode: RequestMode | 'websocket' | 'webtransport' = 'no-cors';
   useCORSPreflight = false;
@@ -249,19 +254,158 @@ const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame
 export class RequestImpl {
   #request: FetchRequest;
   #headers: HeadersImpl;
-  #signal: object;
+  #signal: AbortSignalCapability;
   #bodyMixin: BodyMixin;
+  #runtime: RuntimeContext;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
-  // Author RequestInfo/RequestInit processing belongs to the deferred constructor.
-  // SPEC_MISMATCH: create a Request object(request, guard, signal, realm) -> Request
+  // https://fetch.spec.whatwg.org/#request-create
   constructor(
-    request: FetchRequest, guard: HeadersGuard, signal: object, runtime: RuntimeContext,
+    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, runtime: RuntimeContext,
   ) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
     this.#bodyMixin = new BodyMixin(request, runtime);
+    this.#runtime = runtime;
+  }
+
+  /** Construct a Request from converted author arguments and its relevant settings. */
+  // https://fetch.spec.whatwg.org/#dom-request
+  static create(
+    input: FetchRequestInfo, init: FetchRequestInit,
+    client: FetchEnvironmentSettingsObject, runtime: RuntimeContext,
+  ): RequestImpl {
+    const baseURL = client.apiBaseURL;
+    let source: FetchRequest;
+    let fallbackMode: RequestMode | null = null;
+    let signal: AbortSignalCapability | null = null;
+    if (typeof input === 'string') {
+      const url = parseURL(input, baseURL).url;
+      if (url === null) throw new TypeError('Invalid Request URL');
+      if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
+      source = new FetchRequest(url, client);
+      fallbackMode = 'cors';
+    } else {
+      source = input.#request;
+      signal = input.#signal;
+    }
+
+    const origin = client.origin;
+    let traversable: FetchRequest['traversableForUserPrompts'] = 'client';
+    if (typeof source.traversableForUserPrompts === 'object' &&
+      areSameOrigin(source.traversableForUserPrompts.origin, origin)) {
+      traversable = source.traversableForUserPrompts;
+    }
+    if ('window' in init) {
+      if (init.window !== null) throw new TypeError('RequestInit.window must be null');
+      traversable = 'no-traversable';
+    }
+
+    const request = new FetchRequest(source.url, client);
+    request.method = source.method;
+    request.headerList = source.headerList.clone();
+    request.unsafeRequest = true;
+    request.traversableForUserPrompts = traversable;
+    request.internalPriority = source.internalPriority;
+    request.origin = source.origin;
+    request.referrer = typeof source.referrer === 'string' ? source.referrer : copyURL(source.referrer);
+    request.referrerPolicy = source.referrerPolicy;
+    request.mode = source.mode;
+    request.credentialsMode = source.credentialsMode;
+    request.cacheMode = source.cacheMode;
+    request.redirectMode = source.redirectMode;
+    request.integrityMetadata = source.integrityMetadata;
+    request.keepalive = source.keepalive;
+    request.reloadNavigation = source.reloadNavigation;
+    request.historyNavigation = source.historyNavigation;
+    request.urlList = source.urlList.map(copyURL) as [URLRecord, ...URLRecord[]];
+    request.initiatorType = 'fetch';
+
+    const hasInit = Object.keys(init).length > 0;
+    if (hasInit) {
+      if (request.mode === 'navigate') request.mode = 'same-origin';
+      request.reloadNavigation = false;
+      request.historyNavigation = false;
+      request.origin = 'client';
+      request.referrer = 'client';
+      request.referrerPolicy = '';
+      request.urlList = [request.currentURL];
+    }
+    if (init.referrer !== undefined) {
+      if (init.referrer === '') {
+        request.referrer = 'no-referrer';
+      } else {
+        const referrer = parseURL(init.referrer, baseURL).url;
+        if (referrer === null) throw new TypeError('Invalid Request referrer');
+        request.referrer = (referrer.scheme === 'about' && referrer.path === 'client') ||
+          !areSameOrigin(obtainURLOrigin(referrer), origin) ? 'client' : referrer;
+      }
+    }
+    if (init.referrerPolicy !== undefined) request.referrerPolicy = init.referrerPolicy;
+    const mode = init.mode ?? fallbackMode;
+    if (mode === 'navigate') throw new TypeError('Request mode cannot be navigate');
+    if (mode !== null) request.mode = mode;
+    if (init.credentials !== undefined) request.credentialsMode = init.credentials;
+    if (init.cache !== undefined) request.cacheMode = init.cache;
+    if (request.cacheMode === 'only-if-cached' && request.mode !== 'same-origin') {
+      throw new TypeError('only-if-cached requires same-origin mode');
+    }
+    if (init.redirect !== undefined) request.redirectMode = init.redirect;
+    if (init.integrity !== undefined) request.integrityMetadata = init.integrity;
+    if (init.keepalive !== undefined) request.keepalive = init.keepalive;
+    if (init.method !== undefined) {
+      if (!isMethod(init.method) || isForbiddenMethod(init.method)) throw new TypeError('Invalid Request method');
+      request.method = normalizeMethod(init.method);
+    }
+    if (init.signal !== undefined) signal = init.signal;
+    if (init.priority !== undefined) {
+      if (request.internalPriority !== null) request.internalPriority.update(init.priority);
+      else request.priority = init.priority;
+    }
+
+    const result = new RequestImpl(
+      request, 'request', runtime.createDependentAbortSignal(signal === null ? [] : [signal]), runtime,
+    );
+    if (request.mode === 'no-cors') {
+      if (!isCORSSafelistedMethod(request.method)) throw new TypeError('Invalid method for no-cors mode');
+      result.#headers.guard = 'request-no-cors';
+    }
+    if (hasInit) {
+      const headers = init.headers ?? [...request.headerList.list];
+      request.headerList.list.length = 0;
+      result.#headers.fill(headers);
+    }
+
+    const inputBody = typeof input === 'string' ? null : input.#bodyMixin.getBody();
+    const bodyInit = init.body ?? null;
+    if ((bodyInit !== null || inputBody !== null) && (request.method === 'GET' || request.method === 'HEAD')) {
+      throw new TypeError('GET and HEAD requests cannot have a body');
+    }
+    let initBody: FetchBody | null = null;
+    if (bodyInit !== null) {
+      const extracted = FetchBody.extract(bodyInit, request.keepalive, runtime);
+      initBody = extracted.body;
+      if (extracted.type !== null && !request.headerList.has('Content-Type')) {
+        result.#headers.append('Content-Type', extracted.type);
+      }
+    }
+    let body = initBody ?? inputBody;
+    if (body !== null && body.source === null) {
+      if (initBody !== null && init.duplex === undefined) throw new TypeError('Streaming requests require duplex');
+      if (request.mode !== 'same-origin' && request.mode !== 'cors') {
+        throw new TypeError('Streaming requests require same-origin or cors mode');
+      }
+      request.useCORSPreflight = true;
+    }
+    if (initBody === null && inputBody !== null) {
+      if (inputBody.stream.disturbed || inputBody.stream.locked) throw new TypeError('Request body is disturbed or locked');
+      body = new FetchBody(createReadableStreamProxy(inputBody.stream, runtime), runtime);
+      body.source = inputBody.source;
+      body.length = inputBody.length;
+    }
+    request.body = body;
+    return result;
   }
 
   get method(): string { return this.#request.method; }
@@ -285,11 +429,15 @@ export class RequestImpl {
   get keepalive(): boolean { return this.#request.keepalive; }
   get isReloadNavigation(): boolean { return this.#request.reloadNavigation; }
   get isHistoryNavigation(): boolean { return this.#request.historyNavigation; }
-  get signal(): object { return this.#signal; }
+  get signal(): AbortSignalCapability { return this.#signal; }
   get duplex(): RequestDuplex { return 'half'; }
 
+  // https://fetch.spec.whatwg.org/#dom-request-clone
   clone(): RequestImpl {
-    throw new InternalError('Request.clone and dependent abort signals are not implemented');
+    if (this.#bodyMixin.unusable) throw new TypeError('Request body is disturbed or locked');
+    const request = this.#request.clone();
+    const signal = this.#runtime.createDependentAbortSignal([this.#signal]);
+    return new RequestImpl(request, this.#headers.guard, signal, this.#runtime);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -333,6 +481,8 @@ export type RequestCache = 'default' | 'no-store' | 'reload' | 'no-cache' | 'for
 export type RequestRedirect = 'follow' | 'error' | 'manual';
 export type RequestDuplex = 'half';
 export type RequestPriority = 'high' | 'low' | 'auto';
+/** Priority assigned by Fetch scheduling; updates retain the scheduler's representation. */
+export type RequestInternalPriority = { update(priority: RequestPriority): void; };
 export type WebTransportHash = { algorithm: string; value: Uint8Array; };
 
 /** Converted RequestInfo: an existing Request implementation or a URL string. */
@@ -350,7 +500,7 @@ export type FetchRequestInit = {
   integrity?: string;
   keepalive?: boolean;
   // A DOM implementation reference, not an ambient or Node AbortSignal.
-  signal?: object | null;
+  signal?: AbortSignalCapability | null;
   duplex?: RequestDuplex;
   priority?: RequestPriority;
   window?: unknown;
@@ -391,10 +541,20 @@ export const requestIDL = defineInterface({
     constructWith: [atArg(3, (ctx) => ctx.getRuntime())],
   }),
   members: [
-    ctor([
-      arg('input', reference('RequestInfo')),
-      arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
-    ], { invoke() { throw new InternalError('Request construction from RequestInfo is not implemented'); } }),
+    ctor(
+      [
+        arg('input', reference('RequestInfo')),
+        arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
+      ],
+      {
+        construct(ctx, input, init): RequestImpl {
+          return RequestImpl.create(
+            input as FetchRequestInfo, init as FetchRequestInit,
+            getFetchEnvironmentSettingsObject(ctx, requestIDL), ctx.getRuntime(),
+          );
+        },
+      },
+    ),
     roAttr('method', idlType.ByteString),
     roAttr('url', idlType.USVString),
     roAttr('headers', reference('Headers'), xattr('SameObject')),

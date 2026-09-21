@@ -103,6 +103,11 @@ Existing foundations are indexed in Fetch's
 [FormData entry list](../xhr/ROADMAP.md) and Blob/File bytes already exist;
 their remaining multipart and Blob URL work has the owners linked above.
 
+Slice 6c exposed one additional HTML gate: the settings object's API base URL
+must honor the document's first applicable `<base href>`. That algorithm and
+`HTMLBaseElement` belong to the [element roadmap](../browlet/html/elements/ROADMAP.md).
+The focused Request regression remains failing until that dependency is implemented.
+
 ## Signature audit
 
 **Status:** Slices 1–10 and the deeper Streams pass below are marked as of
@@ -363,8 +368,9 @@ The trustworthiness and cookie-core detour is complete. Resume
 with `Headers`, then Body extraction/consumption, `Request`, and `Response`.
 The remaining work-order entries above are gates for their named consumers,
 not a requirement to finish all browser integration before those APIs.
-Resolve `Request`'s Referrer Policy declaration and dependent AbortSignal
-requirements within Slice 6. Cookie header algorithms follow in Slice 7;
+`Request`'s Referrer Policy declaration and dependent AbortSignal integration
+are implemented in Slice 6c; its document-base-URL gate remains open.
+Cookie header algorithms follow in Slice 7;
 network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.

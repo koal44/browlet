@@ -7,6 +7,8 @@ import { obtainURLOrigin, parseURL } from '../../src/url/url';
 export function createClientSettings(url = 'https://example.test/'): FetchEnvironmentSettingsObject {
   const topLevelCreationURL = parseURL(url).url!;
   return {
+    apiBaseURL: topLevelCreationURL,
+    origin: obtainURLOrigin(topLevelCreationURL),
     fetchGroup: new FetchGroup(),
     userAgent: {
       assumeNoInternetConnectivity: false,

@@ -5,7 +5,7 @@
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
-- **In progress:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), starting with `Headers`. The trustworthiness and cookie-core detour is complete; cookie header integration remains in Slice 7.
+- **In progress:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis). Headers and Body are complete; Request/Response implementation is awaiting HTML's document-base-URL dependency. Cookie header integration remains in Slice 7.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -201,28 +201,26 @@ URL components while retaining any Blob URL entry reference.
 
 - `client` retains the actual HTML settings object through
   `FetchEnvironmentSettingsObject`; `reservedClient` uses `FetchEnvironment`.
-  Traversable and policy-container fields remain opaque owner references.
+  Traversable-for-prompts can retain those same settings; policy containers remain owner references.
   Further client-derived values and policy operations need narrow
   HTML capabilities in §4.1; these objects are not new Fetch-owned environments
   or policy containers. Clientless requests still need their owning UserAgent
   at network orchestration; do not synthesize an environment or assume online.
-- Request retains a DOM implementation reference for its signal, still typed as
-  `object`. `RuntimeContext.createAbortController()` already constructs real
-  DOM controller/signal state, but Request construction and cloning need DOM's
-  dependent-signal algorithm exposed through the runtime. Do not substitute an
-  abort callback bridge for DOM's dependency ordering. Fetch's constructor chooses
-  the Headers guard (`request` or `request-no-cors`); cloning preserves it. These
-  are not client-policy fields. Referrer Policy's value type/declaration also
-  remains with the browser-policy work. Connect these owners before API exposure.
+- Request retains a DOM signal through `AbortSignalCapability`.
+  `RuntimeContext.createDependentAbortSignal()` delegates to DOM's existing
+  dependency graph, preserving abort-reason identity and event ordering.
+  Fetch's constructor chooses the Headers guard (`request` or `request-no-cors`);
+  cloning preserves it. These are not client-policy fields. Browlet supplies
+  Referrer Policy's enum declaration; policy calculation/delivery remains later work.
 - BodyInit extraction and Body consumption are implemented in Slice 6b. Author
-  Request/Response construction and cloning remain in 6c. Internal record cloning
+  Request/Response construction and cloning are implemented in 6c, with its base-URL gate still open. Internal record cloning
   is implemented in Slice 4. Byte-sequence request bodies must be extracted before
   a Body API can expose their stream.
 - `FilteredFetchResponse` provides a live restricted view of its internal
   record. Its specified overrides include a separate filtered header list;
   other fields, including body replacement and timing updates, remain shared.
-- API IDL is co-located with the implementations and remains uninstalled. The
-  public `fetch()` operation and transport are not introduced here.
+- API IDL is co-located with the implementations and installed in Browlet.
+  The public `fetch()` operation and transport remain uninstalled.
 
 **Exit proof:** `test/fetch/state.test.ts` covers defaults, independent
 mutable state, live URL/body references, shared Headers, allocation realm, and
@@ -488,8 +486,40 @@ Coverage is in `test/fetch/body-init.test.ts`, `body-consumption.test.ts`,
 All six unit configurations pass: Node 24.19.0, 26.8.1, and the custom build,
 each with stock and compatibility runtimes. The 9,708 cases include 81 new
 passing cases; existing expected failures/skips are unchanged. Typecheck and lint pass.
-Continue with **6c**: Request/Response author constructors, static factories,
-cloning, dependent AbortSignal construction, and the Referrer Policy declaration.
+**6c implemented; dependency gate open:** Request/Response author constructors,
+static factories, cloning, dependent AbortSignals, and the ReferrerPolicy enum
+are installed in Browlet. Binding supplies the constructor's actual HTML settings
+object; Request retains that client. Response.redirect receives its API base URL.
+The internal factories' explicit settings/base-URL arguments remain marked for
+callable-shape review. Internal priority updates use a narrow `update(priority)`
+contract; network scheduling will supply its implementation.
+
+`new Request(existing)` proxies the input body and disturbs/locks its stream;
+`clone()` tees it. Copied bodies/signals use the new constructor's runtime;
+borrowed clones retain the receiver's runtime. JSON serialization uses the
+factory realm's captured intrinsic. Byte-backed bodies now deliver through an
+owning-global networking task, as Blob data already does through file-reading
+tasks. Direct delivery from parallel Node work left tee/proxy reactions queued
+without an HTML checkpoint; the new constructor tests reproduced those timeouts.
+
+Coverage is in `test/browlet/fetch-request.test.ts`, `fetch-response.test.ts`,
+and the existing body tests. Chromium 149, Firefox 151, and Windows WebKit 26.5
+agree on input consumption, cloned body contents, dependent-signal ordering,
+and clone/factory realms. Firefox's tested build does not expose Request.body;
+stream identity/locking was checked in Chromium and Windows WebKit.
+
+Validation: all 9,773 unit cases ran on Node 24.19.0, 26.8.1, and the custom
+build, each with stock and compatibility runtimes. Every configuration has
+only the ordinary base-element failure below; existing expected failures and
+skips are unchanged. Typecheck and full-project lint pass.
+
+**Next dependency:** HTML's document base URL and `HTMLBaseElement`
+([element roadmap](../browlet/html/elements/ROADMAP.md)). The settings object
+currently reads `Document.baseURI`, which deliberately ignores `<base href>`.
+The ordinary failing test `uses the document base element when resolving Request
+URLs` expects `/base/resource` but gets `/resource`. Keep it failing until that
+HTML work lands; do not duplicate base-element rules in Fetch or mark 6c complete.
+Per review, finish the independent checks now and address this dependency next turn.
 
 Implement:
 

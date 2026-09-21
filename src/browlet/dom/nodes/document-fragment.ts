@@ -65,9 +65,10 @@ export const documentFragmentIDL = defineInterface<Realm>({
   exposed: 'Window',
   implementation: impl(DocumentFragmentImpl),
   members: [
-    ctor([], {
-      constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())],
-    }),
+    ctor(
+      [],
+      { constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())] },
+    ),
   ],
 });
 

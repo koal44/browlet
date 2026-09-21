@@ -323,9 +323,10 @@ describe('Web IDL implementation bindings', () => {
       exposed: 'Window',
       implementation: impl(OwnerImpl),
       members: [
-        ctor([], {
-          constructWith: [atArg(0, (ctx) => ctx.construct(DependencyImpl))],
-        }),
+        ctor(
+          [],
+          { constructWith: [atArg(0, (ctx) => ctx.construct(DependencyImpl))] },
+        ),
         roAttr('dependency', reference(dependencyIDL.name)),
       ],
     });
@@ -675,15 +676,18 @@ describe('Web IDL implementation bindings', () => {
 
   it('declaratively connects an implementation to its interface behavior', () => {
     const realm = new Realm();
-    const constructor = ctor([arg('value', idlType.DOMString)], {
-      invoke(context, value) {
-        DeclarativeExampleImpl.initialize(
-          this as DeclarativeExampleImpl,
-          String(value),
-        );
-        expect(context.realm).toBe(realm);
+    const constructor = ctor(
+      [arg('value', idlType.DOMString)],
+      {
+        invoke(context, value) {
+          DeclarativeExampleImpl.initialize(
+            this as DeclarativeExampleImpl,
+            String(value),
+          );
+          expect(context.realm).toBe(realm);
+        },
       },
-    });
+    );
     const parse = staticOp('parse', idlType.DOMString,
       [
         arg('value', idlType.DOMString),
@@ -1156,11 +1160,14 @@ describe('Web IDL implementation bindings', () => {
       exposed: ['Window'],
       implementation: impl(ProductImpl),
       members: [
-        ctor([arg('value', idlType.DOMString)], {
-          invoke(_context, value) {
-            ProductImpl.initialize(this as ProductImpl, String(value));
+        ctor(
+          [arg('value', idlType.DOMString)],
+          {
+            invoke(_context, value) {
+              ProductImpl.initialize(this as ProductImpl, String(value));
+            },
           },
-        }),
+        ),
         attr('value', idlType.DOMString),
         op('namedItem', idlType.DOMString,
           [

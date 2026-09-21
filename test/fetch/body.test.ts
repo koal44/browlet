@@ -66,7 +66,7 @@ describe('Fetch body cloning', () => {
 });
 
 describe('Fetch byte sequences as bodies', () => {
-  it('retains the source and length and creates a separate stream buffer in parallel', async () => {
+  it('retains the source and length and delivers bytes through the owning global task', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(9, 1, 2, 9).subarray(1, 3);
     const body = FetchBody.fromBytes(source, fixture.runtime);
@@ -75,11 +75,15 @@ describe('Fetch byte sequences as bodies', () => {
     expect(body.length).toBe(2);
     expect(body.stream.disturbed).toBe(false);
     expect(body.stream.locked).toBe(false);
-    expect(fixture.parallelSteps).toHaveLength(1);
-    fixture.runParallel();
+    expect(fixture.tasks).toHaveLength(1);
+    expect(fixture.tasks[0]!.global).toBe(fixture.global);
+    const process = vi.fn();
+    const reading = readBodyBytes(body).then((bytes) => { process(bytes); return bytes; });
+    expect(process).not.toHaveBeenCalled();
+    fixture.runTask();
     expect(source).toEqual(Uint8Array.of(1, 2));
     source[0] = 99;
-    expect(await readBodyBytes(body)).toEqual(Uint8Array.of(1, 2));
+    expect(await reading).toEqual(Uint8Array.of(1, 2));
   });
 
   it('supports BYOB reading in the supplied realm', async () => {
@@ -89,7 +93,7 @@ describe('Fetch byte sequences as bodies', () => {
     const view = fixture.context.realm.createArrayBufferView('Uint8Array', [0, 0, 0, 0]);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     const reading = reader.read(view, { min: 1 });
-    fixture.runParallel();
+    fixture.runTask();
     const result = await observe(reading);
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(1, 2));
@@ -102,13 +106,13 @@ describe('Fetch byte sequences as bodies', () => {
   it('closes an empty byte sequence without enqueueing an empty chunk', async () => {
     const fixture = createBodyFixture();
     const body = FetchBody.fromBytes(new Uint8Array(), fixture.runtime);
-    fixture.runParallel();
+    fixture.runTask();
     expect(body.length).toBe(0);
     expect(body.stream.isClosed).toBe(true);
     expect(await readBodyBytes(body)).toEqual(new Uint8Array());
   });
 
-  it('allows a byte body to be cloned before its bytes become available', async () => {
+  it('allows a byte body to be cloned before its bytes are delivered', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(1, 2, 3);
     const body = FetchBody.fromBytes(source, fixture.runtime);
@@ -117,7 +121,7 @@ describe('Fetch byte sequences as bodies', () => {
     const error = vi.fn();
     clone.fullyRead(process, error, fixture.global);
     const reading = readBodyBytes(body);
-    fixture.runParallel();
+    fixture.runTask();
     expect(await reading).toEqual(source);
     await nextTurn();
     expect(process).not.toHaveBeenCalled();
@@ -130,20 +134,20 @@ describe('Fetch byte sequences as bodies', () => {
     expect(clone.length).toBe(3);
   });
 
-  it('does not revive a byte stream canceled before its parallel work runs', async () => {
+  it('does not revive a byte stream canceled before its delivery task runs', async () => {
     const fixture = createBodyFixture();
     const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.runtime);
     await observe(body.stream.cancelInternal('canceled'));
-    expect(() => fixture.runParallel()).not.toThrow();
+    expect(() => fixture.runTask()).not.toThrow();
     expect(await readBodyBytes(body)).toEqual(new Uint8Array());
   });
 
-  it('preserves a byte stream error raised before its parallel work runs', async () => {
+  it('preserves a byte stream error raised before its delivery task runs', async () => {
     const fixture = createBodyFixture();
     const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.runtime);
     const failure = new Error('failed');
     body.stream.error(failure);
-    fixture.runParallel();
+    fixture.runTask();
     await expect(readBodyBytes(body)).rejects.toBe(failure);
   });
 });

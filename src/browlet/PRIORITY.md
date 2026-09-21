@@ -235,8 +235,10 @@ Current implementation sequence:
    across implementation/Node boundaries. Active Script records/restoration
    belong to the later classic-script pipeline; module loading is not a
    prerequisite for Fetch's records.
-7. **Next: [Fetch Slice 6c](../fetch/ROADMAP.md#slice-6--network-independent-platform-apis),**
-   Request/Response construction and cloning. Headers (6a) and Body extraction/
+7. **Finish [Fetch Slice 6c](../fetch/ROADMAP.md#slice-6--network-independent-platform-apis):**
+   Request/Response construction and cloning are implemented. Next resolve HTML's
+   document base URL and `HTMLBaseElement` in the [element roadmap](html/elements/ROADMAP.md);
+   the Request `<base href>` regression remains failing. Headers (6a) and Body extraction/
    consumption (6b) are complete. Window trustworthiness, secure-context exposure
    for the supported lifecycle, and
    the [cookie core](../http/cookies/ROADMAP.md) are implemented.

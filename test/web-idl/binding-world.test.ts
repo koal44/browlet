@@ -514,9 +514,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'InternalNewExample',
       exposed: '*',
       implementation: impl(InternalNewImpl),
-      members: [ctor([], {
-        invoke() { publicConstructions++; },
-      })],
+      members: [ctor([], { invoke() { publicConstructions++; } })],
     });
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();

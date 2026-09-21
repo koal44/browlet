@@ -172,7 +172,7 @@ describe('Streams operations for other specifications', () => {
     await expect(observe(writer.closed)).rejects.toBe(failure);
 
     const source = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createRuntime());
-    const proxy = createReadableStreamProxy(source);
+    const proxy = createReadableStreamProxy(source, source.runtime);
     expect(source.locked).toBe(true);
     expect(source.disturbed).toBe(true);
     const reading = observe(proxy.getReader({}).read());

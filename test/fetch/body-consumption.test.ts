@@ -269,7 +269,9 @@ function projectBody(
   record.body = body;
   if (type !== null) record.headerList.set('Content-Type', type);
   const platform = kind === 'Request'
-    ? fixture.context.project(RequestImpl, fixture.createRequest(record as ReturnType<typeof createFetchRequest>, {}))
+    ? fixture.context.project(RequestImpl, fixture.createRequest(
+      record as ReturnType<typeof createFetchRequest>, fixture.runtime.createAbortController().signal,
+    ))
     : fixture.context.project(ResponseImpl, fixture.createResponse(record as FetchResponse));
   return platform as unknown as BodyAPI;
 }
