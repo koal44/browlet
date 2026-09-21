@@ -89,13 +89,35 @@ Implement header parsing, referrer calculation/stripping, and redirect updates.
 HTML supplies delivery/inheritance and Fetch supplies request/client records.
 Reuse trustworthiness for downgrade decisions.
 
-`referrer-policy.ts` supplies the enum declaration used by Request/RequestInit
-in Fetch 6c. This validates policy values; it does not implement the header
-parser, policy delivery, or outgoing-referrer calculation described here.
+`referrer-policy.ts` supplies the enum declaration used by Request/RequestInit,
+header parsing (§8.1), redirect policy updates (§8.2), referrer calculation (§8.3),
+and URL stripping (§8.4). Header parsing uses
+the declared grammar: ASCII case-insensitive policy tokens, unknown letter/hyphen
+extensions, and whole-value rejection for malformed tokens. Chromium follows
+that rejection rule; Gecko and WebKit ignore individual malformed tokens.
+Absent or rejected headers do not replace a request's existing policy.
 
-Test every policy across same-/cross-origin and trustworthiness changes,
-credential/fragment removal, and redirects. Then test actual loader/element
-delivery; the stored default policy is only the starting value.
+Referrer calculation consumes the client's `getReferrerSource()` and the owning
+UserAgent's URL trustworthiness algorithm. Window settings read the Document's
+existing URL and srcdoc flag; other settings use their creation URL. Stripping
+produces independent copies. Tests cover all eight policies, the length limit,
+same-/cross-origin requests, loopback and configured trust, credentials/fragments,
+and redirects.
+
+The srcdoc container relationship is provisional: `Navigable.container` returns
+null until HTML supplies the container's content navigable. The source-selection
+algorithm follows the intended relationship and throws when a srcdoc Document
+lacks it. The loaded-iframe referrer test in `test/browlet/scripting/environment.test.ts`
+is an authorized expected failure, currently at the missing content Document.
+Complete that lifecycle under the browsing roadmap, then cover nested srcdoc and
+containers in inactive predecessor Documents. Do not substitute the base URL
+or current parent navigable's active Document.
+Policy delivery/inheritance through responses, elements, and stylesheets is
+still pending with the corresponding loader/HTML/CSS consumers.
+
+Next test actual loader/element delivery; the stored default policy is only
+the starting value. Main Fetch and HTTP redirects will call the policy algorithms
+in Fetch Slices 8–9.
 
 ### Integrity Policy
 

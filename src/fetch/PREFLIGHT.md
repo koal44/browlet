@@ -367,8 +367,11 @@ The trustworthiness and cookie-core detour and Fetch Slice 6 are complete,
 including Request/Response construction, Referrer Policy's declaration,
 dependent AbortSignals, and HTML's document-base-URL dependency. Resume
 [Fetch Slice 7](ROADMAP.md#slice-7--http-extensions): 7a's cookie header
-algorithms and Window ancestry inputs are complete; 7b's Origin/referrer-policy
-integration is next.
+algorithms and Window ancestry inputs are complete. 7b's Origin headers and
+Referrer Policy algorithms are implemented; proceed to 7c. The srcdoc container
+accessor is provisional, with an expected failing loaded-iframe referrer test.
+The browsing roadmap owns that HTML lifecycle; Fetch and policy roadmaps retain
+its replacement conditions and the later main-fetch/redirect call sites.
 The remaining work-order entries above are gates for their named consumers,
 not a requirement to finish all browser policy before proceeding.
 Network cookie processing and cache transactions remain in Slice 9.

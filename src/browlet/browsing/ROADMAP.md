@@ -74,6 +74,14 @@ group algorithms, not by widening the current top-level special case.
 creation, removal, WindowProxy identity, policy inheritance, and child load
 propagation before auxiliary windows are added.
 
+Referrer Policy already follows a srcdoc Document's browsing context to its
+navigable's container and that element's node Document. `Navigable.container`
+provisionally returns null; replace it with the actual content-navigable
+association during child creation/destruction. The loaded-srcdoc referrer case
+in `test/browlet/scripting/environment.test.ts` is an expected failure until
+this lifecycle exists. Add nested-srcdoc and inactive-container-Document cases
+at that point; `parent.activeDocument` is not an equivalent relationship.
+
 Blink distributes these responsibilities between `core/frame`,
 `core/execution_context`, and `platform/weborigin`. Browlet's `browsing/`
 boundary intentionally reunites the HTML-owned lifecycle while leaving

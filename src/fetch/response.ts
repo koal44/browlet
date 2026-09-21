@@ -18,7 +18,7 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import { getFetchEnvironmentSettingsObject } from './infrastructure';
-import type { FetchRequest } from './request';
+import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
@@ -39,8 +39,8 @@ export class FetchResponse {
   headerList = new FetchHeaders();
   /** Response body stream and replay metadata, or null when no body is present. */
   body: FetchBody | null = null;
-  /** Whether the response was served from cache, revalidated, or has no cache classification. */
-  cacheState: '' | 'local' | 'validated' = '';
+  /** How the cache supplied this response; undefined when there is no cache classification. */
+  cacheUsage: CacheUsage | undefined = undefined;
   /** Additional header names exposed by a CORS filtered response. */
   corsExposedHeaderNameList: string[] = [];
   /** Records that a Range header was sent, to prevent unintended exposure of partial content. */
@@ -56,7 +56,7 @@ export class FetchResponse {
   /** Service-worker processing times, or null when no worker timing is attached. */
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
   /** Origin/site classification of the request's redirect chain retained on the response. */
-  redirectTaint: 'same-origin' | 'same-site' | 'cross-site' = 'same-origin';
+  redirectTaint: RedirectTaint = 'same-origin';
 
   /** https://fetch.spec.whatwg.org/#concept-network-error */
   static networkError(): FetchResponse {
@@ -198,6 +198,7 @@ export class FetchResponse {
 
 export type ResponseType = 'default' | 'error' | FilteredResponseType;
 export type FilteredResponseType = 'basic' | 'cors' | 'opaque' | 'opaqueredirect';
+export type CacheUsage = 'local' | 'validated';
 
 export type FilteredFetchResponse = FetchResponse & {
   /** Filtering policy applied by this response view. */

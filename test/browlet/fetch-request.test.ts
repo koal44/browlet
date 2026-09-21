@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import type { FetchBody } from '../../src/fetch/body';
+import type { FetchPromptTarget } from '../../src/fetch/infrastructure';
 import { RequestImpl } from '../../src/fetch/request';
 import { parseURL } from '../../src/url/url';
 
@@ -73,7 +74,7 @@ describe('Fetch Request construction', () => {
     expect(new window.Request(url, { method: 'patch' }).method).toBe('patch');
     expect(new window.Request(url, { mode: 'same-origin', cache: 'only-if-cached' }).cache).toBe('only-if-cached');
     expect(implementation(window, new window.Request(url, { window: null })).getRequest().traversableForUserPrompts)
-      .toBe('no-traversable');
+      .toBeNull();
   });
 
   it.each([
@@ -108,7 +109,7 @@ describe('Fetch Request construction', () => {
 
   it('copies request state without sharing headers and resets privileged state only for nonempty init', () => {
     const window = createWindow();
-    const source = new window.Request(url, { headers: { 'X-Test': 'one' }, referrerPolicy: 'origin' });
+    const source = new window.Request(url, { headers: { 'X-Test': 'one' }, referrer: '', referrerPolicy: 'origin' });
     const record = implementation(window, source).getRequest();
     record.mode = 'navigate';
     record.reloadNavigation = true;
@@ -116,7 +117,7 @@ describe('Fetch Request construction', () => {
     record.headerList.append('Cookie', 'privileged');
     record.urlList.push(parseURL('https://example.test/redirect').url!);
     const copy = new window.Request(source, { method: undefined, ignored: true } as RequestInit);
-    expect(copy).toMatchObject({ url, mode: 'navigate', referrerPolicy: 'origin' });
+    expect(copy).toMatchObject({ url, mode: 'navigate', referrer: '', referrerPolicy: 'origin' });
     expect(copy.headers.get('Cookie')).toBe('privileged');
     expect(implementation(window, copy).getRequest()).toMatchObject({ reloadNavigation: true, historyNavigation: true });
     copy.headers.set('X-Test', 'two');
@@ -128,8 +129,39 @@ describe('Fetch Request construction', () => {
     });
     expect(modified.headers.get('Cookie')).toBeNull();
     const modifiedRecord = implementation(window, modified).getRequest();
-    expect(modifiedRecord).toMatchObject({ reloadNavigation: false, historyNavigation: false, origin: 'client' });
+    expect(modifiedRecord).toMatchObject({ reloadNavigation: false, historyNavigation: false, origin: undefined });
     expect(modifiedRecord.urlList).toHaveLength(1);
+  });
+
+  it('retains a same-origin prompt target and lets window: null suppress it', () => {
+    const window = createWindow();
+    const source = new window.Request(url);
+    const record = implementation(window, source).getRequest();
+    const target: FetchPromptTarget = { origin: record.client!.origin };
+    record.traversableForUserPrompts = target;
+
+    const copy = new window.Request(source);
+    expect(implementation(window, copy).getRequest().traversableForUserPrompts).toBe(target);
+    expect(implementation(window, source.clone()).getRequest().traversableForUserPrompts).toBe(target);
+    const suppressed = new window.Request(source, { window: null });
+    expect(implementation(window, suppressed).getRequest().traversableForUserPrompts).toBeNull();
+    expect(implementation(window, suppressed.clone()).getRequest().traversableForUserPrompts).toBeNull();
+    expect(implementation(window, new window.Request(suppressed)).getRequest().traversableForUserPrompts)
+      .toBeUndefined();
+    expect(record.traversableForUserPrompts).toBe(target);
+  });
+
+  it('defers prompt selection when constructing a Request from a different origin', () => {
+    const owner = createWindow();
+    const other = createWindow();
+    const source = new owner.Request(url);
+    const record = implementation(owner, source).getRequest();
+    const target: FetchPromptTarget = { origin: record.client!.origin };
+    record.traversableForUserPrompts = target;
+
+    const copy = new other.Request(source);
+    expect(implementation(other, copy).getRequest().traversableForUserPrompts).toBeUndefined();
+    expect(record.traversableForUserPrompts).toBe(target);
   });
 
   it('assigns a requested priority or updates an existing internal priority', () => {

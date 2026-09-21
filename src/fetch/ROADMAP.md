@@ -6,7 +6,7 @@
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
-- **In progress:** [Slice 7 — HTTP extensions](#slice-7--http-extensions): 7a cookie headers complete; 7b Origin/referrer policy is next.
+- **In progress:** [Slice 7 — HTTP extensions](#slice-7--http-extensions): 7a and 7b complete, with srcdoc integration provisional; 7c is next.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -620,6 +620,49 @@ Use pure deterministic tests for header and CORS algorithms. Policy-owned
 questions must call named host capabilities so the default no-policy test host
 is explicit and replaceable.
 
+**7b complete, iframe integration provisional:** `FetchRequest.appendOriginHeader()` implements §3.2 using
+the existing origin serialization and redirect taint. CORS-tainted responses,
+WebSocket, and WebTransport requests disclose the serialized origin; other
+non-GET/HEAD requests apply the specified referrer-policy restrictions.
+Origin's downgrade check is explicitly HTTPS-to-non-HTTPS, including HTTP
+loopback targets; it is not Referrer Policy's potentially-trustworthy-URL check.
+
+The browser policy owner implements Referrer Policy §§8.1–8.4: parse response
+headers, update a request's policy on redirect, select the referrer, and strip
+URLs for disclosure. Parsing accepts the last
+recognized token, ignores well-formed extension tokens, and rejects the entire
+header list value on malformed syntax. This follows the grammar and Chromium;
+Gecko/WebKit instead retain recognized policies alongside malformed tokens.
+Absent, unrecognized, or malformed headers leave the existing redirect policy
+unchanged. Coverage is in `test/fetch/http/origin.test.ts` and
+`test/browlet/browsing/policy/referrer-policy.test.ts`.
+
+Window settings expose `getReferrerSource()`: the live Document URL for ordinary
+Windows, no referrer for an opaque-origin Document, and the container Document
+chain for srcdoc. Other settings use their creation URL. Selection applies all
+eight policies, the 4096-character limit, and the request owner's trustworthiness
+rules, including loopback and configured trusted origins. URL stripping copies
+the source so full and origin-only results cannot mutate each other or the Document.
+
+Per Eric's decision, the missing iframe relationship is provisional rather than
+a gate on the remaining policy code. `Navigable.container` currently returns
+null; child-navigable creation/destruction must supply the real element. The
+srcdoc branch throws if that required relationship is absent, and the expected
+failure in `test/browlet/scripting/environment.test.ts` requests the embedding
+Document's referrer through a loaded iframe. It currently fails because the
+iframe has no content Document. When HTML implements that lifecycle, remove
+the provisional accessor and expected-failure designation, then cover nested
+srcdoc and containers retained in an inactive predecessor Document. Do not
+substitute the API base URL or `parent.activeDocument`.
+
+**Next: 7c's CORS and remaining header protocols.** Main-fetch and HTTP-redirect
+callers remain in Slices 8–9, including resolving an empty request policy before
+referrer calculation. Element/response policy delivery remains with HTML's loaders.
+
+Validation: the full unit suite passes on all six Node configurations, with
+the authorized srcdoc expected failure and existing expected failures/skips.
+Typecheck and lint pass.
+
 **Exit proof:** every Fetch §3 header protocol and check is either executable
 or stops at a named external-policy/storage capability with its inputs fully
 formed.
@@ -627,6 +670,19 @@ formed.
 ## Slice 8 — Fetch orchestration and local schemes
 
 **Specification:** Fetch §4–§4.5 and §6.
+
+Connect the prompt target to its HTML traversable and resolve constructor-copy
+behavior when implementing `populate request from client`. The field now uses
+`FetchPromptTarget | null | undefined`: undefined defers selection, null suppresses
+prompts, and a value retains a target. The provisional target contract exposes
+only the origin consumed by the existing copy check. Fetch defines a traversable
+navigable but its Request constructor still tests for an environment settings
+object; the type cleanup preserves that check pending this review.
+Chromium retains an opaque window identifier and documents a partial constructor
+implementation, so copying its code alone does not settle the mismatch. See
+`scratch/SPEC-ISSUES.md` for the source comparison.
+Keep the initiating origin distinct from the target's active document origin:
+a cross-origin iframe's requests can use its top-level traversable for prompts.
 
 Implement in order:
 

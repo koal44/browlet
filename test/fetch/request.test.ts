@@ -16,8 +16,10 @@ describe('Fetch request cloning', () => {
     const request = createFetchRequest('https://[::1]/start', client);
     request.method = 'POST';
     request.credentialsMode = 'include';
+    request.allowServiceWorkerInterception = false;
+    request.initiator = 'prefetch';
     request.origin = obtainURLOrigin(request.url);
-    request.policyContainer = {};
+    request.policyContainer = client.policyContainer;
     request.reservedClient = {
       userAgent: client.userAgent, topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
     };
@@ -52,6 +54,12 @@ describe('Fetch request cloning', () => {
     clone.navigationTimingAllowValuesList[0]!.push('*');
     expect(request.webTransportHashList[0]!.value).toEqual(Uint8Array.of(1));
     expect(request.navigationTimingAllowValuesList).toEqual([['https://example.test']]);
+  });
+
+  it.each([undefined, null])('preserves the referrer state %s when cloning', (referrer) => {
+    const request = createFetchRequest();
+    request.referrer = referrer;
+    expect(request.clone().referrer).toBe(referrer);
   });
 
   it('preserves the identity of a blob URL entry', () => {
@@ -233,9 +241,9 @@ describe('Fetch request redirect-taint', () => {
 
   it('requires a concrete origin even without redirects', () => {
     const request = createFetchRequest(a);
-    expect(() => request.redirectTaint).toThrow('Fetch request origin is still "client"');
-    expect(() => request.serializeOrigin()).toThrow('Fetch request origin is still "client"');
-    expect(() => request.byteSerializeOrigin()).toThrow('Fetch request origin is still "client"');
+    expect(() => request.redirectTaint).toThrow('Fetch request origin has not been resolved');
+    expect(() => request.serializeOrigin()).toThrow('Fetch request origin has not been resolved');
+    expect(() => request.byteSerializeOrigin()).toThrow('Fetch request origin has not been resolved');
   });
 });
 
@@ -309,7 +317,7 @@ describe('Fetch request COEP credentials', () => {
     'unsafe-none', 'require-corp',
   ])('does not restrict credentials under %s', (value) => {
     const request = createFetchRequest(foreign, {
-      ...client, policyContainer: { embedderPolicy: { value } },
+      ...client, policyContainer: { ...client.policyContainer, embedderPolicy: { value } },
     });
     request.origin = obtainURLOrigin(parseURL(home).url!);
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
@@ -330,7 +338,7 @@ describe('Fetch request COEP credentials', () => {
   it('requires a concrete origin before checking policy', () => {
     const request = createFetchRequest(home);
     expect(() => request.crossOriginEmbedderPolicyAllowsCredentials()).toThrow(
-      'Fetch request origin is still "client"',
+      'Fetch request origin has not been resolved',
     );
   });
 });

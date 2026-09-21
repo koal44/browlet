@@ -21,19 +21,37 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */
   hasCrossSiteAncestor: boolean;
+  /** Source URL selected by the client's global, or null when disclosure is prohibited. */
+  getReferrerSource(): URLRecord | null;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup: FetchGroup;
   /** Whether WebDriver BiDi emulates an offline network for this environment. */
   webDriverBiDiNetworkIsOffline(): boolean;
   /** Client's live policy container, exposing the policies currently consumed by Fetch. */
-  policyContainer: {
-    /** Cross-origin embedder policy applied by the client. */
-    embedderPolicy: {
-      /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
-      value: 'unsafe-none' | 'require-corp' | 'credentialless';
-    };
-  };
+  policyContainer: FetchPolicyContainer;
 };
+
+/** Prompt destination, exposing what Request construction currently needs. */
+// PROVISIONAL: reconcile the constructor's environment-origin check with HTML's traversable target.
+export type FetchPromptTarget = {
+  /** Origin used by the constructor's same-origin copy check. */
+  origin: Origin;
+};
+
+/** HTML's policy container, exposing the policies currently consumed by Fetch. */
+export type FetchPolicyContainer = {
+  /** Cross-origin embedder policy applied by the client. */
+  embedderPolicy: {
+    /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
+    value: 'unsafe-none' | 'require-corp' | 'credentialless';
+  };
+  /** Default referrer disclosure policy inherited by requests. */
+  referrerPolicy: ReferrerPolicy;
+};
+
+// https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
+export type ReferrerPolicy = '' | 'no-referrer' | 'no-referrer-when-downgrade' | 'same-origin' |
+  'origin' | 'strict-origin' | 'origin-when-cross-origin' | 'strict-origin-when-cross-origin' | 'unsafe-url';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
 export type FetchEnvironment = {
@@ -56,6 +74,8 @@ export type FetchUserAgent = {
   cookieStore: CookieStore;
   /** Enables sending and accepting cookies without deleting the store when disabled. */
   cookiesEnabled: boolean;
+  /** Applies this user agent's trust policy to a URL, including loopback and configured origins. */
+  isURLPotentiallyTrustworthy(url: URLRecord): boolean;
 };
 
 /** Fetch §2, serialize an integer as its shortest decimal representation. */

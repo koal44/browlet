@@ -577,10 +577,32 @@ Host connectivity detection and BiDi session lookup are provisional; their repla
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
 
 The same settings object exposes its HTML-owned policy container. Window
-settings read it from the associated Document; Fetch's structural client type
-exposes the embedder-policy value without copying it or importing Browlet.
+settings read it from the associated Document; `FetchPolicyContainer` exposes
+the embedder-policy value and typed referrer policy without copying the container
+or importing Browlet. HTML's full `PolicyContainer` extends that structural type.
 `FetchRequest` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
+
+An undefined request origin, policy container, or referrer represents Fetch's
+deferred client value. A null referrer explicitly suppresses disclosure. These
+are stored states resolved at the prescribed algorithm steps, not automatic
+fallback getters. `Request.referrer` still exposes the specified empty string
+or `about:client`, and `ReferrerPolicy` retains its specified string values.
+
+The prompt target likewise uses undefined for deferred selection and null for
+suppressed prompts. `FetchPromptTarget` currently exposes only the origin used
+by Request construction's copy check; it does not require a full settings
+object. Connecting the actual HTML traversable and reconciling that origin
+check remain in Fetch Slice 8 because the specification describes them
+inconsistently.
+
+Referrer Policy asks the same client for `getReferrerSource()`. Window settings
+select the live Document URL, reject opaque-origin disclosure, and follow srcdoc
+container Documents; other settings supply their creation URL. Fetch's structural
+types expose this source query and the UserAgent's existing URL trustworthiness
+method without importing Window, Document, or browser policy into Fetch. Referrer
+stripping copies URL records; it does not change the client's stored URL. The
+provisional iframe/container lifecycle remains in the browsing roadmap.
 
 For cookies, Window settings expose HTML's live cross-site-ancestor query.
 Fetch classifies the request's initiator and current target; it selects

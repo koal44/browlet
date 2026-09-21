@@ -12,10 +12,14 @@ export { FetchController, deserializeAbortReason } from './controller';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
 export { HTTPCachePartitions } from './http/cache/partitions';
-export type { FetchEnvironmentSettingsObject, FetchEnvironment, FetchUserAgent } from './infrastructure';
+export type {
+  FetchEnvironmentSettingsObject, FetchEnvironment, FetchUserAgent,
+  FetchPolicyContainer, FetchPromptTarget, ReferrerPolicy,
+} from './infrastructure';
 export { fetchEnvironmentSettingsObject } from './infrastructure';
-export { requestIDL } from './request';
-export { responseIDL } from './response';
+export { requestIDL, type FetchRequest } from './request';
+export { responseIDL, type FetchResponse } from './response';
+export { isLocalScheme } from './url';
 
 export const fetchIDLDefinitions: Definition[] = [
   headersInitIDL,

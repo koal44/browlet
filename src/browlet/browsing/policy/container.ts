@@ -1,6 +1,7 @@
 import {
   createEmbedderPolicy, type EmbedderPolicy,
 } from './coep';
+import type { FetchPolicyContainer } from '../../../fetch/index';
 
 export function createPolicyContainer(): PolicyContainer {
   return {
@@ -12,10 +13,9 @@ export function createPolicyContainer(): PolicyContainer {
   };
 }
 
-export type PolicyContainer = {
+export type PolicyContainer = FetchPolicyContainer & {
   cspList: object[];
   embedderPolicy: EmbedderPolicy;
-  referrerPolicy: string;
   integrityPolicy: IntegrityPolicy;
   reportOnlyIntegrityPolicy: IntegrityPolicy;
 };

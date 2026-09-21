@@ -6,6 +6,7 @@ import {
   createOpenerPolicy, type OpenerPolicy,
 } from '../policy/coop';
 import type { SandboxingFlagSet } from '../policy/sandbox';
+import type { ReferrerPolicy } from '../../../fetch/index';
 import { areSameOrigin, type Origin } from '../../../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
 import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
@@ -39,7 +40,7 @@ export type NavigationParams = {
   origin: Origin;
   policyContainer: PolicyContainer;
   finalSandboxingFlagSet: SandboxingFlagSet;
-  iframeReferrerPolicy: string;
+  iframeReferrerPolicy: ReferrerPolicy;
   openerPolicy: OpenerPolicy;
   navigationTimingType: NavigationTimingType;
   aboutBaseURL: URLRecord | null;
@@ -48,7 +49,7 @@ export type NavigationParams = {
 
 export type NavigationRequest = {
   currentURL: URLRecord;
-  referrer: 'no-referrer' | URLRecord;
+  referrer: URLRecord | null;
 };
 
 // Fetch owns the controller's concrete state and timing extraction behavior.

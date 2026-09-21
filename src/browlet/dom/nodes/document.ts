@@ -453,6 +453,12 @@ export class DocumentImpl extends NodeImpl {
     first?.setFrozenBaseURL();
   }
 
+  /** The document's URL record, independent of its base URL. */
+  // https://dom.spec.whatwg.org/#concept-document-url
+  getURL(): URLRecord {
+    return this.#url;
+  }
+
   setURL(url: URLRecord): void {
     this.#url = url;
   }
@@ -590,7 +596,12 @@ export class DocumentImpl extends NodeImpl {
     this.#aboutBaseURL = aboutBaseURL;
   }
 
+  /** Whether this document was created from an iframe's srcdoc content. */
   // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#an-iframe-srcdoc-document
+  isIframeSrcdocDocument(): boolean {
+    return this.#isIframeSrcdocDocument;
+  }
+
   setIsIframeSrcdocDocument(isSrcdoc: boolean): void {
     this.#isIframeSrcdocDocument = isSrcdoc;
   }

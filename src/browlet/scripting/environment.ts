@@ -74,6 +74,12 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
     return this.realmExecutionContext.realm.agent.eventLoop;
   }
 
+  /** Source URL for requests using this client's referrer. */
+  // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
+  getReferrerSource(): URLRecord | null {
+    return this.creationURL;
+  }
+
   /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
   webDriverBiDiNetworkIsOffline(): boolean {
     // PROVISIONAL: no BiDi sessions; replace with the environment's scoped network-condition lookup.
@@ -140,6 +146,18 @@ export class WindowEnvironmentSettingsObject
       monotonicClock,
       this.#window.getAssociatedDocument().getLoadTimingInfo().navigationStartTime,
     );
+  }
+
+  // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
+  override getReferrerSource(): URLRecord | null {
+    let document = this.#window.getAssociatedDocument();
+    if (document.getOrigin().kind === 'opaque') return null;
+    while (document.isIframeSrcdocDocument()) {
+      const container = document.getBrowsingContext()?.navigable?.container ?? null;
+      if (container === null) throw new InternalError('A srcdoc document needs a navigable container');
+      document = container.getNodeDocument()!;
+    }
+    return document.getURL();
   }
 }
 

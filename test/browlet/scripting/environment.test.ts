@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDocument, getRelevantRealm } from '../../../src/browlet/bindings';
+import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/session-history';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
@@ -8,9 +9,10 @@ import type { WindowProxy } from '../../../src/browlet/browsing/window/window-pr
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { determineRequestReferrer } from '../../../src/browlet/browsing/policy/referrer-policy';
 import { FetchRequest } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
-import { obtainURLOrigin, parseURL } from '../../../src/url/url';
+import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {
@@ -80,6 +82,54 @@ describe('Fetch cookies through Window settings', () => {
     const isolated = new FetchRequest(url, other.settings, other.settings.userAgent);
     isolated.appendCookieHeader();
     expect(isolated.headerList.get('Cookie')).toBeNull();
+  });
+});
+
+describe('Window environment referrer sources', () => {
+  it('uses the live Document URL, independently of creation and base URLs', () => {
+    const { document, settings } = createEnvironment('https://example.test/initial');
+    const url = parseURL('https://example.test/current?q=1#fragment').url!;
+    document.setURL(url);
+    const root = document.createElement('html');
+    const base = document.createElement('base');
+    base.setAttribute('href', 'https://different.test/base/');
+    document.appendChild(root);
+    root.appendChild(base);
+    expect(serializeURL(settings.apiBaseURL)).toBe('https://different.test/base/');
+    expect(settings.getReferrerSource()).toBe(url);
+
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, settings, settings.userAgent);
+    request.referrerPolicy = 'same-origin';
+    const referrer = determineRequestReferrer(request);
+    expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/current?q=1');
+    expect(document.URL).toBe('https://example.test/current?q=1#fragment');
+  });
+
+  it('does not disclose the URL of an opaque-origin Document', () => {
+    const { document, settings } = createEnvironment('https://example.test/');
+    document.setOrigin(obtainURLOrigin(parseURL('data:,opaque').url!));
+    expect(settings.getReferrerSource()).toBeNull();
+  });
+
+  it('exposes the stored srcdoc flag rather than inferring it from the URL', () => {
+    const { document } = createEnvironment('about:srcdoc');
+    expect(document.isIframeSrcdocDocument()).toBe(false);
+    document.setIsIframeSrcdocDocument(true);
+    expect(document.isIframeSrcdocDocument()).toBe(true);
+  });
+
+  // Iframe creation must eventually supply the content navigable and its container.
+  it.fails('selects the embedding Document URL for a loaded srcdoc iframe', async () => {
+    const browlet = new Browlet({ route: () => '<iframe srcdoc="<p>child</p>"></iframe>' });
+    await browlet.navigate('https://example.test/parent');
+    const iframe = browlet.document.getElementsByTagName('iframe').item(0)!;
+    const document = iframe.contentDocument;
+    expect(document).toBeTruthy();
+    const settings = getRelevantRealm(document!).hostDefined!;
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, settings, settings.userAgent);
+    request.referrerPolicy = 'unsafe-url';
+    const referrer = determineRequestReferrer(request);
+    expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/parent');
   });
 });
 

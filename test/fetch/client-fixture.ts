@@ -11,12 +11,13 @@ export function createClientSettings(url = 'https://example.test/'): FetchEnviro
     apiBaseURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),
     hasCrossSiteAncestor: false,
+    getReferrerSource: () => topLevelCreationURL,
     fetchGroup: new FetchGroup(),
     userAgent: createFetchUserAgent(),
     topLevelOrigin: obtainURLOrigin(topLevelCreationURL),
     topLevelCreationURL,
     webDriverBiDiNetworkIsOffline: () => false,
-    policyContainer: { embedderPolicy: { value: 'unsafe-none' } },
+    policyContainer: { embedderPolicy: { value: 'unsafe-none' }, referrerPolicy: 'strict-origin-when-cross-origin' },
   };
 }
 
@@ -27,5 +28,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     httpCachePartitions: new HTTPCachePartitions(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
+    // Tests exercising browser trust policy use Browlet's real UserAgent instead.
+    isURLPotentiallyTrustworthy: (url) => url.scheme === 'https' || url.scheme === 'wss',
   };
 }

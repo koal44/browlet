@@ -17,6 +17,7 @@ import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } f
 import {
   getFetchEnvironmentSettingsObject, serializeInteger,
   type FetchEnvironmentSettingsObject, type FetchEnvironment, type FetchUserAgent,
+  type FetchPolicyContainer, type FetchPromptTarget, type ReferrerPolicy,
 } from './infrastructure';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
@@ -42,35 +43,36 @@ export class FetchRequest {
   reservedClient: FetchEnvironment | null = null;
   /** Environment ID replaced by a navigation, or an empty string when none is designated. */
   replacesClientId = '';
-  /** Selects the client context for prompts, defers selection to the client, or suppresses UI. */
-  traversableForUserPrompts: 'no-traversable' | 'client' | FetchEnvironmentSettingsObject = 'client';
+  /** Prompt destination, undefined until selected from the client, or null to suppress prompts. */
+  traversableForUserPrompts: FetchPromptTarget | null | undefined = undefined;
   /** Allows the request to continue after its initiating environment is destroyed. */
   keepalive = false;
   /** Initiating feature reported by Resource Timing, or null when unspecified. */
   initiatorType: RequestInitiator | null = null;
   /** Whether relevant service workers may intercept the request. */
-  serviceWorkersMode: 'all' | 'none' = 'all';
+  // https://fetch.spec.whatwg.org/#request-service-workers-mode (all = true, none = false)
+  allowServiceWorkerInterception = true;
   /** Initiator category used by policies such as CSP and Mixed Content. */
-  initiator: '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt' = '';
+  initiator: RequestInitiatorCategory = '';
   /** Intended resource use; an empty string denotes a general-purpose fetch, not an unset value. */
   destination: Destination = '';
   /** Scheduling hint supplied by the caller; auto leaves the choice to the user agent. */
   priority: RequestPriority = 'auto';
   /** Scheduler-owned priority state, or null before a scheduler assigns it. */
   internalPriority: RequestInternalPriority | null = null;
-  /** Origin used for request policy, or client until resolved from the initiating environment. */
-  origin: Origin | 'client' = 'client';
+  /** Origin used for request policy; undefined until resolved from the initiating environment. */
+  origin: Origin | undefined = undefined;
   /** Origin initiating a top-level navigation; null denotes browser initiation. */
   topLevelNavigationInitiatorOrigin: Origin | null = null;
-  /** Policies attached to the request, or client until taken from its environment. */
-  policyContainer: object | 'client' = 'client';
-  /** Referrer URL, an explicit omission, or client until the environment supplies the source. */
-  referrer: URLRecord | 'no-referrer' | 'client' = 'client';
+  /** Policies attached to the request; undefined until taken from its environment. */
+  policyContainer: FetchPolicyContainer | undefined = undefined;
+  /** Referrer URL, null to omit it, or undefined until the client supplies the source. */
+  referrer: URLRecord | null | undefined = undefined;
   // Referrer Policy supplies the enum declaration at the browser composition root.
   /** Policy controlling referrer disclosure; an empty string leaves it to the client policy. */
-  referrerPolicy = '';
+  referrerPolicy: ReferrerPolicy = '';
   /** Fetch mode governing origin restrictions, CORS processing, and response exposure. */
-  mode: RequestMode | 'websocket' | 'webtransport' = 'no-cors';
+  mode: FetchMode = 'no-cors';
   /** Requires preflight when CORS processing applies, even for otherwise safelisted input. */
   useCORSPreflight = false;
   /** Controls sending credentials and accepting credentials from the response. */
@@ -85,8 +87,8 @@ export class FetchRequest {
   integrityMetadata = '';
   /** Initiating element's nonce supplied to Content Security Policy checks. */
   cryptographicNonceMetadata = '';
-  /** Whether the initiating element was parser-inserted, or an empty string when unspecified. */
-  parserMetadata: '' | 'parser-inserted' | 'not-parser-inserted' = '';
+  /** Whether the initiating element was parser-inserted; undefined when no metadata was supplied. */
+  parserInserted: boolean | undefined = undefined;
   /** Marks a navigation caused by reloading the current document. */
   reloadNavigation = false;
   /** Marks a navigation caused by session-history traversal. */
@@ -104,7 +106,7 @@ export class FetchRequest {
   /** Number of redirects followed, used to enforce the redirect limit. */
   redirectCount = 0;
   /** Response filtering selected as origin and CORS processing progresses. */
-  responseTainting: 'basic' | 'cors' | 'opaque' = 'basic';
+  responseTainting: ResponseTainting = 'basic';
   /** Suppresses automatic Cache-Control: max-age=0 when cache mode is no-cache. */
   preventNoCacheCacheControlHeaderModification = false;
   /** Marks completion of the fetch's response end-of-body processing. */
@@ -146,8 +148,8 @@ export class FetchRequest {
   }
 
   /** https://fetch.spec.whatwg.org/#concept-request-tainted-origin */
-  get redirectTaint(): 'same-origin' | 'same-site' | 'cross-site' {
-    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
+  get redirectTaint(): RedirectTaint {
+    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
     let lastURL: URLRecord | null = null;
     let taint: 'same-origin' | 'same-site' = 'same-origin';
     for (const url of this.urlList) {
@@ -170,7 +172,7 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#serializing-a-request-origin */
   serializeOrigin(): string {
-    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
+    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
     return this.redirectTaint === 'same-origin' ? serializeOrigin(this.origin) : 'null';
   }
 
@@ -187,7 +189,7 @@ export class FetchRequest {
       webDriverId: request.webDriverId,
       headerList: this.headerList.clone(),
       urlList: request.urlList,
-      referrer: typeof this.referrer === 'string' ? this.referrer : copyURL(this.referrer),
+      referrer: this.referrer && copyURL(this.referrer),
       webTransportHashList: this.webTransportHashList.map(({ algorithm, value }) => ({ algorithm, value: new Uint8Array(value) })),
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
       // Before body extraction, a byte sequence is copied as a value; a body tees its stream.
@@ -204,7 +206,7 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
   crossOriginEmbedderPolicyAllowsCredentials(): boolean {
-    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
+    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
     if (this.mode !== 'no-cors' || this.client === null) return true;
     if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
     return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
@@ -253,6 +255,37 @@ export class FetchRequest {
     }
     const targetOrigin = obtainURLOrigin(this.currentURL);
     return initiator === null || areSameSite(initiator, targetOrigin);
+  }
+
+  /** Appends the request origin, applying redirect taint and non-CORS disclosure policy. */
+  // https://fetch.spec.whatwg.org/#append-a-request-origin-header
+  appendOriginHeader(): void {
+    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
+    let serializedOrigin = this.serializeOrigin();
+    if (this.responseTainting === 'cors' || this.mode === 'websocket' || this.mode === 'webtransport') {
+      this.headerList.append('Origin', serializedOrigin);
+      return;
+    }
+    if (this.method === 'GET' || this.method === 'HEAD') return;
+
+    if (this.mode !== 'cors') {
+      switch (this.referrerPolicy) {
+        case 'no-referrer':
+          serializedOrigin = 'null';
+          break;
+        case 'no-referrer-when-downgrade':
+        case 'strict-origin':
+        case 'strict-origin-when-cross-origin':
+          if (this.origin.kind === 'tuple' && this.origin.scheme === 'https' && this.currentURL.scheme !== 'https') {
+            serializedOrigin = 'null';
+          }
+          break;
+        case 'same-origin':
+          if (!areSameOrigin(this.origin, obtainURLOrigin(this.currentURL))) serializedOrigin = 'null';
+          break;
+      }
+    }
+    this.headerList.append('Origin', serializedOrigin);
   }
 }
 
@@ -386,14 +419,14 @@ export class RequestImpl {
     }
 
     const origin = client.origin;
-    let traversable: FetchRequest['traversableForUserPrompts'] = 'client';
-    if (typeof source.traversableForUserPrompts === 'object' &&
+    let traversable: FetchRequest['traversableForUserPrompts'] = undefined;
+    if (source.traversableForUserPrompts &&
       areSameOrigin(source.traversableForUserPrompts.origin, origin)) {
       traversable = source.traversableForUserPrompts;
     }
     if ('window' in init) {
       if (init.window !== null) throw new TypeError('RequestInit.window must be null');
-      traversable = 'no-traversable';
+      traversable = null;
     }
 
     const request = new FetchRequest(source.url, client, client.userAgent);
@@ -403,7 +436,7 @@ export class RequestImpl {
     request.traversableForUserPrompts = traversable;
     request.internalPriority = source.internalPriority;
     request.origin = source.origin;
-    request.referrer = typeof source.referrer === 'string' ? source.referrer : copyURL(source.referrer);
+    request.referrer = source.referrer && copyURL(source.referrer);
     request.referrerPolicy = source.referrerPolicy;
     request.mode = source.mode;
     request.credentialsMode = source.credentialsMode;
@@ -421,19 +454,19 @@ export class RequestImpl {
       if (request.mode === 'navigate') request.mode = 'same-origin';
       request.reloadNavigation = false;
       request.historyNavigation = false;
-      request.origin = 'client';
-      request.referrer = 'client';
+      request.origin = undefined;
+      request.referrer = undefined;
       request.referrerPolicy = '';
       request.urlList = [request.currentURL];
     }
     if (init.referrer !== undefined) {
       if (init.referrer === '') {
-        request.referrer = 'no-referrer';
+        request.referrer = null;
       } else {
         const referrer = parseURL(init.referrer, baseURL).url;
         if (referrer === null) throw new TypeError('Invalid Request referrer');
         request.referrer = (referrer.scheme === 'about' && referrer.path === 'client') ||
-          !areSameOrigin(obtainURLOrigin(referrer), origin) ? 'client' : referrer;
+          !areSameOrigin(obtainURLOrigin(referrer), origin) ? undefined : referrer;
       }
     }
     if (init.referrerPolicy !== undefined) request.referrerPolicy = init.referrerPolicy;
@@ -509,13 +542,13 @@ export class RequestImpl {
 
   get referrer(): string {
     const referrer = this.#request.referrer;
-    if (referrer === 'no-referrer') return '';
-    if (referrer === 'client') return 'about:client';
+    if (referrer === null) return '';
+    if (referrer === undefined) return 'about:client';
     return serializeURL(referrer);
   }
 
-  get referrerPolicy(): string { return this.#request.referrerPolicy; }
-  get mode(): FetchRequest['mode'] { return this.#request.mode; }
+  get referrerPolicy(): ReferrerPolicy { return this.#request.referrerPolicy; }
+  get mode(): FetchMode { return this.#request.mode; }
   get credentials(): RequestCredentials { return this.#request.credentialsMode; }
   get cache(): RequestCache { return this.#request.cacheMode; }
   get redirect(): RequestRedirect { return this.#request.redirectMode; }
@@ -553,6 +586,9 @@ export type RequestInitiator = 'audio' | 'beacon' | 'body' | 'css' | 'early-hint
   'embed' | 'fetch' | 'font' | 'frame' | 'iframe' | 'image' | 'img' | 'input' | 'link' |
   'object' | 'ping' | 'script' | 'track' | 'video' | 'xmlhttprequest' | 'other';
 
+// https://fetch.spec.whatwg.org/#concept-request-initiator
+export type RequestInitiatorCategory = '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt';
+
 /** Fetch's internal destination type includes values outside the public Web IDL enum. */
 export type Destination = RequestDestination | 'serviceworker' | 'webidentity';
 
@@ -570,11 +606,14 @@ export type EmptyDestination = '';
 export type PotentialDestination = 'fetch' | Exclude<Destination, EmptyDestination>;
 
 export type RequestMode = 'navigate' | 'same-origin' | 'no-cors' | 'cors';
+export type FetchMode = RequestMode | 'websocket' | 'webtransport';
 export type RequestCredentials = 'omit' | 'same-origin' | 'include';
 export type RequestCache = 'default' | 'no-store' | 'reload' | 'no-cache' | 'force-cache' | 'only-if-cached';
 export type RequestRedirect = 'follow' | 'error' | 'manual';
 export type RequestDuplex = 'half';
 export type RequestPriority = 'high' | 'low' | 'auto';
+export type ResponseTainting = 'basic' | 'cors' | 'opaque';
+export type RedirectTaint = 'same-origin' | 'same-site' | 'cross-site';
 /** Priority assigned by Fetch scheduling; updates retain the scheduler's representation. */
 export type RequestInternalPriority = { update(priority: RequestPriority): void; };
 export type WebTransportHash = {
@@ -596,7 +635,7 @@ export type FetchRequestInit = {
   /** Referrer override; an empty string suppresses it and about:client selects the client. */
   referrer?: string;
   /** Policy overriding how much referrer information may be sent. */
-  referrerPolicy?: string;
+  referrerPolicy?: ReferrerPolicy;
   /** Origin and CORS mode for the new request. */
   mode?: RequestMode;
   /** Policy for sending credentials and accepting credentials from the response. */

@@ -1,5 +1,6 @@
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { PolicyContainer } from '../policy/container';
+import type { ReferrerPolicy } from '../../../fetch/index';
 import type { Origin } from '../../../url/origin';
 import { parseURL, type URLRecord } from '../../../url/url';
 import { InternalError } from '../../../infra/internal-error';
@@ -11,8 +12,8 @@ import { InternalError } from '../../../infra/internal-error';
 export type DocumentState = {
   document: DocumentImpl | null;
   historyPolicyContainer: PolicyContainer | null;
-  requestReferrer: 'no-referrer' | 'client' | URLRecord;
-  requestReferrerPolicy: string;
+  requestReferrer: URLRecord | null | undefined;
+  requestReferrerPolicy: ReferrerPolicy;
   initiatorOrigin: Origin | null;
   origin: Origin | null;
   aboutBaseURL: URLRecord | null;
@@ -49,7 +50,7 @@ export function createDocumentState(
   return {
     document,
     historyPolicyContainer: null,
-    requestReferrer: 'client',
+    requestReferrer: undefined,
     requestReferrerPolicy: 'strict-origin-when-cross-origin',
     initiatorOrigin: null,
     origin: null,

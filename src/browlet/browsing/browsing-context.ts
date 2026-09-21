@@ -21,6 +21,7 @@ import {
 import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
+import type { ReferrerPolicy } from '../../fetch/index';
 import { HTML_NAMESPACE } from '../../infra/index';
 import {
   createOpaqueOrigin, serializeOrigin, type Origin,
@@ -338,7 +339,7 @@ function getEmbedderTopLevelOrigin(_embedder: ElementImpl): Origin {
 
 function determineIframeElementReferrerPolicy(
   embedder: ElementImpl | null,
-): string {
+): ReferrerPolicy {
   if (embedder !== null) {
     throw new InternalError('iframe referrer-policy lookup is not implemented');
   }
@@ -347,7 +348,7 @@ function determineIframeElementReferrerPolicy(
 
 function createInternalAncestorOriginObjectsList(
   _document: DocumentImpl,
-  _referrerPolicy: string,
+  _referrerPolicy: ReferrerPolicy,
   embedder: ElementImpl | null,
 ): Origin[] {
   if (embedder !== null) {

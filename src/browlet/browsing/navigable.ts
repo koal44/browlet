@@ -1,4 +1,5 @@
 import type { DocumentImpl } from '../dom/nodes/document';
+import type { ElementImpl } from '../dom/nodes/element';
 import {
   createNewTopLevelBrowsingContextAndDocument, type BrowsingContext,
 } from './browsing-context';
@@ -71,6 +72,13 @@ export class Navigable {
 
   get activeWindow(): WindowImpl | null {
     return this.activeBrowsingContext?.activeWindow ?? null;
+  }
+
+  /** The element embedding this navigable, or null when it has no container. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
+  get container(): ElementImpl | null {
+    // PROVISIONAL: connect the container's content navigable when child navigables are implemented.
+    return null;
   }
 
   initialize(documentState: DocumentState, parent: Navigable | null = null): void {

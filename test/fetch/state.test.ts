@@ -18,13 +18,13 @@ describe('Fetch request and response state', () => {
     const request = createFetchRequest(undefined, client);
     expect(request).toMatchObject({
       method: 'GET', localURLsOnly: false, headerList: new FetchHeaders(), unsafeRequest: false, body: null,
-      client, reservedClient: null, replacesClientId: '', traversableForUserPrompts: 'client',
-      keepalive: false, initiatorType: null, serviceWorkersMode: 'all', initiator: '', destination: '',
-      priority: 'auto', internalPriority: null, origin: 'client', topLevelNavigationInitiatorOrigin: null,
-      policyContainer: 'client', referrer: 'client', referrerPolicy: '', mode: 'no-cors',
+      client, reservedClient: null, replacesClientId: '', traversableForUserPrompts: undefined,
+      keepalive: false, initiatorType: null, allowServiceWorkerInterception: true, initiator: '', destination: '',
+      priority: 'auto', internalPriority: null, origin: undefined, topLevelNavigationInitiatorOrigin: null,
+      policyContainer: undefined, referrer: undefined, referrerPolicy: '', mode: 'no-cors',
       useCORSPreflight: false, credentialsMode: 'same-origin', useURLCredentials: false,
       cacheMode: 'default', redirectMode: 'follow', integrityMetadata: '', cryptographicNonceMetadata: '',
-      parserMetadata: '', reloadNavigation: false, historyNavigation: false, userActivation: false,
+      parserInserted: undefined, reloadNavigation: false, historyNavigation: false, userActivation: false,
       webDriverNavigationId: null, renderBlocking: false, webTransportHashList: [], redirectCount: 0,
       responseTainting: 'basic', preventNoCacheCacheControlHeaderModification: false, done: false,
       timingAllowFailed: false, navigationTimingAllowValuesList: [],
@@ -60,7 +60,7 @@ describe('Fetch request and response state', () => {
     const response = new FetchResponse();
     expect(response).toEqual({
       type: 'default', aborted: false, urlList: [], status: 200, statusMessage: '', headerList: new FetchHeaders(),
-      body: null, cacheState: '', corsExposedHeaderNameList: [], rangeRequested: false,
+      body: null, cacheUsage: undefined, corsExposedHeaderNameList: [], rangeRequested: false,
       requestIncludesCredentials: true, timingAllowPassed: false, navigationTimingAllowValuesList: [],
       bodyInfo: new ResponseBodyInfo(), serviceWorkerTimingInfo: null, redirectTaint: 'same-origin',
     });
@@ -102,7 +102,7 @@ describe('Fetch state/API sharing', () => {
     record.method = 'POST';
     expect(request.method).toBe('POST');
     expect(request.referrer).toBe('about:client');
-    record.referrer = 'no-referrer';
+    record.referrer = null;
     expect(request.referrer).toBe('');
     expect(request.body).toBeNull();
     expect(request.bodyUsed).toBe(false);

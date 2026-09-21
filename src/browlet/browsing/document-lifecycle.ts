@@ -197,7 +197,7 @@ function initializeDocumentReferrer(
 ): void {
   if (request === null) return;
   document.setReferrer(
-    request.referrer === 'no-referrer'
+    request.referrer === null
       ? ''
       : serializeURL(request.referrer),
   );
