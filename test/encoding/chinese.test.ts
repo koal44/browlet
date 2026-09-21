@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
 import { createRuntime } from '../js-engine/runtime-fixture';
+import { expectBytesEqual } from '../assertions/bytes';
 import { chineseDecodeDigests } from './gen/chinese-vectors';
 
 const encodings = ['GBK', 'gb18030', 'Big5'] as const;
@@ -48,7 +49,7 @@ describe('Encoding §§10–11: Chinese codecs', () => {
     if (encoding === 'GBK') mapping.set('€', [0x80]);
     const output = new IOQueue<Uint8Array>();
     expect(getEncoder(encoding).encode(IOQueue.from([...mapping.keys()].join('')), output, 'fatal')).toBe('finished');
-    expect(output.takeBytes()).toEqual(Uint8Array.from([...mapping.values()].flat()));
+    expectBytesEqual(output.takeBytes(), Uint8Array.from([...mapping.values()].flat()));
     expect(output.readAvailable()).toBe(endOfQueue);
   });
 

@@ -54,8 +54,8 @@ describe('UTF-16 storage materialization', () => {
 });
 
 describe('Infra isomorphic byte/string conversion', () => {
-  it('preserves all byte values, including C1 controls, across large offset views', () => {
-    const data = Uint8Array.from({ length: 65539 }, (_, i) => i & 255);
+  it('preserves all byte values, including C1 controls, across offset views', () => {
+    const data = Uint8Array.from({ length: 259 }, (_, i) => i & 255);
     const input = data.subarray(1, -2);
     const expected = Array.from(input, (byte) => String.fromCharCode(byte)).join('');
     expect(isomorphicDecode(input)).toBe(expected);

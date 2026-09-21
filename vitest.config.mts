@@ -12,6 +12,7 @@ export default defineConfig({
           isolate: false,
           include: [
             'test/lint/**/*.test.mjs',
+            'test/assertions/**/*.test.ts',
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/**/*.test.ts',
             'test/js-engine/**/*.test.ts',

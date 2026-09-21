@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Browlet } from '../../src/browlet/browlet';
 import { singleByteDecodeDigests } from '../encoding/gen/single-byte-vectors';
@@ -7,8 +7,13 @@ import {
 } from './test-runtime';
 
 describe('Encoding projection', () => {
+  // Each case creates fresh codecs and streams. Mutation and borrowed-realm
+  // cases below create their own windows.
+  let browlet: Browlet;
+  beforeAll(() => { browlet = new Browlet({ route: () => '' }); });
+
   it('decodes labels, options, and streaming input', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const TextDecoder_ = requireFunction(window, 'TextDecoder');
     const decoder = Reflect.construct(TextDecoder_, [
       'utf-8',
@@ -26,7 +31,7 @@ describe('Encoding projection', () => {
   });
 
   it('throws decoding errors in the relevant realm', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(
       requireFunction(window, 'TextDecoder'),
       ['utf-8', { fatal: true }],
@@ -37,7 +42,7 @@ describe('Encoding projection', () => {
   });
 
   it.each(Object.entries(singleByteDecodeDigests))('decodes every %s byte through the public API', (label, digest) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label]) as object;
     const text = call(decoder, 'decode', [Uint8Array.from({ length: 256 }, (_, i) => i)]) as string;
     expect(createHash('sha256').update(Buffer.from(text, 'utf16le')).digest('hex')).toBe(digest);
@@ -51,7 +56,7 @@ describe('Encoding projection', () => {
     ['gb18030', 'gb18030', [0x94, 0x39, 0xfc, 0x36], '😀'],
     ['big5-hkscs', 'big5', [0x88, 0x62], '\u00ca\u0304'],
   ] as const)('decodes %s across chunks, flushes, and resets the decoder', (label, name, bytes, expected) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label]) as object;
     expect(Reflect.get(decoder, 'encoding')).toBe(name);
     for (let run = 0; run < 2; run++) {
@@ -76,7 +81,7 @@ describe('Encoding projection', () => {
     ['shift_jis', [0x82], [0xa0], 'あ'],
     ['euc-kr', [0xb0], [0xa1], '가'],
   ] as const)('%s retains incomplete characters independently of consumed input', (label, prefix, suffix, expected) => {
-    const window = createWindow();
+    const window = browlet.window;
     for (const shared of [false, true]) {
       const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label]) as object;
       const buffer = shared ? new SharedArrayBuffer(prefix.length) : new ArrayBuffer(prefix.length);
@@ -89,7 +94,7 @@ describe('Encoding projection', () => {
   });
 
   it.each([false, true])('decodes the actual bytes of a shadowed view (shared=%s)', (shared) => {
-    const window = createWindow();
+    const window = browlet.window;
     const buffer = shared ? new SharedArrayBuffer(5) : new ArrayBuffer(5);
     new Uint8Array(buffer).set([0, 0x61, 0xc3, 0xa9, 0]);
     for (const input of [new Uint8Array(buffer, 1, 3), new DataView(buffer, 1, 3)]) {
@@ -102,7 +107,7 @@ describe('Encoding projection', () => {
   });
 
   it.each(['gbk', 'gb18030', 'big5'])('%s realizes fatal errors in the decoder realm and resets after flush', (label) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label, { fatal: true }]) as object;
     expect(call(decoder, 'decode', [Uint8Array.of(0x81), { stream: true }])).toBe('');
     expect(() => call(decoder, 'decode')).toThrow(requireFunction(window, 'TypeError'));
@@ -112,7 +117,7 @@ describe('Encoding projection', () => {
   });
 
   it('does not strip a GB18030-encoded BOM or confuse it with UTF-8 BOM sniffing', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), ['gb18030']) as object;
     expect(call(decoder, 'decode', [Uint8Array.of(0x84, 0x31, 0x95, 0x33, 0x41)])).toBe('\ufeffA');
   });
@@ -122,7 +127,7 @@ describe('Encoding projection', () => {
     ['gb18030', [0x81, 0x30, 0x22, 0x41], '0"A'],
     ['big5', [0x81, 0x40, 0x41], '@A'],
   ] as const)('%s retains copied input and restored bytes after a fatal streaming error', (label, bytes, suffix) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label, { fatal: true }]) as object;
     const input = Uint8Array.from(bytes);
     expect(() => call(decoder, 'decode', [input, { stream: true }])).toThrow(requireFunction(window, 'TypeError'));
@@ -140,7 +145,6 @@ describe('Encoding projection', () => {
     ['gb18030', [0x94, 0x39, 0xfc, 0x36, 0x81, 0x30], '😀\ufffd'],
     ['big5', [0x88, 0x62, 0x81], '\u00ca\u0304\ufffd'],
   ] as const)('streams %s through bindings and flushes an incomplete final sequence', async (label, bytes, expected) => {
-    const browlet = new Browlet({ route: () => '' });
     const completion = browlet.evaluate(async ({ label, bytes }) => {
       const stream = new TextDecoderStream(label);
       const reader = stream.readable.getReader();
@@ -166,7 +170,7 @@ describe('Encoding projection', () => {
     ['windows-31j', 'shift_jis', [0x93, 0xfa, 0x96, 0x7b, 0x80], '日本\u0080'],
     ['windows-949', 'euc-kr', [0xc7, 0xd1, 0xb1, 0xdb, 0x81, 0x41], '한글갂'],
   ] as const)('decodes %s through the public API at every byte split', (label, name, bytes, expected) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label]) as object;
     expect(Reflect.get(decoder, 'encoding')).toBe(name);
     for (let split = 0; split <= bytes.length; split++) {
@@ -181,7 +185,7 @@ describe('Encoding projection', () => {
     ['euc-jp', [0x8f, 0xa2]], ['iso-2022-jp', [0x1b, 0x24, 0x42, 0x24]],
     ['shift_jis', [0x82]], ['euc-kr', [0x81]],
   ] as const)('%s resets its mode after a fatal flush', (label, bytes) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label, { fatal: true }]) as object;
     expect(call(decoder, 'decode', [Uint8Array.from(bytes), { stream: true }])).toBe('');
     expect(() => call(decoder, 'decode')).toThrow(requireFunction(window, 'TypeError'));
@@ -194,7 +198,7 @@ describe('Encoding projection', () => {
     ['shift_jis', [0x82, 0x22, 0x41], '"A'],
     ['euc-kr', [0x81, 0x5b, 0x41], '[A'],
   ] as const)('%s retains restored input after a fatal streaming error', (label, bytes, expected) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label, { fatal: true }]) as object;
     const input = Uint8Array.from(bytes);
     expect(() => call(decoder, 'decode', [input, { stream: true }])).toThrow(requireFunction(window, 'TypeError'));
@@ -208,7 +212,6 @@ describe('Encoding projection', () => {
     ['shift_jis', [0x82, 0xa0, 0x82], 'あ\ufffd'],
     ['euc-kr', [0xc7, 0xd1, 0x81], '한\ufffd'],
   ] as const)('streams %s through bindings, including incomplete final input', async (label, bytes, expected) => {
-    const browlet = new Browlet({ route: () => '' });
     const completion = browlet.evaluate(async ({ label, bytes }) => {
       const stream = new TextDecoderStream(label);
       const reader = stream.readable.getReader();
@@ -229,7 +232,7 @@ describe('Encoding projection', () => {
   });
 
   it.each(['UTF-16LE', 'UTF-16BE'])('%s handles split BOMs, surrogate pairs, and decoder reset', (label) => {
-    const window = createWindow();
+    const window = browlet.window;
     const bytes = Buffer.from('\ufeffA😀\ufeff', 'utf16le');
     if (label === 'UTF-16BE') bytes.swap16();
     for (const ignoreBOM of [false, true]) {
@@ -251,7 +254,7 @@ describe('Encoding projection', () => {
   });
 
   it.each(['UTF-16LE', 'UTF-16BE'])('%s retains copied bytes after fatal errors and resets after fatal EOF', (label) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [label, { fatal: true }]) as object;
     const bytes = Buffer.from('A\ud800BC', 'utf16le');
     if (label === 'UTF-16BE') bytes.swap16();
@@ -266,7 +269,7 @@ describe('Encoding projection', () => {
   });
 
   it('supports x-user-defined through TextDecoder with either BOM policy', () => {
-    const window = createWindow();
+    const window = browlet.window;
     for (const ignoreBOM of [false, true]) {
       const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), ['x-user-defined', { ignoreBOM, fatal: true }]) as object;
       expect(call(decoder, 'decode', [Uint8Array.of(0x41, 0x80, 0xff)])).toBe('A\uf780\uf7ff');
@@ -279,7 +282,6 @@ describe('Encoding projection', () => {
     ['utf-16be', [0xfe, 0xff, 0, 0x41, 0xd8, 0x3d, 0xde, 0, 0], 'A😀\ufffd'],
     ['x-user-defined', [0x41, 0x80, 0xff], 'A\uf780\uf7ff'],
   ] as const)('streams %s through the public bindings and flushes incomplete data', async (label, bytes, expected) => {
-    const browlet = new Browlet({ route: () => '' });
     const completion = browlet.evaluate(async ({ label, bytes }) => {
       const stream = new TextDecoderStream(label);
       const reader = stream.readable.getReader();
@@ -300,7 +302,6 @@ describe('Encoding projection', () => {
   });
 
   it.each(['utf-16le', 'utf-16be'])('%s rejects an incomplete fatal stream in the owner realm', async (label) => {
-    const browlet = new Browlet({ route: () => '' });
     const completion = browlet.evaluate(async (label) => {
       const stream = new TextDecoderStream(label, { fatal: true });
       const reader = stream.readable.getReader();
@@ -314,7 +315,7 @@ describe('Encoding projection', () => {
   });
 
   it.each([false, true])('handles split BOMs and resets between streams (ignoreBOM=%s)', (ignoreBOM) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), ['utf-8', { ignoreBOM }]) as object;
     const bytes = [0xef, 0xbb, 0xbf, 0x61, 0xef, 0xbb, 0xbf];
     for (let run = 0; run < 2; run++) {
@@ -329,7 +330,7 @@ describe('Encoding projection', () => {
   });
 
   it('flushes incomplete input, resets after fatal flush, and rejects replacement labels', () => {
-    const window = createWindow();
+    const window = browlet.window;
     for (const fatal of [false, true]) {
       const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), ['utf-8', { fatal }]) as object;
       expect(call(decoder, 'decode', [Uint8Array.of(0xe2, 0x82), { stream: true }])).toBe('');
@@ -353,7 +354,7 @@ describe('Encoding projection', () => {
     ['utf-8', [0x61, 0xE2, 0x22, 0x62], '"b'],
     ['iso-8859-3', [0x61, 0xA5, 0x62], 'b'],
   ] as const)('retains unread %s input after a fatal streaming error', (label, bytes, remaining) => {
-    const window = createWindow();
+    const window = browlet.window;
     const decoder = Reflect.construct(requireFunction(window, 'TextDecoder'), [
       label, { fatal: true },
     ]) as object;
@@ -385,7 +386,7 @@ describe('Encoding projection', () => {
   it.each(['TextDecoder', 'TextDecoderStream'])(
     'throws invalid %s labels in the constructor realm',
     (name) => {
-      const window = createWindow();
+      const window = browlet.window;
       expect(() => {
         Reflect.construct(requireFunction(window, name), ['not-an-encoding']);
       }).toThrow(requireFunction(window, 'RangeError'));
@@ -395,7 +396,7 @@ describe('Encoding projection', () => {
   it.each(['TextEncoderStream', 'TextDecoderStream'])(
     'aborts the writable side of %s',
     async (name) => {
-      const window = createWindow();
+      const window = browlet.window;
       const stream = Reflect.construct(requireFunction(window, name), []) as object;
       const writable = requireObject(stream, 'writable');
       const aborted = observeBrowletPromise(
@@ -410,7 +411,7 @@ describe('Encoding projection', () => {
   it.each(['TextDecoder', 'TextDecoderStream'])(
     'preserves author exceptions during %s argument conversion',
     (name) => {
-      const window = createWindow();
+      const window = browlet.window;
       const labelError = new RangeError('label conversion');
       const optionsError = new TypeError('options conversion');
       const cases = [
@@ -436,7 +437,7 @@ describe('Encoding projection', () => {
   it.each(['write', 'flush'])(
     'shares one realm-owned decoder error across stream rejections during %s',
     async (phase) => {
-      const { window, reader, writer } = createDecoderStream({ fatal: true });
+      const { window, reader, writer } = createDecoderStream(browlet.window, { fatal: true });
       const read = observeBrowletPromise(
         window, call(reader, 'read') as Promise<unknown>,
       ).catch((reason: unknown) => reason);
@@ -464,7 +465,7 @@ describe('Encoding projection', () => {
   );
 
   it('creates realm-owned encoded bytes and writes into a destination', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(
       requireFunction(window, 'TextEncoder'),
       [],
@@ -482,7 +483,7 @@ describe('Encoding projection', () => {
   });
 
   it('fills a two-byte destination from a longer string of two-byte scalars', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;
     const destination = Reflect.construct(requireFunction(window, 'Uint8Array'), [2]) as Uint8Array;
     expect(call(encoder, 'encodeInto', ['\u0400'.repeat(33), destination])).toEqual({ read: 1, written: 2 });
@@ -490,7 +491,7 @@ describe('Encoding projection', () => {
   });
 
   it('makes the same encoding progress regardless of an unread suffix', () => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;
     for (const suffix of ['', '☺']) {
       const destination = Reflect.construct(requireFunction(window, 'Uint8Array'), [2]) as Uint8Array;
@@ -500,7 +501,7 @@ describe('Encoding projection', () => {
   });
 
   it.each([false, true])('fills remaining ASCII capacity after a surrogate pair (shared=%s)', (shared) => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;
     const buffer = shared ? new SharedArrayBuffer(15) : new ArrayBuffer(15);
     const storage = new Uint8Array(buffer).fill(0xaa);
@@ -538,7 +539,7 @@ describe('Encoding projection', () => {
   });
 
   it.each([false, true])('writes directly into an offset destination (shared=%s)', (shared) => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;
     const buffer = shared ? new SharedArrayBuffer(10) : new ArrayBuffer(10);
     const storage = new Uint8Array(buffer).fill(0xaa);
@@ -553,7 +554,7 @@ describe('Encoding projection', () => {
   });
 
   it('decodes through Browlet Transform Streams', async () => {
-    const { window, reader, writer } = createDecoderStream();
+    const { window, reader, writer } = createDecoderStream(browlet.window);
     const read = observeBrowletPromise(
       window,
       call(reader, 'read') as Promise<unknown>,
@@ -579,7 +580,7 @@ describe('Encoding projection', () => {
   });
 
   it('encodes through Browlet Transform Streams', async () => {
-    const window = createWindow();
+    const window = browlet.window;
     const encoder = Reflect.construct(
       requireFunction(window, 'TextEncoderStream'),
       [],
@@ -630,7 +631,6 @@ describe('Encoding projection', () => {
   });
 
   it('creates encoded bytes in the encoder realm before downstream callbacks', async () => {
-    const browlet = new Browlet({ route: () => '' });
     const completion = browlet.evaluate(async () => {
       const encoder = new TextEncoderStream();
       let seen: Uint8Array | undefined;
@@ -673,8 +673,7 @@ function createWindow(): Window {
   return new Browlet({ route: () => '' }).window;
 }
 
-function createDecoderStream(options: TextDecoderOptions = {}) {
-  const window = createWindow();
+function createDecoderStream(window: Window, options: TextDecoderOptions = {}) {
   const decoder = Reflect.construct(
     requireFunction(window, 'TextDecoderStream'), ['utf-8', options],
   ) as object;

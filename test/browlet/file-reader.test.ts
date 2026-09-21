@@ -9,6 +9,7 @@ import {
   EventTargetImpl, fireEvent,
 } from '../../src/browlet/dom/events/event-target';
 import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
+import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
 import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
@@ -321,33 +322,56 @@ describe('File API §6.2: FileReader reads', () => {
     expect(reader.result).toBe('');
   });
 
-  it('throttles intermediate progress and reports the final byte count', async () => {
+  it.each([
+    {
+      name: 'throttles intermediate progress and reports the final byte count',
+      deliveryTimes: [0, 49, 50, 51, 51],
+      expectedLoaded: [192 * 1024, 192 * 1024 + 1],
+    },
+    {
+      name: 'reports only final progress when buffered chunks arrive together',
+      deliveryTimes: [0, 0, 0, 0, 0],
+      expectedLoaded: [192 * 1024 + 1],
+    },
+  ])('$name', async ({ deliveryTimes, expectedLoaded }) => {
     const context = getContext(createWindow());
-    const size = 128 * 1024 + 1;
-    const source: BlobByteSource = {
-      size,
-      snapshotState: { version: 1 },
-      async read(_start, length) {
-        await new Promise((resolve) => { setTimeout(resolve, 60); });
-        return new Uint8Array(length);
+    const runtime = context.getRuntime();
+    const size = 192 * 1024 + 1;
+    let deliveryIndex = 0;
+    let now = 0;
+    const clock = vi.spyOn(monotonicClock, 'unsafeCurrentTime')
+      .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
+    const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
+      ...runtime,
+      fileReading: {
+        queueTask(steps) {
+          // Three 64 KiB chunks, one final byte, then stream close.
+          // Control delivery time, rather than assuming backing-read delays survive queuing.
+          const time = deliveryTimes[deliveryIndex++]!;
+          return runtime.fileReading.queueTask(() => {
+            now = time;
+            steps();
+          });
+        },
       },
-    };
-    const blob = BlobImpl.create(
-      BlobData.fromSource(source), '', source.snapshotState, context.getRuntime(),
-    );
+    });
     const reader = createReader(context);
     const loaded: number[] = [];
     reader.onprogress = (event) => {
       loaded.push((event as unknown as ProgressEventImpl).loaded);
     };
 
-    const done = waitForLoadEnd(reader);
-    reader.readAsArrayBuffer(blob);
-    await done;
+    try {
+      const done = waitForLoadEnd(reader);
+      reader.readAsArrayBuffer(blob);
+      await done;
 
-    expect(loaded.length).toBeGreaterThanOrEqual(2);
-    expect(loaded.at(-1)).toBe(size);
-    expect(loaded).toEqual([...loaded].sort((a, b) => a - b));
+      expect(deliveryIndex).toBe(deliveryTimes.length);
+      expect(loaded).toEqual(expectedLoaded);
+      expect((reader.result as ArrayBuffer).byteLength).toBe(size);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('rejects a concurrent read while leaving the first read active', async () => {

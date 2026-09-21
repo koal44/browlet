@@ -22,6 +22,11 @@ npm run test:unit
 
 `npm run clean` removes the root `dist/` and `test-results/` folders.
 
+`test:unit` checks the Web IDL type contracts incrementally before running Vitest.
+Use `npm run test:types` to run just those compiler checks. Their fixtures live in
+`test/web-idl/contracts/`; the core and binding projects remain separate so their
+callback declarations do not merge. Build metadata is kept in `dist/.typecheck/`.
+
 ### Node runtime selection
 
 The [compatibility addon](node-compat/README.md) adds shared microtask queues

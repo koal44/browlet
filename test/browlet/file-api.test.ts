@@ -16,6 +16,7 @@ import {
 import {
   structuredSerialize, structuredSerializeForStorage,
 } from '../../src/browlet/scripting/structured-data/serialize';
+import { expectBytesEqual } from '../assertions/bytes';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from './test-runtime';
@@ -184,10 +185,14 @@ describe('File API Blob projection', () => {
 
     expect(chunks.map((chunk) => chunk.byteLength))
       .toEqual([64 * 1024, 64 * 1024, 3]);
-    expect(concatenate(chunks)).toEqual(source);
+    let offset = 0;
+    for (const chunk of chunks) {
+      expectBytesEqual(chunk, source.subarray(offset, offset + chunk.length));
+      offset += chunk.length;
+    }
     chunks[0]?.fill(99);
     const reread = await call(blob, 'bytes') as Uint8Array;
-    expect(Array.from(reread)).toEqual(Array.from(source));
+    expectBytesEqual(reread, source);
   });
 
   it('decodes through a realm-owned TextDecoderStream', async () => {
@@ -561,15 +566,4 @@ function requireObject(object: object, name: string): object {
     throw new Error(`${name} is not an object`);
   }
   return value;
-}
-
-function concatenate(chunks: Uint8Array[]): Uint8Array {
-  const byteLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return bytes;
 }

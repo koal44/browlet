@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { Buffer } from 'node:buffer';
 import { getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
+import { expectBytesEqual } from '../assertions/bytes';
 
 describe('legacy codec chunk processing', () => {
   it('limits ISO-2022-JP ASCII scanning to the supplied byte view', () => {
@@ -27,9 +29,7 @@ describe('legacy codec chunk processing', () => {
   ] as const)('%s preserves a large decoded prefix before an error and resumption', (encoding, pattern, text) => {
     for (const count of [4095, 4096, 4097, 16385]) {
       for (const mode of ['fatal', 'replacement'] as const) {
-        const bytes = new Uint8Array(pattern.length * count + 2);
-        for (let offset = 0; offset < bytes.length - 2; offset += pattern.length) bytes.set(pattern, offset);
-        bytes.set([0xff, 0x5a], bytes.length - 2);
+        const bytes = repeatBytes(pattern, count, [0xff, 0x5a]);
         const decoder = getDecoder(encoding);
         const input = IOQueue.from(bytes);
         const output = new IOQueue<string>();
@@ -56,16 +56,14 @@ describe('legacy codec chunk processing', () => {
     ['windows-1252', 'é', [0xe9]],
   ] as const)('%s preserves encoded output before an unmappable character and resumption', (encoding, text, sequence) => {
     for (const count of [15, 16, 17, 2047, 2048, 2049, 4095, 4096, 4097]) {
+      const prefix = repeatBytes(sequence, count, [0x41]);
       for (const mode of ['fatal', 'html'] as const) {
         const encoder = getEncoder(encoding);
         const input = IOQueue.from(text.repeat(count) + 'A\ue5e5Z');
         const output = new IOQueue<Uint8Array>();
-        const prefix = new Uint8Array(sequence.length * count + 1);
-        for (let offset = 0; offset < prefix.length - 1; offset += sequence.length) prefix.set(sequence, offset);
-        prefix[prefix.length - 1] = 0x41;
         if (mode === 'fatal') {
           expect(encoder.encode(input, output, mode)).toEqual({ error: 0xe5e5 });
-          expect(output.takeBytes()).toEqual(prefix);
+          expectBytesEqual(output.takeBytes(), prefix);
           expect(encoder.encode(input, output, mode)).toBe('finished');
           expect(output.takeBytes()).toEqual(Uint8Array.of(0x5a));
         } else {
@@ -74,7 +72,7 @@ describe('legacy codec chunk processing', () => {
           const expected = new Uint8Array(prefix.length + suffix.length);
           expected.set(prefix);
           expected.set(suffix, prefix.length);
-          expect(output.takeBytes()).toEqual(expected);
+          expectBytesEqual(output.takeBytes(), expected);
         }
         expect(output.readAvailable()).toBe(endOfQueue);
       }
@@ -90,12 +88,12 @@ describe('legacy codec chunk processing', () => {
       const input = IOQueue.from(text.repeat(count) + '\u{10ffff}Z');
       const output = new IOQueue<Uint8Array>();
       expect(getEncoder(encoding).encode(input, output, 'html')).toBe('finished');
-      const prefix = Uint8Array.from({ length: count * sequence.length }, (_, i) => sequence[i % sequence.length]!);
+      const prefix = repeatBytes(sequence, count);
       const suffix = Uint8Array.from('&#1114111;Z', (c) => c.charCodeAt(0));
       const expected = new Uint8Array(prefix.length + suffix.length);
       expected.set(prefix);
       expected.set(suffix, prefix.length);
-      expect(output.takeBytes()).toEqual(expected);
+      expectBytesEqual(output.takeBytes(), expected);
       expect(output.readAvailable()).toBe(endOfQueue);
     }
   });
@@ -104,7 +102,7 @@ describe('legacy codec chunk processing', () => {
     ['gb18030', [0x81, 0x30, 0x20], '\ufffd0 '],
     ['ISO-2022-JP', [0x1b, 0x28, 0x20], '\ufffd( '],
   ] as const)('%s preserves output through repeated malformed recovery', (encoding, pattern, text) => {
-    const bytes = Uint8Array.from({ length: 768 }, (_, i) => pattern[i % pattern.length]!);
+    const bytes = repeatBytes(pattern, 256);
     for (const chunkSize of [bytes.length, 1, 7, 64]) {
       const decoder = getDecoder(encoding);
       const input = new IOQueue<Uint8Array>();
@@ -190,7 +188,7 @@ describe('legacy codec chunk processing', () => {
     expect(output.takeString()).toBe('');
     const expected = new Uint8Array(restored.length + 4096).fill(0x41);
     expected.set(restored);
-    expect(input.takeBytes()).toEqual(expected);
+    expectBytesEqual(input.takeBytes(), expected);
   });
 
   it.each([
@@ -199,6 +197,8 @@ describe('legacy codec chunk processing', () => {
     ['ISO-2022-JP', 'あ', [0x24, 0x22]],
   ] as const)('%s fills output across repeated mappings and expanding references', (encoding, text, pair) => {
     for (const count of [16, 32, 256, 2048, 2049, 8192]) {
+      const bytes = repeatBytes(pair, count);
+      const expected = encoding === 'ISO-2022-JP' ? Uint8Array.of(0x1b, 0x24, 0x42, ...bytes) : bytes;
       for (const mode of ['fatal', 'html'] as const) {
         const encoder = getEncoder(encoding);
         const input = new IOQueue<string>();
@@ -206,9 +206,7 @@ describe('legacy codec chunk processing', () => {
         input.push(text.repeat(count));
         expect(encoder.encode(input, output, mode)).toBe('waiting');
         const prefix = output.takeBytes();
-        const expected = Uint8Array.from({ length: count * 2 }, (_, i) => pair[i % 2]!);
-        expect(prefix).toEqual(encoding === 'ISO-2022-JP'
-          ? Uint8Array.of(0x1b, 0x24, 0x42, ...expected) : expected);
+        expectBytesEqual(prefix, expected);
 
         input.push('\u{10ffff}Z');
         input.push(endOfQueue);
@@ -229,3 +227,11 @@ describe('legacy codec chunk processing', () => {
     }
   });
 });
+
+function repeatBytes(pattern: ArrayLike<number>, count: number, suffix: number[] = []): Uint8Array {
+  const prefixLength = pattern.length * count;
+  const bytes = new Uint8Array(prefixLength + suffix.length);
+  Buffer.from(bytes.buffer, 0, prefixLength).fill(Buffer.from(pattern));
+  bytes.set(suffix, prefixLength);
+  return bytes;
+}

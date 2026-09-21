@@ -12,6 +12,7 @@
   "include": [
     "./**/*.ts"
   ],
+  "exclude": ["./web-idl/contracts"],
   "references": [
     { "path": "../src/infra" },
     { "path": "../src/js-engine" },

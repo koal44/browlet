@@ -6,6 +6,7 @@ import type { TaskScheduling } from '../../src/infra/index';
 import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
 import type { PromiseValue } from '../../src/infra/promises';
 import { createRuntime } from '../js-engine/runtime-fixture';
+import { expectBytesEqual } from '../assertions/bytes';
 
 describe('File reading implementation', () => {
   it.each([
@@ -20,8 +21,8 @@ describe('File reading implementation', () => {
       observe(blob.arrayBuffer()),
     ]);
     expect(decoded).toBe(text);
-    expect(bytes).toEqual(new TextEncoder().encode(text));
-    expect(bufferBytes).toEqual(bytes);
+    expectBytesEqual(bytes, new TextEncoder().encode(text));
+    expectBytesEqual(bufferBytes, bytes);
   });
 
   it.each(['text', 'bytes', 'arrayBuffer'] as const)('retains a %s read-failure request for the binding boundary', async (method) => {

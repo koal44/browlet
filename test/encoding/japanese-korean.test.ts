@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
 import { createRuntime } from '../js-engine/runtime-fixture';
+import { expectBytesEqual } from '../assertions/bytes';
 import { japaneseKoreanDigests } from './gen/japanese-korean-vectors';
 
 const encodings = ['EUC-JP', 'ISO-2022-JP', 'Shift_JIS', 'EUC-KR'] as const;
@@ -42,7 +43,7 @@ describe('Encoding §§12–13: Japanese and Korean codecs', () => {
     }
     const output = new IOQueue<Uint8Array>();
     expect(getEncoder(encoding).encode(IOQueue.from([...mapping.keys()].join('')), output, 'fatal')).toBe('finished');
-    expect(output.takeBytes()).toEqual(Uint8Array.from(expected));
+    expectBytesEqual(output.takeBytes(), Uint8Array.from(expected));
     expect(output.readAvailable()).toBe(endOfQueue);
   });
 

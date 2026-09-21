@@ -285,6 +285,17 @@ export default defineConfig(
   },
 
   {
+    files: ['test/web-idl/contracts/**/*.ts'],
+    extends: [tseslint.configs.disableTypeChecked],
+    // These compile-only examples deliberately contain invalid calls and unused assignments.
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
+    },
+  },
+
+  {
     files: ['scripts/**/*.{js,mjs}', 'src/**/scripts/**/*.{js,mjs}', 'node-compat/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
