@@ -17,6 +17,7 @@ import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { WindowImpl } from '../../browsing/window/window';
+import type { Realm } from '../../scripting/realm';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import {
   createPolicyContainer, type PolicyContainer,
@@ -772,7 +773,7 @@ export const documentIDL = defineInterface({
           return ctx.construct(implClass, ...argumentsList);
         },
       })),
-      atArg(1, (ctx) => createStyleletRuntime(ctx.getRuntime())),
+      atArg<Realm>(1, (ctx) => createStyleletRuntime(ctx.realm, ctx.getRuntime())),
     ],
   }),
   members: [

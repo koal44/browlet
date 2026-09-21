@@ -144,6 +144,7 @@ export const defaultRuntimeCaps: RuntimeCaps = {
     });
   }),
   runInParallel: (steps) => { setTimeout(steps, 0); },
+  queueTask: (steps) => { setTimeout(steps, 0); },
   createDOMException: (name, message = '') => new DOMException(message, name),
 };
 

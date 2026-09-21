@@ -129,7 +129,7 @@ export class BlobData {
         });
       }
     };
-    scheduling.runInParallel(() => { void readChunks(); });
+    runtime.runInParallel(() => { void readChunks(); });
     return stream;
   }
 

@@ -17,6 +17,8 @@ export type RuntimeContext = {
   };
 
   queueMicrotask(steps: () => void): void;
+  /** Schedule background steps without invoking them inline or entering an owner task. */
+  runInParallel: (steps: () => void) => void;
   createAbortController(): AbortControllerCapability;
   /** Create a DOM dependent signal in the owner's realm. */
   createDependentAbortSignal(signals: AbortSignalCapability[]): AbortSignalCapability;
@@ -34,7 +36,6 @@ export type RuntimeContext = {
 
 export type NetworkingTasks = {
   queueGlobalTask: (global: GlobalObject, steps: () => void) => void;
-  runInParallel: (steps: () => void) => void;
 };
 
 export type AbortControllerCapability = {

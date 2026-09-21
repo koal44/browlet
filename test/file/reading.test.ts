@@ -12,7 +12,7 @@ describe('File reading implementation', () => {
     { name: 'empty input', text: '' },
     { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
   ])('reads bytes and text for $name', async ({ text }) => {
-    const runtime = { ...createRuntime(), fileReading: scheduling };
+    const runtime = { ...createRuntime(), runInParallel: queueMicrotask, fileReading: scheduling };
     const blob = new BlobImpl([text], {}, runtime);
     const [decoded, bytes, bufferBytes] = await Promise.all([
       observe(blob.text()),
@@ -30,7 +30,7 @@ describe('File reading implementation', () => {
       snapshotState: null,
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
-    const runtime = { ...createRuntime(), fileReading: scheduling };
+    const runtime = { ...createRuntime(), runInParallel: queueMicrotask, fileReading: scheduling };
     const blob = BlobImpl.create(data, '', null, runtime);
     const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
@@ -62,5 +62,4 @@ const scheduling: TaskScheduling = {
     const task = setImmediate(steps);
     return { remove: () => { clearImmediate(task); } };
   },
-  runInParallel: queueMicrotask,
 };

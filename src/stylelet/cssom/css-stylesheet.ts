@@ -174,14 +174,26 @@ export class CSSStyleSheetImpl
     this.#disallowModification = true;
 
     const result = this.runtime.promises.withResolvers<CSSStyleSheetImpl>();
+    const reject = (error: unknown): void => {
+      this.#disallowModification = false;
+      result.reject(error);
+    };
+    // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
+    // Parse in parallel; return to the owner before changing rules or settling the promise.
     this.runtime.runInParallel(() => {
       try {
-        this.replaceRules(text);
-        result.resolve(this);
+        const rules = this.parseRules(text);
+        this.runtime.queueTask(() => {
+          try {
+            this.replaceInterpretedStyleSheet(rules);
+            this.#disallowModification = false;
+            result.resolve(this);
+          } catch (error) {
+            reject(error);
+          }
+        });
       } catch (error) {
-        result.reject(error);
-      } finally {
-        this.#disallowModification = false;
+        this.runtime.queueTask(() => { reject(error); });
       }
     });
     return result.promise;
@@ -195,7 +207,7 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.replaceRules(text);
+    this.replaceInterpretedStyleSheet(this.parseRules(text));
   }
 
   // Internal operations ----------------------------------------------------
@@ -251,15 +263,15 @@ export class CSSStyleSheetImpl
 
   // Private helpers ---------------------------------------------------------
 
-  private replaceRules(text: string): void {
-    this.replaceInterpretedStyleSheet(parseStylesheet(text, {
+  private parseRules(text: string): InterpretedStyleSheet {
+    return parseStylesheet(text, {
       ...(this.#interpretedStyleSheet.location === undefined
         ? {}
         : { location: this.#interpretedStyleSheet.location }),
       ...(this.#interpretedStyleSheet.baseUrl === undefined
         ? {}
         : { baseUrl: this.#interpretedStyleSheet.baseUrl }),
-    }));
+    });
   }
 
   private replaceInterpretedStyleSheet(

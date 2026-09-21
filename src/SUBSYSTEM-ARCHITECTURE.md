@@ -155,13 +155,13 @@ Promise implementation with native scheduling.
 
 Stylelet's options contain `document`, `element`, `tree`, and `runtime`
 capabilities. Its document `StyleletContext` normalizes DOM callbacks and
-retains the selected `RuntimeCaps` for promises, deferred execution, and DOM
+retains the selected `RuntimeCaps` for promises, background execution, task delivery, and DOM
 exception creation; it does not retain the options object. Standalone construction
 selects one complete native runtime provider when none is supplied. Cascades and
 stylesheets receive that existing context instead of a separate runtime argument;
 declarations and media lists receive the owner's runtime capabilities directly.
-Browlet composes it from the Document owner's existing Promise facility, HTML's
-cooperative parallel scheduling, and neutral DOMException requests. Initial,
+Browlet composes it from the Document owner's existing Promise facility, shared
+background scheduling, DOM-manipulation task delivery, and neutral DOMException requests. Initial,
 navigated, and author-constructed Documents supply those capabilities at construction.
 This embedding contract does not expose Binding Context or require standalone
 hosts to implement Browlet's unrelated runtime facilities.
@@ -334,7 +334,7 @@ dependencies through the Runtime Context below. Track the remaining migration in
 ### Runtime Context
 
 `RuntimeContext` groups the facilities composed for one owning realm/global:
-Promises, buffer allocation, JSON parsing/serialization, microtasks, task delivery,
+Promises, buffer allocation, JSON parsing/serialization, microtasks, background execution, task delivery,
 abort-controller and dependent-signal construction, time coarsening,
 structured cloning/serialization/deserialization, and immutable
 native-line-ending configuration.
@@ -382,7 +382,12 @@ serialization failures while preserving exceptions thrown by author code.
 Byte-backed Fetch bodies already have their bytes and queue a networking task
 directly on their owning global to allocate the JavaScript chunk and update
 the stream. The task's checkpoint then runs stream reactions; no separate
-background turn is needed. `runInParallel` itself does not enter an HTML task.
+background turn is needed. `runtime.runInParallel()` schedules background steps
+without entering an HTML task or performing the owner's microtask checkpoint.
+File-reading and networking task delivery remain separate facilities. Background
+I/O returns through those facilities before updating owner state or settling
+page-visible results. Parallel queues use the same background scheduler without
+requiring a Window task destination.
 Multipart extraction and Blob streaming use `BlobData.stream(runtime)`;
 backing data retains no runtime and each stream uses its caller's runtime.
 Blob constructor part processing stays on `BlobImpl`, which owns the part and
@@ -488,10 +493,10 @@ AbortController owned by DOM/Browlet, or queueing work on HTML's event loop.
 The provider retains ownership of the behavior; the consumer retains ownership
 of its own state and algorithms.
 
-File reading demonstrates why these roles must stay separate. Running read
-steps in parallel and queueing results on File's task source form one narrow
-HTML scheduling capability. Once integration selects the global and task source,
-consumers use Infra's shared `TaskScheduling` and removable `TaskHandle` contracts.
+File reading demonstrates why these roles must stay separate. The runtime's
+shared `runInParallel()` starts background reads. Once integration selects the
+global and file-reading task source, Infra's `TaskScheduling` supplies only task
+delivery, with removable `TaskHandle` results.
 FileReader retains that dependency; EventTarget owns synchronous dispatch, not
 task scheduling. The underlying platform's native line ending is
 an immutable Runtime Context value, while File's wall-clock default is the

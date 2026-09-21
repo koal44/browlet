@@ -1,7 +1,9 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { unwrap, getRelevantRealm } from '../../../src/browlet/bindings';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 
 describe('Stylelet runtime integration', () => {
   it.each(['initial', 'navigated', 'constructed'] as const)(
@@ -16,28 +18,35 @@ describe('Stylelet runtime integration', () => {
       const styles = implementation.getCSSEngine();
       const sheet = styles.createStyleSheet();
       const result = sheet.replace('main { color: red }');
-      const realm = getRelevantRealm(document);
-      let completed = false;
-      let failure: unknown;
-      result.observe((value) => { completed = value === sheet; }, (error) => { failure = error; });
-
-      // Enter an actual Node task between HTML checkpoints; Vitest's own
-      // Promise continuations are outside Browlet's execution stack.
-      await new Promise<void>((resolve, reject) => {
-        setImmediate(() => {
-          try {
-            realm.agent.eventLoop.performMicrotaskCheckpoint();
-            resolve();
-          } catch (error) {
-            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve any checkpoint failure for the test runner.
-            reject(error);
-          }
-        });
-      });
-      expect(failure).toBeUndefined();
-      expect(completed).toBe(true);
+      const completed = new Promise((resolve, reject) => { result.observe(resolve, reject); });
+      await expect(completed).resolves.toBe(sheet);
       expect(sheet.cssRules.length).toBe(1);
       expect(() => sheet.replaceSync('')).not.toThrow();
     },
   );
+
+  it('delivers stylesheet replacement completion without an unrelated task or manual checkpoint', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browlet.document);
+    const sheet = document.getCSSEngine().createStyleSheet();
+    const realm = getRelevantRealm(browlet.window);
+    const started = Promise.withResolvers<void>();
+    let completed = false;
+    let failure: unknown;
+    realm.queueGlobalTask(domManipulationTaskSource, () => {
+      sheet.replace('main { color: red }').observe(
+        () => { completed = true; }, (error) => { failure = error; },
+      );
+      started.resolve();
+    });
+
+    // Start inside a real HTML task, then allow background work and delivery.
+    // No additional page script or test checkpoint should be needed.
+    await started.promise;
+    await nextTurn();
+    await nextTurn();
+    expect(sheet.cssRules.length).toBe(1);
+    expect(failure).toBeUndefined();
+    expect(completed).toBe(true);
+  });
 });

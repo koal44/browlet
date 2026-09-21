@@ -656,6 +656,10 @@ unrelated AsyncLocalStorage channels, without changing Promise routing. Node
 backend completion returns through an explicit destination task. See
 [JS Engine](./js-engine/README.md) for the runtime operations.
 
+`RuntimeContext.runInParallel()` schedules background steps without entering
+an owner task. File-reading and networking facilities deliver results back to
+the selected HTML event loop, which owns the subsequent microtask checkpoint.
+
 Unmigrated native implementation chains still run on Node. Projecting their final
 result does not move the preceding work into HTML's checkpoint. Their delivery
 failures remain migration work; do not restore ambient routing or pump Node's

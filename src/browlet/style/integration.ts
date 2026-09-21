@@ -6,11 +6,18 @@ import type { TreeScope } from '../../stylelet/engine/tree-scope';
 import type { RuntimeCaps as StyleletRuntimeCaps } from '../../stylelet/stylelet';
 import type { RuntimeContext } from '../../js-engine/runtime-context';
 import { createDOMException } from '../../web-idl/index';
-import { runInParallel } from '../integration/scripting';
+import type { Realm } from '../scripting/realm';
+import { domManipulationTaskSource } from '../scripting/tasks';
 
-/** Compose Stylelet with this owner's Promise queue and neutral exception requests. */
-export function createStyleletRuntime(runtime: RuntimeContext): StyleletRuntimeCaps {
-  return { promises: runtime.promises, runInParallel, createDOMException };
+/** Compose Stylelet with this owner's task delivery, promises, and exception requests. */
+export function createStyleletRuntime(realm: Realm, runtime: RuntimeContext): StyleletRuntimeCaps {
+  return {
+    promises: runtime.promises,
+    runInParallel: runtime.runInParallel,
+    // CSSOM leaves the source unspecified; DOM manipulation delivers stylesheet updates.
+    queueTask: (steps) => { realm.queueGlobalTask(domManipulationTaskSource, steps); },
+    createDOMException,
+  };
 }
 
 export class ElementCSSInlineStyleMixin {

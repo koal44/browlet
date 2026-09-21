@@ -132,10 +132,11 @@ describe('File API §6.2: FileReader reads', () => {
     const destination = createWindow();
     const queues: (() => void)[][] = [[], []];
     const spies = [source, destination].flatMap((window, index) => {
-      const scheduling = getContext(window).getRuntime().fileReading;
+      const runtime = getContext(window).getRuntime();
+      const scheduling = runtime.fileReading;
       const tasks = queues[index]!;
       return [
-        vi.spyOn(scheduling, 'runInParallel').mockImplementation((steps) => { steps(); }),
+        vi.spyOn(runtime, 'runInParallel').mockImplementation((steps) => { steps(); }),
         vi.spyOn(scheduling, 'queueTask').mockImplementation((steps) => {
           tasks.push(steps);
           return {

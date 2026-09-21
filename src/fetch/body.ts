@@ -103,7 +103,7 @@ export class FetchBody {
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
     const runtime = this.#runtime;
-    const destination = taskDestination ?? new ParallelQueue(runtime.networking.runInParallel);
+    const destination = taskDestination ?? new ParallelQueue(runtime.runInParallel);
     const reader = this.stream.getDefaultReader();
     readLoop();
 
@@ -136,7 +136,7 @@ export class FetchBody {
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
     const runtime = this.#runtime;
-    const destination = taskDestination ?? new ParallelQueue(runtime.networking.runInParallel);
+    const destination = taskDestination ?? new ParallelQueue(runtime.runInParallel);
     const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
       queueFetchTask(() => processBody(bytes), destination, runtime);
     const errorSteps = (error?: unknown) =>

@@ -73,6 +73,8 @@ export type TreeCaps = {
 export type RuntimeCaps = {
   promises: Promises;
   runInParallel(steps: () => void): void;
+  /** Deliver stylesheet updates on the owner's task queue. */
+  queueTask(steps: () => void): void;
   createDOMException(name: DOMExceptionName, message?: string): DOMException;
 };
 

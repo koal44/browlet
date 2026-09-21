@@ -20,12 +20,14 @@ describe('Stylelet runtime capabilities', () => {
     expect(() => sheet.replaceSync('')).not.toThrow();
   });
 
-  it('waits for runtime work and keeps a concurrent replacement from changing the result', async () => {
+  it('waits for background work and owner delivery before applying a replacement', async () => {
     const document = new JSDOM().window.document;
     const work: (() => void)[] = [];
+    const tasks: (() => void)[] = [];
     const runtime: RuntimeCaps = {
       ...defaultRuntimeCaps,
       runInParallel: (steps) => { work.push(steps); },
+      queueTask: (steps) => { tasks.push(steps); },
     };
     const sheet = new Stylelet(document, { runtime }).createStyleSheet();
     const completed = observe(sheet.replace('.first {} .second {}'));
@@ -36,6 +38,10 @@ describe('Stylelet runtime capabilities', () => {
     expect(sheet.cssRules.length).toBe(0);
     expect(() => sheet.insertRule('.wrong {}')).toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
     work.shift()!();
+    expect(sheet.cssRules.length).toBe(0);
+    expect(() => sheet.replaceSync('')).toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
+    expect(tasks).toHaveLength(1);
+    tasks.shift()!();
     await expect(completed).resolves.toBe(sheet);
     await rejected;
     expect(sheet.cssRules.length).toBe(2);

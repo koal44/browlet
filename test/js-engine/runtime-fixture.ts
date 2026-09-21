@@ -13,16 +13,15 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
+    runInParallel: (steps) => { setImmediate(steps); },
     fileReading: {
       queueTask(steps) {
         const task = setImmediate(steps);
         return { remove: () => { clearImmediate(task); } };
       },
-      runInParallel: (steps) => { setImmediate(steps); },
     },
     networking: {
       queueGlobalTask: (_global, steps) => { setImmediate(steps); },
-      runInParallel: (steps) => { setImmediate(steps); },
     },
     // Tests of timing policy use Browlet's actual runtime or supply their own clock.
     timing: { coarsenTime: (timestamp) => timestamp },

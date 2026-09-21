@@ -29,9 +29,9 @@ export function createWindowRuntime(
     promises: realm.promises,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
+    runInParallel,
     fileReading: {
       queueTask: (steps) => realm.queueGlobalTask(fileReadingTaskSource, steps),
-      runInParallel,
     },
     networking: fetchTaskScheduling,
     timing: { coarsenTime },

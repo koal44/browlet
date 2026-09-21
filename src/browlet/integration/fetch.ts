@@ -5,7 +5,6 @@ import type { NetworkingTasks } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/index';
 import { Realm } from '../scripting/realm';
 import { networkingTaskSource } from '../scripting/tasks';
-import { runInParallel } from './scripting';
 import { InternalError } from '../../infra/internal-error';
 
 /** Realize Fetch's fallback error before delivering the reason into the target realm. */
@@ -26,7 +25,6 @@ export const queueGlobalFetchTask: NetworkingTasks['queueGlobalTask'] = (global,
 
 export const fetchTaskScheduling: NetworkingTasks = {
   queueGlobalTask: queueGlobalFetchTask,
-  runInParallel,
 };
 
 export const fetchCapabilities = [

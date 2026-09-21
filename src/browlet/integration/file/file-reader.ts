@@ -183,7 +183,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const { fileReading, promises } = this.#runtime;
+    const { fileReading, promises, runInParallel } = this.#runtime;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -291,7 +291,7 @@ export class FileReaderImpl extends EventTargetImpl {
       });
     };
 
-    fileReading.runInParallel(readNextChunk);
+    runInParallel(readNextChunk);
   }
 
   #isLoading(): boolean {
