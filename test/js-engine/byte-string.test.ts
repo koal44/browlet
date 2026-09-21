@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { runInNewContext } from 'node:vm';
 import { codeUnitsToString, isomorphicDecode, isomorphicEncode, writeUTF8Into } from '../../src/js-engine/byte-string';
+import { InternalError } from '../../src/infra/internal-error';
 
 describe('UTF-8 destination writing', () => {
   it.each(['\u00e9', '\u0400', '\u07ff'])('fills destinations from two-byte character %j', (character) => {
@@ -70,6 +71,6 @@ describe('Infra isomorphic byte/string conversion', () => {
   });
 
   it.each(['\u0100', '😀', '\ud800'])('rejects non-isomorphic input %j instead of truncating it', (text) => {
-    expect(() => isomorphicEncode(text)).toThrow(TypeError);
+    expect(() => isomorphicEncode(text)).toThrow(InternalError);
   });
 });

@@ -6,4 +6,5 @@ export {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from './namespaces';
 export { toScalarValueString, type ScalarValueString } from './strings';
+export { InternalError } from './internal-error';
 export type { TaskHandle, TaskScheduling } from './scheduling';

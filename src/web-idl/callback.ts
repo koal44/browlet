@@ -15,6 +15,7 @@ import { getArgumentDefinition } from './overload';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
+import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.11 Callback interfaces — call a user object's operation.
 export function callUserObjectOperation(
@@ -154,7 +155,7 @@ export function convertWebIDLArguments(
 
     const definition = getArgumentDefinition(definitions, index);
     if (!definition) {
-      throw new Error(`Web IDL argument ${index} has no declared type`);
+      throw new InternalError(`Web IDL argument ${index} has no declared type`);
     }
     result.push(convertToJavaScript(
       value,
@@ -213,7 +214,7 @@ function getCallbackOperation(
   const operation = value.definition.members.find((member) =>
     member.kind === 'operation' && member.name === operationName);
   if (!operation || operation.kind !== 'operation') {
-    throw new Error(
+    throw new InternalError(
       `Callback interface ${value.definition.name} has no ${operationName} operation`,
     );
   }
@@ -228,19 +229,19 @@ function validateExceptionBehavior(
 ): void {
   if (getPromiseReturnType(returnType, context)) {
     if (exceptionBehavior) {
-      throw new Error('A promise callback cannot have exception behavior');
+      throw new InternalError('A promise callback cannot have exception behavior');
     }
     return;
   }
   if (!exceptionBehavior) {
-    throw new Error('A non-promise callback requires exception behavior');
+    throw new InternalError('A non-promise callback requires exception behavior');
   }
   const type = getUnannotatedType(returnType, context.binding.definitions);
   const canReport = type.kind === 'simple' && (
     type.name === 'undefined' || type.name === 'any'
   );
   if (exceptionBehavior === 'report' && !canReport) {
-    throw new Error(
+    throw new InternalError(
       'Only undefined- and any-returning callbacks can report exceptions',
     );
   }
@@ -262,7 +263,7 @@ function rejectPromiseReturn(
   );
   const promise = convertToIDL(rejected, returnType, context);
   if (!isIDLPromiseRecord(promise)) {
-    throw new Error('Promise callback did not produce an IDL promise');
+    throw new InternalError('Promise callback did not produce an IDL promise');
   }
   return promise;
 }

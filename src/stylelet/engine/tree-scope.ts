@@ -5,6 +5,7 @@ import {
   createObservableArray, type ObservableArrayHandle,
 } from '../../infra/observable-array';
 import type { CascadeEngine } from './cascade-engine';
+import { TypeError } from '../../js-engine/exceptions';
 
 export class TreeScope {
   #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();

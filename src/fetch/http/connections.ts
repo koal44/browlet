@@ -4,6 +4,7 @@ import { obtainURLOrigin, type URLRecord } from '../../url/url';
 import type { WebTransportHash } from '../request';
 import type { ConnectionTimingInfo } from '../timing';
 import { networkPartitionKeysEqual, type NetworkPartitionKey } from './network-partition';
+import { InternalError } from '../../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#concept-connection-pool */
 export class ConnectionPool {
@@ -16,7 +17,7 @@ export class ConnectionPool {
     webTransportHashes: WebTransportHash[] = [],
   ): Connection | null {
     if (newConnection === 'no') {
-      if (webTransportHashes.length !== 0) throw new Error('Certificate hashes require a new connection');
+      if (webTransportHashes.length !== 0) throw new InternalError('Certificate hashes require a new connection');
       const origin = obtainURLOrigin(url);
       for (const connection of this.connections) {
         if (networkPartitionKeysEqual(connection.key, key) && areSameOrigin(connection.origin, origin) &&
@@ -27,7 +28,7 @@ export class ConnectionPool {
     }
 
     // Proxy selection, establishment, and timing observations belong to the transport.
-    throw new Error('New connection establishment is not implemented');
+    throw new InternalError('New connection establishment is not implemented');
   }
 }
 
@@ -58,5 +59,5 @@ export function resolveOrigin(_key: NetworkPartitionKey, origin: TupleOrigin): I
   }
 
   // The transport supplies external resolution and any partitioned DNS cache.
-  throw new Error('External origin resolution is not implemented');
+  throw new InternalError('External origin resolution is not implemented');
 }

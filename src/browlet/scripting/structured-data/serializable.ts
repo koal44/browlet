@@ -3,6 +3,7 @@ import {
 } from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import type { SerializedRecord, StructuredDataRecord } from './records';
+import { InternalError } from '../../../infra/internal-error';
 
 export const serializable = defineCapability<SerializableSteps>(
   'Serializable',
@@ -44,7 +45,7 @@ function requireMarker<Realm>(
     (attribute) => attribute.kind !== 'raw' && attribute.name === name,
   ) ?? [];
   if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
-    throw new TypeError(
+    throw new InternalError(
       `${definition.name} must declare exactly one [${name}] marker`,
     );
   }

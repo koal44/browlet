@@ -14,6 +14,7 @@ import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
 import { serializeInteger, type FetchEnvironmentSettingsObject, type FetchEnvironment } from './infrastructure';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
+import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
 export class FetchRequest {
@@ -93,7 +94,7 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#concept-request-tainted-origin */
   get redirectTaint(): 'same-origin' | 'same-site' | 'cross-site' {
-    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
     let lastURL: URLRecord | null = null;
     let taint: 'same-origin' | 'same-site' = 'same-origin';
     for (const url of this.urlList) {
@@ -116,7 +117,7 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#serializing-a-request-origin */
   serializeOrigin(): string {
-    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
     return this.redirectTaint === 'same-origin' ? serializeOrigin(this.origin) : 'null';
   }
 
@@ -143,14 +144,14 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */
   addRangeHeader(first: number | bigint, last?: number | bigint): void {
-    if (last !== undefined && first > last) throw new Error('Range start exceeds its end');
+    if (last !== undefined && first > last) throw new InternalError('Range start exceeds its end');
     const value = `bytes=${serializeInteger(first)}-${last === undefined ? '' : serializeInteger(last)}`;
     this.headerList.append('Range', value);
   }
 
   /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
   crossOriginEmbedderPolicyAllowsCredentials(): boolean {
-    if (this.origin === 'client') throw new Error('Fetch request origin is still "client"');
+    if (this.origin === 'client') throw new InternalError('Fetch request origin is still "client"');
     if (this.mode !== 'no-cors' || this.client === null) return true;
     if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
     return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
@@ -288,7 +289,7 @@ export class RequestImpl {
   get duplex(): RequestDuplex { return 'half'; }
 
   clone(): RequestImpl {
-    throw new Error('Request.clone and dependent abort signals are not implemented');
+    throw new InternalError('Request.clone and dependent abort signals are not implemented');
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -393,7 +394,7 @@ export const requestIDL = defineInterface({
     ctor([
       arg('input', reference('RequestInfo')),
       arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
-    ], { invoke() { throw new Error('Request construction from RequestInfo is not implemented'); } }),
+    ], { invoke() { throw new InternalError('Request construction from RequestInfo is not implemented'); } }),
     roAttr('method', idlType.ByteString),
     roAttr('url', idlType.USVString),
     roAttr('headers', reference('Headers'), xattr('SameObject')),

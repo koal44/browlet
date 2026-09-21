@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { runInNewContext } from 'node:vm';
 
 import { createObservableArray } from '../../src/infra/observable-array';
 
@@ -120,6 +121,13 @@ describe('Web IDL observable array', () => {
     expect(() => observable.replace([2, 'invalid']))
       .toThrow('Expected a number');
     expect(observable.value).toEqual([1]);
+  });
+
+  it.each([null, {}])('uses the supplied TypeError for a non-iterable replacement: %s', (value) => {
+    const TypeError_ = runInNewContext('TypeError') as typeof TypeError;
+    const observable = createObservableArray({ convert: Number, typeError: TypeError_ });
+
+    expect(() => observable.replace(value)).toThrow(TypeError_);
   });
 
   it('enforces the indexed and length property descriptors', () => {

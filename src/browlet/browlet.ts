@@ -26,6 +26,7 @@ import { requestNodeEventLoopTurn } from './integration/scripting';
 import { PageEvaluation } from './automation/evaluation';
 import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
+import { InternalError } from '../infra/internal-error';
 
 export class Browlet {
   #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
@@ -53,7 +54,7 @@ export class Browlet {
       this.#traversable.activeDocument === null ||
       this.#traversable.activeWindow === null
     ) {
-      throw new Error('Initial top-level traversable is incomplete');
+      throw new InternalError('Initial top-level traversable is incomplete');
     }
     this.#evaluation = new PageEvaluation(getRelevantRealm(this.window));
   }
@@ -61,7 +62,7 @@ export class Browlet {
   get document(): Document {
     const document = this.#traversable.activeDocument;
     if (document === null) {
-      throw new Error('Top-level traversable has no active Document');
+      throw new InternalError('Top-level traversable has no active Document');
     }
     return project(document) as StampedPlatformObject<Document>;
   }
@@ -69,7 +70,7 @@ export class Browlet {
   get window(): WindowProxy {
     const browsingContext = this.#traversable.activeBrowsingContext;
     if (browsingContext === null) {
-      throw new Error('Top-level traversable has no active browsing context');
+      throw new InternalError('Top-level traversable has no active browsing context');
     }
     return browsingContext.windowProxy;
   }
@@ -90,6 +91,7 @@ export class Browlet {
   async exposeFunction<Arguments extends unknown[], Result>(
     name: string, callback: (...args: Arguments) => Result,
   ): Promise<void> {
+    // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
     if (this.#exposures.has(name)) throw new Error(`Host function ${name} is already exposed`);
     const invoke = (args: unknown[]) => callback(...args as Arguments);
     this.#evaluation.exposeFunction(name, invoke);
@@ -209,6 +211,7 @@ function getTextContent(element: ElementImpl): string {
 
 function requireURLRecord(input: string) {
   const record = parseURL(input).url;
+  // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
   if (record === null) throw new Error(`Could not parse ${input}`);
   return record;
 }

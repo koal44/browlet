@@ -2,6 +2,7 @@ import type { DocumentImpl } from '../../dom/nodes/document';
 import type { PolicyContainer } from '../policy/container';
 import type { Origin } from '../../../url/origin';
 import { parseURL, type URLRecord } from '../../../url/url';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * A document state holds the information needed to present or recreate one
@@ -67,12 +68,12 @@ export function createSessionHistoryEntry(
 ): SessionHistoryEntry {
   const document = documentState.document;
   if (document === null) {
-    throw new Error('An initial session history entry requires a Document');
+    throw new InternalError('An initial session history entry requires a Document');
   }
 
   const url = parseURL(document.URL).url;
   if (url === null) {
-    throw new Error('A Document must have a valid URL');
+    throw new InternalError('A Document must have a valid URL');
   }
 
   // The History and Navigation APIs will add their serialized-state,

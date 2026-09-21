@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
 import type { CollectionIteratorKind, GlobalPrototypeKind, JSFunction } from './realm';
 import type { JSJobCallback, NodeContext } from './runtime';
+import { InternalError } from '../infra/internal-error';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
@@ -55,10 +56,10 @@ export class NodeAPI {
   #loadMethod<Name extends keyof AddonMethods>(backend: object, name: Name): AddonMethods[Name] {
     const method: unknown = Reflect.get(backend, name);
     if (method === undefined) {
-      return () => { throw new Error(`Node backend does not provide ${name}`); };
+      return () => { throw new InternalError(`Node backend does not provide ${name}`); };
     }
     if (typeof method !== 'function') {
-      throw new Error(`Node backend ${name} is not callable`);
+      throw new InternalError(`Node backend ${name} is not callable`);
     }
     const bound = method.bind(backend) as AddonMethods[Name];
     this.#methods[name] = bound;
@@ -127,11 +128,11 @@ function loadNodeApi(): object {
   const addonPath = process.env.BROWLET_NODE_ADDON;
   if (addonPath === undefined) return vm;
   if (!isAbsolute(addonPath)) {
-    throw new Error('BROWLET_NODE_ADDON must be an absolute module path');
+    throw new InternalError('BROWLET_NODE_ADDON must be an absolute module path');
   }
   const api: unknown = createRequire(process.execPath)(addonPath);
   if (typeof api !== 'object' || api === null) {
-    throw new Error('BROWLET_NODE_ADDON must export a Node backend');
+    throw new InternalError('BROWLET_NODE_ADDON must export a Node backend');
   }
   return api;
 }

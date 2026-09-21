@@ -430,7 +430,7 @@ for a genuine dependency edge or composition decision.
 
 Likewise, group related foundations by their consumers and dependency direction.
 `infra/` contains Infra Standard algorithms and small realm-neutral foundations
-such as text cursors, general utilities, and HTML's parallel queue. Preserve
+such as text cursors, general utilities, `InternalError` diagnostics, and HTML's parallel queue. Preserve
 each algorithm's specification provenance; consumers supply host scheduling
 and retain their own policy and lifecycle.
 See the [Infra translation notes](./infra/NOTES.md) for representation and

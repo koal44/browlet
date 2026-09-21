@@ -9,6 +9,7 @@ import {
   createIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
 import { defineDataProperty } from './property';
+import { InternalError } from '../infra/internal-error';
 
 /** Converted iteration steps supplied to implementation algorithms. */
 export type AsyncSequenceValue<T> = {
@@ -59,7 +60,7 @@ export function convertJavaScriptValueToAsyncSequence(
 // Web IDL §3.2.22 Async sequences — convert an async sequence to a JavaScript value.
 export function convertAsyncSequenceToJavaScript(value: unknown): object {
   if (!isIDLAsyncSequence(value)) {
-    throw new Error('IDL async sequence is not an async sequence value');
+    throw new InternalError('IDL async sequence is not an async sequence value');
   }
   return value.object;
 }

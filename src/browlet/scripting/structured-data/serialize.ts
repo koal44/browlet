@@ -27,6 +27,7 @@ import {
 } from './records';
 import { serializable } from './serializable';
 import { DetachedTransferableStamper } from './transferable';
+import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.4, StructuredSerialize. */
 export function structuredSerialize(
@@ -120,7 +121,7 @@ export function structuredSerializeInternal(
       );
       if (!isBufferSerializedRecord(bufferSerialized) &&
         bufferSerialized.type !== 'transfer-placeholder') {
-        throw new Error('A buffer view did not serialize its backing buffer');
+        throw new InternalError('A buffer view did not serialize its backing buffer');
       }
       serialized = {
         type: 'ArrayBufferView',
@@ -165,7 +166,7 @@ export function structuredSerializeInternal(
     } else if (Array.isArray(value)) {
       const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
       if (typeof length !== 'number') {
-        throw new Error('An Array exotic object has no numeric length');
+        throw new InternalError('An Array exotic object has no numeric length');
       }
       serialized = { type: 'Array', length, properties: [] };
       deep = true;
@@ -204,7 +205,7 @@ export function structuredSerializeInternal(
       memory,
     );
   } else {
-    throw new Error(`Unsupported deep record ${serialized.type}`);
+    throw new InternalError(`Unsupported deep record ${serialized.type}`);
   }
 
   return serialized;
@@ -243,7 +244,7 @@ function serializeBuffer(
       return throwDOMException('DataCloneError');
     }
     const agentCluster = ctx.realm.agent.agentCluster;
-    if (!agentCluster) throw new Error('Realm agent has no agent cluster');
+    if (!agentCluster) throw new InternalError('Realm agent has no agent cluster');
     return maxByteLength === undefined
       ? {
         type: 'SharedArrayBuffer',

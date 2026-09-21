@@ -1,6 +1,7 @@
 import type { RuntimeContext } from '../js-engine/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { DOMExceptionNames, createDOMException } from '../web-idl/index';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * Immutable backing data for File API Blob objects.
@@ -18,7 +19,7 @@ export class BlobData {
     this.#size = 0;
     for (const segment of segments) {
       if (segment.length > Number.MAX_SAFE_INTEGER - this.#size) {
-        throw new RangeError('Blob byte length exceeds JavaScript integer precision');
+        throw new InternalError('Blob byte length exceeds JavaScript integer precision');
       }
       this.#size += segment.length;
     }
@@ -152,7 +153,7 @@ export class BlobData {
         // eslint-disable-next-line no-restricted-syntax -- Byte assembly stays on Node's queue without updating platform state.
         const chunk = await segment.source.read(sourceStart, sourceLength);
         if (chunk.length !== sourceLength) {
-          throw new RangeError(
+          throw new InternalError(
             'A Blob byte source must return the complete requested range',
           );
         }
@@ -186,7 +187,7 @@ export class BlobData {
         segment.length,
       );
       if (!source || source.size !== segment.length) {
-        throw new Error(
+        throw new InternalError(
           'The Blob byte source cannot be serialized for storage',
         );
       }
@@ -214,6 +215,7 @@ export type BlobReadFailureReason =
   | 'FileLock';
 
 /** A semantic File API failure; Browlet maps it to a realm DOMException. */
+// eslint-disable-next-line no-restricted-globals -- A backing read failure is translated to a File API DOMException, not an implementation failure.
 export class BlobReadFailure extends Error {
   constructor(
     public reason: BlobReadFailureReason,
@@ -265,7 +267,7 @@ function requireRange(size: number, start: number, length: number): void {
     !Number.isSafeInteger(length) || length < 0 ||
     start > size - length
   ) {
-    throw new RangeError('Blob byte range is outside the source');
+    throw new InternalError('Blob byte range is outside the source');
   }
 }
 

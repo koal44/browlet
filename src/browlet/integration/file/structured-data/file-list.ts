@@ -5,6 +5,7 @@ import type { StructuredDataRecord } from '../../../scripting/structured-data/re
 import {
   serializable, type SerializableSteps,
 } from '../../../scripting/structured-data/serializable';
+import { InternalError } from '../../../../infra/internal-error';
 
 /*
  * FileList sub-serialization uses HTML's shared memory so a File repeated in
@@ -13,7 +14,7 @@ import {
 const fileListSerializable: SerializableSteps = {
   serializationSteps(value, serialized, _forStorage, context) {
     if (!FileListImpl.is(value)) {
-      throw new TypeError(
+      throw new InternalError(
         'FileList serialization requires a FileList implementation',
       );
     }
@@ -24,7 +25,7 @@ const fileListSerializable: SerializableSteps = {
 
   deserializationSteps(serialized, value, _targetRealm, context) {
     if (!FileListImpl.is(value)) {
-      throw new TypeError(
+      throw new InternalError(
         'FileList deserialization requires a FileList implementation',
       );
     }
@@ -32,7 +33,7 @@ const fileListSerializable: SerializableSteps = {
       const platformFile = context.subdeserialize(serializedFile) as File;
       const file = context.unwrap(platformFile, FileImpl);
       if (!file) {
-        throw new TypeError('A FileList entry did not deserialize to File');
+        throw new InternalError('A FileList entry did not deserialize to File');
       }
       return file;
     });
@@ -47,7 +48,7 @@ export const fileListSerializableCapabilities = [
 function requireFiles(record: StructuredDataRecord): unknown[] {
   const value = record.get('Files');
   if (!Array.isArray(value)) {
-    throw new TypeError('Structured-data field [[Files]] is not a list');
+    throw new InternalError('Structured-data field [[Files]] is not a list');
   }
   return value;
 }

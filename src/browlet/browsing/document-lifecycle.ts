@@ -16,6 +16,7 @@ import type {
 import { TopLevelTraversable } from './navigable';
 import type { WindowImpl } from './window/window';
 import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
+import { InternalError } from '../../infra/internal-error';
 
 export function createAndInitializeDocument(
   type: 'html' | 'xml',
@@ -32,7 +33,7 @@ export function createAndInitializeDocument(
     navigationParams.response.url;
   const activeDocument = browsingContext.activeDocument;
   if (activeDocument === null) {
-    throw new Error('Navigation browsing context has no active Document');
+    throw new InternalError('Navigation browsing context has no active Document');
   }
 
   let window: WindowImpl;
@@ -45,13 +46,13 @@ export function createAndInitializeDocument(
   ) {
     const activeWindow = browsingContext.activeWindow;
     if (activeWindow === null) {
-      throw new Error('Navigation browsing context has no active Window');
+      throw new InternalError('Navigation browsing context has no active Window');
     }
     window = activeWindow;
   } else {
     const group = browsingContext.group;
     if (group === null) {
-      throw new Error('Navigation browsing context has no group');
+      throw new InternalError('Navigation browsing context has no group');
     }
     const requestsOAC = getRequestsOriginAgentCluster(
       navigationParams.response,
@@ -111,17 +112,17 @@ export function completelyFinishLoading(
 ): void {
   const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
-    throw new Error('A completely loaded Document needs a browsing context');
+    throw new InternalError('A completely loaded Document needs a browsing context');
   }
   const window = browsingContext.activeWindow;
   if (!window || window.getAssociatedDocument() !== document) {
-    throw new Error('Only an active Document can finish loading');
+    throw new InternalError('Only an active Document can finish loading');
   }
 
   const realm = getRelevantRealm(window);
   const settings = realm.hostDefined;
   if (settings === null) {
-    throw new Error('Active Window has no environment settings object');
+    throw new InternalError('Active Window has no environment settings object');
   }
   const now = settings.timing.currentHighResolutionTime().toTimestamp();
   const timing = document.getLoadTimingInfo();
@@ -141,11 +142,11 @@ function obtainBrowsingContextForNavigationResponse(
   navigationParams: NavigationParams,
 ): BrowsingContext {
   if (navigationParams.coopEnforcementResult.needsBrowsingContextGroupSwitch) {
-    throw new Error('COOP browsing-context group switching is not implemented');
+    throw new InternalError('COOP browsing-context group switching is not implemented');
   }
   const browsingContext = navigationParams.navigable.activeBrowsingContext;
   if (browsingContext === null) {
-    throw new Error('Navigation requires an active browsing context');
+    throw new InternalError('Navigation requires an active browsing context');
   }
   return browsingContext;
 }
@@ -154,10 +155,10 @@ function createPermissionsPolicyFromResponse(
   navigationParams: NavigationParams,
 ): PermissionsPolicy {
   if (getHeader(navigationParams.response, 'Permissions-Policy') !== null) {
-    throw new Error('Permissions-Policy response parsing is not implemented');
+    throw new InternalError('Permissions-Policy response parsing is not implemented');
   }
   if (!(navigationParams.navigable instanceof TopLevelTraversable)) {
-    throw new Error('Container permissions-policy creation is not implemented');
+    throw new InternalError('Container permissions-policy creation is not implemented');
   }
   return {};
 }
@@ -166,7 +167,7 @@ function getRequestsOriginAgentCluster(
   response: NavigationResponse,
 ): boolean {
   if (getHeader(response, 'Origin-Agent-Cluster') !== null) {
-    throw new Error('Origin-Agent-Cluster header parsing is not implemented');
+    throw new InternalError('Origin-Agent-Cluster header parsing is not implemented');
   }
   return false;
 }
@@ -176,7 +177,7 @@ function initializeDocumentAncestry(
   navigationParams: NavigationParams,
 ): void {
   if (!(navigationParams.navigable instanceof TopLevelTraversable)) {
-    throw new Error('Nested Document ancestry is not implemented');
+    throw new InternalError('Nested Document ancestry is not implemented');
   }
   // A top-level Document has no ancestor origins, so its iframe referrer
   // policy cannot affect either list.
@@ -207,7 +208,7 @@ function createNavigationTimingEntry(
   navigationParams: NavigationParams,
 ): void {
   if (navigationParams.fetchController !== null) {
-    throw new Error('Fetch timing extraction is not implemented');
+    throw new InternalError('Fetch timing extraction is not implemented');
   }
   // TODO(Navigation Timing): Create the PerformanceNavigationTiming entry.
   void navigationParams.navigationTimingType;
@@ -218,13 +219,13 @@ function processDocumentResponseIntegrations(
   navigationParams: NavigationParams,
 ): void {
   if (getHeader(navigationParams.response, 'Refresh') !== null) {
-    throw new Error('Refresh response processing is not implemented');
+    throw new InternalError('Refresh response processing is not implemented');
   }
   if (getHeader(navigationParams.response, 'Link') !== null) {
-    throw new Error('Link response processing is not implemented');
+    throw new InternalError('Link response processing is not implemented');
   }
   if (getHeader(navigationParams.response, 'Speculation-Rules') !== null) {
-    throw new Error('Speculation-Rules response processing is not implemented');
+    throw new InternalError('Speculation-Rules response processing is not implemented');
   }
   navigationParams.commitEarlyHints?.(document);
   // TODO(Fetch): Potentially free deferred-fetch quota for this Document.

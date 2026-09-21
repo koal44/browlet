@@ -8,6 +8,7 @@ import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
 import type { EventTargetImpl } from './event-target';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * [Exposed=*]
@@ -120,7 +121,7 @@ export class EventImpl {
 
     const currentTarget = this.#currentTarget;
     if (currentTarget === null) {
-      throw new Error('An event with a path must have a current target');
+      throw new InternalError('An event with a path must have a current target');
     }
 
     composedPath.push(currentTarget);
@@ -145,7 +146,7 @@ export class EventImpl {
     }
 
     if (!foundCurrentTarget) {
-      throw new Error('An event path must contain its current target');
+      throw new InternalError('An event path must contain its current target');
     }
 
     let currentHiddenLevel = currentTargetHiddenSubtreeLevel;

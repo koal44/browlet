@@ -6,6 +6,7 @@ import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   reference, sequence, union,
 } from '../web-idl/index';
+import { InternalError } from '../infra/internal-error';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
 export type FormDataEntry = [
@@ -56,7 +57,7 @@ export class FormDataImpl {
      * then Web IDL rejects the argument at that earlier missing dependency.
      */
     if (form !== undefined) {
-      throw new Error(
+      throw new InternalError(
         'FormData(form, submitter) requires HTML form entry-list construction',
       );
     }

@@ -14,6 +14,7 @@ import {
 import {
   adaptIDLToImpl, constructImplementationObject, resolveImplementationArguments,
 } from './implementation-binding';
+import { InternalError } from '../infra/internal-error';
 
 /** A realm's Web IDL operations and implementation runtime within one binding world. */
 export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
@@ -50,7 +51,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   // Project helper: retrieve the configured implementation runtime.
   getRuntime(): RuntimeContext {
-    if (!this.#runtime) throw new Error('The binding realm has no implementation runtime');
+    if (!this.#runtime) throw new InternalError('The binding realm has no implementation runtime');
     return this.#runtime;
   }
 
@@ -139,14 +140,14 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Project helper: project an implementation through its registered interface.
   project<T extends object>(implClass: ImplementationClass<T>, implInst: T): StampedPlatformObject {
     if (getPlatformRecord(implInst)) {
-      throw new TypeError('Expected an implementation target');
+      throw new InternalError('Expected an implementation target');
     }
     const object = this.#binding.projectImplementationObject(
       implInst,
       this.#getImplementationInterface(implClass),
     );
     if (!object) {
-      throw new TypeError('Implementation target is associated with another interface');
+      throw new InternalError('Implementation target is associated with another interface');
     }
     return object;
   }
@@ -155,7 +156,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   #getImplementationInterface(implClass: ImplementationClass): AssembledInterfaceDefinition {
     const primaryInterface = this.#binding.definitions.getInterfaceForImplClass(implClass);
     if (!primaryInterface) {
-      throw new Error('No Web IDL interface is registered for this implementation');
+      throw new InternalError('No Web IDL interface is registered for this implementation');
     }
     return primaryInterface;
   }
@@ -164,7 +165,7 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   #resolveInterface(definition: InterfaceDefinition<never>): AssembledInterfaceDefinition {
     const primaryInterface = this.#binding.definitions.getInterface(definition.name);
     if (primaryInterface?.definition !== definition) {
-      throw new TypeError(`Unknown Web IDL interface definition ${definition.name}`);
+      throw new InternalError(`Unknown Web IDL interface definition ${definition.name}`);
     }
     return primaryInterface;
   }

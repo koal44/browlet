@@ -1,4 +1,5 @@
 import { createMIMEType, type MIMEType } from './mime-type';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * MIME Sniffing §6 pattern matching algorithm.
@@ -12,7 +13,7 @@ export function matchesBytePattern(
   ignored: Set<number>,
 ): boolean {
   if (pattern.length !== mask.length) {
-    throw new RangeError('A byte pattern and its mask must have equal lengths');
+    throw new InternalError('A byte pattern and its mask must have equal lengths');
   }
   if (input.length < pattern.length) return false;
 

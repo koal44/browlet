@@ -4,6 +4,7 @@ import type { BindingContext } from '../../web-idl/index';
 import { Realm } from '../scripting/realm';
 import { networkingTaskSource } from '../scripting/tasks';
 import { runInParallel } from './scripting';
+import { InternalError } from '../../infra/internal-error';
 
 /** Realize Fetch's fallback error before delivering the reason into the target realm. */
 export function deserializeFetchAbortReason(
@@ -17,7 +18,7 @@ export function deserializeFetchAbortReason(
 
 export const queueGlobalFetchTask: NetworkingTasks['queueGlobalTask'] = (global, steps) => {
   const realm = Realm.getAssociatedRealm(global);
-  if (!realm) throw new Error('A Fetch task destination must have an HTML realm');
+  if (!realm) throw new InternalError('A Fetch task destination must have an HTML realm');
   realm.queueGlobalTask(networkingTaskSource, steps);
 };
 

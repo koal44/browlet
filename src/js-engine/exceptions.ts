@@ -3,6 +3,7 @@
  * binding recognizes only these classes; existing JavaScript errors pass
  * through unchanged.
  */
+// eslint-disable-next-line no-restricted-properties -- Branded exception requests must inherit the corresponding native error.
 export class RangeError extends globalThis.RangeError {
   #brand: undefined;
 
@@ -11,6 +12,7 @@ export class RangeError extends globalThis.RangeError {
   }
 }
 
+// eslint-disable-next-line no-restricted-properties -- Branded exception requests must inherit the corresponding native error.
 export class SyntaxError extends globalThis.SyntaxError {
   #brand: undefined;
 
@@ -19,6 +21,7 @@ export class SyntaxError extends globalThis.SyntaxError {
   }
 }
 
+// eslint-disable-next-line no-restricted-properties -- Branded exception requests must inherit the corresponding native error.
 export class TypeError extends globalThis.TypeError {
   #brand: undefined;
 

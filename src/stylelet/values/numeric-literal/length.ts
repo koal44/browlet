@@ -7,6 +7,7 @@ import {
 import { one, oneOf, adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * <length> = <dimension-token with a length unit> | <zero>
@@ -123,7 +124,7 @@ export function createLengthConsumer(
   const max = options.max ?? Infinity;
 
   if (!canCheckLengthRangeWithoutResolution(min, max)) {
-    throw new Error(
+    throw new InternalError(
       'Length ranges with finite nonzero bounds are not yet supported',
     );
   }

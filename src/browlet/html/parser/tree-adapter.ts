@@ -10,6 +10,7 @@ import type { TextImpl } from '../../dom/nodes/text';
 import {
   isComment, isDocumentType, isElement, isText, type NodeImpl,
 } from '../../dom/nodes/node';
+import { InternalError } from '../../../infra/internal-error';
 
 export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   #document: DocumentImpl;
@@ -322,7 +323,7 @@ class SourceCodeLocationStamper extends Stamper {
 }
 
 function notImplemented(operation: string): never {
-  throw new Error(`Parser tree adapter ${operation} is not implemented`);
+  throw new InternalError(`Parser tree adapter ${operation} is not implemented`);
 }
 
 function fromParserAttribute(

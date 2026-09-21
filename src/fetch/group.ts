@@ -1,5 +1,6 @@
 import type { FetchController } from './controller';
 import type { FetchRequest } from './request';
+import { InternalError } from '../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#fetch-groups */
 export class FetchGroup {
@@ -20,7 +21,7 @@ export class FetchGroup {
   #processDeferredFetches(): void {
     for (const record of this.deferredFetchRecords) {
       if (record.invokeState !== 'pending') continue;
-      throw new Error('Deferred fetch processing is not implemented');
+      throw new InternalError('Deferred fetch processing is not implemented');
     }
   }
 }

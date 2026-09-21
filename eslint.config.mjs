@@ -10,6 +10,12 @@ const runtimeGlobals = [
   { name: 'queueMicrotask', message: 'Use the supplied Promise or task scheduling dependency.' },
 ];
 
+const nativeErrorNames = [
+  'Error', 'TypeError', 'RangeError', 'SyntaxError',
+  'ReferenceError', 'EvalError', 'URIError', 'AggregateError', 'SuppressedError',
+];
+const nativeErrorMessage = 'Use InternalError for implementation failures or an explicit exception import for author-visible errors.';
+
 export default defineConfig(
   {
     ignores: [
@@ -235,15 +241,15 @@ export default defineConfig(
   },
 
   {
-    files: ['src/fetch/**/*.ts'],
+    files: ['src/**/*.{ts,js,mjs,cjs}'],
+    ignores: ['src/selectlet/**', 'src/**/scripts/**'],
     rules: {
-      // Fetch's author-visible errors must be realized by Binding in the result's realm.
-      // Ordinary Error remains available for implementation invariants and unfinished branches.
       'no-restricted-globals': ['error',
         ...runtimeGlobals,
-        ...['TypeError', 'RangeError', 'SyntaxError'].map((name) => ({
-          name, message: 'Import the exception request from js-engine/exceptions so Binding selects its realm.',
-        })),
+        ...nativeErrorNames.map((name) => ({ name, message: nativeErrorMessage })),
+      ],
+      'no-restricted-properties': ['error',
+        ...nativeErrorNames.map((property) => ({ object: 'globalThis', property, message: nativeErrorMessage })),
       ],
     },
   },

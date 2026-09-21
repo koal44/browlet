@@ -6,6 +6,7 @@ import type { ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
 import type { DeclarationValue, OptionalDeclarationValue } from '../syntax/declaration-value';
 import type { GuaranteedInvalidValue, RawWholeValue, WholeValue } from './whole-value';
+import { InternalError } from '../../infra/internal-error';
 
 export type SubstitutionValue<Value, Context = unknown> = {
   type: 'substitution-value';
@@ -95,7 +96,7 @@ function resolveSubstitutionValue<Value, Context>(
   const parsedResult = parseInput(substituted)?.resolve(stage, context) ?? null;
 
   if (parsedResult === null) {
-    throw new Error('Handling substituted parse failure is not implemented');
+    throw new InternalError('Handling substituted parse failure is not implemented');
   }
 
   return parsedResult;
@@ -105,5 +106,5 @@ function resolveSubstitutionFunction(
   _components: ComponentValue[],
   _context: unknown,
 ): ComponentValue[] | GuaranteedInvalidValue {
-  throw new Error('Arbitrary substitution is not implemented');
+  throw new InternalError('Arbitrary substitution is not implemented');
 }

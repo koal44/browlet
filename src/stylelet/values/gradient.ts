@@ -34,6 +34,7 @@ import {
 } from './position';
 import { serializeNumber } from './number';
 import { consumeZero, type ZeroValue } from './numeric-literal/zero';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * <gradient> =
@@ -1818,18 +1819,18 @@ export function interpolateGradients(
     a.repeating !== b.repeating ||
     !a.repeating && colorStopCountA !== colorStopCountB) {
     // TODO: Return cross-fade() once image combinations are represented.
-    throw new Error('Gradient interpolation requires cross-fade()');
+    throw new InternalError('Gradient interpolation requires cross-fade()');
   }
 
   if (a.repeating && colorStopCountA !== colorStopCountB) {
-    throw new Error('TODO: Align repeating gradient stop lists before interpolation');
+    throw new InternalError('TODO: Align repeating gradient stop lists before interpolation');
   }
 
   const explicitA = tryResolveExplicitGradient(a, ValueStage.Used, context);
   const explicitB = tryResolveExplicitGradient(b, ValueStage.Used, context);
 
   if (explicitA === null || explicitB === null) {
-    throw new Error('Gradient interpolation requires explicit used values');
+    throw new InternalError('Gradient interpolation requires explicit used values');
   }
 
   if (usesMixedLengthPercentageStops(a) || usesMixedLengthPercentageStops(b)) {
@@ -2013,7 +2014,7 @@ function interpolateExplicitLengthPercentage(
   }
 
   if (percentageBasis === undefined) {
-    throw new Error('Gradient interpolation requires a percentage basis');
+    throw new InternalError('Gradient interpolation requires a percentage basis');
   }
 
   const resolvedA = resolveLengthPercentageInPixels(
@@ -2030,7 +2031,7 @@ function interpolateExplicitLengthPercentage(
   );
 
   if (resolvedA === undefined || resolvedB === undefined) {
-    throw new Error('Gradient interpolation could not resolve its geometry');
+    throw new InternalError('Gradient interpolation could not resolve its geometry');
   }
 
   return lengthLiteral(interpolateNumber(resolvedA, resolvedB, progress));
@@ -2046,7 +2047,7 @@ function interpolateExplicitGradientStops<
   context: GradientValueContext,
 ): ExplicitGradientStops<Offset> {
   if (a.length !== b.length) {
-    throw new Error('TODO: Define interpolation for unmatched gradient hints');
+    throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
   }
 
   return mapTuple(a, (stop, index) => {
@@ -2085,7 +2086,7 @@ function interpolateExplicitGradientStops<
       };
     }
 
-    throw new Error('TODO: Define interpolation for unmatched gradient hints');
+    throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
   }) as ExplicitGradientStops<Offset>;
 }
 
@@ -2106,7 +2107,7 @@ function interpolateExplicitGradientStopOffset<
   progress: number,
 ): Offset {
   if (a.type !== b.type) {
-    throw new Error('Explicit gradient stop offsets must use the same unit');
+    throw new InternalError('Explicit gradient stop offsets must use the same unit');
   }
 
   return {

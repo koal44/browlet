@@ -20,6 +20,7 @@ import {
 import {
   coarsenedSharedCurrentTime,
 } from '../../performance/high-resolution-time';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * HTML's navigation params struct. Browlet's local route supplies a response
@@ -78,15 +79,15 @@ export function createNavigationParams(
 ): NavigationParams {
   const browsingContext = navigable.activeBrowsingContext;
   if (browsingContext === null) {
-    throw new Error('Navigation requires an active browsing context');
+    throw new InternalError('Navigation requires an active browsing context');
   }
   const activeWindow = browsingContext.activeWindow;
   if (activeWindow === null) {
-    throw new Error('Navigation requires an active Window');
+    throw new InternalError('Navigation requires an active Window');
   }
   const settings = getRelevantRealm(activeWindow).hostDefined;
   if (settings === null) {
-    throw new Error('Navigation Window has no environment settings object');
+    throw new InternalError('Navigation Window has no environment settings object');
   }
 
   return {
@@ -128,7 +129,7 @@ export function resolveNavigationHistoryBehavior(
 ): NavigationHistoryBehavior {
   const activeDocument = navigable.activeDocument;
   if (activeDocument === null) {
-    throw new Error('Navigation requires an active Document');
+    throw new InternalError('Navigation requires an active Document');
   }
 
   const activeURL = navigable.activeSessionHistoryEntry.url;
@@ -174,12 +175,12 @@ export function finalizeCrossDocumentNavigation(
   if (document === null) return;
   const activeDocument = navigable.activeDocument;
   if (activeDocument === null) {
-    throw new Error('Navigation requires an active Document');
+    throw new InternalError('Navigation requires an active Document');
   }
 
   const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
-    throw new Error('Navigation Document has no browsing context');
+    throw new InternalError('Navigation Document has no browsing context');
   }
   if (
     navigable.parent === null &&
@@ -207,7 +208,7 @@ export function finalizeCrossDocumentNavigation(
     const entryToReplace = navigable.activeSessionHistoryEntry;
     const index = targetEntries.indexOf(entryToReplace);
     if (index < 0) {
-      throw new Error('Active history entry is not in session history');
+      throw new InternalError('Active history entry is not in session history');
     }
     targetEntries[index] = historyEntry;
     historyEntry.step = entryToReplace.step;
@@ -234,11 +235,11 @@ function applyPushOrReplaceHistoryStep(
   const browsingContext = document.getBrowsingContext();
   const realm = getRelevantRealm(document);
   if (browsingContext === null) {
-    throw new Error('Navigation Document has no browsing context');
+    throw new InternalError('Navigation Document has no browsing context');
   }
   const window = realm.windowImplementation;
   if (!window) {
-    throw new Error('Navigation Document global object is not a Window');
+    throw new InternalError('Navigation Document global object is not a Window');
   }
 
   navigable.currentSessionHistoryEntry = historyEntry;
@@ -249,7 +250,7 @@ function applyPushOrReplaceHistoryStep(
     window,
   );
   const settings = realm.hostDefined;
-  if (settings === null) throw new Error('Navigation Window has no settings');
+  if (settings === null) throw new InternalError('Navigation Window has no settings');
   settings.markExecutionReady();
 }
 
@@ -269,7 +270,7 @@ function requireTopLevelTraversable(
   navigable: Navigable,
 ): TopLevelTraversable {
   if (!(navigable instanceof TopLevelTraversable)) {
-    throw new Error('Nested navigable history is not implemented');
+    throw new InternalError('Nested navigable history is not implemented');
   }
   return navigable;
 }

@@ -32,6 +32,7 @@ import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
   includesUndefined,
 } from './types';
+import { InternalError } from '../infra/internal-error';
 
 // Project entry point for Web IDL §3.2 JavaScript type mapping; realizes realm-owned failures.
 export function convertToIDL(
@@ -583,7 +584,7 @@ function convertJavaScriptValueToNamedType(
     }
     case 'dictionary': {
       const dictionary = context.binding.definitions.getDictionary(name);
-      if (!dictionary) throw new Error(`Dictionary ${name} was not assembled`);
+      if (!dictionary) throw new InternalError(`Dictionary ${name} was not assembled`);
       return convertJavaScriptValueToDictionary(value, dictionary, context);
     }
     // Web IDL §3.2.19 Callback function types — JavaScript-to-IDL conversion.
@@ -623,10 +624,10 @@ function convertJavaScriptValueToNamedType(
           ? value
           : throwTypeError(context, `Value does not implement ${name}`);
       }
-      throw new Error(`Unknown Web IDL type ${name}`);
+      throw new InternalError(`Unknown Web IDL type ${name}`);
     }
     default:
-      throw new Error(`${name} is not a value type`);
+      throw new InternalError(`${name} is not a value type`);
   }
 }
 
@@ -648,7 +649,7 @@ function convertNamedTypeToJavaScript(
         ? context.binding.projectImplementationObject(value, primaryInterface)
         : undefined;
       if (!object) {
-        throw new Error(
+        throw new InternalError(
           `IDL interface value ${name} is not an implementation target`,
         );
       }
@@ -656,18 +657,18 @@ function convertNamedTypeToJavaScript(
     }
     case 'dictionary': {
       const dictionary = context.binding.definitions.getDictionary(name);
-      if (!dictionary) throw new Error(`Dictionary ${name} was not assembled`);
+      if (!dictionary) throw new InternalError(`Dictionary ${name} was not assembled`);
       return convertDictionaryToJavaScript(value, dictionary, context);
     }
     // Web IDL §3.2.19 Callback function types — recover the JavaScript callback object.
     case 'callback-function':
       if (isCallbackFunctionValue(value)) return value.object;
       if (typeof value === 'function') return value;
-      throw new Error(`IDL callback function ${name} is not callable`);
+      throw new InternalError(`IDL callback function ${name} is not callable`);
     // Web IDL §3.2.16 Callback interface types — recover the JavaScript callback object.
     case 'callback-interface':
       if (!isCallbackInterfaceRecord(value)) {
-        throw new Error(`IDL callback interface ${name} is not a callback value`);
+        throw new InternalError(`IDL callback interface ${name} is not a callback value`);
       }
       return value.object;
     // Project adapter: recover an interface value supplied by the host.
@@ -675,12 +676,12 @@ function convertNamedTypeToJavaScript(
       const hostInterface = context.binding.hostDefinedInterfaces.get(name);
       if (hostInterface) {
         if (hostInterface.is(value)) return value;
-        throw new Error(`IDL interface value does not implement ${name}`);
+        throw new InternalError(`IDL interface value does not implement ${name}`);
       }
-      throw new Error(`Unknown Web IDL type ${name}`);
+      throw new InternalError(`Unknown Web IDL type ${name}`);
     }
     default:
-      throw new Error(`${name} is not a value type`);
+      throw new InternalError(`${name} is not a value type`);
   }
 }
 
@@ -728,7 +729,7 @@ function convertDictionaryToJavaScript(
   context: ConversionContext,
 ): object {
   if (!isObject(value)) {
-    throw new Error(`IDL dictionary ${dictionary.definition.name} is not an object`);
+    throw new InternalError(`IDL dictionary ${dictionary.definition.name} is not an object`);
   }
   const members = isMap(value) ? value : new Map(Object.entries(value));
 
@@ -782,7 +783,7 @@ function convertRecordToJavaScript(
   valueType: WebIDLType,
   context: ConversionContext,
 ): object {
-  if (!isMap(value)) throw new Error('IDL record is not a map');
+  if (!isMap(value)) throw new InternalError('IDL record is not a map');
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
@@ -801,7 +802,7 @@ function convertSequenceToJavaScript(
   elementType: WebIDLType,
   context: ConversionContext,
 ): unknown[] {
-  if (!Array.isArray(value)) throw new Error('IDL sequence is not an array');
+  if (!Array.isArray(value)) throw new InternalError('IDL sequence is not an array');
 
   const result = new context.realm.intrinsics.array();
   for (let i = 0; i < value.length; i++) {
@@ -1065,7 +1066,7 @@ function convertUnionToJavaScript(
     const object = types.find(isObjectType);
     if (object) return value;
   }
-  throw new Error('IDL union value has no matching specific type');
+  throw new InternalError('IDL union value has no matching specific type');
 }
 
 // Project helper: project an implementation using a candidate interface type.
@@ -1336,7 +1337,7 @@ function throwTypeError(
 
 // Project helper: report a conversion that has not been implemented.
 function unsupportedConversion(type: string): never {
-  throw new Error(`Web IDL conversion for ${type} is not implemented`);
+  throw new InternalError(`Web IDL conversion for ${type} is not implemented`);
 }
 
 type EffectiveType = {

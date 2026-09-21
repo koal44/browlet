@@ -1,5 +1,6 @@
 import { types as nodeTypes } from 'node:util';
 import { getNativeArrayBufferViewLengthTracking } from './runtime';
+import { InternalError } from '../infra/internal-error';
 
 export type RuntimeBuffers = {
   /** Allocate zero-initialized final storage directly in the owning realm. */
@@ -88,7 +89,7 @@ export function getArrayBufferByteLength(value: object): number {
       [],
     ) as number;
   }
-  throw new Error(`${name} is not an ArrayBuffer type`);
+  throw new InternalError(`${name} is not an ArrayBuffer type`);
 }
 
 export function getArrayBufferMaxByteLength(
@@ -96,7 +97,7 @@ export function getArrayBufferMaxByteLength(
 ): number | undefined {
   const name = requireBufferTypeName(value);
   if (name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer') {
-    throw new Error(`${name} is not an ArrayBuffer type`);
+    throw new InternalError(`${name} is not an ArrayBuffer type`);
   }
   if (!isResizableArrayBuffer(value)) return;
   return Reflect.apply(
@@ -137,7 +138,7 @@ export function getArrayBufferViewByteOffset(value: object): number {
 
 export function getTypedArrayLength(value: object): number {
   const name = requireBufferViewTypeName(value);
-  if (name === 'DataView') throw new Error('DataView is not a typed array');
+  if (name === 'DataView') throw new InternalError('DataView is not a typed array');
   return Reflect.apply(typedArrayLength, value, []) as number;
 }
 
@@ -150,7 +151,7 @@ export function getArrayBufferViewElementSize(
 export function isDetachedArrayBuffer(value: object): boolean {
   const name = requireBufferTypeName(value);
   if (name === 'SharedArrayBuffer') return false;
-  if (name !== 'ArrayBuffer') throw new Error(`${name} is not an ArrayBuffer`);
+  if (name !== 'ArrayBuffer') throw new InternalError(`${name} is not an ArrayBuffer`);
   if (arrayBufferDetached) {
     return Reflect.apply(arrayBufferDetached, value, []) === true;
   }
@@ -170,7 +171,7 @@ export function isResizableArrayBuffer(value: object): boolean {
       : false;
   }
   if (name !== 'ArrayBuffer') {
-    throw new Error(`${name} is not an ArrayBuffer type`);
+    throw new InternalError(`${name} is not an ArrayBuffer type`);
   }
   return arrayBufferResizable
     ? Reflect.apply(arrayBufferResizable, value, []) === true
@@ -237,7 +238,7 @@ export function writeArrayBuffer(
 ): void {
   const name = requireBufferTypeName(buffer);
   if (name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer') {
-    throw new Error(`${name} is not a buffer type`);
+    throw new InternalError(`${name} is not a buffer type`);
   }
   assertWriteRange(
     bytes.length,
@@ -258,11 +259,11 @@ export function writeArrayBufferView(
 ): void {
   const name = requireBufferTypeName(view);
   if (!isBufferViewTypeName(name)) {
-    throw new Error(`${name} is not a buffer view type`);
+    throw new InternalError(`${name} is not a buffer view type`);
   }
   const elementSize = getArrayBufferViewElementSize(name);
   if (name !== 'DataView' && bytes.length % elementSize !== 0) {
-    throw new Error(`${name} byte length is not a multiple of ${elementSize}`);
+    throw new InternalError(`${name} byte length is not a multiple of ${elementSize}`);
   }
   assertWriteRange(
     bytes.length,
@@ -314,7 +315,7 @@ function probeLengthTrackingArrayBufferView(
 
   const maxByteLength = getArrayBufferMaxByteLength(buffer);
   if (maxByteLength === undefined) {
-    throw new Error('A resizable ArrayBuffer has no maximum byte length');
+    throw new InternalError('A resizable ArrayBuffer has no maximum byte length');
   }
 
   const growth = elementSize - (bufferByteLength - byteOffset) % elementSize;
@@ -361,7 +362,7 @@ function assertWriteRange(
     startingOffset < 0 ||
     byteCount > byteLength - startingOffset
   ) {
-    throw new Error('Buffer source write exceeds the available byte range');
+    throw new InternalError('Buffer source write exceeds the available byte range');
   }
 }
 
@@ -371,21 +372,21 @@ function isBufferViewTypeName(name: JSBufferTypeName): name is JSBufferViewName 
 
 function requireBufferTypeName(value: object): JSBufferTypeName {
   const name = getBufferTypeName(value);
-  if (!name) throw new Error('Value is not an ArrayBuffer or view');
+  if (!name) throw new InternalError('Value is not an ArrayBuffer or view');
   return name;
 }
 
 function requireBufferViewTypeName(value: object): JSBufferViewName {
   const name = requireBufferTypeName(value);
   if (name === 'ArrayBuffer' || name === 'SharedArrayBuffer') {
-    throw new Error(`${name} is not an ArrayBuffer view`);
+    throw new InternalError(`${name} is not an ArrayBuffer view`);
   }
   return name;
 }
 
 function resizeArrayBuffer(buffer: object, byteLength: number): void {
   if (!arrayBufferResize) {
-    throw new Error('Resizable ArrayBuffer operations are unavailable');
+    throw new InternalError('Resizable ArrayBuffer operations are unavailable');
   }
   Reflect.apply(arrayBufferResize, buffer, [byteLength]);
 }
@@ -395,7 +396,7 @@ function getAccessor(
   key: PropertyKey,
 ): (this: object) => unknown {
   const getter = getOptionalAccessor(object, key);
-  if (!getter) throw new Error(`Missing intrinsic accessor ${String(key)}`);
+  if (!getter) throw new InternalError(`Missing intrinsic accessor ${String(key)}`);
   return getter;
 }
 
@@ -412,14 +413,14 @@ function getOptionalAccessor(
 
 function requireSharedArrayBufferByteLength(): (this: object) => unknown {
   if (!sharedArrayBufferByteLength) {
-    throw new Error('SharedArrayBuffer is unavailable');
+    throw new InternalError('SharedArrayBuffer is unavailable');
   }
   return sharedArrayBufferByteLength;
 }
 
 function requireSharedArrayBufferMaxByteLength(): (this: object) => unknown {
   if (!sharedArrayBufferMaxByteLength) {
-    throw new Error('SharedArrayBuffer maxByteLength is unavailable');
+    throw new InternalError('SharedArrayBuffer maxByteLength is unavailable');
   }
   return sharedArrayBufferMaxByteLength;
 }

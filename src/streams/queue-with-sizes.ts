@@ -1,4 +1,5 @@
 import { RangeError } from '../js-engine/exceptions';
+import { InternalError } from '../infra/internal-error';
 
 /** Streams §8.1, a queue that tracks the total size of its values. */
 export class QueueWithSizes<Value> {
@@ -16,7 +17,7 @@ export class QueueWithSizes<Value> {
   /** DequeueValue. */
   dequeue(): Value {
     const pair = this.#entries.shift();
-    if (!pair) throw new Error('Cannot dequeue an empty stream queue');
+    if (!pair) throw new InternalError('Cannot dequeue an empty stream queue');
 
     this.#totalSize -= pair.size;
     if (this.#totalSize < 0) this.#totalSize = 0;
@@ -35,7 +36,7 @@ export class QueueWithSizes<Value> {
   /** PeekQueueValue. */
   peek(): Value {
     const pair = this.#entries[0];
-    if (!pair) throw new Error('Cannot peek an empty stream queue');
+    if (!pair) throw new InternalError('Cannot peek an empty stream queue');
     return pair.value;
   }
 

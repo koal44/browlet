@@ -29,6 +29,7 @@ import {
   type PercentageValue,
 } from './percentage';
 import type { ValueDefinition } from '../value-processing/definition';
+import { InternalError } from '../../infra/internal-error';
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;
@@ -3390,7 +3391,7 @@ function tryResolveFromOriginChannel<Component extends SyntaxComponent>(
   const value = channelValues.get(channelName);
 
   if (value === undefined) {
-    throw new TypeError(`Unknown relative color variable: ${channelName}`);
+    throw new InternalError(`Unknown relative color variable: ${channelName}`);
   }
 
   return value as Component;
@@ -3577,7 +3578,7 @@ function scaleNonHueComponent(
   }
 
   if (value.type === 'math') {
-    throw new Error('Deferred color components cannot be scaled');
+    throw new InternalError('Deferred color components cannot be scaled');
   }
 
   return value.value * (
@@ -3595,7 +3596,7 @@ function scaleHueComponent(
   }
 
   if (value.type === 'math') {
-    throw new Error('A deferred hue cannot be scaled');
+    throw new InternalError('A deferred hue cannot be scaled');
   }
 
   return value.type === 'angle'
@@ -4405,7 +4406,7 @@ function coercePredefinedAbsoluteColor(
   const predefined = tryCoercePredefinedAbsoluteColor(value, context);
 
   if (predefined === null) {
-    throw new TypeError(`Cannot convert color space ${value.space.name}`);
+    throw new InternalError(`Cannot convert color space ${value.space.name}`);
   }
 
   return predefined;
@@ -4598,7 +4599,7 @@ function convertAbsoluteColorToXyz(
     case 'xyz-d65':
       return value;
     default:
-      throw new Error(
+      throw new InternalError(
         `Cannot convert ${value.space.name} directly to XYZ`,
       );
   }
@@ -5848,7 +5849,7 @@ function convertAbsoluteColorToCustomSpace(
   const profile = context.colorProfiles?.get(target);
 
   if (profile === undefined) {
-    throw new TypeError(`Cannot convert color space ${target}`);
+    throw new InternalError(`Cannot convert color space ${target}`);
   }
 
   if (normalized.space.name === target) {
@@ -5864,7 +5865,7 @@ function convertAbsoluteColorToCustomSpace(
   const components = profile.fromAbsoluteColor(predefined);
 
   if (components === null) {
-    throw new TypeError(`Cannot convert color to color space ${target}`);
+    throw new InternalError(`Cannot convert color to color space ${target}`);
   }
 
   return absoluteColorInCustomSpace(
@@ -6219,7 +6220,7 @@ export function calculateColorMix(
   context: ColorContext = {},
 ): AbsoluteColor {
   if (items.length === 0) {
-    throw new TypeError('A color mix requires at least one item');
+    throw new InternalError('A color mix requires at least one item');
   }
 
   const { percentages, leftover } = normalizeMixPercentages(

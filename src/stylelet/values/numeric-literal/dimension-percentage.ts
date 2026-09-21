@@ -7,6 +7,7 @@ import {
   addPercentages, interpolatePercentages, serializePercentage, consumePercentage,
   type PercentageLiteral,
 } from './percentage';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * Shared mechanics for the mixed dimension-percentage productions. This is
@@ -36,7 +37,7 @@ export function createDimensionPercentageConsumer<
   const max = options.max ?? Infinity;
 
   if (!canCheckRangeWithoutResolution(min, max)) {
-    throw new Error(
+    throw new InternalError(
       `${productionName} ranges with finite nonzero bounds are not yet supported`,
     );
   }

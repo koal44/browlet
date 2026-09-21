@@ -13,6 +13,7 @@ import type { StyleletContext } from '../context';
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,
 } from './runtimeCache';
+import { InternalError } from '../../infra/internal-error';
 
 export function nextDescendant(root: Element, node: Element): Element | null {
   if (node.firstElementChild) return node.firstElementChild;
@@ -270,7 +271,7 @@ export function isOnlyOfType(e: Element, context: StyleletContext): boolean {
 
 export function matchesNthIndex(n: number, step: number, absStep: number, offset: number, _context: StyleletContext): boolean {
   if (step === 0) {
-    throw new Error(`Invalid nth-child step value: ${step}; should have been handled earlier`);
+    throw new InternalError(`Invalid nth-child step value: ${step}; should have been handled earlier`);
   }
 
   const congruent = (n - offset) % absStep === 0;
@@ -302,7 +303,7 @@ export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache
 
   const index = indexMap.get(element);
   if (index === undefined) {
-    throw new Error('nthElement cache did not contain the target element');
+    throw new InternalError('nthElement cache did not contain the target element');
   }
 
   return fromLast ? parent.childElementCount - index : index + 1;
@@ -356,7 +357,7 @@ export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache 
 
   const index = entry.indexMap.get(element);
   if (index === undefined) {
-    throw new Error('nthOfType cache did not contain the target element');
+    throw new InternalError('nthOfType cache did not contain the target element');
   }
 
   return fromLast ? entry.length - index : index + 1;
@@ -389,7 +390,7 @@ export function isNthOfType(element: Element, index: number, fromLast: boolean, 
 
 function isNthElementLocal(element: Element, target: number, fromLast: boolean): boolean {
   if (target < 1) {
-    throw new Error(`Invalid nth-child index: ${target}`);
+    throw new InternalError(`Invalid nth-child index: ${target}`);
   }
 
   const parent = element.parentNode;
@@ -419,7 +420,7 @@ function isNthElementLocal(element: Element, target: number, fromLast: boolean):
 
 function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, context: StyleletContext): boolean {
   if (target < 1) {
-    throw new Error(`Invalid nth-of-type index: ${target}`);
+    throw new InternalError(`Invalid nth-of-type index: ${target}`);
   }
 
   const parent = element.parentNode;

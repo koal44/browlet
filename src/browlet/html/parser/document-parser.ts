@@ -125,5 +125,6 @@ export type DocumentWrite = (markup: string) => void;
 
 function toError(value: unknown): Error {
   // Preserve errors from page realms when passing failures to Node's stream.
+  // eslint-disable-next-line no-restricted-globals -- Node streams require an Error; preserve an arbitrary thrown value as its message.
   return types.isNativeError(value) ? value : new Error(String(value));
 }

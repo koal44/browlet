@@ -1,6 +1,7 @@
 import { types as nodeTypes } from 'node:util';
 
 import type { JSRealm } from './realm';
+import { InternalError } from '../infra/internal-error';
 
 /**
  * Node/V8 primitives for inspecting built-in data and object kinds.
@@ -132,7 +133,7 @@ export function writeErrorStack(value: object, stack: string): void {
     value: stack,
     writable: true,
   });
-  if (!defined) throw new Error('Could not restore an Error stack');
+  if (!defined) throw new InternalError('Could not restore an Error stack');
 }
 
 export function isWeakRefObject(value: object): boolean {
@@ -184,7 +185,7 @@ function getAccessor(
 ): (this: object) => unknown {
   const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
   if (typeof descriptor?.get !== 'function') {
-    throw new Error(`Missing intrinsic accessor ${String(key)}`);
+    throw new InternalError(`Missing intrinsic accessor ${String(key)}`);
   }
   return descriptor.get;
 }

@@ -15,6 +15,7 @@ import {
   createNumberConsumer, numberLiteral, serializeCssNumber,
 } from './numeric-literal/number';
 import { type MathContext } from './math-value';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
@@ -103,7 +104,7 @@ export function interpolateRatios(
   p: number,
 ): RatioValue {
   if (isDegenerateRatio(a) || isDegenerateRatio(b)) {
-    throw new TypeError('Degenerate ratios cannot be interpolated');
+    throw new InternalError('Degenerate ratios cannot be interpolated');
   }
 
   const aLog = Math.log(a.numerator / a.denominator);

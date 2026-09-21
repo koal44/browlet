@@ -7,5 +7,6 @@
     "outDir": "../../../dist/.typecheck/web-idl-core",
     "tsBuildInfoFile": "../../../dist/.typecheck/web-idl-core.tsbuildinfo"
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts"],
+  "references": [{ "path": "../../infra" }]
 }

@@ -2,6 +2,7 @@ import {
   arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
 } from '../../../web-idl/index';
 import { withLocationStub } from '../../stubs';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * [Exposed=Window]
@@ -145,5 +146,5 @@ export const locationIDL = defineInterface({
 });
 
 function navigationNotImplemented(): never {
-  throw new Error('Browlet navigation is not implemented');
+  throw new InternalError('Browlet navigation is not implemented');
 }

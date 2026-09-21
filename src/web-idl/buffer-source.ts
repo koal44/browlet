@@ -2,6 +2,7 @@ import * as JSEngine from '../js-engine/index';
 import { hasExtendedAttribute } from './core/helpers';
 import type { BufferTypeName, BufferViewTypeName, ExtendedAttribute } from './core/types';
 import { TypeError } from '../js-engine/exceptions';
+import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.
 export function convertBufferSourceToIDL(
@@ -40,7 +41,7 @@ export function convertBufferSourceToJavaScript(
   name: BufferTypeName,
 ): ArrayBufferLike | ArrayBufferView {
   if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
-    throw new Error(`IDL ${name} value has the wrong buffer source type`);
+    throw new InternalError(`IDL ${name} value has the wrong buffer source type`);
   }
   return value as ArrayBufferLike | ArrayBufferView;
 }

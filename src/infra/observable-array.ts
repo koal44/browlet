@@ -27,7 +27,9 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   convert,
   toJavaScript = identity as (value: IDLValue) => JavaScriptValue,
   array: Array_ = Array,
+  // eslint-disable-next-line no-restricted-globals -- Standalone arrays default to the host realm; bindings can supply their constructors.
   rangeError: RangeError_ = RangeError,
+  // eslint-disable-next-line no-restricted-globals -- Standalone arrays default to the host realm; bindings can supply their constructors.
   typeError: TypeError_ = TypeError,
   toNumber: convertToNumber = toNumber,
   set: setAlgorithm = noop,
@@ -197,7 +199,7 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
     value: observable,
 
     replace(value: unknown): void {
-      const converted = convertSequence(value, convert);
+      const converted = convertSequence(value, convert, TypeError_);
       replaceValues(converted);
     },
 
@@ -208,14 +210,15 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
 function convertSequence<T>(
   value: unknown,
   convert: (value: unknown) => T,
+  TypeError_: typeof TypeError,
 ): T[] {
   if (value === null || value === undefined) {
-    throw new TypeError('Value is not iterable');
+    throw new TypeError_('Value is not iterable');
   }
 
   const iterator = (value as { [Symbol.iterator]?: unknown; })[Symbol.iterator];
   if (typeof iterator !== 'function') {
-    throw new TypeError('Value is not iterable');
+    throw new TypeError_('Value is not iterable');
   }
 
   return Array.from({

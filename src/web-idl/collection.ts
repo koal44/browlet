@@ -8,6 +8,7 @@ import type {
 } from './core/index';
 import { getPlatformRecord, type PlatformRecord } from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
+import { InternalError } from '../infra/internal-error';
 
 export class CollectionBinding {
   #context: ConversionContext;
@@ -168,14 +169,14 @@ export class CollectionBinding {
   // Project helper: retrieve map entries retained in the implementation's binding record.
   getMapEntries(record: PlatformRecord | undefined): IDLMapEntries {
     const entries = record?.mapEntries;
-    if (!entries) throw new Error('Object does not have Web IDL map entries');
+    if (!entries) throw new InternalError('Object does not have Web IDL map entries');
     return entries;
   }
 
   // Project helper: retrieve set entries retained in the implementation's binding record.
   getSetEntries(record: PlatformRecord | undefined): IDLSetEntries {
     const entries = record?.setEntries;
-    if (!entries) throw new Error('Object does not have Web IDL set entries');
+    if (!entries) throw new InternalError('Object does not have Web IDL set entries');
     return entries;
   }
 

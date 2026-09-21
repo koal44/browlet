@@ -1,6 +1,7 @@
 import {
   EventTargetImpl, type EventTargetVirtuals,
 } from '../events/event-target';
+import { InternalError } from '../../../infra/internal-error';
 
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
@@ -108,14 +109,14 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 
   insertTreeSiblingBefore(node: TNode): void {
     const parent = this.#parent;
-    if (!parent) throw new Error('Cannot insert before a detached node');
+    if (!parent) throw new InternalError('Cannot insert before a detached node');
 
     parent.#insertChild(node, this.#asNode());
   }
 
   insertTreeSiblingAfter(node: TNode): void {
     const parent = this.#parent;
-    if (!parent) throw new Error('Cannot insert after a detached node');
+    if (!parent) throw new InternalError('Cannot insert after a detached node');
 
     parent.#insertChild(node, this.#nextSibling);
   }
@@ -164,12 +165,12 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 
   #insertChild(node: TNode, reference: TNode | null): void {
     if (node === this.#asNode()) {
-      throw new Error('Cannot insert a node into itself or its descendant');
+      throw new InternalError('Cannot insert a node into itself or its descendant');
     }
 
     for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
       if (ancestor === node) {
-        throw new Error('Cannot insert a node into itself or its descendant');
+        throw new InternalError('Cannot insert a node into itself or its descendant');
       }
     }
 

@@ -6,6 +6,7 @@ import type {
 import type { EnvironmentSettingsObject } from './environment';
 import { createTaskSource } from './event-loop';
 import { Realm } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
@@ -88,7 +89,7 @@ function enqueuePromiseJob(
 /* HTML §8.1.6 — HostEnqueueGenericJob. */
 function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
   if (!(realm instanceof Realm) || realm.hostDefined === null) {
-    throw new Error('HTML generic jobs require an HTML realm');
+    throw new InternalError('HTML generic jobs require an HTML realm');
   }
   realm.queueGlobalTask(jsEngineTaskSource, job);
 }
@@ -100,7 +101,7 @@ function enqueueTimeoutJob(
   milliseconds: number,
 ): void {
   if (!(realm instanceof Realm) || realm.hostDefined === null) {
-    throw new Error('HTML timeout jobs require an HTML realm');
+    throw new InternalError('HTML timeout jobs require an HTML realm');
   }
   const timers = realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin().timers;
   timers.runStepsAfterTimeout('JavaScript', milliseconds, () => {

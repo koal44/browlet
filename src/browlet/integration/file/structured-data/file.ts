@@ -6,6 +6,7 @@ import {
   serializable, type SerializableSteps,
 } from '../../../scripting/structured-data/serializable';
 import { blobSerializable } from './blob';
+import { InternalError } from '../../../../infra/internal-error';
 
 /*
  * File API defines File's record fields. HTML owns their registration and
@@ -14,7 +15,7 @@ import { blobSerializable } from './blob';
 const fileSerializable: SerializableSteps = {
   serializationSteps(value, serialized, forStorage) {
     if (!FileImpl.is(value)) {
-      throw new TypeError('File serialization requires a File implementation');
+      throw new InternalError('File serialization requires a File implementation');
     }
     blobSerializable.serializationSteps(value, serialized, forStorage);
     const state = value.getFileSerializationState();
@@ -24,7 +25,7 @@ const fileSerializable: SerializableSteps = {
 
   deserializationSteps(serialized, value) {
     if (!FileImpl.is(value)) {
-      throw new TypeError('File deserialization requires a File implementation');
+      throw new InternalError('File deserialization requires a File implementation');
     }
     blobSerializable.deserializationSteps(serialized, value);
     value.setFileSerializationState({
@@ -44,7 +45,7 @@ function requireNumber(
 ): number {
   const value = record.get(field);
   if (typeof value !== 'number') {
-    throw new TypeError(
+    throw new InternalError(
       `Structured-data field [[${field}]] is not a number`,
     );
   }
@@ -57,7 +58,7 @@ function requireString(
 ): string {
   const value = record.get(field);
   if (typeof value !== 'string') {
-    throw new TypeError(
+    throw new InternalError(
       `Structured-data field [[${field}]] is not a string`,
     );
   }

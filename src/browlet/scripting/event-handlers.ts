@@ -4,6 +4,7 @@ import {
 } from '../../web-idl/index';
 import type { EventTargetImpl } from '../dom/events/event-target';
 import type { EventImpl } from '../dom/events/event';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * [LegacyTreatNonObjectAsNull]
@@ -38,7 +39,7 @@ export class EventHandlerMap {
 
   set(name: string, callback: EventHandlerCallback | null): void {
     const handler = this.#handlers.get(name);
-    if (!handler) throw new Error(`Unknown event handler ${name}`);
+    if (!handler) throw new InternalError(`Unknown event handler ${name}`);
 
     if (callback === null) {
       this.#deactivate(handler);

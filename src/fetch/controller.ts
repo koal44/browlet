@@ -1,6 +1,7 @@
 import type { RuntimeContext } from '../js-engine/index';
 import { createDOMException } from '../web-idl/index';
 import type { FetchTimingInfo } from './timing';
+import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2, fetch controller and its operations. */
 export class FetchController {
@@ -12,19 +13,19 @@ export class FetchController {
 
   reportTiming(global: object): void {
     const steps = this.reportTimingSteps;
-    if (steps === null) throw new Error('Fetch timing steps are not set');
+    if (steps === null) throw new InternalError('Fetch timing steps are not set');
     steps(global);
   }
 
   processNextManualRedirect(): void {
     const steps = this.nextManualRedirectSteps;
-    if (steps === null) throw new Error('Fetch manual redirect steps are not set');
+    if (steps === null) throw new InternalError('Fetch manual redirect steps are not set');
     steps();
   }
 
   extractFullTimingInfo(): FetchTimingInfo {
     if (this.fullTimingInfo === null) {
-      throw new Error('Fetch full timing info is not set');
+      throw new InternalError('Fetch full timing info is not set');
     }
     return this.fullTimingInfo;
   }

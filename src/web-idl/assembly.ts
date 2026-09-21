@@ -6,6 +6,7 @@ import type {
 } from './core/declarations';
 import type { Capability, CapabilityRegistration } from './capability';
 import type { ImplementationClass } from './core/types';
+import { InternalError } from '../infra/internal-error';
 
 export class DefinitionAssembly {
   #definitions = new Map<string, PrimaryDefinition>();
@@ -54,13 +55,13 @@ export class DefinitionAssembly {
     for (const registration of capabilities) {
       const primaryInterface = this.getInterface(registration.definition.name);
       if (primaryInterface?.definition !== registration.definition) {
-        throw new TypeError(
+        throw new InternalError(
           `Capability ${registration.capability.name} targets unknown ` +
           `interface definition ${registration.definition.name}`,
         );
       }
       if (primaryInterface.capabilities.has(registration.capability)) {
-        throw new TypeError(
+        throw new InternalError(
           `Interface ${registration.definition.name} has a duplicate ` +
           `${registration.capability.name} capability registration`,
         );

@@ -32,6 +32,7 @@ import {
 } from './non-document-type-child-node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin } from './slottable';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * [Exposed=Window]
@@ -223,7 +224,7 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     } else {
       const ownerDocument = this.getNodeDocument();
       if (!ownerDocument) {
-        throw new Error('Element has no node document');
+        throw new InternalError('Element has no node document');
       }
       const created = ownerDocument.createAttribute(qualifiedName);
       created.value = value;
@@ -303,7 +304,7 @@ export class ElementImpl extends withElementStub(NodeImpl) {
 
   appendAttribute(attribute: AttrImpl): void {
     if (attribute.ownerElement !== null) {
-      throw new TypeError('Cannot append an attribute owned by another element');
+      throw new InternalError('Cannot append an attribute owned by another element');
     }
 
     this.#attributes.push(attribute);
@@ -392,7 +393,7 @@ export function defineElementInterface(
 ): ElementInterface {
   const implClass = options.definition.implementation?.implClass;
   if (!implClass) {
-    throw new TypeError(
+    throw new InternalError(
       `Element interface ${options.definition.name} has no implementation`,
     );
   }

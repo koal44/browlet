@@ -5,6 +5,7 @@ import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fet
 import { CookieStore } from '../http/index';
 import { areSameOrigin, type Origin, type TupleOrigin } from '../url/origin';
 import { obtainURLOrigin, type URLRecord } from '../url/url';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -47,7 +48,7 @@ export class UserAgent implements FetchUserAgent {
 
   removeBrowsingContextGroup(group: BrowsingContextGroup): void {
     if (group.browsingContextSet.size !== 0) {
-      throw new Error('A nonempty browsing context group cannot be removed');
+      throw new InternalError('A nonempty browsing context group cannot be removed');
     }
 
     this.browsingContextGroupSet.delete(group);

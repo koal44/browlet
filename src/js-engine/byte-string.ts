@@ -2,6 +2,7 @@ import { Buffer, isUtf8 } from 'node:buffer';
 import { endianness } from 'node:os';
 import { TextEncoder } from 'node:util';
 import { getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset } from './buffers';
+import { InternalError } from '../infra/internal-error';
 
 /** Infra — Isomorphic decode maps each byte to the code point with the same value. */
 export function isomorphicDecode(input: Uint8Array): string {
@@ -11,7 +12,7 @@ export function isomorphicDecode(input: Uint8Array): string {
 /** Infra — Isomorphic encode requires code points in U+0000–U+00FF. */
 export function isomorphicEncode(input: string): Uint8Array<ArrayBuffer> {
   // Buffer's Latin-1 writer truncates other code points rather than rejecting them.
-  if (/[\u0100-\uffff]/.test(input)) throw new TypeError('Expected an isomorphic string');
+  if (/[\u0100-\uffff]/.test(input)) throw new InternalError('Expected an isomorphic string');
   const bytes = new Uint8Array(input.length);
   Buffer.from(bytes.buffer).write(input, 'latin1');
   return bytes;

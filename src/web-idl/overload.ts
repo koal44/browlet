@@ -15,6 +15,7 @@ import {
   getFlattenedMemberTypes, getTypeWithApplicableExtendedAttributes,
   getUnannotatedType, includesNullableType,
 } from './types';
+import { InternalError } from '../infra/internal-error';
 
 // Web IDL §2.5.8 Overloading — compute the effective overload set, from selected callables.
 export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
@@ -126,7 +127,7 @@ export function resolveOverload<Callable extends IDLCallable>(
   }
 
   if (candidates.length !== 1) {
-    throw new Error('Overload set did not resolve to one callable');
+    throw new InternalError('Overload set did not resolve to one callable');
   }
   const selected = candidates[0] as EffectiveOverloadSetItem<Callable>;
 
@@ -138,7 +139,7 @@ export function resolveOverload<Callable extends IDLCallable>(
       (candidate) => candidate.kind === 'async-sequence',
     );
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
-      throw new Error('Iterator method selected a non-async-sequence overload');
+      throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
     values.push(createIDLAsyncSequence(
       argumentsList[i] as object,
@@ -162,7 +163,7 @@ export function resolveOverload<Callable extends IDLCallable>(
       (sequenceLike.kind !== 'sequence' &&
         sequenceLike.kind !== 'frozen-array')
     ) {
-      throw new Error('Iterator method selected a non-sequence-like overload');
+      throw new InternalError('Iterator method selected a non-sequence-like overload');
     }
     values.push(sequenceLike.kind === 'sequence'
       ? createSequenceFromIterable(
@@ -505,7 +506,7 @@ function getDistinguishingArgumentIndex<Callable extends IDLCallable>(
       return index;
     }
   }
-  throw new Error('Overloads have no distinguishing argument');
+  throw new InternalError('Overloads have no distinguishing argument');
 }
 
 // Project helper: produce comparable type names after resolving typedefs and annotations.

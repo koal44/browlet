@@ -10,6 +10,7 @@ import type {
   StructuredDeserializeMemory,
 } from './records';
 import { serializable } from './serializable';
+import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.6, StructuredDeserialize. */
 // BINDING_INTEGRATION: reconstruct platform objects in the destination realm.
@@ -72,13 +73,13 @@ export function structuredDeserialize(
         memory,
       );
       if (!isObject(buffer)) {
-        throw new Error('An ArrayBufferView record has no backing buffer');
+        throw new InternalError('An ArrayBufferView record has no backing buffer');
       }
       const length = serialized.constructor === 'DataView'
         ? serialized.byteLength
         : serialized.arrayLength;
       if (length === undefined) {
-        throw new Error(`${serialized.constructor} has no serialized array length`);
+        throw new InternalError(`${serialized.constructor} has no serialized array length`);
       }
       value = realm.createView(
         serialized.constructor,
@@ -121,13 +122,13 @@ export function structuredDeserialize(
       break;
     }
     case 'transfer-placeholder':
-      throw new Error('Transfer placeholder has no received value');
+      throw new InternalError('Transfer placeholder has no received value');
   }
 
   memory.set(serialized, value);
   if (!deep) return value;
   if (!isObject(value)) {
-    throw new Error('A deep record has no object value');
+    throw new InternalError('A deep record has no object value');
   }
 
   if (serialized.type === 'Map') {
@@ -151,14 +152,14 @@ export function structuredDeserialize(
     deserializeProperties(serialized.properties, value, ctx, memory);
   } else if (serialized.type === 'platform-object') {
     if (!platformRecord) {
-      throw new Error('A platform-object record was not created');
+      throw new InternalError('A platform-object record was not created');
     }
     const steps = ctx.getCapability(
       platformRecord.primaryInterface.definition,
       serializable,
     );
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `${platformRecord.primaryInterface.definition.name} has no Serializable capability`,
       );
     }
@@ -171,7 +172,7 @@ export function structuredDeserialize(
           ctx.unwrap(platformObject, implClass),
         subdeserialize: (subSerialized) => {
           if (!isSerializedRecord(subSerialized)) {
-            throw new TypeError('Sub-deserialization requires a serialized record');
+            throw new InternalError('Sub-deserialization requires a serialized record');
           }
           return structuredDeserialize(
             subSerialized,
@@ -182,7 +183,7 @@ export function structuredDeserialize(
       },
     );
   } else {
-    throw new Error(`Unsupported deep record ${serialized.type}`);
+    throw new InternalError(`Unsupported deep record ${serialized.type}`);
   }
 
   return value;
@@ -194,18 +195,18 @@ function deserializeSharedArrayBuffer(
   realm: Realm,
 ): object {
   if (getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
-    throw new Error('Only a SharedArrayBuffer can share its backing store');
+    throw new InternalError('Only a SharedArrayBuffer can share its backing store');
   }
   const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
   if (getBufferTypeName(value) !== 'SharedArrayBuffer') {
-    throw new Error('The host did not clone a SharedArrayBuffer');
+    throw new InternalError('The host did not clone a SharedArrayBuffer');
   }
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
   if (!constructor) {
-    throw new Error('The target realm has no SharedArrayBuffer intrinsic');
+    throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
   }
   if (!Reflect.setPrototypeOf(value, constructor.prototype)) {
-    throw new Error('Could not apply the target SharedArrayBuffer prototype');
+    throw new InternalError('Could not apply the target SharedArrayBuffer prototype');
   }
   return value;
 }
@@ -243,7 +244,7 @@ function deserializeProperties(
       value: structuredDeserialize(entry.value, ctx, memory),
       writable: true,
     });
-    if (!status) throw new Error(`Could not deserialize property ${entry.key}`);
+    if (!status) throw new InternalError(`Could not deserialize property ${entry.key}`);
   }
 }
 
@@ -275,7 +276,7 @@ function deserializeErrorCause(
     value: structuredDeserialize(serialized.cause, ctx, memory),
     writable: true,
   });
-  if (!status) throw new Error('Could not restore serialized Error cause');
+  if (!status) throw new InternalError('Could not restore serialized Error cause');
 }
 
 function getErrorConstructor(

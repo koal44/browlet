@@ -30,6 +30,7 @@ import {
   type DeclarationComponent,
 } from '../syntax/declaration-value';
 import { type PropertyContext } from '../css/property';
+import { InternalError } from '../../infra/internal-error';
 
 export type SyntaxValue =
   | UniversalSyntaxValue
@@ -526,13 +527,13 @@ function createSyntaxTypeConsumer(
         type: 'parsed-syntax-type', name, value,
       }));
     case 'transform-function':
-      throw new Error('<transform-function> parsing is not implemented');
+      throw new InternalError('<transform-function> parsing is not implemented');
     case 'custom-ident':
       return adaptConsumer(syntaxTypeDefs['custom-ident'].consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'transform-list':
-      throw new Error('<transform-list> parsing is not implemented');
+      throw new InternalError('<transform-list> parsing is not implemented');
   }
 }
 

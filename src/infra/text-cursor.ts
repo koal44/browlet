@@ -76,6 +76,7 @@ export class TextCursor {
   }
 }
 
+// eslint-disable-next-line no-restricted-globals -- Cursor diagnostics are not requests for a realm-owned exception.
 export class TextCursorError extends SyntaxError {
   constructor(message: string, public position: number, input?: string) {
     const at = `${message} at ${position}`;

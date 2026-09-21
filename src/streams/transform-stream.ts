@@ -12,6 +12,7 @@ import {
 } from './queuing-strategy';
 import { ReadableStreamImpl, ReadableStreamDefaultControllerImpl } from './readable-stream';
 import { WritableStreamImpl } from './writable-stream';
+import { InternalError } from '../infra/internal-error';
 
 // =============================================================================
 // TransformStream
@@ -83,7 +84,7 @@ export class TransformStreamImpl {
   get readableController(): ReadableStreamDefaultControllerImpl {
     const { controller } = this.readable.state;
     if (!ReadableStreamDefaultControllerImpl.is(controller)) {
-      throw new Error('TransformStream has no readable default controller');
+      throw new InternalError('TransformStream has no readable default controller');
     }
     return controller;
   }
@@ -133,7 +134,7 @@ export class TransformStreamImpl {
 
   setBackpressure(backpressure: boolean): void {
     if (this.state.backpressure === backpressure) {
-      throw new Error('Transform stream backpressure did not change');
+      throw new InternalError('Transform stream backpressure did not change');
     }
     this.state.backpressureChange?.resolve();
     this.state.backpressureChange = this.runtime.promises.withResolvers<void>();
@@ -183,7 +184,7 @@ export class TransformStreamImpl {
   #write(chunk: unknown): PromiseValue<unknown> {
     const { state } = this.writable;
     if (state.state !== 'writable') {
-      throw new Error('Transform stream writable side is not writable');
+      throw new InternalError('Transform stream writable side is not writable');
     }
     if (!this.state.backpressure) return this.#controller.performTransform(chunk);
 
@@ -245,7 +246,7 @@ export class TransformStreamImpl {
   /** Streams §6.4.4, TransformStreamDefaultSourcePullAlgorithm. */
   #pull(): PromiseValue<void> {
     if (!this.state.backpressure) {
-      throw new Error('Transform stream source pulled without backpressure');
+      throw new InternalError('Transform stream source pulled without backpressure');
     }
     this.setBackpressure(false);
     return requireStateMember(this.state.backpressureChange, 'backpressure change').promise;
@@ -435,7 +436,7 @@ export class TransformStreamDefaultControllerImpl {
     }
     const backpressure = controller.hasBackpressure;
     if (backpressure !== stream.state.backpressure) {
-      if (!backpressure) throw new Error('Transform stream unexpectedly lost backpressure');
+      if (!backpressure) throw new InternalError('Transform stream unexpectedly lost backpressure');
       stream.setBackpressure(true);
     }
   }
@@ -456,7 +457,7 @@ export class TransformStreamDefaultControllerImpl {
     flushAlgorithm: () => PromiseValue<unknown>,
     cancelAlgorithm: (reason: unknown) => PromiseValue<unknown>,
   ): void {
-    if (stream.state.controller) throw new Error('TransformStream already has a controller');
+    if (stream.state.controller) throw new InternalError('TransformStream already has a controller');
     this.state = { stream, transformAlgorithm, flushAlgorithm, cancelAlgorithm };
     stream.state.controller = this;
   }
@@ -576,7 +577,7 @@ function requireAlgorithm<Algorithm>(
   algorithm: Algorithm | undefined,
   name: string,
 ): Algorithm {
-  if (!algorithm) throw new Error(`Transform stream ${name} algorithm is gone`);
+  if (!algorithm) throw new InternalError(`Transform stream ${name} algorithm is gone`);
   return algorithm;
 }
 
@@ -585,7 +586,7 @@ function requireStateMember<Value>(
   name: string,
 ): Value {
   if (value === undefined) {
-    throw new Error(`TransformStream has no ${name}`);
+    throw new InternalError(`TransformStream has no ${name}`);
   }
   return value;
 }

@@ -2,6 +2,7 @@ import type { JSMicrotaskQueue } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * Each agent has a unique event loop. A task source is associated with one
@@ -38,7 +39,7 @@ export class EventLoop {
 
   start(options: EventLoopOptions): void {
     if (this.#schedulingOptions !== null) {
-      throw new Error('An event loop scheduler is already running');
+      throw new InternalError('An event loop scheduler is already running');
     }
 
     this.#schedulingOptions = options;
@@ -53,7 +54,7 @@ export class EventLoop {
 
   runTaskTurn(options: EventLoopOptions): boolean {
     if (this.#currentlyRunningTask !== null) {
-      throw new Error('An event loop cannot run a task reentrantly');
+      throw new InternalError('An event loop cannot run a task reentrantly');
     }
 
     const runnableTaskQueues = [...this.#taskQueues]
@@ -71,13 +72,13 @@ export class EventLoop {
       (taskQueue) => taskQueue === selectedTaskQueueView,
     );
     if (selectedTaskQueue === undefined) {
-      throw new Error('Task queue selector returned an unavailable queue');
+      throw new InternalError('Task queue selector returned an unavailable queue');
     }
 
     const taskStartTime = options.unsafeSharedCurrentTime();
     const oldestTask = findFirstRunnableTask(selectedTaskQueue);
     if (oldestTask === undefined) {
-      throw new Error('Selected task queue has no runnable task');
+      throw new InternalError('Selected task queue has no runnable task');
     }
 
     selectedTaskQueue.delete(oldestTask);
@@ -144,7 +145,7 @@ export class EventLoop {
   /* HTML §8.1.3.3 — Prepare to run a callback. */
   prepareToRunCallback(settings: EnvironmentSettingsObject): void {
     if (settings.responsibleEventLoop !== this) {
-      throw new Error('A callback context belongs to another event loop');
+      throw new InternalError('A callback context belongs to another event loop');
     }
 
     this.#backupIncumbentSettingsObjectStack.push(settings);
@@ -161,13 +162,13 @@ export class EventLoop {
     );
     if (context !== undefined) {
       if (context.skipWhenDeterminingIncumbent === 0) {
-        throw new Error('A callback incumbent counter is already zero');
+        throw new InternalError('A callback incumbent counter is already zero');
       }
       context.skipWhenDeterminingIncumbent--;
     }
 
     if (this.#backupIncumbentSettingsObjectStack.at(-1) !== settings) {
-      throw new Error('Callback settings were cleaned up out of order');
+      throw new InternalError('Callback settings were cleaned up out of order');
     }
     this.#backupIncumbentSettingsObjectStack.pop();
   }
@@ -175,7 +176,7 @@ export class EventLoop {
   /* HTML §8.1.4.4 — Prepare to run script. */
   prepareToRunScript(settings: EnvironmentSettingsObject): void {
     if (settings.responsibleEventLoop !== this) {
-      throw new Error('Script settings belong to another event loop');
+      throw new InternalError('Script settings belong to another event loop');
     }
 
     const task = this.#currentlyRunningTask;
@@ -201,7 +202,7 @@ export class EventLoop {
       entry?.kind !== 'realm' ||
       entry.settings !== settings
     ) {
-      throw new Error('Script settings were cleaned up out of order');
+      throw new InternalError('Script settings were cleaned up out of order');
     }
     this.#jsExecutionContextStack.pop();
 
@@ -355,7 +356,7 @@ export class EventLoop {
 
   #popScriptExecutionContext(context: ScriptHavingExecutionContext): void {
     if (this.#jsExecutionContextStack.at(-1) !== context) {
-      throw new Error('Script execution contexts were cleaned up out of order');
+      throw new InternalError('Script execution contexts were cleaned up out of order');
     }
     this.#jsExecutionContextStack.pop();
   }
@@ -365,7 +366,7 @@ export class EventLoop {
       this.#currentlyRunningTask !== null &&
       this.#currentlyRunningTask !== task
     ) {
-      throw new Error('A host script entry left another task running');
+      throw new InternalError('A host script entry left another task running');
     }
     this.#currentlyRunningTask = null;
   }
@@ -519,7 +520,7 @@ function selectFirstTaskQueue(
 ): ReadonlySet<Task> {
   const [taskQueue] = runnableTaskQueues;
   if (taskQueue === undefined) {
-    throw new Error('Cannot select from an empty set of task queues');
+    throw new InternalError('Cannot select from an empty set of task queues');
   }
   return taskQueue;
 }

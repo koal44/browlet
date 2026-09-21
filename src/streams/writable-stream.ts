@@ -13,6 +13,7 @@ import {
   type QueuingStrategyRecord, type QueuingStrategySize,
 } from './queuing-strategy';
 import { QueueWithSizes } from './queue-with-sizes';
+import { InternalError } from '../infra/internal-error';
 
 // =============================================================================
 // WritableStream
@@ -175,7 +176,7 @@ export class WritableStreamImpl {
 
   get controller(): WritableStreamDefaultControllerImpl {
     const controller = this.state.controller;
-    if (!controller) throw new Error('WritableStream has no controller');
+    if (!controller) throw new InternalError('WritableStream has no controller');
     return controller;
   }
 
@@ -212,7 +213,7 @@ export class WritableStreamImpl {
       ));
     }
     if (this.closeQueuedOrInFlight) {
-      throw new Error('Writable stream already has a close operation');
+      throw new InternalError('Writable stream already has a close operation');
     }
 
     const promise = this.runtime.promises.withResolvers<void>();
@@ -237,7 +238,7 @@ export class WritableStreamImpl {
   finishErroring(): void {
     const { state } = this;
     if (state.state !== 'erroring' || this.hasOperationInFlight) {
-      throw new Error('Writable stream cannot finish erroring yet');
+      throw new InternalError('Writable stream cannot finish erroring yet');
     }
     state.state = 'errored';
     this.controller.errorSteps();
@@ -273,7 +274,7 @@ export class WritableStreamImpl {
   finishInFlightClose(): void {
     const { state } = this;
     const request = state.inFlightCloseRequest;
-    if (!request) throw new Error('Writable stream has no in-flight close');
+    if (!request) throw new InternalError('Writable stream has no in-flight close');
     request.resolve(undefined);
     state.inFlightCloseRequest = undefined;
 
@@ -294,7 +295,7 @@ export class WritableStreamImpl {
   finishInFlightCloseWithError(error: unknown): void {
     const { state } = this;
     const request = state.inFlightCloseRequest;
-    if (!request) throw new Error('Writable stream has no in-flight close');
+    if (!request) throw new InternalError('Writable stream has no in-flight close');
     request.reject(error);
     state.inFlightCloseRequest = undefined;
     if (state.pendingAbortRequest) {
@@ -308,7 +309,7 @@ export class WritableStreamImpl {
   finishInFlightWrite(): void {
     const { state } = this;
     const request = state.inFlightWriteRequest;
-    if (!request) throw new Error('Writable stream has no in-flight write');
+    if (!request) throw new InternalError('Writable stream has no in-flight write');
     request.resolve(undefined);
     state.inFlightWriteRequest = undefined;
   }
@@ -317,7 +318,7 @@ export class WritableStreamImpl {
   finishInFlightWriteWithError(error: unknown): void {
     const { state } = this;
     const request = state.inFlightWriteRequest;
-    if (!request) throw new Error('Writable stream has no in-flight write');
+    if (!request) throw new InternalError('Writable stream has no in-flight write');
     request.reject(error);
     state.inFlightWriteRequest = undefined;
     this.dealWithRejection(error);
@@ -341,7 +342,7 @@ export class WritableStreamImpl {
   startErroring(reason: unknown): void {
     const { state } = this;
     if (state.state !== 'writable') {
-      throw new Error('Only a writable stream can start erroring');
+      throw new InternalError('Only a writable stream can start erroring');
     }
     state.state = 'erroring';
     state.storedError = reason;
@@ -573,7 +574,7 @@ export class WritableStreamDefaultControllerImpl {
   errorInternal(error: unknown): void {
     const { state } = this;
     if (state.stream.state.state !== 'writable') {
-      throw new Error('Only a writable stream can start erroring');
+      throw new InternalError('Only a writable stream can start erroring');
     }
     this.clearAlgorithms();
     state.stream.startErroring(error);
@@ -591,7 +592,7 @@ export class WritableStreamDefaultControllerImpl {
   ): void {
     const streamState = stream.state;
     if (streamState.controller) {
-      throw new Error('WritableStream already has a controller');
+      throw new InternalError('WritableStream already has a controller');
     }
     const state: WritableStreamDefaultControllerState = {
       abortAlgorithm,
@@ -665,13 +666,13 @@ export class WritableStreamDefaultControllerImpl {
     const stream = controllerState.stream;
     const streamState = stream.state;
     if (!streamState.closeRequest || streamState.inFlightCloseRequest) {
-      throw new Error('Writable stream has no pending close request');
+      throw new InternalError('Writable stream has no pending close request');
     }
     streamState.inFlightCloseRequest = streamState.closeRequest;
     streamState.closeRequest = undefined;
     controllerState.queue.dequeue();
     if (controllerState.queue.length !== 0) {
-      throw new Error('Writable stream close sentinel was not last');
+      throw new InternalError('Writable stream close sentinel was not last');
     }
 
     const closePromise = requireAlgorithm(
@@ -690,7 +691,7 @@ export class WritableStreamDefaultControllerImpl {
     const streamState = stream.state;
     if (streamState.inFlightWriteRequest ||
       streamState.writeRequests.length === 0) {
-      throw new Error('Writable stream has no queued write request');
+      throw new InternalError('Writable stream has no queued write request');
     }
     streamState.inFlightWriteRequest = streamState.writeRequests.shift();
 
@@ -863,7 +864,7 @@ export class WritableStreamDefaultWriterImpl {
   /** RequireWriterStream. */
   get stream(): WritableStreamImpl {
     const { stream } = this.state;
-    if (!stream) throw new Error('WritableStream writer has been released');
+    if (!stream) throw new InternalError('WritableStream writer has been released');
     return stream;
   }
 
@@ -935,7 +936,7 @@ export class WritableStreamDefaultWriterImpl {
     const stream = this.stream;
     const streamState = stream.state;
     if (streamState.writer !== this) {
-      throw new Error('Writable stream is locked by another writer');
+      throw new InternalError('Writable stream is locked by another writer');
     }
 
     const releasedError = new TypeError(
@@ -1046,6 +1047,6 @@ function requireAlgorithm<Algorithm>(
   algorithm: Algorithm | undefined,
   name: string,
 ): Algorithm {
-  if (!algorithm) throw new Error(`Writable stream ${name} algorithm is gone`);
+  if (!algorithm) throw new InternalError(`Writable stream ${name} algorithm is gone`);
   return algorithm;
 }

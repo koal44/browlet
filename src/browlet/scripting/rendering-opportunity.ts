@@ -5,6 +5,7 @@ import type { Navigable } from '../browsing/navigable';
 import type { WindowAgent } from './agents';
 import type { Realm } from './realm';
 import { renderingTaskSource } from './tasks';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * A rendering-opportunity host observes display refreshes, an embedder signal,
@@ -31,7 +32,7 @@ export class WindowRenderingProducer {
 
   start(): void {
     if (this.#stopObserving !== null) {
-      throw new Error('A rendering producer is already running');
+      throw new InternalError('A rendering producer is already running');
     }
 
     this.#stopObserving = this.#host.observeRenderingOpportunities(
@@ -69,7 +70,7 @@ export class WindowRenderingProducer {
   #updateRendering(): void {
     const frameTimestamp = this.#agent.eventLoop.lastRenderOpportunityTime;
     if (frameTimestamp === null) {
-      throw new Error('A rendering task needs a rendering-opportunity time');
+      throw new InternalError('A rendering task needs a rendering-opportunity time');
     }
 
     const documents = this.#collectRenderableDocuments();

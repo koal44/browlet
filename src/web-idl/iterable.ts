@@ -11,6 +11,7 @@ import {
 } from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
+import { InternalError } from '../infra/internal-error';
 
 // Value pairs use the implementation's existing entry tuples.
 export type ValuePair<Key = unknown, Value = unknown> = [key: Key, value: Value];
@@ -136,7 +137,7 @@ export class SynchronousIterableBinding {
           this.#binding.defaultConversionContext,
         );
         if (!isCallbackFunctionValue(callback)) {
-          throw new Error('Function conversion did not produce a callback');
+          throw new InternalError('Function conversion did not produce a callback');
         }
         const context = { binding: receiver.binding, realm: this.#binding.realm };
         let pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
@@ -269,7 +270,7 @@ export class SynchronousIterableBinding {
   ): ValuePair[] {
     const steps = this.#binding.getMemberBinding(primaryInterface, iterable)?.valuePairsSteps;
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `Missing ${primaryInterface.definition.name} value-pairs implementation`,
       );
     }

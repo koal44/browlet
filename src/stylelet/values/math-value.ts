@@ -35,6 +35,7 @@ import { RESOLUTION_UNITS, canonicalizeResolution, type ResolutionLiteral } from
 import {
   TIME_UNITS, canonicalizeTime, type CanonicalTimeLiteral, type TimeLiteral,
 } from './numeric-literal/time';
+import { InternalError } from '../../infra/internal-error';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';
@@ -150,7 +151,7 @@ function createNumericLeafFromLiteral<Type extends MathValueType>(
   const mathHints = mathHintsFromValue(normalized, context);
 
   if (mathHints === null) {
-    throw new TypeError('Cannot create a numeric leaf from an unknown dimension');
+    throw new InternalError('Cannot create a numeric leaf from an unknown dimension');
   }
 
   return createNumericLeaf(normalized, mathHints);
@@ -165,7 +166,7 @@ export function promoteNumericVariable<Type extends MathValueType>(
   const variable = context.numericVariables?.get(normalizedName);
 
   if (variable === undefined || variable.valueType !== valueType) {
-    throw new TypeError('Cannot promote an unknown numeric variable');
+    throw new InternalError('Cannot promote an unknown numeric variable');
   }
 
   return createMathValue(
@@ -309,7 +310,7 @@ export function coercePercentageMathToNumber(
   ]);
 
   if (mathHints === null) {
-    throw new TypeError('Cannot coerce inconsistent percentage math');
+    throw new InternalError('Cannot coerce inconsistent percentage math');
   }
 
   return createMathValue(
@@ -371,7 +372,7 @@ function combineMathValues<Type extends MathValueType>(
   ]);
 
   if (mathHints === null) {
-    throw new TypeError('Math function types must be consistent');
+    throw new InternalError('Math function types must be consistent');
   }
 
   return createMathValue(
@@ -391,7 +392,7 @@ function commonValueType<Type extends MathValueType>(
   const valueType = a.valueType;
 
   if (b.valueType !== valueType) {
-    throw new TypeError('Math value types must be consistent');
+    throw new InternalError('Math value types must be consistent');
   }
 
   return valueType;
@@ -1470,7 +1471,7 @@ function mathHintsFromNumericVariable(
         context,
       )
     ) {
-      throw new TypeError('Numeric variable value does not match its value type');
+      throw new InternalError('Numeric variable value does not match its value type');
     }
   }
 
@@ -1557,7 +1558,7 @@ function addMathHints(
   const [first, ...rest] = hints;
 
   if (first === undefined) {
-    throw new RangeError('Math hint addition requires an operand');
+    throw new InternalError('Math hint addition requires an operand');
   }
 
   if (first === null) {
@@ -1950,7 +1951,7 @@ function requiredExpectedType(
   context?: InternalMathContext,
 ): MathValueType {
   if (context?.expectedType === undefined) {
-    throw new TypeError('Math value expected type is required');
+    throw new InternalError('Math value expected type is required');
   }
 
   return context.expectedType;
@@ -2012,7 +2013,7 @@ function resolvedMathLiteralFromLeaf<Type extends MathValueType>(
   const literal = reifyNumericLiteral(value, valueType);
 
   if (!matchesResolvedMathLiteral(literal, valueType)) {
-    throw new TypeError(
+    throw new InternalError(
       'Resolved math value does not match its value type',
     );
   }
@@ -2158,7 +2159,7 @@ function simplifyCalculationNodeInternal(
       const hints = mathHintsFromNumericVariable(variable, context);
 
       if (!haveSameMathHints(root.hints, hints)) {
-        throw new TypeError('Numeric variable value type changed during resolution');
+        throw new InternalError('Numeric variable value type changed during resolution');
       }
 
       return simplifyCalculationNode(
@@ -3017,7 +3018,7 @@ function scaleNumericLeaf(
   ]);
 
   if (mathHints === null) {
-    throw new TypeError('Cannot multiply inconsistent math hints');
+    throw new InternalError('Cannot multiply inconsistent math hints');
   }
 
   return createNumericLeaf(
@@ -3153,7 +3154,7 @@ function combineProductNumbers(
   );
 
   if (mathHints === null) {
-    throw new TypeError('Cannot combine inconsistent number math hints');
+    throw new InternalError('Cannot combine inconsistent number math hints');
   }
   const combined: CalculationTree[] = [];
   let emitted = false;
@@ -3386,7 +3387,7 @@ function canonicalUnitForDimension(unit: string): string {
     case 'number':
     case 'percent':
     case null:
-      throw new TypeError(`Cannot canonicalize unknown dimension unit: ${unit}`);
+      throw new InternalError(`Cannot canonicalize unknown dimension unit: ${unit}`);
   }
 }
 

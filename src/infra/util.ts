@@ -1,3 +1,5 @@
+import { InternalError } from './internal-error';
+
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 export type SameArityTuple<
@@ -19,11 +21,11 @@ export type Permutations<T, K = T> =
   T extends K ? [T, ...Permutations<Exclude<K, T>>] : never;
 
 export function assertNever(value: never, message?: string): never {
-  throw new Error(message ?? `Unexpected value: ${String(value)}`);
+  throw new InternalError(message ?? `Unexpected value: ${String(value)}`);
 }
 
 export function clamp(n: number, min: number, max: number): number {
-  if (min > max) throw new RangeError('min must be ≤ max');
+  if (min > max) throw new InternalError('min must be ≤ max');
   return Math.min(Math.max(n, min), max);
 }
 
@@ -35,5 +37,5 @@ export function requireDefined<T>(
     return value;
   }
 
-  throw new Error(typeof message === 'function' ? message(value) : message);
+  throw new InternalError(typeof message === 'function' ? message(value) : message);
 }

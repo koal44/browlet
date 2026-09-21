@@ -13,6 +13,7 @@ import { htmlStyleElementInterface } from './html/elements/metadata/style';
 import { mathMLElementInterface } from './mathml/element';
 import { svgElementInterface } from './svg/element';
 import { svgStyleElementInterface } from './svg/style-element';
+import { InternalError } from '../infra/internal-error';
 
 export function resolveElementInterface(
   namespaceURI: string,
@@ -60,7 +61,7 @@ function compileElementInterfaces(
     for (const localName of elementInterface.localNames) {
       const existing = localNames.get(localName);
       if (existing) {
-        throw new TypeError(
+        throw new InternalError(
           `Element ${elementInterface.namespaceURI} ${localName} is declared by ` +
           `${existing.definition.name} and ${elementInterface.definition.name}`,
         );

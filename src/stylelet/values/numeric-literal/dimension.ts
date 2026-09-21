@@ -6,6 +6,7 @@ import {
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * <dimension> = <dimension-token>
@@ -100,7 +101,7 @@ function assertSameDimensionUnit(
   b: AnyDimensionLiteral,
 ): void {
   if (a.unit !== b.unit) {
-    throw new TypeError(`Dimension units must match: ${a.unit} and ${b.unit}`);
+    throw new InternalError(`Dimension units must match: ${a.unit} and ${b.unit}`);
   }
 }
 

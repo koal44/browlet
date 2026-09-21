@@ -44,6 +44,27 @@ describe('Browlet URL bindings', () => {
     expect([...sequence]).toEqual([['1', '2']]);
   });
 
+  it.each(['constructor', 'href', 'search params', 'origin'] as const)(
+    'creates %s failures in the operation realm', (operation) => {
+      const browlet = new Browlet({ route: () => '' });
+      const other = new Browlet({ route: () => '' });
+      const URL_ = getConstructor(browlet, 'URL') as unknown as typeof URL;
+      const OtherURL = getConstructor(other, 'URL') as unknown as typeof URL;
+      const URLSearchParams_ = getConstructor(browlet, 'URLSearchParams') as unknown as typeof URLSearchParams;
+      const Origin = getConstructor(browlet, 'Origin') as unknown as { from(value: unknown): unknown; };
+      const hrefDescriptor = Object.getOwnPropertyDescriptor(URL_.prototype, 'href')!;
+      const operations = {
+        constructor: () => new URL_('relative'),
+        href: () => hrefDescriptor.set!.call(new OtherURL('https://example.test/'), 'relative'),
+        'search params': () => new URLSearchParams_([['name']]),
+        origin: () => Origin.from({}),
+      };
+
+      expect(operations[operation])
+        .toThrow(getConstructor(browlet, 'TypeError'));
+    },
+  );
+
   it('exposes pathname and search as live URL attributes', () => {
     const browlet = new Browlet({ route: () => '' });
     const URL_ = getConstructor(browlet, 'URL') as unknown as typeof URL;

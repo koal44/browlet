@@ -14,6 +14,7 @@ import {
   makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
 } from './runtime';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * One JavaScript realm, backed by a Node VM context. Higher layers subclass
@@ -49,7 +50,7 @@ export class JSRealm {
     this.globalPrototypeChain = getContextPrototypeChain(this.#context);
     this.allocatedGlobalObject = getAllocatedGlobalObject(this.#context);
     if (options.globalPrototypeChain && !this.globalPrototypeChain) {
-      throw new Error('The Node backend did not allocate the requested global prototypes');
+      throw new InternalError('The Node backend did not allocate the requested global prototypes');
     }
     this.#hostGlobal = getContextGlobal(this.#context) as RealmGlobal;
     this.#globalObject = this.#hostGlobal;
@@ -117,7 +118,7 @@ export class JSRealm {
     const iteratorPrototype = arrayIteratorPrototype &&
       Reflect.getPrototypeOf(arrayIteratorPrototype);
     if (!iteratorPrototype) {
-      throw new Error('Could not obtain the realm Iterator prototype');
+      throw new InternalError('Could not obtain the realm Iterator prototype');
     }
     const asyncIterator = runInContext(
       '(async function* () {})()',
@@ -131,7 +132,7 @@ export class JSRealm {
     const asyncIteratorPrototype = asyncGeneratorPrototype &&
       Reflect.getPrototypeOf(asyncGeneratorPrototype);
     if (!asyncIteratorPrototype) {
-      throw new Error('Could not obtain the realm AsyncIterator prototype');
+      throw new InternalError('Could not obtain the realm AsyncIterator prototype');
     }
     const mapIteratorPrototype = Reflect.getPrototypeOf(Reflect.apply(
       Reflect.get(Map_.prototype, 'entries') as CallableFunction,
@@ -144,7 +145,7 @@ export class JSRealm {
       [],
     ) as object);
     if (!mapIteratorPrototype || !setIteratorPrototype) {
-      throw new Error('Could not obtain the realm collection iterator prototypes');
+      throw new InternalError('Could not obtain the realm collection iterator prototypes');
     }
 
     this.intrinsics = {
@@ -302,7 +303,7 @@ export class JSRealm {
   createOrdinaryObject(prototype: object | null): object {
     const object = Reflect.construct(this.intrinsics.object, []);
     if (!Reflect.setPrototypeOf(object, prototype)) {
-      throw new Error('Could not set an ordinary object prototype');
+      throw new InternalError('Could not set an ordinary object prototype');
     }
     associateObjectRealm(object, this);
     return object;
@@ -407,7 +408,7 @@ export class JSRealm {
   createSharedArrayBuffer(bytes: ByteSequence, maxByteLength?: number): SharedArrayBuffer {
     const constructor = this.intrinsics.bufferSource.sharedArrayBuffer;
     if (!constructor) {
-      throw new Error('The target realm has no SharedArrayBuffer intrinsic');
+      throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
     }
     const buffer = new constructor(
       bytes.length,
@@ -423,7 +424,7 @@ export class JSRealm {
   ): JSBufferView<Name> {
     const elementSize = getArrayBufferViewElementSize(name);
     if (name !== 'DataView' && bytes.length % elementSize !== 0) {
-      throw new Error(`${name} byte length is not a multiple of ${elementSize}`);
+      throw new InternalError(`${name} byte length is not a multiple of ${elementSize}`);
     }
     return this.createView(
       name, this.createArrayBuffer(bytes), 0, bytes.length / elementSize,
@@ -439,7 +440,7 @@ export class JSRealm {
   ): JSBufferView<Name> {
     const constructor = this.intrinsics.bufferSource.views[name];
     if (!constructor) {
-      throw new Error(`The target realm has no ${name} intrinsic`);
+      throw new InternalError(`The target realm has no ${name} intrinsic`);
     }
     return Reflect.construct(
       constructor,
@@ -449,7 +450,7 @@ export class JSRealm {
 
   detachArrayBuffer(buffer: ArrayBuffer): void {
     if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
-      throw new Error('Only an ArrayBuffer can be detached');
+      throw new InternalError('Only an ArrayBuffer can be detached');
     }
     if (isDetachedArrayBuffer(buffer)) return;
     Reflect.apply(this.intrinsics.bufferSource.arrayBufferTransfer, buffer, [0]);
@@ -460,7 +461,7 @@ export class JSRealm {
   // IsDetachable() does not answer that question; transfer remains authoritative.
   transferArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
     if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
-      throw new Error('Only an ArrayBuffer can be transferred');
+      throw new InternalError('Only an ArrayBuffer can be transferred');
     }
     if (isDetachedArrayBuffer(buffer)) {
       throw new this.intrinsics.typeError('ArrayBuffer is detached');
@@ -494,7 +495,7 @@ export class JSRealm {
     globalThis: object,
   ): void {
     if (this.#globalObject !== this.#hostGlobal) {
-      throw new Error('Realm global objects are already initialized');
+      throw new InternalError('Realm global objects are already initialized');
     }
     this.#globalObject = globalObject;
     this.#globalThis = globalThis;
@@ -502,7 +503,7 @@ export class JSRealm {
 
     if (this.globalPrototypeChain !== undefined) {
       if (globalObject !== this.allocatedGlobalObject || globalThis !== this.#hostGlobal) {
-        throw new Error('Native global initialization requires its allocated object and proxy');
+        throw new InternalError('Native global initialization requires its allocated object and proxy');
       }
       // Intrinsics have been copied to the per-realm target. Remove configurable
       // backing properties before installing delegation so deletion/ownKeys do
@@ -551,7 +552,7 @@ export class JSRealm {
         descriptor &&
         !Reflect.defineProperty(this.#globalObject, property, descriptor)
       ) {
-        throw new Error(`Could not install global binding ${String(property)}`);
+        throw new InternalError(`Could not install global binding ${String(property)}`);
       }
     }
     Object.defineProperty(this.#globalObject, 'globalThis', {

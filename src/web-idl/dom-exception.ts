@@ -7,6 +7,7 @@ import {
   dictMember, emptyDictionary, idlType, impl, integer, nullable,
   roAttr, reference, xattr,
 } from './core/index';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * [Exposed=*,
@@ -90,7 +91,7 @@ export const domExceptionIDL = defineInterface({
     allocatePlatformObject(ctx, prototype) {
       const object = Reflect.construct(ctx.realm.intrinsics.error, []);
       if (!Reflect.setPrototypeOf(object, prototype)) {
-        throw new TypeError('Could not set DOMException platform-object prototype');
+        throw new InternalError('Could not set DOMException platform-object prototype');
       }
       return object;
     },

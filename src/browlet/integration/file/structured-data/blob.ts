@@ -8,6 +8,7 @@ import type { StructuredDataRecord } from '../../../scripting/structured-data/re
 import {
   serializable, type SerializableSteps,
 } from '../../../scripting/structured-data/serializable';
+import { InternalError } from '../../../../infra/internal-error';
 
 /*
  * File API defines Blob's record fields. HTML owns their registration and
@@ -16,7 +17,7 @@ import {
 export const blobSerializable = {
   serializationSteps(value, serialized, forStorage) {
     if (!BlobImpl.is(value)) {
-      throw new TypeError('Blob serialization requires a Blob implementation');
+      throw new InternalError('Blob serialization requires a Blob implementation');
     }
     const state = value.getSerializationState();
     let data = state.data;
@@ -39,7 +40,7 @@ export const blobSerializable = {
 
   deserializationSteps(serialized, value) {
     if (!BlobImpl.is(value)) {
-      throw new TypeError('Blob deserialization requires a Blob implementation');
+      throw new InternalError('Blob deserialization requires a Blob implementation');
     }
     value.setSerializationState({
       data: requireBlobData(serialized, 'ByteSequence'),
@@ -59,7 +60,7 @@ function requireBlobData(
 ): BlobData {
   const value = record.get(field);
   if (!(value instanceof BlobData)) {
-    throw new TypeError(
+    throw new InternalError(
       `Structured-data field [[${field}]] is not Blob data`,
     );
   }
@@ -72,7 +73,7 @@ function requireString(
 ): string {
   const value = record.get(field);
   if (typeof value !== 'string') {
-    throw new TypeError(
+    throw new InternalError(
       `Structured-data field [[${field}]] is not a string`,
     );
   }

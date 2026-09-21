@@ -8,6 +8,7 @@ import {
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
+import { InternalError } from '../../infra/internal-error';
 
 export class Navigable {
   id = Symbol('Navigable');
@@ -20,7 +21,7 @@ export class Navigable {
 
   get activeSessionHistoryEntry(): SessionHistoryEntry {
     if (this.#activeSessionHistoryEntry === null) {
-      throw new Error('Navigable has not been initialized');
+      throw new InternalError('Navigable has not been initialized');
     }
     return this.#activeSessionHistoryEntry;
   }
@@ -39,13 +40,13 @@ export class Navigable {
 
     const browsingContext = document.getBrowsingContext();
     if (browsingContext === null) {
-      throw new Error('An active Document needs a browsing context');
+      throw new InternalError('An active Document needs a browsing context');
     }
     if (
       browsingContext.navigable !== null &&
       browsingContext.navigable !== this
     ) {
-      throw new Error('A browsing context cannot be active in two navigables');
+      throw new InternalError('A browsing context cannot be active in two navigables');
     }
 
     this.#activeSessionHistoryEntry = entry;
@@ -74,10 +75,10 @@ export class Navigable {
 
   initialize(documentState: DocumentState, parent: Navigable | null = null): void {
     if (documentState.document === null) {
-      throw new Error('A navigable must be initialized with a Document');
+      throw new InternalError('A navigable must be initialized with a Document');
     }
     if (this instanceof TopLevelTraversable && parent !== null) {
-      throw new Error('A top-level traversable must have a null parent');
+      throw new InternalError('A top-level traversable must have a null parent');
     }
 
     const entry = createSessionHistoryEntry(documentState);
@@ -156,12 +157,12 @@ export function createNewTopLevelTraversable(
 function createNewAuxiliaryBrowsingContextAndDocument(
   _opener: BrowsingContext,
 ): DocumentImpl {
-  throw new Error('Auxiliary browsing-context creation is not implemented');
+  throw new InternalError('Auxiliary browsing-context creation is not implemented');
 }
 
 function legacyCloneTraversableStorageShed(
   _opener: BrowsingContext,
   _traversable: TopLevelTraversable,
 ): void {
-  throw new Error('Traversable storage cloning is not implemented');
+  throw new InternalError('Traversable storage cloning is not implemented');
 }

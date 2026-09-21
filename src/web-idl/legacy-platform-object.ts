@@ -14,6 +14,7 @@ import type {
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
 } from './types';
+import { InternalError } from '../infra/internal-error';
 
 export class LegacyPlatformObjectBinding {
   #binding: RealmBinding;
@@ -117,7 +118,7 @@ export class LegacyPlatformObjectBinding {
     if (indexedGetter) {
       const steps = this.#binding.getMemberBinding(primaryInterface, indexedGetter)?.indexedPropertySteps;
       if (!steps) {
-        throw new Error('Missing supported property indices implementation');
+        throw new InternalError('Missing supported property indices implementation');
       }
       indexed = {
         getter: indexedGetter,
@@ -136,7 +137,7 @@ export class LegacyPlatformObjectBinding {
     if (namedGetter) {
       const steps = this.#binding.getMemberBinding(primaryInterface, namedGetter)?.namedPropertySteps;
       if (!steps) {
-        throw new Error('Missing supported property names implementation');
+        throw new InternalError('Missing supported property names implementation');
       }
       named = {
         deleter: findDerivedSpecialOperation(
@@ -303,7 +304,7 @@ export class LegacyPlatformObjectBinding {
   ): PropertyDescriptor {
     const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
     if (!steps) {
-      throw new Error('Missing named property getter implementation');
+      throw new InternalError('Missing named property getter implementation');
     }
     const value = steps(this.#getReceiverRecord(target), property);
     return {
@@ -506,7 +507,7 @@ export class LegacyPlatformObjectBinding {
     properties: IndexedProperties,
   ): void {
     const { setter } = properties;
-    if (!setter) throw new Error('Indexed property has no setter');
+    if (!setter) throw new InternalError('Indexed property has no setter');
 
     const index = toArrayIndex(property);
     const creating = !this.#supportsIndex(
@@ -519,7 +520,7 @@ export class LegacyPlatformObjectBinding {
     if (setter.name) {
       const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
       if (!steps) {
-        throw new Error('Missing indexed property setter implementation');
+        throw new InternalError('Missing indexed property setter implementation');
       }
       steps(this.#getReceiverRecord(target), index, converted);
       return;
@@ -527,7 +528,7 @@ export class LegacyPlatformObjectBinding {
 
     const steps = creating ? properties.steps.setNew : properties.steps.setExisting;
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `Missing indexed property ${creating ? 'new' : 'existing'} setter implementation`,
       );
     }
@@ -542,14 +543,14 @@ export class LegacyPlatformObjectBinding {
     properties: NamedProperties,
   ): void {
     const { setter } = properties;
-    if (!setter) throw new Error('Named property has no setter');
+    if (!setter) throw new InternalError('Named property has no setter');
 
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
     if (setter.name) {
       const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
       if (!steps) {
-        throw new Error('Missing named property setter implementation');
+        throw new InternalError('Missing named property setter implementation');
       }
       steps(this.#getReceiverRecord(target), property, converted);
       return;
@@ -558,7 +559,7 @@ export class LegacyPlatformObjectBinding {
     // eslint-disable-next-line @typescript-eslint/unbound-method -- named setter steps use the implementation as their specified this value
     const steps = creating ? properties.steps.setNew : properties.steps.setExisting;
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `Missing named property ${creating ? 'new' : 'existing'} setter implementation`,
       );
     }
@@ -570,7 +571,7 @@ export class LegacyPlatformObjectBinding {
   #convertSetterValue(setter: OperationMember, value: unknown): unknown {
     const valueArgument = setter.arguments[1];
     if (!valueArgument) {
-      throw new Error('Legacy property setter has no value argument');
+      throw new InternalError('Legacy property setter has no value argument');
     }
     return convertToIDL(
       value,
@@ -589,18 +590,18 @@ export class LegacyPlatformObjectBinding {
     properties: NamedProperties,
   ): boolean {
     const { deleter } = properties;
-    if (!deleter) throw new Error('Named property has no deleter');
+    if (!deleter) throw new InternalError('Named property has no deleter');
     if (!deleter.name) {
       // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
       const steps = properties.steps.deleteExisting;
       if (!steps) {
-        throw new Error('Missing anonymous named property deleter implementation');
+        throw new InternalError('Missing anonymous named property deleter implementation');
       }
       return Reflect.apply(steps, target, [property]);
     }
 
     const steps = this.#binding.getMemberBinding(properties.primaryInterface, deleter)?.operationSteps;
-    if (!steps) throw new Error('Missing named property deleter implementation');
+    if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
     const returnType = getUnannotatedType(
       deleter.returns,
@@ -641,14 +642,14 @@ export class LegacyPlatformObjectBinding {
     properties: IndexedProperties,
   ): unknown {
     const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
-    if (!steps) throw new Error('Missing indexed property getter implementation');
+    if (!steps) throw new InternalError('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
 
   // Proxy traps run after their implementation has been associated with the platform object.
   #getReceiverRecord(implInst: object): PlatformRecord {
     const record = getImplementationRecord(implInst);
-    if (!record) throw new Error('Legacy object implementation is not associated');
+    if (!record) throw new InternalError('Legacy object implementation is not associated');
     return record;
   }
 

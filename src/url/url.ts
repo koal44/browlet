@@ -5,6 +5,7 @@ import { utf8PercentEncode, percentEncodeAfterEncoding } from './percent-encodin
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';
 import { createOpaqueOrigin, type Origin } from './origin';
 import type { URLValidationError } from './validation-error';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * A URL record.
@@ -869,7 +870,7 @@ function clonePath(path: URLRecord['path']): URLRecord['path'] {
 }
 
 function hierarchicalPath(url: URLRecord): string[] {
-  if (hasOpaquePath(url)) throw new TypeError('Expected a hierarchical URL path');
+  if (hasOpaquePath(url)) throw new InternalError('Expected a hierarchical URL path');
   return url.path as string[];
 }
 
@@ -978,7 +979,7 @@ function isWindowsDriveLetterTerminator(codePoint: string): boolean {
 
 function shortenURLPath(url: URLRecord): void {
   if (hasOpaquePath(url)) {
-    throw new TypeError('An opaque URL path cannot be shortened');
+    throw new InternalError('An opaque URL path cannot be shortened');
   }
   const path = url.path as string[];
 

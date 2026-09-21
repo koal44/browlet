@@ -46,6 +46,7 @@ import {
 import type { BindingWorld } from './binding-world';
 import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
+import { InternalError } from '../infra/internal-error';
 
 export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   definitions: DefinitionAssembly;
@@ -117,7 +118,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Project boundary: resolve an interface name before using its assembled definition.
   resolveInterface(interfaceName: string): AssembledInterfaceDefinition {
     const primaryInterface = this.definitions.getInterface(interfaceName);
-    if (!primaryInterface) throw new Error(`Unknown Web IDL interface ${interfaceName}`);
+    if (!primaryInterface) throw new InternalError(`Unknown Web IDL interface ${interfaceName}`);
     return primaryInterface;
   }
 
@@ -329,7 +330,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     );
     const source = declarations[0];
     if (!source) {
-      throw new Error(
+      throw new InternalError(
         `${primaryInterface.definition.name} has no legacy factory function ${id}`,
       );
     }
@@ -355,7 +356,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         );
         const behavior = this.getMemberBinding(primaryInterface, overload.callable)?.constructorBehavior;
         if (!behavior) {
-          throw new Error(
+          throw new InternalError(
             `Web IDL ${primaryInterface.definition.name} legacy factory function ${id} has no implementation steps`,
           );
         }
@@ -467,7 +468,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       ? this.#globalPlatformObjects.createPrototypeObject(parentPrototype)
       : this.realm.createOrdinaryObject(parentPrototype));
     if (Reflect.getPrototypeOf(prototype) !== parentPrototype) {
-      throw new Error(`Allocated ${primaryInterface.definition.name} prototype has the wrong parent`);
+      throw new InternalError(`Allocated ${primaryInterface.definition.name} prototype has the wrong parent`);
     }
     definitionBinding.interfacePrototypeObject = prototype;
 
@@ -510,7 +511,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     const existing = getImplementationRecord(implInst);
     if (existing) {
       if (existing.binding.world !== this.world) {
-        throw new TypeError('Implementation instance belongs to another binding world');
+        throw new InternalError('Implementation instance belongs to another binding world');
       }
       return interfaceImplements(existing.primaryInterface, expectedInterface)
         ? existing.project()
@@ -533,12 +534,12 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     newTarget?: object,
   ): PlatformRecord {
     if (!this.isExposed(primaryInterface)) {
-      throw new Error(
+      throw new InternalError(
         `Interface ${primaryInterface.definition.name} is not exposed in this realm`,
       );
     }
     if (isGlobalInterface(primaryInterface)) {
-      throw new Error(
+      throw new InternalError(
         `Global interface ${primaryInterface.definition.name} requires global exotic object machinery`,
       );
     }
@@ -547,7 +548,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
     const createImplementation = this.getDefinitionBinding(primaryInterface.definition).createImplementation;
     if (!createImplementation) {
-      throw new Error(
+      throw new InternalError(
         `Interface ${primaryInterface.definition.name} has no implementation creation steps`,
       );
     }
@@ -620,7 +621,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     prototype = this.getInterfacePrototypeObject(primaryInterface),
   ): PlatformRecord<T> {
     if (isGlobalInterface(primaryInterface)) {
-      throw new Error(
+      throw new InternalError(
         `Use projectGlobalObject for ${primaryInterface.definition.name}`,
       );
     }
@@ -629,7 +630,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       ? allocatePlatformObject(prototype)
       : this.realm.createOrdinaryObject(prototype);
     if (Reflect.getPrototypeOf(backingObject) !== prototype) {
-      throw new Error(
+      throw new InternalError(
         `Platform object for ${primaryInterface.definition.name} has the wrong prototype`,
       );
     }
@@ -652,18 +653,18 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     allocation?: GlobalObjectAllocation,
   ): PlatformRecord<T> {
     if (!isGlobalInterface(primaryInterface)) {
-      throw new Error(`${primaryInterface.definition.name} is not a global interface`);
+      throw new InternalError(`${primaryInterface.definition.name} is not a global interface`);
     }
     if (!this.isExposed(primaryInterface)) {
-      throw new Error(
+      throw new InternalError(
         `Interface ${primaryInterface.definition.name} is not exposed in this realm`,
       );
     }
     if (this.#globalObject) {
-      throw new Error('This binding already has a projected global object');
+      throw new InternalError('This binding already has a projected global object');
     }
     if (this.#legacyPlatformObjects.supportsIndexedProperties(primaryInterface)) {
-      throw new Error('Global interfaces cannot use indexed properties');
+      throw new InternalError('Global interfaces cannot use indexed properties');
     }
     this.#assertOrdinaryProjection(primaryInterface);
     this.#globalAllocation = allocation;
@@ -671,13 +672,13 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       for (const interfaceName of allocation.prototypes.keys()) {
         const definition = this.resolveInterface(interfaceName).definition;
         if (this.getDefinitionBinding(definition).interfacePrototypeObject) {
-          throw new Error(`Prototype ${interfaceName} was already created before global allocation`);
+          throw new InternalError(`Prototype ${interfaceName} was already created before global allocation`);
         }
       }
     }
     const prototype = this.getInterfacePrototypeObject(primaryInterface);
     if (allocation && Reflect.getPrototypeOf(allocation.object) !== prototype) {
-      throw new Error('Allocated global object has the wrong prototype');
+      throw new InternalError('Allocated global object has the wrong prototype');
     }
     const platformObject = allocation?.object ?? this.#globalPlatformObjects.createObject(
       this.realm.createOrdinaryObject(prototype),
@@ -704,14 +705,14 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   changePlatformObjectRealm(platformObject: object): void {
     const record = getPlatformRecord(platformObject);
     if (record?.binding.world !== this.world) {
-      throw new TypeError('Value is not a platform object in this binding world');
+      throw new InternalError('Value is not a platform object in this binding world');
     }
 
     const primaryInterface = this.resolveInterface(
       record.primaryInterface.definition.name,
     );
     if (primaryInterface.definition !== record.primaryInterface.definition) {
-      throw new TypeError(
+      throw new InternalError(
         'Target realm does not contain the platform object interface',
       );
     }
@@ -721,7 +722,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       Reflect.getPrototypeOf(platformObject) !== prototype &&
       !Reflect.setPrototypeOf(platformObject, prototype)
     ) {
-      throw new TypeError('Could not change the public platform object prototype');
+      throw new InternalError('Could not change the public platform object prototype');
     }
     record.binding = this;
   }
@@ -788,7 +789,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       !elementType ||
       !interfaceIncludesMember(record.primaryInterface, attribute)
     ) {
-      throw new Error('Observable array attribute does not belong to object');
+      throw new InternalError('Observable array attribute does not belong to object');
     }
     return this.#observableArrays.getBackingList(
       record,
@@ -1093,7 +1094,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           );
           if (elementType) {
             if (!receiver) {
-              throw new Error('Observable array attribute was not regular');
+              throw new InternalError('Observable array attribute was not regular');
             }
             return this.#observableArrays.get(
               receiver,
@@ -1136,7 +1137,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   ): JSFunction | undefined {
     if (definition.definition.kind === 'namespace') return;
     const primaryInterface = getMemberInterface(definition);
-    if (!primaryInterface) throw new Error('Namespace attribute unexpectedly had a setter');
+    if (!primaryInterface) throw new InternalError('Namespace attribute unexpectedly had a setter');
     const replaceable = hasExtendedAttribute(
       attribute.extendedAttributes,
       'Replaceable',
@@ -1186,7 +1187,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         if (receiver === invalidReceiver || lenientSetter) return undefined;
 
         if (putForwards) {
-          if (!receiver) throw new Error('PutForwards used on a static attribute');
+          if (!receiver) throw new InternalError('PutForwards used on a static attribute');
           if (!isObject(jsValue)) {
             return this.#throwTypeError('Invalid receiver');
           }
@@ -1206,7 +1207,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         );
         if (observableArrayElementType) {
           if (!receiver) {
-            throw new Error('Observable array attribute was not regular');
+            throw new InternalError('Observable array attribute was not regular');
           }
           this.#observableArrays.replace(
             receiver,
@@ -1247,7 +1248,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     operations: OperationMember[],
   ): JSFunction {
     const source = operations[0];
-    if (!source) throw new Error(`Operation group ${name} is empty`);
+    if (!source) throw new InternalError(`Operation group ${name} is empty`);
     return this.#getOrCreateMemberFunction(
       'operation',
       definition.definition,
@@ -1284,7 +1285,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
             'Default',
           )) {
             if (!receiver || !primaryInterface) {
-              throw new Error('Default operation used as a static operation');
+              throw new InternalError('Default operation used as a static operation');
             }
             return convertToJavaScript(
               this.#runDefaultOperation(primaryInterface, receiver),
@@ -1427,7 +1428,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
         if (this.#legacyPlatformObjects.supportsSpecialOperation(member)) {
           continue;
         }
-        throw new Error(
+        throw new InternalError(
           `${primaryInterface.definition.name} requires deferred legacy platform object machinery`,
         );
       }
@@ -1584,7 +1585,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       }
       parent = parent.parent;
     }
-    throw new Error(
+    throw new InternalError(
       `Inherited attribute ${primaryInterface.definition.name}.${attribute.name} has no ancestor declaration`,
     );
   }
@@ -1915,7 +1916,7 @@ function orderInterfacesByInheritance(
     const primaryInterface = interfaces.find((candidate) =>
       remaining.has(candidate) &&
       (!candidate.parent || !remaining.has(candidate.parent)));
-    if (!primaryInterface) throw new Error('Interface inheritance contains a cycle');
+    if (!primaryInterface) throw new InternalError('Interface inheritance contains a cycle');
     remaining.delete(primaryInterface);
     ordered.push(primaryInterface);
   }
@@ -1929,7 +1930,7 @@ function defineProperty(
   descriptor: PropertyDescriptor,
 ): void {
   if (!Reflect.defineProperty(target, key, descriptor)) {
-    throw new Error(`Could not define Web IDL property ${String(key)}`);
+    throw new InternalError(`Could not define Web IDL property ${String(key)}`);
   }
 }
 
@@ -1938,7 +1939,7 @@ function missingImplementation(
   definition: MemberOwnerDefinition,
   member: string,
 ): Error {
-  return new Error(
+  return new InternalError(
     `Web IDL ${definition.definition.name} ${member} has no implementation steps`,
   );
 }

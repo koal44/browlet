@@ -9,6 +9,7 @@ import type { OperationMember } from './core/types';
 import type { NamedPropertySteps } from './definition-binding';
 import type { RealmBinding } from './realm-binding';
 import { getUnannotatedType } from './types';
+import { InternalError } from '../infra/internal-error';
 
 // The Web IDL object kind is shared across realms and binding instances.
 const namedPropertiesObjects = new WeakSet<object>();
@@ -40,7 +41,7 @@ export class GlobalPlatformObjectBinding {
   ): object {
     const properties = this.#getNamedProperties(primaryInterface);
     if (!properties) {
-      throw new Error(
+      throw new InternalError(
         `${primaryInterface.definition.name} does not support named properties`,
       );
     }
@@ -101,7 +102,7 @@ export class GlobalPlatformObjectBinding {
     });
     if (allocation) {
       if (Reflect.getPrototypeOf(allocation.object) !== prototype) {
-        throw new Error('Allocated named-properties object has the wrong parent');
+        throw new InternalError('Allocated named-properties object has the wrong parent');
       }
       allocation.setDelegate(object);
     }
@@ -148,10 +149,10 @@ export class GlobalPlatformObjectBinding {
     properties: NamedProperties,
   ): PropertyDescriptor {
     const record = getPlatformRecord(global);
-    if (!record) throw new Error('Global object is not a platform object');
+    if (!record) throw new InternalError('Global object is not a platform object');
 
     const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
-    if (!steps) throw new Error('Missing named property getter implementation');
+    if (!steps) throw new InternalError('Missing named property getter implementation');
     const value = steps(record, property);
     return {
       configurable: true,
@@ -210,7 +211,7 @@ export class GlobalPlatformObjectBinding {
     if (!getter) return;
     const steps = this.#binding.getMemberBinding(primaryInterface, getter)?.namedPropertySteps;
     if (!steps) {
-      throw new Error('Missing supported property names implementation');
+      throw new InternalError('Missing supported property names implementation');
     }
     return {
       getter,

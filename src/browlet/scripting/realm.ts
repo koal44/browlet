@@ -10,6 +10,7 @@ import type { TaskCreationOptions, TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import { WindowImpl } from '../browsing/window/window';
 import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
@@ -29,7 +30,7 @@ export function createRealm(
   realm.setGlobalObjects(globalObject, globalThis);
   if (agent instanceof WindowAgent) {
     if (!WindowImpl.is(globalObject)) {
-      throw new Error('A Window realm requires a Window implementation');
+      throw new InternalError('A Window realm requires a Window implementation');
     }
   }
   return { realm };
@@ -140,7 +141,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
 
   getAssociatedDocument(): DocumentImpl {
     const window = this.#windowImplementation;
-    if (!window) throw new Error('Realm global object has no associated Document');
+    if (!window) throw new InternalError('Realm global object has no associated Document');
     return window.getAssociatedDocument();
   }
 
@@ -205,7 +206,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     this.initializeGlobalObjects(globalObject, globalThis);
     if (this.agent.agentCluster?.crossOriginIsolationMode === 'none') {
       const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
-      if (!status) throw new Error('Could not remove SharedArrayBuffer');
+      if (!status) throw new InternalError('Could not remove SharedArrayBuffer');
     }
     if (windowImplementation && this.agent instanceof WindowAgent) {
       this.agent.windowObjects.add(windowImplementation);
@@ -230,7 +231,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     if (settings.realmExecutionContext.realm.hostDefined === settings) {
       return settings;
     }
-    throw new Error('A JavaScript callback context is not a settings object');
+    throw new InternalError('A JavaScript callback context is not a settings object');
   }
 }
 

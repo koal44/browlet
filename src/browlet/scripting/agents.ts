@@ -6,6 +6,7 @@ import {
   type Origin,
 } from '../../url/origin';
 import type { WindowImpl } from '../browsing/window/window';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * An agent owns the execution boundary shared by one or more realms. V8 owns
@@ -45,7 +46,7 @@ export abstract class Agent {
 
   associateWithCluster(cluster: AgentCluster): void {
     if (this.#agentCluster !== null && this.#agentCluster !== cluster) {
-      throw new Error('An agent cannot move between agent clusters');
+      throw new InternalError('An agent cannot move between agent clusters');
     }
 
     this.#agentCluster = cluster;
@@ -127,7 +128,7 @@ export function obtainSimilarOriginWindowAgent(
 
     if (isOrigin(key)) {
       if (!areSameOrigin(key, origin)) {
-        throw new Error('An origin agent cluster key must be the given origin');
+        throw new InternalError('An origin agent cluster key must be the given origin');
       }
 
       agentCluster.isOriginKeyed = true;
@@ -143,7 +144,7 @@ export function obtainSimilarOriginWindowAgent(
     .filter((agent) => agent instanceof WindowAgent);
 
   if (windowAgent === undefined || additionalWindowAgents.length > 0) {
-    throw new Error('An agent cluster must contain one Window agent');
+    throw new InternalError('An agent cluster must contain one Window agent');
   }
 
   return windowAgent;

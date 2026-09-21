@@ -1,3 +1,5 @@
+import { InternalError } from '../../infra/internal-error';
+
 /*
  * A clock tracks the passage of time and reports the unsafe current time at
  * which an algorithm step executes. Clock identity is significant: moments
@@ -56,7 +58,7 @@ export class Moment {
   /** High Resolution Time §2.2, the duration from this moment to another. */
   durationUntil(other: Moment): Duration {
     if (this.clock !== other.clock) {
-      throw new Error('Moments from different clocks are not comparable');
+      throw new InternalError('Moments from different clocks are not comparable');
     }
 
     return new Duration(other.milliseconds - this.milliseconds);

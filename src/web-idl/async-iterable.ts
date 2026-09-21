@@ -17,6 +17,7 @@ import {
 import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
 import { getTypeWithApplicableExtendedAttributes } from './types';
+import { InternalError } from '../infra/internal-error';
 
 export class AsynchronousIterableBinding {
   #binding: RealmBinding;
@@ -247,7 +248,7 @@ export class AsynchronousIterableBinding {
     const steps = this.#requireSteps(state.primaryInterface, declaration);
     if (!steps.return) {
       return this.#rejectedCapability(
-        new Error('Asynchronous iterator return steps are missing'),
+        new InternalError('Asynchronous iterator return steps are missing'),
       );
     }
     try {
@@ -369,7 +370,7 @@ export class AsynchronousIterableBinding {
       return convertToJavaScript(next, declaration.value, context);
     }
     if (!Array.isArray(next) || next.length < 2) {
-      throw new Error('Pair asynchronous iterator produced a non-pair value');
+      throw new InternalError('Pair asynchronous iterator produced a non-pair value');
     }
 
     const key = kind === 'value'
@@ -431,7 +432,7 @@ export class AsynchronousIterableBinding {
   ): AsyncIteratorSteps {
     const steps = this.#binding.getMemberBinding(primaryInterface, declaration)?.asyncIteratorSteps;
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `Missing ${primaryInterface.definition.name} asynchronous iterator implementation`,
       );
     }

@@ -13,6 +13,7 @@ import { NodeImpl } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * enum ShadowRootMode { "open", "closed" };
@@ -61,7 +62,7 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
 
   constructor(host: ElementImpl, mode: ShadowRootMode) {
     const document = host.getNodeDocument();
-    if (!document) throw new Error('A shadow host must have a node document');
+    if (!document) throw new InternalError('A shadow host must have a node document');
 
     super(
       document,
@@ -72,7 +73,7 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => null,
       getStyleScope() {
-        throw new Error('Shadow-root style scopes are not implemented');
+        throw new InternalError('Shadow-root style scopes are not implemented');
       },
     });
   }
@@ -103,7 +104,7 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
 
   get host(): ElementImpl {
     const host = super.getHost();
-    if (!host) throw new Error('A shadow root must have a host');
+    if (!host) throw new InternalError('A shadow root must have a host');
     return host;
   }
 

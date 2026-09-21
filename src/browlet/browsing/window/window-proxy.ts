@@ -1,4 +1,5 @@
 import { WindowImpl } from './window';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * A WindowProxy is an exotic object with a [[Window]] internal slot. It has
@@ -85,7 +86,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
 
   setWindow(window: WindowImpl, object: Window): void {
     if (!WindowImpl.is(window)) {
-      throw new TypeError('WindowProxy target is not a Window implementation');
+      throw new InternalError('WindowProxy target is not a Window implementation');
     }
     this.#window = { implementation: window, object };
   }
@@ -160,7 +161,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
 
   private requireWindowObject(): Window {
     if (!this.#window) {
-      throw new Error('WindowProxy has no associated Window');
+      throw new InternalError('WindowProxy has no associated Window');
     }
     return this.#window.object;
   }
@@ -179,6 +180,6 @@ function requireWindowProxyHandler(
   windowProxy: WindowProxy,
 ): WindowProxyHandler {
   const handler = windowProxyHandlers.get(windowProxy);
-  if (!handler) throw new TypeError('Object is not a WindowProxy');
+  if (!handler) throw new InternalError('Object is not a WindowProxy');
   return handler;
 }

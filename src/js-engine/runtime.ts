@@ -10,6 +10,7 @@ import type {
   CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSRealm,
 } from './realm';
 import { TypeError } from './exceptions';
+import { InternalError } from '../infra/internal-error';
 
 const getNativeRealm = addon.getMethod('getRealm');
 
@@ -106,16 +107,16 @@ export function createContext(
       ...options, reuseGlobalProxyFrom, globalPrototypeChain,
     });
     if (!isAddonContextHandle(context)) {
-      throw new Error('Node backend createContextHandle returned an invalid handle');
+      throw new InternalError('Node backend createContextHandle returned an invalid handle');
     }
     return context;
   }
 
   if (globalPrototypeChain) {
-    throw new Error('Node does not support preallocated global prototypes');
+    throw new InternalError('Node does not support preallocated global prototypes');
   }
   if (reuseGlobalProxyFrom) {
-    throw new Error('Node does not support reusable global proxies');
+    throw new InternalError('Node does not support reusable global proxies');
   }
   return Reflect.apply(vm.createContext, vm, [
     vm.constants.DONT_CONTEXTIFY,
@@ -158,7 +159,7 @@ export function setGlobalObject(context: NodeContext, object: object): void {
 
 export function detachContext(context: NodeContext): object {
   if (!isAddonContextHandle(context)) {
-    throw new Error('Node does not support detachable context handles');
+    throw new InternalError('Node does not support detachable context handles');
   }
   return context.detachGlobal();
 }
@@ -242,7 +243,7 @@ class JSRuntime {
 
     const handle: unknown = addon.createMicrotaskQueue();
     if (!isAddonMicrotaskQueueHandle(handle)) {
-      throw new Error('Node backend createMicrotaskQueue returned an invalid queue');
+      throw new InternalError('Node backend createMicrotaskQueue returned an invalid queue');
     }
 
     return new AddonMicrotaskQueue(handle);
@@ -296,7 +297,7 @@ class JSRuntime {
 
     const candidate: unknown = Reflect.get(process, '_tickCallback');
     if (typeof candidate !== 'function') {
-      throw new Error(
+      throw new InternalError(
         'Node does not expose the provisional microtask checkpoint bridge',
       );
     }

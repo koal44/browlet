@@ -9,6 +9,7 @@ import type {
   AsyncIterableMember, ConstructorMember, DictionaryMember, InterfaceDefinition,
   IterableMember, MaplikeMember, SetlikeMember,
 } from './declarations';
+import { InternalError } from '../../infra/internal-error';
 
 // Members and arguments
 
@@ -307,7 +308,7 @@ export function atArg<Realm = unknown>(
   resolve: InjectedArgument<Realm>['resolve'],
 ): InjectedArgument<Realm> {
   if (!Number.isSafeInteger(index) || index < 0) {
-    throw new RangeError('An injected argument index must be a nonnegative integer');
+    throw new InternalError('An injected argument index must be a nonnegative integer');
   }
   return { index, resolve };
 }

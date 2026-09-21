@@ -28,7 +28,7 @@ describe('Origin interface', () => {
     expect(fromString.isSameOrigin(fromURL)).toBe(true);
     expect(fromString.isSameOrigin(fromOrigin)).toBe(true);
     expect(fromString.isSameSite(sameSite)).toBe(true);
-    expect(() => Origin.from({})).toThrow(TypeError);
+    expect(() => Origin.from({})).toThrow(Reflect.get(browlet.window, 'TypeError'));
   });
 
   it('projects origins returned by static operations into their realm', () => {

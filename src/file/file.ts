@@ -8,6 +8,7 @@ import {
   BlobImpl, type BlobPart, type BlobPropertyBag,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -110,7 +111,7 @@ function requireHostFileType(value: string): string {
     (type.type === 'text' && type.subtype === 'plain' &&
       type.parameters.has('charset'))
   ) {
-    throw new TypeError('A host File requires a valid lowercase MIME type');
+    throw new InternalError('A host File requires a valid lowercase MIME type');
   }
   return value;
 }

@@ -62,6 +62,7 @@ import {
   findElementsByTagNameNS,
 } from './lookups';
 import { resolveElementInterface } from '../../element-interfaces';
+import { InternalError } from '../../../infra/internal-error';
 
 export function createDocument(
   options: DocumentConstructionOptions = {},
@@ -388,7 +389,7 @@ export class DocumentImpl extends NodeImpl {
     const writer = this.#writer;
 
     if (!writer) {
-      throw new Error('Document has no active parser');
+      throw new InternalError('Document has no active parser');
     }
 
     writer(text.join(''));
@@ -636,7 +637,7 @@ export class DocumentImpl extends NodeImpl {
     }
 
     if (this.#relevantGlobalObject === null) {
-      throw new Error(
+      throw new InternalError(
         'A Document with a browsing context needs a relevant global object',
       );
     }
@@ -648,7 +649,7 @@ export class DocumentImpl extends NodeImpl {
       this.#relevantGlobalObject !== null &&
       this.#relevantGlobalObject !== window
     ) {
-      throw new Error('A Document cannot change its relevant global object');
+      throw new InternalError('A Document cannot change its relevant global object');
     }
     this.#relevantGlobalObject = window;
   }
@@ -990,6 +991,6 @@ type FullyActiveStateObserver = (fullyActive: boolean) => void;
 
 function parseDocumentURL(input: string): URLRecord {
   const url = parseURL(input).url;
-  if (url === null) throw new Error(`Could not parse document URL ${input}`);
+  if (url === null) throw new InternalError(`Could not parse document URL ${input}`);
   return url;
 }

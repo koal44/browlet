@@ -8,11 +8,13 @@ export function copyEvaluationValue(
   value: unknown, realm?: JSRealm, memory = new Map<object, unknown>(),
 ): unknown {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
     if (typeof value === 'symbol') throw new TypeError('Symbols cannot cross the evaluation boundary');
     return value;
   }
   if (memory.has(value)) return memory.get(value);
   if (typeof value === 'function' || isProxyObject(value)) {
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
     throw new TypeError('Functions and proxies cannot cross the evaluation boundary');
   }
 
@@ -53,6 +55,7 @@ export function copyEvaluationValue(
       RangeError: realm.intrinsics.rangeError, SyntaxError: realm.intrinsics.syntaxError,
       ReferenceError: realm.intrinsics.referenceError, EvalError: realm.intrinsics.evalError,
       URIError: realm.intrinsics.uriError,
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
     } : { Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError };
     const constructor = Object.hasOwn(constructors, name) ? constructors[name]! : constructors.Error!;
     const result = new constructor(error.message);
@@ -68,6 +71,7 @@ export function copyEvaluationValue(
   } else {
     const prototype = Object.getPrototypeOf(value) as object | null;
     if (prototype !== null && Object.getPrototypeOf(prototype) !== null) {
+      // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
       throw new TypeError('Only data values can cross the evaluation boundary; live objects require handles');
     }
     copy = realm ? realm.createOrdinaryObject(realm.intrinsics.objectPrototype) : {};

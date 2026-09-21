@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { getMIMETypeEssence, type MIMEType } from '../../src/mime/mime-type';
+import { InternalError } from '../../src/infra/internal-error';
 import {
   matchArchiveTypePattern, matchAudioOrVideoTypePattern,
   matchFontTypePattern, matchImageTypePattern,
@@ -57,7 +58,7 @@ describe('MIME Sniffing §6: matching a MIME type pattern', () => {
       [0x41],
       [0xff, 0xff],
       new Set(),
-    )).toThrow(RangeError);
+    )).toThrow(InternalError);
   });
 });
 

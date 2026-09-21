@@ -18,6 +18,7 @@ import {
   asSubjectPredicate, SubjectKind,
   type CandidateElementPredicate, type CompiledMatcher,
 } from './candidate';
+import { InternalError } from '../../infra/internal-error';
 
 type NthArgs = { step: number; offset: number; };
 
@@ -219,7 +220,7 @@ function emitAttributeTest(
   }
 
   if (attr.value === null) {
-    throw new Error(`Missing attribute value in selector`);
+    throw new InternalError(`Missing attribute value in selector`);
   }
 
   const attrVal = attr.value;

@@ -2,6 +2,7 @@ import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
 import type { RuntimeCaps } from '../stylelet';
+import { TypeError } from '../../js-engine/exceptions';
 
 /*
  * [Exposed=Window]

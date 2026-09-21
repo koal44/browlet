@@ -742,8 +742,9 @@ can use `web-idl/core/index` without the runtime dependency.
 `InterfaceDefinition.implementation` owns the class,
 construction dependencies, and optional allocation/initialization hooks.
 `impl(Class, options)` fills that field; its options and result types derive from
-the field. Core also exports exception names, codes, and request helpers. It has
-no dependency on runtime source files or other source projects.
+the field. Core also exports exception names, codes, and request helpers. It uses
+Infra's `InternalError` for invalid declarations without depending on engine or
+binding runtime code.
 
 The `BindingContext<Realm>` class retains the registered binding, its composed
 runtime, and the host's concrete realm type. A declaration can
@@ -799,8 +800,12 @@ error, including any changes the callback makes to it. Web IDL §3.14.3 specifie
 exception creation and realm selection, not an immutable original-message record.
 
 Imported exception constructors request realm-owned failures from specification
-algorithms. Native errors remain appropriate for internal invariant failures;
-no import or declaration replaces the global error constructors.
+algorithms. Use Infra's `InternalError` for implementation contract violations,
+broken invariants, and unfinished operations; Binding preserves these diagnostics
+without realizing them as specification exceptions. ESLint rejects unqualified
+native error constructors across source subsystems except Selectlet. Native
+constructor capture, parser diagnostics, and Node-facing errors have explicit,
+local exemptions.
 
 The binding first realizes a request in the executing method's realm for
 synchronous calls, or the promise's realm when rejecting an internal promise.

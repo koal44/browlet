@@ -13,6 +13,7 @@ import {
 import { registerDefinitionBindings } from './implementation-binding';
 import type { RuntimeContext } from '../js-engine/runtime-context';
 import type { JSRealm } from '../js-engine/index';
+import { InternalError } from '../infra/internal-error';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -63,7 +64,7 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   /** Publish a realm binding after its declaration setup succeeds. */
   registerRealm(binding: RealmBinding): void {
     if (this.#realmBindings.has(binding.realm)) {
-      throw new TypeError('Realm already has a registered binding');
+      throw new InternalError('Realm already has a registered binding');
     }
     this.#realmBindings.set(binding.realm, binding);
   }

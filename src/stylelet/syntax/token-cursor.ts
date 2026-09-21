@@ -113,6 +113,7 @@ export class TokenCursor<Value extends Token = ComponentValue> {
   }
 }
 
+// eslint-disable-next-line no-restricted-globals -- Cursor diagnostics are not requests for a realm-owned exception.
 export class TokenCursorError extends SyntaxError {
   constructor(message: string, public position: number) {
     super(`${message} at token ${position}`);

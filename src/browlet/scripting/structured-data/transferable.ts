@@ -3,6 +3,7 @@ import {
   defineCapability, type InterfaceDefinition,
 } from '../../../web-idl/index';
 import type { StructuredDataRecord } from './records';
+import { InternalError } from '../../../infra/internal-error';
 
 export const transferable = defineCapability<TransferableSteps>(
   'Transferable',
@@ -40,7 +41,7 @@ function requireTransferableMarker<Realm>(definition: InterfaceDefinition<Realm>
       attribute.kind !== 'raw' && attribute.name === 'Transferable',
   ) ?? [];
   if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
-    throw new TypeError(
+    throw new InternalError(
       `${definition.name} must declare exactly one [Transferable] marker`,
     );
   }

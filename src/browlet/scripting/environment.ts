@@ -10,6 +10,7 @@ import type { Origin } from '../../url/origin';
 import { parseURL, type URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * An environment carries navigation/client state before a realm, global
@@ -97,7 +98,7 @@ export class WindowEnvironmentSettingsObject
     const url = parseURL(
       this.#window.getAssociatedDocument().baseURI,
     ).url;
-    if (url === null) throw new Error('Window Document has an invalid base URL');
+    if (url === null) throw new InternalError('Window Document has an invalid base URL');
     return url;
   }
 
@@ -110,7 +111,7 @@ export class WindowEnvironmentSettingsObject
   }
 
   get hasCrossSiteAncestor(): boolean {
-    throw new Error(
+    throw new InternalError(
       'Window navigable ancestry is not implemented',
     );
   }
@@ -125,7 +126,7 @@ export class WindowEnvironmentSettingsObject
     if (mode !== 'concrete') return false;
 
     void this.#window.getAssociatedDocument().getPermissionsPolicy();
-    throw new Error(
+    throw new InternalError(
       'The cross-origin-isolated permissions-policy check is not implemented',
     );
   }
@@ -152,11 +153,11 @@ export function setupWindowEnvironmentSettingsObject(
   const realm = executionContext.realm;
   const window = realm.windowImplementation;
   if (window === undefined) {
-    throw new Error('Window settings require a Window global object');
+    throw new InternalError('Window settings require a Window global object');
   }
   const environment = realm.environment;
   if (environment === null) {
-    throw new Error('Window settings require an Environment');
+    throw new InternalError('Window settings require an Environment');
   }
   const settings = new WindowEnvironmentSettingsObject(
     window,

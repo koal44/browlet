@@ -8,6 +8,7 @@ import {
 } from './candidate';
 import { nextDescendant } from './runtime';
 import type { RuntimeCache } from './runtimeCache';
+import { InternalError } from '../../infra/internal-error';
 
 export type CompiledPart = {
   combinator: Combinator | null;
@@ -28,7 +29,7 @@ export function buildComplexMatcher(
   cost: number,
 ): CompiledMatcher {
   if (parts.length === 0) {
-    throw new Error('Cannot build matcher for empty complex selector');
+    throw new InternalError('Cannot build matcher for empty complex selector');
   }
 
   if (parts.length === 1) {
@@ -179,7 +180,7 @@ function extendElementProof(
     case '~': return buildAnyPreviousElementProof(previous);
     case '||': return () => false;
     case null:
-      throw new Error('Cannot extend proof from first selector part');
+      throw new InternalError('Cannot extend proof from first selector part');
     default:
       return assertNever(combinator);
   }
@@ -196,7 +197,7 @@ function extendSubjectProof(
     case '~': return buildAnyPreviousSubjectProof(previous);
     case '||': return () => false;
     case null:
-      throw new Error('Cannot extend proof from first selector part');
+      throw new InternalError('Cannot extend proof from first selector part');
     default:
       return assertNever(combinator);
   }

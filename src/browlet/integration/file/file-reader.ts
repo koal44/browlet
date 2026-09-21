@@ -13,6 +13,7 @@ import {
 } from '../../scripting/event-handlers';
 import { EventTargetImpl } from '../../dom/events/event-target';
 import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * File API §6.2 — The FileReader API
@@ -87,7 +88,7 @@ export class FileReaderImpl extends EventTargetImpl {
 
     const operation = this.#operation;
     if (operation === null) {
-      throw new Error('A loading FileReader has no active read operation');
+      throw new InternalError('A loading FileReader has no active read operation');
     }
 
     this.#state = 'done';

@@ -18,6 +18,7 @@ import { structuredSerializeInternal } from './serialize';
 import {
   DetachedTransferableStamper, transferable, type TransferableSteps,
 } from './transferable';
+import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.7, StructuredSerializeWithTransfer. */
 export function structuredSerializeWithTransfer(
@@ -162,7 +163,7 @@ function receiveTransfer(
       transferable,
     );
     if (!steps) {
-      throw new Error(
+      throw new InternalError(
         `${platformRecord.primaryInterface.definition.name} has no Transferable capability`,
       );
     }
@@ -178,7 +179,7 @@ function receiveTransfer(
     getBufferSourceByteLength(value) !== dataHolder.byteLength ||
     getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
-    throw new Error('Received ArrayBuffer does not match its data holder');
+    throw new InternalError('Received ArrayBuffer does not match its data holder');
   }
   return value;
 }

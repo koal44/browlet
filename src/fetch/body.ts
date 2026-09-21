@@ -20,6 +20,7 @@ import { parseMultipartFormData } from './multipart/parse';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
 import { queueFetchTask } from './tasks';
+import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.4: a stream and the source/length retained for replay. */
 export class FetchBody {
@@ -302,7 +303,7 @@ export class BodyMixin {
   #getBody(): FetchBody | null {
     const body = this.#record.body;
     if (body !== null && !(body instanceof FetchBody)) {
-      throw new Error('Fetch request body bytes must be extracted before API use');
+      throw new InternalError('Fetch request body bytes must be extracted before API use');
     }
     return body;
   }

@@ -2,6 +2,7 @@ import type {
   ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, WebIDLType,
 } from './types';
 import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
+import { InternalError } from '../../infra/internal-error';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
 export function serializeDefinitions<Realm>(
@@ -335,7 +336,7 @@ function serializeIdentifier(
   permittedKeywords: ReadonlySet<string> = noKeywords,
 ): string {
   if (!identifierPattern.test(identifier)) {
-    throw new TypeError(`Invalid Web IDL identifier: ${identifier}`);
+    throw new InternalError(`Invalid Web IDL identifier: ${identifier}`);
   }
   return reservedIdentifiers.has(identifier) && !permittedKeywords.has(identifier)
     ? `_${identifier}`
@@ -345,7 +346,7 @@ function serializeIdentifier(
 // Project formatter for the string token in Web IDL's unnumbered IDL grammar section.
 function serializeString(value: string): string {
   if (value.includes('"')) {
-    throw new TypeError('Web IDL string values cannot contain U+0022 (").');
+    throw new InternalError('Web IDL string values cannot contain U+0022 (").');
   }
   return `"${value}"`;
 }

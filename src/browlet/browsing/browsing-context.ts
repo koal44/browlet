@@ -29,6 +29,7 @@ import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import {
   currentCoarsenedWallTime, unsafeSharedCurrentTime,
 } from '../performance/high-resolution-time';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * A browsing context is a programmatic representation of a series of
@@ -57,7 +58,7 @@ export class BrowsingContext {
   }
 
   get windowProxy(): WindowProxy {
-    if (!this.#windowProxy) throw new Error('Browsing context has no WindowProxy yet');
+    if (!this.#windowProxy) throw new InternalError('Browsing context has no WindowProxy yet');
     return this.#windowProxy;
   }
 
@@ -79,7 +80,7 @@ export class BrowsingContext {
   }
 
   initializeWindowProxy(proxy: WindowProxy): void {
-    if (this.#windowProxy) throw new Error('Browsing context already has a WindowProxy');
+    if (this.#windowProxy) throw new InternalError('Browsing context already has a WindowProxy');
     this.#windowProxy = proxy;
   }
 
@@ -90,7 +91,7 @@ export class BrowsingContext {
   setNavigable(navigable: Navigable): void {
     const existing = this.#navigable;
     if (existing !== null && existing !== navigable) {
-      throw new Error('A browsing context cannot belong to two navigables');
+      throw new InternalError('A browsing context cannot belong to two navigables');
     }
     this.#navigable = navigable;
   }
@@ -170,7 +171,7 @@ export function createNewBrowsingContextAndDocument(
     document.URL !== 'about:blank' ||
     serializeURL(settings.creationURL) !== 'about:blank'
   ) {
-    throw new Error('Initial Document and environment must use about:blank');
+    throw new InternalError('Initial Document and environment must use about:blank');
   }
 
   window.setAssociatedDocument(document);
@@ -200,7 +201,7 @@ export function createNewTopLevelBrowsingContextAndDocument(
   const [group, document] = createNewBrowsingContextGroupAndDocument(userAgent);
   const [browsingContext] = group.browsingContextSet;
   if (!browsingContext) {
-    throw new Error('A new browsing context group must contain its context');
+    throw new InternalError('A new browsing context group must contain its context');
   }
   return [browsingContext, document];
 }
@@ -222,7 +223,7 @@ export class BrowsingContextGroup {
       browsingContext.group !== null &&
       browsingContext.group !== this
     ) {
-      throw new Error('A browsing context cannot belong to two groups');
+      throw new InternalError('A browsing context cannot belong to two groups');
     }
 
     this.browsingContextSet.add(browsingContext);
@@ -231,7 +232,7 @@ export class BrowsingContextGroup {
 
   remove(browsingContext: BrowsingContext): void {
     if (browsingContext.group !== this) {
-      throw new Error('The browsing context is not in this group');
+      throw new InternalError('The browsing context is not in this group');
     }
 
     browsingContext.setGroup(null);
@@ -293,7 +294,7 @@ function determineCreationSandboxingFlags(
   embedder: ElementImpl | null,
 ): SandboxingFlagSet {
   if (embedder !== null) {
-    throw new Error('Embedded browsing-context sandboxing is not implemented');
+    throw new InternalError('Embedded browsing-context sandboxing is not implemented');
   }
   return new Set(browsingContext.popupSandboxingFlagSet);
 }
@@ -304,7 +305,7 @@ function inheritCreatorVirtualBrowsingContextGroupID(
 ): void {
   // HTML obtains this from creator's top-level browsing context. Nested and
   // auxiliary browsing-context relationships enter with child navigables.
-  throw new Error('Creator browsing-context inheritance is not implemented');
+  throw new InternalError('Creator browsing-context inheritance is not implemented');
 }
 
 function determineAboutBlankOrigin(
@@ -322,24 +323,24 @@ function createPermissionsPolicy(
   _origin: Origin,
 ): PermissionsPolicy {
   if (embedder !== null) {
-    throw new Error('Embedded permissions-policy creation is not implemented');
+    throw new InternalError('Embedded permissions-policy creation is not implemented');
   }
   return {};
 }
 
 function getEmbedderTopLevelCreationURL(_embedder: ElementImpl): URLRecord {
-  throw new Error('Embedder environment inheritance is not implemented');
+  throw new InternalError('Embedder environment inheritance is not implemented');
 }
 
 function getEmbedderTopLevelOrigin(_embedder: ElementImpl): Origin {
-  throw new Error('Embedder environment inheritance is not implemented');
+  throw new InternalError('Embedder environment inheritance is not implemented');
 }
 
 function determineIframeElementReferrerPolicy(
   embedder: ElementImpl | null,
 ): string {
   if (embedder !== null) {
-    throw new Error('iframe referrer-policy lookup is not implemented');
+    throw new InternalError('iframe referrer-policy lookup is not implemented');
   }
   return '';
 }
@@ -350,7 +351,7 @@ function createInternalAncestorOriginObjectsList(
   embedder: ElementImpl | null,
 ): Origin[] {
   if (embedder !== null) {
-    throw new Error('Nested Document ancestry is not implemented');
+    throw new InternalError('Nested Document ancestry is not implemented');
   }
   return [];
 }
@@ -360,7 +361,7 @@ function createAncestorOriginsList(
 ): string[] {
   const origins = document.getInternalAncestorOriginObjectsList();
   if (origins === null) {
-    throw new Error('Document has no internal ancestor origin objects list');
+    throw new InternalError('Document has no internal ancestor origin objects list');
   }
   return origins.map(serializeOrigin);
 }
@@ -369,7 +370,7 @@ function inheritCreatorDocumentState(
   _document: DocumentImpl,
   _creator: DocumentImpl,
 ): void {
-  throw new Error('Creator Document inheritance is not implemented');
+  throw new InternalError('Creator Document inheritance is not implemented');
 }
 
 function populateWithHTMLHeadBody(document: DocumentImpl): void {
@@ -388,22 +389,22 @@ function makeActive(
   const realm = getRelevantRealm(document);
   const window = realm.windowImplementation;
   if (!window) {
-    throw new Error('Document relevant global object is not a Window');
+    throw new InternalError('Document relevant global object is not a Window');
   }
   const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
-    throw new Error('Document has no browsing context');
+    throw new InternalError('Document has no browsing context');
   }
 
   retargetWindowProxy(browsingContext.windowProxy, window);
   const settings = realm.hostDefined;
-  if (settings === null) throw new Error('Window has no environment settings');
+  if (settings === null) throw new InternalError('Window has no environment settings');
   settings.markExecutionReady();
 }
 
 function completelyFinishLoading(document: DocumentImpl): void {
   if (document.getBrowsingContext() === null) {
-    throw new Error('A completely loaded Document needs a browsing context');
+    throw new InternalError('A completely loaded Document needs a browsing context');
   }
   document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
 
@@ -427,6 +428,6 @@ function createDocumentLoadTimingInfo(
 
 function requireURLRecord(input: string): URLRecord {
   const url = parseURL(input).url;
-  if (url === null) throw new Error(`Could not parse ${input}`);
+  if (url === null) throw new InternalError(`Could not parse ${input}`);
   return url;
 }

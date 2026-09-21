@@ -43,6 +43,7 @@ import {
 import { Realm, type JSExecutionContext } from './scripting/realm';
 import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
 import { svgIDLDefinitions } from './svg/web-idl';
+import { InternalError } from '../infra/internal-error';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -116,7 +117,7 @@ class BrowletBindings {
 
   forRealm(realm: Realm): BindingContext<Realm> {
     const context = this.#world.forRealm(realm);
-    if (!context) throw new Error('Realm has no Browlet binding');
+    if (!context) throw new InternalError('Realm has no Browlet binding');
     return context;
   }
 
@@ -148,7 +149,7 @@ class BrowletBindings {
       const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
       const object = realm.allocatedGlobalObject;
       if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
-        throw new Error('Incomplete native Window allocation');
+        throw new InternalError('Incomplete native Window allocation');
       }
       // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
       globalObject = projectWindow(context, window, {
@@ -185,7 +186,7 @@ class BrowletBindings {
     window: WindowImpl,
   ): void {
     const windowObject = this.#world.project(window);
-    if (!windowObject) throw new Error('Window has not been projected');
+    if (!windowObject) throw new InternalError('Window has not been projected');
     setWindowProxyWindow(
       windowProxy,
       window,
@@ -198,19 +199,19 @@ class BrowletBindings {
     if (platformRealm instanceof Realm) return platformRealm;
 
     const realm = Realm.getAssociatedRealm(value);
-    if (!realm) throw new Error('Object has no relevant Realm');
+    if (!realm) throw new InternalError('Object has no relevant Realm');
     return realm;
   }
 
   project(value: object): StampedPlatformObject {
     const object = this.#world.project(value);
-    if (!object) throw new Error('Implementation has not been projected');
+    if (!object) throw new InternalError('Implementation has not been projected');
     return object;
   }
 
   unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
     const implInst = this.#world.unwrap(value);
-    if (!implInst) throw new Error('Value is not a platform object');
+    if (!implInst) throw new InternalError('Value is not a platform object');
     return implInst as StampedImplInstance<Value>;
   }
 }

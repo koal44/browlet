@@ -17,6 +17,7 @@ import {
 import { isRedirectStatus } from './http/statuses';
 import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
+import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.6: response fields can continue changing after delivery. */
 export class FetchResponse {
@@ -54,7 +55,7 @@ export class FetchResponse {
 
   /** https://fetch.spec.whatwg.org/#appropriate-network-error */
   static appropriateNetworkError(params: FetchParams): FetchResponse {
-    if (!params.canceled) throw new Error('Fetch params are not canceled');
+    if (!params.canceled) throw new InternalError('Fetch params are not canceled');
     return params.aborted ? FetchResponse.abortedNetworkError() : FetchResponse.networkError();
   }
 
@@ -65,7 +66,7 @@ export class FetchResponse {
   /** https://fetch.spec.whatwg.org/#serialize-a-response-url-for-reporting */
   serializeURLForReporting(): string {
     const url = this.urlList[0];
-    if (url === undefined) throw new Error('Response URL list is empty');
+    if (url === undefined) throw new InternalError('Response URL list is empty');
     return serializeURL({ ...url, username: '', password: '' }, true);
   }
 
@@ -77,7 +78,7 @@ export class FetchResponse {
    */
   filter(type: FilteredResponseType): FilteredFetchResponse {
     if (this.type === 'error' || isFilteredResponse(this)) {
-      throw new Error('Cannot filter a network error or an already filtered response');
+      throw new InternalError('Cannot filter a network error or an already filtered response');
     }
     const headerList = new FetchHeaders();
     if (type === 'basic' || type === 'cors') {
@@ -103,7 +104,7 @@ export class FetchResponse {
         return Reflect.get(Object.hasOwn(overrides, key) ? overrides : target, key, receiver) as unknown;
       },
       set(target, key, value) {
-        if (Object.hasOwn(overrides, key)) throw new Error(`Cannot replace filtered response ${String(key)}`);
+        if (Object.hasOwn(overrides, key)) throw new InternalError(`Cannot replace filtered response ${String(key)}`);
         return Reflect.set(target, key, value);
       },
       has(target, key) {
@@ -216,15 +217,15 @@ export class ResponseImpl {
   }
 
   static error(): ResponseImpl {
-    throw new Error('Response.error is not implemented');
+    throw new InternalError('Response.error is not implemented');
   }
 
   static redirect(_url: string, _status: number): ResponseImpl {
-    throw new Error('Response.redirect is not implemented');
+    throw new InternalError('Response.redirect is not implemented');
   }
 
   static json(_data: unknown, _init: FetchResponseInit): ResponseImpl {
-    throw new Error('Response.json is not implemented');
+    throw new InternalError('Response.json is not implemented');
   }
 
   get type(): ResponseType { return this.#response.type; }
@@ -236,7 +237,7 @@ export class ResponseImpl {
   get headers(): HeadersImpl { return this.#headers; }
 
   clone(): ResponseImpl {
-    throw new Error('Response.clone is not implemented');
+    throw new InternalError('Response.clone is not implemented');
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -287,7 +288,7 @@ export const responseIDL = defineInterface({
     ctor([
       arg('body', nullable(reference('BodyInit')), { optional: true, default: null }),
       arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
-    ], { invoke() { throw new Error('Response construction from BodyInit is not implemented'); } }),
+    ], { invoke() { throw new InternalError('Response construction from BodyInit is not implemented'); } }),
     staticOp('error', reference('Response'), [], xattr('NewObject')),
     staticOp('redirect', reference('Response'),
       [

@@ -8,6 +8,7 @@ import {
 } from '../../src/file/index';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import { InternalError } from '../../src/infra/internal-error';
 import type { StampedPlatformObject } from '../../src/web-idl/index';
 import {
   structuredDeserialize,
@@ -403,15 +404,15 @@ describe('File API File and FileList projection', () => {
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'Text/Plain',
-    }, runtime)).toThrow(TypeError);
+    }, runtime)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'text/plain;charset=utf-8',
-    }, runtime)).toThrow(TypeError);
+    }, runtime)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'application/example;name=é',
-    }, runtime)).toThrow(TypeError);
+    }, runtime)).toThrow(InternalError);
 
     const before = Date.now();
     const unknown = context.project(FileImpl, FileImpl.fromHost(

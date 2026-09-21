@@ -6,6 +6,7 @@ import type { StructuredDataRecord } from '../scripting/structured-data/records'
 import {
   serializable, type SerializableSteps,
 } from '../scripting/structured-data/serializable';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * Web IDL owns DOMException's implementation state. This HTML integration owns the
@@ -52,7 +53,7 @@ function requireString(
 ): string {
   const value = record.get(field);
   if (typeof value !== 'string') {
-    throw new TypeError(`Structured-data field [[${field}]] is not a string`);
+    throw new InternalError(`Structured-data field [[${field}]] is not a string`);
   }
   return value;
 }
@@ -63,7 +64,7 @@ function requireNullableNumber(
 ): number | null {
   const value = record.get(field);
   if (value !== null && typeof value !== 'number') {
-    throw new TypeError(
+    throw new InternalError(
       `Structured-data field [[${field}]] is not a nullable number`,
     );
   }

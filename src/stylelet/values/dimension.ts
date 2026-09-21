@@ -18,6 +18,7 @@ import {
   consumeResolution, resolveResolution, serializeResolution, type ResolutionValue,
 } from './resolution';
 import { consumeTime, resolveTime, serializeTime, type TimeValue } from './time';
+import { InternalError } from '../../infra/internal-error';
 
 /*
  * <dimension> = <dimension-token>
@@ -121,7 +122,7 @@ export function serializeDimension(value: DimensionValue): string {
         case 'time':
           return serializeTime(value);
       }
-      throw new TypeError('Unsupported dimension math type');
+      throw new InternalError('Unsupported dimension math type');
 
     case 'dimension':
       return serializeDimensionLiteral(value);

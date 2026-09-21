@@ -168,7 +168,7 @@ it('checks declaration options without importing the runtime binding', () => {
   const externalSources = program.getSourceFiles()
     .map((file) => path.resolve(file.fileName))
     .filter((name) => name.startsWith(sourceDirectory) && !name.startsWith(coreDirectory));
-  expect(externalSources).toEqual([]);
+  expect(externalSources).toEqual([path.resolve('src/infra/internal-error.ts')]);
 });
 
 it('preserves implementation identity and validated buffer and type results', () => {

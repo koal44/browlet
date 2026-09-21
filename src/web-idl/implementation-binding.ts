@@ -31,6 +31,7 @@ import {
   closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
   isIDLAsyncSequence, openAsyncSequence,
 } from './async-sequence';
+import { InternalError } from '../infra/internal-error';
 
 // Project helper: register declaration adapters for one realm.
 export function registerDefinitionBindings(binding: RealmBinding): void {
@@ -238,8 +239,8 @@ function registerDefinedInterface(
 function missingMemberBinding(
   primaryInterface: AssembledInterfaceDefinition,
   member: { kind: string; name?: string; },
-): TypeError {
-  return new TypeError(
+): InternalError {
+  return new InternalError(
     `Web IDL ${primaryInterface.definition.name}.${member.name ?? member.kind} has no binding`,
   );
 }
@@ -266,7 +267,7 @@ function registerDefinedAttribute(
         );
       }
       if (!member.get) {
-        throw new TypeError(
+        throw new InternalError(
           `Web IDL attribute ${member.name} has no getter binding`,
         );
       }
@@ -436,7 +437,7 @@ function registerAttribute(
 ): void {
   const descriptor = findDescriptor(target, member.name);
   if (!descriptor?.get) {
-    throw new TypeError(`Web IDL attribute ${member.name} has no implementation`);
+    throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
   }
 
   const getterValue: unknown = Reflect.get(descriptor, 'get');
@@ -490,7 +491,7 @@ function registerOperation(
 ): void {
   const value: unknown = findDescriptor(target, name)?.value;
   if (typeof value !== 'function') {
-    throw new TypeError(
+    throw new InternalError(
       `Web IDL operation ${name} has no implementation`,
     );
   }
@@ -522,7 +523,7 @@ export function resolveImplementationArguments(
   const result: unknown[] = [];
   for (const { index, resolve } of injectedArguments) {
     if (Object.hasOwn(result, index)) {
-      throw new TypeError(`Injected argument ${index} is declared more than once`);
+      throw new InternalError(`Injected argument ${index} is declared more than once`);
     }
     result[index] = resolve(context);
   }
@@ -544,7 +545,7 @@ function registerPairIterable(
 ): void {
   const value: unknown = findDescriptor(target, 'getEntryList')?.value;
   if (typeof value !== 'function') {
-    throw new TypeError(
+    throw new InternalError(
       'Web IDL pair iterable implementation has no getEntryList method',
     );
   }
@@ -563,7 +564,7 @@ function registerStringifier(
 ): void {
   const value: unknown = findDescriptor(target, 'toString')?.value;
   if (typeof value !== 'function') {
-    throw new TypeError('Web IDL stringifier has no implementation');
+    throw new InternalError('Web IDL stringifier has no implementation');
   }
   const stringify = value as StringificationBehavior;
   memberBinding.stringificationBehavior = function() {

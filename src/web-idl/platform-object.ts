@@ -5,6 +5,7 @@ import type { AssembledInterfaceDefinition } from './assembly';
 import type { RealmBinding } from './realm-binding';
 import type { AttributeMember } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';
+import { InternalError } from '../infra/internal-error';
 
 /** An implementation instance stamped with its private platform record. */
 export type StampedImplInstance<T extends object = object> = T & ImplementationStamper;
@@ -64,7 +65,7 @@ export function stampImplementation<T extends object>(
   binding: RealmBinding,
 ): StampedImplInstance<T> {
   if (isStampedPlatformObject(implInst) || isStampedImplInstance(implInst)) {
-    throw new TypeError('Implementation object is already stamped or is a platform object');
+    throw new InternalError('Implementation object is already stamped or is a platform object');
   }
   return new PlatformRecord(implInst, primaryInterface, binding).implInst;
 }
@@ -78,21 +79,21 @@ export function associatePlatformObject<T extends object>(
   binding: RealmBinding,
 ): PlatformRecord<T> {
   if (platformObject === implInst) {
-    throw new TypeError('Implementation and platform objects must be distinct');
+    throw new InternalError('Implementation and platform objects must be distinct');
   }
   if (
     isStampedPlatformObject(platformObject) ||
     isStampedPlatformObject(implInst) ||
     isStampedImplInstance(platformObject)
   ) {
-    throw new TypeError('Platform object is already associated');
+    throw new InternalError('Platform object is already associated');
   }
 
   const record = (ImplementationStamper.get(implInst) ??
     new PlatformRecord(implInst, primaryInterface, binding)) as PlatformRecord<T>;
   if (record.binding !== binding ||
     record.primaryInterface !== primaryInterface || record.platformObject) {
-    throw new TypeError('Implementation object is already associated with another owner or platform object');
+    throw new InternalError('Implementation object is already associated with another owner or platform object');
   }
   record.platformObject = PlatformObjectStamper.stamp(platformObject, record);
   return record;

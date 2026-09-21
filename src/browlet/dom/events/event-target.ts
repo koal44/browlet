@@ -11,6 +11,7 @@ import {
 import {
   type AbortAlgorithmHandle, type AbortSignalImpl,
 } from '../abort/abort-signal';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * [Exposed=*]
@@ -189,7 +190,7 @@ export class EventTargetImpl {
     }
 
     const targetItem = path[targetItemIndex];
-    if (!targetItem) throw new Error('An event path has no adjusted target');
+    if (!targetItem) throw new InternalError('An event path has no adjusted target');
 
     event.setTarget(targetItem.shadowAdjustedTarget);
     event.setRelatedTarget(pathItem.relatedTarget);

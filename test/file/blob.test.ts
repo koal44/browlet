@@ -5,6 +5,7 @@ import {
   type BlobByteSource,
 } from '../../src/file';
 import { createRuntime } from '../js-engine/runtime-fixture';
+import { InternalError } from '../../src/infra/internal-error';
 
 const crlf = '\r\n';
 
@@ -159,7 +160,7 @@ describe('File API §7: Blob read failures', () => {
     };
     const blob = BlobImpl.create(BlobData.fromSource(source), '', undefined, runtime);
 
-    await expect(blob.data.read()).rejects.toThrow(RangeError);
+    await expect(blob.data.read()).rejects.toThrow(InternalError);
   });
 });
 

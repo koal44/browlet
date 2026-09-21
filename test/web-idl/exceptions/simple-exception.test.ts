@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BindingWorld } from '../../../src/web-idl/index';
+import { InternalError } from '../../../src/infra/internal-error';
 import {
   RangeError as RangeErrorRequest, SyntaxError as SyntaxErrorRequest,
   TypeError as TypeErrorRequest,
@@ -33,6 +34,7 @@ describe('Web IDL simple exceptions', () => {
     for (const value of [
       new RangeError('author error'), new SyntaxError('author error'),
       new TypeError('author error'), proxy,
+      new InternalError('implementation failure'),
       { name: 'TypeError', message: 'author value' }, null, undefined, 'reason',
     ]) {
       expect(context.realizeException(value)).toBe(value);

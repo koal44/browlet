@@ -24,6 +24,7 @@ export class PageEvaluation {
         catch {
           expression = expression.trim().replace(/^(async\s+)?/, '$1function ');
           try { new Script(`(${expression})`); }
+          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
           catch { throw new TypeError('The evaluation function cannot be serialized'); }
         }
       }
@@ -38,6 +39,7 @@ export class PageEvaluation {
         } catch (error) {
           // A page getter can throw while its result is being copied.
           try { reject(copyEvaluationValue(error)); }
+          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
           catch { reject(new TypeError('Evaluation failure could not be copied')); }
         }
       };
@@ -82,6 +84,7 @@ export class PageEvaluation {
     for (const task of this.#tasks) task.remove();
     this.#tasks.clear();
     for (const reject of this.#pending) {
+      // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
       reject(new Error('Evaluation context was destroyed by navigation'));
     }
     this.#pending.clear();
@@ -107,6 +110,7 @@ export class PageEvaluation {
   }
 
   #enqueue(steps: () => void): void {
+    // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
     if (this.#disposed) throw new Error('Evaluation context was destroyed by navigation');
     const realm = this.#realm;
     const task = realm.queueGlobalTask(evaluationTaskSource, () => {

@@ -12,6 +12,7 @@ import { LocationImpl } from './location';
 import type { WindowProxy } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
 import type { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
+import { InternalError } from '../../../infra/internal-error';
 
 /*
  * [Global=Window,
@@ -111,7 +112,7 @@ export class WindowImpl
   }
 
   set location(_href: string) {
-    throw new Error('Browlet navigation is not implemented');
+    throw new InternalError('Browlet navigation is not implemented');
   }
 
   get isSecureContext(): boolean {
@@ -134,7 +135,7 @@ export class WindowImpl
     // TODO(CSSOM Web IDL): Move this author operation onto Stylelet's Window
     // partial once CSSStyleDeclaration has a projected interface.
     if (pseudoElement !== null && pseudoElement !== undefined) {
-      throw new Error('Pseudo-element computed style is not implemented');
+      throw new InternalError('Pseudo-element computed style is not implemented');
     }
 
     return this.getAssociatedDocument().getCSSEngine().getComputedStyle(element);
@@ -188,7 +189,7 @@ export class WindowImpl
 
   getAssociatedDocument(): DocumentImpl {
     if (!this.#document) {
-      throw new Error('Window has no associated Document');
+      throw new InternalError('Window has no associated Document');
     }
     return this.#document;
   }
@@ -201,7 +202,7 @@ export class WindowImpl
     // HTML creates the Window with its realm, then sets up its environment
     // settings object before exposing the Window.
     if (this.#globalScopeMixin === null) {
-      throw new Error('Window global-scope mixin is not initialized');
+      throw new InternalError('Window global-scope mixin is not initialized');
     }
     return this.#globalScopeMixin;
   }
@@ -210,14 +211,14 @@ export class WindowImpl
     mixin: WindowOrWorkerGlobalScopeMixin,
   ): void {
     if (this.#globalScopeMixin !== null) {
-      throw new Error('Window global-scope mixin is already initialized');
+      throw new InternalError('Window global-scope mixin is already initialized');
     }
     this.#globalScopeMixin = mixin;
   }
 
   getNamedProperty(name: string): ElementImpl {
     const element = this.getAssociatedDocument().getElementById(name);
-    if (!element) throw new Error(`Window named property ${name} disappeared`);
+    if (!element) throw new InternalError(`Window named property ${name} disappeared`);
     return element;
   }
 
@@ -234,7 +235,7 @@ export class WindowImpl
   getWindowProxy(): WindowProxy {
     const browsingContext = this.getAssociatedDocument().getBrowsingContext();
     if (!browsingContext) {
-      throw new Error('Window Document has no browsing context');
+      throw new InternalError('Window Document has no browsing context');
     }
     return browsingContext.windowProxy;
   }
@@ -261,7 +262,7 @@ export class WindowImpl
   #createTimerAction(handler: TimerHandler): (argumentsList: unknown[]) => void {
     if (typeof handler === 'string') {
       return () => {
-        throw new Error(
+        throw new InternalError(
           'String timer handlers await Trusted Types, CSP, and classic scripts',
         );
       };

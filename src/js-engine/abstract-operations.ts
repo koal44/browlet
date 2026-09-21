@@ -151,6 +151,7 @@ export function toBigInt(value: unknown): bigint {
   try {
     return BigInt(primitive);
   } catch (error) {
+    // eslint-disable-next-line no-restricted-properties -- Recognize the native BigInt parser failure before requesting a realm-owned exception.
     if (error instanceof globalThis.SyntaxError) {
       throw new SyntaxError(error.message);
     }

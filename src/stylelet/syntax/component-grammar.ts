@@ -1,6 +1,7 @@
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { isWhitespaceToken } from './component-value';
 import { TokenKind } from './tokens';
+import { InternalError } from '../../infra/internal-error';
 
 // =============================================================================
 // Consumer and multiplier types
@@ -423,11 +424,11 @@ export function repeat<T, const Count extends number>(item: TryConsumer<T>, min:
 export function repeat<T, const Minimum extends number>(item: TryConsumer<T>, min: Minimum, max?: number, options?: MultiplierOptions<T>): Multiplier<T, AtLeast<T, Minimum>>;
 export function repeat<T, Output extends T[]>(item: TryConsumer<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   if (!Number.isInteger(min) || min < 0) {
-    throw new Error(`Invalid repeat minimum ${min}`);
+    throw new InternalError(`Invalid repeat minimum ${min}`);
   }
 
   if (!Number.isInteger(max) || max < min) {
-    throw new Error(`Invalid repeat maximum ${max}`);
+    throw new InternalError(`Invalid repeat maximum ${max}`);
   }
 
   return createMultiplier<T, Output>(item, min, max, 'none', options);
@@ -451,11 +452,11 @@ export function commaRepeat<T, Output extends T[]>(item: TryConsumer<T>, minOrOp
       : minOrOptions;
 
   if (!Number.isInteger(min) || min < 0) {
-    throw new Error(`Invalid comma repeat minimum ${min}`);
+    throw new InternalError(`Invalid comma repeat minimum ${min}`);
   }
 
   if (!Number.isInteger(max) || max < min) {
-    throw new Error(`Invalid comma repeat maximum ${max}`);
+    throw new InternalError(`Invalid comma repeat maximum ${max}`);
   }
 
   return createMultiplier<T, Output>(
@@ -582,7 +583,7 @@ export function recursive<T>(
     const consume = reference.consume;
 
     if (consume === undefined) {
-      throw new Error('Recursive consumer used during construction');
+      throw new InternalError('Recursive consumer used during construction');
     }
 
     return consume(c);

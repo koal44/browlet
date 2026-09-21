@@ -2,6 +2,7 @@ import { type StyleBlock, type StyleRule } from '../css/stylesheet';
 import type { RuntimeCaps } from '../stylelet';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
+import { InternalError } from '../../infra/internal-error';
 
 export class CSSStyleRuleImpl implements CSSStyleRule {
   STYLE_RULE = 1 as const;
@@ -79,5 +80,5 @@ function declarationBlock(block?: StyleBlock) {
 }
 
 function notImplemented(name: string): never {
-  throw new Error(`${name} is not implemented`);
+  throw new InternalError(`${name} is not implemented`);
 }

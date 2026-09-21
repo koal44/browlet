@@ -3,6 +3,7 @@ import type { PromiseValue } from '../js-engine/index';
 import type { BindingWorld } from './binding-world';
 import type { WebIDLType } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';
+import { InternalError } from '../infra/internal-error';
 
 // Project helper: retain a PromiseCapability with its type, realm, and settlement state.
 // Web IDL §3.2.24 Promise types — Promise<T>.
@@ -18,7 +19,7 @@ export function createIDLPromiseRecord(
     reject = reject_;
   });
   if (!resolve || !reject) {
-    throw new Error('Promise constructor did not initialize its capability');
+    throw new InternalError('Promise constructor did not initialize its capability');
   }
   const reject_ = reject;
   const resolve_ = resolve;

@@ -22,6 +22,7 @@ import {
   getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
 } from '../js-engine/index';
 import type { TransformStreamImpl } from './transform-stream';
+import { InternalError } from '../infra/internal-error';
 
 // =============================================================================
 // ReadableStream
@@ -278,7 +279,7 @@ export class ReadableStreamImpl {
   get defaultController(): ReadableStreamDefaultControllerImpl {
     const controller = this.controller;
     if (!ReadableStreamDefaultControllerImpl.is(controller)) {
-      throw new Error('ReadableStream has no default controller');
+      throw new InternalError('ReadableStream has no default controller');
     }
     return controller;
   }
@@ -287,7 +288,7 @@ export class ReadableStreamImpl {
   get numReadIntoRequests(): number {
     const reader = this.state.reader;
     if (!ReadableStreamBYOBReaderImpl.is(reader)) {
-      throw new Error('Readable stream has no BYOB reader');
+      throw new InternalError('Readable stream has no BYOB reader');
     }
     return reader.readIntoRequests.length;
   }
@@ -296,7 +297,7 @@ export class ReadableStreamImpl {
   get numReadRequests(): number {
     const reader = this.state.reader;
     if (!ReadableStreamDefaultReaderImpl.is(reader)) {
-      throw new Error('Readable stream has no default reader');
+      throw new InternalError('Readable stream has no default reader');
     }
     return reader.readRequests.length;
   }
@@ -319,7 +320,7 @@ export class ReadableStreamImpl {
   get byteController(): ReadableByteStreamControllerImpl {
     const controller = this.controller;
     if (!ReadableByteStreamControllerImpl.is(controller)) {
-      throw new Error('ReadableStream has no byte controller');
+      throw new InternalError('ReadableStream has no byte controller');
     }
     return controller;
   }
@@ -331,7 +332,7 @@ export class ReadableStreamImpl {
     const controller = this.controller;
     const desiredSize = controller.desiredSize;
     if (desiredSize === null) {
-      throw new Error('A readable stream has no desired size');
+      throw new InternalError('A readable stream has no desired size');
     }
     return desiredSize;
   }
@@ -345,7 +346,7 @@ export class ReadableStreamImpl {
   get byobRequestView(): object | null {
     const controller = this.controller;
     if (!ReadableByteStreamControllerImpl.is(controller)) {
-      throw new Error('A default readable stream has no BYOB request view');
+      throw new InternalError('A default readable stream has no BYOB request view');
     }
     return controller.byobRequest?.view ?? null;
   }
@@ -372,7 +373,7 @@ export class ReadableStreamImpl {
 
   get controller(): NonNullable<ReadableStreamState['controller']> {
     const controller = this.#state.controller;
-    if (!controller) throw new Error('ReadableStream has no controller');
+    if (!controller) throw new InternalError('ReadableStream has no controller');
     return controller;
   }
 
@@ -746,7 +747,7 @@ export class ReadableStreamImpl {
   closeInternal(): void {
     const state = this.state;
     if (state.state !== 'readable') {
-      throw new Error('Only a readable stream can be closed');
+      throw new InternalError('Only a readable stream can be closed');
     }
     state.state = 'closed';
 
@@ -767,7 +768,7 @@ export class ReadableStreamImpl {
   errorInternal(error: unknown): void {
     const state = this.state;
     if (state.state !== 'readable') {
-      throw new Error('Only a readable stream can be errored');
+      throw new InternalError('Only a readable stream can be errored');
     }
     state.state = 'errored';
     state.storedError = error;
@@ -1027,7 +1028,7 @@ export class ReadableStreamImpl {
   addReadIntoRequest(request: ReadIntoRequest): void {
     const reader = this.state.reader;
     if (!ReadableStreamBYOBReaderImpl.is(reader)) {
-      throw new Error('Readable stream has no BYOB reader');
+      throw new InternalError('Readable stream has no BYOB reader');
     }
     reader.readIntoRequests.push(request);
   }
@@ -1036,7 +1037,7 @@ export class ReadableStreamImpl {
   addReadRequest(request: ReadRequest): void {
     const reader = this.state.reader;
     if (!ReadableStreamDefaultReaderImpl.is(reader)) {
-      throw new Error('Readable stream has no default reader');
+      throw new InternalError('Readable stream has no default reader');
     }
     reader.readRequests.push(request);
   }
@@ -1100,7 +1101,7 @@ export class ReadableStreamImpl {
         typeof chunk !== 'object' || chunk === null ||
         !isArrayBufferView(chunk)
       ) {
-        throw new Error('A byte stream chunk must be an ArrayBufferView');
+        throw new InternalError('A byte stream chunk must be an ArrayBufferView');
       }
       const byobView = this.byobRequestView;
       if (
@@ -1114,7 +1115,7 @@ export class ReadableStreamImpl {
           getBufferSourceByteLength(chunk) >
           getBufferSourceByteLength(byobView)
         ) {
-          throw new Error('A byte stream chunk exceeds its BYOB request view');
+          throw new InternalError('A byte stream chunk exceeds its BYOB request view');
         }
         controller.respond(getBufferSourceByteLength(chunk));
         return;
@@ -1133,7 +1134,7 @@ export class ReadableStreamImpl {
    */
   pullFromBytes(bytes: Uint8Array, offset = 0): number {
     if (!Number.isInteger(offset) || offset < 0 || offset > bytes.length) {
-      throw new Error('Byte sequence offset is out of range');
+      throw new InternalError('Byte sequence offset is out of range');
     }
     const available = bytes.length - offset;
     const byobView = this.byobRequestView;
@@ -1166,7 +1167,7 @@ export class ReadableStreamImpl {
     options: Partial<StreamPipeOptions> = {},
   ): PromiseValue<void> {
     if (this.locked || writable.locked) {
-      throw new Error('Streams must be unlocked before piping');
+      throw new InternalError('Streams must be unlocked before piping');
     }
     return this.pipeToInternal(
       writable,
@@ -1594,7 +1595,7 @@ export class ReadableStreamDefaultControllerImpl {
 
   get state(): ReadableStreamDefaultControllerState {
     if (!this.#state) {
-      throw new Error('ReadableStreamDefaultController is not set up');
+      throw new InternalError('ReadableStreamDefaultController is not set up');
     }
     return this.#state;
   }
@@ -1703,7 +1704,7 @@ export class ReadableStreamDefaultControllerImpl {
 
     const reader = state.stream.state.reader;
     if (!ReadableStreamDefaultReaderImpl.is(reader)) {
-      throw new Error('Default controller requires a default reader');
+      throw new InternalError('Default controller requires a default reader');
     }
     reader.readRequests.push(request);
     this.callPullIfNeeded();
@@ -1723,7 +1724,7 @@ export class ReadableStreamDefaultControllerImpl {
   ): void {
     const streamState = stream.state;
     if (streamState.controller) {
-      throw new Error('ReadableStream already has a controller');
+      throw new InternalError('ReadableStream already has a controller');
     }
 
     const state: ReadableStreamDefaultControllerState = {
@@ -1938,7 +1939,7 @@ export class ReadableByteStreamControllerImpl {
 
   get state(): ReadableByteStreamControllerState {
     if (!this.#state) {
-      throw new Error('ReadableByteStreamController is not set up');
+      throw new InternalError('ReadableByteStreamController is not set up');
     }
     return this.#state;
   }
@@ -1962,12 +1963,12 @@ export class ReadableByteStreamControllerImpl {
   pull(request: ReadRequest): void {
     const state = this.state;
     if (!state.stream.hasDefaultReader) {
-      throw new Error('Byte-stream default pull requires a default reader');
+      throw new InternalError('Byte-stream default pull requires a default reader');
     }
 
     if (state.queueTotalSize > 0) {
       if (state.stream.numReadRequests !== 0) {
-        throw new Error('Queued bytes cannot coexist with read requests');
+        throw new InternalError('Queued bytes cannot coexist with read requests');
       }
       this.fillReadRequestFromQueue(request);
       return;
@@ -2019,7 +2020,7 @@ export class ReadableByteStreamControllerImpl {
     autoAllocateChunkSize: number | undefined,
   ): void {
     if (stream.state.controller) {
-      throw new Error('ReadableStream already has a controller');
+      throw new InternalError('ReadableStream already has a controller');
     }
     const state: ReadableByteStreamControllerState = {
       autoAllocateChunkSize,
@@ -2601,7 +2602,7 @@ export class ReadableStreamGenericReaderMixin {
 
   get state(): ReadableStreamGenericReaderState {
     if (!this.#state) {
-      throw new Error('ReadableStreamGenericReader is not set up');
+      throw new InternalError('ReadableStreamGenericReader is not set up');
     }
     return this.#state;
   }
@@ -2613,7 +2614,7 @@ export class ReadableStreamGenericReaderMixin {
   /** Streams §4.9.3, ReadableStreamReaderGenericCancel. */
   cancelInternal(reason: unknown): PromiseValue<void> {
     const stream = this.state.stream;
-    if (!stream) throw new Error('Cannot cancel through a released reader');
+    if (!stream) throw new InternalError('Cannot cancel through a released reader');
     return stream.cancelInternal(reason);
   }
 
@@ -2638,11 +2639,11 @@ export class ReadableStreamGenericReaderMixin {
   release(reader: NonNullable<ReadableStreamState['reader']>): void {
     const genericState = this.state;
     const stream = genericState.stream;
-    if (!stream) throw new Error('Cannot release an already released reader');
+    if (!stream) throw new InternalError('Cannot release an already released reader');
 
     const streamState = stream.state;
     if (streamState.reader !== reader) {
-      throw new Error('Readable stream is locked by a different reader');
+      throw new InternalError('Readable stream is locked by a different reader');
     }
     const error = new TypeError(
       'Reader was released and can no longer monitor the stream\'s closedness',
@@ -2781,7 +2782,7 @@ export class ReadableStreamDefaultReaderImpl {
   readChunk(request: ReadRequest): void {
     const generic = this.genericReaderMixin;
     const stream = generic.state.stream;
-    if (!stream) throw new Error('Cannot read through a released reader');
+    if (!stream) throw new InternalError('Cannot read through a released reader');
 
     const streamState = stream.state;
     streamState.disturbed = true;
@@ -3068,7 +3069,7 @@ export class ReadableStreamBYOBReaderImpl {
   readInto(view: object, minimum: number, request: ReadIntoRequest): void {
     const generic = this.genericReaderMixin;
     const stream = generic.state.stream;
-    if (!stream) throw new Error('Cannot read through a released BYOB reader');
+    if (!stream) throw new InternalError('Cannot read through a released BYOB reader');
 
     const streamState = stream.state;
     streamState.disturbed = true;
@@ -3078,7 +3079,7 @@ export class ReadableStreamBYOBReaderImpl {
     }
     const controller = streamState.controller;
     if (!ReadableByteStreamControllerImpl.is(controller)) {
-      throw new Error('BYOB reader is attached to a non-byte stream');
+      throw new InternalError('BYOB reader is attached to a non-byte stream');
     }
     controller.pullInto(view, minimum, request);
   }
@@ -3233,14 +3234,14 @@ function requireAlgorithm<Algorithm>(
   algorithm: Algorithm | undefined,
   name: string,
 ): Algorithm {
-  if (!algorithm) throw new Error(`Readable stream ${name} algorithm is gone`);
+  if (!algorithm) throw new InternalError(`Readable stream ${name} algorithm is gone`);
   return algorithm;
 }
 
 function requireBufferViewType(view: object): JSBufferViewName {
   const type = getBufferTypeName(view);
   if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
-    throw new Error('ArrayBuffer view has no recognized view type');
+    throw new InternalError('ArrayBuffer view has no recognized view type');
   }
   return type;
 }
@@ -3277,13 +3278,13 @@ function copyDataBlockBytes(
 
 function requireObject(value: unknown): object {
   if (typeof value !== 'object' || value === null) {
-    throw new Error('Readable byte stream produced a non-object chunk');
+    throw new InternalError('Readable byte stream produced a non-object chunk');
   }
   return value;
 }
 
 function assert(condition: unknown): asserts condition {
-  if (!condition) throw new Error('Streams implementation invariant failed');
+  if (!condition) throw new InternalError('Streams implementation invariant failed');
 }
 
 function isArrayBufferView(value: object): boolean {

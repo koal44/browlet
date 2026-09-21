@@ -1,3 +1,5 @@
+import { InternalError } from './internal-error';
+
 /*
  * HTML section 2.1.1 defines a parallel queue as a queue of algorithm steps
  * which run in series while other work proceeds in parallel. The host chooses
@@ -39,7 +41,7 @@ export class ParallelQueue {
 
   #drain(): void {
     if (this.#draining) {
-      throw new Error('A parallel queue cannot drain reentrantly');
+      throw new InternalError('A parallel queue cannot drain reentrantly');
     }
 
     this.#drainScheduled = false;
