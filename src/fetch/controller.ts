@@ -5,10 +5,15 @@ import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2, fetch controller and its operations. */
 export class FetchController {
+  /** Controls whether fetch work may continue and how cancellation is reported. */
   state: 'ongoing' | 'terminated' | 'aborted' = 'ongoing';
+  /** Full timing data retained for extraction, or null before it is supplied. */
   fullTimingInfo: FetchTimingInfo | null = null;
+  /** Reporting callback for a selected global, or null before reporting is configured. */
   reportTimingSteps: ((global: object) => void) | null = null;
+  /** Structured-serialized abort reason, or null before an abort reason is recorded. */
   serializedAbortReason: object | null = null;
+  /** Continuation for a pending manual redirect, or null when none is installed. */
   nextManualRedirectSteps: (() => void) | null = null;
 
   reportTiming(global: object): void {

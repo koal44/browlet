@@ -32,6 +32,7 @@ describe('Fetch request cloning', () => {
     expect(clone.webDriverId).not.toBe(request.webDriverId);
     expect(clone.body).toBeNull();
     expect(clone.client).toBe(request.client);
+    expect(clone.userAgent).toBe(client.userAgent);
     expect(clone.origin).toBe(request.origin);
     expect(clone.policyContainer).toBe(request.policyContainer);
     expect(clone.reservedClient).toBe(request.reservedClient);

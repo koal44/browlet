@@ -10,7 +10,7 @@ import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createRuntime } from '../js-engine/runtime-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
-import { createClientSettings } from './client-fixture';
+import { createClientSettings, createFetchUserAgent } from './client-fixture';
 
 describe('Fetch request and response state', () => {
   it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
@@ -30,6 +30,7 @@ describe('Fetch request and response state', () => {
       timingAllowFailed: false, navigationTimingAllowValuesList: [],
     });
     expect(request.client).toBe(client);
+    expect(request.userAgent).toBe(client.userAgent);
     expect(request.urlList).toHaveLength(1);
     expect(request.url).toBe(request.currentURL);
     expect(request.webDriverId).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
@@ -37,7 +38,9 @@ describe('Fetch request and response state', () => {
 
   it('keeps URL/current URL as live pointers and copies the initial URL components', () => {
     const url = parseURL('https://[::1]/start#fragment').url!;
-    const request = new FetchRequest(url, null);
+    const userAgent = createFetchUserAgent();
+    const request = new FetchRequest(url, null, userAgent);
+    expect(request.userAgent).toBe(userAgent);
     expect(request.url).toEqual(url);
     expect(request.url).not.toBe(url);
     expect(request.url.path).not.toBe(url.path);

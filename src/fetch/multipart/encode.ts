@@ -39,7 +39,9 @@ export function encodeMultipartFormData(
 }
 
 export type MultipartEncoding = {
+  /** Boundary token shared by the multipart delimiters and the Content-Type parameter. */
   boundary: string;
+  /** Complete encoded body, retaining shared file data instead of flattening it into bytes. */
   data: BlobData;
 };
 

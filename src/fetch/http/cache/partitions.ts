@@ -3,6 +3,7 @@ import { networkPartitionKeysEqual, type NetworkPartitionKey } from '../network-
 
 /** Browser-owned logical HTTP cache partitions; response storage is still deferred. */
 export class HTTPCachePartitions {
+  /** Stable logical cache identities indexed by network partition key. */
   partitions: HTTPCachePartition[] = [];
 
   /** https://fetch.spec.whatwg.org/#determine-the-http-cache-partition */
@@ -19,4 +20,7 @@ export class HTTPCachePartitions {
 }
 
 /** Partition identity only. Cache entries and transactions join this owner in the cache slice. */
-export type HTTPCachePartition = { key: NetworkPartitionKey; };
+export type HTTPCachePartition = {
+  /** Network partition whose requests share this cache identity. */
+  key: NetworkPartitionKey;
+};

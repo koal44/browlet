@@ -20,6 +20,8 @@ export class UserAgent implements FetchUserAgent {
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
   cookieStore = new CookieStore();
+  /** Controls both sending and accepting cookies without clearing the store. */
+  cookiesEnabled = true;
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
   // Applies to tuple origins supplied by an authenticated protocol implementation.

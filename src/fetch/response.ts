@@ -18,27 +18,44 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import { getFetchEnvironmentSettingsObject } from './infrastructure';
+import type { FetchRequest } from './request';
 import type { FetchParams } from './params';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.6: response fields can continue changing after delivery. */
 export class FetchResponse {
+  /** Response category determining filtering and author-visible exposure. */
   type: ResponseType = 'default';
+  /** Distinguishes an aborted network error from other network errors. */
   aborted = false;
+  /** Response URL history; empty when no response URL has been assigned. */
   urlList: URLRecord[] = [];
+  /** HTTP status code, or zero for a network error or opaque response view. */
   status = 200;
+  /** HTTP reason phrase as a byte string; it may be empty. */
   statusMessage = '';
+  /** Ordered response headers, or the exposed subset for a filtered response. */
   headerList = new FetchHeaders();
+  /** Response body stream and replay metadata, or null when no body is present. */
   body: FetchBody | null = null;
+  /** Whether the response was served from cache, revalidated, or has no cache classification. */
   cacheState: '' | 'local' | 'validated' = '';
+  /** Additional header names exposed by a CORS filtered response. */
   corsExposedHeaderNameList: string[] = [];
+  /** Records that a Range header was sent, to prevent unintended exposure of partial content. */
   rangeRequested = false;
+  /** Whether the request that produced this response was allowed to include credentials. */
   requestIncludesCredentials = true;
+  /** Whether detailed timing may be exposed after checks across the redirect chain. */
   timingAllowPassed = false;
+  /** Redirect Timing-Allow-Origin values retained for checks against the navigation's final origin. */
   navigationTimingAllowValuesList: string[][] = [];
+  /** Body sizes and content metadata collected for timing reports. */
   bodyInfo = new ResponseBodyInfo();
+  /** Service-worker processing times, or null when no worker timing is attached. */
   serviceWorkerTimingInfo: ServiceWorkerTimingInfo | null = null;
+  /** Origin/site classification of the request's redirect chain retained on the response. */
   redirectTaint: 'same-origin' | 'same-site' | 'cross-site' = 'same-origin';
 
   /** https://fetch.spec.whatwg.org/#concept-network-error */
@@ -160,13 +177,32 @@ export class FetchResponse {
     if (url !== null && url.fragment === null) url.fragment = requestFragment;
     return url;
   }
+
+  /** Processes each Set-Cookie field independently using the request's URL and cookie policy. */
+  // https://fetch.spec.whatwg.org/#parse-and-store-response-set-cookie-headers
+  parseAndStoreCookies(request: FetchRequest): void {
+    const { userAgent } = request;
+    if (!userAgent.cookiesEnabled) return;
+    const { scheme, host, path } = request.currentURL;
+    if (host === null || host.kind === 'empty' || host.kind === 'opaque' || typeof path === 'string') return;
+    // Browsers accept Strict/Lax cookies on top-level navigation responses even
+    // when those cookies could not have been sent on the initiating request.
+    const sameSiteStrictOrLaxAllowed = request.destination === 'document' || request.isSameSiteForCookies;
+    for (const [name, value] of this.headerList) {
+      if (name.toLowerCase() !== 'set-cookie') continue;
+      userAgent.cookieStore.parseAndStoreCookie(value, scheme === 'https', host, path, true, false, sameSiteStrictOrLaxAllowed);
+      userAgent.cookieStore.garbageCollectCookies(host);
+    }
+  }
 }
 
 export type ResponseType = 'default' | 'error' | FilteredResponseType;
 export type FilteredResponseType = 'basic' | 'cors' | 'opaque' | 'opaqueredirect';
 
 export type FilteredFetchResponse = FetchResponse & {
+  /** Filtering policy applied by this response view. */
   type: FilteredResponseType;
+  /** Underlying response whose unmasked state remains live through the view. */
   readonly internalResponse: FetchResponse;
 };
 
@@ -205,9 +241,13 @@ function isFilteredResponse(response: FetchResponse): response is FilteredFetchR
  * enum ResponseType { "basic", "cors", "default", "error", "opaque", "opaqueredirect" };
  */
 export class ResponseImpl {
+  /** Internal response or filtered response view represented by this platform Response. */
   #response: FetchResponse;
+  /** Stable Headers implementation sharing the response's list and enforcing its guard. */
   #headers: HeadersImpl;
+  /** Body operations reading this response's current body and headers. */
   #bodyMixin: BodyMixin;
+  /** Owner's execution and allocation facilities, retained by cloned Responses. */
   #runtime: RuntimeContext;
 
   // Internal allocation from an existing response and header guard.
@@ -309,8 +349,11 @@ const invalidStatusText = /[^\x09\x20-\x7e\x80-\xff]/;
 
 /** Post-conversion dictionary; Web IDL supplies status and statusText defaults. */
 export type FetchResponseInit = {
+  /** Response status in the inclusive range 200 through 599. */
   status: number;
+  /** HTTP reason phrase, restricted to the permitted byte-string characters. */
   statusText: string;
+  /** Initial header entries, before any inferred body Content-Type is appended. */
   headers?: HeadersInitValue;
 };
 

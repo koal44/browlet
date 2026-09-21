@@ -1,4 +1,5 @@
 import type { BlobImpl } from '../file/index';
+import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
 import type { AbortSignalCapability, PromiseValue, RuntimeContext } from '../js-engine/index';
 import { TypeError } from '../js-engine/exceptions';
 import { isomorphicEncode } from '../js-engine/byte-string';
@@ -15,63 +16,110 @@ import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
 import {
   getFetchEnvironmentSettingsObject, serializeInteger,
-  type FetchEnvironmentSettingsObject, type FetchEnvironment,
+  type FetchEnvironmentSettingsObject, type FetchEnvironment, type FetchUserAgent,
 } from './infrastructure';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
 import { InternalError } from '../infra/internal-error';
 
-/** Fetch §2.2.5. URL and client are required inputs; the other fields have defaults. */
+/** Fetch §2.2.5. URL, client, and user agent are required inputs; the other fields have defaults. */
 export class FetchRequest {
+  /** HTTP method as a byte string; recognized standard methods use their canonical casing. */
   method = 'GET';
+  /** Restricts fetching to local schemes such as about, blob, and data. */
   localURLsOnly = false;
+  /** Ordered request headers shared with the projected Headers implementation. */
   headerList = new FetchHeaders();
+  /** Enables CORS preflight checks for author-supplied methods and headers. */
   unsafeRequest = false;
+  /** Extracted body, bytes awaiting extraction, or null when no body is present. */
   body: Uint8Array | FetchBody | null = null;
+  /** Initiating environment settings, or null for a request without an environment client. */
   client: FetchEnvironmentSettingsObject | null;
+  /** The shared networking owner, including for requests without a client. */
+  userAgent: FetchUserAgent;
+  /** Destination environment reserved for a navigation or worker, before it becomes active. */
   reservedClient: FetchEnvironment | null = null;
+  /** Environment ID replaced by a navigation, or an empty string when none is designated. */
   replacesClientId = '';
+  /** Selects the client context for prompts, defers selection to the client, or suppresses UI. */
   traversableForUserPrompts: 'no-traversable' | 'client' | FetchEnvironmentSettingsObject = 'client';
+  /** Allows the request to continue after its initiating environment is destroyed. */
   keepalive = false;
+  /** Initiating feature reported by Resource Timing, or null when unspecified. */
   initiatorType: RequestInitiator | null = null;
+  /** Whether relevant service workers may intercept the request. */
   serviceWorkersMode: 'all' | 'none' = 'all';
+  /** Initiator category used by policies such as CSP and Mixed Content. */
   initiator: '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt' = '';
+  /** Intended resource use; an empty string denotes a general-purpose fetch, not an unset value. */
   destination: Destination = '';
+  /** Scheduling hint supplied by the caller; auto leaves the choice to the user agent. */
   priority: RequestPriority = 'auto';
+  /** Scheduler-owned priority state, or null before a scheduler assigns it. */
   internalPriority: RequestInternalPriority | null = null;
+  /** Origin used for request policy, or client until resolved from the initiating environment. */
   origin: Origin | 'client' = 'client';
+  /** Origin initiating a top-level navigation; null denotes browser initiation. */
   topLevelNavigationInitiatorOrigin: Origin | null = null;
+  /** Policies attached to the request, or client until taken from its environment. */
   policyContainer: object | 'client' = 'client';
+  /** Referrer URL, an explicit omission, or client until the environment supplies the source. */
   referrer: URLRecord | 'no-referrer' | 'client' = 'client';
   // Referrer Policy supplies the enum declaration at the browser composition root.
+  /** Policy controlling referrer disclosure; an empty string leaves it to the client policy. */
   referrerPolicy = '';
+  /** Fetch mode governing origin restrictions, CORS processing, and response exposure. */
   mode: RequestMode | 'websocket' | 'webtransport' = 'no-cors';
+  /** Requires preflight when CORS processing applies, even for otherwise safelisted input. */
   useCORSPreflight = false;
+  /** Controls sending credentials and accepting credentials from the response. */
   credentialsMode: RequestCredentials = 'same-origin';
+  /** Prefers the URL's username and password over an existing authentication entry. */
   useURLCredentials = false;
+  /** Policy for consulting, validating, and updating the HTTP cache. */
   cacheMode: RequestCache = 'default';
+  /** Whether redirects are followed, rejected, or exposed for manual handling. */
   redirectMode: RequestRedirect = 'follow';
+  /** Subresource Integrity metadata used to verify the response body. */
   integrityMetadata = '';
+  /** Initiating element's nonce supplied to Content Security Policy checks. */
   cryptographicNonceMetadata = '';
+  /** Whether the initiating element was parser-inserted, or an empty string when unspecified. */
   parserMetadata: '' | 'parser-inserted' | 'not-parser-inserted' = '';
+  /** Marks a navigation caused by reloading the current document. */
   reloadNavigation = false;
+  /** Marks a navigation caused by session-history traversal. */
   historyNavigation = false;
+  /** Whether the initiating navigation carries user activation. */
   userActivation = false;
+  /** WebDriver identifier for the navigation, distinct from this request's own ID. */
   webDriverNavigationId: string | null = null;
+  /** Whether this request participates in HTML's render-blocking mechanism. */
   renderBlocking = false;
+  /** Accepted server-certificate hashes for a WebTransport connection. */
   webTransportHashList: WebTransportHash[] = [];
+  /** Initial URL followed by redirect targets; the last entry is the current URL. */
   urlList: [URLRecord, ...URLRecord[]];
+  /** Number of redirects followed, used to enforce the redirect limit. */
   redirectCount = 0;
+  /** Response filtering selected as origin and CORS processing progresses. */
   responseTainting: 'basic' | 'cors' | 'opaque' = 'basic';
+  /** Suppresses automatic Cache-Control: max-age=0 when cache mode is no-cache. */
   preventNoCacheCacheControlHeaderModification = false;
+  /** Marks completion of the fetch's response end-of-body processing. */
   done = false;
+  /** Remembers a failed timing-allow check across the request's redirect chain. */
   timingAllowFailed = false;
+  /** Timing-Allow-Origin values from each redirect response in a navigation. */
   navigationTimingAllowValuesList: string[][] = [];
+  /** Unique request identifier for WebDriver; cloning generates a fresh identifier. */
   webDriverId: string = crypto.randomUUID();
 
-  constructor(url: URLRecord, client: FetchEnvironmentSettingsObject | null) {
+  constructor(url: URLRecord, client: FetchEnvironmentSettingsObject | null, userAgent: FetchUserAgent) {
     this.urlList = [copyURL(url)];
     this.client = client;
+    this.userAgent = userAgent;
   }
 
   get url(): URLRecord {
@@ -133,7 +181,7 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#concept-request-clone */
   clone(): FetchRequest {
-    const request = new FetchRequest(this.url, this.client);
+    const request = new FetchRequest(this.url, this.client, this.userAgent);
     for (let i = 1; i < this.urlList.length; i++) request.urlList.push(copyURL(this.urlList[i]!));
     return Object.assign(request, this, {
       webDriverId: request.webDriverId,
@@ -168,6 +216,44 @@ export class FetchRequest {
     const environment = this.reservedClient ?? this.client;
     return environment === null ? null : determineNetworkPartitionKey(environment);
   }
+
+  /** Appends the cookies selected for this request from the owning user agent's store. */
+  // https://fetch.spec.whatwg.org/#append-a-request-cookie-header
+  appendCookieHeader(): void {
+    if (!this.userAgent.cookiesEnabled) return;
+    const { scheme, host, path } = this.currentURL;
+    if (host === null || host.kind === 'empty' || host.kind === 'opaque') return;
+    const cookies = this.userAgent.cookieStore.retrieveCookies(
+      scheme === 'https', host, path, true, this.determineSameSiteMode(), laxAllowingUnsafeMaxAge,
+    );
+    if (cookies.length !== 0) this.headerList.append('Cookie', HTTPCookie.serialize(cookies));
+  }
+
+  /** Selects sending restrictions, including Lax-by-default for unspecified SameSite. */
+  // https://fetch.spec.whatwg.org/#determine-the-same-site-mode
+  // Follow browser classification: same-site navigations allow Strict; only top-level
+  // cross-site navigations receive Lax/temporarily unset cookies. Response storage differs.
+  determineSameSiteMode(): CookieSameSiteMode {
+    if (this.isSameSiteForCookies) return 'strict-or-less';
+    if (this.destination !== 'document') return 'none';
+    return safeMethods.has(this.method) ? 'lax-or-less' : 'unset-or-less';
+  }
+
+  /** Whether the initiator and client ancestry are same-site with the current URL. */
+  // Chromium's default does not taint this decision with earlier redirect hops.
+  // Fetch's redirectTaint still serves its separate origin/credentials algorithms.
+  get isSameSiteForCookies(): boolean {
+    let initiator: Origin | null;
+    if (this.destination === 'document') {
+      // No initiator denotes browser-initiated navigation, not a clientless subresource.
+      initiator = this.topLevelNavigationInitiatorOrigin;
+    } else {
+      if (this.client === null || this.client.hasCrossSiteAncestor) return false;
+      initiator = this.client.origin;
+    }
+    const targetOrigin = obtainURLOrigin(this.currentURL);
+    return initiator === null || areSameSite(initiator, targetOrigin);
+  }
 }
 
 /** https://fetch.spec.whatwg.org/#request-destination-script-like */
@@ -191,6 +277,9 @@ const nonSubresourceDestinations = new Set<Destination>([
   'document', 'embed', 'frame', 'iframe', 'object', 'report', 'serviceworker', 'sharedworker', 'worker',
 ]);
 const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame', 'iframe', 'object']);
+const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
+// Chromium's Lax-allowing-unsafe compatibility window for recently created default cookies.
+const laxAllowingUnsafeMaxAge = 2 * 60 * 1000;
 
 /*
  * typedef (Request or USVString) RequestInfo;
@@ -252,10 +341,15 @@ const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame
  * enum RequestPriority { "high", "low", "auto" };
  */
 export class RequestImpl {
+  /** Internal request state represented by this platform Request. */
   #request: FetchRequest;
+  /** Stable Headers implementation sharing the request's list and enforcing its guard. */
   #headers: HeadersImpl;
+  /** Abort signal associated with this Request. */
   #signal: AbortSignalCapability;
+  /** Body operations reading this request's current body and headers. */
   #bodyMixin: BodyMixin;
+  /** Owner's execution, allocation, and abort-construction facilities. */
   #runtime: RuntimeContext;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
@@ -284,7 +378,7 @@ export class RequestImpl {
       const url = parseURL(input, baseURL).url;
       if (url === null) throw new TypeError('Invalid Request URL');
       if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
-      source = new FetchRequest(url, client);
+      source = new FetchRequest(url, client, client.userAgent);
       fallbackMode = 'cors';
     } else {
       source = input.#request;
@@ -302,7 +396,7 @@ export class RequestImpl {
       traversable = 'no-traversable';
     }
 
-    const request = new FetchRequest(source.url, client);
+    const request = new FetchRequest(source.url, client, client.userAgent);
     request.method = source.method;
     request.headerList = source.headerList.clone();
     request.unsafeRequest = true;
@@ -483,26 +577,46 @@ export type RequestDuplex = 'half';
 export type RequestPriority = 'high' | 'low' | 'auto';
 /** Priority assigned by Fetch scheduling; updates retain the scheduler's representation. */
 export type RequestInternalPriority = { update(priority: RequestPriority): void; };
-export type WebTransportHash = { algorithm: string; value: Uint8Array; };
+export type WebTransportHash = {
+  /** Hash algorithm used to identify the expected server certificate. */
+  algorithm: string;
+  /** Expected certificate digest bytes. */
+  value: Uint8Array;
+};
 
 /** Converted RequestInfo: an existing Request implementation or a URL string. */
 export type FetchRequestInfo = RequestImpl | string;
 export type FetchRequestInit = {
+  /** HTTP method overriding the input request's method. */
   method?: string;
+  /** Header entries replacing the input request's header list. */
   headers?: HeadersInitValue;
+  /** Replacement body input; null leaves an input Request's body available for reuse. */
   body?: BodyInitValue | null;
+  /** Referrer override; an empty string suppresses it and about:client selects the client. */
   referrer?: string;
+  /** Policy overriding how much referrer information may be sent. */
   referrerPolicy?: string;
+  /** Origin and CORS mode for the new request. */
   mode?: RequestMode;
+  /** Policy for sending credentials and accepting credentials from the response. */
   credentials?: RequestCredentials;
+  /** HTTP cache access policy. */
   cache?: RequestCache;
+  /** Policy for following or exposing redirects. */
   redirect?: RequestRedirect;
+  /** Subresource Integrity metadata for checking the response body. */
   integrity?: string;
+  /** Whether the request may outlive its initiating environment. */
   keepalive?: boolean;
   // A DOM implementation reference, not an ambient or Node AbortSignal.
+  /** Signal to follow; null disconnects the new request from an input Request's signal. */
   signal?: AbortSignalCapability | null;
+  /** Required half-duplex acknowledgement when supplying a ReadableStream body. */
   duplex?: RequestDuplex;
+  /** Caller-provided scheduling priority hint. */
   priority?: RequestPriority;
+  /** Only null is accepted when present; it disables client-associated prompt UI. */
   window?: unknown;
 };
 

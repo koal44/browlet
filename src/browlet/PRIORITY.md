@@ -243,6 +243,8 @@ Current implementation sequence:
    Window trustworthiness, secure-context exposure
    for the supported lifecycle, and
    the [cookie core](../http/cookies/ROADMAP.md) are implemented.
+   Fetch 7a's cookie headers and Window ancestry are complete; continue with
+   7b's Origin/referrer policy, then 7c's CORS and remaining headers.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.
    Resolve remaining [preflight dependencies](../fetch/PREFLIGHT.md#work-order)

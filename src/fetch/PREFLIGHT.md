@@ -366,8 +366,9 @@ behavior or context ownership was changed by this pass.
 The trustworthiness and cookie-core detour and Fetch Slice 6 are complete,
 including Request/Response construction, Referrer Policy's declaration,
 dependent AbortSignals, and HTML's document-base-URL dependency. Resume
-[Fetch Slice 7](ROADMAP.md#slice-7--http-extensions), starting with §3.1's
-cookie header algorithms and their browser-owned SameSite inputs.
+[Fetch Slice 7](ROADMAP.md#slice-7--http-extensions): 7a's cookie header
+algorithms and Window ancestry inputs are complete; 7b's Origin/referrer-policy
+integration is next.
 The remaining work-order entries above are gates for their named consumers,
 not a requirement to finish all browser policy before proceeding.
 Network cookie processing and cache transactions remain in Slice 9.

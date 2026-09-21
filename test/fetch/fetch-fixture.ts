@@ -23,6 +23,7 @@ import { parseURL } from '../../src/url/url';
 import { BindingWorld } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
+import { createFetchUserAgent } from './client-fixture';
 
 export function createFetchRequest(
   url = 'https://example.test/start',
@@ -30,7 +31,7 @@ export function createFetchRequest(
 ) {
   const parsed = parseURL(url).url;
   if (parsed === null) throw new Error('Invalid fixture URL');
-  return new FetchRequest(parsed, client);
+  return new FetchRequest(parsed, client, client?.userAgent ?? createFetchUserAgent());
 }
 
 export function createFetchFixture(world?: BindingWorld) {

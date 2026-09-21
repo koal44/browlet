@@ -8,6 +8,7 @@ import { InternalError } from '../../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#concept-connection-pool */
 export class ConnectionPool {
+  /** Connections retained for reuse within this user agent, separated by partition and origin. */
   connections = new Set<Connection>();
 
   /** https://fetch.spec.whatwg.org/#concept-connection-obtain */
@@ -34,10 +35,15 @@ export class ConnectionPool {
 
 /** https://fetch.spec.whatwg.org/#concept-connection */
 export type Connection = {
+  /** Network partition permitted to reuse this connection. */
   key: NetworkPartitionKey;
+  /** Origin served by this connection. */
   origin: Origin;
+  /** Whether the connection permits credentials, including TLS client certificates. */
   credentials: boolean;
+  /** DNS, connection, and TLS timing observations. */
   timingInfo: ConnectionTimingInfo;
+  /** Whether the connection supports unreliable data transfer required by some transports. */
   supportsUnreliable: boolean;
 };
 

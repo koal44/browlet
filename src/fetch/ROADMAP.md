@@ -6,7 +6,7 @@
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
-- **Next:** [Slice 7 — HTTP extensions](#slice-7--http-extensions), starting with cookie header integration and its browser-owned SameSite inputs.
+- **In progress:** [Slice 7 — HTTP extensions](#slice-7--http-extensions): 7a cookie headers complete; 7b Origin/referrer policy is next.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -570,11 +570,51 @@ Return to document order and implement:
 4. `Content-Length`, MIME extraction for `Content-Type`, `nosniff`, CORP, and
    `Sec-Purpose` behavior from §§3.4–3.8.
 
-Start §3.1 by completing HTML's cross-site-ancestor query and exposing the
-UserAgent's existing cookie store and browser policy to Fetch. Review the
-[cookie roadmap's browser comparison](../http/cookies/ROADMAP.md#implementation-order)
-before implementing SameSite decisions: sending and accepting cookies need
-distinct rules, and omitted-SameSite behavior still needs a policy choice.
+Work in three parts: **7a cookie headers (§3.1)**, **7b Origin and Referrer
+Policy (§3.2)**, then **7c CORS and remaining header protocols (§§3.3–3.8)**.
+
+**7a complete:** `FetchRequest.appendCookieHeader()` and
+`FetchResponse.parseAndStoreCookies(request)` consume the real UserAgent-owned
+store and its `cookiesEnabled` setting. Each request receives its owning user
+agent at construction, including clientless requests; cloning preserves that
+owner. Response cookie processing uses the request's owner. HTML Window settings
+now supply a live cross-site-ancestor answer from the navigable chain. A
+Document without a current navigable cannot establish a same-site cookie
+context. The tests compose real Window settings and navigables; iframe loading
+and Worker lifecycle are still separate HTML work.
+
+The reviewed browser model replaces §3.1's contradictory SameSite branches:
+same-site requests permit Strict; cross-site top-level safe-method navigations
+permit Lax; other cross-site requests permit only None. An unset SameSite acts
+as Lax, with Chromium's two-minute creation-age exception for unsafe top-level
+navigations. The store applies this age limit before updating access times;
+replacing a cookie does not restart the window. Top-level navigation responses
+may store Strict/Lax cookies independently of what their requests could send.
+Clientless subresources remain cross-site; a null navigation initiator means
+browser initiation. Follow Chromium's default redirect policy: compare the
+current target, without retaining cross-site taint from earlier hops. A fresh
+A-to-B-to-A navigation/fetch probe confirmed that Chromium sends Strict again
+on return to A; Firefox keeps it restricted. Chromium's full-chain check is
+behind the disabled-by-default `CookieSameSiteConsidersRedirectChain` feature.
+See the [cookie policy and source comparison](../http/cookies/ROADMAP.md#implementation-order).
+
+The default policy permits third-party cookies only as allowed by SameSite;
+blanket third-party blocking, tracking exceptions, session-only controls, and
+partitioned cookies are not added here. Disabling cookies suppresses both
+header algorithms while preserving existing stored cookies.
+
+The serialized-cookie-default-path algorithm reuses HTTP's default-path rule
+and URL path serialization without mutating the input. Focused coverage is in
+`test/fetch/http/cookies.test.ts` and `test/browlet/scripting/environment.test.ts`.
+Slice 9 must invoke these algorithms at the HTTP network boundary after its
+credentials decision; completing 7a does not imply network requests or
+`document.cookie` are implemented.
+
+Validation: all 9,839 unit cases pass with the existing expected failures/skips
+on Node 24.19.0, 26.8.1, and the custom build, each in stock and compatibility
+mode. Typecheck and changed-file lint pass. Concurrent full-suite runs exceeded
+the declaration-contract test's five-second limit; run the variant matrix
+sequentially rather than increasing that timeout.
 
 Use pure deterministic tests for header and CORS algorithms. Policy-owned
 questions must call named host capabilities so the default no-policy test host

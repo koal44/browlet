@@ -358,8 +358,8 @@ describe('environment settings objects', () => {
     expect(settings.timeOrigin.milliseconds).toBe(0);
     expect(serializeURL(settings.apiBaseURL)).toBe('https://example.test/');
     expect(settings.crossOriginIsolatedCapability).toBe(false);
-    expect(() => settings.hasCrossSiteAncestor)
-      .toThrow('Window navigable ancestry is not implemented');
+    // The Document is not active in a navigable yet, so it cannot establish a cookie site.
+    expect(settings.hasCrossSiteAncestor).toBe(true);
   });
 });
 

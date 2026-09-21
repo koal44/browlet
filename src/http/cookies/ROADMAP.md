@@ -7,10 +7,10 @@ this project must not discover a process-global cookie jar or import Browlet.
 
 **Status:** §§5.1–5.4 implemented: cookie records and predicates, store limits,
 eviction, subcomponent parsing/matching, and the main parse/store/retrieve/serialize
-algorithms. Each Browlet UserAgent owns a store. Browser access remains ahead.
-The standalone prerequisite and Fetch Slice 6 are complete; resume
-[Fetch Slice 7](../../fetch/ROADMAP.md#slice-7--http-extensions).
-Browser integration follows at its Fetch and HTML consumers.
+algorithms. Each Browlet UserAgent owns a store. Fetch 7a now supplies cookie
+header algorithms, SameSite decisions, and Window ancestry inputs; network
+invocation and credentials checks remain in Fetch Slice 9. Document cookie
+access remains a later HTML consumer.
 
 ## Sources
 
@@ -70,8 +70,8 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    HttpOnly, SameSite, all four name prefixes, overwrite protection,
    replacement, ordering, deletion, and eviction. A `Set-Cookie` value is processed
    separately; it must not be treated as a comma-combinable field.
-4. **Deferred: browser integration at its consumers.**
-   [Fetch Slice 7](../../fetch/ROADMAP.md#slice-7--http-extensions) supplies §3.1's
+4. **Fetch header integration complete; network and Document consumers deferred.**
+   [Fetch Slice 7a](../../fetch/ROADMAP.md#slice-7--http-extensions) supplies §3.1's
    cookie header algorithms; Slice 9 connects them to network request/response
    processing and credentials decisions through its
    [HTTP integration](../../fetch/http/ROADMAP.md).
@@ -82,8 +82,13 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    algorithm excludes Strict cookies on same-site navigations, excludes Lax on
    cross-site navigations, and omits the client/target-site check for ordinary
    subresources. Its GET/POST assertion and reuse of retrieval mode for storage
-   also disagree with browser behavior. Review sending versus accepting cookies,
-   clientless requests, and unset-SameSite policy before implementing these hooks.
+   also disagree with browser behavior. Reviewed with Eric on 2026-09-21:
+   follow Chromium's distinct sending/acceptance rules, schemeful site
+   comparisons, current-target redirect classification, and Lax-by-default with
+   a two-minute creation-age exception for unsafe top-level navigations.
+   A clientless subresource is cross-site; a null top-level navigation
+   initiator denotes browser initiation. Top-level responses can store
+   Strict/Lax cookies even when the request could not send them.
    The reproducible browser probe and findings are in the independent experimental
    repository's `cookies/same-site-context.mjs` and `cookies/README.md`.
 
@@ -99,6 +104,29 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    passes same-site, top-level-navigation, and safe-method
    facts to its platform cookie backend; the Windows curl lookup ignores
    `SameSiteInfo`, so its divergent result is not a Safari policy oracle.
+
+   A fresh 2026-09-21 A-to-B-to-A navigation/fetch probe confirmed Chromium
+   149 sends Strict again when returning to A; Firefox 151 withholds it.
+   Follow Chromium's default here, which leaves
+   `CookieSameSiteConsidersRedirectChain` disabled. The stricter full-chain
+   variant is not enabled implicitly in Browlet. The reproducible observation
+   is `experimental/cookies/redirect-context.mjs` under `node-compat/`.
+
+   Chromium's age exception preserves legacy sign-in flows which return
+   through a cross-site top-level POST; explicit Lax cookies never receive it.
+   Gecko also has a 120-second `laxPlusPOST.timeout` preference, but checks
+   update time and gates it behind its lax-by-default configuration. WebKit's
+   Cocoa code delegates cookie selection to the platform storage backend;
+   that source does not establish a Safari grace-period rule. Our policy is
+   Chromium's creation-time rule: replacement preserves the original time.
+   `retrieveCookies` takes an optional maximum unset-cookie age, applied only
+   in unset-or-less mode before access times change. The core's default
+   remains unrestricted; Fetch supplies the two-minute limit.
+
+   `UserAgent.cookiesEnabled` controls both sending and storage without
+   deleting cookies. The default permits third-party access subject to SameSite.
+   Blanket third-party blocking, tracking exceptions, session-only controls,
+   and persistence remain explicit later browser policy, not hidden defaults.
 
 ## Representation choices
 
@@ -186,11 +214,12 @@ the removal report: garbage collection still returns those original records.
   and site comparisons. The completed cookie core uses these directly.
 - Keep cookie `isSecure` separate from `Environment.isSecureContext`. The
   current Fetch §3.1 callers derive it from the request URL's HTTPS scheme.
-- Full browser integration requires HTML's cross-site-ancestor answer, which
-  `WindowEnvironmentSettingsObject.hasCrossSiteAncestor` currently leaves
-  unimplemented. Fetch's same-site-mode algorithm and request/response cookie
-  hooks are also unfinished. Keep those dependencies explicit when reached;
-  they do not block the cookie core.
+- Window settings now expose HTML's live cross-site-ancestor answer, and Fetch
+  consumes it in cookie classification. An inactive/detached Document does not
+  establish a same-site context. Iframe loading and worker lifecycle are not
+  claimed by the tests that compose Window settings and navigables directly.
+- Fetch Slice 9 must call the header algorithms at the HTTP network boundary
+  under its credentials decision. Document cookie access is still unfinished.
 - The reviewed layered draft does not define a partition-key field or the
   `Partitioned` attribute algorithms; its source contains only a commented-out
   partition field. Review CHIPS and browser storage-partition policy separately
@@ -209,9 +238,11 @@ ordering. Serialization preserves the supplied ordering and byte values.
 `test/browlet/fetch-control.test.ts` checks shared ownership across
 Window settings and separation between UserAgents.
 
-At browser integration, test real Fetch/Document consumers
-against a shared Browlet-owned store, including credentials omission and
-redirect handling.
+`test/fetch/http/cookies.test.ts` covers header processing, SameSite sending
+versus acceptance, redirects, disabling, and the grace-period boundary.
+`test/browlet/scripting/environment.test.ts` covers the real Window ancestry
+query and a shared UserAgent store. Credentials omission and actual network
+invocation remain Slice 9 acceptance tests; Document access remains HTML work.
 
 Network cookie handling does not require implementing the separate Cookie
 Store API or persistent storage. The core uses an in-memory store;

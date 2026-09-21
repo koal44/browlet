@@ -570,8 +570,9 @@ group's owner.
 This makes HTML's implicit user agent explicit without a Document lookup or a
 process-wide singleton. Fetch's `FetchEnvironmentSettingsObject` and
 `FetchUserAgent` types describe narrow views of those same objects; a request
-retains its actual HTML settings object. The UserAgent owns its live connectivity
-assumption, while the settings object supplies the environment-scoped BiDi query.
+retains its actual HTML settings object when it has a client, and always retains
+its owning UserAgent. The UserAgent owns its live connectivity assumption,
+while the settings object supplies the environment-scoped BiDi query.
 Host connectivity detection and BiDi session lookup are provisional; their replacement work is
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
 
@@ -580,6 +581,18 @@ settings read it from the associated Document; Fetch's structural client type
 exposes the embedder-policy value without copying it or importing Browlet.
 `FetchRequest` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
+
+For cookies, Window settings expose HTML's live cross-site-ancestor query.
+Fetch classifies the request's initiator and current target; it selects
+outbound cookies separately from accepting response cookies. The UserAgent
+owns the shared `CookieStore` and `cookiesEnabled` setting. Request construction
+receives that owner explicitly, including for requests without a client, and
+cloning preserves it. The author Request constructor selects the new client's
+owner even when copying another Request. Sending cookies uses the request's
+owner; processing a response's Set-Cookie headers takes that request and uses
+the same store. Responses do not retain a request or UserAgent. Cookie parsing,
+matching, eviction, and access timestamps remain HTTP's responsibility; no
+runtime or binding lookup is needed.
 
 Each `EnvironmentSettingsObject` also owns a `FetchGroup`, exposed through its
 `FetchEnvironmentSettingsObject` view. The group retains request/controller

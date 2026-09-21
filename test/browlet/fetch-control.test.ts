@@ -14,8 +14,8 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.hostDefined!;
     const second = createFetchWindow(userAgent).realm.hostDefined!;
-    const firstRequest = new FetchRequest(first.creationURL, first);
-    const secondRequest = new FetchRequest(second.creationURL, second);
+    const firstRequest = new FetchRequest(first.creationURL, first, first.userAgent);
+    const secondRequest = new FetchRequest(second.creationURL, second, second.userAgent);
     const partitions = userAgent.httpCachePartitions;
     const firstPartition = partitions.determine(firstRequest);
 
@@ -34,7 +34,7 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.hostDefined!;
     const second = createFetchWindow(userAgent).realm.hostDefined!;
-    const request = new FetchRequest(first.creationURL, first);
+    const request = new FetchRequest(first.creationURL, first, first.userAgent);
     const controller = new FetchController();
 
     expect(first.fetchGroup).toBeInstanceOf(FetchGroup);
@@ -53,7 +53,7 @@ describe('Fetch client settings ownership', () => {
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
     const settings = realm.hostDefined!;
-    const request = new FetchRequest(parseURL('https://example.test/').url!, settings);
+    const request = new FetchRequest(parseURL('https://example.test/').url!, settings, settings.userAgent);
     request.origin = settings.origin;
     const container = document!.getPolicyContainer();
 
@@ -79,7 +79,7 @@ describe('Fetch client settings ownership', () => {
     const second = createFetchWindow();
     const settings = first.realm.hostDefined!;
     const otherSettings = second.realm.hostDefined!;
-    const request = new FetchRequest(settings.creationURL, settings);
+    const request = new FetchRequest(settings.creationURL, settings, settings.userAgent);
 
     expect(request.client).toBe(settings);
     expect(settings.userAgent).not.toBe(otherSettings.userAgent);

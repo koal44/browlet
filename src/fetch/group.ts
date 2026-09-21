@@ -4,7 +4,9 @@ import { InternalError } from '../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#fetch-groups */
 export class FetchGroup {
+  /** Requests tracked for one environment, including the controllers used during termination. */
   fetchRecords: FetchRecord[] = [];
+  /** Deferred requests and invocation state retained for that environment. */
   deferredFetchRecords: DeferredFetchRecord[] = [];
 
   /** https://fetch.spec.whatwg.org/#concept-fetch-group-terminate */
@@ -27,12 +29,17 @@ export class FetchGroup {
 }
 
 export type FetchRecord = {
+  /** Request registered with the fetch group. */
   request: FetchRequest;
+  /** Controller for stopping the request, or null when none is associated. */
   controller: FetchController | null;
 };
 
 export type DeferredFetchRecord = {
+  /** Request awaiting deferred execution. */
   request: FetchRequest;
+  /** Notification steps run when the deferred fetch is invoked. */
   notifyInvoked: () => void;
+  /** Tracks whether invocation is pending, has been sent, or has been aborted. */
   invokeState: 'pending' | 'sent' | 'aborted';
 };

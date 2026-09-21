@@ -6,7 +6,7 @@ import type { JSExecutionContext } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import type { WindowImpl } from '../browsing/window/window';
-import type { Origin } from '../../url/origin';
+import { areSameSite, type Origin } from '../../url/origin';
 import type { URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
@@ -106,10 +106,18 @@ export class WindowEnvironmentSettingsObject
     return this.#window.getAssociatedDocument().getOrigin();
   }
 
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
   get hasCrossSiteAncestor(): boolean {
-    throw new InternalError(
-      'Window navigable ancestry is not implemented',
-    );
+    let document = this.#window.getAssociatedDocument();
+    const navigable = document.getNodeNavigable();
+    // A detached/inactive Document has no current ancestor chain to establish a cookie site.
+    if (navigable === null) return true;
+    for (let parent = navigable.parent; parent !== null; parent = parent.parent) {
+      const parentDocument = parent.activeDocument;
+      if (parentDocument === null || !areSameSite(parentDocument.getOrigin(), document.getOrigin())) return true;
+      document = parentDocument;
+    }
+    return false;
   }
 
   get policyContainer(): PolicyContainer {

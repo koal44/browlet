@@ -163,17 +163,22 @@ export class CookieStore {
    * Returns eligible stored cookies, longest serialized path first, then oldest creation time.
    * Updates access times on the returned objects without removing expired records.
    * Opaque request paths return an empty list.
+   * @param maximumUnsetAge Maximum age in milliseconds for unset-SameSite cookies when
+   * selecting unset-or-less; other retrieval modes do not apply this limit.
    */
   retrieveCookies(
     isSecure: boolean, host: CookieHost, path: URLPath, httpOnlyAllowed: boolean, sameSite: CookieSameSiteMode,
+    maximumUnsetAge = Infinity,
   ): StoredHTTPCookie[] {
     if (typeof path === 'string') return [];
     const maximumSameSiteRank = sameSiteRanks[sameSite];
+    const now = Date.now();
     const cookies: StoredHTTPCookie[] = [];
     for (const cookie of this.cookies) {
       // Expiry must be respected even between the caller's garbage-collection passes.
       if (cookie.isExpired || cookie.secure && !isSecure || cookie.httpOnly && !httpOnlyAllowed) continue;
       if (sameSiteRanks[cookie.sameSite] > maximumSameSiteRank) continue;
+      if (sameSite === 'unset-or-less' && cookie.sameSite === 'unset' && now - cookie.creationTime > maximumUnsetAge) continue;
       if (cookie.hostOnly ? !hostsEqual(cookie.host, host) : !cookie.matchesDomain(host) || cookie.hasPublicSuffixHost) continue;
       if (!cookie.matchesPath(path)) continue;
       cookies.push(cookie);
@@ -181,7 +186,6 @@ export class CookieStore {
 
     // Browsers order by serialized path length, not the draft's segment count.
     cookies.sort((a, b) => b.pathLength - a.pathLength || a.creationTime - b.creationTime);
-    const now = Date.now();
     for (const cookie of cookies) cookie.lastAccessTime = now;
     return cookies;
   }

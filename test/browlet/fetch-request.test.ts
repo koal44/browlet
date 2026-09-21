@@ -24,6 +24,7 @@ describe('Fetch Request construction', () => {
     expect(request.signal.aborted).toBe(false);
     const record = implementation(window, request).getRequest();
     expect(record.client).toBe(getRelevantRealm(window).hostDefined);
+    expect(record.userAgent).toBe(getRelevantRealm(window).hostDefined!.userAgent);
     expect(record.unsafeRequest).toBe(true);
     expect(record.initiatorType).toBe('fetch');
     expect(Reflect.has(window, 'fetch')).toBe(false);
@@ -244,6 +245,8 @@ describe('Fetch Request signals and realm ownership', () => {
     expect(copy.headers).toBeInstanceOf(other.Headers);
     expect(copy.signal).toBeInstanceOf(other.AbortSignal);
     expect(copy.body).toBeInstanceOf(other.ReadableStream);
+    expect(implementation(owner, input).getRequest().userAgent).toBe(getRelevantRealm(owner).hostDefined!.userAgent);
+    expect(implementation(other, copy).getRequest().userAgent).toBe(getRelevantRealm(other).hostDefined!.userAgent);
     const copyBody = implementation(other, copy).getRequest().body as FetchBody;
     expect(copyBody.stream.runtime).toBe(getBindingContext(getRelevantRealm(other)).getRuntime());
     const plain = new owner.Request(url);
@@ -251,6 +254,7 @@ describe('Fetch Request signals and realm ownership', () => {
     expect(clone).toBeInstanceOf(owner.Request);
     expect(clone.headers).toBeInstanceOf(owner.Headers);
     expect(clone.signal).toBeInstanceOf(owner.AbortSignal);
+    expect(implementation(owner, clone).getRequest().userAgent).toBe(getRelevantRealm(owner).hostDefined!.userAgent);
     expect(() => other.Request.prototype.clone.call({} as Request)).toThrow(other.TypeError);
   });
 

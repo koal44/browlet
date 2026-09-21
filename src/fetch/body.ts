@@ -24,10 +24,13 @@ import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.4: a stream and the source/length retained for replay. */
 export class FetchBody {
+  /** Stream supplying the body bytes; cloning replaces it with one branch of a tee. */
   stream: ReadableStreamImpl;
+  /** Retained input for replaying the body, or null when only the stream is available. */
   source: Uint8Array | BlobImpl | FormDataImpl | null = null;
+  /** Total body length in bytes, or null when unknown; this is not a count of remaining bytes. */
   length: number | null = null;
-  // Implementation dependency for HTML task delivery, retained across clones.
+  /** Execution and task-delivery facilities shared by this body and its clones. */
   #runtime: RuntimeContext;
 
   constructor(stream: ReadableStreamImpl, runtime: RuntimeContext) {
@@ -152,7 +155,12 @@ export class FetchBody {
   }
 }
 
-export type BodyWithType = { body: FetchBody; type: string | null; };
+export type BodyWithType = {
+  /** Body extracted from the supplied input. */
+  body: FetchBody;
+  /** Inferred Content-Type value, or null when extraction supplies none. */
+  type: string | null;
+};
 
 /**
  * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
@@ -194,7 +202,9 @@ export function handleContentCodings(
  * };
  */
 export class BodyMixin {
+  /** Includer's live request or response, so body and header replacements remain visible. */
   #record: FetchRequest | FetchResponse;
+  /** Owner's facilities for body consumption, result allocation, and promise delivery. */
   #runtime: RuntimeContext;
 
   // Read the includer's current body and headers, including replacements.
