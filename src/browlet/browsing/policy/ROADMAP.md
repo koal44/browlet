@@ -143,7 +143,8 @@ metadata and digest verification and is complete. Slice 2 here supplies the
 policy model, both header parsers, container association and independent copying,
 and is complete. Slice 3's blocking/report-only checks and violation bodies
 are also complete through the actual settings object's Reporting seam.
-Report generation/delivery remains deferred to the Reporting detour.
+Reporting B connects report generation, Window queues, and local observers;
+outbound delivery and destruction integration remain with Reporting and HTML.
 
 `IntegrityPolicy.parse(headers, headerName)` consumes the existing HTTP
 Structured Fields parser. `PolicyContainer.parseIntegrityPolicyHeaders(response)`
@@ -175,8 +176,10 @@ policies through an actual Window's Fetch client population. Automatic
 response delivery still belongs to the unfinished HTML loader/navigation
 consumer. `FetchRequest.isBlockedByIntegrityPolicy()` returns
 a boolean and submits violations of either policy using the request client's
-live reporting URL. Its report-body dictionary inherits Reporting's empty
-`ReportBody` dictionary; `reportOnly` stays a boolean. Main Fetch must invoke
+live reporting URL. Its observer-facing `IntegrityViolationReportBodyImpl` inherits
+Reporting's `ReportBodyImpl`, following the approved browser interface model;
+`reportOnly` stays a boolean. Fetch still submits plain producer data.
+Main Fetch must invoke
 this operation after populating the request's policy container. Workers must supply
 their own reporting URL when their settings implementation is introduced.
 

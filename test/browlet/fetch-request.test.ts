@@ -6,7 +6,6 @@ import type { FetchBody } from '../../src/fetch/body';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { parseURL } from '../../src/url/url';
-import { reference } from '../../src/web-idl/index';
 
 describe('Fetch Request construction', () => {
   it('constructs a request with independent headers, a signal, and the relevant client', () => {
@@ -385,9 +384,6 @@ describe('Fetch client population with HTML settings', () => {
         destination: 'script', reportOnly: true,
       }],
     ]);
-    const body = queueReport.mock.calls[1]![2];
-    expect(getBindingContext(realm).convertToImpl(body, reference('IntegrityViolationReportBody'))).toEqual(body);
-    expect(Reflect.has(window, 'IntegrityViolationReportBody')).toBe(false);
     expect(window.document.URL).toBe('https://document.test/page#fragment');
   });
 

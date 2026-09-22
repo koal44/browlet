@@ -52,6 +52,10 @@
   including canceling queued tasks, disentangling MessagePorts, removing the
   Document from worker owner sets, and terminating its worklet globals.
   Browsing owns the ordering; each subsystem owns its internal state.
+  Reporting adds global endpoints, outbound reports, observer registrations,
+  and its report buffer to that cleanup. Do not clear them merely when the
+  Document becomes inactive; [Reporting B](../reporting/ROADMAP.md#b-generation-observers-and-user-controls)
+  leaves destruction integration explicitly outstanding.
 
 ## Lifecycle completion order
 

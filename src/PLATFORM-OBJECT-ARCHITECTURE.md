@@ -207,6 +207,13 @@ factories. Request's factory additionally receives its actual HTML settings
 object. Internal creation from existing Fetch state remains on the implementation
 constructors, with the selected guard, signal where applicable, and RuntimeContext.
 
+Reporting separates queued `Report` data and delivery bookkeeping from the
+observer-facing `ReportImpl`. Its `body` holds a `ReportBodyImpl` subclass, such
+as `IntegrityViolationReportBodyImpl`. A base-typed attribute preserves the
+concrete platform interface through ordinary projection; default Web IDL
+`toJSON` operations expose its declared fields. Producer data remains independent
+of this platform representation.
+
 ### Binding machinery
 
 Web IDL owns the boundary into the Platform layer:

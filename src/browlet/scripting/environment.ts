@@ -90,16 +90,25 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
     return null;
   }
 
-  /** Submit a report for this environment; currently discards reports pending Reporting integration. */
+  /** Submit a report to this environment's actual global scope. */
   // https://w3c.github.io/reporting/#generate-report
-  queueReport(_type: string, _endpoint: string, _body: Record<string, string | boolean>): void {
-    // PROVISIONAL: ../reporting/ROADMAP.md owns report generation, queues, observers, and delivery.
+  queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void {
+    const window = this.realmExecutionContext.realm.windowImplementation;
+    if (window === undefined) throw new InternalError('Reporting requires a Window or worker global');
+    window.getWindowOrWorkerGlobalScopeMixin().queueReport(type, endpoint, body);
   }
 
   /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
   webDriverBiDiNetworkIsOffline(): boolean {
     // PROVISIONAL: no BiDi sessions; replace with the environment's scoped network-condition lookup.
     return false;
+  }
+
+  /** Identification override selected for this environment, or null when absent. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
+  webDriverBiDiEmulatedUserAgent(): string | null {
+    // PROVISIONAL: no BiDi sessions; replace with the environment's scoped emulation lookup.
+    return null;
   }
 }
 

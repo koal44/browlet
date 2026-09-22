@@ -246,9 +246,10 @@ Current implementation sequence:
    Fetch 7a is complete. 7b's Origin and Referrer Policy algorithms are
    implemented, with a provisional srcdoc container accessor and an expected
    failing iframe integration test. 7c's header algorithms and CORP checks are
-   implemented. Their settings-owned Reporting hook is provisionally a no-op;
-   the [Reporting roadmap](reporting/ROADMAP.md) owns its replacement with
-   report generation, queues, observers, and later Fetch-based delivery.
+   implemented. Their settings-owned Reporting hook now generates reports,
+   fills per-global queues/buffers, and delivers ReportingObserver callbacks;
+   the [Reporting roadmap](reporting/ROADMAP.md) retains destruction integration
+   and later Fetch-based delivery.
    Slice 7 and the bounded test-reliability/performance review are complete.
    Slice 8 retains five subdivisions, A–E. 8A client population now selects HTML
    prompt targets and copies implemented policy state. Continue entry/main-fetch
@@ -256,8 +257,12 @@ Current implementation sequence:
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery
-   still at their consumer gates. Continue with Reporting's configuration,
-   queues, user controls, and observers; then HSTS, Storage keys/Blob URLs,
+   still at their consumer gates. Reporting A implements records, endpoint
+   parsing, and explicit per-global initialization; loader invocation remains
+   gated on actual Fetch responses. Reporting B's generation, queues, user
+   controls, and observers are implemented for Windows; HTML destruction and
+   worker lifecycle remain consumer gates. Review Reporting C's independent
+   serialization/retirement work next; then HSTS, Storage keys/Blob URLs,
    Mixed Content/upgrading, and CSP. Network
    report delivery remains gated on Fetch. CSP copying and policy delivery
    remain with their policy owners.

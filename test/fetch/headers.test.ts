@@ -16,6 +16,7 @@ import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchRequest } from './fetch-fixture';
+import { createClientSettings } from './client-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {
   it('distinguishes absent and empty values and combines duplicate lines in order', () => {
@@ -452,10 +453,19 @@ describe('Sec-Purpose (Fetch §3.8)', () => {
 });
 
 describe('default request header values', () => {
-  it('selects an explicit emulated User-Agent, including an empty one', () => {
-    expect(getEnvironmentDefaultUserAgent('Browlet', null)).toBe('Browlet');
-    expect(getEnvironmentDefaultUserAgent('Browlet', 'Emulated')).toBe('Emulated');
-    expect(getEnvironmentDefaultUserAgent('Browlet', '')).toBe('');
+  it('selects the owning user agent\'s default when there is no emulation', () => {
+    const client = createClientSettings();
+    client.userAgent.defaultUserAgentValue = 'Configured/1.0';
+    expect(getEnvironmentDefaultUserAgent(client)).toBe('Configured/1.0');
+  });
+
+  it.each(['Emulated', '', 'Agent/\u00e9'])('preserves the emulated value %j as a byte string', (value) => {
+    const client = createClientSettings();
+    client.webDriverBiDiEmulatedUserAgent = () => value;
+    expect(getEnvironmentDefaultUserAgent(client)).toBe(value);
+  });
+
+  it('defines the document Accept header value', () => {
     expect(documentAcceptHeaderValue).toBe('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
   });
 });

@@ -1,5 +1,6 @@
-import type { FetchHeaders, FetchIntegrityPolicy } from '../../../fetch/index';
-import { defineDictionary, dictMember, idlType } from '../../../web-idl/index';
+import type { FetchHeaders, FetchIntegrityPolicy, IntegrityViolationReportBody } from '../../../fetch/index';
+import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/index';
+import { ReportBodyImpl } from '../../reporting/report';
 
 /** Integrity metadata requirements and reporting endpoints for subresource loads. */
 // https://w3c.github.io/webappsec-subresource-integrity/#integrity-policy-section
@@ -50,22 +51,66 @@ export class IntegrityPolicy implements FetchIntegrityPolicy {
   }
 }
 
+/** Observer-facing snapshot of an Integrity Policy violation. */
 // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
+export class IntegrityViolationReportBodyImpl extends ReportBodyImpl implements IntegrityViolationReportBody {
+  /** Sanitized URL of the document or worker that initiated the request. */
+  #documentURL: string;
+  /** Sanitized original request URL, before redirects. */
+  #blockedURL: string;
+  /** Intended use of the blocked resource. */
+  #destination: string;
+  /** Whether the violated policy only reports instead of blocking. */
+  #reportOnly: boolean;
+
+  constructor(body: IntegrityViolationReportBody) {
+    super();
+    this.#documentURL = body.documentURL;
+    this.#blockedURL = body.blockedURL;
+    this.#destination = body.destination;
+    this.#reportOnly = body.reportOnly;
+  }
+
+  get documentURL(): string {
+    return this.#documentURL;
+  }
+
+  get blockedURL(): string {
+    return this.#blockedURL;
+  }
+
+  get destination(): string {
+    return this.#destination;
+  }
+
+  get reportOnly(): boolean {
+    return this.#reportOnly;
+  }
+}
+
+// -- Web IDL ------------------------------------------------------------
+
+// Use the browser interface model shared with Reporting's ReportBody.
 /*
- * dictionary IntegrityViolationReportBody : ReportBody {
- *   USVString documentURL;
- *   USVString blockedURL;
- *   USVString destination;
- *   boolean reportOnly;
+ * [Exposed=Window]
+ * interface IntegrityViolationReportBody : ReportBody {
+ *   readonly attribute USVString documentURL;
+ *   readonly attribute USVString blockedURL;
+ *   readonly attribute USVString destination;
+ *   readonly attribute boolean reportOnly;
+ *   [Default] object toJSON();
  * };
  */
-export const integrityViolationReportBodyIDL = defineDictionary({
+export const integrityViolationReportBodyIDL = defineInterface({
   name: 'IntegrityViolationReportBody',
   inherits: 'ReportBody',
+  exposed: ['Window'],
+  implementation: impl(IntegrityViolationReportBodyImpl),
   members: [
-    dictMember('documentURL', idlType.USVString),
-    dictMember('blockedURL', idlType.USVString),
-    dictMember('destination', idlType.USVString),
-    dictMember('reportOnly', idlType.boolean),
+    roAttr('documentURL', idlType.USVString),
+    roAttr('blockedURL', idlType.USVString),
+    roAttr('destination', idlType.USVString),
+    roAttr('reportOnly', idlType.boolean),
+    op('toJSON', idlType.object, [], xattr('Default')),
   ],
 });

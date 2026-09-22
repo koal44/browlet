@@ -257,8 +257,11 @@ Header-list extraction takes the field's parser and its single/multiple-line
 rule explicitly. It implements absence, duplicate rejection, ordering, and
 whole-field failure, returning undefined for absence and null for failure;
 concrete field grammars join it at their consumers.
-The default User-Agent selector takes the host default and any BiDi emulation
-value explicitly; browser configuration and BiDi lookup remain host work.
+The default User-Agent selector takes the actual settings object, checks its
+environment-scoped BiDi override, and otherwise reads the owning UserAgent's
+configured default. Header values remain isomorphic strings, including an
+explicit empty override. Browlet supplies the default; BiDi session lookup is
+still provisional.
 Range endpoints use BigInts to preserve decimal ordering above JavaScript's
 safe-integer range, without inventing a smaller limit than the specification.
 
@@ -666,7 +669,7 @@ Validation: the full unit suite passes on all six Node configurations, with
 the authorized srcdoc expected failure and existing expected failures/skips.
 Typecheck and lint pass.
 
-**7c complete, Reporting integration provisional:**
+**7c complete, outbound Reporting delivery still pending:**
 
 - §3.3's CORS response token-list grammar supplies header-list extraction for
   Allow-Methods, Allow-Headers, and Expose-Headers. It preserves case and `*`
@@ -695,17 +698,18 @@ The outer check and report-producing method live in `response.ts`.
 `isBlockedByCORP()` and `isBlockedByCORPInternal()` return true for blocking;
 `queueCORPViolationReport()` submits the selected endpoint and report body
 through `settings.queueReport()`. Fetch's contract exposes HTML's existing
-enforcing and report-only policy fields. The settings method is an explicitly
-provisional no-op, approved for this stage; the [Reporting roadmap](../browlet/reporting/ROADMAP.md)
-owns replacing it with report generation, queues, observers, and delivery.
-Tests with a reporting spy verify Fetch's decisions, not real report generation.
+enforcing and report-only policy fields. The settings method now reaches actual
+Window report generation, queues, and observers. The
+[Reporting roadmap](../browlet/reporting/ROADMAP.md) retains destruction integration
+and outbound delivery; `test/browlet/reporting/observers.test.ts` exercises the
+real COEP and Integrity Policy submission paths.
 
 Focused coverage is in `test/fetch/headers.test.ts`,
 `test/fetch/http/blocking.test.ts`, and `test/fetch/http/corp.test.ts`.
 The focused tests supply the Reporting capability to verify Fetch's decision,
 report-only/enforcing behavior, endpoint selection, ordering, and URL stripping.
 The six Node variants, typecheck, and repository-wide lint cover the completed
-contracts; passing them does not clear the provisional Reporting integration.
+contracts; passing them does not establish outbound Reporting delivery.
 
 **Exit proof:** every Fetch §3 header protocol and check is either executable
 or stops at a named external-policy/storage capability with its inputs fully
@@ -810,6 +814,11 @@ Add a direct Undici runtime dependency only with this slice. Browlet's
 supported Node floor is already 22.19 or newer, but the adapter still requires
 version-specific conformance and cancellation/backpressure tests.
 
+`FetchRequest.appendUserAgentHeader()` already implements the User-Agent
+insertion step, preserving an existing header and using the owning UserAgent's
+default for clientless requests. Call it at the prescribed HTTP-network-or-cache
+stage; public Request construction must not insert it early.
+
 **Exit proof:** a basic HTTP(S) request through an injected transport produces
 a Browlet `Response`, streams bytes with backpressure, resolves through an
 explicit Fetch task destination, and aborts without leaking an Undici/Node
@@ -868,14 +877,15 @@ exempt. Clientless requests and globals outside Window/Worker have no applicable
 policy owner. Tests cover those decisions, policy snapshots, per-endpoint
 reporting, and real Window client population.
 
-Report bodies preserve `reportOnly` as a boolean. The current Reporting draft
-defines `ReportBody` as an empty dictionary, so SRI's derived dictionary is
-registered without adding a platform interface. URL's Reporting helper strips
+Report bodies preserve `reportOnly` as a boolean. Fetch submits plain data;
+Browlet's observer-facing body inherits the `ReportBody` interface, following
+the approved browser model rather than the draft's dictionaries. URL's Reporting helper strips
 credentials/fragments without mutating the original URL, as approved; non-HTTP(S)
 URLs disclose only their scheme. The draft's per-endpoint reporting loop is
 retained, as in Gecko/WebKit; Chromium instead queues one observer report with
 an endpoint list. No endpoints means blocking can still occur, but this algorithm
-submits no report. Actual queues, observers, and delivery remain Reporting work.
+submits no report. Reporting B connects actual Window queues and observers;
+outbound delivery remains Reporting C's Fetch consumer.
 
 Eric approved these parsing choices on 2026-09-21: split on Infra's ASCII
 whitespace, ignore expressions outside the attribute grammar, retain digests
@@ -926,7 +936,7 @@ does not close the consumer integrations:
 | §§1-3.3: metadata, hash support, selection, verification | Implemented and tested, including unsupported algorithms, unknown options, exact byte views, and strongest-digest selection. |
 | §§3.4-3.6: HTML attributes and Link processing | [HTML loading](../browlet/loader/ROADMAP.md) must carry script/link and Link-header integrity metadata into Fetch. The shared metadata parser already ignores unknown options as required. |
 | §3.7: failed integrity checks | Fetch 8A must reject ineligible responses and hash the consumed body before handover, returning a network error on failure. HTML loaders must deliver element error events and prevent execution/application. |
-| §§3.8-3.8.3: policies, blocking, reports | Algorithms and report dictionaries are implemented. HTML must deliver response policies; main Fetch must invoke blocking; [Reporting](../browlet/reporting/ROADMAP.md) must replace the provisional submission no-op. Worker URL/lifetime integration waits for workers. |
+| §§3.8-3.8.3: policies, blocking, reports | Algorithms and report bodies are implemented, including Window report queues and observers. HTML must deliver response policies; main Fetch must invoke blocking; [Reporting](../browlet/reporting/ROADMAP.md) retains outbound delivery and destruction integration. Worker URL/lifetime integration waits for workers. |
 | §4: transforming proxies | Requirements apply to content-transforming intermediaries and serving origins, not an additional Browlet SRI algorithm. Do not synthesize a response's `Cache-Control: no-transform` header. |
 | §5: security/privacy | Explicitly non-normative. Its cross-origin leakage concern reinforces the Fetch response-eligibility gate; the helper alone must not be used to validate an opaque response. |
 

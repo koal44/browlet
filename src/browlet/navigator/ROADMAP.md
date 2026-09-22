@@ -22,6 +22,12 @@ Navigator object. Worker-global creation owns its lazy/stable instance;
 `navigator/` owns the common capability answers. Additional specifications
 contribute their own members through Browlet's ordinary Web IDL assembly.
 
+For `NavigatorID.userAgent`, call Fetch's `getEnvironmentDefaultUserAgent()`
+with this Navigator's relevant settings object, as HTML prescribes. Browlet's
+UserAgent already owns the configured default; the settings supply the scoped
+BiDi query. Reporting and request-header insertion use the same selector.
+Do not introduce a second identification value on Navigator or RuntimeContext.
+
 Blink likewise keeps a base Navigator/WorkerNavigator in core while feature
 modules contribute separate IDL mixins. Browlet should preserve that extension
 shape instead of accumulating every future API in `navigator.ts`.

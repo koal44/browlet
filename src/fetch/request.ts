@@ -15,7 +15,9 @@ import {
 } from '../web-idl/index';
 import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
-import { FetchHeaders, HeadersImpl, type HeadersGuard, type HeadersInitValue } from './headers';
+import {
+  FetchHeaders, getEnvironmentDefaultUserAgent, HeadersImpl, type HeadersGuard, type HeadersInitValue,
+} from './headers';
 import {
   getFetchEnvironmentSettingsObject, serializeInteger,
   type FetchEnvironmentSettingsObject, type FetchEnvironment, type FetchUserAgent,
@@ -255,6 +257,16 @@ export class FetchRequest {
   determineNetworkPartitionKey(): NetworkPartitionKey | null {
     const environment = this.reservedClient ?? this.client;
     return environment === null ? null : determineNetworkPartitionKey(environment);
+  }
+
+  /** Supply the client's identification value only when the request has no User-Agent header. */
+  // User-Agent insertion in https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
+  appendUserAgentHeader(): void {
+    if (this.headerList.has('User-Agent')) return;
+    const value = this.client === null
+      ? this.userAgent.defaultUserAgentValue
+      : getEnvironmentDefaultUserAgent(this.client);
+    this.headerList.append('User-Agent', value);
   }
 
   /** Appends the cookies selected for this request from the owning user agent's store. */

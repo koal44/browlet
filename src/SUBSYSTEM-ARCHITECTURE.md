@@ -411,6 +411,22 @@ Integrity Policy uses the same seam with boolean report fields. Settings supply
 the Document/Worker URL through `getReportingSource()`; Window settings read
 their live associated Document rather than substituting its base/referrer URL.
 This dependency belongs to Reporting, not RuntimeContext.
+The existing `WindowOrWorkerGlobalScopeMixin` owns Reporting endpoint and report
+lists, observer registrations, and the per-type bounded report buffer. Its
+initialization method parses the actual Fetch response using the
+settings object's UserAgent for trust decisions; there is no additional global
+registry or Reporting environment facade. Automatic response delivery remains
+with the HTML loader. Settings route submissions to the actual global's mixin;
+it generates reports, notifies observers, and queues outbound data when the
+UserAgent's delivery preference permits it. ReportingObserver receives its
+owning mixin at construction, while Web IDL adapts callbacks and HTML delivers
+them as global tasks. No Binding Context enters the observer implementation.
+Document destruction must eventually cancel tasks and release Reporting state;
+ordinary inactivity is not destruction. Network delivery remains a Fetch consumer.
+Observer-facing `ReportImpl` and derived `ReportBodyImpl` classes are composed
+in Browlet. Fetch supplies plain report data; constructing its concrete body is
+Reporting integration work, while Web IDL preserves the derived interface during
+projection and provides default JSON conversion.
 Its stateless URL sanitization algorithm lives in URL, retaining its Reporting
 citation, so both policy checks and Reporting can import it directly.
 
@@ -598,6 +614,14 @@ its owning UserAgent. The UserAgent owns its live connectivity assumption,
 while the settings object supplies the environment-scoped BiDi query.
 Host connectivity detection and BiDi session lookup are provisional; their replacement work is
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
+
+The UserAgent also owns the configured default identification header value.
+Fetch's environment-default User-Agent algorithm reads that owner and the
+settings object's scoped BiDi override. Request-header insertion, Reporting
+generation, and the future NavigatorID getter share this selector. Reporting
+captures a string at generation time; an explicit per-request header does not
+change environment identity. No identification state belongs in RuntimeContext
+or a separate Navigator-owned copy.
 
 The same settings object exposes its HTML-owned policy container. Window
 settings read it from the associated Document; `FetchPolicyContainer` exposes

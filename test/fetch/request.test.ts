@@ -108,6 +108,33 @@ describe('Fetch request cloning', () => {
   });
 });
 
+describe('Fetch request User-Agent headers', () => {
+  it('uses the client\'s effective value when inserting a missing header', () => {
+    const client = createClientSettings();
+    client.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
+    const request = createFetchRequest(undefined, client);
+    expect(request.headerList.has('User-Agent')).toBe(false);
+    request.appendUserAgentHeader();
+    expect(request.headerList.get('User-Agent')).toBe('Emulated/1.0');
+    request.appendUserAgentHeader();
+    expect(request.headerList.list).toEqual([['User-Agent', 'Emulated/1.0']]);
+  });
+
+  it('uses the owning user agent for a request without a client', () => {
+    const request = createFetchRequest();
+    request.userAgent.defaultUserAgentValue = 'BrowserInitiated/1.0';
+    request.appendUserAgentHeader();
+    expect(request.headerList.get('User-Agent')).toBe('BrowserInitiated/1.0');
+  });
+
+  it.each(['Explicit/1.0', ''])('preserves an existing header with value %j', (value) => {
+    const request = createFetchRequest();
+    request.headerList.append('user-agent', value);
+    request.appendUserAgentHeader();
+    expect(request.headerList.list).toEqual([['user-agent', value]]);
+  });
+});
+
 describe('Fetch request Range headers', () => {
   it.each<[number | bigint, number | bigint | undefined, string]>([
     [0, undefined, 'bytes=0-'], [0, 0, 'bytes=0-0'], [1, 500, 'bytes=1-500'],

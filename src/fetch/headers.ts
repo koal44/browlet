@@ -13,6 +13,7 @@ import {
 } from '../web-idl/index';
 import { isForbiddenMethod } from './http/methods';
 import { parseSingleRangeHeaderValue } from './http/ranges';
+import type { FetchEnvironmentSettingsObject } from './infrastructure';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
 // https://fetch.spec.whatwg.org/#concept-header-list
@@ -483,13 +484,11 @@ export function isRequestBodyHeaderName(name: string): boolean {
   return ['content-encoding', 'content-language', 'content-location', 'content-type'].includes(name.toLowerCase());
 }
 
-/**
- * Fetch §2.2.2 — environment default User-Agent. The host supplies the default
- * and BiDi emulation values instead of the environment settings object.
- */
-// SPEC_MISMATCH: (environment: environment settings object) -> header value
-export function getEnvironmentDefaultUserAgent(defaultValue: string, emulatedValue: string | null): string {
-  return emulatedValue ?? defaultValue;
+/** Select this environment's identification header value, including an explicit empty override. */
+// https://fetch.spec.whatwg.org/#environment-default-user-agent-value
+export function getEnvironmentDefaultUserAgent(environment: FetchEnvironmentSettingsObject): string {
+  // Header values already use isomorphic strings; no intermediate byte array is needed.
+  return environment.webDriverBiDiEmulatedUserAgent() ?? environment.userAgent.defaultUserAgentValue;
 }
 
 export const documentAcceptHeaderValue = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';

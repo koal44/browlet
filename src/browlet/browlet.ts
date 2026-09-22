@@ -3,6 +3,7 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/index';
+import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
@@ -46,6 +47,14 @@ export class Browlet {
         unsafeSharedCurrentTime,
       },
     );
+    if (config.userAgent !== undefined) {
+      if (!isHeaderValue(config.userAgent)) {
+        // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
+        throw new TypeError('userAgent must be a valid HTTP header value');
+      }
+      this.#userAgent.defaultUserAgentValue = config.userAgent;
+    }
+    this.#userAgent.reportDeliveryEnabled = config.reporting ?? true;
     this.#traversable = createNewTopLevelTraversable(
       this.#userAgent,
       null,
@@ -198,6 +207,10 @@ export type BrowletRoute = (url: string) => string;
 
 export type BrowletConfig = {
   route: BrowletRoute;
+  /** Default User-Agent header value; defaults to Mozilla/5.0 (compatible; Browlet). */
+  userAgent?: string;
+  /** Allow outbound reports; false retains local ReportingObservers. Defaults to true. */
+  reporting?: boolean;
 };
 
 function getTextContent(element: ElementImpl): string {

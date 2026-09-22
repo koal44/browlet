@@ -17,11 +17,16 @@ export class UserAgent implements FetchUserAgent {
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   eventLoopOptions: EventLoopOptions | null;
 
+  /** Default identification header value, shared by this user agent's environments. */
+  // https://fetch.spec.whatwg.org/#default-user-agent-value
+  defaultUserAgentValue = 'Mozilla/5.0 (compatible; Browlet)';
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
   cookieStore = new CookieStore();
   /** Controls both sending and accepting cookies without clearing the store. */
   cookiesEnabled = true;
+  /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
+  reportDeliveryEnabled = true;
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
   // Applies to tuple origins supplied by an authenticated protocol implementation.

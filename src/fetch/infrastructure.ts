@@ -31,6 +31,8 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   fetchGroup: FetchGroup;
   /** Whether WebDriver BiDi emulates an offline network for this environment. */
   webDriverBiDiNetworkIsOffline(): boolean;
+  /** Environment-scoped identification override, or null when BiDi supplies none. */
+  webDriverBiDiEmulatedUserAgent(): string | null;
   /** Client's live policy container, exposing the policies currently consumed by Fetch. */
   policyContainer: FetchPolicyContainer;
   /** Submit a policy report for this client, retaining each field's JSON value type. */
@@ -86,6 +88,8 @@ export type FetchEnvironment = {
 };
 
 export type FetchUserAgent = {
+  /** Default identification header value before an environment-specific override. */
+  defaultUserAgentValue: string;
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
   assumeNoInternetConnectivity: boolean;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */

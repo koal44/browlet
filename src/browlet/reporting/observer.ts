@@ -1,0 +1,151 @@
+import {
+  arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
+  dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
+} from '../../web-idl/index';
+import type { Realm } from '../scripting/realm';
+import type { WindowOrWorkerGlobalScopeMixin } from '../scripting/global-scope';
+import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
+import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
+import type { IntegrityViolationReportBody } from '../../fetch/index';
+import { ReportImpl, type Report } from './report';
+
+/** An observer's registration, type filter, and pending callback batch. */
+// https://w3c.github.io/reporting/#interface-reporting-observer
+export class ReportingObserverImpl {
+  /** Converted callback, including Web IDL argument projection and exception reporting. */
+  #callback: ReportingObserverCallback;
+  /** Types selected at construction; absent or empty means every observable type. */
+  #types: string[] | undefined;
+  /** Whether the first observe() call should replay the global's report buffer. */
+  #buffered: boolean;
+  /** Reports waiting for this observer's callback or takeRecords(). */
+  #reports: ReportImpl[] = [];
+  /** Actual global-scope mixin owning registration, buffering, and task delivery. */
+  #global: WindowOrWorkerGlobalScopeMixin;
+
+  // SPEC_MISMATCH: (callback, options) -> ReportingObserver
+  constructor(
+    callback: ReportingObserverCallback, options: ReportingObserverOptions,
+    global: WindowOrWorkerGlobalScopeMixin,
+  ) {
+    this.#callback = callback;
+    this.#types = options.types;
+    this.#buffered = options.buffered;
+    this.#global = global;
+  }
+
+  /** Register this observer, replaying buffered reports at most once. */
+  // https://w3c.github.io/reporting/#dom-reportingobserver-observe
+  observe(): void {
+    this.#global.reportingObservers.add(this);
+    if (!this.#buffered) return;
+    this.#buffered = false;
+    // Blink, Gecko, and WebKit replay synchronously; only callback delivery is a task.
+    for (const report of this.#global.reportBuffer) {
+      this.queueReport(report);
+    }
+  }
+
+  /** Stop accepting new reports without emptying this observer's pending batch. */
+  // https://w3c.github.io/reporting/#dom-reportingobserver-disconnect
+  disconnect(): void {
+    this.#global.reportingObservers.delete(this);
+  }
+
+  /** Drain the pending batch, independently of registration and the global buffer. */
+  // https://w3c.github.io/reporting/#dom-reportingobserver-takerecords
+  takeRecords(): ReportImpl[] {
+    const reports = this.#reports;
+    this.#reports = [];
+    return reports;
+  }
+
+  /** Add an observable report matching the type filter and schedule batch delivery. */
+  // https://w3c.github.io/reporting/#add-report
+  queueReport(report: Report): void {
+    if (!visibleReportTypes.has(report.type)) return;
+    if (this.#types?.length && !this.#types.includes(report.type)) return;
+    const body = report.type === 'integrity-violation'
+      ? new IntegrityViolationReportBodyImpl(report.body as IntegrityViolationReportBody)
+      : new COEPViolationReportBodyImpl(report.body as COEPViolationReportBody);
+    this.#reports.push(new ReportImpl(report.type, report.url, body));
+    if (this.#reports.length !== 1) return;
+    const observers = [...this.#global.reportingObservers];
+    this.#global.queueReportingTask(() => {
+      for (const observer of observers) observer.invokeCallback();
+    });
+  }
+
+  /** Deliver a nonempty batch, clearing it before invoking author code. */
+  // https://w3c.github.io/reporting/#invoke-observers
+  private invokeCallback(): void {
+    if (this.#reports.length === 0) return;
+    this.#callback.call(this, this.takeRecords(), this);
+  }
+}
+
+/** Values after ReportingObserverOptions dictionary conversion and defaulting. */
+export type ReportingObserverOptions = {
+  types?: string[];
+  buffered: boolean;
+};
+
+/** Implementation-facing invocation of the converted ReportingObserverCallback. */
+export type ReportingObserverCallback = (
+  this: ReportingObserverImpl, reports: ReportImpl[], observer: ReportingObserverImpl,
+) => void;
+
+// HTML defines coep as observable; SRI's Integrity Policy example likewise exposes its reports.
+// Other report types remain invisible until their definitions and body interfaces are integrated.
+const visibleReportTypes = new Set(['coep', 'integrity-violation']);
+
+// -- Web IDL ------------------------------------------------------------
+
+/*
+ * [Exposed=(Window,Worker)]
+ * interface ReportingObserver {
+ *   constructor(ReportingObserverCallback callback, optional ReportingObserverOptions options = {});
+ *   undefined observe();
+ *   undefined disconnect();
+ *   ReportList takeRecords();
+ * };
+ * callback ReportingObserverCallback = undefined (sequence<Report> reports, ReportingObserver observer);
+ * dictionary ReportingObserverOptions {
+ *   sequence<DOMString> types;
+ *   boolean buffered = false;
+ * };
+ * typedef sequence<Report> ReportList;
+ */
+export const reportingObserverIDL = defineInterface<Realm>({
+  name: 'ReportingObserver',
+  exposed: ['Window', 'Worker'],
+  implementation: impl(ReportingObserverImpl),
+  members: [
+    ctor(
+      [
+        arg('callback', reference('ReportingObserverCallback'), onError('report')),
+        arg('options', reference('ReportingObserverOptions'), { optional: true, default: emptyDictionary }),
+      ],
+      { constructWith: [atArg(2, (context) => context.realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin())] },
+    ),
+    op('observe', idlType.undefined),
+    op('disconnect', idlType.undefined),
+    op('takeRecords', reference('ReportList')),
+  ],
+});
+
+export const reportingObserverCallbackIDL = defineCallbackFunction({
+  name: 'ReportingObserverCallback',
+  returns: idlType.undefined,
+  arguments: [arg('reports', sequence(reference('Report'))), arg('observer', reference('ReportingObserver'))],
+});
+
+export const reportingObserverOptionsIDL = defineDictionary({
+  name: 'ReportingObserverOptions',
+  members: [
+    dictMember('types', sequence(idlType.DOMString)),
+    dictMember('buffered', idlType.boolean, { default: false }),
+  ],
+});
+
+export const reportListIDL = defineTypedef({ name: 'ReportList', type: sequence(reference('Report')) });

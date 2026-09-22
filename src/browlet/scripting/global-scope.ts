@@ -3,10 +3,16 @@ import {
   emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr,
 } from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
+import { ReportingEndpoint } from '../reporting/endpoint';
+import { generateReport, type Report } from '../reporting/report';
+import type { ReportingObserverImpl } from '../reporting/observer';
+import type { FetchResponse } from '../../fetch/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EnvironmentSettingsObject } from './environment';
 import { GlobalTimers, type GlobalTimersOptions, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
+import { createTaskSource } from './event-loop';
+import type { QueuedTaskHandle } from './tasks';
 
 /*
  * typedef (DOMString or Function or TrustedScript) TimerHandler;
@@ -48,6 +54,14 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
  */
 export class WindowOrWorkerGlobalScopeMixin {
   timers: GlobalTimers;
+  /** Named Reporting destinations configured by this global's resource response. */
+  reportingEndpoints: ReportingEndpoint[] = [];
+  /** Reports awaiting delivery for this global, independent of other globals. */
+  reports: Report[] = [];
+  /** Observers currently registered with this global, in registration order. */
+  reportingObservers = new Set<ReportingObserverImpl>();
+  /** Recent reports for buffered observation, limited to 100 entries per type. */
+  reportBuffer: Report[] = [];
   #settings: EnvironmentSettingsObject;
   #performance: PerformanceImpl;
   #structuredClone: StructuredCloneSteps;
@@ -103,6 +117,41 @@ export class WindowOrWorkerGlobalScopeMixin {
     return this.#structuredClone(value, options.transfer ?? []);
   }
 
+  /** Replace this global's Reporting endpoint list using its resource response. */
+  // https://w3c.github.io/reporting/#initialize-a-globals-endpoint-list
+  initializeReportingEndpoints(response: FetchResponse): void {
+    this.reportingEndpoints = ReportingEndpoint.parse(response, this.#settings.userAgent);
+  }
+
+  /** Generate a report for local observation and, when enabled, later network delivery. */
+  // https://w3c.github.io/reporting/#generate-report
+  queueReport(type: string, destination: string, body: unknown): void {
+    const report = generateReport(body, type, destination, this.#settings);
+    this.notifyReportingObservers(report);
+    if (this.#settings.userAgent.reportDeliveryEnabled) this.reports.push(report);
+    else this.reports.length = 0;
+  }
+
+  /** Publish a report locally and retain the most recent 100 reports of its type. */
+  // https://w3c.github.io/reporting/#notify-observers
+  notifyReportingObservers(report: Report): void {
+    for (const observer of this.reportingObservers) observer.queueReport(report);
+    this.reportBuffer.push(report);
+    let count = 0;
+    for (const bufferedReport of this.reportBuffer) {
+      if (bufferedReport.type === report.type) count++;
+    }
+    if (count > 100) {
+      const index = this.reportBuffer.findIndex((bufferedReport) => bufferedReport.type === report.type);
+      this.reportBuffer.splice(index, 1);
+    }
+  }
+
+  /** Queue observer work on the HTML event loop owning this global. */
+  queueReportingTask(steps: () => void): QueuedTaskHandle {
+    return this.#settings.realmExecutionContext.realm.queueGlobalTask(reportingTaskSource, steps);
+  }
+
   // -- Internal ---------------------------------------------------------
 
   setAssociatedDocument(document: DocumentImpl): void {
@@ -120,6 +169,9 @@ export type StructuredCloneSteps = (
   value: unknown,
   transferList: object[],
 ) => unknown;
+
+// Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
+export const reportingTaskSource = createTaskSource('reporting');
 
 // -- Web IDL ------------------------------------------------------------
 

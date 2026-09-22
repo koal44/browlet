@@ -17,7 +17,7 @@ export type {
   FetchPolicyContainer, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './infrastructure';
 export { fetchEnvironmentSettingsObject } from './infrastructure';
-export type { FetchHeaders } from './headers';
+export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
 export { requestIDL, type FetchRequest } from './request';
 export { responseIDL, type FetchResponse } from './response';
 export {
