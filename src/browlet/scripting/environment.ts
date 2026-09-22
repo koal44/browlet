@@ -70,6 +70,10 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
   abstract get crossOriginIsolatedCapability(): boolean;
   abstract get timeOrigin(): Moment;
 
+  /** Document or worker URL for reports, or null for other kinds of global. */
+  // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
+  abstract getReportingSource(): URLRecord | null;
+
   get responsibleEventLoop(): EventLoop {
     return this.realmExecutionContext.realm.agent.eventLoop;
   }
@@ -88,7 +92,7 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
 
   /** Submit a report for this environment; currently discards reports pending Reporting integration. */
   // https://w3c.github.io/reporting/#generate-report
-  queueReport(_type: string, _endpoint: string, _body: Record<string, string>): void {
+  queueReport(_type: string, _endpoint: string, _body: Record<string, string | boolean>): void {
     // PROVISIONAL: ../reporting/ROADMAP.md owns report generation, queues, observers, and delivery.
   }
 
@@ -170,6 +174,11 @@ export class WindowEnvironmentSettingsObject
       document = container.getNodeDocument()!;
     }
     return document.getURL();
+  }
+
+  // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
+  override getReportingSource(): URLRecord {
+    return this.#window.getAssociatedDocument().getURL();
   }
 
   // https://fetch.spec.whatwg.org/#populate-request-from-client

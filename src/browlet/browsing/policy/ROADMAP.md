@@ -12,7 +12,7 @@ languages and enforcement algorithms are tracked below.
 | `sandbox.ts` | Parsing sandbox tokens, determining flags, propagation and navigation checks | HTML §7.1.5 |
 | iframe element plus Document ancestry | iframe referrer-policy inheritance and ancestor-origin list construction | HTML §7.1.6 |
 | `permissions.ts` | HTML's policy-controlled feature definitions/default allowlists plus declared, inherited, and container policy checks | HTML §2.2; Permissions Policy; HTML Document, browsing-context, and lifecycle integration |
-| `container.ts` | Complete CSP/integrity copying and determine policy container; response policy association | HTML §7.1.7 |
+| `container.ts` | Complete CSP copying and determine policy container; response policy association | HTML §7.1.7 |
 
 Policy data travels with environments, Documents, history entries, responses,
 and navigations. Keep one typed value model here and apply each specification's
@@ -24,9 +24,9 @@ the same HTML object; clientless requests obtain a fresh default container from
 their UserAgent. COEP fields and referrer policy copy independently, and each
 new container has independent default policy storage. Populated CSP lists
 explicitly reject cloning until CSP supplies its concrete records and copying.
-Integrity Policy still has empty placeholder records. HTML's clone algorithm
-currently omits its report-only member; resolve that omission with the concrete
-Integrity Policy model rather than carrying it into populated policy handling.
+Integrity Policy has typed source, destination, and endpoint lists. Both
+enforced and report-only policies copy independently, following Gecko's
+behavior; HTML's clone algorithm omits its report-only member.
 
 COEP's value and reporting fields now have their specified defaults. Fetch's
 request credentials predicate reads the actual client's embedder-policy value;
@@ -138,9 +138,54 @@ It depends on [structured fields](../../../http/struct-fields/README.md),
 Fetch records, and Reporting. Byte/hash verification is owned by
 [Fetch's integrity work](../../../fetch/ROADMAP.md#subresource-integrity).
 
-Test supported destinations/sources, malformed policy fields, request
-blocking, report-only behavior, and endpoint/report association through real
-policy-container delivery.
+That plan divides the combined work into three slices. Slice 1 supplies SRI
+metadata and digest verification and is complete. Slice 2 here supplies the
+policy model, both header parsers, container association and independent copying,
+and is complete. Slice 3's blocking/report-only checks and violation bodies
+are also complete through the actual settings object's Reporting seam.
+Report generation/delivery remains deferred to the Reporting detour.
+
+`IntegrityPolicy.parse(headers, headerName)` consumes the existing HTTP
+Structured Fields parser. `PolicyContainer.parseIntegrityPolicyHeaders(response)`
+associates enforcement and report-only headers independently. An absent
+header preserves the existing policy; an invalid present header replaces
+only its policy with an empty one. The entire dictionary is validated before
+defaults are applied: every member must be an inner list of tokens, including
+unrecognized keys. Valid unknown keys/tokens are ignored, and valid Structured
+Fields parameters do not alter policy interpretation.
+
+The reviewed choices are:
+
+- HTML's container clone omits report-only integrity state. Gecko's
+  `IntegrityPolicy::InitFromOther` copies both policies, and Chromium's
+  policy-container conversions carry both. Copying both independently is
+  accepted and covered by populated-policy regression tests.
+- The draft requires inner lists of tokens but leaves malformed-field
+  handling unspecified. Chromium and WebKit skip non-token items; Gecko
+  rejects the affected policy. A present, non-list `sources` field also
+  differs: Chromium leaves sources empty, while Gecko/WebKit default to
+  `inline`. Browlet consistently rejects the whole header for malformed
+  structure, as requested by Eric. A missing `sources` key defaults to
+  `inline`; an explicit empty or unsupported-token list stays empty.
+  Examples and source pointers are in `scratch/SPEC-ISSUES.md`.
+
+Tests cover both destinations, sources, endpoint names, repeated headers,
+malformed syntax and types, independent header association, and cloning both
+policies through an actual Window's Fetch client population. Automatic
+response delivery still belongs to the unfinished HTML loader/navigation
+consumer. `FetchRequest.isBlockedByIntegrityPolicy()` returns
+a boolean and submits violations of either policy using the request client's
+live reporting URL. Its report-body dictionary inherits Reporting's empty
+`ReportBody` dictionary; `reportOnly` stays a boolean. Main Fetch must invoke
+this operation after populating the request's policy container. Workers must supply
+their own reporting URL when their settings implementation is introduced.
+
+The report loops follow the draft and Gecko/WebKit, one submission per endpoint;
+an enforced policy still blocks when its endpoint list is empty. Reporting URL
+stripping preserves the source and removes the fragment delimiter entirely,
+matching Gecko/Blink rather than the draft's mutation and empty-fragment wording.
+The approved departure and observer-count difference are recorded in
+`scratch/SPEC-ISSUES.md`.
 
 ### HSTS
 
@@ -155,6 +200,13 @@ Test learning over secure versus insecure transport, expiry, domain matching,
 and port mapping with controlled clocks. Later network tests must prove an
 HSTS certificate failure cannot fall back to HTTP. Preload distribution and
 disk persistence remain explicit host choices.
+
+HTTP Public Key Pinning (RFC 7469) is not a prerequisite or planned feature.
+Its mention in SRI's introduction is an informative reference: dynamic HPKP was
+[removed in Chrome 72](https://developer.chrome.com/blog/chrome-72-deps-rems#remove-http-based-public-key-pinning)
+and [disabled in Firefox 72](https://bugzilla.mozilla.org/show_bug.cgi?id=1412438#c23).
+Application-configured certificate pins would be a separate transport feature,
+not part of HSTS or SRI.
 
 ### Mixed Content and Upgrade Insecure Requests
 

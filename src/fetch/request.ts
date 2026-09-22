@@ -6,7 +6,7 @@ import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin, parseURL,
-  serializeURL, type URLRecord,
+  serializeURL, stripURLForReporting, type URLRecord,
 } from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
@@ -23,6 +23,8 @@ import {
 } from './infrastructure';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
+import { parseIntegrityMetadata, type IntegrityViolationReportBody } from './integrity';
+import { isLocalScheme } from './url';
 import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.5. URL, client, and user agent are required inputs; the other fields have defaults. */
@@ -213,6 +215,40 @@ export class FetchRequest {
     if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
     return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
       this.redirectTaint === 'same-origin';
+  }
+
+  /** Whether the populated request's integrity policies block it, reporting violations of either policy. */
+  // https://w3c.github.io/webappsec-subresource-integrity/#should-request-be-blocked-by-integrity-policy-section
+  isBlockedByIntegrityPolicy(): boolean {
+    if (this.policyContainer === undefined) throw new InternalError('Fetch request policy container has not been resolved');
+    const metadata = parseIntegrityMetadata(this.integrityMetadata);
+    if (metadata.length !== 0 && (this.mode === 'cors' || this.mode === 'same-origin')) return false;
+    if (isLocalScheme(this.url.scheme)) return false;
+    const { destination, client } = this;
+    if (destination !== 'script' && destination !== 'style') return false;
+    const policy = this.policyContainer.integrityPolicy;
+    const reportPolicy = this.policyContainer.reportOnlyIntegrityPolicy;
+    const block = policy.sources.includes('inline') && policy.blockedDestinations.includes(destination);
+    const reportBlock = reportPolicy.sources.includes('inline') && reportPolicy.blockedDestinations.includes(destination);
+    if (!block && !reportBlock) return false;
+    if (client === null) return false;
+    const source = client.getReportingSource();
+    if (source === null) return false;
+
+    // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
+    const body: IntegrityViolationReportBody = {
+      documentURL: stripURLForReporting(source), blockedURL: stripURLForReporting(this.url),
+      destination, reportOnly: false,
+    };
+    if (block) {
+      for (const endpoint of policy.endpoints) client.queueReport('integrity-violation', endpoint, { ...body });
+    }
+    if (reportBlock) {
+      for (const endpoint of reportPolicy.endpoints) {
+        client.queueReport('integrity-violation', endpoint, { ...body, reportOnly: true });
+      }
+    }
+    return block;
   }
 
   /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */

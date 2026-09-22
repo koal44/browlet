@@ -1,7 +1,7 @@
 export { URLSearchParamsImpl, urlIDLDefinitions } from './api';
 export { originIDL } from './origin-api';
 export {
-  copyURL, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, urlsEqual,
+  copyURL, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,
   type URLPath, type URLRecord,
 } from './url';
 export {

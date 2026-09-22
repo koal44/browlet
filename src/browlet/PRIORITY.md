@@ -253,10 +253,14 @@ Current implementation sequence:
    Slice 8 retains five subdivisions, A–E. 8A client population now selects HTML
    prompt targets and copies implemented policy state. Continue entry/main-fetch
    orchestration after the selected [preflight detour](../fetch/PREFLIGHT.md#work-order).
-   Fetch Metadata's header algorithms are complete; SRI/Integrity Policy is next,
-   followed by HSTS, Storage keys/Blob URLs, Mixed Content/upgrading, Reporting,
-   and CSP. CSP copying and Integrity Policy's value model remain with their
-   policy owners.
+   Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
+   completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
+   with main-fetch invocation, response-byte verification, and Reporting delivery
+   still at their consumer gates. Continue with Reporting's configuration,
+   queues, user controls, and observers; then HSTS, Storage keys/Blob URLs,
+   Mixed Content/upgrading, and CSP. Network
+   report delivery remains gated on Fetch. CSP copying and policy delivery
+   remain with their policy owners.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.

@@ -759,14 +759,14 @@ An unresolved or cross-origin source defers selection. A traversable has no orig
 its current Document's origin is not used for this check. The specification's
 old environment-object wording remains an upstream issue to resolve.
 
-Policy cloning covers implemented COEP/referrer state and independent default
-containers. CSP and Integrity Policy records remain placeholders: populated
-CSP lists explicitly reject cloning until the CSP owner supplies copying.
+Policy cloning covers implemented COEP/referrer state, both Integrity Policies,
+and independent default containers. Populated CSP lists explicitly reject
+cloning until the CSP owner supplies copying.
 That model must include CSP's list-level `self-origin`, not just replace
 `object[]` with typed policy entries; see the [CSP roadmap](../browlet/browsing/policy/csp/ROADMAP.md).
-HTML's clone algorithm currently omits report-only Integrity Policy; revisit
-that omission when implementing its value model. These are policy-owner gaps,
-not missing Fetch wiring or permission to silently share arbitrary policy data.
+Both Integrity Policies now copy independently, following Gecko despite HTML's
+report-only omission. Remaining policy models and delivery belong to their
+policy owners, rather than requiring new Fetch wiring.
 
 After client population, 8A reaches HTML preload consumption, shared-clock
 access, language/priority selection, and BiDi hooks. Main fetch then reaches
@@ -823,18 +823,118 @@ Read the framework/response-verification algorithms in local
 `w3c-subresource-integrity/index.bs`; its path is relative to the
 [reference root](PREFLIGHT.md#local-reference-inventory).
 
-**Status:** planned. Implement the independently testable metadata/digest
-operations first, then connect response eligibility and actual body bytes
-during main-fetch processing. Hashing uses a host cryptographic primitive.
-The [browser policy owner](../browlet/browsing/policy/ROADMAP.md#integrity-policy)
-separately owns Integrity-Policy parsing, container association, request
-blocking, and reporting.
+Use three slices across SRI and
+[the browser policy owner](../browlet/browsing/policy/ROADMAP.md#integrity-policy):
+
+1. **Metadata and verification (SRI §§2-3.3).** Parse supported expressions,
+   select every strongest-algorithm candidate, and verify byte sequences using
+   SHA-256, SHA-384, or SHA-512. Keep the host hash primitive independent of
+   Web Crypto's public API and realm-owned promises.
+2. **Integrity Policy state (SRI §3.8 through §3.8.1).** Replace HTML's empty
+   policy placeholders, parse both structured-field headers, associate them
+   with policy containers, and implement independent copying. Both policies
+   copy independently; HTML's report-only omission was reviewed and rejected.
+3. **Policy checks and reports (SRI §§3.8.2-3.8.3).** Implement request
+   blocking and report-only decisions, source/destination exemptions, URL
+   stripping, and violation bodies. Use the existing settings-owned Reporting
+   seam with typed boolean fields and the report-body dictionary declaration.
+   Observer/endpoint delivery stays with the planned Reporting implementation.
+
+**Slice 1 complete:** `integrity.ts` parses and verifies metadata using JS
+Engine's `computeHash(algorithm, bytes)`, backed by Node's native hashing.
+The byte/hash fixtures cover all three algorithms, exact byte views, and the
+parser and matching choices below. The complete unit suite passes on Node
+24.19.0, 26.8.1, and custom 27.0.0-pre, each with stock and compat runtimes.
+Blink's `ComputeDigest`, Gecko's `nsICryptoHash`, and WebKit's `CryptoDigest`
+likewise serve SRI directly without requiring its public Web Crypto API.
+
+**Slice 2 complete:** the browser's `IntegrityPolicy` owns typed source,
+destination, and endpoint lists and parses both headers through HTTP Structured
+Fields. `PolicyContainer` associates each present header independently and
+copies both policies. Strict validation rejects an entire header when a
+dictionary member is not an inner list of tokens. Unknown well-formed
+keys/tokens are ignored; defaults apply only after validation. Tests cover
+parsing, association, and independent copying through actual Window settings
+and Fetch client population. The existing HTML loader/navigation consumer
+still needs to deliver response headers automatically.
+
+**Slice 3 complete:** `FetchRequest.isBlockedByIntegrityPolicy()`
+checks enforced and report-only requirements and submits violation bodies to
+the request client's `queueReport()`. Fetch's narrow container contract exposes
+the attached integrity policy fields. Window settings supply their live Document URL separately from
+base/referrer URLs; future Worker settings must supply their own URL. Metadata
+with CORS/same-origin mode, local URLs, and unlisted sources/destinations are
+exempt. Clientless requests and globals outside Window/Worker have no applicable
+policy owner. Tests cover those decisions, policy snapshots, per-endpoint
+reporting, and real Window client population.
+
+Report bodies preserve `reportOnly` as a boolean. The current Reporting draft
+defines `ReportBody` as an empty dictionary, so SRI's derived dictionary is
+registered without adding a platform interface. URL's Reporting helper strips
+credentials/fragments without mutating the original URL, as approved; non-HTTP(S)
+URLs disclose only their scheme. The draft's per-endpoint reporting loop is
+retained, as in Gecko/WebKit; Chromium instead queues one observer report with
+an endpoint list. No endpoints means blocking can still occur, but this algorithm
+submits no report. Actual queues, observers, and delivery remain Reporting work.
+
+Eric approved these parsing choices on 2026-09-21: split on Infra's ASCII
+whitespace, ignore expressions outside the attribute grammar, retain digests
+whose syntax is valid even if they cannot decode, and compare decoded bytes
+so Base64url and omitted padding work. Normalize only algorithm names, using
+the spec's case-insensitive definition; digest text remains case-sensitive.
+The computed digest is shared by all strongest candidates rather than hashing
+the body again for each candidate.
+
+The draft instead strictly splits on spaces and every hyphen, omits expression
+validation, and compares Base64 strings literally. Its algorithm-name
+validation ignores case but its later ordered-set lookup omits normalization.
+These issues are centralized in `scratch/SPEC-ISSUES.md`. The implementation
+uses typed expression objects in ordered arrays, an accepted representation
+for the fixed fields and sequential scans. Repeated expressions do not change
+the verification result. Returning raw digest bytes rather than encoded digest
+strings is also accepted; verification compares decoded bytes directly.
+
+A real-navigation Fetch probe in Chromium 149, Firefox 151, and Playwright
+Windows WebKit 26.5 confirms whitespace-separated hashes, Base64url, and
+omitted padding. WebKit enforces uppercase algorithm names, while Chromium
+and Firefox ignore them. Malformed-expression details also differ: Chromium
+retains `sha512-====`, while Firefox/WebKit discard it. We follow the declared
+Base64 grammar, which requires data characters before any padding.
+
+**Consumer gates:** main Fetch must invoke `request.isBlockedByIntegrityPolicy()`
+after client population. Fetch 8A must check response eligibility, fully read the
+actual body, and deliver an integrity failure as a network error before
+handover. SRI §§3.4-3.7's script/link attributes, Link processing options,
+and element error events belong to their HTML/loader consumers. Neither a
+digest helper nor a parsed policy completes those lifecycles.
 
 **Exit proof:** known byte/hash fixtures cover supported/unsupported and
 malformed metadata, strongest-algorithm selection, matches, and mismatches.
 Fetch integration tests must exercise response eligibility, actual consumed
 bytes, and integrity failure delivery. Parsing a policy or hashing arbitrary
 test bytes alone does not prove the response path.
+
+### SRI audit coverage
+
+Reviewed the complete SRI draft (`w3c-subresource-integrity` at `632bf53`) against
+the implementation and focused tests on 2026-09-21. No additional gap was found
+in the completed algorithm slices beyond the approved departures above. This
+does not close the consumer integrations:
+
+| SRI sections | Coverage and remaining owner |
+| --- | --- |
+| §§1-3.3: metadata, hash support, selection, verification | Implemented and tested, including unsupported algorithms, unknown options, exact byte views, and strongest-digest selection. |
+| §§3.4-3.6: HTML attributes and Link processing | [HTML loading](../browlet/loader/ROADMAP.md) must carry script/link and Link-header integrity metadata into Fetch. The shared metadata parser already ignores unknown options as required. |
+| §3.7: failed integrity checks | Fetch 8A must reject ineligible responses and hash the consumed body before handover, returning a network error on failure. HTML loaders must deliver element error events and prevent execution/application. |
+| §§3.8-3.8.3: policies, blocking, reports | Algorithms and report dictionaries are implemented. HTML must deliver response policies; main Fetch must invoke blocking; [Reporting](../browlet/reporting/ROADMAP.md) must replace the provisional submission no-op. Worker URL/lifetime integration waits for workers. |
+| §4: transforming proxies | Requirements apply to content-transforming intermediaries and serving origins, not an additional Browlet SRI algorithm. Do not synthesize a response's `Cache-Control: no-transform` header. |
+| §5: security/privacy | Explicitly non-normative. Its cross-origin leakage concern reinforces the Fetch response-eligibility gate; the helper alone must not be used to validate an opaque response. |
+
+The optional verification overrides and console warning mentioned after §3.3.4
+do not introduce mandatory SRI APIs. Reporting's separate §9.4 does require a
+user opt-out; that requirement and its enforcement-preservation tests are now
+explicit in the Reporting roadmap. Re-audit the live Fetch/HTML paths when those
+consumers land, rather than treating standalone tests as end-to-end coverage.
 
 ## Explicitly deferred work
 

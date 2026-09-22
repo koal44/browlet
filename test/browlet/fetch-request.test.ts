@@ -4,7 +4,9 @@ import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings'
 import { Browlet } from '../../src/browlet/browlet';
 import type { FetchBody } from '../../src/fetch/body';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
+import { FetchResponse } from '../../src/fetch/response';
 import { parseURL } from '../../src/url/url';
+import { reference } from '../../src/web-idl/index';
 
 describe('Fetch Request construction', () => {
   it('constructs a request with independent headers, a signal, and the relevant client', () => {
@@ -332,6 +334,61 @@ describe('Fetch client population with HTML settings', () => {
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBe(traversable);
     expect(request.policyContainer).toBe(policy);
+  });
+
+  it('copies parsed enforcement and report-only integrity policies from the actual Window settings', () => {
+    const window = createWindow();
+    const settings = getRelevantRealm(window).hostDefined!;
+    const response = new FetchResponse();
+    response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforced)');
+    response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(style), endpoints=(reported)');
+    settings.policyContainer.parseIntegrityPolicyHeaders(response);
+    const request = implementation(window, new window.Request(url)).getRequest();
+    request.populateFromClient();
+    const expected = {
+      integrityPolicy: { sources: ['inline'], blockedDestinations: ['script'], endpoints: ['enforced'] },
+      reportOnlyIntegrityPolicy: { sources: ['inline'], blockedDestinations: ['style'], endpoints: ['reported'] },
+    };
+    expect(request.policyContainer).toMatchObject(expected);
+    expect(request.policyContainer).not.toBe(settings.policyContainer);
+    settings.policyContainer.integrityPolicy.sources.length = 0;
+    settings.policyContainer.integrityPolicy.blockedDestinations.length = 0;
+    settings.policyContainer.integrityPolicy.endpoints.length = 0;
+    settings.policyContainer.reportOnlyIntegrityPolicy.sources.length = 0;
+    settings.policyContainer.reportOnlyIntegrityPolicy.blockedDestinations.length = 0;
+    settings.policyContainer.reportOnlyIntegrityPolicy.endpoints.length = 0;
+    expect(request.policyContainer).toMatchObject(expected);
+  });
+
+  it('checks populated integrity policies and submits typed reports using the actual Window Document URL', async () => {
+    const browlet = new Browlet({ route: () => '<base href="https://resource.test/assets/">' });
+    await browlet.navigate('https://document.test/page#fragment');
+    const window = browlet.window as Window & typeof globalThis;
+    const realm = getRelevantRealm(window);
+    const settings = realm.hostDefined!;
+    const response = new FetchResponse();
+    response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforced)');
+    response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(script), endpoints=(reported)');
+    settings.policyContainer.parseIntegrityPolicyHeaders(response);
+    const queueReport = vi.spyOn(settings, 'queueReport');
+    const request = implementation(window, new window.Request('script.js')).getRequest();
+    request.destination = 'script';
+    request.populateFromClient();
+    expect(request.isBlockedByIntegrityPolicy()).toBe(true);
+    expect(queueReport.mock.calls).toEqual([
+      ['integrity-violation', 'enforced', {
+        documentURL: 'https://document.test/page', blockedURL: 'https://resource.test/assets/script.js',
+        destination: 'script', reportOnly: false,
+      }],
+      ['integrity-violation', 'reported', {
+        documentURL: 'https://document.test/page', blockedURL: 'https://resource.test/assets/script.js',
+        destination: 'script', reportOnly: true,
+      }],
+    ]);
+    const body = queueReport.mock.calls[1]![2];
+    expect(getBindingContext(realm).convertToImpl(body, reference('IntegrityViolationReportBody'))).toEqual(body);
+    expect(Reflect.has(window, 'IntegrityViolationReportBody')).toBe(false);
+    expect(window.document.URL).toBe('https://document.test/page#fragment');
   });
 
   it('copies policy state independently when the caller suppresses prompts', () => {

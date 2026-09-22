@@ -1,6 +1,7 @@
 import type { FetchGroup } from './group';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
+import type { FetchIntegrityPolicy } from './integrity';
 import type { CookieStore } from '../http/index';
 import type { Origin, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
@@ -22,6 +23,8 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   hasCrossSiteAncestor: boolean;
   /** Source URL selected by the client's global, or null when disclosure is prohibited. */
   getReferrerSource(): URLRecord | null;
+  /** Document or worker URL for reports, or null for a global outside those categories. */
+  getReportingSource(): URLRecord | null;
   /** Traversable belonging to this client's Window, or null when no Window navigable exists. */
   getTraversableForUserPrompts(): FetchPromptTarget | null;
   /** Requests tracked for this environment's lifetime. */
@@ -30,8 +33,8 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   webDriverBiDiNetworkIsOffline(): boolean;
   /** Client's live policy container, exposing the policies currently consumed by Fetch. */
   policyContainer: FetchPolicyContainer;
-  /** Submit a report for this client using the string-valued body fields produced by Fetch. */
-  queueReport(type: string, endpoint: string, body: Record<string, string>): void;
+  /** Submit a policy report for this client, retaining each field's JSON value type. */
+  queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
 };
 
 /** An opaque reference to the HTML traversable selected for user prompts. */
@@ -57,6 +60,10 @@ export type FetchPolicyContainer = {
   };
   /** Default referrer disclosure policy inherited by requests. */
   referrerPolicy: ReferrerPolicy;
+  /** Enforced integrity requirements for outgoing requests. */
+  integrityPolicy: FetchIntegrityPolicy;
+  /** Integrity requirements checked for reporting without blocking requests. */
+  reportOnlyIntegrityPolicy: FetchIntegrityPolicy;
   /** Copy the HTML-owned policy state for an independently populated request. */
   clone(): FetchPolicyContainer;
 };

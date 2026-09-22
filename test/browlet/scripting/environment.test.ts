@@ -133,6 +133,28 @@ describe('Window environment referrer sources', () => {
   });
 });
 
+describe('Window environment reporting sources', () => {
+  it('uses the live Document URL independently of the base URL and creation URL', () => {
+    const { document, settings } = createEnvironment('https://example.test/initial');
+    const url = parseURL('https://example.test/current#fragment').url!;
+    document.setURL(url);
+    const root = document.createElement('html');
+    const base = document.createElement('base');
+    base.setAttribute('href', 'https://different.test/base/');
+    document.appendChild(root);
+    root.appendChild(base);
+    expect(serializeURL(settings.apiBaseURL)).toBe('https://different.test/base/');
+    expect(settings.getReportingSource()).toBe(url);
+  });
+
+  it('reports the srcdoc Document itself even when its origin prevents a referrer', () => {
+    const { document, settings } = createEnvironment('about:srcdoc');
+    document.setIsIframeSrcdocDocument(true);
+    expect(settings.getReferrerSource()).toBeNull();
+    expect(settings.getReportingSource()).toBe(document.getURL());
+  });
+});
+
 describe('Window environment prompt targets', () => {
   it('selects the window\'s own traversable', () => {
     const top = createEnvironment('https://example.test/');

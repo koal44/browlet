@@ -17,8 +17,13 @@ export type {
   FetchPolicyContainer, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './infrastructure';
 export { fetchEnvironmentSettingsObject } from './infrastructure';
+export type { FetchHeaders } from './headers';
 export { requestIDL, type FetchRequest } from './request';
 export { responseIDL, type FetchResponse } from './response';
+export {
+  parseIntegrityMetadata, type IntegrityMetadata, type IntegrityAlgorithm,
+  type FetchIntegrityPolicy, type IntegrityViolationReportBody,
+} from './integrity';
 export { isLocalScheme } from './url';
 
 export const fetchIDLDefinitions: Definition[] = [

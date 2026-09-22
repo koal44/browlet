@@ -13,6 +13,8 @@ import {
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
+import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
+import { reportBodyIDL } from './reporting/report';
 import {
   type WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
@@ -254,6 +256,7 @@ const browletDefinitions = [
   originIDL,
   locationIDL,
   referrerPolicyIDL,
+  reportBodyIDL, integrityViolationReportBodyIDL,
   domHighResTimeStampIDL,
   epochTimeStampIDL,
   performanceIDL,

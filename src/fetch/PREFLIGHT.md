@@ -95,8 +95,9 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 | 6 | [Referrer Policy](../browlet/browsing/policy/ROADMAP.md#referrer-policy) | Request/redirect handling and policy delivery |
 | 7 | [Fetch Metadata](http/ROADMAP.md#fetch-metadata); header algorithms implemented | Outgoing HTTP request headers in Fetch Slice 9 |
 | 8 | [SRI verification](ROADMAP.md#subresource-integrity) and [Integrity Policy](../browlet/browsing/policy/ROADMAP.md#integrity-policy) | Response bytes and request policy |
-| 9 | [HSTS](../browlet/browsing/policy/ROADMAP.md#hsts), RFC 6797 | Scheme upgrading and secure transport |
-| 10 | [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then [File's Blob URL slice](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred) | URL resolution, Fetch, and environment teardown |
+| 9 | [Reporting](../browlet/reporting/ROADMAP.md): configuration, queues, user controls, and observers | COEP and Integrity Policy report submission; network delivery remains a Fetch consumer |
+| 10 | [HSTS](../browlet/browsing/policy/ROADMAP.md#hsts), RFC 6797 | Scheme upgrading and secure transport |
+| 11 | [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then [File's Blob URL slice](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred) | URL resolution, Fetch, and environment teardown |
 
 Existing foundations are indexed in Fetch's
 [dependency ledger](ROADMAP.md#dependency-ledger). In particular, the
@@ -371,8 +372,9 @@ integration deferrals below. The bounded test-reliability/performance review
 is complete, and [Slice 8A](ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes)
 has connected client population to HTML prompt-target selection and policy
 container cloning/default creation. The Request constructor uses the accepted
-provisional source-origin copy check; concrete CSP copying and Integrity Policy
-state remain with their policy owners. 7a's cookie header
+provisional source-origin copy check; populated CSP copying remains pending.
+Concrete Integrity Policy state and independent copying belong to the HTML
+policy owner; FetchRequest owns the request check. 7a's cookie header
 algorithms and Window ancestry inputs are complete. 7b's Origin headers and
 Referrer Policy algorithms are implemented. 7c's header algorithms and CORP
 checks are implemented. Their `settings.queueReport()` capability currently
@@ -384,20 +386,27 @@ The browsing roadmap owns that HTML lifecycle; Fetch and policy roadmaps retain
 its replacement conditions and the later main-fetch/redirect call sites.
 The remaining work-order entries above are gates for their named consumers,
 not a requirement to finish all browser policy before proceeding.
-The selected detour starts with Fetch Metadata; its single algorithm slice is
-complete. Continue with SRI/Integrity Policy, HSTS, Storage keys/Blob URLs, then
-the policy-stage order below before returning to Fetch 8A. Their consumer
-integration gates remain with Fetch and HTML.
+Fetch Metadata's single algorithm slice is complete. SRI/Integrity Policy is
+divided into [three slices](ROADMAP.md#subresource-integrity): metadata/digests,
+policy parsing/copying, and policy checks/reporting. All three algorithm slices
+are complete. Main Fetch still needs to invoke the request policy check and
+verify consumed response bytes. Actual report delivery remains with Reporting,
+and automatic response-policy delivery remains with HTML's loader.
+Continue with Reporting's configuration/queue/observer work, then HSTS,
+Storage keys/Blob URLs, and the independent policy work below before returning
+to Fetch 8A. Their consumer integration gates remain with Fetch and HTML.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 
-Finish the policy stage in this order:
+Finish the independent policy work in this order:
 
 1. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
-2. [Reporting](../browlet/reporting/ROADMAP.md), including its Fetch delivery.
-3. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
+2. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
    its inputs to the preceding policy algorithms.
+
+[Reporting](../browlet/reporting/ROADMAP.md)'s network delivery completes when
+Fetch can execute its requests; it is not a prerequisite for resuming Fetch 8A.
 
 Configured policy enforcement must have real behavior tests; explicitly
 empty policies exercise only the unconfigured path.

@@ -14,6 +14,7 @@ export function createClientSettings(url = 'https://example.test/'): FetchEnviro
     origin: obtainURLOrigin(topLevelCreationURL),
     hasCrossSiteAncestor: false,
     getReferrerSource: () => topLevelCreationURL,
+    getReportingSource: () => topLevelCreationURL,
     getTraversableForUserPrompts: () => null,
     fetchGroup: new FetchGroup(),
     userAgent: createFetchUserAgent(),
@@ -44,8 +45,21 @@ function createFetchPolicyContainer(): FetchPolicyContainer {
       value: 'unsafe-none', reportingEndpoint: '', reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '',
     },
     referrerPolicy: 'strict-origin-when-cross-origin',
+    integrityPolicy: { sources: [], blockedDestinations: [], endpoints: [] },
+    reportOnlyIntegrityPolicy: { sources: [], blockedDestinations: [], endpoints: [] },
     clone() {
-      return { ...this, embedderPolicy: { ...this.embedderPolicy } };
+      return {
+        ...this, embedderPolicy: { ...this.embedderPolicy },
+        integrityPolicy: {
+          sources: [...this.integrityPolicy.sources], blockedDestinations: [...this.integrityPolicy.blockedDestinations],
+          endpoints: [...this.integrityPolicy.endpoints],
+        },
+        reportOnlyIntegrityPolicy: {
+          sources: [...this.reportOnlyIntegrityPolicy.sources],
+          blockedDestinations: [...this.reportOnlyIntegrityPolicy.blockedDestinations],
+          endpoints: [...this.reportOnlyIntegrityPolicy.endpoints],
+        },
+      };
     },
   };
 }

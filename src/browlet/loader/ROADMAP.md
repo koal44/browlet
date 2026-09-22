@@ -15,11 +15,11 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `document-handlers.ts` | Select and populate HTML, XML, text, multipart, media, and content-handler Documents from response MIME/type state | HTML §§7.5.2–7.5.7 |
 | `resource-loader.ts` | Fetch-backed subresource requests, credentials, referrer and policy inputs | Fetch plus each HTML element's fetch algorithm |
 | `resource-type.ts` | Determine resource type from response metadata and sniffing inputs | HTML §2.5.2 and MIME Sniffing |
-| `element-fetch-options.ts` | Normalize CORS settings, referrer policy, nonce, lazy-loading, blocking, and fetch-priority attributes into Fetch inputs | HTML §§2.5.4–2.5.9 |
+| `element-fetch-options.ts` | Normalize CORS settings, referrer policy, integrity metadata, nonce, lazy-loading, blocking, and fetch-priority attributes into Fetch inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
 | `linked-resource.ts` | `<link>` processing and external style sheets | HTML §4.2.4 and CSSOM |
 | `script-loader.ts` | Shared classic/module graph fetching plus parser, worker, `importScripts()`, and worklet coordination | HTML §§4.12.1 and 8.1.5; HTML §§10.2.4, 10.3.1, and 11.3.2 |
-| `preload.ts` | preload/modulepreload resource hints and parser-discovered preloads | HTML §4.2.4 and Fetch |
-| `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch |
+| `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
+| `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
 | `node-transport.ts` | Adapt a supported Node HTTP/Undici dispatcher to Fetch's transport contract without delegating redirects or browser policy | Fetch network fetch |

@@ -135,6 +135,9 @@ Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
 Composition exposes the required operations through `runtime.buffers` and
 `runtime.promises`, without passing a realm into implementation algorithms.
+Native hashing is a realm-neutral operation in `hash.ts`; consumers such as
+SRI own algorithm selection and verification policy. It does not invoke the
+public Web Crypto API or allocate author-visible results.
 Infra owns internal simple-exception requests; their realization into
 realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exceptions).
 
@@ -404,7 +407,12 @@ Fetch's CORP check submits violations through the actual settings object's
 `queueReport()` capability. Browlet connects that recipient to Reporting's
 document/worker lifecycle and global-owned observer state; Fetch supplies
 the report type, endpoint name, and body without receiving the global itself.
+Integrity Policy uses the same seam with boolean report fields. Settings supply
+the Document/Worker URL through `getReportingSource()`; Window settings read
+their live associated Document rather than substituting its base/referrer URL.
 This dependency belongs to Reporting, not RuntimeContext.
+Its stateless URL sanitization algorithm lives in URL, retaining its Reporting
+citation, so both policy checks and Reporting can import it directly.
 
 `serialize(value)` captures a value using the source runtime;
 `deserialize(record)` reconstructs it in the destination runtime's realm.
@@ -593,12 +601,14 @@ tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delive
 
 The same settings object exposes its HTML-owned policy container. Window
 settings read it from the associated Document; `FetchPolicyContainer` exposes
-the embedder-policy value, typed referrer policy, and an HTML-owned `clone()`
-operation without importing Browlet. HTML's `PolicyContainer` class implements
-that structural type. Client population clones it once into the request; the
+the embedder-policy value, typed referrer policy, integrity policy fields, and
+an HTML-owned `clone()` without importing Browlet. HTML's `PolicyContainer`
+class implements that structural type. Client population clones it once into the request; the
 UserAgent supplies fresh default containers for requests without a client.
-CSP copying and Integrity Policy's concrete state remain with their unfinished
-HTML policy owners; cloning currently rejects populated CSP lists.
+Integrity Policy owns concrete, independently copied policy lists. `FetchRequest`
+checks its attached policies in `isBlockedByIntegrityPolicy()` and submits reports
+through its client's Reporting seam. CSP's model and copying remain
+unfinished; cloning currently rejects populated CSP lists.
 `FetchRequest` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
 

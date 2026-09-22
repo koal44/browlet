@@ -496,6 +496,10 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   get timeOrigin(): Moment {
     return new Moment(monotonicClock, 0);
   }
+
+  getReportingSource(): URLRecord | null {
+    return null;
+  }
 }
 
 function requireURL(input: string): URLRecord {
