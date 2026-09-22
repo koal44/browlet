@@ -1,10 +1,10 @@
 import {
-  defineElementInterface, type ElementCreationContext,
+  defineElementInterface, type ElementCreationContext, type ElementImpl,
 } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
 import { withSVGStyleElementStub } from '../stubs';
-import { isSVGElement, SVGElementImpl } from './element';
+import { SVGElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../stylelet/index';
 
 /*
@@ -61,7 +61,7 @@ export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({
 });
 
 export function isSVGStyleElement(
-  element: Element,
+  element: ElementImpl,
 ): element is SVGStyleElementImpl {
-  return isSVGElement(element) && element.localName === 'style';
+  return element instanceof SVGStyleElementImpl;
 }

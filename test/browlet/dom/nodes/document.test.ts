@@ -29,28 +29,28 @@ describe('Document', () => {
     expect(document.compatMode).toBe('CSS1Compat');
     expect(document.customElementRegistry).toBeNull();
     expect(document.type).toBe('xml');
-    expect(document.getOrigin().kind).toBe('opaque');
-    expect(document.allowsDeclarativeShadowRoots()).toBe(false);
-    expect(document.getModuleMap()).toEqual({ entries: [] });
-    expect(document.getPolicyContainer()).toMatchObject({
+    expect(document.origin.kind).toBe('opaque');
+    expect(document.allowDeclarativeShadowRoots).toBe(false);
+    expect(document.moduleMap).toEqual({ entries: [] });
+    expect(document.policyContainer).toMatchObject({
       cspList: [],
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
-    expect(document.getPermissionsPolicy()).toEqual({});
-    expect(document.getOpenerPolicy()).toEqual({
+    expect(document.permissionsPolicy).toEqual({});
+    expect(document.openerPolicy).toEqual({
       value: 'unsafe-none',
       reportingEndpoint: null,
       reportOnlyValue: 'unsafe-none',
       reportOnlyReportingEndpoint: null,
     });
-    expect(document.getLoadTimingInfo().navigationStartTime)
+    expect(document.loadTimingInfo.navigationStartTime)
       .toBe(0);
-    expect(document.isInitialAboutBlank()).toBe(false);
+    expect(document.isInitialAboutBlank).toBe(false);
   });
 
   it('always has a base URI', () => {
     const document = new DocumentImpl();
-    document.setURL(documentURL('https://example.com/'));
+    document.url = documentURL('https://example.com/');
     const text = document.createTextNode('content');
 
     expect(new DocumentImpl().baseURI).toBe('about:blank');
@@ -63,8 +63,8 @@ describe('Document', () => {
   it('can update a node document during a future adoption operation', () => {
     const first = new DocumentImpl();
     const second = new DocumentImpl();
-    first.setURL(documentURL('https://first.example/'));
-    second.setURL(documentURL('https://second.example/'));
+    first.url = documentURL('https://first.example/');
+    second.url = documentURL('https://second.example/');
     const text = first.createTextNode('content');
 
     text.setNodeDocument(second);
@@ -75,23 +75,23 @@ describe('Document', () => {
 
   it('inherits the about base URL only for about:blank, including a query or fragment', () => {
     const document = new DocumentImpl();
-    document.setAboutBaseURL(documentURL('https://example.test/parent/'));
+    document.aboutBaseURL = documentURL('https://example.test/parent/');
     for (const url of ['about:blank', 'about:blank?query#fragment']) {
-      document.setURL(documentURL(url));
+      document.url = documentURL(url);
       expect(document.baseURI).toBe('https://example.test/parent/');
     }
     for (const url of ['https://example.test/page', 'about:srcdoc', 'about:other']) {
-      document.setURL(documentURL(url));
+      document.url = documentURL(url);
       expect(document.baseURI).toBe(url);
     }
   });
 
   it('uses an iframe srcdoc document\'s inherited base independently of its current URL', () => {
     const document = new DocumentImpl();
-    document.setAboutBaseURL(documentURL('https://example.test/parent/'));
-    document.setIsIframeSrcdocDocument(true);
+    document.aboutBaseURL = documentURL('https://example.test/parent/');
+    document.isIframeSrcdocDocument = true;
     for (const url of ['about:srcdoc', 'about:srcdoc#fragment']) {
-      document.setURL(documentURL(url));
+      document.url = documentURL(url);
       expect(document.baseURI).toBe('https://example.test/parent/');
     }
   });
@@ -104,7 +104,7 @@ describe('Document', () => {
     expect(document.getParent(new EventImpl('ready')))
       .toBeNull();
 
-    document.setBrowsingContext(new BrowsingContext());
+    document.browsingContext = new BrowsingContext();
 
     expect(document.getParent(new EventImpl('ready')))
       .toBe(window);
@@ -117,8 +117,8 @@ describe('Document', () => {
     const first = new DocumentImpl();
     const second = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
-    first.setBrowsingContext(browsingContext);
-    second.setBrowsingContext(browsingContext);
+    first.browsingContext = browsingContext;
+    second.browsingContext = browsingContext;
 
     window.setAssociatedDocument(first);
     window.setAssociatedDocument(second);
@@ -195,7 +195,7 @@ describe('Document', () => {
 
     expect(document.doctype).toBe(doctype);
     expect(document.documentElement).toBe(element);
-    expect(document.getMode()).toBe(DocumentMode.NoQuirks);
+    expect(document.mode).toBe(DocumentMode.NoQuirks);
   });
 
   it('derives its head from the HTML document tree', () => {
@@ -214,8 +214,8 @@ describe('Document', () => {
 
   it('creates HTML elements and text nodes', () => {
     const document = new DocumentImpl();
-    document.setType('html');
-    document.setContentType('text/html');
+    document.type = 'html';
+    document.contentType = 'text/html';
     const element = document.createElement('MaIn');
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -233,13 +233,13 @@ describe('Document', () => {
 
   it('identifies HTML and compatibility mode', () => {
     const document = new DocumentImpl();
-    document.setType('html');
-    document.setContentType('text/html');
+    document.type = 'html';
+    document.contentType = 'text/html';
 
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');
 
-    document.setMode(DocumentMode.Quirks);
+    document.mode = DocumentMode.Quirks;
 
     expect(document.compatMode).toBe('BackCompat');
   });

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { throwDOMException } from '../../src/web-idl/core/dom-exception';
@@ -264,6 +264,96 @@ describe('Web IDL implementation bindings', () => {
       .toBe(AutomaticConstructorImpl.prototype);
     expect(instance.value).toBe('converted');
     expect(conversions).toBe(1);
+  });
+
+  it('binds implementation fields with IDL conversion and readonly exposure', () => {
+    class FieldsImpl {
+      count = 1;
+      label = 'initial';
+      next: FieldsImpl | null = null;
+      optional: unknown = undefined;
+      internal = 'implementation only';
+    }
+    const definition = defineInterface({
+      name: 'Fields', exposed: '*', implementation: impl(FieldsImpl),
+      members: [
+        ctor(), attr('count', idlType.long), roAttr('label', idlType.DOMString),
+        attr('next', nullable(reference('Fields'))), roAttr('optional', idlType.any),
+      ],
+    });
+    const realm = new Realm();
+    new BindingWorld([definition]).register(realm).install(realm.global);
+    const Fields = Reflect.get(realm.global, definition.name) as new() => {
+      count: number; label: string; next: object | null; optional: unknown;
+    };
+    const object = new Fields();
+    const next = new Fields();
+    const implementation = getImplementationObject(object);
+    assert(implementation instanceof FieldsImpl);
+
+    expect(object.count).toBe(1);
+    expect(object.optional).toBeUndefined();
+    Reflect.set(object, 'count', { valueOf: () => 7.9 });
+    expect(implementation.count).toBe(7);
+    expect(object.count).toBe(7);
+    object.next = next;
+    expect(implementation.next).toBe(getImplementationObject(next));
+    expect(object.next).toBe(next);
+    implementation.label = 'updated';
+    expect(object.label).toBe('updated');
+    expect(Reflect.set(object, 'label', 'author assignment')).toBe(false);
+    expect(implementation.label).toBe('updated');
+    expect(typeof Object.getOwnPropertyDescriptor(Fields.prototype, 'count')?.get).toBe('function');
+    expect('internal' in object).toBe(false);
+  });
+
+  it('retains implementation accessors and supports static fields', () => {
+    class BaseImpl {
+      #value = 2;
+      get value(): number { return this.#value * 2; }
+      set value(value: number) { this.#value = value; }
+    }
+    class AttributesImpl extends BaseImpl {
+      static label = 'initial';
+      static get alias(): string { return this.label; }
+    }
+    const definition = defineInterface({
+      name: 'Attributes', exposed: '*', implementation: impl(AttributesImpl),
+      members: [
+        ctor(), attr('value', idlType.long),
+        attr('label', idlType.DOMString, { static: true }),
+        roAttr('alias', idlType.DOMString, { static: true }),
+      ],
+    });
+    const realm = new Realm();
+    new BindingWorld([definition]).register(realm).install(realm.global);
+    const Attributes = Reflect.get(realm.global, definition.name) as {
+      new(): { value: number; }; label: string; alias: string;
+    };
+    const object = new Attributes();
+
+    expect(object.value).toBe(4);
+    object.value = 3;
+    expect(object.value).toBe(6);
+    Reflect.set(Attributes, 'label', { toString: () => 'updated' });
+    expect(AttributesImpl.label).toBe('updated');
+    expect(Attributes.label).toBe('updated');
+    expect(Attributes.alias).toBe('updated');
+  });
+
+  it('reports missing implementation fields when an attribute is accessed', () => {
+    class MissingImpl {}
+    const definition = defineInterface({
+      name: 'Missing', exposed: '*', implementation: impl(MissingImpl),
+      members: [ctor(), attr('value', idlType.long)],
+    });
+    const realm = new Realm();
+    new BindingWorld([definition]).register(realm).install(realm.global);
+    const Missing = Reflect.get(realm.global, definition.name) as new() => { value: number; };
+    const object = new Missing();
+
+    expect(() => object.value).toThrow('Web IDL attribute value has no implementation');
+    expect(() => { object.value = 1; }).toThrow('Web IDL attribute value has no implementation');
   });
 
   it('injects contextual dependencies into an empty constructor', () => {

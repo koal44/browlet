@@ -39,9 +39,7 @@ import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
-import {
-  isHTMLElement, isHTMLHeadElement, type ElementImpl,
-} from './element';
+import type { ElementImpl } from './element';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../infra/index';
@@ -59,6 +57,8 @@ import {
 } from './lookups';
 import { resolveElementInterface } from '../../element-interfaces';
 import { HTMLBaseElementImpl } from '../../html/elements/metadata/base';
+import { isHTMLElement, type HTMLElementImpl } from '../../html/elements/html-element';
+import { isHTMLHeadElement, type HTMLHeadElementImpl } from '../../html/elements/metadata/head';
 import { InternalError } from '../../../infra/internal-error';
 
 export function createDocument(
@@ -122,24 +122,56 @@ export type DocumentConstructionOptions = {
  * };
  */
 export class DocumentImpl extends NodeImpl {
-  #aboutBaseURL: URLRecord | null = null;
-  #activeSandboxingFlagSet = createSandboxingFlagSet();
-  #allowDeclarativeShadowRoots = false;
-  #ancestorOriginsList: string[] | null = null;
-  #browsingContext: BrowsingContext | null = null;
-  #relevantGlobalObject: WindowImpl | null = null;
-  #completelyLoadedTime: number | null = null;
-  #contentType = 'application/xml';
-  #currentDocumentReadiness: DocumentReadyState = 'complete';
-  #customElementRegistry: CustomElementRegistryImpl | null = null;
-  #duringLoadingNavigationID: string | null = null;
-  #encoding = 'UTF-8';
-  #firstBaseElement: HTMLBaseElementImpl | null = null;
-  #fullyActiveObservers = new Set<FullyActiveStateObserver>();
-  #internalAncestorOriginObjectsList: Origin[] | null = null;
-  #isIframeSrcdocDocument = false;
-  #isInitialAboutBlank = false;
-  #loadTimingInfo: DocumentLoadTimingInfo = {
+  /** The document's URL record, independent of its base URL. */
+  // https://dom.spec.whatwg.org/#concept-document-url
+  url = parseDocumentURL('about:blank');
+  /** Origin used by the document's security and same-origin checks. */
+  origin: Origin = createOpaqueOrigin();
+  /** Whether DOM operations use HTML or XML rules. */
+  type: DocumentType = 'xml';
+  /** Compatibility mode selected by the parser. */
+  mode = DocumentMode.NoQuirks;
+  /** MIME type of the document's content. */
+  contentType = 'application/xml';
+  /** Encoding name exposed by characterSet and its legacy aliases. */
+  encoding = 'UTF-8';
+  /** Associated browsing context, or null for a detached document. */
+  browsingContext: BrowsingContext | null = null;
+  /** Inherited fallback base for about:blank and iframe srcdoc documents. */
+  aboutBaseURL: URLRecord | null = null;
+  /** Loading state exposed by readyState. */
+  currentDocumentReadiness: DocumentReadyState = 'complete';
+  /** Referrer recorded when the document was created, or the empty string. */
+  referrer = '';
+  /** Custom element registry associated with this document, if any. */
+  customElementRegistry: CustomElementRegistryImpl | null = null;
+  /** Module scripts known to this document. */
+  moduleMap: ModuleMap = { entries: [] };
+  /** Policies inherited or supplied when the document was created. */
+  policyContainer: PolicyContainer = createPolicyContainer();
+  /** Permissions policy controlling features in this document. */
+  permissionsPolicy: PermissionsPolicy = createPermissionsPolicy();
+  /** Cross-origin opener policy selected for this document. */
+  openerPolicy: OpenerPolicy = createOpenerPolicy();
+  /** Sandbox restrictions currently applied to the document. */
+  activeSandboxingFlagSet: SandboxingFlagSet = createSandboxingFlagSet();
+  /** Whether parsing may create declarative shadow roots. */
+  allowDeclarativeShadowRoots = false;
+  /** Ancestor origins retained for navigation, or null before selection. */
+  internalAncestorOriginObjectsList: Origin[] | null = null;
+  /** Serialized ancestor origins, or null before selection. */
+  ancestorOriginsList: string[] | null = null;
+  /** Whether this document was created from an iframe's srcdoc content. */
+  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#an-iframe-srcdoc-document
+  isIframeSrcdocDocument = false;
+  /** Whether this is the initial about:blank document of a browsing context. */
+  isInitialAboutBlank = false;
+  /** Whether cross-origin redirects occurred while creating this document. */
+  wasCreatedViaCrossOriginRedirects = false;
+  /** Navigation identifier while loading, or null outside that phase. */
+  duringLoadingNavigationID: string | null = null;
+  /** Navigation and document-loading milestones. */
+  loadTimingInfo: DocumentLoadTimingInfo = {
     navigationStartTime: 0,
     domInteractiveTime: 0,
     domContentLoadedEventStartTime: 0,
@@ -148,19 +180,17 @@ export class DocumentImpl extends NodeImpl {
     loadEventStartTime: 0,
     loadEventEndTime: 0,
   };
-  #mode = DocumentMode.NoQuirks;
-  #moduleMap: ModuleMap = { entries: [] };
-  #openerPolicy = createOpenerPolicy();
-  #origin: Origin = createOpaqueOrigin();
-  #permissionsPolicy = createPermissionsPolicy();
-  #policyContainer = createPolicyContainer();
-  #type: DocumentType = 'xml';
-  #url = parseDocumentURL('about:blank');
-  #wasCreatedViaCrossOriginRedirects = false;
-  #readyForPostLoadTasks = false;
-  #referrer = '';
-  #stylelet: Stylelet | undefined;
+  /** Completion timestamp, or null until the document is completely loaded. */
+  completelyLoadedTime: number | null = null;
+  /** Whether tasks that depend on loading completion may proceed. */
+  readyForPostLoadTasks = false;
+  /** Execution facilities supplied to the document's Stylelet instance. */
   styleletExec: StyleletExecutionCaps;
+
+  #relevantGlobalObject: WindowImpl | null = null;
+  #firstBaseElement: HTMLBaseElementImpl | null = null;
+  #fullyActiveObservers = new Set<FullyActiveStateObserver>();
+  #stylelet: Stylelet | undefined;
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   #parentNodeMixin: ParentNodeMixin;
   #treeScopeResolver: TreeScopeResolver;
@@ -193,14 +223,14 @@ export class DocumentImpl extends NodeImpl {
     this.styleletExec = styleletExec;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
-      getCustomElementRegistry: () => this.#customElementRegistry,
+      getCustomElementRegistry: () => this.customElementRegistry,
       getStyleScope: () => this.getCSSEngine().documentScope,
     });
     this.#parentNodeMixin = new ParentNodeMixin(this);
   }
 
   get URL(): string {
-    return serializeURL(this.#url);
+    return serializeURL(this.url);
   }
 
   get documentURI(): string {
@@ -212,7 +242,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   get characterSet(): string {
-    return this.#encoding;
+    return this.encoding;
   }
 
   get charset(): string {
@@ -223,34 +253,18 @@ export class DocumentImpl extends NodeImpl {
     return this.characterSet;
   }
 
-  get contentType(): string {
-    return this.#contentType;
-  }
-
-  get type(): DocumentType {
-    return this.#type;
-  }
-
   get defaultView(): Window | null {
-    return this.#browsingContext?.windowProxy ?? null;
+    return this.browsingContext?.windowProxy ?? null;
   }
 
   get readyState(): DocumentReadyState {
-    return this.#currentDocumentReadiness;
-  }
-
-  get referrer(): string {
-    return this.#referrer;
+    return this.currentDocumentReadiness;
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
-    return this.#mode === DocumentMode.Quirks
+    return this.mode === DocumentMode.Quirks
       ? 'BackCompat'
       : 'CSS1Compat';
-  }
-
-  get customElementRegistry(): CustomElementRegistryImpl | null {
-    return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
   get doctype(): DocumentTypeImpl | null {
@@ -269,7 +283,7 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
-  get head(): (ElementImpl & HTMLHeadElement) | null {
+  get head(): HTMLHeadElementImpl | null {
     const html = this.documentElement;
     if (!html || !isHTMLElement(html) || html.localName !== 'html') {
       return null;
@@ -282,7 +296,7 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
-  get body(): (ElementImpl & HTMLElement) | null {
+  get body(): HTMLElementImpl | null {
     const html = this.documentElement;
     if (!html || !isHTMLElement(html) || html.localName !== 'html') {
       return null;
@@ -336,7 +350,7 @@ export class DocumentImpl extends NodeImpl {
     localName: string,
     _options?: ElementCreationOptions,
   ): HTMLElement & ElementImpl {
-    if (this.#type === 'html') localName = asciiLower(localName);
+    if (this.type === 'html') localName = asciiLower(localName);
     return this.createElementNode(localName, HTML_NAMESPACE);
   }
 
@@ -370,7 +384,7 @@ export class DocumentImpl extends NodeImpl {
         `Invalid attribute local name ${JSON.stringify(localName)}`,
       );
     }
-    if (this.#type === 'html') localName = asciiLower(localName);
+    if (this.type === 'html') localName = asciiLower(localName);
     return this.createAttributeNode(localName, '', null, null);
   }
 
@@ -424,16 +438,16 @@ export class DocumentImpl extends NodeImpl {
   /** The base for resolving a base element's own href, or URLs without a base element. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fallback-base-url
   getFallbackBaseURL(): URLRecord {
-    if (this.#isIframeSrcdocDocument) {
-      if (this.#aboutBaseURL === null) throw new InternalError('A srcdoc document must have an about base URL');
-      return this.#aboutBaseURL;
+    if (this.isIframeSrcdocDocument) {
+      if (this.aboutBaseURL === null) throw new InternalError('A srcdoc document must have an about base URL');
+      return this.aboutBaseURL;
     }
-    const url = this.#url;
+    const url = this.url;
     if (
-      this.#aboutBaseURL !== null && url.scheme === 'about' && url.path === 'blank' &&
+      this.aboutBaseURL !== null && url.scheme === 'about' && url.path === 'blank' &&
       url.username === '' && url.password === '' && url.host === null
     ) {
-      return this.#aboutBaseURL;
+      return this.aboutBaseURL;
     }
     return url;
   }
@@ -448,35 +462,13 @@ export class DocumentImpl extends NodeImpl {
     first?.setFrozenBaseURL();
   }
 
-  /** The document's URL record, independent of its base URL. */
-  // https://dom.spec.whatwg.org/#concept-document-url
-  getURL(): URLRecord {
-    return this.#url;
-  }
-
-  setURL(url: URLRecord): void {
-    this.#url = url;
-  }
-
-  setContentType(contentType: string): void {
-    this.#contentType = contentType;
-  }
-
-  getBrowsingContext(): BrowsingContext | null {
-    return this.#browsingContext;
-  }
-
-  setBrowsingContext(browsingContext: BrowsingContext | null): void {
-    this.#browsingContext = browsingContext;
-  }
-
   /*
    * Return the navigable whose active Document is this one. Inactive
    * Documents intentionally have no node navigable, even while session
    * history retains them for possible later reactivation.
    */
   getNodeNavigable(): Navigable | null {
-    const navigable = this.#browsingContext?.navigable;
+    const navigable = this.browsingContext?.navigable;
     return navigable?.activeDocument === this ? navigable : null;
   }
 
@@ -508,169 +500,16 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 
-  getMode(): DocumentMode {
-    return this.#mode;
-  }
-
-  setMode(mode: DocumentMode): void {
-    this.#mode = mode;
-  }
-
-  setType(type: DocumentType): void {
-    this.#type = type;
-  }
-
-  getOrigin(): Origin {
-    return this.#origin;
-  }
-
-  setOrigin(origin: Origin): void {
-    this.#origin = origin;
-  }
-
-  getModuleMap(): ModuleMap {
-    return this.#moduleMap;
-  }
-
-  getPolicyContainer(): PolicyContainer {
-    return this.#policyContainer;
-  }
-
-  setPolicyContainer(policyContainer: PolicyContainer): void {
-    this.#policyContainer = policyContainer;
-  }
-
-  getPermissionsPolicy(): PermissionsPolicy {
-    return this.#permissionsPolicy;
-  }
-
-  setPermissionsPolicy(permissionsPolicy: PermissionsPolicy): void {
-    this.#permissionsPolicy = permissionsPolicy;
-  }
-
-  getActiveSandboxingFlagSet(): SandboxingFlagSet {
-    return this.#activeSandboxingFlagSet;
-  }
-
+  /** Copy the selected restrictions into the document's existing flag set. */
   setActiveSandboxingFlagSet(sandboxingFlagSet: ReadonlySet<SandboxingFlag>): void {
-    this.#activeSandboxingFlagSet.clear();
+    this.activeSandboxingFlagSet.clear();
     for (const flag of sandboxingFlagSet) {
-      this.#activeSandboxingFlagSet.add(flag);
+      this.activeSandboxingFlagSet.add(flag);
     }
   }
 
-  getOpenerPolicy(): OpenerPolicy {
-    return this.#openerPolicy;
-  }
-
-  setOpenerPolicy(openerPolicy: OpenerPolicy): void {
-    this.#openerPolicy = openerPolicy;
-  }
-
-  getLoadTimingInfo(): DocumentLoadTimingInfo {
-    return this.#loadTimingInfo;
-  }
-
-  setLoadTimingInfo(loadTimingInfo: DocumentLoadTimingInfo): void {
-    this.#loadTimingInfo = loadTimingInfo;
-  }
-
-  isInitialAboutBlank(): boolean {
-    return this.#isInitialAboutBlank;
-  }
-
-  setIsInitialAboutBlank(isInitialAboutBlank: boolean): void {
-    this.#isInitialAboutBlank = isInitialAboutBlank;
-  }
-
-  getAboutBaseURL(): URLRecord | null {
-    return this.#aboutBaseURL;
-  }
-
-  setAboutBaseURL(aboutBaseURL: URLRecord | null): void {
-    this.#aboutBaseURL = aboutBaseURL;
-  }
-
-  /** Whether this document was created from an iframe's srcdoc content. */
-  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#an-iframe-srcdoc-document
-  isIframeSrcdocDocument(): boolean {
-    return this.#isIframeSrcdocDocument;
-  }
-
-  setIsIframeSrcdocDocument(isSrcdoc: boolean): void {
-    this.#isIframeSrcdocDocument = isSrcdoc;
-  }
-
-  allowsDeclarativeShadowRoots(): boolean {
-    return this.#allowDeclarativeShadowRoots;
-  }
-
-  setAllowsDeclarativeShadowRoots(allow: boolean): void {
-    this.#allowDeclarativeShadowRoots = allow;
-  }
-
-  setCustomElementRegistry(registry: CustomElementRegistryImpl): void {
-    this.#customElementRegistry = registry;
-  }
-
-  getInternalAncestorOriginObjectsList(): Origin[] | null {
-    return this.#internalAncestorOriginObjectsList;
-  }
-
-  setInternalAncestorOriginObjectsList(origins: Origin[]): void {
-    this.#internalAncestorOriginObjectsList = origins;
-  }
-
-  getAncestorOriginsList(): string[] | null {
-    return this.#ancestorOriginsList;
-  }
-
-  setAncestorOriginsList(origins: string[]): void {
-    this.#ancestorOriginsList = origins;
-  }
-
-  isReadyForPostLoadTasks(): boolean {
-    return this.#readyForPostLoadTasks;
-  }
-
-  markReadyForPostLoadTasks(): void {
-    this.#readyForPostLoadTasks = true;
-  }
-
-  setCurrentDocumentReadiness(readiness: DocumentReadyState): void {
-    this.#currentDocumentReadiness = readiness;
-  }
-
-  setReferrer(referrer: string): void {
-    this.#referrer = referrer;
-  }
-
-  wasCreatedViaCrossOriginRedirects(): boolean {
-    return this.#wasCreatedViaCrossOriginRedirects;
-  }
-
-  setWasCreatedViaCrossOriginRedirects(value: boolean): void {
-    this.#wasCreatedViaCrossOriginRedirects = value;
-  }
-
-  getDuringLoadingNavigationID(): string | null {
-    return this.#duringLoadingNavigationID;
-  }
-
-  setDuringLoadingNavigationID(id: string | null): void {
-    this.#duringLoadingNavigationID = id;
-  }
-
-  getCompletelyLoadedTime(): number | null {
-    return this.#completelyLoadedTime;
-  }
-
-  setCompletelyLoadedTime(time: number): void {
-    this.#completelyLoadedTime = time;
-  }
-
   override getEventParent(event: EventImpl): EventTargetImpl | null {
-    if (event.type === 'load' || this.#browsingContext === null) {
+    if (event.type === 'load' || this.browsingContext === null) {
       return null;
     }
 
@@ -700,10 +539,6 @@ export class DocumentImpl extends NodeImpl {
     return this.#stylelet ??= new Stylelet(asDocument(this), {
       exec: this.styleletExec,
     });
-  }
-
-  getTreeScopeResolver(): TreeScopeResolver {
-    return this.#treeScopeResolver;
   }
 
   withWriter<T>(writer: DocumentWriter, callback: () => T): T {

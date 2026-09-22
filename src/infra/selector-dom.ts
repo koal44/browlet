@@ -1,8 +1,8 @@
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
-} from './index';
+} from './namespaces';
 
-// Selector guards for DOM objects supplied by the host.
+// Guards for DOM objects supplied by the host.
 
 const ELEMENT_NODE = 1;
 const DOCUMENT_FRAGMENT_NODE = 11;
@@ -25,6 +25,10 @@ export function isMathElement(e: Element): e is MathMLElement {
 
 export function isHtmlSvgOrMathElement(e: Element): e is HTMLElement | SVGElement | MathMLElement {
   return isHtmlElement(e) || isSvgElement(e) || isMathElement(e);
+}
+
+export function isHtmlLink(e: Element): e is HTMLLinkElement {
+  return isHtmlElement(e) && e.localName === 'link';
 }
 
 export function isHtmlMediaElement(e: Element): e is HTMLMediaElement {

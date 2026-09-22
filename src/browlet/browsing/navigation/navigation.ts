@@ -129,13 +129,13 @@ export function resolveNavigationHistoryBehavior(
   const activeURL = navigable.activeSessionHistoryEntry.url;
   let historyHandling: NavigationHistoryBehavior =
     urlsEqual(url, activeURL) &&
-    areSameOrigin(origin, activeDocument.getOrigin())
+    areSameOrigin(origin, activeDocument.origin)
       ? 'replace'
       : 'push';
 
   if (
     url.scheme === 'javascript' ||
-    activeDocument.isInitialAboutBlank()
+    activeDocument.isInitialAboutBlank
   ) {
     historyHandling = 'replace';
   }
@@ -172,7 +172,7 @@ export function finalizeCrossDocumentNavigation(
     throw new InternalError('Navigation requires an active Document');
   }
 
-  const browsingContext = document.getBrowsingContext();
+  const browsingContext = document.browsingContext;
   if (browsingContext === null) {
     throw new InternalError('Navigation Document has no browsing context');
   }
@@ -183,8 +183,8 @@ export function finalizeCrossDocumentNavigation(
       browsingContext.openerBrowsingContext !== null
     ) &&
     !areSameOrigin(
-      document.getOrigin(),
-      activeDocument.getOrigin(),
+      document.origin,
+      activeDocument.origin,
     )
   ) {
     historyEntry.documentState.navigableTargetName = '';
@@ -226,7 +226,7 @@ function applyPushOrReplaceHistoryStep(
 ): void {
   const document = historyEntry.documentState.document;
   if (document === null) return;
-  const browsingContext = document.getBrowsingContext();
+  const browsingContext = document.browsingContext;
   const realm = getRelevantRealm(document);
   if (browsingContext === null) {
     throw new InternalError('Navigation Document has no browsing context');

@@ -72,7 +72,7 @@ export function createDocumentState(
 export function createSessionHistoryEntry(
   documentState: DocumentBackedState,
 ): SessionHistoryEntry {
-  const url = documentState.document.getURL();
+  const url = documentState.document.url;
 
   // The History and Navigation APIs will add their serialized-state,
   // navigation-key, scroll-restoration, and persisted-user-state slots.

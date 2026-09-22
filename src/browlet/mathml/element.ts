@@ -40,7 +40,7 @@ export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
 });
 
 export function isMathMLElement(
-  element: Element,
+  element: ElementImpl,
 ): element is MathMLElementImpl {
-  return element.namespaceURI === MATHML_NAMESPACE;
+  return element instanceof MathMLElementImpl;
 }

@@ -27,7 +27,7 @@ export class Navigable {
     parent: Navigable | null = null,
   ) {
     const document = documentState.document;
-    const browsingContext = document.getBrowsingContext();
+    const browsingContext = document.browsingContext;
     if (browsingContext === null) throw new InternalError('An active Document needs a browsing context');
 
     this.parent = parent;
@@ -52,7 +52,7 @@ export class Navigable {
     const previousDocument = this.#activeSessionHistoryEntry.documentState.document;
     const document = entry.documentState.document;
     if (document !== null) {
-      const browsingContext = document.getBrowsingContext();
+      const browsingContext = document.browsingContext;
       if (browsingContext === null) throw new InternalError('An active Document needs a browsing context');
       browsingContext.setNavigable(this);
     }
@@ -71,7 +71,7 @@ export class Navigable {
   get activeBrowsingContext(): BrowsingContext | null {
     const document = this.activeDocument;
     if (document === null) return null;
-    return document.getBrowsingContext();
+    return document.browsingContext;
   }
 
   get activeWindow(): WindowImpl | null {
@@ -146,10 +146,10 @@ export function createNewTopLevelTraversable(
   const documentState = createDocumentState(document);
   documentState.initiatorOrigin = opener === null
     ? null
-    : document.getOrigin();
-  documentState.origin = document.getOrigin();
+    : document.origin;
+  documentState.origin = document.origin;
   documentState.navigableTargetName = targetName;
-  documentState.aboutBaseURL = document.getAboutBaseURL();
+  documentState.aboutBaseURL = document.aboutBaseURL;
 
   const traversable = new TopLevelTraversable(documentState);
   const initialHistoryEntry = traversable.activeSessionHistoryEntry;

@@ -160,7 +160,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
   const document = createDocument(realm);
-  document.setBrowsingContext(context);
+  document.browsingContext = context;
   window.setAssociatedDocument(document);
   retargetWindowProxy(proxy, window);
   return { agent, realm, window, platformWindow, document, context };

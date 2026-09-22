@@ -48,7 +48,7 @@ export function parseCacheControl(input: string): CacheDirective[] | null {
 
 /** RFC 9111 §1.2.2 — nonnegative seconds, saturating on integer overflow. */
 export function parseDeltaSeconds(input: string): number | null {
-  if (input === '' || /[^0-9]/.test(input)) return null;
+  if (input === '' || nonDigitPattern.test(input)) return null;
   return Math.min(Number(input), Number.MAX_SAFE_INTEGER);
 }
 
@@ -56,7 +56,7 @@ export function parseDeltaSeconds(input: string): number | null {
 export function parseVary(input: string): string[] | null {
   const names: string[] = [];
   for (const member of input.split(',')) {
-    const name = member.replace(/^[ \t]+|[ \t]+$/g, '');
+    const name = member.replace(surroundingWhitespacePattern, '');
     if (!name) continue;
     if (!isHTTPToken(name)) return null;
     names.push(name.toLowerCase());
@@ -83,3 +83,6 @@ export type CacheDirective = {
   name: string;
   value: string | null;
 };
+
+const nonDigitPattern = /[^0-9]/;
+const surroundingWhitespacePattern = /^[ \t]+|[ \t]+$/g;

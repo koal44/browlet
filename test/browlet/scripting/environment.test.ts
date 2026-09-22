@@ -47,13 +47,13 @@ describe('Window environment cross-site ancestry', () => {
     const child = createEnvironment('https://b.example.com/', middle.navigable);
     expect(child.environment.hasCrossSiteAncestor).toBe(false);
 
-    middle.document.setOrigin(obtainURLOrigin(parseURL('https://other.test/').url!));
+    middle.document.origin = obtainURLOrigin(parseURL('https://other.test/').url!);
     expect(child.environment.hasCrossSiteAncestor).toBe(true);
   });
 
   it('does not grant same-site cookie access to a Document without a current navigable', () => {
     const top = createEnvironment('https://example.com/');
-    top.document.setBrowsingContext(null);
+    top.document.browsingContext = null;
     expect(top.environment.hasCrossSiteAncestor).toBe(true);
   });
 });
@@ -89,7 +89,7 @@ describe('Window environment referrer sources', () => {
   it('uses the live Document URL, independently of creation and base URLs', () => {
     const { document, environment } = createEnvironment('https://example.test/initial');
     const url = parseURL('https://example.test/current?q=1#fragment').url!;
-    document.setURL(url);
+    document.url = url;
     const root = document.createElement('html');
     const base = document.createElement('base');
     base.setAttribute('href', 'https://different.test/base/');
@@ -107,15 +107,15 @@ describe('Window environment referrer sources', () => {
 
   it('does not disclose the URL of an opaque-origin Document', () => {
     const { document, environment } = createEnvironment('https://example.test/');
-    document.setOrigin(obtainURLOrigin(parseURL('data:,opaque').url!));
+    document.origin = obtainURLOrigin(parseURL('data:,opaque').url!);
     expect(environment.getReferrerSource()).toBeNull();
   });
 
   it('exposes the stored srcdoc flag rather than inferring it from the URL', () => {
     const { document } = createEnvironment('about:srcdoc');
-    expect(document.isIframeSrcdocDocument()).toBe(false);
-    document.setIsIframeSrcdocDocument(true);
-    expect(document.isIframeSrcdocDocument()).toBe(true);
+    expect(document.isIframeSrcdocDocument).toBe(false);
+    document.isIframeSrcdocDocument = true;
+    expect(document.isIframeSrcdocDocument).toBe(true);
   });
 
   // Iframe creation must eventually supply the content navigable and its container.
@@ -137,7 +137,7 @@ describe('Window environment reporting sources', () => {
   it('uses the live Document URL independently of the base URL and creation URL', () => {
     const { document, environment } = createEnvironment('https://example.test/initial');
     const url = parseURL('https://example.test/current#fragment').url!;
-    document.setURL(url);
+    document.url = url;
     const root = document.createElement('html');
     const base = document.createElement('base');
     base.setAttribute('href', 'https://different.test/base/');
@@ -149,9 +149,9 @@ describe('Window environment reporting sources', () => {
 
   it('reports the srcdoc Document itself even when its origin prevents a referrer', () => {
     const { document, environment } = createEnvironment('about:srcdoc');
-    document.setIsIframeSrcdocDocument(true);
+    document.isIframeSrcdocDocument = true;
     expect(environment.getReferrerSource()).toBeNull();
-    expect(environment.getReportingSource()).toBe(document.getURL());
+    expect(environment.getReportingSource()).toBe(document.url);
   });
 });
 
@@ -176,7 +176,7 @@ describe('Window environment prompt targets', () => {
     const window = realm.globalObject as Window & typeof globalThis;
     const source = new window.Request('https://resource.test/');
     context.unwrap(source, RequestImpl)!.getRequest().populateFromClient();
-    top.document.setOrigin(obtainURLOrigin(parseURL('https://changed.test/').url!));
+    top.document.origin = obtainURLOrigin(parseURL('https://changed.test/').url!);
     const copy = context.unwrap(new window.Request(source), RequestImpl)!.getRequest();
     expect(copy.traversableForUserPrompts).toBe(top.navigable);
     expect(copy.origin).toBe(child.environment.origin);
@@ -184,7 +184,7 @@ describe('Window environment prompt targets', () => {
 
   it('has no prompt target when its document has no navigable', () => {
     const top = createEnvironment('https://example.test/');
-    top.document.setBrowsingContext(null);
+    top.document.browsingContext = null;
     expect(top.environment.getTraversableForUserPrompts()).toBeNull();
   });
 });
@@ -204,9 +204,9 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   const realm = environment.realm;
   const proxy = realm.globalThis as WindowProxy;
   const document = createDocument(realm);
-  document.setURL(creationURL);
-  document.setOrigin(origin);
-  document.setBrowsingContext(new BrowsingContext(proxy));
+  document.url = creationURL;
+  document.origin = origin;
+  document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
   retargetWindowProxy(proxy, window);
   const documentState = createDocumentState(document);

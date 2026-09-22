@@ -76,7 +76,7 @@ export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
 });
 
 export function isHTMLElement(
-  element: Element,
+  element: ElementImpl,
 ): element is HTMLElementImpl {
-  return element.namespaceURI === HTML_NAMESPACE;
+  return element instanceof HTMLElementImpl;
 }

@@ -152,7 +152,7 @@ describe('Frozen base URLs', () => {
     const base = document.createElement('base');
     base.href = 'relative/';
     root.appendChild(base);
-    document.setURL(parseURL('https://example.test/new/page').url!);
+    document.url = parseURL('https://example.test/new/page').url!;
     expect(document.baseURI).toBe('https://example.test/dir/relative/');
     expect(base.href).toBe('https://example.test/new/relative/');
 
@@ -165,7 +165,7 @@ describe('Frozen base URLs', () => {
     const first = document.createElement('base');
     first.href = 'first/';
     root.appendChild(first);
-    document.setURL(parseURL('https://example.test/new/page').url!);
+    document.url = parseURL('https://example.test/new/page').url!;
     const second = document.createElement('base');
     second.href = 'second/';
     root.appendChild(second);
@@ -186,7 +186,7 @@ describe('Frozen base URLs', () => {
     const base = document.createElement('base');
     base.href = 'https://[';
     root.appendChild(base);
-    document.setURL(parseURL('https://example.test/new/page').url!);
+    document.url = parseURL('https://example.test/new/page').url!;
     expect(document.baseURI).toBe('https://example.test/dir/page');
     base.attributes.getNamedItem('href')!.value = 'https://[';
     expect(document.baseURI).toBe('https://example.test/new/page');
@@ -195,7 +195,7 @@ describe('Frozen base URLs', () => {
 
 function createDocument() {
   const document = new DocumentImpl();
-  document.setURL(parseURL('https://example.test/dir/page').url!);
+  document.url = parseURL('https://example.test/dir/page').url!;
   const root = document.createElement('html');
   document.appendChild(root);
   return { document, root };

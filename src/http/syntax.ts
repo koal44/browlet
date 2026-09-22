@@ -29,7 +29,7 @@ export function collectHTTPQuotedString(c: TextCursor, extractValue = false): st
 
 /** RFC 9110 §5.6.2 — the nonempty token production, also used for methods/names. */
 export function isHTTPToken(value: string): boolean {
-  return value !== '' && !/[^!#$%&'*+\-.^_`|~0-9A-Za-z]/.test(value);
+  return value !== '' && !invalidTokenCharacterPattern.test(value);
 }
 
 /** Fetch §2.2. These predicates operate on one isomorphically decoded byte. */
@@ -44,3 +44,5 @@ function isHTTPNewline(character: string): boolean {
 export function isHTTPTabOrSpace(character: string): boolean {
   return character === '\t' || character === ' ';
 }
+
+const invalidTokenCharacterPattern = /[^!#$%&'*+\-.^_`|~0-9A-Za-z]/;

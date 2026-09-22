@@ -436,18 +436,6 @@ export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
   interface: 'Element', mixin: nonDocumentTypeChildNodeIDL.name,
 });
 
-export function isHTMLElement(
-  element: Element,
-): element is HTMLElement {
-  return element.namespaceURI === HTML_NAMESPACE;
-}
-
-export function isHTMLHeadElement(
-  element: Element,
-): element is HTMLHeadElement {
-  return isHTMLElement(element) && element.localName === 'head';
-}
-
 function normalizeNamespace(namespaceURI: string | null): string | null {
   return namespaceURI === '' ? null : namespaceURI;
 }

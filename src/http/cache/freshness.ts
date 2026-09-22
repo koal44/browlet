@@ -20,7 +20,7 @@ export function calculateCacheFreshness(
   const directives = parsedDirectives ?? [];
   const date = parseHTTPDate(fields.date ?? '', responseTime) ?? responseTime;
   // RFC 9111 §5.1: use only the first Age member, and ignore invalid values.
-  const ageField = (fields.age ?? '').split(',', 1)[0]!.replace(/^[ \t]+|[ \t]+$/g, '');
+  const ageField = (fields.age ?? '').split(',', 1)[0]!.replace(surroundingWhitespacePattern, '');
   const age = parseDeltaSeconds(ageField) ?? 0;
   const apparentAge = Math.max(0, (responseTime - date) / 1000);
   const responseDelay = (responseTime - requestTime) / 1000;
@@ -104,3 +104,5 @@ function getFreshnessLifetime(
   const lastModified = parseHTTPDate(fields.lastModified ?? '', responseTime);
   return lastModified === null ? 0 : Math.max(0, (date - lastModified) / 10_000);
 }
+
+const surroundingWhitespacePattern = /^[ \t]+|[ \t]+$/g;

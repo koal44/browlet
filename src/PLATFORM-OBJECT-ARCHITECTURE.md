@@ -198,6 +198,15 @@ private methods for work confined to that class, and statics for factories,
 predicates, or class-level algorithms. An internal operation does not need to be
 static merely to distinguish it from the declared platform API.
 
+Automatic attribute bindings use an implementation getter when present, and
+otherwise use the same-named field on the implementation instance or class.
+Instance fields are checked when accessed, after construction. Both paths
+retain Web IDL conversion, projection, and exception handling; the declaration
+still determines whether the author can assign the attribute. Public
+implementation fields do not become platform properties unless declared.
+Document therefore stores ordinary state in fields, retaining accessors for
+computed values and API aliases, and methods for operations with behavior.
+
 Fetch's internal `FetchRequest`, `FetchResponse`, and `FetchHeaders` own network
 state and algorithms. The projected APIs use `RequestImpl`, `ResponseImpl`, and
 `HeadersImpl`. A `HeadersImpl` shares the internal `FetchHeaders` while keeping

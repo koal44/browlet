@@ -1,5 +1,5 @@
 import {
-  defineElementInterface, type ElementCreationContext,
+  defineElementInterface, type ElementCreationContext, type ElementImpl,
 } from '../../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
@@ -64,8 +64,7 @@ export const htmlStyleElementIncludesLinkStyleIDL = defineIncludes({
 });
 
 export function isHTMLStyleElement(
-  element: Element,
+  element: ElementImpl,
 ): element is HTMLStyleElementImpl {
-  return element.namespaceURI === HTML_NAMESPACE &&
-    element.localName === 'style';
+  return element instanceof HTMLStyleElementImpl;
 }

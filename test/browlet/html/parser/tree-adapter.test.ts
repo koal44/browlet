@@ -27,14 +27,14 @@ describe('Parser tree adapter', () => {
       .parse('<!doctype html><main>content</main>');
     const quirks = createParser().parse('<main>content</main>');
 
-    expect(standards.getMode()).toBe(DocumentMode.NoQuirks);
+    expect(standards.mode).toBe(DocumentMode.NoQuirks);
     expect(standards.type).toBe('html');
     expect(standards.contentType).toBe('text/html');
     expect(standards.URL).toBe('about:blank');
     expect(standards.characterSet).toBe('UTF-8');
     expect(standards.doctype?.name).toBe('html');
     expect(standards.documentElement?.localName).toBe('html');
-    expect(quirks.getMode()).toBe(DocumentMode.Quirks);
+    expect(quirks.mode).toBe(DocumentMode.Quirks);
   });
 
   it('parses comments as comment nodes', () => {
@@ -123,7 +123,7 @@ describe('Parser tree adapter', () => {
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
 
-    expect(document.getMode()).toBe(DocumentMode.Quirks);
+    expect(document.mode).toBe(DocumentMode.Quirks);
     expect(parser.getDocumentMode(document)).toBe(html.DOCUMENT_MODE.QUIRKS);
   });
 
@@ -154,7 +154,7 @@ describe('Parser tree adapter', () => {
 
 function createParser(): HTMLTreeAdapter {
   const document = createDocument();
-  document.setType('html');
-  document.setContentType('text/html');
+  document.type = 'html';
+  document.contentType = 'text/html';
   return new HTMLTreeAdapter(document);
 }

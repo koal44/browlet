@@ -55,7 +55,7 @@ describe('Fetch client settings ownership', () => {
     const environment = realm.environment;
     const request = new FetchRequest(parseURL('https://example.test/').url!, environment, environment.userAgent);
     request.origin = environment.origin;
-    const container = document!.getPolicyContainer();
+    const container = document!.policyContainer;
 
     expect(request.client!.policyContainer).toBe(container);
     expect(container.embedderPolicy).toEqual({
@@ -70,7 +70,7 @@ describe('Fetch client settings ownership', () => {
     container.embedderPolicy.value = 'credentialless';
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
 
-    document!.setPolicyContainer(createPolicyContainer());
+    document!.policyContainer = createPolicyContainer();
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
   });
 
@@ -90,7 +90,7 @@ describe('Fetch client settings ownership', () => {
     expect(isOffline(request.client!)).toBe(true);
     expect(isOffline(otherSettings)).toBe(false);
 
-    const context = first.document!.getBrowsingContext()!;
+    const context = first.document!.browsingContext!;
     expect(context.group!.userAgent).toBe(environment.userAgent);
     context.group!.remove(context);
     expect(context.group).toBeNull();

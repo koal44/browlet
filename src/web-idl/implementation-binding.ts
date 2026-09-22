@@ -426,7 +426,7 @@ type AsyncIteratorValue = {
   return?: (this: object, value: unknown) => Promise<unknown> | PromiseValue<unknown>;
 };
 
-// Project helper: register adapters for implementation accessors.
+// Project helper: register adapters for implementation accessors or fields.
 // Supplies attribute behavior to Web IDL §3.7.6 Attributes.
 function registerAttribute(
   memberBinding: MemberBinding,
@@ -436,28 +436,39 @@ function registerAttribute(
   realmBinding: RealmBinding,
 ): void {
   const descriptor = findDescriptor(target, member.name);
-  if (!descriptor?.get) {
-    throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
-  }
-
-  const getterValue: unknown = Reflect.get(descriptor, 'get');
-  const setterValue: unknown = Reflect.get(descriptor, 'set');
-  const get = getterValue as (this: object | null) => unknown;
-  const set = setterValue as
-    ((this: object | null, value: unknown) => void) | undefined;
+  const getterValue: unknown = descriptor && Reflect.get(descriptor, 'get');
+  const setterValue: unknown = descriptor && Reflect.get(descriptor, 'set');
+  // Instance fields exist only after construction. Check them on access rather
+  // than creating an implementation merely to inspect its shape.
+  const get = getterValue as ((this: object) => unknown) | undefined ?? function(this: object): unknown {
+    if (!Reflect.has(this, member.name)) {
+      throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
+    }
+    return Reflect.get(this, member.name);
+  };
+  const set = getterValue !== undefined
+    ? setterValue as ((this: object, value: unknown) => void) | undefined
+    : function(this: object, value: unknown): void {
+      if (!Reflect.has(this, member.name)) {
+        throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
+      }
+      if (!Reflect.set(this, member.name, value)) {
+        throw new InternalError(`Web IDL attribute ${member.name} is not writable`);
+      }
+    };
   memberBinding.attributeSteps = {
-    // Project helper: invoke the implementation getter through our exception boundary.
+    // Project helper: read the implementation through our exception boundary.
     get(receiver) {
-      return callImplementation(get, receiver?.implInst ?? null, [], realmBinding);
+      return callImplementation(get, receiver?.implInst ?? target, [], realmBinding);
     },
     ...(set && !member.readonly
       ? {
-        // Project helper: adapt the converted attribute value before invoking the implementation setter.
+        // Project helper: adapt the converted attribute value before storing it.
         set(receiver, value) {
           const operationContext = receiver?.binding.context ?? context;
           callImplementation(
             set,
-            receiver?.implInst ?? null,
+            receiver?.implInst ?? target,
             [
               adaptIDLToImpl(
                 value,

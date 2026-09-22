@@ -26,7 +26,7 @@ describe('HTML timers', () => {
     fixture.host.advanceBy(4);
 
     const inactiveDocument = new DocumentImpl();
-    inactiveDocument.setBrowsingContext(fixture.traversable.activeBrowsingContext);
+    inactiveDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
       createSessionHistoryEntry(createDocumentState(inactiveDocument));
     fixture.host.advanceBy(100);

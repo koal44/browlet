@@ -111,9 +111,9 @@ function parseItem(input: TextCursor): StructuredItem | null {
 function parseBareItem(input: TextCursor): StructuredBareItem | null {
   const first = input.peek();
   if (first === '-' || isDigit(first)) return parseNumber(input);
-  if (/^[A-Za-z*]/.test(first)) {
+  if (tokenStartPattern.test(first)) {
     const start = input.pos();
-    input.consumeWhile((char) => /[A-Za-z0-9!#$%&'*+\-.^_`|~:/]/.test(char));
+    input.consumeWhile((char) => tokenCharacterPattern.test(char));
     return { type: 'token', value: input.slice(start) };
   }
   switch (first) {
@@ -155,9 +155,9 @@ function parseParameters(input: TextCursor): StructuredParameters | null {
 
 /** RFC 9651 §4.2.3.3, Keys. */
 function parseKey(input: TextCursor): string | null {
-  if (!/^[a-z*]/.test(input.peek())) return null;
+  if (!keyStartPattern.test(input.peek())) return null;
   const start = input.pos();
-  input.consumeWhile((char) => /[a-z0-9_.*-]/.test(char));
+  input.consumeWhile((char) => keyCharacterPattern.test(char));
   return input.slice(start);
 }
 
@@ -201,7 +201,7 @@ function parseString(input: TextCursor): StructuredBareItem | null {
 function parseBytes(input: TextCursor): StructuredBareItem | null {
   input.advance();
   const start = input.pos();
-  input.consumeWhile((char) => /[A-Za-z0-9+/=]/.test(char));
+  input.consumeWhile((char) => base64CharacterPattern.test(char));
   const encoded = input.slice(start);
   if (!input.match(':')) return null;
   // Validate the alphabet before the shared forgiving decoder can strip space.
@@ -223,7 +223,7 @@ function parseDisplayString(input: TextCursor): StructuredBareItem | null {
     if (char < ' ' || char > '~') return null;
     if (char === '%') {
       const hex = input.next() + input.next();
-      if (!/^[0-9a-f]{2}$/.test(hex)) return null;
+      if (!lowercaseHexBytePattern.test(hex)) return null;
       bytes.push(Number.parseInt(hex, 16));
     } else {
       bytes.push(char.charCodeAt(0));
@@ -239,3 +239,10 @@ function isDigit(char: string): boolean {
 function isOWS(char: string): boolean {
   return char === ' ' || char === '\t';
 }
+
+const tokenStartPattern = /^[A-Za-z*]/;
+const tokenCharacterPattern = /[A-Za-z0-9!#$%&'*+\-.^_`|~:/]/;
+const keyStartPattern = /^[a-z*]/;
+const keyCharacterPattern = /[a-z0-9_.*-]/;
+const base64CharacterPattern = /[A-Za-z0-9+/=]/;
+const lowercaseHexBytePattern = /^[0-9a-f]{2}$/;

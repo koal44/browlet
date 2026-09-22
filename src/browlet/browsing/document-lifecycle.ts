@@ -34,9 +34,9 @@ export function createAndInitializeDocument(
 
   let window: WindowImpl;
   if (
-    activeDocument.isInitialAboutBlank() &&
+    activeDocument.isInitialAboutBlank &&
     areSameOriginDomain(
-      activeDocument.getOrigin(),
+      activeDocument.origin,
       navigationParams.origin,
     )
   ) {
@@ -71,24 +71,22 @@ export function createAndInitializeDocument(
     navigationParams.response.timingInfo.startTime,
   );
 
-  document.setType(type);
-  document.setContentType(contentType);
-  document.setOrigin(navigationParams.origin);
-  document.setBrowsingContext(browsingContext);
-  document.setPolicyContainer(navigationParams.policyContainer);
-  document.setPermissionsPolicy(permissionsPolicy);
+  document.type = type;
+  document.contentType = contentType;
+  document.origin = navigationParams.origin;
+  document.browsingContext = browsingContext;
+  document.policyContainer = navigationParams.policyContainer;
+  document.permissionsPolicy = permissionsPolicy;
   document.setActiveSandboxingFlagSet(navigationParams.finalSandboxingFlagSet);
-  document.setOpenerPolicy(navigationParams.openerPolicy);
-  document.setLoadTimingInfo(loadTimingInfo);
-  document.setWasCreatedViaCrossOriginRedirects(
-    navigationParams.response.hasCrossOriginRedirects,
-  );
-  document.setDuringLoadingNavigationID(navigationParams.id);
-  document.setURL(creationURL);
-  document.setCurrentDocumentReadiness('loading');
-  document.setAboutBaseURL(navigationParams.aboutBaseURL);
-  document.setAllowsDeclarativeShadowRoots(true);
-  document.setCustomElementRegistry(new CustomElementRegistryImpl());
+  document.openerPolicy = navigationParams.openerPolicy;
+  document.loadTimingInfo = loadTimingInfo;
+  document.wasCreatedViaCrossOriginRedirects = navigationParams.response.hasCrossOriginRedirects;
+  document.duringLoadingNavigationID = navigationParams.id;
+  document.url = creationURL;
+  document.currentDocumentReadiness = 'loading';
+  document.aboutBaseURL = navigationParams.aboutBaseURL;
+  document.allowDeclarativeShadowRoots = true;
+  document.customElementRegistry = new CustomElementRegistryImpl();
 
   window.setAssociatedDocument(document);
   initializeDocumentAncestry(document, navigationParams);
@@ -102,7 +100,7 @@ export function createAndInitializeDocument(
 export function completelyFinishLoading(
   document: DocumentImpl,
 ): void {
-  const browsingContext = document.getBrowsingContext();
+  const browsingContext = document.browsingContext;
   if (browsingContext === null) {
     throw new InternalError('A completely loaded Document needs a browsing context');
   }
@@ -114,17 +112,17 @@ export function completelyFinishLoading(
   const realm = getRelevantRealm(window);
   const environment = realm.environment;
   const now = environment.timing.currentHighResolutionTime().toTimestamp();
-  const timing = document.getLoadTimingInfo();
+  const timing = document.loadTimingInfo;
   timing.domInteractiveTime = now;
   timing.domContentLoadedEventStartTime = now;
   timing.domContentLoadedEventEndTime = now;
   timing.domCompleteTime = now;
   timing.loadEventStartTime = now;
-  document.setCurrentDocumentReadiness('complete');
-  document.markReadyForPostLoadTasks();
+  document.currentDocumentReadiness = 'complete';
+  document.readyForPostLoadTasks = true;
   fireEvent('load', window);
   timing.loadEventEndTime = environment.timing.currentHighResolutionTime().toTimestamp();
-  document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
+  document.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
 }
 
 function obtainBrowsingContextForNavigationResponse(
@@ -171,8 +169,8 @@ function initializeDocumentAncestry(
   // A top-level Document has no ancestor origins, so its iframe referrer
   // policy cannot affect either list.
   void navigationParams.iframeReferrerPolicy;
-  document.setInternalAncestorOriginObjectsList([]);
-  document.setAncestorOriginsList([]);
+  document.internalAncestorOriginObjectsList = [];
+  document.ancestorOriginsList = [];
 }
 
 function initializeDocumentCSP(_document: DocumentImpl): void {
@@ -185,11 +183,9 @@ function initializeDocumentReferrer(
   request: NavigationRequest | null,
 ): void {
   if (request === null) return;
-  document.setReferrer(
-    request.referrer === null
-      ? ''
-      : serializeURL(request.referrer),
-  );
+  document.referrer = request.referrer === null
+    ? ''
+    : serializeURL(request.referrer);
 }
 
 function createNavigationTimingEntry(

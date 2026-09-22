@@ -147,11 +147,11 @@ export class WindowEnvironment extends Environment {
   }
 
   get moduleMap(): ModuleMap {
-    return this.window.getAssociatedDocument().getModuleMap();
+    return this.window.getAssociatedDocument().moduleMap;
   }
 
   get origin(): Origin {
-    return this.window.getAssociatedDocument().getOrigin();
+    return this.window.getAssociatedDocument().origin;
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
@@ -162,21 +162,21 @@ export class WindowEnvironment extends Environment {
     if (navigable === null) return true;
     for (let parent = navigable.parent; parent !== null; parent = parent.parent) {
       const parentDocument = parent.activeDocument;
-      if (parentDocument === null || !areSameSite(parentDocument.getOrigin(), document.getOrigin())) return true;
+      if (parentDocument === null || !areSameSite(parentDocument.origin, document.origin)) return true;
       document = parentDocument;
     }
     return false;
   }
 
   get policyContainer(): PolicyContainer {
-    return this.window.getAssociatedDocument().getPolicyContainer();
+    return this.window.getAssociatedDocument().policyContainer;
   }
 
   get crossOriginIsolatedCapability(): boolean {
     const mode = this.realm.agent.agentCluster?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
 
-    void this.window.getAssociatedDocument().getPermissionsPolicy();
+    void this.window.getAssociatedDocument().permissionsPolicy;
     throw new InternalError(
       'The cross-origin-isolated permissions-policy check is not implemented',
     );
@@ -185,7 +185,7 @@ export class WindowEnvironment extends Environment {
   get timeOrigin(): Moment {
     return new Moment(
       monotonicClock,
-      this.window.getAssociatedDocument().getLoadTimingInfo().navigationStartTime,
+      this.window.getAssociatedDocument().loadTimingInfo.navigationStartTime,
     );
   }
 
@@ -196,18 +196,18 @@ export class WindowEnvironment extends Environment {
   // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
   override getReferrerSource(): URLRecord | null {
     let document = this.window.getAssociatedDocument();
-    if (document.getOrigin().kind === 'opaque') return null;
-    while (document.isIframeSrcdocDocument()) {
-      const container = document.getBrowsingContext()?.navigable?.container ?? null;
+    if (document.origin.kind === 'opaque') return null;
+    while (document.isIframeSrcdocDocument) {
+      const container = document.browsingContext?.navigable?.container ?? null;
       if (container === null) throw new InternalError('A srcdoc document needs a navigable container');
       document = container.getNodeDocument()!;
     }
-    return document.getURL();
+    return document.url;
   }
 
   // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
   override getReportingSource(): URLRecord {
-    return this.window.getAssociatedDocument().getURL();
+    return this.window.getAssociatedDocument().url;
   }
 
   // https://fetch.spec.whatwg.org/#populate-request-from-client

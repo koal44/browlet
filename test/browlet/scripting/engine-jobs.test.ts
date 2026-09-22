@@ -61,7 +61,7 @@ describe('HTML generic and timeout jobs', () => {
 
     const activeEntry = fixture.traversable.activeSessionHistoryEntry;
     const otherDocument = new DocumentImpl();
-    otherDocument.setBrowsingContext(fixture.traversable.activeBrowsingContext);
+    otherDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
       createSessionHistoryEntry(createDocumentState(otherDocument));
     advance(10000);

@@ -9,7 +9,7 @@ export function parseHTMLDocument(
   options: DocumentConstructionOptions = {},
 ): DocumentImpl & Document {
   const document = createDocument(options);
-  document.setType('html');
-  document.setContentType('text/html');
+  document.type = 'html';
+  document.contentType = 'text/html';
   return asDocument(new HTMLTreeAdapter(document).parse(source));
 }

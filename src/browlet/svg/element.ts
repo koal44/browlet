@@ -45,7 +45,7 @@ export const svgElementIncludesElementCSSInlineStyleIDL = defineIncludes({
 });
 
 export function isSVGElement(
-  element: Element,
+  element: ElementImpl,
 ): element is SVGElementImpl {
-  return element.namespaceURI === SVG_NAMESPACE;
+  return element instanceof SVGElementImpl;
 }

@@ -4,15 +4,15 @@
  * recommends for caches. `now` supplies the reference for two-digit years.
  */
 export function parseHTTPDate(input: string, now: number): number | null {
-  const value = input.replace(/^[ \t]+|[ \t]+$/g, '');
-  let match: string[] | null = /^([a-z]{3}), ([0-9]{2}) ([a-z]{3}) ([0-9]{4}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i.exec(value);
+  const value = input.replace(surroundingWhitespacePattern, '');
+  let match: string[] | null = imfFixdatePattern.exec(value);
   let obsolete = false;
   if (!match) {
-    match = /^([a-z]+), ([0-9]{2})-([a-z]{3})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i.exec(value);
+    match = rfc850DatePattern.exec(value);
     obsolete = match !== null;
   }
   if (!match) {
-    const asctime = /^([a-z]{3}) ([a-z]{3}) ([ 0-9][0-9]) ([0-9]{2}):([0-9]{2}):([0-9]{2}) ([0-9]{4})$/i.exec(value);
+    const asctime = asctimeDatePattern.exec(value);
     if (!asctime || asctime[0] !== value) return null;
     match = [asctime[0], asctime[1]!, asctime[3]!, asctime[2]!,
       asctime[7]!, asctime[4]!, asctime[5]!, asctime[6]!];
@@ -53,3 +53,8 @@ export function parseHTTPDate(input: string, now: number): number | null {
 const shortWeekdays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const longWeekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+const surroundingWhitespacePattern = /^[ \t]+|[ \t]+$/g;
+const imfFixdatePattern = /^([a-z]{3}), ([0-9]{2}) ([a-z]{3}) ([0-9]{4}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i;
+const rfc850DatePattern = /^([a-z]+), ([0-9]{2})-([a-z]{3})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i;
+const asctimeDatePattern = /^([a-z]{3}) ([a-z]{3}) ([ 0-9][0-9]) ([0-9]{2}):([0-9]{2}):([0-9]{2}) ([0-9]{4})$/i;

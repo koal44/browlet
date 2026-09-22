@@ -233,7 +233,7 @@ export class WindowImpl
   }
 
   getWindowProxy(): WindowProxy {
-    const browsingContext = this.getAssociatedDocument().getBrowsingContext();
+    const browsingContext = this.getAssociatedDocument().browsingContext;
     if (!browsingContext) {
       throw new InternalError('Window Document has no browsing context');
     }

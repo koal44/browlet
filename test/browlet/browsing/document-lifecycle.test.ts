@@ -108,15 +108,15 @@ describe('browsing context groups', () => {
     expect(agent.windowObjects).toEqual(new Set([window]));
   });
 
-  it('retains its Window before global-object installation', () => {
+  it('retains its Window before installation and rejects premature environment access', () => {
     const window = new WindowImpl(new URL('about:blank'));
     const document = new DocumentImpl();
     window.setAssociatedDocument(document);
     const realm = new WindowRealm(window, {
       agent: new WindowAgent(),
       environmentRecord: createEnvironmentRecord({
-        userAgent: new UserAgent(), creationURL: document.getURL(),
-        topLevelCreationURL: document.getURL(), topLevelOrigin: document.getOrigin(),
+        userAgent: new UserAgent(), creationURL: document.url,
+        topLevelCreationURL: document.url, topLevelOrigin: document.origin,
         targetBrowsingContext: null, isSecureContext: false,
       }),
     });
@@ -134,7 +134,7 @@ describe('browsing context groups', () => {
     expect(() => realm.environment).toThrow('Realm has no environment');
   });
 
-  it('requires an attached environment for a browser-facing realm lookup', () => {
+  it('finds the relevant realm before its environment is attached', () => {
     const realm = new Realm();
     const object = realm.evaluate('({})', 'unattached-object.js') as object;
 
@@ -186,8 +186,8 @@ describe('browsing context groups', () => {
 describe('navigables', () => {
   it('constructs one pending current and active history entry', () => {
     const document = new DocumentImpl();
-    document.setBrowsingContext(new BrowsingContext());
-    document.setURL(requireURL('https://example.test/page'));
+    document.browsingContext = new BrowsingContext();
+    document.url = requireURL('https://example.test/page');
     const documentState = createDocumentState(document);
     const activity: boolean[] = [];
     document.observeFullyActiveState((active) => { activity.push(active); });
@@ -201,7 +201,7 @@ describe('navigables', () => {
       .toBe(documentState);
     expect(serializeURL(traversable.activeSessionHistoryEntry.url))
       .toBe(document.URL);
-    expect(traversable.activeSessionHistoryEntry.url).toBe(document.getURL());
+    expect(traversable.activeSessionHistoryEntry.url).toBe(document.url);
     expect(traversable.activeDocument).toBe(document);
     expect(activity).toEqual([true]);
   });
@@ -218,7 +218,7 @@ describe('navigables', () => {
       throw new Error('Expected a complete initial navigable');
     }
     const secondDocument = new DocumentImpl();
-    secondDocument.setBrowsingContext(browsingContext);
+    secondDocument.browsingContext = browsingContext;
 
     expect(firstDocument.getNodeNavigable()).toBe(traversable);
     expect(firstDocument.isFullyActive()).toBe(true);
@@ -237,7 +237,7 @@ describe('navigables', () => {
 
   it('allows an active history entry whose Document is absent', () => {
     const document = new DocumentImpl();
-    document.setBrowsingContext(new BrowsingContext());
+    document.browsingContext = new BrowsingContext();
     const traversable = new TopLevelTraversable(createDocumentState(document));
     const initialEntry = traversable.activeSessionHistoryEntry;
     const activity: boolean[] = [];
@@ -271,7 +271,7 @@ describe('navigables', () => {
     }
     const childDocument = new DocumentImpl();
     const childContext = new BrowsingContext();
-    childDocument.setBrowsingContext(childContext);
+    childDocument.browsingContext = childContext;
     const child = new Navigable(createDocumentState(childDocument), parent);
 
     expect(childDocument.getNodeNavigable()).toBe(child);
@@ -315,22 +315,22 @@ describe('navigables', () => {
     expect(window.getAssociatedDocument()).toBe(document);
 
     expect(document.type).toBe('html');
-    expect(document.getMode()).toBe('quirks');
+    expect(document.mode).toBe('quirks');
     expect(document.contentType).toBe('text/html');
     expect(document.URL).toBe('about:blank');
-    expect(document.getOrigin().kind).toBe('opaque');
-    expect(document.getBrowsingContext()).toBe(browsingContext);
-    expect(document.getActiveSandboxingFlagSet()).toEqual(new Set());
-    expect(document.getAboutBaseURL()).toBeNull();
-    expect(document.isInitialAboutBlank()).toBe(true);
-    expect(document.allowsDeclarativeShadowRoots()).toBe(true);
+    expect(document.origin.kind).toBe('opaque');
+    expect(document.browsingContext).toBe(browsingContext);
+    expect(document.activeSandboxingFlagSet).toEqual(new Set());
+    expect(document.aboutBaseURL).toBeNull();
+    expect(document.isInitialAboutBlank).toBe(true);
+    expect(document.allowDeclarativeShadowRoots).toBe(true);
     expect(document.customElementRegistry).not.toBeNull();
-    expect(document.getInternalAncestorOriginObjectsList())
+    expect(document.internalAncestorOriginObjectsList)
       .toEqual([]);
-    expect(document.getAncestorOriginsList()).toEqual([]);
-    expect(document.isReadyForPostLoadTasks()).toBe(true);
+    expect(document.ancestorOriginsList).toEqual([]);
+    expect(document.readyForPostLoadTasks).toBe(true);
     expect(document.readyState).toBe('complete');
-    expect(document.getCompletelyLoadedTime()).not.toBeNull();
+    expect(document.completelyLoadedTime).not.toBeNull();
     expect(document.documentElement?.localName).toBe('html');
     expect(document.head?.localName).toBe('head');
     expect(document.body?.localName).toBe('body');
@@ -338,10 +338,10 @@ describe('navigables', () => {
     expect(environment.executionReady).toBe(true);
     expect(serializeURL(environment.creationURL)).toBe('about:blank');
     expect(serializeURL(environment.topLevelCreationURL!)).toBe('about:blank');
-    expect(environment.topLevelOrigin).toBe(document.getOrigin());
+    expect(environment.topLevelOrigin).toBe(document.origin);
     expect(environment.timeOrigin.clock).toBe(monotonicClock);
     expect(environment.timeOrigin.milliseconds)
-      .toBe(document.getLoadTimingInfo().navigationStartTime);
+      .toBe(document.loadTimingInfo.navigationStartTime);
 
     const initialEntry = traversable.activeSessionHistoryEntry;
     expect(traversable.currentSessionHistoryEntry).toBe(initialEntry);
@@ -350,7 +350,7 @@ describe('navigables', () => {
     expect(initialEntry.documentState.document).toBe(document);
     expect(initialEntry.documentState.initiatorOrigin).toBeNull();
     expect(initialEntry.documentState.origin)
-      .toBe(document.getOrigin());
+      .toBe(document.origin);
     expect(initialEntry.documentState.navigableTargetName).toBe('');
     expect(initialEntry.documentState.aboutBaseURL).toBeNull();
   });
@@ -391,8 +391,8 @@ describe('environment settings objects', () => {
     const { realm, window } = environment;
     const exec = getBindingContext(realm).getExecution();
     const document = new DocumentImpl();
-    document.setOrigin(origin);
-    document.setURL(creationURL);
+    document.origin = origin;
+    document.url = creationURL;
     window.setAssociatedDocument(document);
 
     expect(environment.userAgent).toBe(userAgent);
@@ -406,9 +406,9 @@ describe('environment settings objects', () => {
     expect(realm.environmentRecord).toBe(environment);
     expect(realm.secureContext).toBe(true);
     expect(environment.isSecureContext).toBe(true);
-    expect(environment.moduleMap).toBe(document.getModuleMap());
+    expect(environment.moduleMap).toBe(document.moduleMap);
     expect(environment.policyContainer)
-      .toBe(document.getPolicyContainer());
+      .toBe(document.policyContainer);
     expect(environment.timeOrigin.clock).toBe(monotonicClock);
     expect(environment.timeOrigin.milliseconds).toBe(0);
     expect(serializeURL(environment.apiBaseURL)).toBe('https://example.test/');
@@ -495,7 +495,7 @@ describe('navigation lifecycle', () => {
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
     expect(window && window.getAssociatedDocument()).toBe(documentImpl);
-    expect(documentImpl.getBrowsingContext()?.windowProxy)
+    expect(documentImpl.browsingContext?.windowProxy)
       .toBe(windowProxy);
     expect(initialDocumentImpl.getNodeNavigable()).toBeNull();
     expect(initialDocumentImpl.isFullyActive()).toBe(false);

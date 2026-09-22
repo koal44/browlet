@@ -4,14 +4,12 @@ import {
   Browlet,
 } from '../../src/browlet/browlet';
 import { unwrap } from '../../src/browlet/bindings';
-import {
-  isHTMLLinkElement,
-} from '../../src/browlet/html/elements/metadata/link';
 import { fireEvent } from '../../src/browlet/dom/events/event-target';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../src/infra/index';
+import { isHtmlLink } from '../../src/infra/selector-dom';
 import { serializeOrigin } from '../../src/url/origin';
 
 describe('Browlet', () => {
@@ -50,25 +48,25 @@ describe('Browlet', () => {
     );
     expect(document.baseURI).toBe(document.URL);
     expect(document.contentType).toBe('text/html');
-    expect(serializeOrigin(documentImpl.getOrigin())).toBe(
+    expect(serializeOrigin(documentImpl.origin)).toBe(
       'https://example.test',
     );
-    expect(documentImpl.allowsDeclarativeShadowRoots())
+    expect(documentImpl.allowDeclarativeShadowRoots)
       .toBe(true);
     expect(documentImpl.readyState)
       .toBe('complete');
-    expect(documentImpl.isReadyForPostLoadTasks()).toBe(true);
-    expect(documentImpl.getCompletelyLoadedTime())
+    expect(documentImpl.readyForPostLoadTasks).toBe(true);
+    expect(documentImpl.completelyLoadedTime)
       .not.toBeNull();
-    expect(documentImpl.wasCreatedViaCrossOriginRedirects())
+    expect(documentImpl.wasCreatedViaCrossOriginRedirects)
       .toBe(false);
-    expect(documentImpl.getDuringLoadingNavigationID())
+    expect(documentImpl.duringLoadingNavigationID)
       .toBeNull();
     expect(documentImpl.customElementRegistry)
       .not.toBeNull();
-    expect(documentImpl.getInternalAncestorOriginObjectsList())
+    expect(documentImpl.internalAncestorOriginObjectsList)
       .toEqual([]);
-    expect(documentImpl.getAncestorOriginsList()).toEqual([]);
+    expect(documentImpl.ancestorOriginsList).toEqual([]);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
@@ -522,7 +520,7 @@ describe('Browlet', () => {
 
     await browlet.navigate('https://example.test/page');
     const link = browlet.document.getElementById('style');
-    if (!link || !isHTMLLinkElement(link)) {
+    if (!link || !isHtmlLink(link)) {
       throw new Error('Expected an HTML link element');
     }
 

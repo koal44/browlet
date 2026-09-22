@@ -298,8 +298,8 @@ function createWindow(userAgent: UserAgent, origin: Origin, parent: WindowImpl |
   });
   const { window } = environment;
   const document = createDocument(environment.realm);
-  document.setOrigin(origin);
-  document.setURL(creationURL);
+  document.origin = origin;
+  document.url = creationURL;
   window.setAssociatedDocument(document);
   return window;
 }

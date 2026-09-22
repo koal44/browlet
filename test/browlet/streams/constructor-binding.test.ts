@@ -132,7 +132,7 @@ function createRelatedWindow(first: Window): WindowProxy {
   const { realm } = relatedSettings;
   const proxy = realm.globalThis as WindowProxy;
   const document = new DocumentImpl();
-  document.setBrowsingContext(new BrowsingContext(proxy));
+  document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
   retargetWindowProxy(proxy, window);
   return proxy;

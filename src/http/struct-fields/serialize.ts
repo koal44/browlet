@@ -88,7 +88,7 @@ function serializeParameters(parameters: StructuredParameters): string | null {
 
 /** RFC 9651 §4.1.1.3, Key character constraints. */
 function isKey(key: string): boolean {
-  return /^[a-z*]/.test(key) && !/[^a-z0-9_.*-]/.test(key);
+  return keyStartPattern.test(key) && !invalidKeyCharacterPattern.test(key);
 }
 
 /** RFC 9651 §4.1.3.1 and §4.1.4–§4.1.11, Bare Items. */
@@ -99,12 +99,12 @@ function serializeBareItem(item: StructuredBareItem): string | null {
     case 'decimal':
       return serializeDecimal(item.value);
     case 'string':
-      if (/[^\x20-\x7e]/.test(item.value)) return null;
-      return `"${item.value.replace(/["\\]/g, '\\$&')}"`;
+      if (invalidStringCharacterPattern.test(item.value)) return null;
+      return `"${item.value.replace(stringEscapePattern, '\\$&')}"`;
     case 'token':
       if (
-        !/^[A-Za-z*]/.test(item.value) ||
-        /[^A-Za-z0-9!#$%&'*+\-.^_`|~:/]/.test(item.value)
+        !tokenStartPattern.test(item.value) ||
+        invalidTokenCharacterPattern.test(item.value)
       ) return null;
       return item.value;
     case 'bytes':
@@ -142,7 +142,7 @@ function serializeDecimal(value: number): string | null {
     discarded[0] !== undefined && (
       discarded[0] > '5' ||
       discarded[0] === '5' && (
-        /[1-9]/.test(discarded.slice(1)) || thousandths % 2 !== 0
+        nonzeroDigitPattern.test(discarded.slice(1)) || thousandths % 2 !== 0
       )
     )
   ) thousandths++;
@@ -150,7 +150,7 @@ function serializeDecimal(value: number): string | null {
   if (thousandths > 999_999_999_999_999) return null;
   const whole = Math.floor(thousandths / 1000);
   const fractional = String(thousandths % 1000).padStart(3, '0')
-    .replace(/0+$/, '') || '0';
+    .replace(trailingZerosPattern, '') || '0';
   return `${value < 0 ? '-' : ''}${whole}.${fractional}`;
 }
 
@@ -164,3 +164,12 @@ function serializeDisplayString(value: string): string | null {
   }
   return output + '"';
 }
+
+const keyStartPattern = /^[a-z*]/;
+const invalidKeyCharacterPattern = /[^a-z0-9_.*-]/;
+const invalidStringCharacterPattern = /[^\x20-\x7e]/;
+const stringEscapePattern = /["\\]/g;
+const tokenStartPattern = /^[A-Za-z*]/;
+const invalidTokenCharacterPattern = /[^A-Za-z0-9!#$%&'*+\-.^_`|~:/]/;
+const nonzeroDigitPattern = /[1-9]/;
+const trailingZerosPattern = /0+$/;

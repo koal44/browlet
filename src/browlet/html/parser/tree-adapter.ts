@@ -211,19 +211,19 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {
     switch (mode) {
       case html.DOCUMENT_MODE.NO_QUIRKS:
-        document.setMode(DocumentMode.NoQuirks);
+        document.mode = DocumentMode.NoQuirks;
         break;
       case html.DOCUMENT_MODE.QUIRKS:
-        document.setMode(DocumentMode.Quirks);
+        document.mode = DocumentMode.Quirks;
         break;
       case html.DOCUMENT_MODE.LIMITED_QUIRKS:
-        document.setMode(DocumentMode.LimitedQuirks);
+        document.mode = DocumentMode.LimitedQuirks;
         break;
     }
   }
 
   getDocumentMode(document: DocumentImpl): html.DOCUMENT_MODE {
-    switch (document.getMode()) {
+    switch (document.mode) {
       case DocumentMode.NoQuirks:
         return html.DOCUMENT_MODE.NO_QUIRKS;
       case DocumentMode.Quirks:

@@ -111,7 +111,7 @@ export function createNewBrowsingContextAndDocument(
   let creatorBaseURL: URLRecord | null = null;
 
   if (creator !== null) {
-    creatorOrigin = creator.getOrigin();
+    creatorOrigin = creator.origin;
     creatorBaseURL = requireURLRecord(creator.baseURI);
     inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
   }
@@ -147,24 +147,23 @@ export function createNewBrowsingContextAndDocument(
   );
   const document = createDocument(realm);
 
-  document.setType('html');
-  document.setContentType('text/html');
-  document.setMode(DocumentMode.Quirks);
-  document.setOrigin(origin);
-  document.setBrowsingContext(browsingContext);
-  document.setPermissionsPolicy(permissionsPolicy);
+  document.type = 'html';
+  document.contentType = 'text/html';
+  document.mode = DocumentMode.Quirks;
+  document.origin = origin;
+  document.browsingContext = browsingContext;
+  document.permissionsPolicy = permissionsPolicy;
   document.setActiveSandboxingFlagSet(sandboxFlags);
-  document.setLoadTimingInfo(loadTimingInfo);
-  document.setIsInitialAboutBlank(true);
-  document.setAboutBaseURL(creatorBaseURL);
-  document.setAllowsDeclarativeShadowRoots(true);
-  document.setCustomElementRegistry(new CustomElementRegistryImpl());
+  document.loadTimingInfo = loadTimingInfo;
+  document.isInitialAboutBlank = true;
+  document.aboutBaseURL = creatorBaseURL;
+  document.allowDeclarativeShadowRoots = true;
+  document.customElementRegistry = new CustomElementRegistryImpl();
 
   const iframeReferrerPolicy = determineIframeElementReferrerPolicy(embedder);
-  document.setInternalAncestorOriginObjectsList(
-    createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder),
-  );
-  document.setAncestorOriginsList(createAncestorOriginsList(document));
+  document.internalAncestorOriginObjectsList =
+    createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder);
+  document.ancestorOriginsList = createAncestorOriginsList(document);
 
   if (creator !== null) {
     inheritCreatorDocumentState(document, creator);
@@ -178,7 +177,7 @@ export function createNewBrowsingContextAndDocument(
   }
 
   window.setAssociatedDocument(document);
-  document.markReadyForPostLoadTasks();
+  document.readyForPostLoadTasks = true;
   populateWithHTMLHeadBody(document);
   makeActive(document);
   completelyFinishLoading(document);
@@ -362,7 +361,7 @@ function createInternalAncestorOriginObjectsList(
 function createAncestorOriginsList(
   document: DocumentImpl,
 ): string[] {
-  const origins = document.getInternalAncestorOriginObjectsList();
+  const origins = document.internalAncestorOriginObjectsList;
   if (origins === null) {
     throw new InternalError('Document has no internal ancestor origin objects list');
   }
@@ -391,7 +390,7 @@ function makeActive(
 ): void {
   const realm = getRelevantRealm(document);
   const window = realm.windowImplementation;
-  const browsingContext = document.getBrowsingContext();
+  const browsingContext = document.browsingContext;
   if (browsingContext === null) {
     throw new InternalError('Document has no browsing context');
   }
@@ -402,10 +401,10 @@ function makeActive(
 }
 
 function completelyFinishLoading(document: DocumentImpl): void {
-  if (document.getBrowsingContext() === null) {
+  if (document.browsingContext === null) {
     throw new InternalError('A completely loaded Document needs a browsing context');
   }
-  document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
+  document.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
 
   // A newly-created top-level Document has no container, so the remaining
   // iframe/container load-event steps have no effect.

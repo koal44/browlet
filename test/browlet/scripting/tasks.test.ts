@@ -540,7 +540,7 @@ describe('task queues', () => {
       throw new Error('Expected a complete top-level traversable');
     }
     const inactiveDocument = new DocumentImpl();
-    inactiveDocument.setBrowsingContext(browsingContext);
+    inactiveDocument.browsingContext = browsingContext;
 
     expect(createTask(null).isRunnable).toBe(true);
     expect(createTask(activeDocument).isRunnable).toBe(true);
