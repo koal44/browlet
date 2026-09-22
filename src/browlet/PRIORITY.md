@@ -235,7 +235,7 @@ Current implementation sequence:
    across implementation/Node boundaries. Active Script records/restoration
    belong to the later classic-script pipeline; module loading is not a
    prerequisite for Fetch's records.
-7. **Continue with [Fetch Slice 7](../fetch/ROADMAP.md#slice-7--http-extensions):**
+7. **Continue with [Fetch Slice 8](../fetch/ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes):**
    Headers (6a), Body extraction/consumption (6b), and Request/Response construction
    and cloning (6c) are complete. HTML's document base URL and `HTMLBaseElement`
    close the Request `<base href>` dependency; remaining HTML/CSP integration
@@ -249,8 +249,11 @@ Current implementation sequence:
    implemented. Their settings-owned Reporting hook is provisionally a no-op;
    the [Reporting roadmap](reporting/ROADMAP.md) owns its replacement with
    report generation, queues, observers, and later Fetch-based delivery.
-   Slice 7 is complete with those integration deferrals; Slice 8 is next after
-   the bounded review of test reliability and compiler-test costs.
+   Slice 7 and the bounded test-reliability/performance review are complete.
+   Slice 8 retains five subdivisions, A–E. 8A client population now selects HTML
+   prompt targets and copies implemented policy state. Continue entry/main-fetch
+   orchestration; CSP copying and Integrity Policy's value model remain with
+   their policy owners.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.

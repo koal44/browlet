@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import type { FetchBody } from '../../src/fetch/body';
-import type { FetchPromptTarget } from '../../src/fetch/infrastructure';
-import { RequestImpl } from '../../src/fetch/request';
+import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { parseURL } from '../../src/url/url';
 
 describe('Fetch Request construction', () => {
@@ -137,7 +136,8 @@ describe('Fetch Request construction', () => {
     const window = createWindow();
     const source = new window.Request(url);
     const record = implementation(window, source).getRequest();
-    const target: FetchPromptTarget = { origin: record.client!.origin };
+    const target = getRelevantRealm(window).hostDefined!.getTraversableForUserPrompts()!;
+    record.origin = record.client!.origin;
     record.traversableForUserPrompts = target;
 
     const copy = new window.Request(source);
@@ -156,12 +156,25 @@ describe('Fetch Request construction', () => {
     const other = createWindow();
     const source = new owner.Request(url);
     const record = implementation(owner, source).getRequest();
-    const target: FetchPromptTarget = { origin: record.client!.origin };
+    const target = getRelevantRealm(owner).hostDefined!.getTraversableForUserPrompts()!;
+    record.origin = record.client!.origin;
     record.traversableForUserPrompts = target;
 
     const copy = new other.Request(source);
     expect(implementation(other, copy).getRequest().traversableForUserPrompts).toBeUndefined();
     expect(record.traversableForUserPrompts).toBe(target);
+  });
+
+  it('defers copying a selected prompt target until the source origin is resolved', () => {
+    const window = createWindow();
+    const source = new window.Request(url);
+    const record = implementation(window, source).getRequest();
+    const target = getRelevantRealm(window).hostDefined!.getTraversableForUserPrompts()!;
+    record.traversableForUserPrompts = target;
+    const copy = implementation(window, new window.Request(source)).getRequest();
+    expect(copy.traversableForUserPrompts).toBeUndefined();
+    expect(record.traversableForUserPrompts).toBe(target);
+    expect(record.origin).toBeUndefined();
   });
 
   it('assigns a requested priority or updates an existing internal priority', () => {
@@ -300,6 +313,48 @@ describe('Fetch Request signals and realm ownership', () => {
         constructorLength: Request.length,
       };
     })).toEqual({ subclass: true, cloneSubclass: false, constructorLength: 1 });
+  });
+});
+
+describe('Fetch client population with HTML settings', () => {
+  it('selects the actual window traversable and clones the client policy', () => {
+    const window = createWindow();
+    const settings = getRelevantRealm(window).hostDefined!;
+    const traversable = [...settings.userAgent.topLevelTraversableSet][0]!;
+    const request = implementation(window, new window.Request(url)).getRequest();
+    expect(request.origin).toBeUndefined();
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBe(traversable);
+    expect(request.origin).toBe(settings.origin);
+    expect(request.policyContainer).not.toBe(settings.policyContainer);
+    expect(request.policyContainer).toEqual(settings.policyContainer);
+    const policy = request.policyContainer;
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBe(traversable);
+    expect(request.policyContainer).toBe(policy);
+  });
+
+  it('copies policy state independently when the caller suppresses prompts', () => {
+    const window = createWindow();
+    const settings = getRelevantRealm(window).hostDefined!;
+    const request = implementation(window, new window.Request(url, { window: null })).getRequest();
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBeNull();
+    expect(request.policyContainer).not.toBe(settings.policyContainer);
+    expect(request.policyContainer!.embedderPolicy).not.toBe(settings.policyContainer.embedderPolicy);
+    settings.policyContainer.embedderPolicy.value = 'require-corp';
+    expect(request.policyContainer!.embedderPolicy.value).toBe('unsafe-none');
+  });
+
+  it('creates a default policy container for a clientless request', () => {
+    const window = createWindow();
+    const settings = getRelevantRealm(window).hostDefined!;
+    const request = new FetchRequest(parseURL(url).url!, null, settings.userAgent);
+    request.origin = settings.origin;
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBeNull();
+    expect(request.policyContainer).toEqual(settings.policyContainer);
+    expect(request.policyContainer).not.toBe(settings.policyContainer);
   });
 });
 

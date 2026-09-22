@@ -12,12 +12,21 @@ languages and enforcement algorithms are tracked below.
 | `sandbox.ts` | Parsing sandbox tokens, determining flags, propagation and navigation checks | HTML §7.1.5 |
 | iframe element plus Document ancestry | iframe referrer-policy inheritance and ancestor-origin list construction | HTML §7.1.6 |
 | `permissions.ts` | HTML's policy-controlled feature definitions/default allowlists plus declared, inherited, and container policy checks | HTML §2.2; Permissions Policy; HTML Document, browsing-context, and lifecycle integration |
-| `container.ts` | Clone/determine policy container, CSP/referrer/integrity/COEP association | HTML §7.1.7 |
+| `container.ts` | Complete CSP/integrity copying and determine policy container; response policy association | HTML §7.1.7 |
 
 Policy data travels with environments, Documents, history entries, responses,
 and navigations. Keep one typed value model here and apply each specification's
 explicit clone or identity rule; do not duplicate policy state in each
 subsystem.
+
+`PolicyContainer` now owns `clone()`. Fetch's client population calls it through
+the same HTML object; clientless requests obtain a fresh default container from
+their UserAgent. COEP fields and referrer policy copy independently, and each
+new container has independent default policy storage. Populated CSP lists
+explicitly reject cloning until CSP supplies its concrete records and copying.
+Integrity Policy still has empty placeholder records. HTML's clone algorithm
+currently omits its report-only member; resolve that omission with the concrete
+Integrity Policy model rather than carrying it into populated policy handling.
 
 COEP's value and reporting fields now have their specified defaults. Fetch's
 request credentials predicate reads the actual client's embedder-policy value;

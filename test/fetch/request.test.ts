@@ -344,3 +344,38 @@ describe('Fetch request COEP credentials', () => {
     );
   });
 });
+
+describe('Fetch client population', () => {
+  it('retains explicitly supplied fields', () => {
+    const client = createClientSettings();
+    const request = createFetchRequest('https://example.test/', client);
+    const origin = createOpaqueOrigin();
+    const policy = createClientSettings().policyContainer;
+    request.traversableForUserPrompts = null;
+    request.origin = origin;
+    request.policyContainer = policy;
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBeNull();
+    expect(request.origin).toBe(origin);
+    expect(request.policyContainer).toBe(policy);
+  });
+
+  it('resolves the origin once instead of following later client changes', () => {
+    const client = createClientSettings();
+    const request = createFetchRequest('https://example.test/', client);
+    const origin = client.origin;
+    request.traversableForUserPrompts = null;
+    request.policyContainer = client.policyContainer;
+    request.populateFromClient();
+    expect(request.origin).toBe(origin);
+    client.origin = createOpaqueOrigin();
+    request.populateFromClient();
+    expect(request.origin).toBe(origin);
+  });
+
+  it('requires an explicit origin for a clientless request', () => {
+    const request = createFetchRequest();
+    request.traversableForUserPrompts = null;
+    expect(() => request.populateFromClient()).toThrow('An unresolved request origin requires a client');
+  });
+});

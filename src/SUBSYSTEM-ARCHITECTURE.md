@@ -593,8 +593,12 @@ tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delive
 
 The same settings object exposes its HTML-owned policy container. Window
 settings read it from the associated Document; `FetchPolicyContainer` exposes
-the embedder-policy value and typed referrer policy without copying the container
-or importing Browlet. HTML's full `PolicyContainer` extends that structural type.
+the embedder-policy value, typed referrer policy, and an HTML-owned `clone()`
+operation without importing Browlet. HTML's `PolicyContainer` class implements
+that structural type. Client population clones it once into the request; the
+UserAgent supplies fresh default containers for requests without a client.
+CSP copying and Integrity Policy's concrete state remain with their unfinished
+HTML policy owners; cloning currently rejects populated CSP lists.
 `FetchRequest` owns the COEP credentials decision, which needs the request's
 mode, origin, and redirect history as well as that policy value.
 
@@ -605,11 +609,16 @@ fallback getters. `Request.referrer` still exposes the specified empty string
 or `about:client`, and `ReferrerPolicy` retains its specified string values.
 
 The prompt target likewise uses undefined for deferred selection and null for
-suppressed prompts. `FetchPromptTarget` currently exposes only the origin used
-by Request construction's copy check; it does not require a full settings
-object. Connecting the actual HTML traversable and reconciling that origin
-check remain in Fetch Slice 8 because the specification describes them
-inconsistently.
+suppressed prompts. The settings object's `getTraversableForUserPrompts()` returns
+the actual Window navigable's nearest traversable ancestor, or null for a
+non-Window client or a Window without a navigable. `FetchPromptTarget` is an
+opaque reference to that actual traversable. A type-only brand declared on
+`TraversableNavigable` excludes ordinary navigables without exposing unused
+properties or adding runtime state. Request construction provisionally
+retains a selected target when the source request's resolved origin matches the
+new constructor's environment; otherwise it defers selection. The specification
+still describes the old environment-object target in that constructor check.
+The target's current Document origin does not replace the initiating origin.
 
 Referrer Policy asks the same client for `getReferrerSource()`. Window settings
 select the live Document URL, reject opaque-origin disclosure, and follow srcdoc

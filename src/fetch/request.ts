@@ -289,6 +289,23 @@ export class FetchRequest {
     }
     this.headerList.append('Origin', serializedOrigin);
   }
+
+  /** Resolve the client-derived request fields once, before starting the fetch. */
+  // https://fetch.spec.whatwg.org/#populate-request-from-client
+  populateFromClient(): void {
+    if (this.traversableForUserPrompts === undefined) {
+      this.traversableForUserPrompts = this.client?.getTraversableForUserPrompts() ?? null;
+    }
+    if (this.origin === undefined) {
+      if (this.client === null) throw new InternalError('An unresolved request origin requires a client');
+      this.origin = this.client.origin;
+    }
+    if (this.policyContainer === undefined) {
+      this.policyContainer = this.client === null
+        ? this.userAgent.createPolicyContainer()
+        : this.client.policyContainer.clone();
+    }
+  }
 }
 
 /** https://fetch.spec.whatwg.org/#request-destination-script-like */
@@ -422,8 +439,8 @@ export class RequestImpl {
 
     const origin = client.origin;
     let traversable: FetchRequest['traversableForUserPrompts'] = undefined;
-    if (source.traversableForUserPrompts &&
-      areSameOrigin(source.traversableForUserPrompts.origin, origin)) {
+    // PROVISIONAL: Fetch's constructor still names an environment target; compare the source request origin.
+    if (source.traversableForUserPrompts && source.origin !== undefined && areSameOrigin(source.origin, origin)) {
       traversable = source.traversableForUserPrompts;
     }
     if ('window' in init) {

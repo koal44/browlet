@@ -21,6 +21,11 @@ request/response records rather than a CSP-specific substitute.
 1. **Policy model and parsing.** Implement serialized policies, policy lists,
    dispositions, directive/source-list records, and header parsing. Preserve
    multiple policies and the specified unknown/duplicate-directive behavior.
+   CSP §2.2 defines a CSP list as policies plus a `self-origin`; the existing
+   `PolicyContainer.cspList: object[]` omits that origin. Reconcile HTML's
+   list-shaped initialization/clone wording with this model before enabling
+   populated policy copying. Cover independent directive data and preservation
+   of the origin used by inherited `'self'` checks.
 2. **Fetch checks.** Implement request/response blocking and the directive
    matching/fallback algorithms they call, including redirects, source
    matching, and policy disposition. A passing empty-policy path is only the

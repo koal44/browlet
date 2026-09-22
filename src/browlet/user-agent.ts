@@ -1,5 +1,6 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
+import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
 import { CookieStore } from '../http/index';
@@ -53,6 +54,11 @@ export class UserAgent implements FetchUserAgent {
     }
 
     this.browsingContextGroupSet.delete(group);
+  }
+
+  /** Create a fresh HTML policy container, including for clientless Fetch requests. */
+  createPolicyContainer(): PolicyContainer {
+    return createPolicyContainer();
   }
 
   /*

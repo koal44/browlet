@@ -1,4 +1,5 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
+import type { TraversableNavigable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
 import { FetchGroup, type FetchEnvironmentSettingsObject, type FetchEnvironment } from '../../fetch/index';
 import type { EventLoop } from './event-loop';
@@ -77,6 +78,12 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
   // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
   getReferrerSource(): URLRecord | null {
     return this.creationURL;
+  }
+
+  /** Select a prompt destination; environments without a Window have none. */
+  // https://fetch.spec.whatwg.org/#populate-request-from-client
+  getTraversableForUserPrompts(): TraversableNavigable | null {
+    return null;
   }
 
   /** Submit a report for this environment; currently discards reports pending Reporting integration. */
@@ -163,6 +170,11 @@ export class WindowEnvironmentSettingsObject
       document = container.getNodeDocument()!;
     }
     return document.getURL();
+  }
+
+  // https://fetch.spec.whatwg.org/#populate-request-from-client
+  override getTraversableForUserPrompts(): TraversableNavigable | null {
+    return this.#window.getAssociatedDocument().getNodeNavigable()?.traversableNavigable ?? null;
   }
 }
 

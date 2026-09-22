@@ -7,7 +7,7 @@
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
-- **Next:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes).
+- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A client population is connected for the implemented HTML policy state.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -204,11 +204,12 @@ URL components while retaining any Blob URL entry reference.
 
 - `client` retains the actual HTML settings object through
   `FetchEnvironmentSettingsObject`; `reservedClient` uses `FetchEnvironment`.
-  Traversable-for-prompts can retain those same settings; policy containers remain owner references.
+  Traversable-for-prompts retains an opaque reference to the actual HTML
+  traversable; policy containers use their owner's cloning operation.
   Further client-derived values and policy operations need narrow
   HTML capabilities in §4.1; these objects are not new Fetch-owned environments
-  or policy containers. Clientless requests still need their owning UserAgent
-  at network orchestration; do not synthesize an environment or assume online.
+  or policy containers. Clientless requests retain their owning UserAgent
+  explicitly; do not synthesize an environment or assume online.
 - Request retains a DOM signal through `AbortSignalCapability`.
   `RuntimeContext.createDependentAbortSignal()` delegates to DOM's existing
   dependency graph, preserving abort-reason identity and event ordering.
@@ -714,31 +715,65 @@ formed.
 
 **Specification:** Fetch §4–§4.5 and §6.
 
-Connect the prompt target to its HTML traversable and resolve constructor-copy
-behavior when implementing `populate request from client`. The field now uses
-`FetchPromptTarget | null | undefined`: undefined defers selection, null suppresses
-prompts, and a value retains a target. The provisional target contract exposes
-only the origin consumed by the existing copy check. Fetch defines a traversable
-navigable but its Request constructor still tests for an environment settings
-object; the type cleanup preserves that check pending this review.
+Client population connects the prompt target to its actual HTML traversable.
+The field uses `FetchPromptTarget | null | undefined`: undefined defers selection,
+null suppresses prompts, and a value retains the traversable by identity. A
+type-only brand excludes ordinary navigables without adding runtime state. Fetch
+defines a traversable navigable but its Request constructor still tests for an
+environment settings object; the accepted provisional copy rule is described below.
 Chromium retains an opaque window identifier and documents a partial constructor
 implementation, so copying its code alone does not settle the mismatch. See
 `scratch/SPEC-ISSUES.md` for the source comparison.
 Keep the initiating origin distinct from the target's active document origin:
 a cross-origin iframe's requests can use its top-level traversable for prompts.
 
+Keep five subdivisions; 8A already includes substantial setup, policy ordering,
+response filtering, body completion, and task delivery. The later subdivisions
+have separate callers and dependency fronts.
+
 Implement in order:
 
-1. The Fetch entry algorithm and main-fetch response processing from the
-   opening of §4 and §4.1, preserving CSP, Mixed Content, upgrade, Service
-   Worker, response-blocking, and timing calls as explicit host decisions.
-2. Override fetch from §4.2 as an embedder/test seam, not a global mutable
-   shortcut.
-3. Scheme fetch from §4.3 for the branches whose dependencies exist.
-4. HTTP fetch and HTTP-redirect fetch from §§4.4–4.5, with transport and cache
-   work still delegated by contract.
-5. The `data:` URL processor from §6, then close the `data:` branch left in
-   scheme fetch. Use the MIME parser and project-owned byte/base64 operations.
+- **8A — Entry and main-fetch processing.** The Fetch entry algorithm and
+  main-fetch response processing from the opening of §4 and §4.1, preserving
+  CSP, Mixed Content, upgrade, Service Worker, response-blocking, and timing
+  calls as explicit dependencies of their owning subsystems.
+- **8B — Override fetch.** §4.2's embedder/test seam, without a global mutable
+  shortcut.
+- **8C — Scheme fetch.** §4.3's branches whose dependencies exist.
+- **8D — HTTP fetch and redirects.** §§4.4–4.5, with transport and cache work
+  still delegated by contract.
+- **8E — Data URLs.** §6's processor, then close the `data:` branch left in
+  scheme fetch. Use the MIME parser and project-owned byte/base64 operations.
+
+**8A started, not complete:** `FetchRequest.populateFromClient()` preserves
+supplied fields and resolves deferred fields once. HTML settings select the real
+traversable; HTML's policy container owns cloning, and the UserAgent supplies
+default containers for clientless requests. Integration tests cover these paths
+with real settings and traversables, including a cross-origin child Window.
+The Fetch entry algorithm and main-fetch processing have not been implemented;
+client population is their first completed dependency, not the whole of 8A.
+
+The accepted provisional Request-constructor rule preserves a selected target
+only when the source request's resolved origin matches the new environment.
+An unresolved or cross-origin source defers selection. A traversable has no origin;
+its current Document's origin is not used for this check. The specification's
+old environment-object wording remains an upstream issue to resolve.
+
+Policy cloning covers implemented COEP/referrer state and independent default
+containers. CSP and Integrity Policy records remain placeholders: populated
+CSP lists explicitly reject cloning until the CSP owner supplies copying.
+That model must include CSP's list-level `self-origin`, not just replace
+`object[]` with typed policy entries; see the [CSP roadmap](../browlet/browsing/policy/csp/ROADMAP.md).
+HTML's clone algorithm currently omits report-only Integrity Policy; revisit
+that omission when implementing its value model. These are policy-owner gaps,
+not missing Fetch wiring or permission to silently share arbitrary policy data.
+
+After client population, 8A reaches HTML preload consumption, shared-clock
+access, language/priority selection, and BiDi hooks. Main fetch then reaches
+CSP, Mixed Content, HSTS/HTTPS DNS upgrading, SRI byte verification, CORS
+preflight-cache invalidation, and Resource Timing. Preserve the planned owner
+boundaries and pause at unresolved dependencies; a test host's policy decisions
+do not constitute Browlet policy enforcement.
 
 `about:`, `blob:`, and `file:` branches remain explicit until their owning URL
 store, File API, and host filesystem decisions exist. `file:` behavior is an

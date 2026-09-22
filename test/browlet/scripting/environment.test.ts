@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDocument, getRelevantRealm } from '../../../src/browlet/bindings';
+import { createDocument, getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/session-history';
@@ -10,7 +10,7 @@ import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { determineRequestReferrer } from '../../../src/browlet/browsing/policy/referrer-policy';
-import { FetchRequest } from '../../../src/fetch/request';
+import { FetchRequest, RequestImpl } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 
@@ -130,6 +130,40 @@ describe('Window environment referrer sources', () => {
     request.referrerPolicy = 'unsafe-url';
     const referrer = determineRequestReferrer(request);
     expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/parent');
+  });
+});
+
+describe('Window environment prompt targets', () => {
+  it('selects the window\'s own traversable', () => {
+    const top = createEnvironment('https://example.test/');
+    expect(top.settings.getTraversableForUserPrompts()).toBe(top.navigable);
+  });
+
+  it('selects the containing traversable across cross-origin ancestors', () => {
+    const top = createEnvironment('https://top.test/');
+    const middle = createEnvironment('https://middle.test/', top.navigable);
+    const child = createEnvironment('https://child.test/', middle.navigable);
+    expect(child.settings.getTraversableForUserPrompts()).toBe(top.navigable);
+  });
+
+  it('retains a populated child request\'s target independently of the top document\'s origin', () => {
+    const top = createEnvironment('https://top.test/');
+    const child = createEnvironment('https://child.test/', top.navigable);
+    const realm = child.settings.realmExecutionContext.realm;
+    const context = getBindingContext(realm);
+    const window = realm.globalObject as Window & typeof globalThis;
+    const source = new window.Request('https://resource.test/');
+    context.unwrap(source, RequestImpl)!.getRequest().populateFromClient();
+    top.document.setOrigin(obtainURLOrigin(parseURL('https://changed.test/').url!));
+    const copy = context.unwrap(new window.Request(source), RequestImpl)!.getRequest();
+    expect(copy.traversableForUserPrompts).toBe(top.navigable);
+    expect(copy.origin).toBe(child.settings.origin);
+  });
+
+  it('has no prompt target when its document has no navigable', () => {
+    const top = createEnvironment('https://example.test/');
+    top.document.setBrowsingContext(null);
+    expect(top.settings.getTraversableForUserPrompts()).toBeNull();
   });
 });
 

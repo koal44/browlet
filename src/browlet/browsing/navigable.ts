@@ -9,6 +9,7 @@ import {
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
+import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../fetch/index';
 import { InternalError } from '../../infra/internal-error';
 
 export class Navigable {
@@ -74,6 +75,18 @@ export class Navigable {
     return this.activeBrowsingContext?.activeWindow ?? null;
   }
 
+  /** Nearest inclusive ancestor that owns session-history traversal. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-traversable
+  get traversableNavigable(): TraversableNavigable {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Walk the inclusive ancestor chain.
+    let navigable: Navigable = this;
+    while (!(navigable instanceof TraversableNavigable)) {
+      if (navigable.parent === null) throw new InternalError('A navigable needs a traversable ancestor');
+      navigable = navigable.parent;
+    }
+    return navigable;
+  }
+
   /** The element embedding this navigable, or null when it has no container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
   get container(): ElementImpl | null {
@@ -103,13 +116,15 @@ export class Navigable {
   }
 }
 
-export class TraversableNavigable extends Navigable {
+export class TraversableNavigable extends Navigable implements FetchPromptTarget {
   currentSessionHistoryStep = 0;
   sessionHistoryEntries: SessionHistoryEntry[] = [];
   sessionHistoryTraversalQueue = new SessionHistoryTraversalQueue();
   runningNestedApplyHistoryStep = false;
   systemVisibilityState: DocumentVisibilityState = 'visible';
   isCreatedByWebContent = false;
+  /** Type-only identification as an eligible Fetch prompt destination. */
+  declare [fetchPromptTargetBrand]: true;
 }
 
 export class TopLevelTraversable extends TraversableNavigable {

@@ -22,6 +22,8 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   hasCrossSiteAncestor: boolean;
   /** Source URL selected by the client's global, or null when disclosure is prohibited. */
   getReferrerSource(): URLRecord | null;
+  /** Traversable belonging to this client's Window, or null when no Window navigable exists. */
+  getTraversableForUserPrompts(): FetchPromptTarget | null;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup: FetchGroup;
   /** Whether WebDriver BiDi emulates an offline network for this environment. */
@@ -32,12 +34,13 @@ export type FetchEnvironmentSettingsObject = FetchEnvironment & {
   queueReport(type: string, endpoint: string, body: Record<string, string>): void;
 };
 
-/** Prompt destination, exposing what Request construction currently needs. */
-// PROVISIONAL: reconcile the constructor's environment-origin check with HTML's traversable target.
+/** An opaque reference to the HTML traversable selected for user prompts. */
 export type FetchPromptTarget = {
-  /** Origin used by the constructor's same-origin copy check. */
-  origin: Origin;
+  [fetchPromptTargetBrand]: true;
 };
+
+/** Type-only marker declared by HTML traversables; it has no runtime value. */
+export declare const fetchPromptTargetBrand: unique symbol;
 
 /** HTML's policy container, exposing the policies currently consumed by Fetch. */
 export type FetchPolicyContainer = {
@@ -54,6 +57,8 @@ export type FetchPolicyContainer = {
   };
   /** Default referrer disclosure policy inherited by requests. */
   referrerPolicy: ReferrerPolicy;
+  /** Copy the HTML-owned policy state for an independently populated request. */
+  clone(): FetchPolicyContainer;
 };
 
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy-value
@@ -86,6 +91,8 @@ export type FetchUserAgent = {
   cookiesEnabled: boolean;
   /** Applies this user agent's trust policy to a URL, including loopback and configured origins. */
   isURLPotentiallyTrustworthy(url: URLRecord): boolean;
+  /** Create HTML's default policy container for a request without a client. */
+  createPolicyContainer(): FetchPolicyContainer;
 };
 
 /** Fetch §2, serialize an integer as its shortest decimal representation. */
