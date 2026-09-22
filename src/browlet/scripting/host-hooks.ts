@@ -3,7 +3,7 @@ import type {
   JSJobCallback, JSJobRegistration, JSFunction,
   JSRealm,
 } from '../../js-engine/index';
-import type { EnvironmentSettingsObject } from './environment';
+import type { Environment } from './environment';
 import { createTaskSource } from './event-loop';
 import { Realm } from './realm';
 import { InternalError } from '../../infra/internal-error';
@@ -24,7 +24,7 @@ export function installHostHooks(): void {
   installed = true;
 }
 
-type JobCallback = JSJobCallback<EnvironmentSettingsObject | null>;
+type JobCallback = JSJobCallback<Environment | null>;
 
 /* HTML §8.1.6 — HostMakeJobCallback. */
 function makeJobCallback(
@@ -39,7 +39,7 @@ function makeJobCallback(
    */
   return {
     callback,
-    hostDefined: incumbent instanceof Realm ? incumbent.hostDefined : null,
+    hostDefined: incumbent instanceof Realm ? incumbent.hostDefined ?? null : null,
   };
 }
 
@@ -49,16 +49,16 @@ function callJobCallback(
   receiver: unknown,
   argumentsList: unknown[],
 ): unknown {
-  const settings = record.hostDefined;
-  if (settings === null) {
+  const environment = record.hostDefined;
+  if (environment === null) {
     return Reflect.apply(record.callback, receiver, argumentsList);
   }
-  const loop = settings.responsibleEventLoop;
-  loop.prepareToRunCallback(settings);
+  const loop = environment.responsibleEventLoop;
+  loop.prepareToRunCallback(environment);
   try {
     return Reflect.apply(record.callback, receiver, argumentsList);
   } finally {
-    loop.cleanUpAfterRunningCallback(settings);
+    loop.cleanUpAfterRunningCallback(environment);
   }
 }
 
@@ -70,15 +70,15 @@ function enqueuePromiseJob(
 ): false | void {
   // Node and unrelated vm jobs retain the engine-selected queue.
   const destination = queueRealm;
-  if (!(destination instanceof Realm) || destination.hostDefined === null) return false;
-  const settings = realm instanceof Realm ? realm.hostDefined : null;
+  if (!(destination instanceof Realm) || destination.hostDefined === undefined) return false;
+  const environment = realm instanceof Realm ? realm.hostDefined : undefined;
   destination.queueMicrotask(() => {
     try {
-      if (settings !== null) settings.responsibleEventLoop.prepareToRunScript(settings);
+      if (environment !== undefined) environment.responsibleEventLoop.prepareToRunScript(environment);
       try {
         job();
       } finally {
-        if (settings !== null) settings.responsibleEventLoop.cleanUpAfterRunningScript(settings);
+        if (environment !== undefined) environment.responsibleEventLoop.cleanUpAfterRunningScript(environment);
       }
     } catch (exception) {
       destination.callbacks.reportException(exception);
@@ -88,7 +88,7 @@ function enqueuePromiseJob(
 
 /* HTML §8.1.6 — HostEnqueueGenericJob. */
 function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
-  if (!(realm instanceof Realm) || realm.hostDefined === null) {
+  if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML generic jobs require an HTML realm');
   }
   realm.queueGlobalTask(jsEngineTaskSource, job);
@@ -100,10 +100,10 @@ function enqueueTimeoutJob(
   realm: JSRealm | null,
   milliseconds: number,
 ): void {
-  if (!(realm instanceof Realm) || realm.hostDefined === null) {
+  if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML timeout jobs require an HTML realm');
   }
-  const timers = realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin().timers;
+  const timers = realm.environment.getWindowOrWorkerGlobalScopeMixin().timers;
   timers.runStepsAfterTimeout('JavaScript', milliseconds, () => {
     realm.queueGlobalTask(jsEngineTaskSource, job);
   });

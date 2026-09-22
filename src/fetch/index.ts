@@ -13,10 +13,10 @@ export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
 export { HTTPCachePartitions } from './http/cache/partitions';
 export type {
-  FetchEnvironmentSettingsObject, FetchEnvironment, FetchUserAgent,
+  FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
   FetchPolicyContainer, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './infrastructure';
-export { fetchEnvironmentSettingsObject } from './infrastructure';
+export { fetchEnvironment } from './infrastructure';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
 export { requestIDL, type FetchRequest } from './request';
 export { responseIDL, type FetchResponse } from './response';

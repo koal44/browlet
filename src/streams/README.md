@@ -24,14 +24,14 @@ implementation as their receiver.
 
 ## Runtime and bindings
 
-A stream retains one trailing `RuntimeContext` and passes it to derived streams.
+A stream retains one trailing `RealmExecution` and passes it to derived streams.
 Its `PromiseValue` chains retain their execution destination. Streams use that
 facility for asynchronous work; native `async`/`await` and global microtask
 scheduling are excluded by ESLint. Native backend I/O enters through explicit
 tasks or Promise imports.
 
-Buffer allocation, views, transfer, and copying use `runtime.buffers`. Ordinary
-tee with cloning uses `runtime.clone`; public `tee()` shares ordinary chunks,
+Buffer allocation, views, transfer, and copying use `exec.buffers`. Ordinary
+tee with cloning uses `exec.clone`; public `tee()` shares ordinary chunks,
 while byte tee copies bytes. Writable controllers obtain their AbortController
 from the runtime.
 

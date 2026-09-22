@@ -1,7 +1,7 @@
 import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
-import { bindAsyncContext, type RuntimeContext } from '../../../js-engine/index';
+import { bindAsyncContext, type RealmExecution } from '../../../js-engine/index';
 import type { PromiseValue } from '../../../infra/promises';
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { ElementImpl } from '../../dom/nodes/element';
@@ -17,18 +17,18 @@ export class BrowletParser {
   #eventLoop: EventLoop;
   #stream: ParserStream<HTMLTreeAdapterMap>;
   #treeAdapter: HTMLTreeAdapter;
-  #runtime: RuntimeContext;
+  #exec: RealmExecution;
 
   constructor(
     document: DocumentImpl,
     handleScript: ScriptHandler,
     eventLoop: EventLoop,
-    runtime: RuntimeContext,
+    exec: RealmExecution,
   ) {
     this.document = document;
     this.#handleScript = handleScript;
     this.#eventLoop = eventLoop;
-    this.#runtime = runtime;
+    this.#exec = exec;
     this.#treeAdapter = new HTMLTreeAdapter(document);
     this.#stream = new ParserStream<HTMLTreeAdapterMap>({
       sourceCodeLocationInfo: true,
@@ -40,7 +40,7 @@ export class BrowletParser {
   }
 
   parse(source: string): PromiseValue<void> {
-    const complete = this.#runtime.promises.withResolvers<void>();
+    const complete = this.#exec.promises.withResolvers<void>();
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#stream, (error) => {
       cleanup();
@@ -86,7 +86,7 @@ export class BrowletParser {
       // HTML's blocking wait resumes on the original (networking) task source.
       // Recheck here: another stylesheet can block before that task runs.
       if (this.document.hasScriptBlockingStyleSheets()) {
-        this.document.waitForScriptBlockingStyleSheets(this.#runtime).observe(
+        this.document.waitForScriptBlockingStyleSheets(this.#exec).observe(
           () => { this.queueTask(() => { this.runScript(element, write, resume); }); },
           (error) => { this.#stream.destroy(toError(error)); },
         );

@@ -6,7 +6,7 @@ import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
 import type { StyleletContext } from '../context';
-import type { PromiseValue, RuntimeCaps } from '../stylelet';
+import type { PromiseValue, ExecutionCaps } from '../stylelet';
 import { CSSRuleListImpl } from './rule-list';
 import { CSSStyleRuleImpl } from './rules';
 import { StyleSheetImpl } from './stylesheet';
@@ -52,7 +52,7 @@ export class CSSStyleSheetImpl
     context: StyleletContext,
     options: CSSStyleSheetInit = {},
   ) {
-    super(context.runtime);
+    super(context.exec);
 
     const document = context.document;
     const location = new URL(document.baseURI);
@@ -120,7 +120,7 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index > this.#rules.length) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'IndexSizeError',
         `Index ${index} exceeds the rule-list length.`,
       );
@@ -128,16 +128,16 @@ export class CSSStyleSheetImpl
 
     const parsedRule = parseRule(rule);
     if (parsedRule === null || isImportRule(parsedRule)) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'SyntaxError',
         `Failed to parse the rule: ${rule}`,
       );
     }
 
-    const rulePair = createCSSRule(parsedRule, this.runtime);
+    const rulePair = createCSSRule(parsedRule, this.exec);
     if (rulePair === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'NotSupportedError',
         `The parsed rule is not supported: ${rule}`,
       );
@@ -153,7 +153,7 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index >= this.#rules.length) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'IndexSizeError',
         `Index ${index} does not identify a rule.`,
       );
@@ -165,7 +165,7 @@ export class CSSStyleSheetImpl
 
   replace(text: string): PromiseValue<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return this.runtime.promises.reject(this.runtime.createDOMException(
+      return this.exec.promises.reject(this.exec.createDOMException(
         'NotAllowedError',
         'This stylesheet cannot be replaced.',
       ));
@@ -173,17 +173,17 @@ export class CSSStyleSheetImpl
 
     this.#disallowModification = true;
 
-    const result = this.runtime.promises.withResolvers<CSSStyleSheetImpl>();
+    const result = this.exec.promises.withResolvers<CSSStyleSheetImpl>();
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);
     };
     // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
     // Parse in parallel; return to the owner before changing rules or settling the promise.
-    this.runtime.runInParallel(() => {
+    this.exec.runInParallel(() => {
       try {
         const rules = this.parseRules(text);
-        this.runtime.queueTask(() => {
+        this.exec.queueTask(() => {
           try {
             this.replaceInterpretedStyleSheet(rules);
             this.#disallowModification = false;
@@ -193,7 +193,7 @@ export class CSSStyleSheetImpl
           }
         });
       } catch (error) {
-        this.runtime.queueTask(() => { reject(error); });
+        this.exec.queueTask(() => { reject(error); });
       }
     });
     return result.promise;
@@ -201,7 +201,7 @@ export class CSSStyleSheetImpl
 
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'NotAllowedError',
         'This stylesheet cannot be replaced.',
       );
@@ -278,12 +278,12 @@ export class CSSStyleSheetImpl
     styleSheet: InterpretedStyleSheet,
   ): void {
     this.#interpretedStyleSheet = styleSheet;
-    this.#rules.replace(buildCSSRules(styleSheet, this.runtime));
+    this.#rules.replace(buildCSSRules(styleSheet, this.exec));
   }
 
   private assertOriginClean(): void {
     if (!this.#originClean) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'SecurityError',
         'The stylesheet is not origin-clean.',
       );
@@ -292,7 +292,7 @@ export class CSSStyleSheetImpl
 
   private assertModificationAllowed(): void {
     if (this.#disallowModification) {
-      throw this.runtime.createDOMException(
+      throw this.exec.createDOMException(
         'NotAllowedError',
         'The stylesheet cannot currently be modified.',
       );
@@ -311,25 +311,25 @@ type CSSStyleSheetProperties = {
   originClean: boolean;
 };
 
-function buildCSSRules(sheet: InterpretedStyleSheet, runtime: RuntimeCaps): CSSRule[] {
+function buildCSSRules(sheet: InterpretedStyleSheet, exec: ExecutionCaps): CSSRule[] {
   return sheet.rules.flatMap((rule) => {
-    const cssRule = createCSSRuleFromInterpretedRule(rule, runtime);
+    const cssRule = createCSSRuleFromInterpretedRule(rule, exec);
     return cssRule === null ? [] : [cssRule];
   });
 }
 
-function createCSSRule(rule: SyntaxRule, runtime: RuntimeCaps): RulePair | null {
+function createCSSRule(rule: SyntaxRule, exec: ExecutionCaps): RulePair | null {
   const sheet = interpretStylesheet({ rules: [rule] });
   const interpretedRule = sheet.rules[0];
   if (interpretedRule === undefined) return null;
 
-  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, runtime);
+  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, exec);
   return cssRule === null ? null : { cssRule, interpretedRule };
 }
 
-function createCSSRuleFromInterpretedRule(rule: InterpretedRule, runtime: RuntimeCaps): CSSRule | null {
+function createCSSRuleFromInterpretedRule(rule: InterpretedRule, exec: ExecutionCaps): CSSRule | null {
   switch (rule.type) {
-    case 'style-rule': return new CSSStyleRuleImpl(rule, runtime);
+    case 'style-rule': return new CSSStyleRuleImpl(rule, exec);
     case 'property-rule': return null;
   }
 }

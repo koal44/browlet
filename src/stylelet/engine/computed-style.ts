@@ -59,5 +59,5 @@ export function computeStyle(
     computed: true,
     declarations: computed,
     readonly: true,
-  }, engine.context.runtime);
+  }, engine.context.exec);
 }

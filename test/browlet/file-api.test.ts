@@ -247,7 +247,7 @@ describe('File API Blob projection', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
-    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getBindingContext(getRelevantRealm(window)).getRuntime());
+    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getBindingContext(getRelevantRealm(window)).getExecution());
     const blob = projectBlob(window, implementation);
 
     await expect(call(blob, 'bytes')).rejects.toMatchObject({
@@ -383,7 +383,7 @@ describe('File API File and FileList projection', () => {
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {
     const window = createWindow();
     const context = getBindingContext(getRelevantRealm(window));
-    const runtime = context.getRuntime();
+    const exec = context.getExecution();
     const source: BlobByteSource = {
       size: 3,
       snapshotState: { version: 1 },
@@ -395,7 +395,7 @@ describe('File API File and FileList projection', () => {
       lastModified: 12,
       name: 'picked.bin',
       type: 'application/octet-stream',
-    }, runtime);
+    }, exec);
     const file = context.project(FileImpl, implementation);
 
     expect(file).toBeInstanceOf(requireFunction(window, 'File'));
@@ -409,21 +409,21 @@ describe('File API File and FileList projection', () => {
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'Text/Plain',
-    }, runtime)).toThrow(InternalError);
+    }, exec)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'text/plain;charset=utf-8',
-    }, runtime)).toThrow(InternalError);
+    }, exec)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'application/example;name=é',
-    }, runtime)).toThrow(InternalError);
+    }, exec)).toThrow(InternalError);
 
     const before = Date.now();
     const unknown = context.project(FileImpl, FileImpl.fromHost(
       source,
       { name: 'unknown.bin', type: '' },
-      runtime,
+      exec,
     ));
     const modificationTime = Reflect.get(unknown, 'lastModified') as number;
     const after = Date.now();

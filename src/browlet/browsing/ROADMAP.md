@@ -27,7 +27,11 @@
 - A browsing context owns the stable WindowProxy and the series of Windows it
   exposes. It does not own session history.
 - A navigable owns its current and active session-history entries; its active
-  Document and browsing context are derived through the active entry.
+  Document and browsing context are derived through the active entry. Its
+  constructor requires a document state with a present Document, establishes
+  both entries, and associates that Document. Callers cannot retain an
+  uninitialized navigable. Retained history state still permits null after
+  document discard; that later absence does not weaken constructor inputs.
 - Navigation commit must update the active entry, Document-to-browsing-context
   association, Window-to-Document association, and WindowProxy target as one
   coherent transition. The current convenience accessors must never become

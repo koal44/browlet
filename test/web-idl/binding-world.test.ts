@@ -6,44 +6,42 @@ import {
   defineCapability, defineInterface, idlType, impl, invokeWith, namedGetter, op,
   reference, roAttr, xattr, type BindingContext,
 } from '../../src/web-idl/index';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
 
 describe('Web IDL binding worlds and realm registration', () => {
-  it('composes the implementation runtime once per realm registration', () => {
+  it('composes execution facilities once per realm registration', () => {
     const realm = new Realm();
-    const runtime = createRuntime(realm);
+    const exec = createExecution(realm);
     const world = new BindingWorld([exampleIDL]);
     const compose = vi.fn((context: BindingContext) => {
       expect(context.realm).toBe(realm);
       expect(world.forRealm(realm)).toBeUndefined();
-      return runtime;
+      return exec;
     });
-    const first = world.register(realm, { createRuntime: compose });
-    const second = world.register(realm, { createRuntime: compose });
+    const first = world.register(realm, compose);
+    const second = world.register(realm, compose);
 
     expect(second).toBe(first);
     expect(world.forRealm(realm)).toBe(first);
     expect(compose).toHaveBeenCalledOnce();
     expect(compose.mock.calls[0]![0]).toBe(first);
-    expect(first.getRuntime()).toBe(runtime);
-    expect(first.getRuntime().promises).toBe(first.promises);
+    expect(first.getExecution()).toBe(exec);
+    expect(first.getExecution().promises).toBe(first.promises);
   });
 
-  it('allows registration to retry after runtime composition fails', () => {
+  it('allows registration to retry after execution composition fails', () => {
     const realm = new Realm();
     const world = new BindingWorld([exampleIDL]);
-    const failure = new Error('Runtime composition failed');
+    const failure = new Error('Execution composition failed');
 
-    expect(() => world.register(realm, {
-      createRuntime() { throw failure; },
-    })).toThrow(failure);
+    expect(() => world.register(realm, () => { throw failure; })).toThrow(failure);
     expect(world.forRealm(realm)).toBeUndefined();
 
-    const runtime = createRuntime(realm);
-    const context = world.register(realm, { createRuntime: () => runtime });
+    const exec = createExecution(realm);
+    const context = world.register(realm, () => exec);
     expect(world.forRealm(realm)).toBe(context);
-    expect(context.getRuntime()).toBe(runtime);
+    expect(context.getExecution()).toBe(exec);
     expect(world.project(context.construct(ExampleImpl))).toBeDefined();
   });
 
@@ -60,10 +58,10 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(() => world.register(realm)).toThrow('operation read has no implementation');
   });
 
-  it('requires explicit runtime composition only when a binding requests it', () => {
+  it('requires execution facilities only when a binding requests them', () => {
     const ctx = new BindingWorld([]).register(new Realm());
-    expect(() => ctx.getRuntime())
-      .toThrow('The binding realm has no implementation runtime');
+    expect(() => ctx.getExecution())
+      .toThrow('The binding realm has no execution facilities');
   });
 
   it('shares platform-object identity across realm registrations', () => {

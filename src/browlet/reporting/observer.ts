@@ -3,6 +3,7 @@ import {
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
 } from '../../web-idl/index';
 import type { Realm } from '../scripting/realm';
+import type { Environment } from '../scripting/environment';
 import type { WindowOrWorkerGlobalScopeMixin } from '../scripting/global-scope';
 import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
 import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
@@ -23,15 +24,14 @@ export class ReportingObserverImpl {
   /** Actual global-scope mixin owning registration, buffering, and task delivery. */
   #global: WindowOrWorkerGlobalScopeMixin;
 
-  // SPEC_MISMATCH: (callback, options) -> ReportingObserver
   constructor(
     callback: ReportingObserverCallback, options: ReportingObserverOptions,
-    global: WindowOrWorkerGlobalScopeMixin,
+    environment: Environment,
   ) {
     this.#callback = callback;
     this.#types = options.types;
     this.#buffered = options.buffered;
-    this.#global = global;
+    this.#global = environment.getWindowOrWorkerGlobalScopeMixin();
   }
 
   /** Register this observer, replaying buffered reports at most once. */
@@ -126,7 +126,7 @@ export const reportingObserverIDL = defineInterface<Realm>({
         arg('callback', reference('ReportingObserverCallback'), onError('report')),
         arg('options', reference('ReportingObserverOptions'), { optional: true, default: emptyDictionary }),
       ],
-      { constructWith: [atArg(2, (context) => context.realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin())] },
+      { constructWith: [atArg(2, (ctx) => ctx.realm.environment)] },
     ),
     op('observe', idlType.undefined),
     op('disconnect', idlType.undefined),

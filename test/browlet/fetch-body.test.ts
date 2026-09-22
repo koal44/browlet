@@ -4,7 +4,7 @@ import { itPassesWith } from '../test-runtime';
 import { FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
-import type { GlobalObject, RuntimeContext } from '../../src/js-engine/index';
+import type { GlobalObject, RealmExecution } from '../../src/js-engine/index';
 import type { PromiseValue } from '../../src/infra/promises';
 import {
   defineInterface, idlType, impl, op, promise, BindingWorld,
@@ -22,7 +22,7 @@ describe('Fetch body delivery through HTML', () => {
   it('delivers extracted bytes inside the owning HTML task', () => {
     const fixture = createFetchWindow();
     const loop = fixture.realm.agent.eventLoop;
-    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getExecution());
     const chunk = vi.fn();
     body.stream.getDefaultReader().readChunk({
       chunkSteps: (value) => { chunk([...value as Uint8Array], loop.currentlyRunningTask); },
@@ -40,7 +40,7 @@ describe('Fetch body delivery through HTML', () => {
   it('routes a foreign body to the destination Window networking tasks', () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), source.context.getRuntime());
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), source.context.getExecution());
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
@@ -64,7 +64,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('fully reads on the stream realm checkpoint and queues completion as another task', () => {
     const fixture = createFetchWindow();
-    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getExecution());
     fixture.runTask();
     const process = vi.fn();
     const error = vi.fn();
@@ -104,7 +104,7 @@ describe('Fetch body delivery through HTML', () => {
 
   it('uses HTML parallel scheduling when no task destination is supplied', async () => {
     const fixture = createFetchWindow();
-    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getRuntime());
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getExecution());
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
       body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);
@@ -120,21 +120,21 @@ describe('Fetch body delivery through HTML', () => {
     const owner = createFetchWindow();
     const source = createFetchWindow();
     const bindings = new BindingWorld(fetchDefinitions);
-    const ownerBinding = bindings.register(owner.realm, { createRuntime: () => owner.context.getRuntime() });
-    const otherBinding = bindings.register(source.realm, { createRuntime: () => source.context.getRuntime() });
+    const ownerBinding = bindings.register(owner.realm, () => owner.context.getExecution());
+    const otherBinding = bindings.register(source.realm, () => source.context.getExecution());
     const create = (context: typeof ownerBinding, body: FetchBody | null) => {
       if (kind === 'Request') {
         const request = createFetchRequest();
         request.body = body;
         return context.project(RequestImpl, context.construct(
-          RequestImpl, request, 'request', context.getRuntime().createDependentAbortSignal([]),
+          RequestImpl, request, 'request', context.getExecution().createDependentAbortSignal([]),
         ));
       }
       const response = new FetchResponse();
       response.body = body;
       return context.project(ResponseImpl, context.construct(ResponseImpl, response, 'response'));
     };
-    const body = FetchBody.fromBytes(Uint8Array.of(65, 66), source.context.getRuntime());
+    const body = FetchBody.fromBytes(Uint8Array.of(65, 66), source.context.getExecution());
     const receiver = create(ownerBinding, body);
     const foreign = create(otherBinding, null);
     const text = Reflect.get(foreign, 'text') as () => Promise<string>;
@@ -162,9 +162,9 @@ describe('Fetch body errors at the Promise binding boundary', () => {
   ] as const)('delivers a %s failure through a borrowed %s read', (failure, method) => {
     const owner = createFetchWindow();
     const other = createFetchWindow();
-    const runtime = owner.context.getRuntime();
-    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime);
-    const body = new FetchBody(stream, runtime);
+    const exec = owner.context.getExecution();
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, exec);
+    const body = new FetchBody(stream, exec);
     const authorError = new other.realm.intrinsics.typeError('author failure');
     if (failure === 'locked') stream.getDefaultReader();
     else if (failure === 'non-byte') stream.enqueueChunk('not bytes');
@@ -174,7 +174,7 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     const ownerBinding = bindings.register(owner.realm);
     bindings.register(other.realm).install(other.realm.global);
     const consumer = ownerBinding.project(
-      BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, runtime),
+      BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, exec),
     );
     const otherPrototype = (Reflect.get(other.realm.global, 'BodyConsumer') as typeof Object).prototype;
     const borrowed = Reflect.get(otherPrototype, method) as CallableFunction;
@@ -207,17 +207,17 @@ class BodyConsumerImpl {
   constructor(
     public body: FetchBody,
     public destination: GlobalObject,
-    public runtime: RuntimeContext,
+    public exec: RealmExecution,
   ) {}
 
   full(): PromiseValue<void> {
-    const result = this.runtime.promises.withResolvers<void>();
+    const result = this.exec.promises.withResolvers<void>();
     this.body.fullyRead(() => result.resolve(), result.reject, this.destination);
     return result.promise;
   }
 
   incremental(): PromiseValue<void> {
-    const result = this.runtime.promises.withResolvers<void>();
+    const result = this.exec.promises.withResolvers<void>();
     this.body.incrementallyRead(() => {}, result.resolve, result.reject, this.destination);
     return result.promise;
   }

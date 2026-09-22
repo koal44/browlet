@@ -1,5 +1,5 @@
 import type {
-  AbortControllerCapability, AbortSignalCapability, RuntimeContext,
+  AbortControllerCapability, AbortSignalCapability, RealmExecution,
 } from '../js-engine/index';
 import type { PromiseValue, PromiseValueCapability, Promises } from '../infra/promises';
 import {
@@ -45,7 +45,7 @@ export class WritableStreamImpl {
   constructor(
     underlyingSink: UnderlyingSink | null = {},
     strategy: QueuingStrategyRecord = {},
-    public runtime: RuntimeContext,
+    public exec: RealmExecution,
   ) {
     if (underlyingSink === null) return;
     if (underlyingSink.type !== undefined) {
@@ -73,9 +73,9 @@ export class WritableStreamImpl {
     abortAlgorithm: (reason: unknown) => PromiseValue<unknown>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
-    runtime: RuntimeContext,
+    exec: RealmExecution,
   ): WritableStreamImpl {
-    const stream = new WritableStreamImpl(null, {}, runtime);
+    const stream = new WritableStreamImpl(null, {}, exec);
     const controller = new WritableStreamDefaultControllerImpl();
     controller.setUp(
       stream,
@@ -97,16 +97,16 @@ export class WritableStreamImpl {
     abortAlgorithm: ((reason: unknown) => PromiseValue<unknown> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
-    runtime: RuntimeContext,
+    exec: RealmExecution,
   ): WritableStreamImpl {
     return WritableStreamImpl.create(
       () => undefined,
-      (chunk) => runtime.promises.try(() => writeAlgorithm(chunk)),
-      () => runtime.promises.try(() => closeAlgorithm?.()),
-      (reason) => runtime.promises.try(() => abortAlgorithm?.(reason)),
+      (chunk) => exec.promises.try(() => writeAlgorithm(chunk)),
+      () => exec.promises.try(() => closeAlgorithm?.()),
+      (reason) => exec.promises.try(() => abortAlgorithm?.(reason)),
       highWaterMark,
       sizeAlgorithm,
-      runtime,
+      exec,
     );
   }
 
@@ -118,7 +118,7 @@ export class WritableStreamImpl {
   /** Streams §5.2.4, abort(reason). */
   abort(reason?: unknown): PromiseValue<void> {
     if (this.locked) {
-      return this.runtime.promises.reject(new TypeError(
+      return this.exec.promises.reject(new TypeError(
         'Cannot abort a stream that already has a writer',
       ));
     }
@@ -128,12 +128,12 @@ export class WritableStreamImpl {
   /** Streams §5.2.4, close(). */
   close(): PromiseValue<void> {
     if (this.locked) {
-      return this.runtime.promises.reject(new TypeError(
+      return this.exec.promises.reject(new TypeError(
         'Cannot close a stream that already has a writer',
       ));
     }
     if (this.closeQueuedOrInFlight) {
-      return this.runtime.promises.reject(new TypeError(
+      return this.exec.promises.reject(new TypeError(
         'Cannot close an already-closing stream',
       ));
     }
@@ -184,17 +184,17 @@ export class WritableStreamImpl {
   abortInternal(reason: unknown): PromiseValue<void> {
     const { state } = this;
     if (this.#isFinished()) {
-      return this.runtime.promises.resolve(undefined);
+      return this.exec.promises.resolve(undefined);
     }
 
     this.controller.state.abortController.abort(reason);
     if (this.#isFinished()) {
-      return this.runtime.promises.resolve(undefined);
+      return this.exec.promises.resolve(undefined);
     }
     if (state.pendingAbortRequest) return state.pendingAbortRequest.promise.promise;
 
     const wasAlreadyErroring = state.state === 'erroring';
-    const promise = this.runtime.promises.withResolvers<void>();
+    const promise = this.exec.promises.withResolvers<void>();
     state.pendingAbortRequest = {
       promise,
       reason: wasAlreadyErroring ? undefined : reason,
@@ -208,7 +208,7 @@ export class WritableStreamImpl {
   closeInternal(): PromiseValue<void> {
     const { state } = this;
     if (state.state === 'closed' || state.state === 'errored') {
-      return this.runtime.promises.reject(new TypeError(
+      return this.exec.promises.reject(new TypeError(
         `A stream in the ${state.state} state cannot be closed`,
       ));
     }
@@ -216,7 +216,7 @@ export class WritableStreamImpl {
       throw new InternalError('Writable stream already has a close operation');
     }
 
-    const promise = this.runtime.promises.withResolvers<void>();
+    const promise = this.exec.promises.withResolvers<void>();
     state.closeRequest = promise;
     if (state.writer && state.backpressure && state.state === 'writable') {
       state.writer.state.readyPromise.resolve();
@@ -361,7 +361,7 @@ export class WritableStreamImpl {
     if (state.writer && backpressure !== state.backpressure) {
       const writerState = state.writer.state;
       if (backpressure) {
-        writerState.readyPromise = this.runtime.promises.withResolvers<void>();
+        writerState.readyPromise = this.exec.promises.withResolvers<void>();
       } else {
         writerState.readyPromise.resolve();
       }
@@ -422,7 +422,7 @@ export const writableStreamIDL = defineInterface({
   ...xattr('Transferable'),
   implementation: impl(WritableStreamImpl, {
     constructWith: [
-      atArg(2, (ctx) => ctx.getRuntime()),
+      atArg(2, (ctx) => ctx.getExecution()),
     ],
   }),
   members: [
@@ -546,9 +546,9 @@ export class WritableStreamDefaultControllerImpl {
   ): void {
     const { start, write, close, abort } = sink;
     const startAlgorithm = () => start && Reflect.apply(start, sink, [this]);
-    const writeAlgorithm = (chunk: unknown) => stream.runtime.promises.try(() => write?.call(sink, chunk, this));
-    const closeAlgorithm = () => stream.runtime.promises.try(() => close?.call(sink));
-    const abortAlgorithm = (reason: unknown) => stream.runtime.promises.try(() => abort?.call(sink, reason));
+    const writeAlgorithm = (chunk: unknown) => stream.exec.promises.try(() => write?.call(sink, chunk, this));
+    const closeAlgorithm = () => stream.exec.promises.try(() => close?.call(sink));
+    const abortAlgorithm = (reason: unknown) => stream.exec.promises.try(() => abort?.call(sink, reason));
 
     this.setUp(
       stream,
@@ -596,7 +596,7 @@ export class WritableStreamDefaultControllerImpl {
     }
     const state: WritableStreamDefaultControllerState = {
       abortAlgorithm,
-      abortController: stream.runtime.createAbortController(),
+      abortController: stream.exec.createAbortController(),
       closeAlgorithm,
       queue: new QueueWithSizes(),
       started: false,
@@ -609,7 +609,7 @@ export class WritableStreamDefaultControllerImpl {
     streamState.controller = this;
 
     stream.updateBackpressure(this.backpressure);
-    const startPromise = stream.runtime.promises.resolve(startAlgorithm());
+    const startPromise = stream.exec.promises.resolve(startAlgorithm());
     void startPromise.then(() => {
       state.started = true;
       this.advanceQueueIfNeeded();
@@ -877,8 +877,8 @@ export class WritableStreamDefaultWriterImpl {
     }
 
     const streamState = stream.state;
-    const readyPromise = stream.runtime.promises.withResolvers<void>();
-    const closedPromise = stream.runtime.promises.withResolvers<void>();
+    const readyPromise = stream.exec.promises.withResolvers<void>();
+    const closedPromise = stream.exec.promises.withResolvers<void>();
     if (streamState.state === 'writable' || streamState.state === 'closed') {
       if (streamState.state === 'closed' ||
         stream.closeQueuedOrInFlight || !streamState.backpressure) {
@@ -893,7 +893,7 @@ export class WritableStreamDefaultWriterImpl {
       closedPromise.reject(streamState.storedError);
       void closedPromise.promise.then(undefined, () => {});
     }
-    this.state = { closedPromise, readyPromise, stream, promises: stream.runtime.promises };
+    this.state = { closedPromise, readyPromise, stream, promises: stream.exec.promises };
     streamState.writer = this;
   }
 

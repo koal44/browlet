@@ -1,5 +1,5 @@
 import {
-  codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8, type RuntimeContext,
+  codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8, type RealmExecution,
 } from '../../js-engine/index';
 import type { PromiseValue } from '../../infra/promises';
 import { endOfQueue, IOQueue, processQueue, type QueueResult } from '../io-queue';
@@ -20,10 +20,10 @@ export function utf8DecodeWithoutBOMOrFail(input: Uint8Array): string | null {
 }
 
 /** Complete-string UTF-8 encoding, with one allocation in the supplied runtime. */
-export function utf8Encode(input: string, runtime?: RuntimeContext): Uint8Array<ArrayBuffer> {
+export function utf8Encode(input: string, exec?: RealmExecution): Uint8Array<ArrayBuffer> {
   const length = utf8ByteLength(input);
-  const bytes = runtime
-    ? runtime.buffers.createView('Uint8Array', runtime.buffers.allocateArrayBuffer(length))
+  const bytes = exec
+    ? exec.buffers.createView('Uint8Array', exec.buffers.allocateArrayBuffer(length))
     : new Uint8Array(length);
   writeUTF8(input, bytes);
   return bytes;
@@ -31,37 +31,37 @@ export function utf8Encode(input: string, runtime?: RuntimeContext): Uint8Array<
 
 /** Encoding §6 — UTF-8 decode; consume one leading BOM, including across chunks. */
 export function utf8DecodeQueue(
-  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), runtime: RuntimeContext,
+  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), exec: RealmExecution,
 ): PromiseValue<IOQueue<string>> {
-  return input.waitFor(3, runtime).then(() => {
+  return input.waitFor(3, exec).then(() => {
     if (hasBOM(input.peek(3)!)) input.readAvailable(3);
-    return utf8DecodeWithoutBOMQueue(input, output, runtime);
+    return utf8DecodeWithoutBOMQueue(input, output, exec);
   });
 }
 
 /** Encoding §6 — UTF-8 decode without BOM; append to the caller's output. */
 export function utf8DecodeWithoutBOMQueue(
-  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), runtime: RuntimeContext,
+  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), exec: RealmExecution,
 ): PromiseValue<IOQueue<string>> {
   const decoder = new UTF8Decoder();
-  return processQueue(input, () => decoder.decode(input, output), runtime).then(() => output);
+  return processQueue(input, () => decoder.decode(input, output), exec).then(() => output);
 }
 
 /** Encoding §6 — Fatal decoding leaves the emitted prefix and unread input available. */
 export function utf8DecodeWithoutBOMOrFailQueue(
-  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), runtime: RuntimeContext,
+  input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), exec: RealmExecution,
 ): PromiseValue<IOQueue<string> | null> {
   const decoder = new UTF8Decoder();
-  return processQueue(input, () => decoder.decode(input, output, 'fatal'), runtime)
+  return processQueue(input, () => decoder.decode(input, output, 'fatal'), exec)
     .then((result) => typeof result === 'object' ? null : output);
 }
 
 /** Encoding §6 — UTF-8 encode, retaining streaming input and supplied output. */
 export function utf8EncodeQueue(
-  input: IOQueue<string>, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), runtime: RuntimeContext,
+  input: IOQueue<string>, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), exec: RealmExecution,
 ): PromiseValue<IOQueue<Uint8Array>> {
   const encoder = new UTF8Encoder();
-  return processQueue(input, () => encoder.encode(input, output), runtime).then(() => output);
+  return processQueue(input, () => encoder.encode(input, output), exec).then(() => output);
 }
 
 // -- Encoding §8: UTF-8 -------------------------------------------------

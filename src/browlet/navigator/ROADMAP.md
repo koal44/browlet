@@ -26,7 +26,7 @@ For `NavigatorID.userAgent`, call Fetch's `getEnvironmentDefaultUserAgent()`
 with this Navigator's relevant settings object, as HTML prescribes. Browlet's
 UserAgent already owns the configured default; the settings supply the scoped
 BiDi query. Reporting and request-header insertion use the same selector.
-Do not introduce a second identification value on Navigator or RuntimeContext.
+Do not introduce a second identification value on Navigator or RealmExecution.
 
 Blink likewise keeps a base Navigator/WorkerNavigator in core while feature
 modules contribute separate IDL mixins. Browlet should preserve that extension

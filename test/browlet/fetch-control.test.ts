@@ -12,8 +12,8 @@ import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 describe('Fetch client settings ownership', () => {
   it('shares networking owners across settings while separating opaque cache partitions', () => {
     const userAgent = new UserAgent();
-    const first = createFetchWindow(userAgent).realm.hostDefined!;
-    const second = createFetchWindow(userAgent).realm.hostDefined!;
+    const first = createFetchWindow(userAgent).realm.environment;
+    const second = createFetchWindow(userAgent).realm.environment;
     const firstRequest = new FetchRequest(first.creationURL, first, first.userAgent);
     const secondRequest = new FetchRequest(second.creationURL, second, second.userAgent);
     const partitions = userAgent.httpCachePartitions;
@@ -32,8 +32,8 @@ describe('Fetch client settings ownership', () => {
 
   it('owns a separate fetch group for each settings object in the same user agent', () => {
     const userAgent = new UserAgent();
-    const first = createFetchWindow(userAgent).realm.hostDefined!;
-    const second = createFetchWindow(userAgent).realm.hostDefined!;
+    const first = createFetchWindow(userAgent).realm.environment;
+    const second = createFetchWindow(userAgent).realm.environment;
     const request = new FetchRequest(first.creationURL, first, first.userAgent);
     const controller = new FetchController();
 
@@ -52,9 +52,9 @@ describe('Fetch client settings ownership', () => {
 
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
-    const settings = realm.hostDefined!;
-    const request = new FetchRequest(parseURL('https://example.test/').url!, settings, settings.userAgent);
-    request.origin = settings.origin;
+    const environment = realm.environment;
+    const request = new FetchRequest(parseURL('https://example.test/').url!, environment, environment.userAgent);
+    request.origin = environment.origin;
     const container = document!.getPolicyContainer();
 
     expect(request.client!.policyContainer).toBe(container);
@@ -77,31 +77,31 @@ describe('Fetch client settings ownership', () => {
   it('reads the owning browser\'s live offline state even after its browsing context is detached', () => {
     const first = createFetchWindow();
     const second = createFetchWindow();
-    const settings = first.realm.hostDefined!;
-    const otherSettings = second.realm.hostDefined!;
-    const request = new FetchRequest(settings.creationURL, settings, settings.userAgent);
+    const environment = first.realm.environment;
+    const otherSettings = second.realm.environment;
+    const request = new FetchRequest(environment.creationURL, environment, environment.userAgent);
 
-    expect(request.client).toBe(settings);
-    expect(settings.userAgent).not.toBe(otherSettings.userAgent);
-    expect(settings.webDriverBiDiNetworkIsOffline()).toBe(false);
+    expect(request.client).toBe(environment);
+    expect(environment.userAgent).not.toBe(otherSettings.userAgent);
+    expect(environment.webDriverBiDiNetworkIsOffline()).toBe(false);
     expect(isOffline(request.client!)).toBe(false);
 
-    settings.userAgent.assumeNoInternetConnectivity = true;
+    environment.userAgent.assumeNoInternetConnectivity = true;
     expect(isOffline(request.client!)).toBe(true);
     expect(isOffline(otherSettings)).toBe(false);
 
     const context = first.document!.getBrowsingContext()!;
-    expect(context.group!.userAgent).toBe(settings.userAgent);
+    expect(context.group!.userAgent).toBe(environment.userAgent);
     context.group!.remove(context);
     expect(context.group).toBeNull();
-    expect(isOffline(settings)).toBe(true);
+    expect(isOffline(environment)).toBe(true);
 
-    settings.userAgent.assumeNoInternetConnectivity = false;
-    expect(isOffline(settings)).toBe(false);
+    environment.userAgent.assumeNoInternetConnectivity = false;
+    expect(isOffline(environment)).toBe(false);
   });
 });
 
-describe('Runtime structured serialization', () => {
+describe('RealmExecution structured serialization', () => {
   it('reuses a snapshot to reconstruct independent graphs in destination realms', () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
@@ -112,22 +112,22 @@ describe('Runtime structured serialization', () => {
       const value = { bytes, alias: bytes };
       value.self = value;
       return value;
-    })()`, 'runtime-serialize.js') as Value;
-    const record = source.runtime.serialize(value);
+    })()`, 'execution-serialize.js') as Value;
+    const record = source.exec.serialize(value);
     value.bytes[0] = 9;
 
-    const first = target.runtime.deserialize(record) as Value;
-    const second = other.runtime.deserialize(record) as Value;
+    const first = target.exec.deserialize(record) as Value;
+    const second = other.exec.deserialize(record) as Value;
     for (const [restored, destination] of [[first, target], [second, other]] as const) {
       expect([...restored.bytes]).toEqual([1, 2]);
       expect(restored.self).toBe(restored);
       expect(restored.alias).toBe(restored.bytes);
       expect(Object.getPrototypeOf(restored)).toBe(destination.realm.intrinsics.object.prototype);
       expect(Object.getPrototypeOf(restored.bytes)).toBe(
-        destination.realm.evaluate('Uint8Array.prototype', 'runtime-view.js'),
+        destination.realm.evaluate('Uint8Array.prototype', 'execution-view.js'),
       );
       expect(Object.getPrototypeOf(restored.bytes.buffer)).toBe(
-        destination.realm.evaluate('ArrayBuffer.prototype', 'runtime-buffer.js'),
+        destination.realm.evaluate('ArrayBuffer.prototype', 'execution-buffer.js'),
       );
     }
     first.bytes[0] = 7;
@@ -181,7 +181,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
 
   it('uses AbortError for a missing record and for serialized undefined', () => {
     const target = createFetchWindow();
-    for (const record of [null, target.runtime.serialize(undefined)]) {
+    for (const record of [null, target.exec.serialize(undefined)]) {
       expectAbortError(target.deserialize(record), target);
     }
   });

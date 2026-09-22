@@ -2,12 +2,12 @@ import { escapeRegExp } from '../infra/strings';
 import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
 import { Promises } from '../infra/promises';
-import type { RuntimeCaps, StyleletOptions } from './stylelet';
+import type { ExecutionCaps, StyleletOptions } from './stylelet';
 
 export class StyleletContext {
   document: Document;
   isHtml: boolean;
-  runtime: RuntimeCaps;
+  exec: ExecutionCaps;
 
   documentDesignMode: (document: Document) => string | undefined;
   treeVersion: (root: Node) => number | undefined;
@@ -52,7 +52,7 @@ export class StyleletContext {
 
     this.document = document;
     this.isHtml = document.contentType.includes('/html');
-    this.runtime = options.runtime ?? defaultRuntimeCaps;
+    this.exec = options.exec ?? defaultExecutionCaps;
 
     this.documentDesignMode = documentCaps?.designMode ?? defaultDocumentDesignMode;
     this.treeVersion = treeCaps?.version ?? defaultTreeVersion;
@@ -134,9 +134,9 @@ export class StyleletContext {
 
 /*
  * Standalone Stylelet uses the native environment's queue. StyleletContext selects
- * this complete provider when no runtime is supplied at construction.
+ * this complete provider when no execution facilities are supplied at construction.
  */
-export const defaultRuntimeCaps: RuntimeCaps = {
+export const defaultExecutionCaps: ExecutionCaps = {
   // eslint-disable-next-line no-restricted-globals -- This provider deliberately uses native Promise allocation and scheduling.
   promises: new Promises(Promise, (promise, fulfilled, rejected) => {
     void promise.then(fulfilled, rejected).catch((error: unknown) => {

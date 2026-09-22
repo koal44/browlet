@@ -13,7 +13,7 @@ import {
 } from '../web-idl/index';
 import { isForbiddenMethod } from './http/methods';
 import { parseSingleRangeHeaderValue } from './http/ranges';
-import type { FetchEnvironmentSettingsObject } from './infrastructure';
+import type { FetchEnvironment } from './infrastructure';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
 // https://fetch.spec.whatwg.org/#concept-header-list
@@ -486,7 +486,7 @@ export function isRequestBodyHeaderName(name: string): boolean {
 
 /** Select this environment's identification header value, including an explicit empty override. */
 // https://fetch.spec.whatwg.org/#environment-default-user-agent-value
-export function getEnvironmentDefaultUserAgent(environment: FetchEnvironmentSettingsObject): string {
+export function getEnvironmentDefaultUserAgent(environment: FetchEnvironment): string {
   // Header values already use isomorphic strings; no intermediate byte array is needed.
   return environment.webDriverBiDiEmulatedUserAgent() ?? environment.userAgent.defaultUserAgentValue;
 }

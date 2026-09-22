@@ -1,4 +1,4 @@
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -118,6 +118,6 @@ describe('TextEncoderStream byte production', () => {
 });
 
 function createEncoder() {
-  const encoder = new TextEncoderStreamImpl(createRuntime());
+  const encoder = new TextEncoderStreamImpl(createExecution());
   return { reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
 }

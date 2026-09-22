@@ -126,5 +126,5 @@ function createResponse(header?: string, url = 'https://example.test/path/docume
 
 function createGlobalScope() {
   const browlet = new Browlet({ route: () => '' });
-  return getRelevantRealm(browlet.window).windowImplementation!.getWindowOrWorkerGlobalScopeMixin();
+  return getRelevantRealm(browlet.window).windowImplementation.getWindowOrWorkerGlobalScopeMixin();
 }

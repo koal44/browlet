@@ -3,7 +3,7 @@ import {
 } from '../../web-idl/index';
 import { getEnvironmentDefaultUserAgent } from '../../fetch/index';
 import { stripURLForReporting } from '../../url/index';
-import type { EnvironmentSettingsObject } from '../scripting/environment';
+import type { Environment } from '../scripting/environment';
 
 /** Observer-facing report data, independent of network delivery bookkeeping. */
 // https://w3c.github.io/reporting/#dom-report
@@ -41,13 +41,13 @@ export class ReportBodyImpl {}
 /** Create pending report data, capturing the environment's current identification value. */
 // https://w3c.github.io/reporting/#queue-report
 export function generateReport(
-  data: unknown, type: string, destination: string, settings: EnvironmentSettingsObject,
+  data: unknown, type: string, destination: string, environment: Environment,
 ): Report {
   // HTML's NavigatorID.userAgent uses this same environment-default algorithm.
   return {
     body: data,
-    url: stripURLForReporting(settings.creationURL),
-    userAgent: getEnvironmentDefaultUserAgent(settings),
+    url: stripURLForReporting(environment.creationURL),
+    userAgent: getEnvironmentDefaultUserAgent(environment),
     destination,
     type,
     timestamp: Date.now(),

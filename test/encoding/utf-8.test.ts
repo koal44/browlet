@@ -7,7 +7,7 @@ import {
   utf8DecodeWithoutBOMQueue, utf8DecodeWithoutBOMOrFailQueue, utf8EncodeQueue,
 } from '../../src/encoding/codecs/utf-8';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 
 describe('Encoding Standard UTF-8 hooks', () => {
   it('encodes and decodes scalar values', () => {
@@ -200,7 +200,7 @@ describe('Encoding §6: UTF-8 queue hooks', () => {
     const output = new IOQueue<string>();
     const results: unknown[] = [];
     output.push('prefix:');
-    utf8DecodeQueue(input, output, createRuntime()).observe(
+    utf8DecodeQueue(input, output, createExecution()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     input.push(Uint8Array.of(0xef));
@@ -224,7 +224,7 @@ describe('Encoding §6: UTF-8 queue hooks', () => {
   it.each([[[]], [[0xef]], [[0xef, 0xbb]]])('finishes a short input %j during BOM lookahead', async (bytes) => {
     const output = new IOQueue<string>();
     const results: unknown[] = [];
-    utf8DecodeQueue(IOQueue.from(Uint8Array.from(bytes)), output, createRuntime()).observe(
+    utf8DecodeQueue(IOQueue.from(Uint8Array.from(bytes)), output, createExecution()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -233,10 +233,10 @@ describe('Encoding §6: UTF-8 queue hooks', () => {
   });
 
   it('preserves a BOM without sniffing and keeps fatal output open', async () => {
-    const runtime = createRuntime();
+    const exec = createExecution();
     const output = new IOQueue<string>();
     const results: unknown[] = [];
-    utf8DecodeWithoutBOMQueue(IOQueue.from(Uint8Array.of(0xef, 0xbb, 0xbf)), output, runtime).observe(
+    utf8DecodeWithoutBOMQueue(IOQueue.from(Uint8Array.of(0xef, 0xbb, 0xbf)), output, exec).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -245,7 +245,7 @@ describe('Encoding §6: UTF-8 queue hooks', () => {
 
     const input = IOQueue.from(Uint8Array.of(0x61, 0xff, 0x62));
     const prefix = new IOQueue<string>();
-    utf8DecodeWithoutBOMOrFailQueue(input, prefix, runtime).observe(
+    utf8DecodeWithoutBOMOrFailQueue(input, prefix, exec).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -260,7 +260,7 @@ describe('Encoding §6: UTF-8 queue hooks', () => {
     const output = new IOQueue<Uint8Array>();
     const results: unknown[] = [];
     input.push('A');
-    utf8EncodeQueue(input, output, createRuntime()).observe(
+    utf8EncodeQueue(input, output, createExecution()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     expect(output.takeBytes()).toEqual(Uint8Array.of(65));

@@ -8,7 +8,7 @@ import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context'
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
+import { createWindowEnvironment } from '../../../src/browlet/bindings';
 
 describe('Streams constructor bindings', () => {
   it.each([
@@ -119,16 +119,17 @@ function construct(global: object, name: string, args: unknown[] = []): object {
 
 function createRelatedWindow(first: Window): WindowProxy {
   const firstRealm = getRelevantRealm(first);
-  const { agent, hostDefined: settings } = firstRealm;
-  if (!(agent instanceof WindowAgent) || !settings) {
+  const { agent, environment } = firstRealm;
+  if (!(agent instanceof WindowAgent)) {
     throw new Error('Expected an initialized Window realm');
   }
-  const { window, settings: relatedSettings } = createWindowEnvironment(agent, {
-    userAgent: settings.userAgent, creationURL: settings.creationURL,
-    origin: settings.origin, parent: null,
-    topLevelCreationURL: settings.creationURL, topLevelOrigin: settings.origin,
+  const relatedSettings = createWindowEnvironment({
+    agent, userAgent: environment.userAgent, creationURL: environment.creationURL,
+    origin: environment.origin, parent: null,
+    topLevelCreationURL: environment.creationURL, topLevelOrigin: environment.origin,
   });
-  const { realm } = relatedSettings.realmExecutionContext;
+  const { window } = relatedSettings;
+  const { realm } = relatedSettings;
   const proxy = realm.globalThis as WindowProxy;
   const document = new DocumentImpl();
   document.setBrowsingContext(new BrowsingContext(proxy));

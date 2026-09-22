@@ -322,7 +322,7 @@ export class ElementImpl extends withElementStub(NodeImpl) {
   getInlineStyle(): CSSStyleDeclarationImpl {
     return (this.#inlineStyleMixin ??=
       new ElementCSSInlineStyleMixin(
-        this, this.getNodeDocument()!.styleletRuntime,
+        this, this.getNodeDocument()!.styleletExec,
       )).style;
   }
 

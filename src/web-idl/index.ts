@@ -17,7 +17,7 @@ export {
   type CapabilityOptions,
 } from './capability';
 export {
-  BindingWorld, type BindingWorldOptions, type RealmRegistrationOptions,
+  BindingWorld, type BindingWorldOptions,
 } from './binding-world';
 export type { WebIDLRealmHost };
 export type { GlobalObjectAllocation } from './realm-binding';

@@ -6,16 +6,18 @@ assembles their capability providers with Web IDL definitions, host-defined
 interfaces, and realm bindings.
 
 The named functions exported by `bindings.ts` forward to its main
-`BrowletBindings` instance. HTML's `createWindowEnvironment()` constructs the
-Window, gives its Environment to `createWindowRealm()` for engine allocation
-and binding, then sets up settings and the global-scope mixin. The Realm reads
-security from the Environment before Web IDL installs properties; settings
-inherit that decision. The Document lifecycle algorithms retain their own
+`BrowletBindings` instance. `createWindowEnvironment()` constructs the Window,
+allocates its realm and execution facilities, and installs its platform global.
+The Realm initially reads security from a plain `EnvironmentRecord`. After Web
+IDL installation, the composition root constructs and publishes the complete
+`WindowEnvironment`, which owns `realm`, `exec`, and `window`, and constructs its
+shared global-scope mixin. The Document lifecycle algorithms retain their own
 initialization. `createDocument()` obtains the node factory and
-Stylelet runtime through Document's existing construction declaration. Record
+Stylelet execution facilities through Document's existing construction declaration. Record
 creation initializes its realm-owned event factory without projecting it.
-Window initialization supplies prepared structured-clone steps to the mixin,
-rather than a Binding Context or the complete realm binding.
+The mixin uses `environment.exec.clone()` and derives timer ownership from
+`environment.realm`, without retaining a Binding Context or a separate execution
+argument.
 
 A standalone subsystem owns the contract for each capability it consumes. A
 provider module here connects that contract to Browlet-owned behavior. The
@@ -33,12 +35,11 @@ Domain-local behavior still remains with its owning subsystem.
 - `file/` connects File API algorithms to HTML scheduling and structured data,
   supplies platform line ending policy, and owns `FileReader`, whose concrete
   implementation depends on Browlet's EventTarget, tasks, timing, and events.
-- `runtime.ts` composes each Window's implementation Runtime Context from its
-  engine facilities, DOM AbortController construction, HTML task delivery, and
-  structured cloning. Binding registration retains that one context and
-  declaration bindings supply it to implementations. It also prepares the
-  global's structured-clone steps with explicit destination-realm bindings;
-  HTML Window initialization supplies them to the global-scope mixin.
+- `execution.ts` composes engine facilities, DOM AbortController construction,
+  HTML task delivery, and structured cloning into `RealmExecution`. The binding's
+  `getExecution()` and `environment.exec` retain that same execution object;
+  declarations supply it to portable implementations. Clone and serialization
+  operations capture the explicit destination binding here.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.

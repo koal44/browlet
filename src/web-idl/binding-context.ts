@@ -1,5 +1,5 @@
 import type { Promises } from '../infra/promises';
-import type { RuntimeContext } from '../js-engine/index';
+import type { RealmExecution } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
 import type { Capability } from './capability';
@@ -16,22 +16,22 @@ import {
 } from './implementation-binding';
 import { InternalError } from '../infra/internal-error';
 
-/** A realm's Web IDL operations and implementation runtime within one binding world. */
+/** A realm's Web IDL operations and execution facilities within one binding world. */
 export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   realm: Realm;
   promises: Promises;
   #binding: RealmBinding<Realm>;
-  #runtime: RuntimeContext | undefined;
+  #exec: RealmExecution | undefined;
 
-  // Project helper: retain a realm binding and compose its implementation runtime.
+  // Project helper: retain a realm binding and compose its execution facilities.
   constructor(
     binding: RealmBinding<Realm>,
-    createRuntime?: (ctx: BindingContext<Realm>) => RuntimeContext,
+    createExecution?: (ctx: BindingContext<Realm>) => RealmExecution,
   ) {
     this.realm = binding.realm;
     this.promises = binding.realm.promises;
     this.#binding = binding;
-    this.#runtime = createRuntime?.(this);
+    this.#exec = createExecution?.(this);
   }
 
   /** Install this realm's exposed definitions on the supplied global object. */
@@ -49,10 +49,10 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     return this.#binding.projectGlobalObject(implInst, primaryInterface, allocation).platformObject!;
   }
 
-  // Project helper: retrieve the configured implementation runtime.
-  getRuntime(): RuntimeContext {
-    if (!this.#runtime) throw new InternalError('The binding realm has no implementation runtime');
-    return this.#runtime;
+  // Project helper: retrieve the configured execution facilities.
+  getExecution(): RealmExecution {
+    if (!this.#exec) throw new InternalError('The binding realm has no execution facilities');
+    return this.#exec;
   }
 
   // Project helper: compose Web IDL §3.2 JavaScript type mapping with implementation adaptation.

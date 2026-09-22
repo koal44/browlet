@@ -4,10 +4,13 @@ This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
-It also defines the neutral [`RuntimeContext`](./runtime-context.ts) contract
-shared by implementations. Browlet composes its task, abort, timing, and structured-data
-providers; their specification policy stays above this layer. `timing.coarsenTime()`
-is supplied by Browlet's High Resolution Time implementation. `serialize()` captures
+It also defines the neutral [`RealmExecution`](./realm-execution.ts) contract
+shared by implementations. Browlet's `Environment` owns it as `exec`, with task,
+abort, and structured-data facilities assembled at its composition root.
+Portable implementations use the neutral contract without depending on HTML
+environments; other hosts may supply their own implementation. Specification
+policy stays above this layer. High Resolution Time and Fetch directly import
+the stateless coarsening calculation from Infra. `serialize()` captures
 an opaque record, `deserialize()` reconstructs it in the destination runtime's
 realm, and `clone()` supplies immediate cloning. Engine-owned
 buffer inspection and writes live in [`buffers.ts`](./buffers.ts). Realm-owned
@@ -15,7 +18,7 @@ allocation, view construction, and transfer belong to the
 [`JSRealm`](./realm.ts) class. Its `createRuntimeBuffers()` method supplies
 those operations to implementations without exposing the realm. Web IDL retains
 BufferSource conversion. The composition and lifetime rules are authoritative
-in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md#runtime-context).
+in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md#realm-execution).
 
 `JSRealm.createCollectionIterator(kind, next)` allocates a Map/Set iterator;
 Web IDL supplies the live iteration and per-step conversion callback. The
@@ -23,7 +26,7 @@ patched V8 factory provides native `next()` branding and iterator lifecycle.
 Without that factory, the engine layer retains the labeled Proxy fallback for
 ordinary iteration; borrowing native Map/Set `next()` remains unsupported.
 
-`runtime.buffers.allocateArrayBuffer(byteLength)` creates zero-initialized,
+`exec.buffers.allocateArrayBuffer(byteLength)` creates zero-initialized,
 fixed-length storage in the owning realm. `createView(name, buffer, byteOffset?,
 length?)` creates a concrete typed array or DataView over the supplied buffer
 without copying or replacing it. Length counts elements for typed arrays and
@@ -76,7 +79,7 @@ Promise routing uses the job's queue realm, without an ambient execution owner
 or a saved-continuation-data lookup. Node reactions, including runtime diagnostics,
 remain on Node's queue even when created during a platform operation or HTML task.
 Each realm owns a `Promises` facility for allocation, adoption, and native
-observation. Bindings supply it through Runtime Context to asynchronous implementations. A
+observation. Bindings supply it through RealmExecution to asynchronous implementations. A
 `PromiseValue<T>` retains that facility through `.then()` and `.catch()`;
 terminal `.observe()` needs no destination argument. `Promises.import()` brings
 a native or another owner's internal result into the consumer's destination.

@@ -5,7 +5,7 @@ import { unwrap, getRelevantRealm } from '../../../src/browlet/bindings';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 
-describe('Stylelet runtime integration', () => {
+describe('Stylelet execution integration', () => {
   it.each(['initial', 'navigated', 'constructed'] as const)(
     'completes stylesheet work with the %s document host', async (kind) => {
       const browlet = new Browlet({ route: () => '<main></main>' });

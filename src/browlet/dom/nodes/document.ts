@@ -1,11 +1,11 @@
 import {
-  type TreeScope, defaultRuntimeCaps as defaultStyleletRuntimeCaps, Stylelet,
-  type RuntimeCaps as StyleletRuntimeCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
+  type TreeScope, defaultExecutionCaps as defaultStyleletExecutionCaps, Stylelet,
+  type ExecutionCaps as StyleletExecutionCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import type { PromiseValue, PromiseValueCapability } from '../../../infra/promises';
-import type { RuntimeContext } from '../../../js-engine/index';
+import type { RealmExecution } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
-import { createStyleletRuntime, type TreeScopeResolver } from '../../style/integration';
+import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
@@ -65,12 +65,12 @@ export function createDocument(
   options: DocumentConstructionOptions = {},
 ): DocumentImpl {
   const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
-  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, options.styleletRuntime]);
+  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, options.styleletExec]);
 }
 
 export type DocumentConstructionOptions = {
   nodeFactory?: DOMNodeFactory;
-  styleletRuntime?: StyleletRuntimeCaps;
+  styleletExec?: StyleletExecutionCaps;
 };
 
 /*
@@ -160,7 +160,7 @@ export class DocumentImpl extends NodeImpl {
   #readyForPostLoadTasks = false;
   #referrer = '';
   #stylelet: Stylelet | undefined;
-  styleletRuntime: StyleletRuntimeCaps;
+  styleletExec: StyleletExecutionCaps;
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   #parentNodeMixin: ParentNodeMixin;
   #treeScopeResolver: TreeScopeResolver;
@@ -179,7 +179,7 @@ export class DocumentImpl extends NodeImpl {
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
-    styleletRuntime: StyleletRuntimeCaps = defaultStyleletRuntimeCaps,
+    styleletExec: StyleletExecutionCaps = defaultStyleletExecutionCaps,
   ) {
     super(
       NodeType.Document,
@@ -190,7 +190,7 @@ export class DocumentImpl extends NodeImpl {
     );
     this.setNodeDocument(this);
     this.#nodeFactory = nodeFactory;
-    this.styleletRuntime = styleletRuntime;
+    this.styleletExec = styleletExec;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => this.#customElementRegistry,
@@ -698,7 +698,7 @@ export class DocumentImpl extends NodeImpl {
 
   getCSSEngine(): Stylelet {
     return this.#stylelet ??= new Stylelet(asDocument(this), {
-      runtime: this.styleletRuntime,
+      exec: this.styleletExec,
     });
   }
 
@@ -782,13 +782,13 @@ export class DocumentImpl extends NodeImpl {
     return this.#scriptBlockingStyleSheets.size > 0;
   }
 
-  waitForScriptBlockingStyleSheets(runtime: RuntimeContext): PromiseValue<void> {
-    return runtime.promises.try(() => {
+  waitForScriptBlockingStyleSheets(exec: RealmExecution): PromiseValue<void> {
+    return exec.promises.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=
-        runtime.promises.withResolvers<void>();
+        exec.promises.withResolvers<void>();
       return ready.promise.then(() =>
-        this.waitForScriptBlockingStyleSheets(runtime),
+        this.waitForScriptBlockingStyleSheets(exec),
       );
     });
   }
@@ -810,7 +810,7 @@ export const documentIDL = defineInterface({
           return ctx.construct(implClass, ...argumentsList);
         },
       })),
-      atArg<Realm>(1, (ctx) => createStyleletRuntime(ctx.realm, ctx.getRuntime())),
+      atArg<Realm>(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getExecution())),
     ],
   }),
   members: [

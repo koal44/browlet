@@ -27,17 +27,17 @@ import { styleletIDLDefinitions } from 'stylelet';
 A DOM host can assemble it with its own interfaces and bind the resulting
 CSSOM mixins to that host's platform objects.
 
-`StyleletOptions` accepts `document`, `element`, `tree`, and `runtime`
+`StyleletOptions` accepts `document`, `element`, `tree`, and `exec`
 capabilities directly. The DOM capabilities customize access to attributes,
-document state, and tree mutation versions. `runtime` accepts `RuntimeCaps`
+document state, and tree mutation versions. `exec` accepts `ExecutionCaps`
 for promises, deferred execution, and DOM exceptions; omitting it selects
-`defaultRuntimeCaps`, using the native Promise queue, timers, and DOMException.
-The document's `StyleletContext` retains the selected runtime and normalized DOM
+`defaultExecutionCaps`, using the native Promise queue, timers, and DOMException.
+The document's `StyleletContext` retains the selected execution facilities and normalized DOM
 callbacks; it does not retain the options object.
 
 Stylelet exports its stylesheet, declaration, and media-list implementations.
-Stylesheet construction takes the existing context, which supplies its runtime.
-Declaration and media-list constructors take runtime capabilities last.
+Stylesheet construction takes the existing context, which supplies `exec`.
+Declaration and media-list constructors take execution capabilities last.
 `CSSStyleSheetImpl.replace()` returns an internal
 `PromiseValue<CSSStyleSheetImpl>`; use `.observe(fulfilled, rejected)` when consuming
 it directly. Platform promise and exception projection belong to the host binding.

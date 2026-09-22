@@ -1,4 +1,4 @@
-import { toString, type RuntimeContext } from '../js-engine/index';
+import { toString, type RealmExecution } from '../js-engine/index';
 import { utf8Encode } from './codecs/utf-8';
 import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/index';
 import {
@@ -16,20 +16,20 @@ import {
  */
 export class TextEncoderStreamImpl {
   #generic: GenericTransformStreamMixin;
-  #runtime: RuntimeContext;
+  #exec: RealmExecution;
   #transform: TransformStreamImpl;
   #leadingSurrogate = '';
 
-  constructor(runtime: RuntimeContext) {
-    this.#runtime = runtime;
-    const transform = this.#transform = new TransformStreamImpl(null, {}, {}, runtime);
+  constructor(exec: RealmExecution) {
+    this.#exec = exec;
+    const transform = this.#transform = new TransformStreamImpl(null, {}, {}, exec);
     transform.setUp(
       (chunk) => {
         this.#encodeAndEnqueue(toString(chunk));
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        transform.enqueue(utf8Encode('\uFFFD', runtime));
+        transform.enqueue(utf8Encode('\uFFFD', exec));
         this.#leadingSurrogate = '';
       },
     );
@@ -61,7 +61,7 @@ export class TextEncoderStreamImpl {
       this.#leadingSurrogate = input.at(-1) ?? '';
       input = input.slice(0, -1);
     }
-    if (input !== '') this.#transform.enqueue(utf8Encode(input, this.#runtime));
+    if (input !== '') this.#transform.enqueue(utf8Encode(input, this.#exec));
   }
 }
 
@@ -71,7 +71,7 @@ export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getRuntime())],
+    constructWith: [atArg(0, (ctx) => ctx.getExecution())],
   }),
   members: [ctor()],
 });

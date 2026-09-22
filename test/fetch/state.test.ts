@@ -8,7 +8,7 @@ import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
 import { parseURL } from '../../src/url/url';
 import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientSettings, createFetchUserAgent } from './client-fixture';
 
@@ -90,7 +90,7 @@ describe('Fetch state/API sharing', () => {
   it('retains the same request, signal, and duplicate-preserving Headers list', () => {
     const fixture = createFetchFixture();
     const record = createFetchRequest();
-    const signal = fixture.runtime.createAbortController().signal;
+    const signal = fixture.exec.createAbortController().signal;
     const request = fixture.createRequest(record, signal);
     expect(request.getRequest()).toBe(record);
     expect(request.signal).toBe(signal);
@@ -132,10 +132,10 @@ describe('Fetch state/API sharing', () => {
   it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
     const fixture = createFetchFixture();
     const foreignRealm = new TestRealm();
-    const foreign = fixture.bindings.register(foreignRealm, { createRuntime: () => createRuntime(foreignRealm) });
+    const foreign = fixture.bindings.register(foreignRealm, () => createExecution(foreignRealm));
     const createObject = (context: BindingContext) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
-        RequestImpl, createFetchRequest(), 'request', context.getRuntime().createAbortController().signal,
+        RequestImpl, createFetchRequest(), 'request', context.getExecution().createAbortController().signal,
       ))
       : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
     const receiver = createObject(fixture.context);
@@ -157,7 +157,7 @@ describe('Fetch state/API sharing', () => {
     const fixture = createFetchFixture();
     const record = new FetchResponse();
     const response = fixture.createResponse(record);
-    const mixin = new BodyMixin(record, fixture.runtime);
+    const mixin = new BodyMixin(record, fixture.exec);
     const first = fixture.createBody();
     expect(first.source).toBeNull();
     expect(first.length).toBeNull();

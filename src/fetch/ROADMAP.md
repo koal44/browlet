@@ -145,13 +145,13 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironmentSettingsObject` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
+| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
-The source/target Runtime Contexts supply HTML structured serialization and
+The source/target RealmExecution objects supply HTML structured serialization and
 deserialization. Fetch retains serialization records opaquely;
-`browlet/integration/runtime.ts` realizes exception requests at serialization,
+`browlet/integration/execution.ts` realizes exception requests at serialization,
 and `browlet/integration/fetch.ts` realizes fallback errors in the destination
 realm and supplies global networking tasks. The controller takes no Binding Context.
 The adapters are ready for Fetch orchestration; no public Fetch APIs are installed.
@@ -203,7 +203,7 @@ URL components while retaining any Blob URL entry reference.
 **Remaining boundaries:**
 
 - `client` retains the actual HTML settings object through
-  `FetchEnvironmentSettingsObject`; `reservedClient` uses `FetchEnvironment`.
+  `FetchEnvironment`; `reservedClient` uses `FetchEnvironmentRecord`.
   Traversable-for-prompts retains an opaque reference to the actual HTML
   traversable; policy containers use their owner's cloning operation.
   Further client-derived values and policy operations need narrow
@@ -211,7 +211,7 @@ URL components while retaining any Blob URL entry reference.
   or policy containers. Clientless requests retain their owning UserAgent
   explicitly; do not synthesize an environment or assume online.
 - Request retains a DOM signal through `AbortSignalCapability`.
-  `RuntimeContext.createDependentAbortSignal()` delegates to DOM's existing
+  `RealmExecution.createDependentAbortSignal()` delegates to DOM's existing
   dependency graph, preserving abort-reason identity and event ordering.
   Fetch's constructor chooses the Headers guard (`request` or `request-no-cors`);
   cloning preserves it. These are not client-policy fields. Browlet supplies
@@ -312,7 +312,7 @@ failure.
 
 `FetchBody.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
 the source/length and creates a byte-stream implementation, filled through supplied
-parallel scheduling. `FetchBody` retains its `RuntimeContext` from construction
+parallel scheduling. `FetchBody` retains its `RealmExecution` from construction
 and forwards it when cloning. Its networking facilities supply HTML global
 tasks and parallel execution; the read signatures keep the specified
 callbacks and optional destination. An omitted destination starts a new parallel queue.
@@ -362,7 +362,7 @@ header-extraction convention: undefined for absence, null for failure. That
 return-type translation has been reviewed and accepted.
 
 **COEP credentials check (2026-09-19):** implemented on `FetchRequest`, reading
-the actual client's policy container through `FetchEnvironmentSettingsObject`.
+the actual client's policy container through `FetchEnvironment`.
 HTML's [`EmbedderPolicy`](../browlet/browsing/policy/coep.ts) now holds its four
 specified fields and defaults. Tests cover policy/mode selection, same-origin credentials,
 redirect suppression, and the live Document policy-container relationship.
@@ -402,7 +402,7 @@ contracts and deterministic fakes.
 entry shape from §2.3. Credential storage, request associations, and clearing
 remain with the later HTTP authentication integration. `group.ts` contains the
 §2.4 records and ordinary termination. Each HTML environment settings object
-owns its group directly, exposed through `FetchEnvironmentSettingsObject`.
+owns its group directly, exposed through `FetchEnvironment`.
 `FetchGroup` privately processes deferred fetches during termination. It skips
 sent/aborted records and throws at pending processing, which still needs the Fetch entry algorithm and client-task
 integration. It does not mark an unsent request sent or invoke its notification.
@@ -422,7 +422,7 @@ proxy selection, DNS, connection establishment, certificate policy, ALPN, and
 timing observations join through the Slice 9 transport. No socket is opened here.
 
 `ConnectionTimingInfo.clampAndCoarsen()` hides reused-connection details and
-uses `RuntimeContext.timing.coarsenTime()` for new-connection timestamps.
+directly imports Infra's `coarsenTime()` for new-connection timestamps.
 Browlet supplies its existing High Resolution Time calculation; JS Engine
 only declares the supplied facility. The accepted behavior preserves TLS start,
 matching Blink, Gecko, and WebKit source. The specification currently uses
@@ -432,7 +432,7 @@ connection end there; the end-of-slice issue candidate remains in Scratch.
 creation URL, preferring a request's reserved client over its client. The
 implementation-defined second key is null. Equal sites share a key; opaque
 origins retain their distinct identities. `reservedClient` now has the concrete
-`FetchEnvironment` contract rather than `object`.
+`FetchEnvironmentRecord` contract rather than `object`.
 
 §2.8 selects browser-owned `HTTPCachePartition` identities using those keys.
 A clientless request returns null. These objects do not yet store responses;
@@ -477,7 +477,7 @@ values; `fromBytes()` remains the internal byte-sequence path. Multipart extract
 captures the boundary, exact length, text, and File data without reading Files
 synchronously. File and multipart streams share the existing bounded Blob-data reader.
 `BodyMixin` implements all seven consumption methods, including incremental
-`TextDecoderStream` decoding. Its owner supplies one RuntimeContext, including
+`TextDecoderStream` decoding. Its owner supplies one RealmExecution, including
 the relevant global; FormData owns entry creation. JSON uses a captured parse
 intrinsic from that runtime's realm. Body completion targets the receiver's HTML
 networking tasks even when the stream belongs to another realm.

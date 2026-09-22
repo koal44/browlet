@@ -1,12 +1,12 @@
 import { deserialize, serialize } from 'node:v8';
 
 import type {
-  AbortControllerCapability, RuntimeContext,
+  AbortControllerCapability, RealmExecution,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
-export function createRuntime(realm = new TestRealm()): RuntimeContext {
+export function createExecution(realm = new TestRealm()): RealmExecution {
   return {
     global: realm.global,
     nativeLineEnding: '\n',
@@ -23,15 +23,13 @@ export function createRuntime(realm = new TestRealm()): RuntimeContext {
     networking: {
       queueGlobalTask: (_global, steps) => { setImmediate(steps); },
     },
-    // Tests of timing policy use Browlet's actual runtime or supply their own clock.
-    timing: { coarsenTime: (timestamp) => timestamp },
     createAbortController,
     createDependentAbortSignal() {
       throw new Error('Dependent-signal tests require the DOM runtime');
     },
     parseJSON: (text) => realm.parseJSON(text),
     stringifyJSON: (value) => realm.stringifyJSON(value),
-    clone: structuredClone,
+    clone: (value, transferList = []) => structuredClone(value, { transfer: transferList }),
     serialize,
     deserialize: (record): unknown => deserialize(record as Uint8Array),
   };

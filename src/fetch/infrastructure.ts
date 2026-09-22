@@ -3,18 +3,19 @@ import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { CookieStore } from '../http/index';
+import type { RealmExecution } from '../js-engine/index';
 import type { Origin, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#is-offline */
-export function isOffline(environment: FetchEnvironmentSettingsObject): boolean {
+export function isOffline(environment: FetchEnvironment): boolean {
   return environment.userAgent.assumeNoInternetConnectivity ||
     environment.webDriverBiDiNetworkIsOffline();
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
-export type FetchEnvironmentSettingsObject = FetchEnvironment & {
+export type FetchEnvironment = FetchEnvironmentRecord & {
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
   /** Client origin used by Fetch's origin and policy checks. */
@@ -78,7 +79,7 @@ export type ReferrerPolicy = '' | 'no-referrer' | 'no-referrer-when-downgrade' |
   'origin' | 'strict-origin' | 'origin-when-cross-origin' | 'strict-origin-when-cross-origin' | 'unsafe-url';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
-export type FetchEnvironment = {
+export type FetchEnvironmentRecord = {
   /** Shared user agent owning this environment's networking state. */
   userAgent: FetchUserAgent;
   /** Top-level origin used for network partitioning, or null when it must be derived. */
@@ -111,14 +112,14 @@ export function serializeInteger(integer: number | bigint): string {
   return BigInt(integer).toString();
 }
 
-/** Binding integration: HTML supplies the relevant settings object for Fetch APIs. */
-export const fetchEnvironmentSettingsObject =
-  defineCapability<(context: BindingContext) => FetchEnvironmentSettingsObject>('Fetch environment settings object');
+/** Binding integration: HTML supplies the relevant browser environment and its execution facilities. */
+export const fetchEnvironment =
+  defineCapability<(context: BindingContext) => FetchEnvironment & { exec: RealmExecution; }>('Fetch environment');
 
-export function getFetchEnvironmentSettingsObject(
+export function getFetchEnvironment(
   context: BindingContext, definition: InterfaceDefinition<never>,
-): FetchEnvironmentSettingsObject {
-  const getSettings = context.getCapability(definition, fetchEnvironmentSettingsObject);
+): FetchEnvironment & { exec: RealmExecution; } {
+  const getSettings = context.getCapability(definition, fetchEnvironment);
   if (!getSettings) throw new InternalError('Fetch API requires HTML environment settings');
   return getSettings(context);
 }

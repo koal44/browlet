@@ -12,7 +12,7 @@ UTF-8; legacy output encodings are available through the internal operations.
 | `index.ts` | Entry point for other subsystems. |
 | `encodings.ts` | Canonical encoding type, label lookup, codec factories, and complete-input/queue operations. |
 | `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |
-| `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through RuntimeContext. |
+| `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through RealmExecution. |
 | `indexes.ts`, `gen/` | Lazy lookup tables and checked-in packed mapping data. |
 | `text-*.ts` | Interface implementation, stream composition, and Web IDL declarations. |
 | `scripts/` | Mapping-data generator and its source license. |
@@ -26,7 +26,7 @@ replacement and UTF-16 deliberately have no encoders.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `PromiseValue`
-completion through the trailing RuntimeContext. `encodeOrFailSync` provides the
+completion through the trailing RealmExecution. `encodeOrFailSync` provides the
 immediate operation used by URL processing; it requires complete input and
 retains the supplied encoder's state across failures.
 
@@ -50,7 +50,7 @@ completed encodings are not interchangeable with one streaming encoding.
 strings. Queues retain chunks, so their bytes must not be mutated while queued.
 An empty open queue differs from the persistent `endOfQueue` token. `restore`
 prepends unread input in order. Collection reads currently available output;
-`takeBytes(runtime)` allocates and fills the final result in that runtime.
+`takeBytes(exec)` allocates and fills the final result in that runtime.
 `bomSniff` peeks without consuming and needs three bytes or EOF: streaming callers
 wait for that lookahead rather than repeatedly retrying a shorter prefix.
 

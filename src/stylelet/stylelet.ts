@@ -38,7 +38,7 @@ export type StyleletOptions = {
   document?: DocumentCaps;
   element?: ElementCaps;
   tree?: TreeCaps;
-  runtime?: RuntimeCaps;
+  exec?: ExecutionCaps;
 };
 
 export type DocumentCaps = {
@@ -70,7 +70,7 @@ export type TreeCaps = {
 };
 
 /** Execution and failure facilities supplied by the embedding host. */
-export type RuntimeCaps = {
+export type ExecutionCaps = {
   promises: Promises;
   runInParallel(steps: () => void): void;
   /** Deliver stylesheet updates on the owner's task queue. */
@@ -79,7 +79,7 @@ export type RuntimeCaps = {
 };
 
 // Hosts can configure the small Promise facility without loading JSRealm or JSRuntime.
-export { defaultRuntimeCaps, StyleletContext } from './context';
+export { defaultExecutionCaps, StyleletContext } from './context';
 export { Promises } from '../infra/promises';
 export type { NativePromiseObserver, PromiseValue } from '../infra/promises';
 export type { DOMExceptionName };

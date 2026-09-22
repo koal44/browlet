@@ -2,18 +2,18 @@ import type { ElementImpl } from '../dom/nodes/element';
 import { isText, type NodeImpl } from '../dom/nodes/node';
 import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
-  type RuntimeCaps as StyleletRuntimeCaps,
+  type ExecutionCaps as StyleletExecutionCaps,
 } from '../../stylelet/index';
-import type { RuntimeContext } from '../../js-engine/index';
+import type { RealmExecution } from '../../js-engine/index';
 import { createDOMException } from '../../web-idl/index';
 import type { Realm } from '../scripting/realm';
 import { domManipulationTaskSource } from '../scripting/tasks';
 
 /** Compose Stylelet with this owner's task delivery, promises, and exception requests. */
-export function createStyleletRuntime(realm: Realm, runtime: RuntimeContext): StyleletRuntimeCaps {
+export function createStyleletExecution(realm: Realm, exec: RealmExecution): StyleletExecutionCaps {
   return {
-    promises: runtime.promises,
-    runInParallel: runtime.runInParallel,
+    promises: exec.promises,
+    runInParallel: exec.runInParallel,
     // CSSOM leaves the source unspecified; DOM manipulation delivers stylesheet updates.
     queueTask: (steps) => { realm.queueGlobalTask(domManipulationTaskSource, steps); },
     createDOMException,
@@ -23,10 +23,10 @@ export function createStyleletRuntime(realm: Realm, runtime: RuntimeContext): St
 export class ElementCSSInlineStyleMixin {
   style: CSSStyleDeclarationImpl;
 
-  constructor(element: ElementImpl, runtime: StyleletRuntimeCaps) {
+  constructor(element: ElementImpl, exec: StyleletExecutionCaps) {
     this.style = new CSSStyleDeclarationImpl({
       ownerNode: element,
-    }, runtime);
+    }, exec);
   }
 
   attributeChanged(value: string | null): void {

@@ -10,8 +10,8 @@ import type { WindowProxy } from '../../../src/browlet/browsing/window/window-pr
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import type { Realm } from '../../../src/browlet/scripting/realm';
-import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
+import type { WindowRealm } from '../../../src/browlet/scripting/realm';
+import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import type { StampedPlatformObject } from '../../../src/web-idl/index';
@@ -150,12 +150,12 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const agent = previous?.agent ?? new WindowAgent();
   const creationURL = parseURL('https://example.test/').url!;
   const origin = createOpaqueOrigin();
-  const { window, settings } = createWindowEnvironment(agent, {
-    userAgent: previous?.realm.hostDefined?.userAgent ?? new UserAgent(),
+  const environment = createWindowEnvironment({
+    agent, userAgent: previous?.realm.environment.userAgent ?? new UserAgent(),
     creationURL, origin, parent: null,
     topLevelCreationURL: creationURL, topLevelOrigin: origin, previousRealm: previous?.realm,
   });
-  const { realm } = settings.realmExecutionContext;
+  const { window, realm } = environment;
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
@@ -168,7 +168,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
 
 type NativeWindow = {
   agent: WindowAgent;
-  realm: Realm;
+  realm: WindowRealm;
   window: WindowImpl;
   platformWindow: Window;
   document: DocumentImpl;

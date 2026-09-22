@@ -39,7 +39,7 @@ describe('HTML generic and timeout jobs', () => {
     expect(task?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set());
     expect(fixture.observations[0]?.task?.source.name).toBe('microtask');
     expect(fixture.observations[0]?.task?.scriptEvaluationEnvironmentSettingsObjectSet)
-      .toEqual(new Set([fixture.realm.hostDefined]));
+      .toEqual(new Set([fixture.realm.environment]));
     expect(fixture.loop.currentlyRunningTask).toBeNull();
   });
 
@@ -47,7 +47,7 @@ describe('HTML generic and timeout jobs', () => {
     const fixture = createFixture();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let now = 0;
-    vi.spyOn(fixture.realm.hostDefined!.timing, 'currentHighResolutionTime')
+    vi.spyOn(fixture.realm.environment.timing, 'currentHighResolutionTime')
       .mockImplementation(() => new Duration(now));
     const advance = (milliseconds: number) => {
       now += milliseconds;

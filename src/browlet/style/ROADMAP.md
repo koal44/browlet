@@ -8,8 +8,8 @@
 - Stylelet exports those mixins' neutral declarations through
   `styleletIDLDefinitions`; Browlet contributes only their host behavior and
   assembles the declarations into its Web IDL bindings.
-- Documents supply Stylelet's `RuntimeCaps` at construction; `StyleletContext`
-  retains them alongside its normalized DOM access hooks. CSSOM replacement uses the
+- Documents supply Stylelet's `ExecutionCaps` at construction; `StyleletContext`
+  retains them as `exec` alongside its normalized DOM access hooks. CSSOM replacement uses the
   owner's Promise facility and HTML's cooperative parallel scheduling; all
   Stylelet DOM exceptions use the host's factory. The standalone host uses
   native scheduling and DOMException without loading Browlet's engine runtime.
@@ -35,7 +35,7 @@
   factory into Web IDL and remove `src/infra/observable-array.ts`.
 - [ ] Exercise CSSOM exception and promise boundaries through the projected
   APIs, including borrowed cross-realm calls. Realize requested DOMExceptions
-  in the operation's realm and preserve author-thrown exceptions. The runtime
+  in the operation's realm and preserve author-thrown exceptions. The execution
   and exception-request providers are connected; complete CSSOM projection is
   still required to exercise this author-facing boundary.
 

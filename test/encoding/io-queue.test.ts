@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
 
 describe('Encoding §3: I/O queues', () => {
@@ -124,7 +124,7 @@ describe('Encoding §3: I/O queues', () => {
     for (let i = 0; i < count; i++) queue.push(source.subarray(i * 2, i * 2 + 2));
     if (count) expect(queue.readAvailable()).toBe(0);
     queue.push(endOfQueue);
-    const bytes = queue.takeBytes(createRuntime(realm));
+    const bytes = queue.takeBytes(createExecution(realm));
     expect([...bytes]).toEqual([...source.subarray(count ? 1 : 0, count * 2)]);
     expect(Object.getPrototypeOf(bytes)).toBe(realm.evaluate('Uint8Array.prototype', 'queue-test.js'));
     expect(Object.getPrototypeOf(bytes.buffer)).toBe(realm.intrinsics.bufferSource.arrayBuffer.prototype);
@@ -147,10 +147,10 @@ describe('Encoding §3: I/O queues', () => {
 
   it('waits for enough input, or for end of input, without consuming it', async () => {
     const queue = new IOQueue<string>();
-    const runtime = createRuntime();
+    const exec = createExecution();
     const events: unknown[] = [];
-    queue.waitFor(2, runtime).observe(() => { events.push('two'); }, (error) => { events.push(error); });
-    queue.waitFor(4, runtime).observe(() => { events.push('four'); }, (error) => { events.push(error); });
+    queue.waitFor(2, exec).observe(() => { events.push('two'); }, (error) => { events.push(error); });
+    queue.waitFor(4, exec).observe(() => { events.push('four'); }, (error) => { events.push(error); });
     queue.push('');
     queue.push('💩');
     await nextTurn();
@@ -167,13 +167,13 @@ describe('Encoding §3: I/O queues', () => {
 
   it('counts remaining and restored bytes when waking readers', async () => {
     const queue = new IOQueue<Uint8Array>();
-    const runtime = createRuntime();
+    const exec = createExecution();
     const events: unknown[] = [];
-    queue.waitFor(0, runtime).observe(() => { events.push('zero'); }, (error) => { events.push(error); });
+    queue.waitFor(0, exec).observe(() => { events.push('zero'); }, (error) => { events.push(error); });
     queue.push(Uint8Array.of(1, 2, 3));
     expect(queue.readAvailable(2)).toEqual([1, 2]);
-    queue.waitFor(3, runtime).observe(() => { events.push('three'); }, (error) => { events.push(error); });
-    queue.waitFor(4, runtime).observe(() => { events.push('four'); }, (error) => { events.push(error); });
+    queue.waitFor(3, exec).observe(() => { events.push('three'); }, (error) => { events.push(error); });
+    queue.waitFor(4, exec).observe(() => { events.push('four'); }, (error) => { events.push(error); });
     queue.restore(Uint8Array.of(0));
     await nextTurn();
     expect(events).toEqual(['zero']);
@@ -189,10 +189,10 @@ describe('Encoding §3: I/O queues', () => {
 
   it('preserves waiting readers across partial wakes and later suspension', async () => {
     const queue = new IOQueue<Uint8Array>();
-    const runtime = createRuntime();
+    const exec = createExecution();
     const events: unknown[] = [];
     for (const count of [3, 1, 2, 1]) {
-      queue.waitFor(count, runtime).observe(() => { events.push(count); }, (error) => { events.push(error); });
+      queue.waitFor(count, exec).observe(() => { events.push(count); }, (error) => { events.push(error); });
     }
     queue.push(Uint8Array.of(1));
     await nextTurn();
@@ -205,7 +205,7 @@ describe('Encoding §3: I/O queues', () => {
     expect(events).toEqual([1, 1, 2, 3]);
     expect(queue.takeBytes()).toEqual(Uint8Array.of(1, 2, 3));
 
-    queue.waitFor(2, runtime).observe(() => { events.push('later'); }, (error) => { events.push(error); });
+    queue.waitFor(2, exec).observe(() => { events.push('later'); }, (error) => { events.push(error); });
     queue.restore(Uint8Array.of(4));
     await nextTurn();
     expect(events).toEqual([1, 1, 2, 3]);

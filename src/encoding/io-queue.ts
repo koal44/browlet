@@ -1,5 +1,5 @@
 import type { PromiseValue } from '../infra/promises';
-import type { RuntimeContext } from '../js-engine/index';
+import type { RealmExecution } from '../js-engine/index';
 
 /** Encoding Standard §3 — A persistent end marker, distinct from an empty open queue. */
 export const endOfQueue = Symbol('end-of-queue');
@@ -100,9 +100,9 @@ export class IOQueue<T extends QueueChunk> {
   }
 
   /** Wait only at a chunk boundary, using the caller's execution owner. */
-  waitFor(count: number, runtime: RuntimeContext): PromiseValue<void> {
-    if (this.#canRead(count)) return runtime.promises.try(() => undefined);
-    const result = runtime.promises.withResolvers<void>();
+  waitFor(count: number, exec: RealmExecution): PromiseValue<void> {
+    if (this.#canRead(count)) return exec.promises.try(() => undefined);
+    const result = exec.promises.withResolvers<void>();
     (this.#waiters ??= []).push({ count, resolve: () => { result.resolve(); } });
     return result.promise;
   }
@@ -130,15 +130,15 @@ export class IOQueue<T extends QueueChunk> {
   }
 
   /** Consume bytes into one result allocation, optionally in the supplied runtime. */
-  takeBytes(this: IOQueue<Uint8Array>, runtime?: RuntimeContext): Uint8Array<ArrayBuffer> {
+  takeBytes(this: IOQueue<Uint8Array>, exec?: RealmExecution): Uint8Array<ArrayBuffer> {
     const head = this.#head;
     this.#head = this.#tail = undefined;
     let length = 0;
     for (let node = head; node; node = node.next) {
       length += node.data.length - node.offset;
     }
-    const bytes = runtime
-      ? runtime.buffers.createView('Uint8Array', runtime.buffers.allocateArrayBuffer(length))
+    const bytes = exec
+      ? exec.buffers.createView('Uint8Array', exec.buffers.allocateArrayBuffer(length))
       : new Uint8Array(length);
     let offset = 0;
     for (let node = head; node; node = node.next) {
@@ -210,13 +210,13 @@ export type Decoder = {
 export function processQueue<T extends QueueChunk, Error>(
   input: IOQueue<T>,
   steps: () => QueueResult<Error>,
-  runtime: RuntimeContext,
+  exec: RealmExecution,
 ): PromiseValue<Exclude<QueueResult<Error>, 'waiting'>> {
   const run = (): Exclude<QueueResult<Error>, 'waiting'> | PromiseValue<Exclude<QueueResult<Error>, 'waiting'>> => {
     const result = steps();
-    return result === 'waiting' ? input.waitFor(1, runtime).then(run) : result;
+    return result === 'waiting' ? input.waitFor(1, exec).then(run) : result;
   };
-  return runtime.promises.try(run);
+  return exec.promises.try(run);
 }
 
 function sliceChunk<T extends QueueChunk>(chunk: T, start: number): T {

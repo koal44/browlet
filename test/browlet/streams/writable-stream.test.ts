@@ -1,4 +1,4 @@
-import { createRuntime } from '../../js-engine/runtime-fixture';
+import { createExecution } from '../../js-engine/execution-fixture';
 import { observe, createWritableStream } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
@@ -16,8 +16,8 @@ describe('writable-stream implementation', () => {
   });
 
   it('writes queued chunks and closes the underlying sink', async () => {
-    const runtime = createRuntime();
-    const { promises } = runtime;
+    const exec = createExecution();
+    const { promises } = exec;
     const write = vi.fn();
     const close = vi.fn(() => promises.resolve(undefined));
     const stream = createWritableStream({
@@ -53,12 +53,12 @@ describe('writable-stream implementation', () => {
   });
 
   it('uses the injected Abort capability and exposes its signal', async () => {
-    const runtime = createRuntime();
-    const { promises } = runtime;
+    const exec = createExecution();
+    const { promises } = exec;
     const abortController = createAbortController();
-    vi.spyOn(runtime, 'createAbortController').mockReturnValue(abortController);
+    vi.spyOn(exec, 'createAbortController').mockReturnValue(abortController);
     const sinkAbort = vi.fn(() => promises.resolve(undefined));
-    const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, runtime);
+    const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, exec);
     const controller = requireController(stream);
 
     expect(controller.signal).toBe(abortController.signal);
@@ -69,8 +69,8 @@ describe('writable-stream implementation', () => {
   });
 
   it('applies backpressure until queued writes drain', async () => {
-    const runtime = createRuntime();
-    const { promises } = runtime;
+    const exec = createExecution();
+    const { promises } = exec;
     const finishWrite = promises.withResolvers<void>();
     const stream = createWritableStream({
       write: () => finishWrite.promise,
@@ -94,12 +94,12 @@ describe('writable-stream implementation', () => {
   });
 
   it('signals abort immediately and waits for an in-flight write', async () => {
-    const runtime = createRuntime();
-    const { promises } = runtime;
+    const exec = createExecution();
+    const { promises } = exec;
     const writeStarted = promises.withResolvers<void>();
     const finishWrite = promises.withResolvers<void>();
     const abortController = createAbortController();
-    vi.spyOn(runtime, 'createAbortController').mockReturnValue(abortController);
+    vi.spyOn(exec, 'createAbortController').mockReturnValue(abortController);
     const abort = vi.fn(() => promises.resolve());
     const stream = new WritableStreamImpl({
       write: () => {
@@ -107,7 +107,7 @@ describe('writable-stream implementation', () => {
         return finishWrite.promise;
       },
       abort,
-    }, {}, runtime);
+    }, {}, exec);
     const writer = stream.getWriter();
     const writing = writer.write('chunk');
     await observe(writeStarted.promise);
@@ -124,8 +124,8 @@ describe('writable-stream implementation', () => {
   });
 
   it('rejects writes with a TypeError once close is queued while erroring', async () => {
-    const runtime = createRuntime();
-    const { promises } = runtime;
+    const exec = createExecution();
+    const { promises } = exec;
     const failure = new Error('stream failure');
     let controller: WritableStreamDefaultControllerImpl | undefined;
     const stream = createWritableStream({

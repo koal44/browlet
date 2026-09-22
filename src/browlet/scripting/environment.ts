@@ -1,9 +1,9 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { TraversableNavigable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
-import { FetchGroup, type FetchEnvironmentSettingsObject, type FetchEnvironment } from '../../fetch/index';
+import { FetchGroup, type FetchEnvironment } from '../../fetch/index';
 import type { EventLoop } from './event-loop';
-import type { JSExecutionContext } from './realm';
+import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import type { WindowImpl } from '../browsing/window/window';
@@ -11,55 +11,72 @@ import { areSameSite, type Origin, type URLRecord } from '../../url/index';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
+import type { RealmExecution } from '../../js-engine/index';
+import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 
-/*
- * An environment carries navigation/client state before a realm, global
- * object, or environment settings object necessarily exists.
- */
-export class Environment implements FetchEnvironment {
-  id: string = crypto.randomUUID();
+/** Browser state and operations associated with one realm and global. */
+// HTML's environment settings object. The engine owns execution-context stacks;
+// its realm component is retained directly here.
+export abstract class Environment implements EnvironmentRecord, FetchEnvironment {
+  /** Identity retained from the early environment record. */
+  id: string;
+  /** Browser owner shared by navigation and networking. */
   userAgent: UserAgent;
+  /** URL associated with this environment's creation. */
   creationURL: URLRecord;
+  /** Top-level creation URL, or null when the environment has none. */
   topLevelCreationURL: URLRecord | null;
+  /** Top-level origin, or null until it can be determined. */
   topLevelOrigin: Origin | null;
+  /** Navigation's target browsing context, when present. */
   targetBrowsingContext: BrowsingContext | null;
+  /** Service worker controlling this environment, when present. */
   activeServiceWorker: object | null;
+  /** Requests tracked for this environment's lifetime. */
+  fetchGroup = new FetchGroup();
+  /** Browser timing relative to this environment's time origin. */
+  timing: EnvironmentTiming;
+  /** JavaScript realm associated with this browser environment. */
+  realm: Realm;
+  /** Allocation, execution, and owner task delivery for this realm. */
+  exec: RealmExecution;
   #isSecureContext: boolean;
   #executionReady = false;
 
-  constructor(initialization: EnvironmentInitialization) {
-    this.userAgent = initialization.userAgent;
-    this.creationURL = initialization.creationURL;
-    this.topLevelCreationURL = initialization.topLevelCreationURL;
-    this.topLevelOrigin = initialization.topLevelOrigin;
-    this.targetBrowsingContext = initialization.targetBrowsingContext;
-    this.activeServiceWorker = initialization.activeServiceWorker ?? null;
-    this.#isSecureContext = initialization.isSecureContext;
+  constructor(realm: Realm, record: EnvironmentRecord, exec: RealmExecution) {
+    this.exec = exec;
+    this.id = record.id;
+    this.userAgent = record.userAgent;
+    this.creationURL = record.creationURL;
+    this.topLevelCreationURL = record.topLevelCreationURL;
+    this.topLevelOrigin = record.topLevelOrigin;
+    this.targetBrowsingContext = record.targetBrowsingContext;
+    this.activeServiceWorker = record.activeServiceWorker;
+    this.#isSecureContext = record.isSecureContext;
+    this.timing = new EnvironmentTiming(this);
+    this.realm = realm;
+    realm.setHostDefined(this);
   }
 
-  /** https://html.spec.whatwg.org/multipage/webappapis.html#secure-context */
+  /** The platform global installed in this environment's realm. */
+  get global(): RealmExecution['global'] {
+    return this.realm.global;
+  }
+
+  /** Security classification fixed when the environment was created. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
   get isSecureContext(): boolean {
     return this.#isSecureContext;
   }
 
+  /** Whether HTML has completed setup for script execution. */
   get executionReady(): boolean {
     return this.#executionReady;
   }
 
+  /** Mark HTML setup complete. */
   markExecutionReady(): void {
     this.#executionReady = true;
-  }
-}
-
-export abstract class EnvironmentSettingsObject extends Environment implements FetchEnvironmentSettingsObject {
-  fetchGroup = new FetchGroup();
-  timing: EnvironmentTiming;
-  realmExecutionContext: JSExecutionContext;
-
-  constructor(initialization: EnvironmentSettingsInitialization) {
-    super(initialization);
-    this.timing = new EnvironmentTiming(this);
-    this.realmExecutionContext = initialization.realmExecutionContext;
   }
 
   abstract get apiBaseURL(): URLRecord;
@@ -75,7 +92,7 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
   abstract getReportingSource(): URLRecord | null;
 
   get responsibleEventLoop(): EventLoop {
-    return this.realmExecutionContext.realm.agent.eventLoop;
+    return this.realm.agent.eventLoop;
   }
 
   /** Source URL for requests using this client's referrer. */
@@ -90,12 +107,13 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
     return null;
   }
 
+  /** Existing state shared by all consumers of this environment's global scope. */
+  abstract getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin;
+
   /** Submit a report to this environment's actual global scope. */
   // https://w3c.github.io/reporting/#generate-report
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void {
-    const window = this.realmExecutionContext.realm.windowImplementation;
-    if (window === undefined) throw new InternalError('Reporting requires a Window or worker global');
-    window.getWindowOrWorkerGlobalScopeMixin().queueReport(type, endpoint, body);
+    this.getWindowOrWorkerGlobalScopeMixin().queueReport(type, endpoint, body);
   }
 
   /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
@@ -112,34 +130,33 @@ export abstract class EnvironmentSettingsObject extends Environment implements F
   }
 }
 
-export class WindowEnvironmentSettingsObject
-  extends EnvironmentSettingsObject
-{
-  #window: WindowImpl;
+export class WindowEnvironment extends Environment {
+  declare realm: WindowRealm;
 
-  constructor(
-    window: WindowImpl,
-    initialization: EnvironmentSettingsInitialization,
-  ) {
-    super(initialization);
-    this.#window = window;
+  constructor(realm: WindowRealm, record: EnvironmentRecord, exec: RealmExecution) {
+    super(realm, record, exec);
+  }
+
+  /** Window implementation whose current Document supplies browser state. */
+  get window(): WindowImpl {
+    return this.realm.windowImplementation;
   }
 
   get apiBaseURL(): URLRecord {
-    return this.#window.getAssociatedDocument().getBaseURL();
+    return this.window.getAssociatedDocument().getBaseURL();
   }
 
   get moduleMap(): ModuleMap {
-    return this.#window.getAssociatedDocument().getModuleMap();
+    return this.window.getAssociatedDocument().getModuleMap();
   }
 
   get origin(): Origin {
-    return this.#window.getAssociatedDocument().getOrigin();
+    return this.window.getAssociatedDocument().getOrigin();
   }
 
   // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
   get hasCrossSiteAncestor(): boolean {
-    let document = this.#window.getAssociatedDocument();
+    let document = this.window.getAssociatedDocument();
     const navigable = document.getNodeNavigable();
     // A detached/inactive Document has no current ancestor chain to establish a cookie site.
     if (navigable === null) return true;
@@ -152,15 +169,14 @@ export class WindowEnvironmentSettingsObject
   }
 
   get policyContainer(): PolicyContainer {
-    return this.#window.getAssociatedDocument().getPolicyContainer();
+    return this.window.getAssociatedDocument().getPolicyContainer();
   }
 
   get crossOriginIsolatedCapability(): boolean {
-    const mode = this.realmExecutionContext.realm.agent.agentCluster
-      ?.crossOriginIsolationMode;
+    const mode = this.realm.agent.agentCluster?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
 
-    void this.#window.getAssociatedDocument().getPermissionsPolicy();
+    void this.window.getAssociatedDocument().getPermissionsPolicy();
     throw new InternalError(
       'The cross-origin-isolated permissions-policy check is not implemented',
     );
@@ -169,13 +185,17 @@ export class WindowEnvironmentSettingsObject
   get timeOrigin(): Moment {
     return new Moment(
       monotonicClock,
-      this.#window.getAssociatedDocument().getLoadTimingInfo().navigationStartTime,
+      this.window.getAssociatedDocument().getLoadTimingInfo().navigationStartTime,
     );
+  }
+
+  override getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
+    return this.window.getWindowOrWorkerGlobalScopeMixin();
   }
 
   // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
   override getReferrerSource(): URLRecord | null {
-    let document = this.#window.getAssociatedDocument();
+    let document = this.window.getAssociatedDocument();
     if (document.getOrigin().kind === 'opaque') return null;
     while (document.isIframeSrcdocDocument()) {
       const container = document.getBrowsingContext()?.navigable?.container ?? null;
@@ -187,68 +207,48 @@ export class WindowEnvironmentSettingsObject
 
   // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
   override getReportingSource(): URLRecord {
-    return this.#window.getAssociatedDocument().getURL();
+    return this.window.getAssociatedDocument().getURL();
   }
 
   // https://fetch.spec.whatwg.org/#populate-request-from-client
   override getTraversableForUserPrompts(): TraversableNavigable | null {
-    return this.#window.getAssociatedDocument().getNodeNavigable()?.traversableNavigable ?? null;
+    return this.window.getAssociatedDocument().getNodeNavigable()?.traversableNavigable ?? null;
   }
 }
 
-/**
- * https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
- * Return the settings so Window initialization can use the newly established owner.
- */
-export function setupWindowEnvironmentSettingsObject(
-  creationURL: URLRecord,
-  executionContext: JSExecutionContext,
-  reservedEnvironment: Environment | null,
-  topLevelCreationURL: URLRecord,
-  topLevelOrigin: Origin,
-): WindowEnvironmentSettingsObject {
-  const realm = executionContext.realm;
-  const window = realm.windowImplementation;
-  if (window === undefined) {
-    throw new InternalError('Window settings require a Window global object');
-  }
-  const environment = realm.environment;
-  if (environment === null) {
-    throw new InternalError('Window settings require an Environment');
-  }
-  const settings = new WindowEnvironmentSettingsObject(
-    window,
-    {
-      userAgent: environment.userAgent,
-      isSecureContext: environment.isSecureContext,
-      activeServiceWorker: reservedEnvironment?.activeServiceWorker ?? null,
-      creationURL,
-      realmExecutionContext: executionContext,
-      targetBrowsingContext:
-        reservedEnvironment?.targetBrowsingContext ?? null,
-      topLevelCreationURL,
-      topLevelOrigin,
-    },
-  );
-
-  if (reservedEnvironment) {
-    settings.id = reservedEnvironment.id;
-    reservedEnvironment.id = '';
-  }
-  realm.setHostDefined(settings);
-  return settings;
-}
-
-export type EnvironmentInitialization = {
+/** State that can identify an environment before a realm or global exists. */
+// HTML's environment, including reserved environments and reserved Fetch clients.
+export type EnvironmentRecord = {
+  /** Identity transferred to the full environment when a reservation is consumed. */
+  id: string;
+  /** Browser owner shared by navigation and networking. */
   userAgent: UserAgent;
-  isSecureContext: boolean;
+  /** URL associated with the environment's creation. */
   creationURL: URLRecord;
+  /** Top-level creation URL, or null when the environment has none. */
   topLevelCreationURL: URLRecord | null;
+  /** Top-level origin, or null until it can be determined. */
   topLevelOrigin: Origin | null;
+  /** Navigation's target browsing context, when present. */
   targetBrowsingContext: BrowsingContext | null;
-  activeServiceWorker?: object | null;
+  /** Service worker controlling this environment, when present. */
+  activeServiceWorker: object | null;
+  /** Security classification established before Web IDL exposure. */
+  isSecureContext: boolean;
+  /** Whether HTML has completed setup for script execution. */
+  executionReady: boolean;
 };
 
-export type EnvironmentSettingsInitialization = EnvironmentInitialization & {
-  realmExecutionContext: JSExecutionContext;
+/** Create the state needed before allocating a realm. */
+export function createEnvironmentRecord(initialization: EnvironmentInit): EnvironmentRecord {
+  return {
+    ...initialization,
+    id: crypto.randomUUID(),
+    activeServiceWorker: initialization.activeServiceWorker ?? null,
+    executionReady: false,
+  };
+}
+
+export type EnvironmentInit = Omit<EnvironmentRecord, 'id' | 'executionReady' | 'activeServiceWorker'> & {
+  activeServiceWorker?: object | null;
 };

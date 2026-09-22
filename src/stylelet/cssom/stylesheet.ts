@@ -1,7 +1,7 @@
 import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
-import type { RuntimeCaps } from '../stylelet';
+import type { ExecutionCaps } from '../stylelet';
 import { TypeError } from '../../infra/exceptions';
 
 /*
@@ -24,20 +24,20 @@ export abstract class StyleSheetImpl {
   #title: string;
   #media: MediaListImpl;
   #disabled: boolean;
-  protected runtime: RuntimeCaps;
+  protected exec: ExecutionCaps;
 
-  protected constructor(runtime: RuntimeCaps) {
+  protected constructor(exec: ExecutionCaps) {
     if (new.target === StyleSheetImpl) {
       throw new TypeError('Illegal constructor');
     }
 
-    this.runtime = runtime;
+    this.exec = exec;
     this.#type = 'text/css';
     this.#location = null;
     this.#ownerNode = null;
     this.#parentStyleSheet = null;
     this.#title = '';
-    this.#media = new MediaListImpl('', runtime);
+    this.#media = new MediaListImpl('', exec);
     this.#disabled = false;
   }
 

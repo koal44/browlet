@@ -6,7 +6,7 @@ import {
 import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
-import type { RuntimeCaps } from '../stylelet';
+import type { ExecutionCaps } from '../stylelet';
 import { withCSSStyleDeclaration } from './stubs/extensions';
 
 /*
@@ -44,7 +44,7 @@ export class CSSStyleDeclarationImpl
   #ownerNode: Element | null;
   #onChange: (declarations: readonly PropertyDeclaration[]) => void;
   #updating = false;
-  #runtime: RuntimeCaps;
+  #exec: ExecutionCaps;
 
   constructor({
     declarations = [],
@@ -53,9 +53,9 @@ export class CSSStyleDeclarationImpl
     parentRule = null,
     ownerNode = null,
     onChange = () => {},
-  }: CSSStyleDeclarationOptions, runtime: RuntimeCaps) {
+  }: CSSStyleDeclarationOptions, exec: ExecutionCaps) {
     super();
-    this.#runtime = runtime;
+    this.#exec = exec;
     this.#computed = computed;
     this.#readonly = readonly;
     this.#parentRule = parentRule;
@@ -256,7 +256,7 @@ export class CSSStyleDeclarationImpl
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throw this.#runtime.createDOMException(
+    throw this.#exec.createDOMException(
       'NoModificationAllowedError',
       'The CSS declaration block is read-only.',
     );

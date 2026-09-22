@@ -12,7 +12,7 @@ describe('Streams Promise dependencies', () => {
     const stream = ReadableStreamImpl.from({
       next: () => next.promise,
       return: () => b.promises.resolve(),
-    }, a.runtime);
+    }, a.exec);
     const chunks: unknown[] = [];
     stream.getReader({}).read().observe((value) => { chunks.push(value); }, (error) => { throw error; });
     next.resolve('chunk');
@@ -23,11 +23,11 @@ describe('Streams Promise dependencies', () => {
   itPassesWith('explicitQueues')('pipes between owners without moving the source continuation to the destination queue', () => {
     const a = createOwner();
     const b = createOwner();
-    const source = new ReadableStreamImpl({}, {}, a.runtime);
+    const source = new ReadableStreamImpl({}, {}, a.exec);
     const chunks: unknown[] = [];
     const destination = new WritableStreamImpl({
       write(chunk) { chunks.push(chunk); },
-    }, {}, b.runtime);
+    }, {}, b.exec);
     a.queue.performMicrotaskCheckpoint();
     b.queue.performMicrotaskCheckpoint();
     source.enqueueChunk('chunk');
@@ -53,6 +53,6 @@ describe('Streams Promise dependencies', () => {
 function createOwner() {
   const { window } = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(window);
-  const runtime = getBindingContext(realm).getRuntime();
-  return { queue: realm.agent.eventLoop, promises: runtime.promises, runtime };
+  const exec = getBindingContext(realm).getExecution();
+  return { queue: realm.agent.eventLoop, promises: exec.promises, exec };
 }

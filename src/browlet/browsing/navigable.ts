@@ -4,7 +4,7 @@ import {
   createNewTopLevelBrowsingContextAndDocument, type BrowsingContext,
 } from './browsing-context';
 import {
-  createDocumentState, createSessionHistoryEntry, type DocumentState,
+  createDocumentState, createSessionHistoryEntry, type DocumentBackedState,
   type SessionHistoryEntry,
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
@@ -14,50 +14,53 @@ import { InternalError } from '../../infra/internal-error';
 
 export class Navigable {
   id = Symbol('Navigable');
-  isTopLevelTraversable: boolean = false;
-  parent: Navigable | null = null;
-  currentSessionHistoryEntry!: SessionHistoryEntry;
-  #activeSessionHistoryEntry: SessionHistoryEntry | null = null;
+  parent: Navigable | null;
+  currentSessionHistoryEntry: SessionHistoryEntry;
+  #activeSessionHistoryEntry: SessionHistoryEntry;
   isClosing = false;
   isDelayingLoadEvents = false;
 
+  /** Create the initial history entry and associate its Document with this navigable. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#initialize-the-navigable
+  constructor(
+    documentState: DocumentBackedState,
+    parent: Navigable | null = null,
+  ) {
+    const document = documentState.document;
+    const browsingContext = document.getBrowsingContext();
+    if (browsingContext === null) throw new InternalError('An active Document needs a browsing context');
+
+    this.parent = parent;
+    this.currentSessionHistoryEntry = createSessionHistoryEntry(documentState);
+    this.#activeSessionHistoryEntry = this.currentSessionHistoryEntry;
+    browsingContext.setNavigable(this);
+    document.notifyFullyActiveStateChanged();
+
+    // TODO(HTML page visibility): Set initial Document visibility, after
+    // traversable subclasses have initialized their system visibility state.
+  }
+
+  get isTopLevelTraversable(): boolean {
+    return false;
+  }
+
   get activeSessionHistoryEntry(): SessionHistoryEntry {
-    if (this.#activeSessionHistoryEntry === null) {
-      throw new InternalError('Navigable has not been initialized');
-    }
     return this.#activeSessionHistoryEntry;
   }
 
   set activeSessionHistoryEntry(entry: SessionHistoryEntry) {
-    const previousDocument = this.#activeSessionHistoryEntry
-      ?.documentState.document ?? null;
+    const previousDocument = this.#activeSessionHistoryEntry.documentState.document;
     const document = entry.documentState.document;
-    if (document === null) {
-      this.#activeSessionHistoryEntry = entry;
-      if (previousDocument !== null) {
-        previousDocument.notifyFullyActiveStateChanged();
-      }
-      return;
-    }
-
-    const browsingContext = document.getBrowsingContext();
-    if (browsingContext === null) {
-      throw new InternalError('An active Document needs a browsing context');
-    }
-    if (
-      browsingContext.navigable !== null &&
-      browsingContext.navigable !== this
-    ) {
-      throw new InternalError('A browsing context cannot be active in two navigables');
+    if (document !== null) {
+      const browsingContext = document.getBrowsingContext();
+      if (browsingContext === null) throw new InternalError('An active Document needs a browsing context');
+      browsingContext.setNavigable(this);
     }
 
     this.#activeSessionHistoryEntry = entry;
-    browsingContext.setNavigable(this);
     if (previousDocument !== document) {
-      if (previousDocument !== null) {
-        previousDocument.notifyFullyActiveStateChanged();
-      }
-      document.notifyFullyActiveStateChanged();
+      previousDocument?.notifyFullyActiveStateChanged();
+      document?.notifyFullyActiveStateChanged();
     }
   }
 
@@ -94,23 +97,6 @@ export class Navigable {
     return null;
   }
 
-  initialize(documentState: DocumentState, parent: Navigable | null = null): void {
-    if (documentState.document === null) {
-      throw new InternalError('A navigable must be initialized with a Document');
-    }
-    if (this instanceof TopLevelTraversable && parent !== null) {
-      throw new InternalError('A top-level traversable must have a null parent');
-    }
-
-    const entry = createSessionHistoryEntry(documentState);
-    this.currentSessionHistoryEntry = entry;
-    this.activeSessionHistoryEntry = entry;
-    this.parent = parent;
-
-    // TODO(HTML page visibility): Set the Document's initial visibility state
-    // to the traversable navigable's system visibility state.
-  }
-
   allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
     return 'allowed';
   }
@@ -128,7 +114,13 @@ export class TraversableNavigable extends Navigable implements FetchPromptTarget
 }
 
 export class TopLevelTraversable extends TraversableNavigable {
-  override isTopLevelTraversable = true as const;
+  constructor(documentState: DocumentBackedState) {
+    super(documentState);
+  }
+
+  override get isTopLevelTraversable(): true {
+    return true;
+  }
 }
 
 /*
@@ -159,8 +151,7 @@ export function createNewTopLevelTraversable(
   documentState.navigableTargetName = targetName;
   documentState.aboutBaseURL = document.getAboutBaseURL();
 
-  const traversable = new TopLevelTraversable();
-  traversable.initialize(documentState);
+  const traversable = new TopLevelTraversable(documentState);
   const initialHistoryEntry = traversable.activeSessionHistoryEntry;
   initialHistoryEntry.step = 0;
   traversable.sessionHistoryEntries.push(initialHistoryEntry);

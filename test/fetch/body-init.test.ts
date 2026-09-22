@@ -15,7 +15,7 @@ import { createFetchFixture } from './fetch-fixture';
 describe('BodyInit extraction', () => {
   it('UTF-8-encodes a converted string and records its byte length and type', async () => {
     const fixture = createFetchFixture();
-    const { body, type } = FetchBody.extract('hello 🌍', false, fixture.runtime);
+    const { body, type } = FetchBody.extract('hello 🌍', false, fixture.exec);
     expect(type).toBe('text/plain;charset=UTF-8');
     expect(body.source).toEqual(utf8Encode('hello 🌍'));
     expect(body.length).toBe(10);
@@ -29,7 +29,7 @@ describe('BodyInit extraction', () => {
     const blob = fixture.context.construct(BlobImpl, ['contents']);
     const platform = fixture.context.project(BlobImpl, blob);
     expect(convert(platform)).toBe(blob);
-    const { body } = FetchBody.extract(convert(platform), false, fixture.runtime);
+    const { body } = FetchBody.extract(convert(platform), false, fixture.exec);
     expect(utf8Decode(await readBodyBytes(body))).toBe('contents');
   });
 
@@ -39,7 +39,7 @@ describe('BodyInit extraction', () => {
     const input = kind === 'ArrayBuffer' ? bytes.buffer : kind === 'DataView'
       ? new DataView(bytes.buffer, 1, 2) : bytes.subarray(1, 3);
     const expected = kind === 'ArrayBuffer' ? [9, 1, 2, 9] : [1, 2];
-    const { body, type } = FetchBody.extract(input, false, fixture.runtime);
+    const { body, type } = FetchBody.extract(input, false, fixture.exec);
     expect(type).toBeNull();
     expect(body.length).toBe(expected.length);
     bytes.fill(0);
@@ -50,7 +50,7 @@ describe('BodyInit extraction', () => {
   it('serializes URLSearchParams immediately while preserving repeated fields', async () => {
     const fixture = createFetchFixture();
     const params = fixture.context.construct(URLSearchParamsImpl, 'a=one+two&a=%E2%82%AC');
-    const { body, type } = FetchBody.extract(params, false, fixture.runtime);
+    const { body, type } = FetchBody.extract(params, false, fixture.exec);
     params.append('later', 'ignored');
     expect(type).toBe('application/x-www-form-urlencoded;charset=UTF-8');
     expect(utf8Decode(await readBodyBytes(body))).toBe('a=one+two&a=%E2%82%AC');
@@ -59,8 +59,8 @@ describe('BodyInit extraction', () => {
 
   it.each(['', 'text/plain'])('uses Blob data, length, and its %j type', async (type) => {
     const fixture = createFetchFixture();
-    const blob = new BlobImpl(['hello'], { type }, fixture.runtime);
-    const extracted = FetchBody.extract(blob, true, fixture.runtime);
+    const blob = new BlobImpl(['hello'], { type }, fixture.exec);
+    const extracted = FetchBody.extract(blob, true, fixture.exec);
     expect(extracted.body.source).toBe(blob);
     expect(extracted.body.length).toBe(5);
     expect(extracted.type).toBe(type || null);
@@ -69,8 +69,8 @@ describe('BodyInit extraction', () => {
 
   it('retains an undisturbed stream without a replay source, length, or inferred type', async () => {
     const fixture = createFetchFixture();
-    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, fixture.runtime);
-    const { body, type } = FetchBody.extract(stream, false, fixture.runtime);
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, fixture.exec);
+    const { body, type } = FetchBody.extract(stream, false, fixture.exec);
     expect(body.stream).toBe(stream);
     expect(body.source).toBeNull();
     expect(body.length).toBeNull();
@@ -84,10 +84,10 @@ describe('BodyInit extraction', () => {
 
   it.each(['keepalive', 'locked', 'disturbed'] as const)('rejects a %s stream', async (state) => {
     const fixture = createFetchFixture();
-    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, fixture.runtime);
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, fixture.exec);
     if (state === 'locked') stream.getDefaultReader();
     if (state === 'disturbed') await observe(stream.cancelInternal(undefined));
-    expect(() => FetchBody.extract(stream, state === 'keepalive', fixture.runtime)).toThrow(TypeError);
+    expect(() => FetchBody.extract(stream, state === 'keepalive', fixture.exec)).toThrow(TypeError);
   });
 });
 
@@ -95,7 +95,7 @@ describe('multipart BodyInit extraction', () => {
   it('retains lazy File data and snapshots text entries and file metadata', async () => {
     const fixture = createFetchFixture();
     const read = vi.fn(() => Promise.resolve(Uint8Array.of(1, 2)));
-    const file = new FileImpl([], 'data.bin', {}, fixture.runtime);
+    const file = new FileImpl([], 'data.bin', {}, fixture.exec);
     file.setSerializationState({
       data: BlobData.fromSource({ size: 2, snapshotState: undefined, read }),
       type: 'application/octet-stream', snapshotState: undefined,
@@ -103,7 +103,7 @@ describe('multipart BodyInit extraction', () => {
     const form = fixture.context.construct(FormDataImpl);
     form.append(toScalarValueString('name'), toScalarValueString('Eric'));
     form.append(toScalarValueString('file'), file);
-    const { body, type } = FetchBody.extract(form, false, fixture.runtime);
+    const { body, type } = FetchBody.extract(form, false, fixture.exec);
     expect(body.source).toBe(form);
     expect(read).not.toHaveBeenCalled();
     const boundary = type!.slice('multipart/form-data; boundary='.length);
@@ -127,7 +127,7 @@ describe('multipart BodyInit extraction', () => {
   it('encodes an empty FormData with a closing delimiter', async () => {
     const fixture = createFetchFixture();
     const form = fixture.context.construct(FormDataImpl);
-    const { body, type } = FetchBody.extract(form, false, fixture.runtime);
+    const { body, type } = FetchBody.extract(form, false, fixture.exec);
     const boundary = type!.slice('multipart/form-data; boundary='.length);
     expect(utf8Decode(await readBodyBytes(body))).toBe(`--${boundary}--\r\n`);
     expect(body.length).toBe(boundary.length + 6);
@@ -136,14 +136,14 @@ describe('multipart BodyInit extraction', () => {
   it('propagates a retained File read failure through the body stream', async () => {
     const fixture = createFetchFixture();
     const failure = new Error('read failed');
-    const file = new FileImpl([], 'failed.bin', {}, fixture.runtime);
+    const file = new FileImpl([], 'failed.bin', {}, fixture.exec);
     file.setSerializationState({
       data: BlobData.fromSource({ size: 1, snapshotState: undefined, read: () => Promise.reject(failure) }),
       type: '', snapshotState: undefined,
     });
     const form = fixture.context.construct(FormDataImpl);
     form.append(toScalarValueString('file'), file);
-    const { body } = FetchBody.extract(form, false, fixture.runtime);
+    const { body } = FetchBody.extract(form, false, fixture.exec);
     await expect(readBodyBytes(body)).rejects.toBe(failure);
   });
 });

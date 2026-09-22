@@ -1,7 +1,7 @@
 import type { JSMicrotaskQueue } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
-import type { EnvironmentSettingsObject } from './environment';
+import type { Environment } from './environment';
 import { InternalError } from '../../infra/internal-error';
 
 /*
@@ -13,7 +13,7 @@ import { InternalError } from '../../infra/internal-error';
  */
 export class EventLoop {
   /* HTML §8.1.3.3 — Backup incumbent settings object stack. */
-  #backupIncumbentSettingsObjectStack: EnvironmentSettingsObject[] = [];
+  #backupIncumbentSettingsObjectStack: Environment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
@@ -118,8 +118,8 @@ export class EventLoop {
 
   /* HTML §8.1.3.3 — The incumbent settings object. */
   getIncumbentSettingsObject(
-    hostEntrySettings: EnvironmentSettingsObject,
-  ): EnvironmentSettingsObject {
+    hostEntrySettings: Environment,
+  ): Environment {
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -127,7 +127,7 @@ export class EventLoop {
       context !== undefined &&
       context.skipWhenDeterminingIncumbent === 0
     ) {
-      return context.settings;
+      return context.environment;
     }
 
     const backup = this.#backupIncumbentSettingsObjectStack.at(-1);
@@ -143,12 +143,12 @@ export class EventLoop {
   }
 
   /* HTML §8.1.3.3 — Prepare to run a callback. */
-  prepareToRunCallback(settings: EnvironmentSettingsObject): void {
-    if (settings.responsibleEventLoop !== this) {
+  prepareToRunCallback(environment: Environment): void {
+    if (environment.responsibleEventLoop !== this) {
       throw new InternalError('A callback context belongs to another event loop');
     }
 
-    this.#backupIncumbentSettingsObjectStack.push(settings);
+    this.#backupIncumbentSettingsObjectStack.push(environment);
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -156,7 +156,7 @@ export class EventLoop {
   }
 
   /* HTML §8.1.3.3 — Clean up after running a callback. */
-  cleanUpAfterRunningCallback(settings: EnvironmentSettingsObject): void {
+  cleanUpAfterRunningCallback(environment: Environment): void {
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -167,15 +167,15 @@ export class EventLoop {
       context.skipWhenDeterminingIncumbent--;
     }
 
-    if (this.#backupIncumbentSettingsObjectStack.at(-1) !== settings) {
+    if (this.#backupIncumbentSettingsObjectStack.at(-1) !== environment) {
       throw new InternalError('Callback settings were cleaned up out of order');
     }
     this.#backupIncumbentSettingsObjectStack.pop();
   }
 
   /* HTML §8.1.4.4 — Prepare to run script. */
-  prepareToRunScript(settings: EnvironmentSettingsObject): void {
-    if (settings.responsibleEventLoop !== this) {
+  prepareToRunScript(environment: Environment): void {
+    if (environment.responsibleEventLoop !== this) {
       throw new InternalError('Script settings belong to another event loop');
     }
 
@@ -189,18 +189,18 @@ export class EventLoop {
      */
     this.#jsExecutionContextStack.push({
       kind: 'realm',
-      settings,
+      environment,
       task,
     });
-    task?.scriptEvaluationEnvironmentSettingsObjectSet.add(settings);
+    task?.scriptEvaluationEnvironmentSettingsObjectSet.add(environment);
   }
 
   /* HTML §8.1.4.4 — Clean up after running script. */
-  cleanUpAfterRunningScript(settings: EnvironmentSettingsObject): void {
+  cleanUpAfterRunningScript(environment: Environment): void {
     const entry = this.#jsExecutionContextStack.at(-1);
     if (
       entry?.kind !== 'realm' ||
-      entry.settings !== settings
+      entry.environment !== environment
     ) {
       throw new InternalError('Script settings were cleaned up out of order');
     }
@@ -226,7 +226,7 @@ export class EventLoop {
    * a temporary task because Node exposes no surrounding execution context.
    */
   runScriptEvaluation<Result>(
-    settings: EnvironmentSettingsObject,
+    environment: Environment,
     steps: () => Result,
   ): Result {
     const hostEntryTask = this.#currentlyRunningTask === null
@@ -235,10 +235,10 @@ export class EventLoop {
     if (hostEntryTask !== null) this.#currentlyRunningTask = hostEntryTask;
 
     try {
-      this.prepareToRunScript(settings);
+      this.prepareToRunScript(environment);
       const context: ScriptHavingExecutionContext = {
         kind: 'script',
-        settings,
+        environment,
         skipWhenDeterminingIncumbent: 0,
       };
       this.#jsExecutionContextStack.push(context);
@@ -246,7 +246,7 @@ export class EventLoop {
         return steps();
       } finally {
         this.#popScriptExecutionContext(context);
-        this.cleanUpAfterRunningScript(settings);
+        this.cleanUpAfterRunningScript(environment);
       }
     } finally {
       if (hostEntryTask !== null) {
@@ -443,7 +443,7 @@ export type TaskQueueSelector = (
 
 export class Task {
   document: DocumentImpl | null;
-  scriptEvaluationEnvironmentSettingsObjectSet = new Set<EnvironmentSettingsObject>();
+  scriptEvaluationEnvironmentSettingsObjectSet = new Set<Environment>();
   readonly source: TaskSource;
   steps: () => void;
   timerNestingLevel?: number;
@@ -490,13 +490,13 @@ type TrackedExecutionContext =
 
 type RealmExecutionContextEntry = {
   kind: 'realm';
-  settings: EnvironmentSettingsObject;
+  environment: Environment;
   task: Task | null;
 };
 
 type ScriptHavingExecutionContext = {
   kind: 'script';
-  settings: EnvironmentSettingsObject;
+  environment: Environment;
   skipWhenDeterminingIncumbent: number;
 };
 

@@ -15,7 +15,7 @@ and delivery. URL owns the stateless stripping helper.
 
 Fetch 7c has reached the first concrete consumer: COEP's CORP violation reports.
 FetchResponse implements the policy checks and submits violations through
-`settings.queueReport()`. EnvironmentSettingsObject routes those submissions to
+`settings.queueReport()`. Environment routes those submissions to
 its actual Window's global-scope mixin, which generates a report, notifies local
 observers, and adds it to the outbound queue when delivery is enabled. Network
 delivery still needs the later Fetch pipeline.
@@ -45,8 +45,8 @@ When connecting generation, reconcile the current text: Fetch's CORP
 report algorithm passes a global, Reporting §3.4.1 accepts a Document/worker,
 and Reporting §3.1 declares the queues on WindowOrWorkerGlobalScope. Keep this
 adaptation within Browlet rather than exposing DOM ownership details to Fetch.
-The actual settings object already reaches its global through
-`realmExecutionContext.realm.globalObject`; Fetch does not need that field in
+The actual settings object reaches its shared implementation state through
+`getWindowOrWorkerGlobalScopeMixin()`; Fetch does not need that method in
 its narrowed contract. Queued report records are distinct from HTML tasks:
 observer callbacks require task delivery, while network delivery batches
 pending reports according to the user agent's schedule.
@@ -106,9 +106,10 @@ do not import browser feature flags or unrelated report fields.
 `test/browlet/reporting/reports.test.ts` covers base-typed derived projection,
 JSON output, producer snapshots, getter-only attributes, stable identity, and
 cross-realm projection/serialization. The observer constructs the concrete body
-before projection. Its constructor receives its owning global-scope mixin as an
-extra implementation argument supplied by Web IDL; that callable shape remains
-marked for review. The implementation retains no Binding Context.
+before projection. Its constructor receives the owning settings object from
+Web IDL and retrieves that environment's existing global-scope mixin. The
+environment owns `exec`, so consumers need no separate execution input.
+The observer does not construct another mixin or retain a Binding Context.
 
 `generateReport()` implements the generic generation algorithm: it retains
 producer data, sanitizes the settings' creation URL without mutating it, and

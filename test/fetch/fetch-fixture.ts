@@ -1,6 +1,6 @@
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
-import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/infrastructure';
 import {
   FetchBody, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
 } from '../../src/fetch/body';
@@ -27,7 +27,7 @@ import { createFetchUserAgent } from './client-fixture';
 
 export function createFetchRequest(
   url = 'https://example.test/start',
-  client: FetchEnvironmentSettingsObject | null = null,
+  client: FetchEnvironment | null = null,
 ) {
   const parsed = parseURL(url).url;
   if (parsed === null) throw new Error('Invalid fixture URL');
@@ -37,15 +37,15 @@ export function createFetchRequest(
 export function createFetchFixture(world?: BindingWorld) {
   const bindings = world ?? new BindingWorld(fetchDefinitions);
   const realm = new TestRealm();
-  const context = bindings.register(realm, { createRuntime: () => createRuntime(realm) });
-  const runtime = context.getRuntime();
+  const context = bindings.register(realm, () => createExecution(realm));
+  const exec = context.getExecution();
   // This fixture allocates implementations without installing the browser API.
   return {
     bindings,
     realm,
     context,
-    runtime,
-    createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, runtime), runtime),
+    exec,
+    createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, exec), exec),
     createRequest: (record: FetchRequest, signal: AbortSignalCapability, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new FetchResponse(), guard: HeadersGuard = 'response') =>

@@ -9,7 +9,7 @@ import type { SandboxingFlagSet } from '../policy/sandbox';
 import type { ReferrerPolicy } from '../../../fetch/index';
 import { areSameOrigin, type Origin, obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/index';
 import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
-import type { Environment } from '../../scripting/environment';
+import type { EnvironmentRecord } from '../../scripting/environment';
 import {
   TopLevelTraversable, type Navigable, type TraversableNavigable,
 } from '../navigable';
@@ -35,7 +35,7 @@ export type NavigationParams = {
   fetchController: FetchController | null;
   commitEarlyHints: ((document: DocumentImpl) => void) | null;
   coopEnforcementResult: OpenerPolicyEnforcementResult;
-  reservedEnvironment: Environment | null;
+  reservedEnvironment: EnvironmentRecord | null;
   origin: Origin;
   policyContainer: PolicyContainer;
   finalSandboxingFlagSet: SandboxingFlagSet;
@@ -82,13 +82,7 @@ export function createNavigationParams(
     throw new InternalError('Navigation requires an active browsing context');
   }
   const activeWindow = browsingContext.activeWindow;
-  if (activeWindow === null) {
-    throw new InternalError('Navigation requires an active Window');
-  }
-  const settings = getRelevantRealm(activeWindow).hostDefined;
-  if (settings === null) {
-    throw new InternalError('Navigation Window has no environment settings object');
-  }
+  const environment = getRelevantRealm(activeWindow).environment;
 
   return {
     id: null,
@@ -100,7 +94,7 @@ export function createNavigationParams(
       headers: new Map(),
       timingInfo: {
         startTime: coarsenedSharedCurrentTime(
-          settings.crossOriginIsolatedCapability,
+          environment.crossOriginIsolatedCapability,
         ).milliseconds,
       },
       hasCrossOriginRedirects: false,
@@ -238,9 +232,6 @@ function applyPushOrReplaceHistoryStep(
     throw new InternalError('Navigation Document has no browsing context');
   }
   const window = realm.windowImplementation;
-  if (!window) {
-    throw new InternalError('Navigation Document global object is not a Window');
-  }
 
   navigable.currentSessionHistoryEntry = historyEntry;
   navigable.activeSessionHistoryEntry = historyEntry;
@@ -249,9 +240,8 @@ function applyPushOrReplaceHistoryStep(
     browsingContext.windowProxy,
     window,
   );
-  const settings = realm.hostDefined;
-  if (settings === null) throw new InternalError('Navigation Window has no settings');
-  settings.markExecutionReady();
+  const environment = realm.environment;
+  environment.markExecutionReady();
 }
 
 function clearForwardSessionHistory(

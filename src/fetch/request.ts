@@ -1,6 +1,6 @@
 import type { BlobImpl } from '../file/index';
 import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
-import { type AbortSignalCapability, type RuntimeContext, isomorphicEncode } from '../js-engine/index';
+import { type AbortSignalCapability, type RealmExecution, isomorphicEncode } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
@@ -19,8 +19,8 @@ import {
   FetchHeaders, getEnvironmentDefaultUserAgent, HeadersImpl, type HeadersGuard, type HeadersInitValue,
 } from './headers';
 import {
-  getFetchEnvironmentSettingsObject, serializeInteger,
-  type FetchEnvironmentSettingsObject, type FetchEnvironment, type FetchUserAgent,
+  getFetchEnvironment, serializeInteger,
+  type FetchEnvironment, type FetchEnvironmentRecord, type FetchUserAgent,
   type FetchPolicyContainer, type FetchPromptTarget, type ReferrerPolicy,
 } from './infrastructure';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
@@ -42,11 +42,11 @@ export class FetchRequest {
   /** Extracted body, bytes awaiting extraction, or null when no body is present. */
   body: Uint8Array | FetchBody | null = null;
   /** Initiating environment settings, or null for a request without an environment client. */
-  client: FetchEnvironmentSettingsObject | null;
+  client: FetchEnvironment | null;
   /** The shared networking owner, including for requests without a client. */
   userAgent: FetchUserAgent;
   /** Destination environment reserved for a navigation or worker, before it becomes active. */
-  reservedClient: FetchEnvironment | null = null;
+  reservedClient: FetchEnvironmentRecord | null = null;
   /** Environment ID replaced by a navigation, or an empty string when none is designated. */
   replacesClientId = '';
   /** Prompt destination, undefined until selected from the client, or null to suppress prompts. */
@@ -124,7 +124,7 @@ export class FetchRequest {
   /** Unique request identifier for WebDriver; cloning generates a fresh identifier. */
   webDriverId: string = crypto.randomUUID();
 
-  constructor(url: URLRecord, client: FetchEnvironmentSettingsObject | null, userAgent: FetchUserAgent) {
+  constructor(url: URLRecord, client: FetchEnvironment | null, userAgent: FetchUserAgent) {
     this.urlList = [copyURL(url)];
     this.client = client;
     this.userAgent = userAgent;
@@ -510,27 +510,28 @@ export class RequestImpl {
   /** Body operations reading this request's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution, allocation, and abort-construction facilities. */
-  #runtime: RuntimeContext;
+  #exec: RealmExecution;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
   // https://fetch.spec.whatwg.org/#request-create
   constructor(
-    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, runtime: RuntimeContext,
+    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, exec: RealmExecution,
   ) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
-    this.#bodyMixin = new BodyMixin(request, runtime);
-    this.#runtime = runtime;
+    this.#bodyMixin = new BodyMixin(request, exec);
+    this.#exec = exec;
   }
 
   /** Construct a Request from converted author arguments and its relevant settings. */
   // https://fetch.spec.whatwg.org/#dom-request
   static create(
     input: FetchRequestInfo, init: FetchRequestInit,
-    client: FetchEnvironmentSettingsObject, runtime: RuntimeContext,
+    environment: FetchEnvironment & { exec: RealmExecution; },
   ): RequestImpl {
-    const baseURL = client.apiBaseURL;
+    const { exec } = environment;
+    const baseURL = environment.apiBaseURL;
     let source: FetchRequest;
     let fallbackMode: RequestMode | null = null;
     let signal: AbortSignalCapability | null = null;
@@ -538,14 +539,14 @@ export class RequestImpl {
       const url = parseURL(input, baseURL).url;
       if (url === null) throw new TypeError('Invalid Request URL');
       if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
-      source = new FetchRequest(url, client, client.userAgent);
+      source = new FetchRequest(url, environment, environment.userAgent);
       fallbackMode = 'cors';
     } else {
       source = input.#request;
       signal = input.#signal;
     }
 
-    const origin = client.origin;
+    const origin = environment.origin;
     let traversable: FetchRequest['traversableForUserPrompts'] = undefined;
     // PROVISIONAL: Fetch's constructor still names an environment target; compare the source request origin.
     if (source.traversableForUserPrompts && source.origin !== undefined && areSameOrigin(source.origin, origin)) {
@@ -556,7 +557,7 @@ export class RequestImpl {
       traversable = null;
     }
 
-    const request = new FetchRequest(source.url, client, client.userAgent);
+    const request = new FetchRequest(source.url, environment, environment.userAgent);
     request.method = source.method;
     request.headerList = source.headerList.clone();
     request.unsafeRequest = true;
@@ -619,7 +620,7 @@ export class RequestImpl {
     }
 
     const result = new RequestImpl(
-      request, 'request', runtime.createDependentAbortSignal(signal === null ? [] : [signal]), runtime,
+      request, 'request', exec.createDependentAbortSignal(signal === null ? [] : [signal]), exec,
     );
     if (request.mode === 'no-cors') {
       if (!isCORSSafelistedMethod(request.method)) throw new TypeError('Invalid method for no-cors mode');
@@ -638,7 +639,7 @@ export class RequestImpl {
     }
     let initBody: FetchBody | null = null;
     if (bodyInit !== null) {
-      const extracted = FetchBody.extract(bodyInit, request.keepalive, runtime);
+      const extracted = FetchBody.extract(bodyInit, request.keepalive, exec);
       initBody = extracted.body;
       if (extracted.type !== null && !request.headerList.has('Content-Type')) {
         result.#headers.append('Content-Type', extracted.type);
@@ -654,7 +655,7 @@ export class RequestImpl {
     }
     if (initBody === null && inputBody !== null) {
       if (inputBody.stream.disturbed || inputBody.stream.locked) throw new TypeError('Request body is disturbed or locked');
-      body = new FetchBody(createReadableStreamProxy(inputBody.stream, runtime), runtime);
+      body = new FetchBody(createReadableStreamProxy(inputBody.stream, exec), exec);
       body.source = inputBody.source;
       body.length = inputBody.length;
     }
@@ -690,8 +691,8 @@ export class RequestImpl {
   clone(): RequestImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Request body is disturbed or locked');
     const request = this.#request.clone();
-    const signal = this.#runtime.createDependentAbortSignal([this.#signal]);
-    return new RequestImpl(request, this.#headers.guard, signal, this.#runtime);
+    const signal = this.#exec.createDependentAbortSignal([this.#signal]);
+    return new RequestImpl(request, this.#headers.guard, signal, this.#exec);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -818,7 +819,7 @@ export const requestIDL = defineInterface({
   name: 'Request',
   exposed: ['Window', 'Worker'],
   implementation: impl(RequestImpl, {
-    constructWith: [atArg(3, (ctx) => ctx.getRuntime())],
+    constructWith: [atArg(3, (ctx) => ctx.getExecution())],
   }),
   members: [
     ctor(
@@ -830,7 +831,7 @@ export const requestIDL = defineInterface({
         construct(ctx, input, init): RequestImpl {
           return RequestImpl.create(
             input as FetchRequestInfo, init as FetchRequestInit,
-            getFetchEnvironmentSettingsObject(ctx, requestIDL), ctx.getRuntime(),
+            getFetchEnvironment(ctx, requestIDL),
           );
         },
       },

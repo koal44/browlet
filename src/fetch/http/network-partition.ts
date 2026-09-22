@@ -1,9 +1,9 @@
 import { obtainSite, sitesAreSameSite, type Site, obtainURLOrigin } from '../../url/index';
-import type { FetchEnvironment } from '../infrastructure';
+import type { FetchEnvironmentRecord } from '../infrastructure';
 import { InternalError } from '../../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#determine-the-network-partition-key */
-export function determineNetworkPartitionKey(environment: FetchEnvironment): NetworkPartitionKey {
+export function determineNetworkPartitionKey(environment: FetchEnvironmentRecord): NetworkPartitionKey {
   let topLevelOrigin = environment.topLevelOrigin;
   if (topLevelOrigin === null) {
     if (environment.topLevelCreationURL === null) throw new InternalError('Fetch environment has no top-level origin or creation URL');

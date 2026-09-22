@@ -8,8 +8,8 @@ observability feature.
 - `clock.ts` owns the wall and monotonic clocks, unsafe and coarsened moments,
   clock-neutral durations, and their arithmetic. Unsafe moments coarsen into
   Moments; arithmetic returns new values and never moves an existing moment.
-  The shared `coarsenTime()` calculation also supplies `RuntimeContext.timing`
-  for Fetch's connection timestamps. Transport timing observations remain deferred.
+  High Resolution Time and Fetch's connection timestamps share the stateless
+  `coarsenTime()` calculation in Infra. Transport timing observations remain deferred.
 - `high-resolution-time.ts` owns the estimated monotonic Unix epoch, relative
   and shared time, and environment-settings time origins. It selects the
   isolation capability passed to `UnsafeMoment.coarsen()`.

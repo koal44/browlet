@@ -11,7 +11,7 @@ import {
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
 import { registerDefinitionBindings } from './implementation-binding';
-import type { RuntimeContext, JSRealm } from '../js-engine/index';
+import type { RealmExecution, JSRealm } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 
 /**
@@ -39,8 +39,14 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     );
   }
 
-  /** Register a realm in this world, returning its shared binding context. */
-  register(realm: Realm, options: RealmRegistrationOptions<Realm> = {}): BindingContext<Realm> {
+  /**
+   * Register a realm in this world, returning its shared binding context.
+   * Supply an execution factory when its implementations need host facilities.
+   */
+  register(
+    realm: Realm,
+    createExecution?: (context: BindingContext<Realm>) => RealmExecution,
+  ): BindingContext<Realm> {
     const registered = this.forRealm(realm);
     if (registered) return registered;
 
@@ -48,7 +54,7 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       this.#definitions,
       realm,
       this,
-      options.createRuntime,
+      createExecution,
     );
     registerDefinitionBindings(binding);
     return binding.context;
@@ -95,8 +101,4 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 export type BindingWorldOptions = {
   capabilities?: CapabilityRegistration[];
   hostDefinedInterfaces?: HostDefinedInterface[];
-};
-
-export type RealmRegistrationOptions<Realm extends WebIDLRealmHost = WebIDLRealmHost> = {
-  createRuntime?: (ctx: BindingContext<Realm>) => RuntimeContext;
 };

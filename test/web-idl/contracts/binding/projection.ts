@@ -3,9 +3,9 @@ import {
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type StampedImplInstance, type StampedPlatformObject, type WebIDLRealmHost,
 } from '../../../../src/web-idl/index';
-import type { RuntimeContext } from '../../../../src/js-engine/runtime-context';
+import type { RealmExecution } from '../../../../src/js-engine/realm-execution';
 
-declare const runtime: RuntimeContext;
+declare const exec: RealmExecution;
 interface HostRealm extends WebIDLRealmHost {
   eventTimeStamp(): number;
 }
@@ -13,7 +13,7 @@ declare const hostRealm: HostRealm;
 declare const minimalRealm: WebIDLRealmHost;
 class Example { value = 1; }
 
-atArg(0, (ctx) => ctx.getRuntime());
+atArg(0, (ctx) => ctx.getExecution());
 attrFn((ctx) => function value() { return ctx.realm.global; });
 // @ts-expect-error A default binding context has no HTML timing API.
 atArg(0, (ctx) => ctx.realm.eventTimeStamp());
@@ -38,15 +38,13 @@ const definition = defineInterface<HostRealm>({
   ],
 });
 serializeDefinition(definition);
-const capability = defineCapability<RuntimeContext>('runtime');
+const capability = defineCapability<RealmExecution>('execution');
 const world = new BindingWorld<HostRealm>([definition], {
-  capabilities: [capability.for(definition, runtime)],
+  capabilities: [capability.for(definition, exec)],
 });
-const ctx = world.register(hostRealm, {
-  createRuntime(ctx) {
-    ctx.realm.eventTimeStamp();
-    return runtime;
-  },
+const ctx = world.register(hostRealm, (context) => {
+  context.realm.eventTimeStamp();
+  return exec;
 });
 ctx.realm.eventTimeStamp();
 world.forRealm(hostRealm)?.realm.eventTimeStamp();

@@ -4,7 +4,7 @@ import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import {
-  defaultRuntimeCaps, Stylelet, type PromiseValue,
+  defaultExecutionCaps, Stylelet, type PromiseValue,
 } from '../../../../src/stylelet/stylelet';
 import { createBrowletDocument } from '../../browlet-document';
 
@@ -19,7 +19,7 @@ describe('StyleSheetImpl', () => {
 
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
-    const media = new MediaListImpl('screen', defaultRuntimeCaps);
+    const media = new MediaListImpl('screen', defaultExecutionCaps);
     const sheet = createStyleSheet({
       baseURL: 'https://example.com/css/',
       media,

@@ -8,7 +8,7 @@ import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import { createDocument, getRelevantRealm } from '../bindings';
 import type { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import { createWindowEnvironment } from '../scripting/window-environment';
+import { createWindowEnvironment } from '../bindings';
 import type {
   NavigationParams, NavigationRequest, NavigationResponse,
 } from './navigation/navigation';
@@ -31,9 +31,6 @@ export function createAndInitializeDocument(
   const creationURL = navigationParams.request?.currentURL ??
     navigationParams.response.url;
   const activeDocument = browsingContext.activeDocument;
-  if (activeDocument === null) {
-    throw new InternalError('Navigation browsing context has no active Document');
-  }
 
   let window: WindowImpl;
   if (
@@ -43,11 +40,7 @@ export function createAndInitializeDocument(
       navigationParams.origin,
     )
   ) {
-    const activeWindow = browsingContext.activeWindow;
-    if (activeWindow === null) {
-      throw new InternalError('Navigation browsing context has no active Window');
-    }
-    window = activeWindow;
+    window = browsingContext.activeWindow;
   } else {
     const group = browsingContext.group;
     if (group === null) {
@@ -61,8 +54,8 @@ export function createAndInitializeDocument(
       group,
       requestsOAC,
     );
-    window = createWindowEnvironment(agent, {
-      userAgent: group.userAgent,
+    window = createWindowEnvironment({
+      agent, userAgent: group.userAgent,
       creationURL,
       origin: navigationParams.origin,
       parent: navigationParams.navigable.parent?.activeWindow ?? null,
@@ -114,16 +107,13 @@ export function completelyFinishLoading(
     throw new InternalError('A completely loaded Document needs a browsing context');
   }
   const window = browsingContext.activeWindow;
-  if (!window || window.getAssociatedDocument() !== document) {
+  if (window.getAssociatedDocument() !== document) {
     throw new InternalError('Only an active Document can finish loading');
   }
 
   const realm = getRelevantRealm(window);
-  const settings = realm.hostDefined;
-  if (settings === null) {
-    throw new InternalError('Active Window has no environment settings object');
-  }
-  const now = settings.timing.currentHighResolutionTime().toTimestamp();
+  const environment = realm.environment;
+  const now = environment.timing.currentHighResolutionTime().toTimestamp();
   const timing = document.getLoadTimingInfo();
   timing.domInteractiveTime = now;
   timing.domContentLoadedEventStartTime = now;
@@ -133,7 +123,7 @@ export function completelyFinishLoading(
   document.setCurrentDocumentReadiness('complete');
   document.markReadyForPostLoadTasks();
   fireEvent('load', window);
-  timing.loadEventEndTime = settings.timing.currentHighResolutionTime().toTimestamp();
+  timing.loadEventEndTime = environment.timing.currentHighResolutionTime().toTimestamp();
   document.setCompletelyLoadedTime(currentCoarsenedWallTime().milliseconds);
 }
 

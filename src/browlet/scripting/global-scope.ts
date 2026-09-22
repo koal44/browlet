@@ -8,8 +8,8 @@ import { generateReport, type Report } from '../reporting/report';
 import type { ReportingObserverImpl } from '../reporting/observer';
 import type { FetchResponse } from '../../fetch/index';
 import type { DocumentImpl } from '../dom/nodes/document';
-import type { EnvironmentSettingsObject } from './environment';
-import { GlobalTimers, type GlobalTimersOptions, type TimerAction } from './timers';
+import type { Environment } from './environment';
+import { GlobalTimers, timerTaskSource, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 import { createTaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
@@ -62,24 +62,23 @@ export class WindowOrWorkerGlobalScopeMixin {
   reportingObservers = new Set<ReportingObserverImpl>();
   /** Recent reports for buffered observation, limited to 100 entries per type. */
   reportBuffer: Report[] = [];
-  #settings: EnvironmentSettingsObject;
+  #environment: Environment;
   #performance: PerformanceImpl;
-  #structuredClone: StructuredCloneSteps;
 
-  constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
-    this.#settings = initialization.settings;
-    this.#performance = new PerformanceImpl(initialization.settings.timing);
-    this.#structuredClone = initialization.structuredClone;
+  constructor(environment: Environment) {
+    this.#environment = environment;
+    this.#performance = new PerformanceImpl(environment.timing);
+    const { realm } = environment;
     this.timers = new GlobalTimers({
-      eventLoop: initialization.settings.responsibleEventLoop,
-      queueTask: initialization.queueTimerTask,
-      time: initialization.settings.timing,
+      eventLoop: environment.responsibleEventLoop,
+      queueTask: (steps, options) => realm.queueGlobalTask(timerTaskSource, steps, options),
+      time: environment.timing,
     });
   }
 
   /** https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext */
   get isSecureContext(): boolean {
-    return this.#settings.isSecureContext;
+    return this.#environment.isSecureContext;
   }
 
   get performance(): PerformanceImpl {
@@ -107,28 +106,28 @@ export class WindowOrWorkerGlobalScopeMixin {
   }
 
   queueMicrotask(callback: VoidFunction): void {
-    this.#settings.responsibleEventLoop.queueMicrotask(() => { callback(); });
+    this.#environment.responsibleEventLoop.queueMicrotask(() => { callback(); });
   }
 
   structuredClone(
     value: unknown,
     options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
-    return this.#structuredClone(value, options.transfer ?? []);
+    return this.#environment.exec.clone(value, options.transfer);
   }
 
   /** Replace this global's Reporting endpoint list using its resource response. */
   // https://w3c.github.io/reporting/#initialize-a-globals-endpoint-list
   initializeReportingEndpoints(response: FetchResponse): void {
-    this.reportingEndpoints = ReportingEndpoint.parse(response, this.#settings.userAgent);
+    this.reportingEndpoints = ReportingEndpoint.parse(response, this.#environment.userAgent);
   }
 
   /** Generate a report for local observation and, when enabled, later network delivery. */
   // https://w3c.github.io/reporting/#generate-report
   queueReport(type: string, destination: string, body: unknown): void {
-    const report = generateReport(body, type, destination, this.#settings);
+    const report = generateReport(body, type, destination, this.#environment);
     this.notifyReportingObservers(report);
-    if (this.#settings.userAgent.reportDeliveryEnabled) this.reports.push(report);
+    if (this.#environment.userAgent.reportDeliveryEnabled) this.reports.push(report);
     else this.reports.length = 0;
   }
 
@@ -149,7 +148,7 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   /** Queue observer work on the HTML event loop owning this global. */
   queueReportingTask(steps: () => void): QueuedTaskHandle {
-    return this.#settings.realmExecutionContext.realm.queueGlobalTask(reportingTaskSource, steps);
+    return this.#environment.realm.queueGlobalTask(reportingTaskSource, steps);
   }
 
   // -- Internal ---------------------------------------------------------
@@ -158,17 +157,6 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.timers.setAssociatedDocument(document);
   }
 }
-
-export type WindowOrWorkerGlobalScopeInitialization = {
-  settings: EnvironmentSettingsObject;
-  queueTimerTask: GlobalTimersOptions['queueTask'];
-  structuredClone: StructuredCloneSteps;
-};
-
-export type StructuredCloneSteps = (
-  value: unknown,
-  transferList: object[],
-) => unknown;
 
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');

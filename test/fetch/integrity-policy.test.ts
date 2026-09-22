@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
-import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/infrastructure';
 import { FetchRequest, type Destination, type FetchMode } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { parseURL, serializeURL } from '../../src/url/url';
@@ -192,7 +192,7 @@ function createRequest(enforced = '', reportOnly = '', url = 'https://resource.t
   container.parseIntegrityPolicyHeaders(response);
   const client = {
     ...createClientSettings('https://document.test/page#fragment'), policyContainer: container,
-    queueReport: vi.fn<FetchEnvironmentSettingsObject['queueReport']>(),
+    queueReport: vi.fn<FetchEnvironment['queueReport']>(),
   };
   const request = new FetchRequest(parseURL(url).url!, client, client.userAgent);
   request.mode = 'cors';

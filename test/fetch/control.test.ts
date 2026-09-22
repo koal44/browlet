@@ -11,7 +11,7 @@ import {
 } from '../../src/fetch/url';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { parseURL } from '../../src/url/url';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { createControllerFixture } from './control-fixture';
 import { createClientSettings } from './client-fixture';
 
@@ -54,7 +54,7 @@ describe('Fetch §2 controllers', () => {
     const error = {};
     const record = {};
     const { controller, abort } = createControllerFixture({
-      ...createRuntime(),
+      ...createExecution(),
       serialize(value) {
         expect(controller.state).toBe('aborted');
         expect(controller.serializedAbortReason).toBeNull();
@@ -73,7 +73,7 @@ describe('Fetch §2 controllers', () => {
 
   it('does not add a once-only restriction to abort or terminate', () => {
     const { controller, abort } = createControllerFixture({
-      ...createRuntime(),
+      ...createExecution(),
       serialize: (value) => ({ value }),
       deserialize: vi.fn(),
     });
@@ -86,7 +86,7 @@ describe('Fetch §2 controllers', () => {
 
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
-    const { abort } = createControllerFixture({ ...createRuntime(), serialize, deserialize: vi.fn() });
+    const { abort } = createControllerFixture({ ...createExecution(), serialize, deserialize: vi.fn() });
 
     abort();
     expect(serialize.mock.calls[0]![0]).toMatchObject({ name: 'AbortError' });
@@ -96,7 +96,7 @@ describe('Fetch §2 controllers', () => {
 
   it('falls back to AbortError if deserialization throws', () => {
     const { deserialize } = createControllerFixture({
-      ...createRuntime(),
+      ...createExecution(),
       serialize: vi.fn(),
       deserialize: () => { throw new Error('Unavailable serialized type'); },
     });
@@ -170,15 +170,15 @@ describe('Fetch §2 task delivery', () => {
     const drains: (() => void)[] = [];
     const queue = new ParallelQueue((steps) => drains.push(steps));
     const queueGlobalTask = vi.fn();
-    const runtime = createRuntime();
-    runtime.networking.queueGlobalTask = queueGlobalTask;
+    const exec = createExecution();
+    exec.networking.queueGlobalTask = queueGlobalTask;
     const order: number[] = [];
 
     queueFetchTask(() => {
       order.push(1);
-      queueFetchTask(() => order.push(3), queue, runtime);
-    }, queue, runtime);
-    queueFetchTask(() => order.push(2), queue, runtime);
+      queueFetchTask(() => order.push(3), queue, exec);
+    }, queue, exec);
+    queueFetchTask(() => order.push(2), queue, exec);
     expect(order).toEqual([]);
     expect(drains).toHaveLength(1);
     drains.shift()!();
@@ -191,10 +191,10 @@ describe('Fetch §2 task delivery', () => {
     const global = {};
     const algorithm = vi.fn();
     const queueGlobalTask = vi.fn();
-    const runtime = createRuntime();
-    runtime.networking.queueGlobalTask = queueGlobalTask;
+    const exec = createExecution();
+    exec.networking.queueGlobalTask = queueGlobalTask;
 
-    queueFetchTask(algorithm, global, runtime);
+    queueFetchTask(algorithm, global, exec);
 
     expect(queueGlobalTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
     expect(algorithm).not.toHaveBeenCalled();

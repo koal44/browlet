@@ -24,8 +24,8 @@ describe('Fetch Request construction', () => {
     expect(request.signal).toBe(request.signal);
     expect(request.signal.aborted).toBe(false);
     const record = implementation(window, request).getRequest();
-    expect(record.client).toBe(getRelevantRealm(window).hostDefined);
-    expect(record.userAgent).toBe(getRelevantRealm(window).hostDefined!.userAgent);
+    expect(record.client).toBe(getRelevantRealm(window).environment);
+    expect(record.userAgent).toBe(getRelevantRealm(window).environment.userAgent);
     expect(record.unsafeRequest).toBe(true);
     expect(record.initiatorType).toBe('fetch');
     expect(Reflect.has(window, 'fetch')).toBe(false);
@@ -137,7 +137,7 @@ describe('Fetch Request construction', () => {
     const window = createWindow();
     const source = new window.Request(url);
     const record = implementation(window, source).getRequest();
-    const target = getRelevantRealm(window).hostDefined!.getTraversableForUserPrompts()!;
+    const target = getRelevantRealm(window).environment.getTraversableForUserPrompts()!;
     record.origin = record.client!.origin;
     record.traversableForUserPrompts = target;
 
@@ -157,7 +157,7 @@ describe('Fetch Request construction', () => {
     const other = createWindow();
     const source = new owner.Request(url);
     const record = implementation(owner, source).getRequest();
-    const target = getRelevantRealm(owner).hostDefined!.getTraversableForUserPrompts()!;
+    const target = getRelevantRealm(owner).environment.getTraversableForUserPrompts()!;
     record.origin = record.client!.origin;
     record.traversableForUserPrompts = target;
 
@@ -170,7 +170,7 @@ describe('Fetch Request construction', () => {
     const window = createWindow();
     const source = new window.Request(url);
     const record = implementation(window, source).getRequest();
-    const target = getRelevantRealm(window).hostDefined!.getTraversableForUserPrompts()!;
+    const target = getRelevantRealm(window).environment.getTraversableForUserPrompts()!;
     record.traversableForUserPrompts = target;
     const copy = implementation(window, new window.Request(source)).getRequest();
     expect(copy.traversableForUserPrompts).toBeUndefined();
@@ -285,22 +285,31 @@ describe('Fetch Request signals and realm ownership', () => {
   it('uses the new constructor realm for copied bodies and signals and the receiver realm for clones', () => {
     const owner = createWindow();
     const other = createWindow();
+    const ownerSettings = getRelevantRealm(owner).environment;
+    const otherSettings = getRelevantRealm(other).environment;
     const input = new owner.Request(url, { method: 'POST', body: 'payload' });
     const copy = new other.Request(input);
     expect(copy).toBeInstanceOf(other.Request);
     expect(copy.headers).toBeInstanceOf(other.Headers);
     expect(copy.signal).toBeInstanceOf(other.AbortSignal);
     expect(copy.body).toBeInstanceOf(other.ReadableStream);
-    expect(implementation(owner, input).getRequest().userAgent).toBe(getRelevantRealm(owner).hostDefined!.userAgent);
-    expect(implementation(other, copy).getRequest().userAgent).toBe(getRelevantRealm(other).hostDefined!.userAgent);
-    const copyBody = implementation(other, copy).getRequest().body as FetchBody;
-    expect(copyBody.stream.runtime).toBe(getBindingContext(getRelevantRealm(other)).getRuntime());
+    const inputRecord = implementation(owner, input).getRequest();
+    expect(inputRecord.client).toBe(ownerSettings);
+    expect(inputRecord.userAgent).toBe(ownerSettings.userAgent);
+    expect((inputRecord.body as FetchBody).stream.exec).toBe(ownerSettings.exec);
+    const copyRecord = implementation(other, copy).getRequest();
+    expect(copyRecord.client).toBe(otherSettings);
+    expect(copyRecord.userAgent).toBe(otherSettings.userAgent);
+    const copyBody = copyRecord.body as FetchBody;
+    expect(copyBody.stream.exec).toBe(otherSettings.exec);
     const plain = new owner.Request(url);
     const clone = other.Request.prototype.clone.call(plain);
     expect(clone).toBeInstanceOf(owner.Request);
     expect(clone.headers).toBeInstanceOf(owner.Headers);
     expect(clone.signal).toBeInstanceOf(owner.AbortSignal);
-    expect(implementation(owner, clone).getRequest().userAgent).toBe(getRelevantRealm(owner).hostDefined!.userAgent);
+    const cloneRecord = implementation(owner, clone).getRequest();
+    expect(cloneRecord.client).toBe(ownerSettings);
+    expect(cloneRecord.userAgent).toBe(ownerSettings.userAgent);
     expect(() => other.Request.prototype.clone.call({} as Request)).toThrow(other.TypeError);
   });
 
@@ -320,15 +329,15 @@ describe('Fetch Request signals and realm ownership', () => {
 describe('Fetch client population with HTML settings', () => {
   it('selects the actual window traversable and clones the client policy', () => {
     const window = createWindow();
-    const settings = getRelevantRealm(window).hostDefined!;
-    const traversable = [...settings.userAgent.topLevelTraversableSet][0]!;
+    const environment = getRelevantRealm(window).environment;
+    const traversable = [...environment.userAgent.topLevelTraversableSet][0]!;
     const request = implementation(window, new window.Request(url)).getRequest();
     expect(request.origin).toBeUndefined();
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBe(traversable);
-    expect(request.origin).toBe(settings.origin);
-    expect(request.policyContainer).not.toBe(settings.policyContainer);
-    expect(request.policyContainer).toEqual(settings.policyContainer);
+    expect(request.origin).toBe(environment.origin);
+    expect(request.policyContainer).not.toBe(environment.policyContainer);
+    expect(request.policyContainer).toEqual(environment.policyContainer);
     const policy = request.policyContainer;
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBe(traversable);
@@ -337,11 +346,11 @@ describe('Fetch client population with HTML settings', () => {
 
   it('copies parsed enforcement and report-only integrity policies from the actual Window settings', () => {
     const window = createWindow();
-    const settings = getRelevantRealm(window).hostDefined!;
+    const environment = getRelevantRealm(window).environment;
     const response = new FetchResponse();
     response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforced)');
     response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(style), endpoints=(reported)');
-    settings.policyContainer.parseIntegrityPolicyHeaders(response);
+    environment.policyContainer.parseIntegrityPolicyHeaders(response);
     const request = implementation(window, new window.Request(url)).getRequest();
     request.populateFromClient();
     const expected = {
@@ -349,13 +358,13 @@ describe('Fetch client population with HTML settings', () => {
       reportOnlyIntegrityPolicy: { sources: ['inline'], blockedDestinations: ['style'], endpoints: ['reported'] },
     };
     expect(request.policyContainer).toMatchObject(expected);
-    expect(request.policyContainer).not.toBe(settings.policyContainer);
-    settings.policyContainer.integrityPolicy.sources.length = 0;
-    settings.policyContainer.integrityPolicy.blockedDestinations.length = 0;
-    settings.policyContainer.integrityPolicy.endpoints.length = 0;
-    settings.policyContainer.reportOnlyIntegrityPolicy.sources.length = 0;
-    settings.policyContainer.reportOnlyIntegrityPolicy.blockedDestinations.length = 0;
-    settings.policyContainer.reportOnlyIntegrityPolicy.endpoints.length = 0;
+    expect(request.policyContainer).not.toBe(environment.policyContainer);
+    environment.policyContainer.integrityPolicy.sources.length = 0;
+    environment.policyContainer.integrityPolicy.blockedDestinations.length = 0;
+    environment.policyContainer.integrityPolicy.endpoints.length = 0;
+    environment.policyContainer.reportOnlyIntegrityPolicy.sources.length = 0;
+    environment.policyContainer.reportOnlyIntegrityPolicy.blockedDestinations.length = 0;
+    environment.policyContainer.reportOnlyIntegrityPolicy.endpoints.length = 0;
     expect(request.policyContainer).toMatchObject(expected);
   });
 
@@ -364,12 +373,12 @@ describe('Fetch client population with HTML settings', () => {
     await browlet.navigate('https://document.test/page#fragment');
     const window = browlet.window as Window & typeof globalThis;
     const realm = getRelevantRealm(window);
-    const settings = realm.hostDefined!;
+    const environment = realm.environment;
     const response = new FetchResponse();
     response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforced)');
     response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(script), endpoints=(reported)');
-    settings.policyContainer.parseIntegrityPolicyHeaders(response);
-    const queueReport = vi.spyOn(settings, 'queueReport');
+    environment.policyContainer.parseIntegrityPolicyHeaders(response);
+    const queueReport = vi.spyOn(environment, 'queueReport');
     const request = implementation(window, new window.Request('script.js')).getRequest();
     request.destination = 'script';
     request.populateFromClient();
@@ -389,25 +398,25 @@ describe('Fetch client population with HTML settings', () => {
 
   it('copies policy state independently when the caller suppresses prompts', () => {
     const window = createWindow();
-    const settings = getRelevantRealm(window).hostDefined!;
+    const environment = getRelevantRealm(window).environment;
     const request = implementation(window, new window.Request(url, { window: null })).getRequest();
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBeNull();
-    expect(request.policyContainer).not.toBe(settings.policyContainer);
-    expect(request.policyContainer!.embedderPolicy).not.toBe(settings.policyContainer.embedderPolicy);
-    settings.policyContainer.embedderPolicy.value = 'require-corp';
+    expect(request.policyContainer).not.toBe(environment.policyContainer);
+    expect(request.policyContainer!.embedderPolicy).not.toBe(environment.policyContainer.embedderPolicy);
+    environment.policyContainer.embedderPolicy.value = 'require-corp';
     expect(request.policyContainer!.embedderPolicy.value).toBe('unsafe-none');
   });
 
   it('creates a default policy container for a clientless request', () => {
     const window = createWindow();
-    const settings = getRelevantRealm(window).hostDefined!;
-    const request = new FetchRequest(parseURL(url).url!, null, settings.userAgent);
-    request.origin = settings.origin;
+    const environment = getRelevantRealm(window).environment;
+    const request = new FetchRequest(parseURL(url).url!, null, environment.userAgent);
+    request.origin = environment.origin;
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBeNull();
-    expect(request.policyContainer).toEqual(settings.policyContainer);
-    expect(request.policyContainer).not.toBe(settings.policyContainer);
+    expect(request.policyContainer).toEqual(environment.policyContainer);
+    expect(request.policyContainer).not.toBe(environment.policyContainer);
   });
 });
 

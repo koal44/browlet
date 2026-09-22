@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
+import { registerRealm } from '../../../src/browlet/bindings';
 
 import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
@@ -21,19 +22,69 @@ import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { EnvironmentSettingsObject } from
+import { Environment, createEnvironmentRecord } from
   '../../../src/browlet/scripting/environment';
+import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/scripting/global-scope';
 import type { EventLoopOptions, Task } from
   '../../../src/browlet/scripting/event-loop';
 import {
   Moment, monotonicClock, UnsafeMoment,
 } from '../../../src/browlet/performance/clock';
-import type { Realm } from '../../../src/browlet/scripting/realm';
 import {
   createRealm,
 } from '../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
+  it('attaches the environment to its realm during construction', () => {
+    const agent = new TestAgent(createEventLoopOptions());
+    const { realm, environment } = createTestRealm(agent, 'attachment');
+
+    expect(realm.hostDefined).toBe(environment);
+    expect(realm.environment).toBe(environment);
+    expect(realm.environmentRecord).toBe(environment);
+    expect(environment.realm).toBe(realm);
+  });
+
+  it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {
+    const options = createEventLoopOptions();
+    const agent = new TestAgent(options);
+    const { realm, environment, context } = createTestRealm(agent, 'abort-timeout');
+    context.install(realm.global);
+    const timers = environment.getWindowOrWorkerGlobalScopeMixin().timers;
+    const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
+      .mockReturnValue(Symbol('Timer'));
+
+    realm.evaluate('globalThis.signal = AbortSignal.timeout(10)', 'abort-timeout.js');
+
+    expect(schedule).toHaveBeenCalledWith('AbortSignal-timeout', 10, expect.any(Function));
+    expect(realm.evaluate('signal.aborted', 'before-timeout.js')).toBe(false);
+    schedule.mock.calls[0]![2]();
+    expect(agent.eventLoop.runTaskTurn(options)).toBe(true);
+    expect(realm.evaluate('[signal.aborted, signal.reason.name]', 'after-timeout.js'))
+      .toEqual([true, 'TimeoutError']);
+  });
+
+  itPassesWith('hostHooks')('uses the non-Window environment timer owner for engine timeouts', () => {
+    installHostHooks();
+    const options = { ...createEventLoopOptions(), createMicrotaskQueue };
+    const agent = new TestAgent(options);
+    const { realm, environment } = createTestRealm(agent, 'engine-timeout');
+    const timers = environment.getWindowOrWorkerGlobalScopeMixin().timers;
+    const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
+      .mockReturnValue(Symbol('Timer'));
+    Reflect.set(realm.global, 'waitArray', new Int32Array(new SharedArrayBuffer(4)));
+    realm.evaluate(`
+      globalThis.result = undefined;
+      Atomics.waitAsync(waitArray, 0, 0, 10).value.then(value => { result = value; });
+    `, 'engine-timeout.js');
+
+    // The engine supplies the remaining deadline, after any setup time has elapsed.
+    expect(schedule).toHaveBeenCalledWith('JavaScript', expect.any(Number), expect.any(Function));
+    schedule.mock.calls[0]![2]();
+    expect(agent.eventLoop.runTaskTurn(options)).toBe(true);
+    expect(realm.evaluate('result', 'after-timeout.js')).toBe('timed-out');
+  });
+
   itPassesWith('hostHooks')('retains each Promise registration incumbent independently of the callback realm', () => {
     installHostHooks();
     const agent = new TestAgent({
@@ -64,13 +115,13 @@ describe('HTML callback and script-entry lifecycle', () => {
     callbackRealm.realm.evaluate('pending.resolve()', 'settle-promise.js');
 
     expect(observations.map(({ incumbent }) => incumbent))
-      .toEqual([first.settings, second.settings]);
+      .toEqual([first.environment, second.environment]);
     for (const { task } of observations) {
       expect(task?.source.name).toBe('microtask');
       expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
-        .toEqual(new Set([callbackRealm.settings]));
+        .toEqual(new Set([callbackRealm.environment]));
     }
-    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.settings);
+    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.environment);
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
   });
 
@@ -130,12 +181,12 @@ describe('HTML callback and script-entry lifecycle', () => {
 
     incumbentRealm.realm.evaluate('invoke()', 'invoke-callback.js');
 
-    expect(observation?.incumbent).toBe(incumbentRealm.settings);
+    expect(observation?.incumbent).toBe(incumbentRealm.environment);
     expect(observation?.checkpointCount).toBe(0);
     expect(observation?.task?.scriptEvaluationEnvironmentSettingsObjectSet)
       .toEqual(new Set([
-        incumbentRealm.settings,
-        callbackRealm.settings,
+        incumbentRealm.environment,
+        callbackRealm.environment,
       ]));
     expect(checkpoint).toHaveBeenCalledOnce();
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
@@ -152,15 +203,15 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     const firstLoop = first.realm.agent.eventLoop;
 
-    firstLoop.prepareToRunCallback(first.settings);
+    firstLoop.prepareToRunCallback(first.environment);
     try {
-      expect(first.realm.callbacks.captureContext()).toBe(first.settings);
-      expect(second.realm.callbacks.captureContext()).toBe(second.settings);
+      expect(first.realm.callbacks.captureContext()).toBe(first.environment);
+      expect(second.realm.callbacks.captureContext()).toBe(second.environment);
       expect(() => second.realm.agent.eventLoop
-        .prepareToRunCallback(first.settings))
+        .prepareToRunCallback(first.environment))
         .toThrow('another event loop');
     } finally {
-      firstLoop.cleanUpAfterRunningCallback(first.settings);
+      firstLoop.cleanUpAfterRunningCallback(first.environment);
     }
   });
 
@@ -210,10 +261,11 @@ class TestAgent extends Agent {
   }
 }
 
-class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
+class TestEnvironment extends Environment {
   #moduleMap: ModuleMap = { entries: [] };
   #origin = createOpaqueOrigin();
   #policyContainer = createPolicyContainer();
+  #globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(this);
 
   get apiBaseURL(): URLRecord {
     return this.creationURL;
@@ -246,29 +298,30 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   getReportingSource(): URLRecord | null {
     return null;
   }
+
+  getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
+    return this.#globalScopeMixin;
+  }
 }
 
 function createTestRealm(
   agent: Agent,
   name: string,
-): {
-  realm: Realm;
-  settings: EnvironmentSettingsObject;
-} {
-  const executionContext = createRealm(agent, {
+) {
+  const realm = createRealm(agent, {
     createGlobalObject: () => ({}),
-  });
-  const settings = new TestEnvironmentSettingsObject({
+  }, { globalNames: ['Worker'] });
+  const context = registerRealm(realm);
+  const record = createEnvironmentRecord({
     userAgent: new UserAgent(),
     isSecureContext: false,
     creationURL: requireURL(`https://${name}.test/`),
-    realmExecutionContext: executionContext,
     targetBrowsingContext: null,
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  executionContext.realm.setHostDefined(settings);
-  return { realm: executionContext.realm, settings };
+  const environment = new TestEnvironment(realm, record, context.getExecution());
+  return { realm, environment, context };
 }
 
 function createEventLoopOptions(

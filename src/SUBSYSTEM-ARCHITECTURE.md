@@ -39,7 +39,7 @@ Binding stamps a `PlatformRecord` onto an implementation instance through a
 private field, independently of its implementation class. That record selects
 the owning realm and retains the eventual platform object;
 implementation methods still receive their execution dependencies explicitly
-through `RuntimeContext`. Stamping does not inject Binding Context into
+through `RealmExecution`. Stamping does not inject Binding Context into
 implementation constructors or change their prototypes.
 Creating the record runs inherited implementation initializers before attaching
 the stamp. An initialized implementation can therefore remain unprojected.
@@ -133,8 +133,8 @@ author's result Promise. Streams owns the explicit adoption of author thenable
 chunks in its read steps.
 Buffer inspection and writes are realm-neutral functions in `buffers.ts`;
 allocation and native Promise observation use the selected realm's methods.
-Composition exposes the required operations through `runtime.buffers` and
-`runtime.promises`, without passing a realm into implementation algorithms.
+Composition exposes the required operations through `exec.buffers` and
+`exec.promises`, without passing a realm into implementation algorithms.
 Native hashing is a realm-neutral operation in `hash.ts`; consumers such as
 SRI own algorithm selection and verification policy. It does not invoke the
 public Web Crypto API or allocate author-visible results.
@@ -143,7 +143,7 @@ realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exce
 
 Asynchronous implementations receive Infra's `Promises` dependency for
 allocation, adoption, and continuation placement. A realm owns one facility;
-Binding supplies it through Runtime Context at construction or operation
+Binding supplies it through RealmExecution at construction or operation
 composition. Streams and Blobs retain that context and pass it to derived
 streams and slices. Returned
 `PromiseValue<T>` chains retain that destination, so `.then()` and `.observe()`
@@ -156,20 +156,24 @@ observer. It does not import JSRealm or JSRuntime; JSRealm composes it with its
 own observation operation. Standalone hosts can reuse the same small internal
 Promise implementation with native scheduling.
 
-Stylelet's options contain `document`, `element`, `tree`, and `runtime`
+Stylelet's options contain `document`, `element`, `tree`, and `exec`
 capabilities. Its document `StyleletContext` normalizes DOM callbacks and
-retains the selected `RuntimeCaps` for promises, background execution, task delivery, and DOM
+retains the selected `ExecutionCaps` for promises, background execution, task delivery, and DOM
 exception creation; it does not retain the options object. Standalone construction
-selects one complete native runtime provider when none is supplied. Cascades and
-stylesheets receive that existing context instead of a separate runtime argument;
-declarations and media lists receive the owner's runtime capabilities directly.
+selects one complete native execution provider when none is supplied. Cascades and
+stylesheets receive that existing context instead of a separate execution argument;
+declarations and media lists receive the owner's execution capabilities directly.
 Browlet composes it from the Document owner's existing Promise facility, shared
 background scheduling, DOM-manipulation task delivery, and neutral DOMException requests. Initial,
 navigated, and author-constructed Documents supply those capabilities at construction.
 This embedding contract does not expose Binding Context or require standalone
-hosts to implement Browlet's unrelated runtime facilities.
+hosts to implement Browlet's unrelated execution facilities. Stylelet owns
+`ExecutionCaps`: stylesheet task delivery and exception creation differ from the
+members of `RealmExecution`. The typed `createStyleletExecution()` adapter checks
+both contracts; changing a field on either side is caught at that boundary.
+Their shared Promise machinery is already defined in Infra.
 
-The HTML document parser receives its EventLoop and Runtime Context explicitly.
+The HTML document parser receives its EventLoop and RealmExecution explicitly.
 Node stream completion only queues an HTML networking task; parser waits and
 load completion use `PromiseValue`. The public `Browlet.navigate()` bridges the
 finished internal operation to a native Promise for its Node caller. That
@@ -207,8 +211,9 @@ extends the JavaScript realm contract with binding policy, and Browlet's HTML
 `Realm` subclasses `JSRealm` to add its Agent, environment settings object,
 callback lifecycle, and global task routing. Its `queueGlobalTask()` method
 uses those existing owner links and captures the associated Document at queueing.
-The global-scope mixin owns `GlobalTimers`; Window initialization supplies task
-delivery, and AbortSignal's declaration supplies its timeout-scheduling dependency.
+The global-scope mixin owns `GlobalTimers` and derives timer task delivery from
+its settings object's realm. AbortSignal's declaration supplies its
+timeout-scheduling dependency.
 The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
@@ -221,12 +226,11 @@ allocates immutable objects and forwards native property operations; Binding
 supplies interface members and Web IDL named-property behavior; HTML associates
 the native WindowProxy with the current Window. The allocation passed into
 Binding is a one-time construction input, not another environment or registry.
-`createWindowRealm()` in Browlet's composition root is the entry point for this
-allocation and its binding; it does not put Window policy in the engine or
-construct Window implementation state inside Binding.
-HTML's `createWindowEnvironment()` composes that entry point with Window
-construction, settings setup, and global-scope initialization. The two Document
-creation algorithms keep their own Document initialization.
+`createWindowEnvironment()` in Browlet's composition root constructs the Window,
+allocates and binds its realm, and returns its complete `WindowEnvironment`.
+That environment owns `realm`, `exec`, and `window`; engine allocation and Web IDL
+projection retain their existing owners. The two Document creation algorithms
+keep their own Document initialization.
 See the [global-object notes](./PLATFORM-OBJECT-ARCHITECTURE.md#special-object-categories)
 for the current adoption boundary.
 
@@ -331,76 +335,91 @@ capability. If it reaches outside the runtime, use a Host Port.
 
 Existing implementation uses are migration work, not a pattern to extend.
 Move conversion and projection into declaration bindings, and supply execution
-dependencies through the Runtime Context below. Track the remaining migration in the
+dependencies through `RealmExecution` below. Track the remaining migration in the
 [platform-object ledger](./PLATFORM-OBJECT-ARCHITECTURE.md#migration-ledger-temporary).
 
-### Runtime Context
+### Realm execution
 
-`RuntimeContext` groups the facilities composed for one owning realm/global:
-Promises, buffer allocation, JSON parsing/serialization, microtasks, background execution, task delivery,
-abort-controller and dependent-signal construction, time coarsening,
-structured cloning/serialization/deserialization, and immutable
-native-line-ending configuration.
+`RealmExecution` groups the facilities composed for one owning realm/global:
+Promises, buffer allocation, JSON parsing/serialization, microtasks, background
+execution, task delivery, abort-controller and dependent-signal construction,
+structured cloning/serialization/deserialization, and native-line-ending
+configuration.
 Its `global` identifies that owner when a specification selects it as a task
-destination. Browlet reads it through a getter because Window installation
-finishes after the runtime is composed.
-It contains no Binding Context, realm object,
-conversion, callback adaptation, or platform-object registry.
+destination. In Browlet this is the Window platform object, distinct from its
+Window implementation and the stable WindowProxy.
+The neutral contract exposes no Binding Context, realm object, conversion,
+callback adaptation, or platform-object registry.
 
 The neutral contract and engine-owned buffer operations live in `js-engine/`.
-HTML task policy, DOM aborting, High Resolution Time coarsening, and HTML structured
-data retain their implementations in Browlet.
-[`integration/runtime.ts`](browlet/integration/runtime.ts) assembles
-them once during Window realm registration, reusing that realm's existing
-Promise facility. Binding exposes the same object through `context.getRuntime()`;
-the `runtimeContext` declaration value supplies it to constructors or methods.
+HTML task policy, DOM aborting, and HTML structured data retain their
+implementations in Browlet. `Environment` owns this contract as `exec`, alongside
+its `realm` and browser state. Portable implementations accept `RealmExecution`;
+browser-owned algorithms accept `Environment` when they also need HTML state and
+reach execution facilities through `environment.exec`. The environment does not
+forward those facilities as its own methods or implement the neutral contract.
 
-`runtime.timing.coarsenTime(timestamp, crossOriginIsolatedCapability)` exposes
-the same calculation used by High Resolution Time's moments. The consumer
-supplies the isolation capability; JS Engine neither selects timing policy nor
-imports its implementation. Connection timing uses this facility without a
-second clock or rounding algorithm.
+[`integration/execution.ts`](browlet/integration/execution.ts) assembles the
+execution object during Window realm registration, reusing that realm's existing
+Promise facility. `context.getExecution()` and `environment.exec` retain the same
+object. Binding-dependent closures are assembled here; neither Environment nor
+portable implementations retain Binding Context. The execution object's `global`
+getter reads the Realm's installed platform global. Declaration bindings supply
+`context.getExecution()` to portable constructors and methods. Other hosts can
+supply the same neutral contract without an HTML environment.
+`exec.clone(value, transferList?)` invokes HTML's structured-clone algorithm
+with that realm's binding, including transfer processing when requested.
+
+High Resolution Time and Fetch connection timing directly import the stateless
+`coarsenTime(timestamp, crossOriginIsolatedCapability)` calculation from
+[`infra/time.ts`](infra/time.ts). Consumers select the isolation capability;
+`EnvironmentTiming` keeps browser clocks and time origins. `RealmExecution`
+has no timing member.
 
 Implementations keep lifetime dependencies in a final constructor argument and
-pass the same runtime to children they create. Blob slices retain their source
-runtime; deserialized Blobs receive the destination runtime while sharing or
+pass the same `exec` to children they create. Blob slices retain their source
+execution owner; deserialized Blobs receive the destination's `exec` while sharing or
 copying `BlobData` as serialization requires. FileReader obtains a stream from
-the Blob, while retaining its own runtime for result allocation and event tasks.
+the Blob, while retaining its own `exec` for result allocation and event tasks.
 Invocation-specific information, such as Fetch's explicit task destination,
 remains an operation argument. Borrowing another realm's method does not change
-the receiver's runtime.
+the receiver's execution owner.
 
-Fetch's Body mixin selects `runtime.global` for consumption task delivery.
+Fetch's Body mixin selects `exec.global` for consumption task delivery.
 The global identifies the Window; the networking task source selects a task
 category within its event loop. Body reading can also receive another global
 or a parallel queue explicitly. FormData implements HTML's create-an-entry
 algorithm alongside its entry list; string and Blob/File normalization need
-only its existing runtime. Fetch constructs FormData directly, without an
-entry-creation capability on constructors or RuntimeContext. Constructing an
+only its existing `exec`. Fetch constructs FormData directly, without an
+entry-creation capability on constructors or RealmExecution. Constructing an
 entry list from an HTML form remains browser-owned work deferred until forms exist.
-`runtime.parseJSON(text)` uses the owning realm's captured intrinsic, so nested
+`exec.parseJSON(text)` uses the owning realm's captured intrinsic, so nested
 objects and syntax failures have that realm without a second parse or clone.
-`runtime.stringifyJSON(value)` likewise retains the factory realm for JSON
+`exec.stringifyJSON(value)` likewise retains the factory realm for JSON
 serialization failures while preserving exceptions thrown by author code.
 Byte-backed Fetch bodies already have their bytes and queue a networking task
 directly on their owning global to allocate the JavaScript chunk and update
 the stream. The task's checkpoint then runs stream reactions; no separate
-background turn is needed. `runtime.runInParallel()` schedules background steps
+background turn is needed. `exec.runInParallel()` schedules background steps
 without entering an HTML task or performing the owner's microtask checkpoint.
 File-reading and networking task delivery remain separate facilities. Background
 I/O returns through those facilities before updating owner state or settling
 page-visible results. Parallel queues use the same background scheduler without
 requiring a Window task destination.
-Multipart extraction and Blob streaming use `BlobData.stream(runtime)`;
-backing data retains no runtime and each stream uses its caller's runtime.
+Multipart extraction and Blob streaming use `BlobData.stream(exec)`;
+backing data retains no execution owner and each stream uses its caller's `exec`.
 Blob constructor part processing stays on `BlobImpl`, which owns the part and
 option interpretation, including native line ending policy.
 
 Fetch constructor declarations obtain their relevant HTML settings through a
-registered capability. Request's factory receives the actual settings object;
-Response.redirect receives only its API base URL. These are explicit algorithm
-inputs, not additions to RuntimeContext. Dependent-signal construction does belong
-to the runtime: Browlet allocates the signal in that owner and calls DOM's
+registered capability. Request's factory accepts one
+`FetchEnvironment & { exec: RealmExecution }`. That environment supplies the new
+request's client; its `exec` supplies signal construction and allocation. Internal
+Request construction still accepts an explicit execution owner: a retained
+request client can differ from the result's allocation owner or be absent.
+Response.redirect receives its API base URL separately from `exec`. Client policy
+and URL inputs remain outside the neutral contract. Dependent-signal construction
+belongs to `RealmExecution`: Browlet allocates the signal in that owner and calls DOM's
 existing dependency algorithm, without a parallel Fetch-owned signal graph.
 
 Fetch's CORP check submits violations through the actual settings object's
@@ -410,7 +429,7 @@ the report type, endpoint name, and body without receiving the global itself.
 Integrity Policy uses the same seam with boolean report fields. Settings supply
 the Document/Worker URL through `getReportingSource()`; Window settings read
 their live associated Document rather than substituting its base/referrer URL.
-This dependency belongs to Reporting, not RuntimeContext.
+This dependency belongs to Reporting, not RealmExecution.
 The existing `WindowOrWorkerGlobalScopeMixin` owns Reporting endpoint and report
 lists, observer registrations, and the per-type bounded report buffer. Its
 initialization method parses the actual Fetch response using the
@@ -419,8 +438,11 @@ registry or Reporting environment facade. Automatic response delivery remains
 with the HTML loader. Settings route submissions to the actual global's mixin;
 it generates reports, notifies observers, and queues outbound data when the
 UserAgent's delivery preference permits it. ReportingObserver receives its
-owning mixin at construction, while Web IDL adapts callbacks and HTML delivers
-them as global tasks. No Binding Context enters the observer implementation.
+owning settings object at construction and obtains the existing global-scope
+mixin from it. Each observer retains its own pending records while sharing the
+global's registrations and buffered reports; it does not construct another mixin.
+Web IDL adapts callbacks and HTML delivers them as global tasks. No Binding
+Context enters the observer implementation.
 Document destruction must eventually cancel tasks and release Reporting state;
 ordinary inactivity is not destruction. Network delivery remains a Fetch consumer.
 Observer-facing `ReportImpl` and derived `ReportBodyImpl` classes are composed
@@ -443,7 +465,7 @@ its getter returns that buffer without a projection cache. TextEncoderStream
 allocates bytes before enqueueing them to downstream callbacks. Binding still
 owns author conversion, platform identity, and exception/result projection.
 
-Prefer allocating final storage directly through `runtime.buffers` when the
+Prefer allocating final storage directly through `exec.buffers` when the
 implementation controls its creation. Copying and ownership transfer remain
 distinct operations; see the [engine buffer contract](js-engine/README.md).
 
@@ -538,7 +560,7 @@ global and file-reading task source, Infra's `TaskScheduling` supplies only task
 delivery, with removable `TaskHandle` results.
 FileReader retains that dependency; EventTarget owns synchronous dispatch, not
 task scheduling. The underlying platform's native line ending is
-an immutable Runtime Context value, while File's wall-clock default is the
+an immutable RealmExecution value, while File's wall-clock default is the
 directly available ECMAScript `Date.now()` operation. Neither needs a
 subsystem-wide host facade.
 
@@ -571,7 +593,7 @@ ambient runtime discovery. A Composition Root assembles:
 
 - Web IDL definitions and binding contributions;
 - Binding Contexts;
-- Runtime Contexts for implementation owners;
+- RealmExecution objects for implementation owners;
 - cross-specification capability registrations;
 - Host Ports; and
 - the globals and implementation roots which consume them.
@@ -581,7 +603,7 @@ Implementation algorithms must not perform ambient discovery of the same
 objects later.
 
 Promise placement follows this rule too. Binding supplies the receiver's
-Runtime Context with its existing `Promises` facility; HTML task creation selects its event loop. A consumer
+RealmExecution with its existing `Promises` facility; HTML task creation selects its event loop. A consumer
 imports another owner's result into its own facility before chaining work on
 it. Neither establishes ambient ownership over ordinary Node Promise
 continuations. The boundary contract lives in
@@ -598,16 +620,41 @@ Binding Context or global passed by the calling algorithm and must not import
 the assembled `browletBindings` singleton or use its forwarding functions to
 rediscover either.
 
-HTML's `Environment` retains its owning `UserAgent` and fixed `isSecureContext`
-decision, including before a realm exists; `EnvironmentSettingsObject` inherits
-both. The HTML Realm references that Environment, and its Web IDL
-`secureContext` getter reads the decision from there. Settings setup preserves
-it while replacing the Realm's Environment reference and assigning its
-`[[HostDefined]]` settings; the early Environment is never `[[HostDefined]]`.
+HTML's pre-realm state is an `EnvironmentRecord`, created by
+`createEnvironmentRecord()`. It includes the owning `UserAgent`, identity,
+creation URLs, and `isSecureContext` decision. It has no realm or execution
+facilities. The HTML Realm initially references this record so Web IDL can read
+the security decision before installing properties.
+
+`createWindowEnvironment()` constructs the Window, `WindowRealm`, and execution
+facilities, then installs the platform global. Only then does it construct a
+`WindowEnvironment` with the required realm and execution object. Environment
+construction attaches itself to the same Realm. The factory transfers any
+reserved identity, initializes the shared global-scope mixin, and returns the
+environment. No partial settings object or placeholder realm is needed. The
+early record is never `[[HostDefined]]`. Document-dependent getters remain live
+queries of the associated Document and are used after document initialization.
+Code names the full object `environment` and the early state `environmentRecord`.
+Navigation retains `reservedEnvironment`, HTML's name for the reserved record's
+role. `WindowRealm` requires its Window at construction and owns Window-only
+event state access and associated-Document lookup. `WindowEnvironment.window`
+reads that same reference. A plain Realm has no Window state and returns null
+for its associated Document. The Window's Document and global-scope mixin
+accessors still enforce their own initialization requirements. Browser-facing
+`getRelevantRealm()` returns `WindowRealm` for Windows and DOM nodes, and
+`Realm` for other browser objects. The same realm is retained throughout
+projection and environment attachment. Every realm has an optional
+`hostDefined` lookup for callers that allow absence and a checked `environment`
+getter for callers that require attachment. Realm lookup itself does not
+require an environment; browser consumers access `realm.environment` when they
+need it. `Environment` declares the global-scope mixin accessor abstractly;
+`WindowEnvironment` retrieves its Window's existing mixin. AbortSignal and
+engine timeout scheduling use this environment accessor, including for
+non-Window globals.
 Initial Window creation and navigation supply the target browsing-context
 group's owner.
 This makes HTML's implicit user agent explicit without a Document lookup or a
-process-wide singleton. Fetch's `FetchEnvironmentSettingsObject` and
+process-wide singleton. Fetch's `FetchEnvironment` and
 `FetchUserAgent` types describe narrow views of those same objects; a request
 retains its actual HTML settings object when it has a client, and always retains
 its owning UserAgent. The UserAgent owns its live connectivity assumption,
@@ -620,7 +667,7 @@ Fetch's environment-default User-Agent algorithm reads that owner and the
 settings object's scoped BiDi override. Request-header insertion, Reporting
 generation, and the future NavigatorID getter share this selector. Reporting
 captures a string at generation time; an explicit per-request header does not
-change environment identity. No identification state belongs in RuntimeContext
+change environment identity. No identification state belongs in RealmExecution
 or a separate Navigator-owned copy.
 
 The same settings object exposes its HTML-owned policy container. Window
@@ -674,14 +721,14 @@ the same store. Responses do not retain a request or UserAgent. Cookie parsing,
 matching, eviction, and access timestamps remain HTTP's responsibility; no
 runtime or binding lookup is needed.
 
-Each `EnvironmentSettingsObject` also owns a `FetchGroup`, exposed through its
-`FetchEnvironmentSettingsObject` view. The group retains request/controller
+Each `Environment` also owns a `FetchGroup`, exposed through its
+`FetchEnvironment` view. The group retains request/controller
 records and owns group termination; it has no reverse lookup into HTML. Request
 registration and lifecycle termination calls join through the consuming
 Fetch/HTML algorithms.
 
-The base `Environment` satisfies `FetchEnvironment`, including top-level origin
-and creation URL before a realm exists. Requests retain this actual object as
+`EnvironmentRecord` satisfies `FetchEnvironmentRecord`, including top-level origin
+and creation URL before a realm exists. Requests retain this actual record as
 their reserved client. Fetch derives network partition keys from it, retaining
 opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
 partitions; they outlive an individual environment. Connection establishment
@@ -698,10 +745,11 @@ worker/worklet lifecycle completion remains in the browsing policy roadmap.
 Initial-document and navigation algorithms select their Window and retain HTML
 state initialization. Named functions on the composition-root module delegate
 to its main binding world. Document creation reuses the dependencies declared
-for its Web IDL constructor; the root also prepares structured-clone steps
-through `integration/runtime.ts`. `createWindowEnvironment()` supplies those
-steps to the global-scope mixin after settings setup, without retaining a realm
-binding. The Document retains its node factory. The factory uses `context.construct()`
+for its Web IDL constructor. After settings setup, `createWindowEnvironment()`
+constructs the global-scope mixin with that environment. The mixin derives
+timer routing from `environment.realm` and calls `environment.exec.clone()`
+without a second execution argument or a retained Binding Context. The Document retains its
+node factory. The factory uses `context.construct()`
 to establish node ownership and initialize its realm-owned event factory.
 Document and node platform objects are allocated when projection is needed.
 Internal fragment creation supplies its owning
@@ -713,7 +761,7 @@ the realm's associated Document.
 ```text
 Composition Root(s)
   |-- Binding Context -----------------> Binding
-  |-- Runtime Context -----------------> Implementation
+  |-- RealmExecution -----------------> Implementation
   |-- Cross-specification capabilities --> Implementation
   `-- Host Ports -----------------------> Implementation
 
@@ -816,7 +864,7 @@ or capability at the Composition Root.
 ### Capability bags
 
 A context is not one capability merely because its members share an object.
-The Runtime Context deliberately groups facilities sharing an implementation
+The RealmExecution deliberately groups facilities sharing an implementation
 owner and lifecycle. Keep the ownership of each facility explicit. Adding
 callbacks, dictionary conversion, projection, or registries would copy Binding
 into it and erase the distinction that the context is meant to preserve.
@@ -884,7 +932,7 @@ The successful removal sequence was:
 
 That removed the private façade, but left Binding Context in implementations.
 The current migration separates runtime execution dependencies from Binding:
-implementations receive Runtime Context, while declaration/member bindings
+implementations receive RealmExecution, while declaration/member bindings
 retain conversion, callback adaptation, and projection.
 
 ### Refactor acceptance bar

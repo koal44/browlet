@@ -137,7 +137,7 @@ export class Browlet {
       navigationParams,
     );
     const realm = getRelevantRealm(document);
-    const runtime = getBindingContext(realm).getRuntime();
+    const exec = getBindingContext(realm).getExecution();
     const historyEntry = createNavigationHistoryEntry(
       document,
       navigationParams,
@@ -166,7 +166,7 @@ export class Browlet {
         );
       },
       realm.agent.eventLoop,
-      runtime,
+      exec,
     );
 
     return parser.parse(source).then(() => {

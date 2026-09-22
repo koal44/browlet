@@ -3,8 +3,8 @@ import type { RuntimeBuffers } from './buffers';
 import type { Promises } from '../infra/promises';
 import type { GlobalObject } from './realm';
 
-/** Implementation facilities composed for one owning realm/global. */
-export type RuntimeContext = {
+/** Persistent execution and allocation facilities for one owning realm/global. */
+export type RealmExecution = {
   /** The owning global object, including when selected as an HTML task destination. */
   global: GlobalObject;
   nativeLineEnding: '\n' | '\r\n';
@@ -12,9 +12,6 @@ export type RuntimeContext = {
   buffers: RuntimeBuffers;
   fileReading: TaskScheduling;
   networking: NetworkingTasks;
-  timing: {
-    coarsenTime(timestamp: number, crossOriginIsolatedCapability: boolean): number;
-  };
 
   queueMicrotask(steps: () => void): void;
   /** Schedule background steps without invoking them inline or entering an owner task. */
@@ -26,8 +23,8 @@ export type RuntimeContext = {
   parseJSON(text: string): unknown;
   /** Serialize using the owner's captured JSON intrinsic. */
   stringifyJSON(value: unknown): string | undefined;
-  /** HTML structured cloning into the owner's realm. */
-  clone(value: unknown): unknown;
+  /** HTML structured cloning into the owner's realm, optionally transferring objects. */
+  clone(value: unknown, transferList?: object[]): unknown;
   /** HTML structured serialization; the provider owns the opaque record. */
   serialize(value: unknown): object;
   /** Reconstruct a serialized record in the owner's realm. */

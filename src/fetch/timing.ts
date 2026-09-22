@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '../js-engine/index';
+import { coarsenTime } from '../infra/time';
 
 /** Fetch §2, fetch timing info. Timestamps are DOMHighResTimeStamp values. */
 export class FetchTimingInfo {
@@ -67,7 +67,7 @@ export class ConnectionTimingInfo {
 
   /** https://fetch.spec.whatwg.org/#clamp-and-coarsen-connection-timing-info */
   clampAndCoarsen(
-    defaultStartTime: number, crossOriginIsolatedCapability: boolean, runtime: RuntimeContext,
+    defaultStartTime: number, crossOriginIsolatedCapability: boolean,
   ): ConnectionTimingInfo {
     const result = new ConnectionTimingInfo();
     result.alpnNegotiatedProtocol = this.alpnNegotiatedProtocol;
@@ -80,12 +80,12 @@ export class ConnectionTimingInfo {
       return result;
     }
 
-    result.domainLookupStartTime = runtime.timing.coarsenTime(this.domainLookupStartTime, crossOriginIsolatedCapability);
-    result.domainLookupEndTime = runtime.timing.coarsenTime(this.domainLookupEndTime, crossOriginIsolatedCapability);
-    result.connectionStartTime = runtime.timing.coarsenTime(this.connectionStartTime, crossOriginIsolatedCapability);
-    result.connectionEndTime = runtime.timing.coarsenTime(this.connectionEndTime, crossOriginIsolatedCapability);
+    result.domainLookupStartTime = coarsenTime(this.domainLookupStartTime, crossOriginIsolatedCapability);
+    result.domainLookupEndTime = coarsenTime(this.domainLookupEndTime, crossOriginIsolatedCapability);
+    result.connectionStartTime = coarsenTime(this.connectionStartTime, crossOriginIsolatedCapability);
+    result.connectionEndTime = coarsenTime(this.connectionEndTime, crossOriginIsolatedCapability);
     // Preserve TLS start; the spec currently names connection end here.
-    result.secureConnectionStartTime = runtime.timing.coarsenTime(this.secureConnectionStartTime, crossOriginIsolatedCapability);
+    result.secureConnectionStartTime = coarsenTime(this.secureConnectionStartTime, crossOriginIsolatedCapability);
     return result;
   }
 }

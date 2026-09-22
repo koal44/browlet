@@ -19,7 +19,7 @@ describe('Browlet Fetch Metadata integration', () => {
 
     outgoing.appendFetchMetadataHeaders();
 
-    expect(outgoing.client).toBe(getRelevantRealm(window).hostDefined);
+    expect(outgoing.client).toBe(getRelevantRealm(window).environment);
     expect(outgoing.headerList.list).toEqual([
       ['Sec-Fetch-Dest', 'empty'], ['Sec-Fetch-Mode', 'cors'], ['Sec-Fetch-Site', 'same-origin'],
     ]);

@@ -6,7 +6,7 @@ import {
   createDocument, getRelevantRealm, retargetWindowProxy,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import { createWindowEnvironment } from '../scripting/window-environment';
+import { createWindowEnvironment } from '../bindings';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
   type URLRecord,
@@ -70,13 +70,16 @@ export class BrowsingContext {
     return this.#navigable;
   }
 
-  get activeWindow(): WindowImpl | null {
-    return getWindowProxyWindow(this.windowProxy);
+  /** Current Window; throws until the WindowProxy has been connected. */
+  get activeWindow(): WindowImpl {
+    const window = getWindowProxyWindow(this.windowProxy);
+    if (window === null) throw new InternalError('Browsing context has no active Window');
+    return window;
   }
 
-  get activeDocument(): DocumentImpl | null {
-    const window = this.activeWindow;
-    return window ? window.getAssociatedDocument() : null;
+  /** Document associated with the current Window. */
+  get activeDocument(): DocumentImpl {
+    return this.activeWindow.getAssociatedDocument();
   }
 
   initializeWindowProxy(proxy: WindowProxy): void {
@@ -127,20 +130,20 @@ export function createNewBrowsingContextAndDocument(
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
-  const { window, settings } = createWindowEnvironment(agent, {
-    userAgent: group.userAgent,
+  const environment = createWindowEnvironment({
+    agent, userAgent: group.userAgent,
     creationURL: aboutBlankURL,
     origin,
     parent: embedder?.getNodeDocument()?.getRelevantGlobalObject() ?? null,
     topLevelCreationURL,
     topLevelOrigin,
   });
-  const { realm } = settings.realmExecutionContext;
+  const { window, realm } = environment;
   browsingContext.initializeWindowProxy(
     realm.globalThis as WindowProxy,
   );
   const loadTimingInfo = createDocumentLoadTimingInfo(
-    unsafeContextCreationTime.coarsen(settings.crossOriginIsolatedCapability).milliseconds,
+    unsafeContextCreationTime.coarsen(environment.crossOriginIsolatedCapability).milliseconds,
   );
   const document = createDocument(realm);
 
@@ -169,7 +172,7 @@ export function createNewBrowsingContextAndDocument(
 
   if (
     document.URL !== 'about:blank' ||
-    serializeURL(settings.creationURL) !== 'about:blank'
+    serializeURL(environment.creationURL) !== 'about:blank'
   ) {
     throw new InternalError('Initial Document and environment must use about:blank');
   }
@@ -388,18 +391,14 @@ function makeActive(
 ): void {
   const realm = getRelevantRealm(document);
   const window = realm.windowImplementation;
-  if (!window) {
-    throw new InternalError('Document relevant global object is not a Window');
-  }
   const browsingContext = document.getBrowsingContext();
   if (browsingContext === null) {
     throw new InternalError('Document has no browsing context');
   }
 
   retargetWindowProxy(browsingContext.windowProxy, window);
-  const settings = realm.hostDefined;
-  if (settings === null) throw new InternalError('Window has no environment settings');
-  settings.markExecutionReady();
+  const environment = realm.environment;
+  environment.markExecutionReady();
 }
 
 function completelyFinishLoading(document: DocumentImpl): void {

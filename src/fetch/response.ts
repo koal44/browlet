@@ -2,7 +2,7 @@ import type { BlobImpl } from '../file/index';
 import { utf8Encode } from '../encoding/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { PromiseValue } from '../infra/promises';
-import type { RuntimeContext } from '../js-engine/index';
+import type { RealmExecution } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
@@ -22,7 +22,7 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
-  getFetchEnvironmentSettingsObject, type FetchEmbedderPolicyValue, type FetchEnvironmentSettingsObject,
+  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment,
 } from './infrastructure';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
@@ -204,7 +204,7 @@ export class FetchResponse {
   /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(
-    origin: Origin, settings: FetchEnvironmentSettingsObject, destination: string, forNavigation = false,
+    origin: Origin, settings: FetchEnvironment, destination: string, forNavigation = false,
   ): boolean {
     const policy = settings.policyContainer.embedderPolicy;
     if (this.isBlockedByCORPInternal(origin, 'unsafe-none', forNavigation)) {
@@ -244,7 +244,7 @@ export class FetchResponse {
   /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
   // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
   queueCORPViolationReport(
-    settings: FetchEnvironmentSettingsObject, destination: string, reportOnly: boolean,
+    settings: FetchEnvironment, destination: string, reportOnly: boolean,
   ): void {
     const policy = settings.policyContainer.embedderPolicy;
     const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
@@ -308,52 +308,52 @@ export class ResponseImpl {
   /** Body operations reading this response's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution and allocation facilities, retained by cloned Responses. */
-  #runtime: RuntimeContext;
+  #exec: RealmExecution;
 
   // Internal allocation from an existing response and header guard.
   // https://fetch.spec.whatwg.org/#response-create
   constructor(
-    response: FetchResponse, guard: HeadersGuard, runtime: RuntimeContext,
+    response: FetchResponse, guard: HeadersGuard, exec: RealmExecution,
   ) {
     this.#response = response;
     this.#headers = new HeadersImpl(response.headerList, guard);
-    this.#bodyMixin = new BodyMixin(response, runtime);
-    this.#runtime = runtime;
+    this.#bodyMixin = new BodyMixin(response, exec);
+    this.#exec = exec;
   }
 
   /** Construct a Response from converted author arguments. */
   // https://fetch.spec.whatwg.org/#dom-response
-  static create(body: BodyInitValue | null, init: FetchResponseInit, runtime: RuntimeContext): ResponseImpl {
-    const response = new ResponseImpl(new FetchResponse(), 'response', runtime);
-    const extracted = body === null ? null : FetchBody.extract(body, false, runtime);
+  static create(body: BodyInitValue | null, init: FetchResponseInit, exec: RealmExecution): ResponseImpl {
+    const response = new ResponseImpl(new FetchResponse(), 'response', exec);
+    const extracted = body === null ? null : FetchBody.extract(body, false, exec);
     response.#initialize(init, extracted);
     return response;
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-error
-  static error(runtime: RuntimeContext): ResponseImpl {
-    return new ResponseImpl(FetchResponse.networkError(), 'immutable', runtime);
+  static error(exec: RealmExecution): ResponseImpl {
+    return new ResponseImpl(FetchResponse.networkError(), 'immutable', exec);
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-redirect
   // SPEC_MISMATCH: Response.redirect(url, status) -> Response
-  static redirect(url: string, status: number, baseURL: URLRecord, runtime: RuntimeContext): ResponseImpl {
+  static redirect(url: string, status: number, baseURL: URLRecord, exec: RealmExecution): ResponseImpl {
     const parsedURL = parseURL(url, baseURL).url;
     if (parsedURL === null) throw new TypeError('Invalid redirect URL');
     if (!isRedirectStatus(status)) throw new RangeError('Invalid redirect status');
     const response = new FetchResponse();
     response.status = status;
     response.headerList.append('Location', serializeURL(parsedURL));
-    return new ResponseImpl(response, 'immutable', runtime);
+    return new ResponseImpl(response, 'immutable', exec);
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-json
-  static json(data: unknown, init: FetchResponseInit, runtime: RuntimeContext): ResponseImpl {
+  static json(data: unknown, init: FetchResponseInit, exec: RealmExecution): ResponseImpl {
     // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
-    const json = runtime.stringifyJSON(data);
+    const json = exec.stringifyJSON(data);
     if (json === undefined) throw new TypeError('Value cannot be serialized as JSON');
-    const body = FetchBody.fromBytes(utf8Encode(json), runtime);
-    const response = new ResponseImpl(new FetchResponse(), 'response', runtime);
+    const body = FetchBody.fromBytes(utf8Encode(json), exec);
+    const response = new ResponseImpl(new FetchResponse(), 'response', exec);
     response.#initialize(init, { body, type: 'application/json' });
     return response;
   }
@@ -369,7 +369,7 @@ export class ResponseImpl {
   // https://fetch.spec.whatwg.org/#dom-response-clone
   clone(): ResponseImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Response body is disturbed or locked');
-    return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#runtime);
+    return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#exec);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -437,7 +437,7 @@ export const responseIDL = defineInterface({
   name: 'Response',
   exposed: ['Window', 'Worker'],
   implementation: impl(ResponseImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getRuntime())],
+    constructWith: [atArg(2, (ctx) => ctx.getExecution())],
   }),
   members: [
     ctor(
@@ -447,13 +447,13 @@ export const responseIDL = defineInterface({
       ],
       {
         construct(ctx, body, init) {
-          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getRuntime());
+          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getExecution());
         },
       },
     ),
     staticOp('error', reference('Response'),
       [],
-      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getRuntime())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getExecution())) },
     ),
     staticOp('redirect', reference('Response'),
       [
@@ -463,8 +463,8 @@ export const responseIDL = defineInterface({
       {
         ...xattr('NewObject'),
         ...invokeWith(
-          atArg(2, (ctx): URLRecord => getFetchEnvironmentSettingsObject(ctx, responseIDL).apiBaseURL),
-          atArg(3, (ctx) => ctx.getRuntime()),
+          atArg(2, (ctx): URLRecord => getFetchEnvironment(ctx, responseIDL).apiBaseURL),
+          atArg(3, (ctx) => ctx.getExecution()),
         ),
       },
     ),
@@ -473,7 +473,7 @@ export const responseIDL = defineInterface({
         arg('data', idlType.any),
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
-      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getRuntime())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getExecution())) },
     ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),

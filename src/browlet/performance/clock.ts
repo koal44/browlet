@@ -1,4 +1,5 @@
 import { InternalError } from '../../infra/internal-error';
+import { coarsenTime } from '../../infra/time';
 
 /*
  * A clock tracks the passage of time and reports the unsafe current time at
@@ -82,16 +83,3 @@ export class Duration {
     return this.milliseconds;
   }
 }
-
-/** https://w3c.github.io/hr-time/#dfn-coarsen-time */
-export function coarsenTime(timestamp: number, crossOriginIsolatedCapability = false): number {
-  const resolution = crossOriginIsolatedCapability
-    ? FINE_RESOLUTION_MICROSECONDS
-    : COARSE_RESOLUTION_MICROSECONDS;
-  const microseconds = timestamp * 1_000;
-  const coarseMicroseconds = Math.trunc(microseconds / resolution) * resolution;
-  return coarseMicroseconds / 1_000;
-}
-
-const COARSE_RESOLUTION_MICROSECONDS = 100;
-const FINE_RESOLUTION_MICROSECONDS = 5;

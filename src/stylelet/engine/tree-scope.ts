@@ -23,7 +23,7 @@ export class TreeScope {
       convert: toCSSStyleSheet,
       set(styleSheet) {
         if (styleSheet.isConstructedFor(document)) return;
-        throw cascade.context.runtime.createDOMException(
+        throw cascade.context.exec.createDOMException(
           'NotAllowedError',
           'The stylesheet was not constructed for this document.',
         );

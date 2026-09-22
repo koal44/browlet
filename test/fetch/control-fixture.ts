@@ -1,19 +1,19 @@
 import { FetchController, deserializeAbortReason } from '../../src/fetch/controller';
-import type { RuntimeContext } from '../../src/js-engine/index';
+import type { RealmExecution } from '../../src/js-engine/index';
 
 export function createControllerFixture(
-  runtime: RuntimeContext,
+  exec: RealmExecution,
 ) {
   const controller = new FetchController();
   return {
     controller,
-    runtime,
+    exec,
     // Preserve the distinction between an omitted reason and explicit undefined.
     abort: (...reason: [] | [unknown]) => {
-      if (reason.length === 0) controller.abort(runtime);
-      else controller.abort(reason[0], runtime);
+      if (reason.length === 0) controller.abort(exec);
+      else controller.abort(reason[0], exec);
     },
     deserialize: (reason: object | null) =>
-      deserializeAbortReason(reason, runtime),
+      deserializeAbortReason(reason, exec),
   };
 }

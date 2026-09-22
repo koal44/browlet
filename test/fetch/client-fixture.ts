@@ -2,12 +2,12 @@ import { FetchGroup } from '../../src/fetch/group';
 import { ConnectionPool } from '../../src/fetch/http/connections';
 import { HTTPCachePartitions } from '../../src/fetch/http/cache/partitions';
 import type {
-  FetchEnvironmentSettingsObject, FetchPolicyContainer, FetchUserAgent,
+  FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/infrastructure';
 import { CookieStore } from '../../src/http/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 
-export function createClientSettings(url = 'https://example.test/'): FetchEnvironmentSettingsObject {
+export function createClientSettings(url = 'https://example.test/'): FetchEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   return {
     apiBaseURL: topLevelCreationURL,

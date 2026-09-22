@@ -4,12 +4,11 @@ import { fetchIDLDefinitions } from '../fetch/index';
 import { addon } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
-import { urlIDLDefinitions, originIDL } from '../url/index';
+import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
   BindingWorld, type GlobalObjectAllocation,
   type BindingContext, type StampedImplInstance, type StampedPlatformObject,
-  type RealmRegistrationOptions,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
 import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
@@ -20,34 +19,34 @@ import {
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
 } from './reporting/observer';
 import {
-  type WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
 import {
   adoptNativeWindowProxy, createWindowProxy, isWindowProxy,
   resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
 } from './browsing/window/window-proxy';
 import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
+import type { NodeImpl } from './dom/nodes/node';
 import { domIDLDefinitions } from './dom/web-idl';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
 import { fetchCapabilities } from './integration/fetch';
 import { fileReaderIDL } from './integration/file/file-reader';
-import {
-  createStructuredClone as createStructuredCloneSteps, createWindowRuntime,
-} from './integration/runtime';
+import { createExecution } from './integration/execution';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
 import type { WindowAgent } from './scripting/agents';
-import type { Environment } from './scripting/environment';
+import { WindowEnvironment, createEnvironmentRecord, type EnvironmentRecord } from './scripting/environment';
+import type { UserAgent } from './user-agent';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
   highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
-  windowOrWorkerGlobalScopeIDL, type StructuredCloneSteps,
+  windowOrWorkerGlobalScopeIDL, WindowOrWorkerGlobalScopeMixin,
 } from './scripting/global-scope';
-import { Realm, type JSExecutionContext } from './scripting/realm';
+import { Realm, WindowRealm } from './scripting/realm';
 import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
 import { svgIDLDefinitions } from './svg/web-idl';
 import { InternalError } from '../infra/internal-error';
@@ -60,27 +59,23 @@ import { InternalError } from '../infra/internal-error';
  * hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
  * These named entry points forward to the module's main BrowletBindings instance.
  */
-export function createWindowRealm(
-  agent: WindowAgent,
-  window: WindowImpl,
-  environment: Environment,
-  previousRealm?: Realm,
-): JSExecutionContext {
-  return browletBindings.createWindowRealm(agent, window, environment, previousRealm);
+export function createWindowEnvironment(
+  initialization: WindowEnvironmentInit,
+): WindowEnvironment {
+  return browletBindings.createWindowEnvironment(initialization);
 }
 
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
   return browletBindings.createDocument(realm);
 }
 
-export function createStructuredClone(realm: Realm): StructuredCloneSteps {
-  return browletBindings.createStructuredClone(realm);
-}
-
 export function retargetWindowProxy(windowProxy: WindowProxy, window: WindowImpl): void {
   browletBindings.retargetWindowProxy(windowProxy, window);
 }
 
+/** Relevant realm of a browser object; Window and DOM-node inputs retain their concrete realm type. */
+export function getRelevantRealm(value: Window | WindowImpl | Node | NodeImpl): WindowRealm;
+export function getRelevantRealm(value: object): Realm;
 export function getRelevantRealm(value: object): Realm {
   return browletBindings.getRelevantRealm(value);
 }
@@ -93,11 +88,8 @@ export function unwrap<Value extends object>(value: object): StampedImplInstance
   return browletBindings.unwrap<Value>(value);
 }
 
-export function registerRealm(
-  realm: Realm,
-  options?: RealmRegistrationOptions<Realm>,
-): BindingContext<Realm> {
-  return browletBindings.register(realm, options);
+export function registerRealm(realm: Realm): BindingContext<Realm> {
+  return browletBindings.register(realm);
 }
 
 /** Retrieve the realm's context in Browlet's main binding world. */
@@ -118,8 +110,8 @@ class BrowletBindings {
     );
   }
 
-  register(realm: Realm, options: RealmRegistrationOptions<Realm> = {}): BindingContext<Realm> {
-    return this.#world.register(realm, options);
+  register(realm: Realm): BindingContext<Realm> {
+    return this.#world.register(realm, createExecution);
   }
 
   forRealm(realm: Realm): BindingContext<Realm> {
@@ -128,28 +120,38 @@ class BrowletBindings {
     return context;
   }
 
-  /* Compose engine allocation and bindings for the Window selected by HTML. */
-  createWindowRealm(
-    agent: WindowAgent,
-    window: WindowImpl,
-    environment: Environment,
-    previousRealm?: Realm,
-  ): JSExecutionContext {
+  /* Compose the Window, its realm and bindings, and its browser environment. */
+  createWindowEnvironment(
+    initialization: WindowEnvironmentInit,
+  ): WindowEnvironment {
+    const {
+      agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
+      reservedEnvironment = null, previousRealm,
+    } = initialization;
+    // HTML secure-context determination; browser ancestry checks include the
+    // parent's full chain. A reserved environment already carries that decision.
+    // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+    // https://w3c.github.io/webappsec-secure-contexts/#ancestors
+    const environmentRecord = reservedEnvironment ?? createEnvironmentRecord({
+      userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
+      targetBrowsingContext: null,
+      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
+        (parent === null || parent.isSecureContext),
+    });
+    const window = new WindowImpl(new URL(serializeURL(creationURL)));
     const useAddonGlobals = !!(
       addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
       addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
     );
     if (useAddonGlobals) previousRealm?.detachGlobal();
-    const realm = new Realm({
+    const realm = new WindowRealm(window, {
       agent,
-      environment,
+      environmentRecord,
       reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
       // Window.prototype -> named properties -> EventTarget.prototype.
       globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
     });
-    const context = this.register(realm, {
-      createRuntime: (ctx) => createWindowRuntime(window, ctx),
-    });
+    const context = this.register(realm);
     const chain = realm.globalPrototypeChain;
     let globalObject: Window;
     if (chain) {
@@ -176,16 +178,19 @@ class BrowletBindings {
     const globalThis = useAddonGlobals
       ? adoptNativeWindowProxy(realm.globalThis)
       : previousRealm?.globalThis ?? createWindowProxy();
-    realm.setGlobalObjects(globalObject, globalThis, window);
-    return { realm };
+    realm.setGlobalObjects(globalObject, globalThis);
+    // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+    // The environment constructor attaches itself to this same WindowRealm.
+    const environment = new WindowEnvironment(realm, {
+      ...environmentRecord, creationURL, topLevelCreationURL, topLevelOrigin,
+    }, context.getExecution());
+    if (reservedEnvironment !== null) reservedEnvironment.id = '';
+    window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(environment));
+    return environment;
   }
 
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
     return this.forRealm(realm).construct(DocumentImpl);
-  }
-
-  createStructuredClone(realm: Realm): StructuredCloneSteps {
-    return createStructuredCloneSteps(this.forRealm(realm));
   }
 
   retargetWindowProxy(
@@ -202,11 +207,8 @@ class BrowletBindings {
   }
 
   getRelevantRealm(value: object): Realm {
-    const platformRealm = this.#world.getRealm(value);
-    if (platformRealm instanceof Realm) return platformRealm;
-
-    const realm = Realm.getAssociatedRealm(value);
-    if (!realm) throw new InternalError('Object has no relevant Realm');
+    const realm = this.#world.getRealm(value) ?? Realm.getAssociatedRealm(value);
+    if (!(realm instanceof Realm)) throw new InternalError('Object has no relevant Realm');
     return realm;
   }
 
@@ -222,6 +224,18 @@ class BrowletBindings {
     return implInst as StampedImplInstance<Value>;
   }
 }
+
+type WindowEnvironmentInit = {
+  agent: WindowAgent;
+  userAgent: UserAgent;
+  creationURL: URLRecord;
+  origin: Origin;
+  parent: WindowImpl | null;
+  topLevelCreationURL: URLRecord;
+  topLevelOrigin: Origin;
+  reservedEnvironment?: EnvironmentRecord | null;
+  previousRealm?: WindowRealm;
+};
 
 function projectWindow(
   context: BindingContext<Realm>,

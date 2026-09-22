@@ -56,7 +56,7 @@ const sniff = (
 If several configured operations emerge, promote that closure to a
 `MIMESniffer` class. Construct it for the loader or Browlet instance with the
 actual support capability; do not install a mutable module singleton or put
-the capability on a realm, Binding Context, or Runtime Context. Context-specific
+the capability on a realm, Binding Context, or RealmExecution. Context-specific
 sniffing operations may live on that class when the resulting API is more
 cohesive, even when an individual operation does not consult the capability.
 

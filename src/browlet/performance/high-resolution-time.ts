@@ -50,6 +50,7 @@ export class EnvironmentTiming {
   currentHighResolutionTime(): Duration {
     return this.relativeHighResolutionTime(unsafeSharedCurrentTime());
   }
+
 }
 
 export function currentCoarsenedWallTime(): Moment {

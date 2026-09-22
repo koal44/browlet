@@ -1,5 +1,5 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
-import type { RuntimeCaps } from '../stylelet';
+import type { ExecutionCaps } from '../stylelet';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 import { InternalError } from '../../infra/internal-error';
@@ -24,14 +24,14 @@ export class CSSStyleRuleImpl implements CSSStyleRule {
   #style: CSSStyleDeclarationImpl;
   #cssRules = new CSSRuleListImpl();
 
-  constructor(rule: StyleRule | undefined, runtime: RuntimeCaps) {
+  constructor(rule: StyleRule | undefined, exec: ExecutionCaps) {
     this.#style = new CSSStyleDeclarationImpl({
       declarations: declarationBlock(rule?.block),
       parentRule: this,
       onChange: (declarations) => {
         if (rule) rule.block = [...declarations];
       },
-    }, runtime);
+    }, exec);
   }
 
   get cssRules(): CSSRuleListImpl {

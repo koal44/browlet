@@ -1,5 +1,5 @@
 import {
-  deserializeAbortReason, fetchEnvironmentSettingsObject, requestIDL, responseIDL,
+  deserializeAbortReason, fetchEnvironment, requestIDL, responseIDL,
 } from '../../fetch/index';
 import type { NetworkingTasks } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/index';
@@ -13,7 +13,7 @@ export function deserializeFetchAbortReason(
   context: BindingContext,
 ): unknown {
   return context.realizeException(
-    deserializeAbortReason(abortReason, context.getRuntime()),
+    deserializeAbortReason(abortReason, context.getExecution()),
   );
 }
 
@@ -28,15 +28,15 @@ export const fetchTaskScheduling: NetworkingTasks = {
 };
 
 export const fetchCapabilities = [
-  fetchEnvironmentSettingsObject.for(requestIDL, getFetchSettings),
-  fetchEnvironmentSettingsObject.for(responseIDL, getFetchSettings),
+  fetchEnvironment.for(requestIDL, getFetchEnvironment),
+  fetchEnvironment.for(responseIDL, getFetchEnvironment),
 ];
 
-/** Supply Fetch constructors with the actual HTML settings object of their realm. */
-function getFetchSettings(context: BindingContext) {
+/** Supply Fetch constructors with the browser environment of their realm. */
+function getFetchEnvironment(context: BindingContext) {
   const realm = context.realm;
-  if (!(realm instanceof Realm) || realm.hostDefined === null) {
+  if (!(realm instanceof Realm)) {
     throw new InternalError('Fetch construction requires an HTML environment settings object');
   }
-  return realm.hostDefined;
+  return realm.environment;
 }

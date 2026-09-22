@@ -9,9 +9,12 @@
   [`../../js-engine/`](../../js-engine/README.md).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
-- `window-environment.ts` shares Window, realm, settings, and global-scope
-  initialization between the initial browsing-context and navigation paths.
-- Each `Environment` retains its owning UserAgent. Window creation/navigation
+- The composition root's `createWindowEnvironment()` shares Window, realm,
+  execution, and global-scope initialization between the initial browsing-context
+  and navigation paths. It returns a `WindowEnvironment` with required `realm`,
+  `exec`, and `window` fields. A plain `EnvironmentRecord` supplies security and
+  navigation state before the realm exists.
+- Each `EnvironmentRecord` and full `Environment` retains its owning UserAgent. Window creation/navigation
   supplies the target group's owner; this reference does not depend on a live
   Document or browsing-context association. Settings objects satisfy Fetch's
   narrow environment contract; their provisional BiDi query returns false
@@ -137,7 +140,7 @@ reporting, and FinalizationRegistry cleanup scheduling remain deferred.
 ## Section 8.1.7 definition audit
 
 The existing agent boundary is sound: every `Agent` owns one unique
-`EventLoop`, `EnvironmentSettingsObject.responsibleEventLoop` follows its
+`EventLoop`, `Environment.responsibleEventLoop` follows its
 realm's agent, and agent classes distinguish Window, worker, and worklet
 loops without equating an event loop with an implementation thread. The
 authoritative fully-active-Document predicate now supplies the task

@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '../js-engine/index';
+import type { RealmExecution } from '../js-engine/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { DOMExceptionNames, createDOMException } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
@@ -87,11 +87,11 @@ export class BlobData {
   /** Stream retained Blob data, including multipart data, without an intermediate Blob object. */
   // File API's get stream algorithm, shared with Fetch's multipart body extraction.
   // https://w3c.github.io/FileAPI/#dfn-get-stream
-  stream(runtime: RuntimeContext): ReadableStreamImpl {
-    const scheduling = runtime.fileReading;
+  stream(exec: RealmExecution): ReadableStreamImpl {
+    const scheduling = exec.fileReading;
     let canceled = false;
     const stream = ReadableStreamImpl.createWithByteReadingSupport(
-      undefined, () => { canceled = true; }, 0, runtime,
+      undefined, () => { canceled = true; }, 0, exec,
     );
 
     // Backend awaits resume on Node's microtask queue. File-reading tasks deliver
@@ -129,7 +129,7 @@ export class BlobData {
         });
       }
     };
-    runtime.runInParallel(() => { void readChunks(); });
+    exec.runInParallel(() => { void readChunks(); });
     return stream;
   }
 

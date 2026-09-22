@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FetchEnvironmentSettingsObject } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/infrastructure';
 import {
   isScriptLikeDestination, translatePotentialDestination, type Destination,
   type PotentialDestination, type FetchRequest,
@@ -340,7 +340,7 @@ describe('Fetch request COEP credentials', () => {
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
   });
 
-  it.each<FetchEnvironmentSettingsObject['policyContainer']['embedderPolicy']['value']>([
+  it.each<FetchEnvironment['policyContainer']['embedderPolicy']['value']>([
     'unsafe-none', 'require-corp',
   ])('does not restrict credentials under %s', (value) => {
     const request = createFetchRequest(foreign, {

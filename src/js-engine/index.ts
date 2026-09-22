@@ -14,8 +14,8 @@ export {
 export { computeHash } from './hash';
 export type {
   AbortAlgorithmHandle, AbortControllerCapability, AbortSignalCapability,
-  NetworkingTasks, RuntimeContext,
-} from './runtime-context';
+  NetworkingTasks, RealmExecution,
+} from './realm-execution';
 export type {
   GlobalObject, JSFunction, JSIntrinsics,
   JSMethod, RealmFunctionOptions, RealmFunctionSteps,

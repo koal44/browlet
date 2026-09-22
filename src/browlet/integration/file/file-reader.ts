@@ -2,7 +2,7 @@ import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, throwDOMException,
 } from '../../../web-idl/index';
-import { getBufferSourceCopy, type RuntimeContext } from '../../../js-engine/index';
+import { getBufferSourceCopy, type RealmExecution } from '../../../js-engine/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
@@ -43,7 +43,7 @@ import { InternalError } from '../../../infra/internal-error';
  * };
  */
 export class FileReaderImpl extends EventTargetImpl {
-  #runtime: RuntimeContext;
+  #exec: RealmExecution;
   #state: FileReaderState = 'empty';
   #result: string | ArrayBuffer | null = null;
   #error: DOMException | null = null;
@@ -57,9 +57,9 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
-  constructor(runtime: RuntimeContext) {
+  constructor(exec: RealmExecution) {
     super();
-    this.#runtime = runtime;
+    this.#exec = exec;
   }
 
   readAsArrayBuffer(blob: BlobImpl): void {
@@ -183,7 +183,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const { fileReading, promises, runInParallel } = this.#runtime;
+    const { fileReading, promises, runInParallel } = this.#exec;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -268,7 +268,7 @@ export class FileReaderImpl extends EventTargetImpl {
                 type,
                 blob.type,
                 encodingLabel,
-                this.#runtime,
+                this.#exec,
               );
               fire('load');
             } catch (error) {
@@ -306,7 +306,7 @@ export const fileReaderIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getRuntime())],
+    constructWith: [atArg(0, (ctx) => ctx.getExecution())],
   }),
   members: [
     ctor(),

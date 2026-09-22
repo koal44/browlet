@@ -1,6 +1,6 @@
 import { withDocumentFragmentStub } from '../../stubs';
 import type { EventTargetVirtuals } from '../events/event-target';
-import type { Realm } from '../../scripting/realm';
+import type { Realm, WindowRealm } from '../../scripting/realm';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
 } from '../../../web-idl/index';
@@ -67,7 +67,8 @@ export const documentFragmentIDL = defineInterface<Realm>({
   members: [
     ctor(
       [],
-      { constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())] },
+      // Exposed=Window narrows the realm; the shared declaration registry also serves other globals.
+      { constructWith: [atArg(0, (ctx) => (ctx.realm as WindowRealm).getAssociatedDocument())] },
     ),
   ],
 });

@@ -2,11 +2,11 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import {
-  defaultRuntimeCaps, Stylelet, type PromiseValue, type RuntimeCaps,
+  defaultExecutionCaps, Stylelet, type PromiseValue, type ExecutionCaps,
 } from '../../../src/stylelet/stylelet';
 
-describe('Stylelet runtime capabilities', () => {
-  it('completes replacement with the standalone native runtime', async () => {
+describe('Stylelet execution capabilities', () => {
+  it('completes replacement with the default execution capabilities', async () => {
     const { document } = new JSDOM('<main></main>', { url: 'https://example.test/' }).window;
     const styles = new Stylelet(document);
     const sheet = styles.createStyleSheet();
@@ -24,12 +24,12 @@ describe('Stylelet runtime capabilities', () => {
     const document = new JSDOM().window.document;
     const work: (() => void)[] = [];
     const tasks: (() => void)[] = [];
-    const runtime: RuntimeCaps = {
-      ...defaultRuntimeCaps,
+    const exec: ExecutionCaps = {
+      ...defaultExecutionCaps,
       runInParallel: (steps) => { work.push(steps); },
       queueTask: (steps) => { tasks.push(steps); },
     };
-    const sheet = new Stylelet(document, { runtime }).createStyleSheet();
+    const sheet = new Stylelet(document, { exec }).createStyleSheet();
     const completed = observe(sheet.replace('.first {} .second {}'));
     const rejected = expect(observe(sheet.replace('.wrong {}')))
       .rejects.toMatchObject({ name: 'NotAllowedError' });
@@ -48,14 +48,14 @@ describe('Stylelet runtime capabilities', () => {
     expect(sheet.insertRule('.third {}')).toBe(0);
   });
 
-  it('uses runtime exceptions in sheets, media lists, declarations, and adoption', async () => {
+  it('uses host exceptions in sheets, media lists, declarations, and adoption', async () => {
     class HostDOMException extends DOMException {}
-    const runtime: RuntimeCaps = {
-      ...defaultRuntimeCaps,
+    const exec: ExecutionCaps = {
+      ...defaultExecutionCaps,
       createDOMException: (name, message) => new HostDOMException(message, name),
     };
     const { document } = new JSDOM('<main></main>').window;
-    const styles = new Stylelet(document, { runtime });
+    const styles = new Stylelet(document, { exec });
     const sheet = styles.createStyleSheet();
 
     expect(() => sheet.deleteRule(0)).toThrow(HostDOMException);

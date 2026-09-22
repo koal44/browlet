@@ -194,7 +194,7 @@ describe('HTML structured transfer', () => {
 
     const transferBoxIDL = defineInterface({
       name: 'TransferBox',
-      exposed: 'Window',
+      exposed: 'TransferTest',
       ...xattr('Transferable'),
       implementation: impl(TransferBoxImpl),
       members: [],
@@ -208,8 +208,8 @@ describe('HTML structured transfer', () => {
       },
     })];
     const bindings = new BindingWorld<Realm>([transferBoxIDL], { capabilities });
-    const sourceRealm = new Realm();
-    const targetRealm = new Realm();
+    const sourceRealm = new Realm({ globalNames: ['TransferTest'] });
+    const targetRealm = new Realm({ globalNames: ['TransferTest'] });
     const source = bindings.register(sourceRealm);
     const target = bindings.register(targetRealm);
     const original = source.createPlatformRecord(transferBoxIDL);
@@ -258,7 +258,7 @@ describe('HTML structured transfer', () => {
       .toBe('transferred');
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
-    const hiddenRealm = new Realm({ globalNames: ['Worker'] });
+    const hiddenRealm = new Realm();
     const hiddenTarget = bindings.register(hiddenRealm);
     const hiddenOriginal = source.createPlatformRecord(transferBoxIDL);
     const hiddenSerialized = structuredSerializeWithTransfer(

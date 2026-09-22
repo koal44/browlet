@@ -1,8 +1,7 @@
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { PolicyContainer } from '../policy/container';
 import type { ReferrerPolicy } from '../../../fetch/index';
-import { type Origin, parseURL, type URLRecord } from '../../../url/index';
-import { InternalError } from '../../../infra/internal-error';
+import type { Origin, URLRecord } from '../../../url/index';
 
 /*
  * A document state holds the information needed to present or recreate one
@@ -24,6 +23,9 @@ export type DocumentState = {
   notRestoredReasons: object | null;
 };
 
+/** Session-history state while its Document is present. */
+export type DocumentBackedState = DocumentState & { document: DocumentImpl; };
+
 export type SessionHistoryEntry = {
   step: number | 'pending';
   url: URLRecord;
@@ -43,6 +45,10 @@ export type PostResource = {
     | 'text/plain';
 };
 
+export function createDocumentState(
+  document: DocumentImpl,
+): DocumentBackedState;
+export function createDocumentState(document?: DocumentImpl | null): DocumentState;
 export function createDocumentState(
   document: DocumentImpl | null = null,
 ): DocumentState {
@@ -64,17 +70,9 @@ export function createDocumentState(
 }
 
 export function createSessionHistoryEntry(
-  documentState: DocumentState,
+  documentState: DocumentBackedState,
 ): SessionHistoryEntry {
-  const document = documentState.document;
-  if (document === null) {
-    throw new InternalError('An initial session history entry requires a Document');
-  }
-
-  const url = parseURL(document.URL).url;
-  if (url === null) {
-    throw new InternalError('A Document must have a valid URL');
-  }
+  const url = documentState.document.getURL();
 
   // The History and Navigation APIs will add their serialized-state,
   // navigation-key, scroll-restoration, and persisted-user-state slots.

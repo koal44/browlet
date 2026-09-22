@@ -7,7 +7,7 @@ import type { WindowProxy } from '../../../src/browlet/browsing/window/window-pr
 import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/scripting/window-environment';
+import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { FetchRequest } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { parseURL } from '../../../src/url/url';
@@ -26,10 +26,10 @@ describe('ReportingObserver', () => {
 
   it('delivers an asynchronous batch through the running HTML event loop', async () => {
     const browlet = new Browlet({ route: () => '' });
-    const settings = getRelevantRealm(browlet.window).hostDefined!;
+    const environment = getRelevantRealm(browlet.window).environment;
     await browlet.exposeFunction('produceReports', () => {
-      settings.queueReport('coep', 'reports', coepBody());
-      settings.queueReport('integrity-violation', 'reports', integrityBody());
+      environment.queueReport('coep', 'reports', coepBody());
+      environment.queueReport('integrity-violation', 'reports', integrityBody());
     });
     const result = await browlet.evaluate(`new Promise(resolve => {
       const observer = new ReportingObserver(function(reports, argument) {
@@ -54,13 +54,13 @@ describe('ReportingObserver', () => {
   });
 
   it('batches reports in generation order and does not register an observer twice', () => {
-    const { window, settings, runTask } = createWindow();
+    const { window, environment, runTask } = createWindow();
     const callback = vi.fn<ObserverCallback>();
     const observer = new window.ReportingObserver(callback);
     observer.observe();
     observer.observe();
-    settings.queueReport('coep', 'reports', coepBody());
-    settings.queueReport('integrity-violation', 'reports', integrityBody());
+    environment.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('integrity-violation', 'reports', integrityBody());
     expect(callback).not.toHaveBeenCalled();
     expect(runTask()).toBe(true);
     expect(callback).toHaveBeenCalledOnce();
@@ -72,24 +72,24 @@ describe('ReportingObserver', () => {
   });
 
   it('applies converted type filters and hides report types not defined as observable', () => {
-    const { window, settings, scope } = createWindow();
+    const { window, environment, scope } = createWindow();
     const types = [{ toString: () => 'coep' }];
     const filtered = Reflect.construct(window.ReportingObserver, [() => {}, { types }]) as ObserverObject;
     const all = new window.ReportingObserver(() => {}, { types: [] });
     filtered.observe();
     all.observe();
     types[0] = { toString: () => 'integrity-violation' };
-    settings.queueReport('coep', 'reports', coepBody());
-    settings.queueReport('integrity-violation', 'reports', integrityBody());
-    settings.queueReport('future-type', 'reports', { message: 'hidden' });
+    environment.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('integrity-violation', 'reports', integrityBody());
+    environment.queueReport('future-type', 'reports', { message: 'hidden' });
     expect(filtered.takeRecords().map((report) => report.type)).toEqual(['coep']);
     expect(all.takeRecords().map((report) => report.type)).toEqual(['coep', 'integrity-violation']);
     expect(scope.reports.map((report) => report.type)).toEqual(['coep', 'integrity-violation', 'future-type']);
   });
 
   it('makes buffered reports available during observe and replays them only once', () => {
-    const { window, settings } = createWindow();
-    settings.queueReport('coep', 'reports', coepBody());
+    const { window, environment } = createWindow();
+    environment.queueReport('coep', 'reports', coepBody());
     const unbuffered = new window.ReportingObserver(() => {});
     const buffered = new window.ReportingObserver(() => {}, { buffered: true });
     unbuffered.observe();
@@ -97,18 +97,18 @@ describe('ReportingObserver', () => {
     expect(unbuffered.takeRecords()).toEqual([]);
     expect(buffered.takeRecords().map((report) => report.type)).toEqual(['coep']);
     buffered.disconnect();
-    settings.queueReport('integrity-violation', 'reports', integrityBody());
+    environment.queueReport('integrity-violation', 'reports', integrityBody());
     buffered.observe();
     expect(buffered.takeRecords()).toEqual([]);
-    settings.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('coep', 'reports', coepBody());
     expect(buffered.takeRecords().map((report) => report.type)).toEqual(['coep']);
   });
 
   it('retains the latest 100 buffered reports per type in generation order', () => {
-    const { window, settings, scope } = createWindow();
+    const { window, environment, scope } = createWindow();
     for (let index = 0; index <= 100; index++) {
-      settings.queueReport('coep', 'reports', coepBody(`https://resource.test/${index}`));
-      settings.queueReport('integrity-violation', 'reports', integrityBody());
+      environment.queueReport('coep', 'reports', coepBody(`https://resource.test/${index}`));
+      environment.queueReport('integrity-violation', 'reports', integrityBody());
     }
     const observer = new window.ReportingObserver(() => {}, { buffered: true });
     observer.observe();
@@ -124,11 +124,11 @@ describe('ReportingObserver', () => {
   });
 
   it('takeRecords drains only the observer and suppresses an empty callback', () => {
-    const { window, settings, scope, runTask } = createWindow();
+    const { window, environment, scope, runTask } = createWindow();
     const callback = vi.fn<ObserverCallback>();
     const observer = new window.ReportingObserver(callback);
     observer.observe();
-    settings.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('coep', 'reports', coepBody());
     const records = observer.takeRecords();
     expect(records).toHaveLength(1);
     expect(records).toBeInstanceOf(window.Array);
@@ -140,29 +140,29 @@ describe('ReportingObserver', () => {
   });
 
   it('disconnect stops new reports but preserves the pending callback batch', () => {
-    const { window, settings, runTask } = createWindow();
+    const { window, environment, runTask } = createWindow();
     const callback = vi.fn<ObserverCallback>();
     const observer = new window.ReportingObserver(callback);
     observer.observe();
-    settings.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('coep', 'reports', coepBody());
     observer.disconnect();
     observer.disconnect();
-    settings.queueReport('integrity-violation', 'reports', integrityBody());
+    environment.queueReport('integrity-violation', 'reports', integrityBody());
     runTask();
     expect(callback).toHaveBeenCalledOnce();
     expect(callback.mock.calls[0]![0].map((report) => report.type)).toEqual(['coep']);
   });
 
   it('clears a batch before author code and queues newly generated reports for another task', () => {
-    const { window, settings, runTask } = createWindow();
+    const { window, environment, runTask } = createWindow();
     const batches: string[][] = [];
     const observer = new window.ReportingObserver((reports) => {
       batches.push(reports.map((report) => report.type));
       expect(observer.takeRecords()).toEqual([]);
-      if (batches.length === 1) settings.queueReport('coep', 'reports', coepBody());
+      if (batches.length === 1) environment.queueReport('coep', 'reports', coepBody());
     });
     observer.observe();
-    settings.queueReport('integrity-violation', 'reports', integrityBody());
+    environment.queueReport('integrity-violation', 'reports', integrityBody());
     runTask();
     expect(batches).toEqual([['integrity-violation']]);
     runTask();
@@ -170,7 +170,7 @@ describe('ReportingObserver', () => {
   });
 
   it('reports callback exceptions without preventing another observer from receiving its batch', () => {
-    const { window, realm, settings, runTask } = createWindow();
+    const { window, realm, environment, runTask } = createWindow();
     const error = new window.Error('observer failed');
     const reported = vi.spyOn(realm.callbacks, 'reportException').mockImplementation(() => {});
     const first = new window.ReportingObserver(() => { throw error; });
@@ -178,7 +178,7 @@ describe('ReportingObserver', () => {
     const second = new window.ReportingObserver(secondCallback);
     first.observe();
     second.observe();
-    settings.queueReport('coep', 'reports', coepBody());
+    environment.queueReport('coep', 'reports', coepBody());
     runTask();
     expect(reported).toHaveBeenCalledExactlyOnceWith(error);
     expect(secondCallback).toHaveBeenCalledOnce();
@@ -191,7 +191,7 @@ describe('ReportingObserver', () => {
     const second = createWindow();
     const observer = new second.window.ReportingObserver(() => {}, { buffered: true });
     observer.observe();
-    first.settings.queueReport('coep', 'reports', coepBody());
+    first.environment.queueReport('coep', 'reports', coepBody());
     expect(observer.takeRecords()).toEqual([]);
     expect(first.scope.reports).toHaveLength(1);
     expect(second.scope.reports).toHaveLength(0);
@@ -203,12 +203,12 @@ describe('ReportingObserver', () => {
     // Author callbacks can cross same-agent realms, not unrelated event loops.
     const { agent } = owner.realm;
     if (!(agent instanceof WindowAgent)) throw new Error('Expected a Window agent');
-    const sibling = createWindowEnvironment(agent, {
-      userAgent: owner.settings.userAgent, creationURL: owner.settings.creationURL,
-      origin: owner.settings.origin, parent: null,
-      topLevelCreationURL: owner.settings.creationURL, topLevelOrigin: owner.settings.origin,
+    const sibling = createWindowEnvironment({
+      agent, userAgent: owner.environment.userAgent, creationURL: owner.environment.creationURL,
+      origin: owner.environment.origin, parent: null,
+      topLevelCreationURL: owner.environment.creationURL, topLevelOrigin: owner.environment.origin,
     });
-    const otherRealm = sibling.settings.realmExecutionContext.realm;
+    const otherRealm = sibling.realm;
     const proxy = otherRealm.globalThis as WindowProxy;
     const document = createDocument(otherRealm);
     document.setBrowsingContext(new BrowsingContext(proxy));
@@ -220,7 +220,7 @@ describe('ReportingObserver', () => {
     })`, 'reporting-callback.js') as ObserverCallback;
     const observer = new owner.window.ReportingObserver(callback);
     observer.observe();
-    owner.settings.queueReport('coep', 'reports', coepBody());
+    owner.environment.queueReport('coep', 'reports', coepBody());
     owner.runTask();
     const delivered = Reflect.get(otherWindow, 'delivered') as {
       reports: ReportObject[]; observer: ObserverObject; receiver: ObserverObject;
@@ -235,9 +235,9 @@ describe('ReportingObserver', () => {
 
 describe('Reporting policy integration and user control', () => {
   it.each([true, false])('reports enforced and report-only CORP violations with delivery enabled: %s', (enabled) => {
-    const { window, settings, scope } = createWindow();
-    settings.userAgent.reportDeliveryEnabled = enabled;
-    settings.policyContainer.embedderPolicy = {
+    const { window, environment, scope } = createWindow();
+    environment.userAgent.reportDeliveryEnabled = enabled;
+    environment.policyContainer.embedderPolicy = {
       value: 'require-corp', reportingEndpoint: 'enforce',
       reportOnlyValue: 'require-corp', reportOnlyReportingEndpoint: 'observe',
     };
@@ -245,7 +245,7 @@ describe('Reporting policy integration and user control', () => {
     observer.observe();
     const response = new FetchResponse();
     response.urlList.push(parseURL('https://user:secret@resource.test/image.png#fragment').url!);
-    expect(response.isBlockedByCORP(settings.origin, settings, 'image')).toBe(true);
+    expect(response.isBlockedByCORP(environment.origin, environment, 'image')).toBe(true);
     const reports = observer.takeRecords();
     expect(reports.map((report) => report.body!.toJSON())).toEqual([
       { type: 'corp', blockedURL: 'https://resource.test/image.png', destination: 'image', disposition: 'reporting' },
@@ -259,15 +259,15 @@ describe('Reporting policy integration and user control', () => {
   });
 
   it.each([true, false])('preserves Integrity Policy enforcement and boolean fields with delivery enabled: %s', (enabled) => {
-    const { window, settings, scope } = createWindow();
-    settings.userAgent.reportDeliveryEnabled = enabled;
+    const { window, environment, scope } = createWindow();
+    environment.userAgent.reportDeliveryEnabled = enabled;
     const response = new FetchResponse();
     response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforce)');
     response.headerList.append('Integrity-Policy-Report-Only', 'blocked-destinations=(script), endpoints=(observe)');
-    settings.policyContainer.parseIntegrityPolicyHeaders(response);
+    environment.policyContainer.parseIntegrityPolicyHeaders(response);
     const observer = new window.ReportingObserver(() => {});
     observer.observe();
-    const request = new FetchRequest(parseURL('https://resource.test/script.js').url!, settings, settings.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/script.js').url!, environment, environment.userAgent);
     request.destination = 'script';
     request.mode = 'cors';
     request.populateFromClient();
@@ -284,10 +284,10 @@ describe('Reporting policy integration and user control', () => {
   it('configures outbound opt-out without disabling local callbacks or buffering', async () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     const realm = getRelevantRealm(browlet.window);
-    const settings = realm.hostDefined!;
-    const scope = realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin();
+    const environment = realm.environment;
+    const scope = realm.windowImplementation.getWindowOrWorkerGlobalScopeMixin();
     await browlet.exposeFunction('produceReport', () => {
-      settings.queueReport('coep', 'reports', coepBody());
+      environment.queueReport('coep', 'reports', coepBody());
     });
     expect(await browlet.evaluate(`new Promise(resolve => {
       const observer = new ReportingObserver(reports => resolve(reports.length));
@@ -307,8 +307,8 @@ function createWindow() {
   return {
     realm,
     window: realm.global as unknown as ReportingWindow,
-    settings: realm.hostDefined!,
-    scope: realm.windowImplementation!.getWindowOrWorkerGlobalScopeMixin(),
+    environment: realm.environment,
+    scope: realm.windowImplementation.getWindowOrWorkerGlobalScopeMixin(),
     runTask: () => eventLoop.runTaskTurn({
       createMicrotaskQueue: () => eventLoop.microtaskQueue,
       requestEventLoopTurn: vi.fn(),

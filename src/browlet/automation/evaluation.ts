@@ -1,18 +1,18 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
-import type { Realm } from '../scripting/realm';
+import type { WindowRealm } from '../scripting/realm';
 import { createTaskSource } from '../scripting/event-loop';
 import type { QueuedTaskHandle } from '../scripting/tasks';
 import { copyEvaluationValue } from './evaluation-value';
 
 /** One page execution context and its outstanding host commands. */
 export class PageEvaluation {
-  #realm: Realm;
+  #realm: WindowRealm;
   #pending = new Set<(reason: Error) => void>();
   #tasks = new Set<QueuedTaskHandle>();
   #disposed = false;
 
-  constructor(realm: Realm) {
+  constructor(realm: WindowRealm) {
     this.#realm = realm;
   }
 
@@ -115,7 +115,7 @@ export class PageEvaluation {
     const realm = this.#realm;
     const task = realm.queueGlobalTask(evaluationTaskSource, () => {
       this.#tasks.delete(task);
-      realm.agent.eventLoop.runScriptEvaluation(realm.hostDefined!, steps);
+      realm.agent.eventLoop.runScriptEvaluation(realm.environment, steps);
     });
     this.#tasks.add(task);
   }

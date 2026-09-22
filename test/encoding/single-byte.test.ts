@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Encoding } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
 import { getSingleByteCodec } from '../../src/encoding/codecs/single-byte';
-import { createRuntime } from '../js-engine/runtime-fixture';
+import { createExecution } from '../js-engine/execution-fixture';
 import { singleByteDecodeDigests } from './gen/single-byte-vectors';
 
 const encodings = Object.keys(singleByteDecodeDigests) as (keyof typeof singleByteDecodeDigests)[];
@@ -170,7 +170,7 @@ describe('Encoding §9: shared single-byte codec', () => {
     const output = new IOQueue<string>();
     const codec = getSingleByteCodec('windows-1252')!;
     const completed: unknown[] = [];
-    processQueue(input, () => codec.decode(input, output), createRuntime())
+    processQueue(input, () => codec.decode(input, output), createExecution())
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     input.push(Uint8Array.of(0x41, 0x80));
     await nextTurn();
@@ -192,7 +192,7 @@ describe('Encoding §9: shared single-byte codec', () => {
     const output = new IOQueue<Uint8Array>();
     const completed: unknown[] = [];
     const codec = getSingleByteCodec('windows-1252')!;
-    processQueue(input, () => codec.encode(input, output), createRuntime())
+    processQueue(input, () => codec.encode(input, output), createExecution())
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     input.push('a💩b');
     await nextTurn();

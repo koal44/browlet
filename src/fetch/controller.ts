@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '../js-engine/index';
+import type { RealmExecution } from '../js-engine/index';
 import { createDOMException } from '../web-idl/index';
 import type { FetchTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
@@ -37,17 +37,17 @@ export class FetchController {
 
   /** Fetch §2, abort a fetch controller; an omitted error differs from explicit undefined. */
   abort(
-    ...args: [runtime: RuntimeContext] | [error: unknown, runtime: RuntimeContext]
+    ...args: [exec: RealmExecution] | [error: unknown, exec: RealmExecution]
   ): void {
     this.state = 'aborted';
     const fallbackError = createDOMException('AbortError');
-    const runtime = args.length === 1 ? args[0] : args[1];
+    const exec = args.length === 1 ? args[0] : args[1];
     const error = args.length === 1 ? fallbackError : args[0];
     let serializedError: object;
     try {
-      serializedError = runtime.serialize(error);
+      serializedError = exec.serialize(error);
     } catch {
-      serializedError = runtime.serialize(fallbackError);
+      serializedError = exec.serialize(fallbackError);
     }
     this.serializedAbortReason = serializedError;
   }
@@ -60,12 +60,12 @@ export class FetchController {
 /** Fetch §2, deserialize a serialized abort reason in the target runtime's realm. */
 export function deserializeAbortReason(
   abortReason: object | null,
-  runtime: RuntimeContext,
+  exec: RealmExecution,
 ): unknown {
   const fallbackError = createDOMException('AbortError');
   if (abortReason !== null) {
     try {
-      const error = runtime.deserialize(abortReason);
+      const error = exec.deserialize(abortReason);
       return error === undefined ? fallbackError : error;
     } catch {
       return fallbackError;

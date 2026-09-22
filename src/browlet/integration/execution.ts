@@ -1,13 +1,10 @@
 import { EOL } from 'node:os';
 
-import type { RuntimeContext } from '../../js-engine/index';
+import type { RealmExecution } from '../../js-engine/index';
 import type { BindingContext } from '../../web-idl/index';
-import type { WindowImpl } from '../browsing/window/window';
 import { AbortControllerImpl } from '../dom/abort/abort-controller';
 import { AbortSignalImpl } from '../dom/abort/abort-signal';
-import { coarsenTime } from '../performance/clock';
 import { createTaskSource } from '../scripting/event-loop';
-import type { StructuredCloneSteps } from '../scripting/global-scope';
 import type { Realm } from '../scripting/realm';
 import { structuredDeserialize } from '../scripting/structured-data/deserialize';
 import type { SerializedRecord } from '../scripting/structured-data/records';
@@ -16,14 +13,11 @@ import { structuredClone } from '../scripting/structured-data/structured-clone';
 import { fetchTaskScheduling } from './fetch';
 import { runInParallel } from './scripting';
 
-/** BINDING_INTEGRATION: compose implementation facilities for a Window realm. */
-export function createWindowRuntime(
-  window: WindowImpl,
-  context: BindingContext<Realm>,
-): RuntimeContext {
+/** BINDING_INTEGRATION: compose execution facilities for one realm and binding. */
+export function createExecution(context: BindingContext<Realm>): RealmExecution {
   const { realm } = context;
-  // Global installation completes after registration. Host operations run later.
   return {
+    // Window installation follows binding registration.
     get global() { return realm.global; },
     nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
     promises: realm.promises,
@@ -34,23 +28,13 @@ export function createWindowRuntime(
       queueTask: (steps) => realm.queueGlobalTask(fileReadingTaskSource, steps),
     },
     networking: fetchTaskScheduling,
-    timing: { coarsenTime },
     createAbortController: () => context.construct(AbortControllerImpl),
     createDependentAbortSignal: (signals) => AbortSignalImpl.any(
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],
     ),
     parseJSON: (text) => realm.parseJSON(text),
     stringifyJSON: (value) => realm.stringifyJSON(value),
-    clone: (value) => window.getWindowOrWorkerGlobalScopeMixin().structuredClone(value),
-    ...createRuntimeSerialization(context),
-  };
-}
-
-/** Supply HTML serialization with the owning realm and its platform bindings. */
-export function createRuntimeSerialization(
-  context: BindingContext<Realm>,
-): Pick<RuntimeContext, 'serialize' | 'deserialize'> {
-  return {
+    clone: (value, transferList = []) => structuredClone(value, transferList, context),
     // Exception requests become recognizable platform objects at serialization.
     serialize: (value) => structuredSerialize(
       context.realizeException(value),
@@ -61,14 +45,6 @@ export function createRuntimeSerialization(
       context,
     ),
   };
-}
-
-/** Supply HTML cloning with the destination realm and its platform bindings. */
-export function createStructuredClone(
-  context: BindingContext<Realm>,
-): StructuredCloneSteps {
-  return (value, transferList) =>
-    structuredClone(value, transferList, context);
 }
 
 const fileReadingTaskSource = createTaskSource('file reading');

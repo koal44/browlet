@@ -17,8 +17,8 @@ const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
   name: 'DocumentOrShadowRoot',
   members: [
     roAttr('styleSheets', idlType.object, xattr('SameObject')),
-    // TODO(Web IDL observable arrays): Restore ObservableArray<CSSStyleSheet>
-    // when the specialized attribute proxy is available.
+    // TODO(CSSOM interface projection): Restore ObservableArray<CSSStyleSheet>
+    // when CSSStyleSheet projection and adoption mutation steps are bound.
     attr('adoptedStyleSheets', idlType.any),
   ],
 });
