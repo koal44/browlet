@@ -306,6 +306,66 @@ export class FetchRequest {
         : this.client.policyContainer.clone();
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Fetch Metadata: Sec-Fetch-* request headers
+  // https://w3c.github.io/webappsec-fetch-metadata/
+  // ---------------------------------------------------------------------------
+
+  /** Set the outgoing request's Fetch Metadata headers when its current URL is trustworthy. */
+  // https://w3c.github.io/webappsec-fetch-metadata/#fetch-integration
+  appendFetchMetadataHeaders(): void {
+    if (!this.userAgent.isURLPotentiallyTrustworthy(this.currentURL)) return;
+    this.#setFetchDestHeader();
+    this.#setFetchModeHeader();
+    this.#setFetchSiteHeader();
+    this.#setFetchUserHeader();
+  }
+
+  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-dest-header
+  #setFetchDestHeader(): void {
+    this.headerList.setStructuredFieldValue('Sec-Fetch-Dest', {
+      type: 'item', bareItem: { type: 'token', value: this.destination || 'empty' }, parameters: new Map(),
+    });
+  }
+
+  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-mode-header
+  #setFetchModeHeader(): void {
+    this.headerList.setStructuredFieldValue('Sec-Fetch-Mode', {
+      type: 'item', bareItem: { type: 'token', value: this.mode }, parameters: new Map(),
+    });
+  }
+
+  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-site-header
+  #setFetchSiteHeader(): void {
+    let site: 'same-origin' | 'same-site' | 'cross-site' | 'none' = 'same-origin';
+    // HTML's navigation-fetch algorithm has a null client only for browser-UI initiation.
+    // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
+    if (this.isNavigation && this.client === null) {
+      site = 'none';
+    } else {
+      if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
+      for (const url of this.urlList) {
+        const origin = obtainURLOrigin(url);
+        if (areSameOrigin(origin, this.origin)) continue;
+        site = 'cross-site';
+        if (!areSameSite(this.origin, origin)) break;
+        site = 'same-site';
+      }
+    }
+    this.headerList.setStructuredFieldValue('Sec-Fetch-Site', {
+      type: 'item', bareItem: { type: 'token', value: site }, parameters: new Map(),
+    });
+  }
+
+  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-user-header
+  #setFetchUserHeader(): void {
+    if (!this.isNavigation || !this.userActivation) return;
+    // The field definition and ABNF require a boolean; step 3's "token" is a typo.
+    this.headerList.setStructuredFieldValue('Sec-Fetch-User', {
+      type: 'item', bareItem: { type: 'boolean', value: true }, parameters: new Map(),
+    });
+  }
 }
 
 /** https://fetch.spec.whatwg.org/#request-destination-script-like */

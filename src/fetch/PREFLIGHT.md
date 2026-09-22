@@ -39,12 +39,12 @@ src/
 ├── fetch/
 │   ├── ROADMAP.md
 │   ├── PREFLIGHT.md
+│   ├── request.ts         # Includes Fetch Metadata request headers
 │   ├── integrity.ts
 │   ├── multipart/
 │   │   └── ROADMAP.md
 │   └── http/
 │       ├── ROADMAP.md
-│       ├── metadata.ts
 │       └── cache/
 │           └── ROADMAP.md
 ├── file/
@@ -93,7 +93,7 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 | 4 | [Trustworthiness](../browlet/browsing/policy/ROADMAP.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |
 | 5 | [Cookies](../http/cookies/ROADMAP.md), the current HTTPWG draft + HTML/Fetch | HTTP cookie processing, then HTML consumers |
 | 6 | [Referrer Policy](../browlet/browsing/policy/ROADMAP.md#referrer-policy) | Request/redirect handling and policy delivery |
-| 7 | [Fetch Metadata](http/ROADMAP.md#fetch-metadata) | Outgoing HTTP request headers |
+| 7 | [Fetch Metadata](http/ROADMAP.md#fetch-metadata); header algorithms implemented | Outgoing HTTP request headers in Fetch Slice 9 |
 | 8 | [SRI verification](ROADMAP.md#subresource-integrity) and [Integrity Policy](../browlet/browsing/policy/ROADMAP.md#integrity-policy) | Response bytes and request policy |
 | 9 | [HSTS](../browlet/browsing/policy/ROADMAP.md#hsts), RFC 6797 | Scheme upgrading and secure transport |
 | 10 | [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then [File's Blob URL slice](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred) | URL resolution, Fetch, and environment teardown |
@@ -384,6 +384,10 @@ The browsing roadmap owns that HTML lifecycle; Fetch and policy roadmaps retain
 its replacement conditions and the later main-fetch/redirect call sites.
 The remaining work-order entries above are gates for their named consumers,
 not a requirement to finish all browser policy before proceeding.
+The selected detour starts with Fetch Metadata; its single algorithm slice is
+complete. Continue with SRI/Integrity Policy, HSTS, Storage keys/Blob URLs, then
+the policy-stage order below before returning to Fetch 8A. Their consumer
+integration gates remain with Fetch and HTML.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.

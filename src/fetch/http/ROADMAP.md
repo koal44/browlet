@@ -46,13 +46,39 @@ belongs to the transport, not another parser in this folder.
 
 ## Fetch Metadata
 
-Implement `metadata.ts` over the actual Fetch request record when available.
-It appends `Sec-Fetch-Dest`, `Sec-Fetch-Mode`, `Sec-Fetch-Site`, and
-`Sec-Fetch-User`. Reuse [structured fields](../../http/struct-fields/README.md),
-URL origin/site operations, and the policy owner's trustworthiness operation.
-Client, URL-list/redirect, destination, and activation state must retain their
-provenance from request construction; an ordinary header-setting API does not
-provide those facts.
+**Slice 1 — Header algorithms:** implemented as `FetchRequest` methods in
+[`request.ts`](../request.ts), grouped under the Fetch Metadata banner.
+The single algorithm slice covers all four headers and the append operation
+from Fetch Metadata §§2-3. It reuses structured-field serialization, URL
+origin/site operations, and the request owner's URL trustworthiness policy.
+No additional runtime facility, policy capability, or request state was needed.
+
+The published draft was checked on 2026-09-21: its current-URL wording supersedes
+the local snapshot's older request-URL wording. The current URL controls
+trustworthiness. Site classification compares every URL in the redirect history
+with the resolved request origin; it is distinct
+from Fetch's redirect-taint and cookie classifications. HTML's navigation-fetch
+algorithm supplies a null client only for browser-UI initiation, so a navigation
+with a null client receives `none`. A page link retains its client even with
+activation or no referrer. Activation separately controls the boolean `?1`.
+The draft's token/boolean typo is recorded in `scratch/SPEC-ISSUES.md`.
+
+`test/fetch/http/metadata.test.ts` covers header values, replacement, origin/site
+relationships, redirect history, navigation/activation, and trust gating.
+`test/browlet/fetch-metadata.test.ts` exercises real Request bindings and the
+UserAgent's loopback/configured-origin trust policy. These tests inspect actual
+Fetch header lists; they do not claim that Browlet sends network requests yet.
+All six Node variants pass the unit suite with the existing expected failures
+and skips; the 46 new cases pass. Typechecking and focused lint also pass.
+
+**Consumer integration — parent Slice 9:** call `request.appendFetchMetadataHeaders()`
+on the outgoing HTTP request from §4.6, after origin population and URL upgrades,
+and recompute it at each redirect. Keep generated headers on that outgoing
+request, separate from author-visible Request headers. The caller must not carry
+old generated metadata into an untrustworthy redirect: the append algorithm's
+untrustworthy-URL branch returns without editing headers. HTML navigation
+construction must supply the real source client and snapshotted activation.
+These are later HTTP/navigation acceptance gates, not a second parser slice.
 
 **Exit proof:** cover same-origin/same-site/cross-site requests, redirect
 history, empty destinations, navigation activation, and omission for

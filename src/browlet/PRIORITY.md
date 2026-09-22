@@ -252,8 +252,11 @@ Current implementation sequence:
    Slice 7 and the bounded test-reliability/performance review are complete.
    Slice 8 retains five subdivisions, A–E. 8A client population now selects HTML
    prompt targets and copies implemented policy state. Continue entry/main-fetch
-   orchestration; CSP copying and Integrity Policy's value model remain with
-   their policy owners.
+   orchestration after the selected [preflight detour](../fetch/PREFLIGHT.md#work-order).
+   Fetch Metadata's header algorithms are complete; SRI/Integrity Policy is next,
+   followed by HSTS, Storage keys/Blob URLs, Mixed Content/upgrading, Reporting,
+   and CSP. CSP copying and Integrity Policy's value model remain with their
+   policy owners.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.
