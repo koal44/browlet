@@ -287,15 +287,123 @@ not part of HSTS or SRI.
 
 Read [Mixed Content](https://w3c.github.io/webappsec-mixed-content/) and
 [Upgrade Insecure Requests](https://w3c.github.io/webappsec-upgrade-insecure-requests/),
-local `w3c-mixed-content/index.bs` and
-`w3c-upgrade-insecure-requests/index.bs`. Suggested files are
-`mixed-content.ts` and `upgrade-insecure-requests.ts`.
+local `w3c-mixed-content/index.bs` and `w3c-upgrade-insecure-requests/index.bs`.
+Both complete sources have been reviewed. Keep this as one algorithm slice;
+CSP's own review remains a separate preflight task.
 
-Implement their request upgrade/blocking and response checks with explicit
-client/policy inputs and shared trustworthiness rules. CSP supplies its
-directive inputs when integrated. Test destination-sensitive decisions,
-upgrades, response failures, and report/enforcement effects through Fetch.
-These policies do not replace HSTS or TLS verification.
+**Independent algorithms implemented:** `Environment.prohibitsMixedSecurityContexts()` checks the
+origin and Window ancestors, independently of secure-context classification.
+`FetchRequest.upgradeInsecureRequest()` applies the enforced policy and sets
+the navigation preference header; `upgradeMixedContent()` upgrades eligible
+images, audio, and video before blocking.
+`FetchRequest.isBlockedByMixedContent()` and
+`FetchResponse.isBlockedByMixedContent(request)` supply the blocking checks.
+`FetchResponse.isMixedDownload(sourceURL, env)` checks every response URL hop
+against the initiating Document URL. There is no mixed-content override setting;
+the optional user bypass and additional form-warning UI are not implemented.
+
+`InsecureRequestsPolicy` groups the upgrade flag and navigation targets on the
+Environment and BrowsingContext. Nested-context creation copies the embedding
+environment's enabled policy; Document initialization copies context policy
+before CSP initialization. Window reuse clears the previous Document's own
+directive state. Full iframe creation still reaches the existing unfinished
+HTML creator/embedding helpers; the tests compose real navigables and separately
+exercise policy inheritance during the implemented Document creation path.
+
+**Reviewed choices:** both upgrades rewrite the current URL, preserving earlier
+redirect hops. Mixed Content follows the algorithm's CORS-image eligibility;
+ordinary CORS checks still apply. Navigation targets match host and port by
+value. UIR exempts trustworthy HTTP targets such as localhost, following
+Chromium and Gecko. See [the source comparison notes](../../../../scratch/SPEC-ISSUES.md#mixed-content--upgrade-insecure-requests-reviewed-interpretations).
+The preference header is set on every navigation, as permitted by UIR, and
+redirect re-entry does not duplicate it. Tests cover both upgrades, their
+ordering with blocking, form submissions, ports, IP hosts, and redirects.
+
+Consumer gates:
+
+- **CSP:** an enforced `upgrade-insecure-requests` directive calls
+  `env.insecureRequestsPolicy.enableFor(protectedResourceURL)`; report-only
+  delivery must not enable it. No CSP parser or directive dispatch is added here.
+- **Fetch 8A:** report monitored-policy violations before either upgrade;
+  apply UIR, mixed-content upgrading, and then request blocking. Apply enforced
+  CSP after rewriting. Fill the internal response URL list before response
+  blocking. Failed HTTPS upgrades must not retry plaintext. HSTS keeps its own
+  later stage and transport verification remains mandatory.
+- **HTML navigation/forms:** supply `FetchRequest.isFormSubmission` for GET
+  as well as POST forms, and distinguish top-level `document` from nested
+  destinations. The method alone cannot identify a form submission.
+- **HTML downloads:** call `response.isMixedDownload(sourceDocument.url, env)`
+  before accepting either navigation or hyperlink downloads. A secure final URL
+  does not erase an insecure redirect hop.
+- **Workers:** inherit both upgrade state and targets at creation, once the
+  worker lifecycle exists. Reports belong to the initiating worker/document,
+  not to the ancestor from which an upgrade policy was inherited.
+- **CSP violation destinations:** UIR [§5.2](https://w3c.github.io/webappsec-upgrade-insecure-requests/#violation-report-target)
+  also forbids sending `SecurityPolicyViolationEvent` to another Document.
+  Inherited upgrade state must not redirect either reports or events to the
+  ancestor that originally enabled it.
+
+The obsolete `block-all-mixed-content` directive does not need a second policy
+flag. These policies do not replace HSTS or TLS verification.
+
+#### Mixed Content audit
+
+The complete Mixed Content source was audited against the implementation and
+its consumer gates. The reviewed choices above are intentional departures;
+no additional mandatory algorithm step was found missing from the independent
+methods.
+
+| Sections | Coverage |
+| --- | --- |
+| 1–3: introduction, definitions, content categories | Trustworthiness uses the existing UserAgent algorithms; destinations and `imageset` distinguish automatic-upgrade eligibility. |
+| 4.1–4.2: upgrading and removal of the old category split | Current-URL upgrading checks trustworthiness, IP hosts, client restrictions, destination, and initiator before rewriting HTTP. |
+| 4.3: environment classification | The environment's origin and every Window ancestor are checked independently of secure-context classification. Workers use the origin check when their environments exist. |
+| 4.4–4.5: request and response blocking | The current request URL and final internal response URL are checked separately; top-level navigation is exempt. Optional user overrides are not exposed. |
+| 5: Fetch and HTML integration | Upgrade-before-blocking and both download handoffs are recorded above. Main Fetch must populate the internal response URL list, including for responses supplied by Service Workers. |
+| 6: obsolete strict checking | No `block-all-mixed-content` flag is needed. |
+| 7: security considerations, forms, user controls | The upgrade categories are covered. Optional UI has the conditional requirements below. |
+| 8 and generated index/references | No additional implementation algorithm. |
+
+If optional UI is introduced later, retain these conditions:
+
+- [§7.1](https://w3c.github.io/webappsec-mixed-content/#requirements-forms):
+  insecure-form submission warnings should also cover redirects to insecure
+  URLs and let the user abort.
+- [§7.2](https://w3c.github.io/webappsec-mixed-content/#requirements-user-controls):
+  any controls overriding blocking or automatic upgrading must also be exposed
+  through accessibility APIs. Offering either override remains optional.
+
+#### Upgrade Insecure Requests audit
+
+The complete UIR source was audited in document order, retaining the reviewed
+choices above. The independent request-upgrade algorithm covers the reached
+requirements. The nested-context policy-owner issue found during the audit
+has been corrected and covered by focused regression tests.
+
+| Sections | Coverage |
+| --- | --- |
+| 1: introduction, goals, examples, recommendations | Upgrades preserve the resource target and restrict ordinary top-level links. Failed HTTPS requests must not fall back to HTTP; Fetch already records that gate. Server redirects and deployment advice are server responsibilities. |
+| 2: concepts and terminology | Upgrade and host/port concepts have representations. Always sending the navigation preference header avoids needing preload-specific suppression or refresh scheduling. |
+| 3.1: directive delivery and Mixed Content ordering | Enforced delivery has `enableFor()`; CSP parsing/dispatch remains planned. Report-only delivery must leave upgrade state unchanged. Upgrading precedes Mixed Content and enforced CSP checks. |
+| 3.2: capability advertisement | Navigation requests set one `Upgrade-Insecure-Requests: 1` field, including HTTPS requests and redirect re-entry. Sending it on every navigation is permitted. |
+| 3.3: inheritance | Policy state and target sets are copied independently from the embedding element's current Document; adoption, Document initialization, and Window reuse are covered. Worker creation remains a recorded consumer gate. |
+| 3.4: monitored-policy reporting | The Fetch gate explicitly puts report-only checks before rewriting and enforced checks afterward. |
+| 4.1–4.2: processing algorithms | The client policy, navigation/form distinction, host/port targets, current URL, and reviewed trustworthy-target exception are covered. |
+| 5: security considerations | HSTS remains independent. Violation reports and events must stay with the initiating Document/Worker, as recorded above. |
+| 6–9 and generated index/references | Optional header optimizations, authoring advice, registration details, acknowledgements, and references add no missing mandatory runtime algorithm. |
+
+[`BrowsingContext.inheritInsecureRequestsPolicy()`](../browsing-context.ts)
+uses the embedding element's current node document, as required by UIR
+[§3.3](https://w3c.github.io/webappsec-upgrade-insecure-requests/#nesting).
+The element retains its creation realm after adoption; that realm must not
+choose the inherited flag or navigation targets. Focused regressions exercise
+enabled-to-disabled, disabled-to-enabled, and differently targeted enabled
+policies through real bindings. They supply adoption's node-document change
+directly and call the same inheritance method used by context creation.
+
+Full DOM adoption and nested-context construction remain unfinished HTML
+lifecycle work. These tests cover the policy-inheritance step independently
+of the existing creator/sandboxing gaps.
 
 ## Removal condition
 

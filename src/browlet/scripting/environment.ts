@@ -9,6 +9,7 @@ import type { EventLoop } from './event-loop';
 import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
+import { InsecureRequestsPolicy } from '../browsing/policy/upgrade-insecure-requests';
 import type { WindowImpl } from '../browsing/window/window';
 import {
   areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
@@ -43,6 +44,8 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   activeServiceWorker: object | null;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
+  /** Upgrade policy and navigation targets inherited or enabled for this environment. */
+  insecureRequestsPolicy = new InsecureRequestsPolicy();
   /** Browser timing relative to this environment's time origin. */
   timing: EnvironmentTiming;
   /** JavaScript realm associated with this browser environment. */
@@ -113,6 +116,12 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
   getReferrerSource(): URLRecord | null {
     return this.creationURL;
+  }
+
+  /** Whether this environment's origin requires trustworthy subresources. */
+  // https://w3c.github.io/webappsec-mixed-content/#categorize-settings-object
+  prohibitsMixedSecurityContexts(): boolean {
+    return this.userAgent.isOriginPotentiallyTrustworthy(this.origin);
   }
 
   /** Select a prompt destination; environments without a Window have none. */
@@ -195,6 +204,17 @@ export class WindowEnvironment extends Environment {
 
   get policyContainer(): PolicyContainer {
     return this.window.getAssociatedDocument().policyContainer;
+  }
+
+  /** A trustworthy Window ancestor also prohibits mixed content, regardless of this origin. */
+  override prohibitsMixedSecurityContexts(): boolean {
+    if (super.prohibitsMixedSecurityContexts()) return true;
+    const navigable = this.window.getAssociatedDocument().getNodeNavigable();
+    for (let ancestor = navigable?.parent ?? null; ancestor !== null; ancestor = ancestor.parent) {
+      const document = ancestor.activeDocument;
+      if (document !== null && this.userAgent.isOriginPotentiallyTrustworthy(document.origin)) return true;
+    }
+    return false;
   }
 
   get crossOriginIsolatedCapability(): boolean {

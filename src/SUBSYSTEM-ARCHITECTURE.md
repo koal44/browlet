@@ -439,6 +439,16 @@ Integrity Policy uses the same seam with boolean report fields. Settings supply
 the Document/Worker URL through `getReportingSource()`; Window settings read
 their live associated Document rather than substituting its base/referrer URL.
 This dependency belongs to Reporting, not RealmExecution.
+
+Mixed Content likewise asks the actual Fetch client whether its origin or a
+Window ancestor prohibits mixed security contexts. This is independent of the
+fixed `isSecureContext` flag: an HTTPS child of an HTTP parent still restricts
+its own subresources. Request and Response own the blocking predicates;
+Environment owns browser ancestry. `InsecureRequestsPolicy` groups the upgrade
+flag and host/port targets for Environment and BrowsingContext, with explicit
+inheritance during Document creation. CSP will enable that same policy value;
+it does not require another environment object or a realm-execution facility.
+
 The existing `WindowOrWorkerGlobalScopeMixin` owns Reporting endpoint and report
 lists, observer registrations, and the per-type bounded report buffer. Its
 initialization method parses the actual Fetch response using the

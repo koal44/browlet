@@ -25,6 +25,13 @@ download/POST handling, nested navigables, reload, traversal, unloading,
 ongoing-navigation cancellation, and full history-step application (HTML
 §7.4).
 
+Navigation/form request construction must set Fetch's `isFormSubmission` for
+GET and POST forms, so Upgrade Insecure Requests can distinguish cross-origin
+forms from ordinary links. At both navigation-download and hyperlink-download
+handoff, apply `response.isMixedDownload(sourceDocument.url, env)` to the full
+response URL list before accepting the download. The policy algorithms and
+reviewed upgrade choices are tracked in the [policy roadmap](../policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
+
 All push, replace, traversal, reload, and cross-/same-document commits must
 converge on the centralized session-history modification and history-step
 algorithms. Public History or Navigation methods must not mutate the arrays

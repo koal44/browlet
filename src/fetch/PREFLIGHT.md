@@ -417,11 +417,14 @@ Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 
-Finish the remaining independent preflight work in this order:
+[Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests)
+now supply blocking, download checks, policy state, both URL-upgrade algorithms,
+and the navigation preference header. Their Fetch/HTML consumer gates remain
+with the owning roadmaps.
 
-1. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
-2. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
-   its inputs to the preceding policy algorithms.
+The remaining independent preflight task is
+[CSP](../browlet/browsing/policy/csp/ROADMAP.md), including delivery of its
+inputs to the preceding policy algorithms.
 
 [Reporting](../browlet/reporting/ROADMAP.md)'s network delivery completes when
 Fetch can execute its requests; it is not a prerequisite for resuming Fetch 8A.

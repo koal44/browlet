@@ -783,6 +783,16 @@ preflight-cache invalidation, and Resource Timing. Preserve the planned owner
 boundaries and pause at unresolved dependencies; a test host's policy decisions
 do not constitute Browlet policy enforcement.
 
+Mixed Content's independent request/response blocking checks are available on
+`FetchRequest` and `FetchResponse`, using the client's browser-owned ancestor
+classification. Call `request.upgradeInsecureRequest()` followed by
+`request.upgradeMixedContent()` after monitored CSP reporting and before
+request blocking. Both rewrite the current URL; the former also sets the
+navigation preference header. The [policy roadmap](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests)
+records the reviewed browser/spec choices and consumer inputs. Fill
+the internal response URL list before its mixed-content check. Preserve this
+ordering on redirect re-entry. A failed HTTPS upgrade never retries HTTP.
+
 HSTS's independent algorithms are implemented. Main fetch must call
 `request.upgradeForHSTS()` after referrer selection and before dispatch, including
 on redirect re-entry. It uses the request's UserAgent store and exempts localhost

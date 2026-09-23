@@ -281,7 +281,10 @@ Current implementation sequence:
    remains with Workers. Neither media nor worker implementation gates this
    preflight work. Blob response/range handling and dispatch remain in Fetch 8C;
    creator-document inheritance has an approved HTML TODO regression.
-   Continue with Mixed Content/upgrading and CSP. Network report delivery remains gated on
+   Mixed Content/upgrading's independent algorithms are complete: policy state,
+   request upgrades, navigation preference headers, and request/response/download
+   checks. Fetch/HTML consumer wiring remains at the recorded integration gates.
+   CSP is the last independent preflight task. Network report delivery remains gated on
    Fetch. CSP copying and policy delivery
    remain with their policy owners.
    Complete the container relationship with HTML's child-navigable lifecycle.

@@ -26,6 +26,10 @@ export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment 
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */
   hasCrossSiteAncestor: boolean;
+  /** Whether this client's origin or a Window ancestor prohibits mixed content. */
+  prohibitsMixedSecurityContexts(): boolean;
+  /** Upgrade policy and navigation targets inherited or enabled for this client. */
+  insecureRequestsPolicy: FetchInsecureRequestsPolicy;
   /** Source URL selected by the client's global, or null when disclosure is prohibited. */
   getReferrerSource(): URLRecord | null;
   /** Document or worker URL for reports, or null for a global outside those categories. */
@@ -47,6 +51,14 @@ export type FetchPromptTarget = {
 
 /** Type-only marker declared by HTML traversables; it has no runtime value. */
 export declare const fetchPromptTargetBrand: unique symbol;
+
+/** Upgrade Insecure Requests state supplied by the client's environment. */
+export interface FetchInsecureRequestsPolicy {
+  /** Whether the client upgrades insecure subresource and nested navigation requests. */
+  upgrade: boolean;
+  /** Whether this top-level navigation matches an opted-in host and port. */
+  shouldUpgradeNavigation(url: URLRecord): boolean;
+}
 
 /** HTML's policy container, exposing the policies currently consumed by Fetch. */
 export type FetchPolicyContainer = {

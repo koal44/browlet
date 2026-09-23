@@ -23,6 +23,7 @@ import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
 import type { ReferrerPolicy } from '../../fetch/index';
+import { InsecureRequestsPolicy } from './policy/upgrade-insecure-requests';
 import { HTML_NAMESPACE } from '../../infra/index';
 import { unsafeSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
@@ -40,6 +41,8 @@ export class BrowsingContext {
   isAuxiliary = false;
   initialURL: URLRecord | null = null;
   virtualBrowsingContextGroupID = 0;
+  /** Upgrade policy inherited from the embedding document when this context was created. */
+  insecureRequestsPolicy = new InsecureRequestsPolicy();
   #group: BrowsingContextGroup | null = null;
 
   /*
@@ -83,6 +86,14 @@ export class BrowsingContext {
     this.#windowProxy = proxy;
   }
 
+  /** Copy the embedding document's upgrade policy when creating this nested context. */
+  // https://w3c.github.io/webappsec-upgrade-insecure-requests/#nesting
+  inheritInsecureRequestsPolicy(embedder: ElementImpl): void {
+    // Adoption changes the node document without changing the element's realm.
+    const policy = embedder.getNodeDocument()!.env.insecureRequestsPolicy;
+    if (policy.upgrade) this.insecureRequestsPolicy = policy.clone();
+  }
+
   setGroup(group: BrowsingContextGroup | null): void {
     this.#group = group;
   }
@@ -102,6 +113,7 @@ export function createNewBrowsingContextAndDocument(
   group: BrowsingContextGroup,
 ): [browsingContext: BrowsingContext, document: DocumentImpl] {
   const browsingContext = new BrowsingContext();
+  if (embedder !== null) browsingContext.inheritInsecureRequestsPolicy(embedder);
   const unsafeContextCreationTime = unsafeSharedCurrentTime();
   let creatorOrigin: Origin | null = null;
   let creatorBaseURL: URLRecord | null = null;
@@ -172,6 +184,7 @@ export function createNewBrowsingContextAndDocument(
   }
 
   window.setAssociatedDocument(document);
+  document.initializeInsecureRequestsPolicy();
   document.readyForPostLoadTasks = true;
   populateWithHTMLHeadBody(document);
   makeActive(document);

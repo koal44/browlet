@@ -101,6 +101,9 @@ export class FetchRequest {
   historyNavigation = false;
   /** Whether the initiating navigation carries user activation. */
   userActivation = false;
+  /** Identifies form navigation for Upgrade Insecure Requests, including cross-origin GET forms. */
+  // Supplied by HTML's form navigation path; the HTTP method alone cannot identify a form.
+  isFormSubmission = false;
   /** WebDriver identifier for the navigation, distinct from this request's own ID. */
   webDriverNavigationId: string | null = null;
   /** Whether this request participates in HTML's render-blocking mechanism. */
@@ -203,6 +206,40 @@ export class FetchRequest {
     });
   }
 
+  /** Advertise navigation upgrade support and apply the client's enforced upgrade policy. */
+  // https://w3c.github.io/webappsec-upgrade-insecure-requests/#upgrade-request
+  upgradeInsecureRequest(): void {
+    // Sending this on every navigation is permitted, including to preloadable
+    // HSTS hosts. Set rather than append so redirect re-entry keeps one value.
+    if (this.isNavigation) this.headerList.set('Upgrade-Insecure-Requests', '1');
+    const client = this.client;
+    if (client === null || !client.insecureRequestsPolicy.upgrade) return;
+    const url = this.currentURL;
+    // Follow Chromium's trustworthy-URL exemption. Gecko also leaves loopback
+    // HTTP services alone, even under an explicit upgrade policy.
+    if (url.scheme !== 'http' || this.userAgent.isURLPotentiallyTrustworthy(url)) return;
+    if (this.destination === 'document' && !this.isFormSubmission &&
+      !client.insecureRequestsPolicy.shouldUpgradeNavigation(url)) return;
+
+    // Apply upgrades to the current redirect target, preserving earlier hops.
+    url.scheme = 'https';
+    if (url.port === 443) url.port = null;
+  }
+
+  /** Upgrade eligible mixed images, audio, and video before mixed-content blocking. */
+  // https://w3c.github.io/webappsec-mixed-content/#upgrade-algorithm
+  upgradeMixedContent(): void {
+    const url = this.currentURL;
+    if (url.scheme !== 'http' || this.userAgent.isURLPotentiallyTrustworthy(url) ||
+      url.host?.kind === 'ipv4' || url.host?.kind === 'ipv6' ||
+      this.client === null || !this.client.prohibitsMixedSecurityContexts()) return;
+    if (this.destination !== 'image' && this.destination !== 'audio' && this.destination !== 'video') return;
+    if (this.destination === 'image' && this.initiator === 'imageset') return;
+    // The algorithm has no CORS-mode exclusion; normal CORS checks still apply.
+    url.scheme = 'https';
+    if (url.port === 443) url.port = null;
+  }
+
   /** Upgrade the current HTTP URL when this user agent's HSTS policy requires HTTPS. */
   // https://www.rfc-editor.org/rfc/rfc6797.html#section-8.3
   // HSTS branch of https://fetch.spec.whatwg.org/#concept-main-fetch, after referrer selection.
@@ -217,6 +254,16 @@ export class FetchRequest {
     // URL parsing already represents HTTP's port 80 as null. Keep HTTPS's
     // default port canonical too; every other explicit port remains unchanged.
     if (url.port === 443) url.port = null;
+  }
+
+  /** Whether fetching this request would expose mixed content to its client. */
+  // https://w3c.github.io/webappsec-mixed-content/#should-block-fetch
+  isBlockedByMixedContent(): boolean {
+    // HTML uses document for top-level navigation and the container's local name
+    // for nested navigation. A browser-initiated request has no client to protect.
+    return this.client !== null && this.destination !== 'document' &&
+      this.client.prohibitsMixedSecurityContexts() &&
+      !this.userAgent.isURLPotentiallyTrustworthy(this.currentURL);
   }
 
   /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */

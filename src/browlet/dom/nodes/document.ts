@@ -15,6 +15,7 @@ import type { Navigable } from '../../browsing/navigable';
 import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
 import type { NavigationParams, NavigationRequest } from '../../browsing/navigation/navigation';
 import type { Environment } from '../../scripting/environment';
+import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
 import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
 import type { Realm } from '../../scripting/realm';
@@ -583,9 +584,22 @@ export class DocumentImpl extends NodeImpl {
     this.ancestorOriginsList = [];
   }
 
+  /** Inherit the browsing context's upgrade policy before applying this document's own directives. */
+  // https://w3c.github.io/webappsec-upgrade-insecure-requests/#nesting
+  initializeInsecureRequestsPolicy(): void {
+    const policy = this.browsingContext?.insecureRequestsPolicy;
+    const env = this.env;
+    if (policy?.upgrade) env.insecureRequestsPolicy = policy.clone();
+    // Initial about:blank replacement can reuse the Window and environment.
+    else if (env.insecureRequestsPolicy.upgrade) env.insecureRequestsPolicy = new InsecureRequestsPolicy();
+  }
+
   /** Initialize the document's delivered Content Security Policies. */
   initializeCSP(): void {
     // PROVISIONAL: run CSP initialization when response parsing and CSP lists exist.
+    // An enforced upgrade-insecure-requests directive enables
+    // this.env.insecureRequestsPolicy.enableFor(this.url).
+    // Report-only directives must leave that policy unchanged.
   }
 
   /** Record the referrer selected by the request that created this document. */

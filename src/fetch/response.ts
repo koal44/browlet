@@ -201,6 +201,29 @@ export class FetchResponse {
     }
   }
 
+  /** Whether this internal response would expose mixed content to the request's client. */
+  // https://w3c.github.io/webappsec-mixed-content/#should-block-response
+  isBlockedByMixedContent(request: FetchRequest): boolean {
+    if (request.client === null || request.destination === 'document' ||
+      !request.client.prohibitsMixedSecurityContexts()) return false;
+    // Main Fetch fills an empty URL list before running its response checks.
+    const url = this.url;
+    if (url === null) throw new InternalError('Mixed-content response checking requires a response URL');
+    return !request.userAgent.isURLPotentiallyTrustworthy(url);
+  }
+
+  /** Whether a trustworthy source URL initiated a download with any untrustworthy response hop. */
+  // Extracts the shared rejection condition added to HTML's attachment-response
+  // navigation branch and hyperlink-download path. Their callers check this
+  // before "handle as a download"; this predicate does not perform the download.
+  // https://w3c.github.io/webappsec-mixed-content/#html
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-as-a-download
+  // https://html.spec.whatwg.org/multipage/links.html#downloading-hyperlinks
+  isMixedDownload(sourceURL: URLRecord, env: FetchEnvironment): boolean {
+    return env.userAgent.isURLPotentiallyTrustworthy(sourceURL) &&
+      this.urlList.some((url) => !env.userAgent.isURLPotentiallyTrustworthy(url));
+  }
+
   /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(

@@ -17,6 +17,8 @@ export function createClientEnvironment(url = 'https://example.test/'): FetchEnv
     creationURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),
     hasCrossSiteAncestor: false,
+    prohibitsMixedSecurityContexts() { return this.userAgent.isURLPotentiallyTrustworthy(topLevelCreationURL); },
+    insecureRequestsPolicy: { upgrade: false, shouldUpgradeNavigation: () => false },
     getReferrerSource: () => topLevelCreationURL,
     getReportingSource: () => topLevelCreationURL,
     getTraversableForUserPrompts: () => null,

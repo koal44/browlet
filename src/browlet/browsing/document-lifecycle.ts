@@ -73,6 +73,7 @@ export function createAndInitializeDocument(
 
   window.setAssociatedDocument(document);
   document.initializeAncestry(navigationParams);
+  document.initializeInsecureRequestsPolicy();
   document.initializeCSP();
   document.initializeReferrer(navigationParams.request);
   document.createNavigationTimingEntry(navigationParams);
