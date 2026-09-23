@@ -445,19 +445,19 @@ describe('Web IDL implementation bindings', () => {
   it('constructs implementations with contextual dependencies', () => {
     type Environment = { global: object; };
     class ContextualDependencyImpl {
-      #environment: Environment;
+      #env: Environment;
       #value: string;
 
       constructor(
         value: string | undefined,
-        environment: Environment,
+        env: Environment,
       ) {
-        this.#environment = environment;
+        this.#env = env;
         this.#value = value ?? 'created';
       }
 
-      get environment(): Environment {
-        return this.#environment;
+      get env(): Environment {
+        return this.#env;
       }
 
       get value(): string {
@@ -480,7 +480,7 @@ describe('Web IDL implementation bindings', () => {
           [],
           invokeWith(atArg(0, (ctx) => ctx.construct(ContextualDependencyImpl))),
         ),
-        roAttr('environment', idlType.object),
+        roAttr('env', idlType.object),
         roAttr('value', idlType.DOMString),
       ],
     });
@@ -503,9 +503,9 @@ describe('Web IDL implementation bindings', () => {
     const constructed = new ContextualDependency('explicit');
     const created = ContextualDependency.create();
 
-    expect(constructed.environment.global).toBe(realm.global);
+    expect(constructed.env.global).toBe(realm.global);
     expect(constructed.value).toBe('explicit');
-    expect(created.environment.global).toBe(realm.global);
+    expect(created.env.global).toBe(realm.global);
     expect(created.value).toBe('created');
   });
 

@@ -1,4 +1,4 @@
-import { createExecution } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 import type { PromiseValue } from '../../../src/infra/promises';
 import { TestRealm } from '../../web-idl/test-realm';
 import {
@@ -12,7 +12,7 @@ export function createTransformStream(
   readableStrategy: QueuingStrategyRecord = {},
 ): TransformStreamImpl {
   return new TransformStreamImpl(
-    transformer, writableStrategy, readableStrategy, createExecution(),
+    transformer, writableStrategy, readableStrategy, createEnvironment(),
   );
 }
 
@@ -20,7 +20,7 @@ export function createWritableStream(
   sink: UnderlyingSink | null = {},
   strategy: QueuingStrategyRecord = {},
 ): WritableStreamImpl {
-  return new WritableStreamImpl(sink, strategy, createExecution());
+  return new WritableStreamImpl(sink, strategy, createEnvironment());
 }
 
 export function createPromises() {

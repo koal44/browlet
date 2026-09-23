@@ -9,6 +9,7 @@ import {
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { InternalError } from '../../src/infra/internal-error';
+import { ReadableStreamImpl } from '../../src/streams/index';
 import type { StampedPlatformObject } from '../../src/web-idl/index';
 import {
   structuredDeserialize,
@@ -124,6 +125,11 @@ describe('File API Blob projection', () => {
     expect(stream).not.toBeInstanceOf(requireFunction(second, 'ReadableStream'));
     expect(slice).toBeInstanceOf(requireFunction(first, 'Blob'));
     expect(slice).not.toBeInstanceOf(requireFunction(second, 'Blob'));
+
+    const ownerRealm = getRelevantRealm(first);
+    const ownerBinding = getBindingContext(ownerRealm);
+    expect(ownerBinding.unwrap(stream, ReadableStreamImpl)!.env).toBe(ownerRealm.env);
+    expect(ownerBinding.unwrap(slice, BlobImpl)!.stream().env).toBe(ownerRealm.env);
 
     const reader = call(call(slice, 'stream') as object, 'getReader') as object;
     const result = await call(reader, 'read') as ReadableStreamReadResult<Uint8Array>;
@@ -247,7 +253,7 @@ describe('File API Blob projection', () => {
       snapshotState: { version: 1 },
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
-    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getBindingContext(getRelevantRealm(window)).getExecution());
+    const implementation = BlobImpl.create(BlobData.fromSource(source), '', source.snapshotState, getBindingContext(getRelevantRealm(window)).getEnvironment());
     const blob = projectBlob(window, implementation);
 
     await expect(call(blob, 'bytes')).rejects.toMatchObject({
@@ -383,7 +389,7 @@ describe('File API File and FileList projection', () => {
   it('creates host Files without exposing paths or invalid MIME metadata', async () => {
     const window = createWindow();
     const context = getBindingContext(getRelevantRealm(window));
-    const exec = context.getExecution();
+    const env = context.getEnvironment();
     const source: BlobByteSource = {
       size: 3,
       snapshotState: { version: 1 },
@@ -395,7 +401,7 @@ describe('File API File and FileList projection', () => {
       lastModified: 12,
       name: 'picked.bin',
       type: 'application/octet-stream',
-    }, exec);
+    }, env);
     const file = context.project(FileImpl, implementation);
 
     expect(file).toBeInstanceOf(requireFunction(window, 'File'));
@@ -409,21 +415,21 @@ describe('File API File and FileList projection', () => {
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'Text/Plain',
-    }, exec)).toThrow(InternalError);
+    }, env)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'text/plain;charset=utf-8',
-    }, exec)).toThrow(InternalError);
+    }, env)).toThrow(InternalError);
     expect(() => FileImpl.fromHost(source, {
       name: 'invalid.txt',
       type: 'application/example;name=é',
-    }, exec)).toThrow(InternalError);
+    }, env)).toThrow(InternalError);
 
     const before = Date.now();
     const unknown = context.project(FileImpl, FileImpl.fromHost(
       source,
       { name: 'unknown.bin', type: '' },
-      exec,
+      env,
     ));
     const modificationTime = Reflect.get(unknown, 'lastModified') as number;
     const after = Date.now();

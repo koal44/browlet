@@ -2,7 +2,7 @@ import type { BlobImpl } from '../file/index';
 import { utf8Encode } from '../encoding/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { PromiseValue } from '../infra/promises';
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
@@ -22,7 +22,7 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
-  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment, type FetchUserAgent,
+  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment,
 } from './infrastructure';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
@@ -175,12 +175,11 @@ export class FetchResponse {
    * https://fetch.spec.whatwg.org/#concept-response-location-url
    * Undefined means absent; null means extraction or URL parsing failed.
    */
-  // SPEC_MISMATCH: location URL(response, requestFragment) -> URL, null, or failure
-  getLocationURL(requestFragment: string | null, userAgent: FetchUserAgent): URLRecord | undefined | null {
+  getLocationURL(requestFragment: string | null, env: FetchEnvironment): URLRecord | undefined | null {
     if (!isRedirectStatus(this.status)) return undefined;
     const values = this.headerList.extractValues('Location', (value) => [value], false);
     if (values === undefined || values === null) return values;
-    const url = userAgent.parseURL(values[0]!, this.url).url;
+    const url = env.parseURL(values[0]!, this.url).url;
     if (url !== null && url.fragment === null) url.fragment = requestFragment;
     return url;
   }
@@ -205,19 +204,19 @@ export class FetchResponse {
   /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(
-    origin: Origin, settings: FetchEnvironment, destination: string, forNavigation = false,
+    origin: Origin, env: FetchEnvironment, destination: string, forNavigation = false,
   ): boolean {
-    const policy = settings.policyContainer.embedderPolicy;
+    const policy = env.policyContainer.embedderPolicy;
     if (this.isBlockedByCORPInternal(origin, 'unsafe-none', forNavigation)) {
       return true;
     }
     if (this.isBlockedByCORPInternal(origin, policy.reportOnlyValue, forNavigation)) {
-      this.queueCORPViolationReport(settings, destination, true);
+      this.queueCORPViolationReport(env, destination, true);
     }
     if (!this.isBlockedByCORPInternal(origin, policy.value, forNavigation)) {
       return false;
     }
-    this.queueCORPViolationReport(settings, destination, false);
+    this.queueCORPViolationReport(env, destination, false);
     return true;
   }
 
@@ -245,11 +244,11 @@ export class FetchResponse {
   /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
   // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
   queueCORPViolationReport(
-    settings: FetchEnvironment, destination: string, reportOnly: boolean,
+    env: FetchEnvironment, destination: string, reportOnly: boolean,
   ): void {
-    const policy = settings.policyContainer.embedderPolicy;
+    const policy = env.policyContainer.embedderPolicy;
     const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
-    settings.queueReport('coep', endpoint, {
+    env.queueReport('coep', endpoint, {
       type: 'corp', blockedURL: this.serializeURLForReporting(), destination,
       disposition: reportOnly ? 'reporting' : 'enforce',
     });
@@ -309,54 +308,53 @@ export class ResponseImpl {
   /** Body operations reading this response's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution and allocation facilities, retained by cloned Responses. */
-  #exec: RealmExecution;
+  #env: JSEnvironment;
 
   // Internal allocation from an existing response and header guard.
   // https://fetch.spec.whatwg.org/#response-create
   constructor(
-    response: FetchResponse, guard: HeadersGuard, exec: RealmExecution,
+    response: FetchResponse, guard: HeadersGuard, env: JSEnvironment,
   ) {
     this.#response = response;
     this.#headers = new HeadersImpl(response.headerList, guard);
-    this.#bodyMixin = new BodyMixin(response, exec);
-    this.#exec = exec;
+    this.#bodyMixin = new BodyMixin(response, env);
+    this.#env = env;
   }
 
   /** Construct a Response from converted author arguments. */
   // https://fetch.spec.whatwg.org/#dom-response
-  static create(body: BodyInitValue | null, init: FetchResponseInit, exec: RealmExecution): ResponseImpl {
-    const response = new ResponseImpl(new FetchResponse(), 'response', exec);
-    const extracted = body === null ? null : FetchBody.extract(body, false, exec);
+  static create(body: BodyInitValue | null, init: FetchResponseInit, env: JSEnvironment): ResponseImpl {
+    const response = new ResponseImpl(new FetchResponse(), 'response', env);
+    const extracted = body === null ? null : FetchBody.extract(body, false, env);
     response.#initialize(init, extracted);
     return response;
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-error
-  static error(exec: RealmExecution): ResponseImpl {
-    return new ResponseImpl(FetchResponse.networkError(), 'immutable', exec);
+  static error(env: JSEnvironment): ResponseImpl {
+    return new ResponseImpl(FetchResponse.networkError(), 'immutable', env);
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-redirect
-  // SPEC_MISMATCH: Response.redirect(url, status) -> Response
   static redirect(
-    url: string, status: number, environment: FetchEnvironment & { exec: RealmExecution; },
+    url: string, status: number, env: FetchEnvironment,
   ): ResponseImpl {
-    const parsedURL = environment.userAgent.parseURL(url, environment.apiBaseURL).url;
+    const parsedURL = env.parseURL(url, env.apiBaseURL).url;
     if (parsedURL === null) throw new TypeError('Invalid redirect URL');
     if (!isRedirectStatus(status)) throw new RangeError('Invalid redirect status');
     const response = new FetchResponse();
     response.status = status;
     response.headerList.append('Location', serializeURL(parsedURL));
-    return new ResponseImpl(response, 'immutable', environment.exec);
+    return new ResponseImpl(response, 'immutable', env);
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-json
-  static json(data: unknown, init: FetchResponseInit, exec: RealmExecution): ResponseImpl {
+  static json(data: unknown, init: FetchResponseInit, env: JSEnvironment): ResponseImpl {
     // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
-    const json = exec.stringifyJSON(data);
+    const json = env.exec.stringifyJSON(data);
     if (json === undefined) throw new TypeError('Value cannot be serialized as JSON');
-    const body = FetchBody.fromBytes(utf8Encode(json), exec);
-    const response = new ResponseImpl(new FetchResponse(), 'response', exec);
+    const body = FetchBody.fromBytes(utf8Encode(json), env);
+    const response = new ResponseImpl(new FetchResponse(), 'response', env);
     response.#initialize(init, { body, type: 'application/json' });
     return response;
   }
@@ -372,7 +370,7 @@ export class ResponseImpl {
   // https://fetch.spec.whatwg.org/#dom-response-clone
   clone(): ResponseImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Response body is disturbed or locked');
-    return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#exec);
+    return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#env);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -440,7 +438,7 @@ export const responseIDL = defineInterface({
   name: 'Response',
   exposed: ['Window', 'Worker'],
   implementation: impl(ResponseImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor(
@@ -450,13 +448,13 @@ export const responseIDL = defineInterface({
       ],
       {
         construct(ctx, body, init) {
-          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getExecution());
+          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getEnvironment());
         },
       },
     ),
     staticOp('error', reference('Response'),
       [],
-      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getExecution())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getEnvironment())) },
     ),
     staticOp('redirect', reference('Response'),
       [
@@ -465,7 +463,7 @@ export const responseIDL = defineInterface({
       ],
       {
         ...xattr('NewObject'),
-        ...invokeWith(atArg(2, (ctx): FetchEnvironment & { exec: RealmExecution; } =>
+        ...invokeWith(atArg(2, (ctx): FetchEnvironment =>
           getFetchEnvironment(ctx, responseIDL))),
       },
     ),
@@ -474,7 +472,7 @@ export const responseIDL = defineInterface({
         arg('data', idlType.any),
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
-      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getExecution())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getEnvironment())) },
     ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),

@@ -4,7 +4,7 @@ import { FetchRequest, type Destination } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { getSerializedCookieDefaultPath } from '../../../src/fetch/url';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
-import { createClientSettings } from '../client-fixture';
+import { createClientEnvironment } from '../client-fixture';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -226,7 +226,7 @@ describe('Fetch serialized cookie default paths', () => {
 });
 
 function createCookieRequest(clientURL = 'https://shop.example.test/') {
-  const client = createClientSettings(clientURL);
+  const client = createClientEnvironment(clientURL);
   const userAgent = client.userAgent;
   const request = new FetchRequest(parseURL('https://shop.example.test/account/page').url!, client, userAgent);
   const seed = new FetchRequest(request.url, null, userAgent);

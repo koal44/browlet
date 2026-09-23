@@ -45,7 +45,7 @@ export class NavigationParams {
   /** Whether COOP requires changing the destination's browsing context group. */
   coopEnforcementResult: OpenerPolicyEnforcementResult = { needsBrowsingContextGroupSwitch: false };
   /** Environment reserved by Fetch before constructing the document's realm. */
-  reservedEnvironment: EnvironmentRecord | null = null;
+  reservedEnv: EnvironmentRecord | null = null;
   /** Origin selected for the new document. */
   origin: Origin;
   /** Response policies transferred to the new document. */
@@ -74,11 +74,11 @@ export class NavigationParams {
   static fromSource(navigable: Navigable, url: URLRecord, body: string): NavigationParams {
     const window = navigable.activeWindow;
     if (window === null) throw new InternalError('Navigation requires an active Window');
-    const environment = getRelevantRealm(window).environment;
+    const env = getRelevantRealm(window).env;
     return new NavigationParams(navigable, {
       url, body, headers: new Map(),
       timingInfo: {
-        startTime: coarsenedSharedCurrentTime(environment.crossOriginIsolatedCapability).milliseconds,
+        startTime: coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
       },
       hasCrossOriginRedirects: false,
     });
@@ -271,8 +271,8 @@ function applyPushOrReplaceHistoryStep(
     browsingContext.windowProxy,
     window,
   );
-  const environment = realm.environment;
-  environment.markExecutionReady();
+  const env = realm.env;
+  env.markExecutionReady();
 }
 
 function clearForwardSessionHistory(

@@ -161,7 +161,7 @@ delivering performance entries remain at the later timing producers, using the
 existing [Performance owner](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration).
 Service Worker timing defaults to null; its shared data type records the six
 fields supplied by Service Workers, whose execution remains deferred.
-`isOffline(environment)` reads the owning UserAgent's live offline assumption
+`isOffline(env)` reads the owning UserAgent's live offline assumption
 before asking the same UserAgent for environment-scoped BiDi state. Browlet's base `Environment`
 retains the UserAgent supplied during construction; Window setup receives the
 target browsing-context group's owner, including across navigation.
@@ -312,7 +312,7 @@ failure.
 
 `FetchBody.fromBytes` brings forward only §5.2's internal byte-sequence path. It retains
 the source/length and creates a byte-stream implementation, filled through supplied
-parallel scheduling. `FetchBody` retains its `RealmExecution` from construction
+parallel scheduling. `FetchBody` retains its `JSEnvironment` from construction
 and forwards it when cloning. Its networking facilities supply HTML global
 tasks and parallel execution; the read signatures keep the specified
 callbacks and optional destination. An omitted destination starts a new parallel queue.
@@ -477,7 +477,7 @@ values; `fromBytes()` remains the internal byte-sequence path. Multipart extract
 captures the boundary, exact length, text, and File data without reading Files
 synchronously. File and multipart streams share the existing bounded Blob-data reader.
 `BodyMixin` implements all seven consumption methods, including incremental
-`TextDecoderStream` decoding. Its owner supplies one RealmExecution, including
+`TextDecoderStream` decoding. Its owner supplies one JSEnvironment, whose exec includes
 the relevant global; FormData owns entry creation. JSON uses a captured parse
 intrinsic from that runtime's realm. Body completion targets the receiver's HTML
 networking tasks even when the stream belongs to another realm.

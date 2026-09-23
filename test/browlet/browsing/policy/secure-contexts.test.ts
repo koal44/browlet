@@ -106,7 +106,7 @@ describe('Secure Contexts: URL trustworthiness', () => {
   ] as const)('uses the stored blob creator origin from %s', (creatorURL, expected) => {
     const origin = obtainURLOrigin(parseURL(creatorURL).url!);
     const url = parseURL(expected ? 'blob:http://misleading.test/id' : 'blob:https://misleading.test/id').url!;
-    url.blobURLEntry = { environment: { origin } };
+    url.blobURLEntry = { env: { origin } };
 
     expect(obtainURLOrigin(url)).toBe(origin);
     expect(userAgent.isURLPotentiallyTrustworthy(url)).toBe(expected);
@@ -128,10 +128,10 @@ describe('Secure Contexts: Window classification', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
 
-    expect(realm.environment.origin.kind).toBe('opaque');
-    expect(realm.environmentRecord).toBe(realm.environment);
+    expect(realm.env.origin.kind).toBe('opaque');
+    expect(realm.envRecord).toBe(realm.env);
     expect(realm.secureContext).toBe(false);
-    expect(realm.environment.isSecureContext).toBe(false);
+    expect(realm.env.isSecureContext).toBe(false);
     expect(await browlet.evaluate(() => isSecureContext)).toBe(false);
   });
 
@@ -147,8 +147,8 @@ describe('Secure Contexts: Window classification', () => {
     const realm = getRelevantRealm(browlet.window);
 
     expect(realm.secureContext).toBe(expected);
-    expect(realm.environmentRecord).toBe(realm.environment);
-    expect(realm.environment.isSecureContext).toBe(expected);
+    expect(realm.envRecord).toBe(realm.env);
+    expect(realm.env.isSecureContext).toBe(expected);
     expect(browlet.window.isSecureContext).toBe(expected);
     expect(browlet.document.title).toBe(String(expected));
     expect(await browlet.evaluate(() => isSecureContext)).toBe(expected);
@@ -164,12 +164,12 @@ describe('Secure Contexts: Window classification', () => {
     expect(getRelevantRealm(browlet.window)).not.toBe(secureRealm);
     expect(browlet.window.isSecureContext).toBe(false);
     expect(Reflect.get(oldWindow, 'isSecureContext')).toBe(true);
-    expect(secureRealm.environment.isSecureContext).toBe(true);
+    expect(secureRealm.env.isSecureContext).toBe(true);
   });
 
   it('uses configured trust at creation without changing an existing Window', async () => {
     const browlet = new Browlet({ route: () => '' });
-    const userAgent = getRelevantRealm(browlet.window).environment.userAgent;
+    const userAgent = getRelevantRealm(browlet.window).env.userAgent;
     userAgent.trustworthyOrigins.push(tupleOriginFor('http://example.test/'));
     await browlet.navigate('http://example.test/');
 
@@ -185,23 +185,23 @@ describe('Secure Contexts: Window classification', () => {
     const creationURL = parseURL('http://example.test/').url!;
     const origin = obtainURLOrigin(creationURL);
     userAgent.trustworthyOrigins.push(tupleOriginFor('http://example.test/'));
-    const reservedEnvironment = createEnvironmentRecord({
+    const reservedEnv = createEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
     });
-    expect(reservedEnvironment.isSecureContext).toBe(true);
+    expect(reservedEnv.isSecureContext).toBe(true);
     userAgent.trustworthyOrigins.length = 0;
 
-    const environment = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnvironment,
+    const env = createWindowEnvironment({
+      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
-    const { window } = environment;
+    const { window } = env;
 
     expect(window.isSecureContext).toBe(true);
-    expect(environment.isSecureContext).toBe(true);
-    expect(environment.realm.secureContext).toBe(true);
+    expect(env.isSecureContext).toBe(true);
+    expect(env.realm.secureContext).toBe(true);
   });
 
   it('uses the selected inherited origin for about:blank', () => {
@@ -244,7 +244,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
     });
     const realm = new WindowRealm(new WindowImpl(new URL(url)), {
-      agent: new WindowAgent(), environmentRecord: record,
+      agent: new WindowAgent(), envRecord: record,
     });
     const world = new BindingWorld([
       defineInterface({
@@ -259,24 +259,24 @@ describe('Secure Contexts: Web IDL exposure', () => {
     world.register(realm).install(target);
 
     expect(realm.hostDefined).toBeUndefined();
-    expect(() => realm.environment).toThrow('Realm has no environment');
-    expect(realm.environmentRecord).toBe(record);
+    expect(() => realm.env).toThrow('Realm has no environment');
+    expect(realm.envRecord).toBe(record);
     expect(realm.secureContext).toBe(expected);
     expect(Reflect.has(target, 'SecureProbe')).toBe(expected);
     const constructor = Reflect.get(target, 'OrdinaryProbe') as { prototype: object; };
     expect(Reflect.has(constructor.prototype, 'secureMember')).toBe(expected);
 
-    const environment = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnvironment: record,
+    const env = createWindowEnvironment({
+      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv: record,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
-    const installedTarget = environment.realm.createOrdinaryObject(null);
-    world.register(environment.realm).install(installedTarget);
-    expect(environment.realm.environmentRecord).toBe(environment);
-    expect(environment.realm.hostDefined).toBe(environment);
-    expect(environment.realm.environment).toBe(environment);
-    expect(environment.realm.secureContext).toBe(expected);
-    expect(environment.isSecureContext).toBe(expected);
+    const installedTarget = env.realm.createOrdinaryObject(null);
+    world.register(env.realm).install(installedTarget);
+    expect(env.realm.envRecord).toBe(env);
+    expect(env.realm.hostDefined).toBe(env);
+    expect(env.realm.env).toBe(env);
+    expect(env.realm.secureContext).toBe(expected);
+    expect(env.isSecureContext).toBe(expected);
     expect(Reflect.has(installedTarget, 'SecureProbe')).toBe(expected);
     const installedConstructor = Reflect.get(installedTarget, 'OrdinaryProbe') as { prototype: object; };
     expect(Reflect.has(installedConstructor.prototype, 'secureMember')).toBe(expected);
@@ -292,12 +292,12 @@ function tupleOriginFor(input: string): TupleOrigin {
 // Compose real Window bindings while iframe/creator navigation remains unimplemented.
 function createWindow(userAgent: UserAgent, origin: Origin, parent: WindowImpl | null = null): WindowImpl {
   const creationURL = parseURL('about:blank').url!;
-  const environment = createWindowEnvironment({
+  const env = createWindowEnvironment({
     agent: new WindowAgent(), userAgent, creationURL, origin, parent,
     topLevelCreationURL: creationURL, topLevelOrigin: origin,
   });
-  const { window } = environment;
-  const document = createDocument(environment.realm);
+  const { window } = env;
+  const document = createDocument(env.realm);
   document.origin = origin;
   document.url = creationURL;
   window.setAssociatedDocument(document);

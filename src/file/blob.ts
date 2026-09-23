@@ -1,6 +1,6 @@
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 import type { PromiseValue } from '../infra/promises';
-import { type RealmExecution, getBufferSourceCopy } from '../js-engine/index';
+import { type JSEnvironment, getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
@@ -40,16 +40,16 @@ import { BlobData, type BlobSnapshotState } from './blob-data';
  */
 export class BlobImpl {
   #data: BlobData;
-  #exec: RealmExecution;
+  #env: JSEnvironment;
   #snapshotState: BlobSnapshotState;
   #type: string;
 
   constructor(
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
-    exec: RealmExecution,
+    env: JSEnvironment,
   ) {
-    this.#exec = exec;
+    this.#env = env;
     this.#data = this.#processParts(blobParts, options);
     this.#snapshotState = this.#data.captureSnapshotState();
     this.#type = normalizeBlobType(options.type ?? '');
@@ -76,13 +76,13 @@ export class BlobImpl {
       this.#data.slice(relativeStart, span),
       normalizeBlobType(contentType ?? ''),
       this.#snapshotState,
-      this.#exec,
+      this.#env,
     );
   }
 
   /** File API §3, get stream. */
   stream(): ReadableStreamImpl {
-    return this.#data.stream(this.#exec);
+    return this.#data.stream(this.#env);
   }
 
   text(): PromiseValue<string> {
@@ -98,7 +98,7 @@ export class BlobImpl {
   textStream(): ReadableStreamImpl {
     const stream = this.stream();
     const decoder = new TextDecoderStreamImpl(
-      'utf-8', { fatal: false, ignoreBOM: false }, this.#exec,
+      'utf-8', { fatal: false, ignoreBOM: false }, this.#env,
     );
     return stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
@@ -109,7 +109,7 @@ export class BlobImpl {
 
   /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
   #read(): PromiseValue<Uint8Array> {
-    const result = this.#exec.promises.withResolvers<Uint8Array>();
+    const result = this.#env.exec.promises.withResolvers<Uint8Array>();
     const reader = this.stream().getDefaultReader();
     reader.readAllBytes(result.resolve, result.reject);
     return result.promise;
@@ -125,9 +125,9 @@ export class BlobImpl {
     data: BlobData,
     type: string,
     snapshotState: BlobSnapshotState,
-    exec: RealmExecution,
+    env: JSEnvironment,
   ): BlobImpl {
-    const blob = new BlobImpl([], {}, exec);
+    const blob = new BlobImpl([], {}, env);
     blob.#data = data;
     blob.#snapshotState = snapshotState;
     blob.#type = type;
@@ -160,7 +160,7 @@ export class BlobImpl {
     for (const element of parts) {
       if (typeof element === 'string') {
         const string = options.endings === 'native'
-          ? convertLineEndingsToNative(element, this.#exec)
+          ? convertLineEndingsToNative(element, this.#env)
           : element;
         data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
       } else if (BlobImpl.is(element)) {
@@ -191,9 +191,9 @@ export type BlobSerializationState = {
 /** File API §3.1, convert line endings to native. */
 export function convertLineEndingsToNative(
   value: string,
-  exec: RealmExecution,
+  env: JSEnvironment,
 ): string {
-  return value.replace(lineEndingPattern, exec.nativeLineEnding);
+  return value.replace(lineEndingPattern, env.exec.nativeLineEnding);
 }
 
 const lineEndingPattern = /\r\n|\r|\n/g;
@@ -246,7 +246,7 @@ export const blobIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(BlobImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor([

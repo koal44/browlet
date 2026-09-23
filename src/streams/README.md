@@ -24,7 +24,8 @@ implementation as their receiver.
 
 ## Runtime and bindings
 
-A stream retains one trailing `RealmExecution` and passes it to derived streams.
+A stream retains one trailing `JSEnvironment` and passes it to derived streams.
+Its `env.exec` supplies execution, allocation, and task delivery.
 Its `PromiseValue` chains retain their execution destination. Streams use that
 facility for asynchronous work; native `async`/`await` and global microtask
 scheduling are excluded by ESLint. Native backend I/O enters through explicit

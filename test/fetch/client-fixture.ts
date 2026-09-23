@@ -6,10 +6,13 @@ import type {
 } from '../../src/fetch/infrastructure';
 import { CookieStore } from '../../src/http/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { createEnvironment } from '../js-engine/execution-fixture';
 
-export function createClientSettings(url = 'https://example.test/'): FetchEnvironment {
+export function createClientEnvironment(url = 'https://example.test/'): FetchEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   return {
+    ...createEnvironment(),
+    parseURL(input, base, encoding) { return this.userAgent.parseURL(input, base, encoding); },
     apiBaseURL: topLevelCreationURL,
     creationURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),

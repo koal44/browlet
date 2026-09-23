@@ -9,7 +9,7 @@ import {
 } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
 import { getSingleByteCodec } from '../../src/encoding/codecs/single-byte';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 
 const encodings: Encoding[] = [
   'UTF-8', 'IBM866',
@@ -145,10 +145,10 @@ describe('Encoding §6.1: encode or fail', () => {
     const input = IOQueue.from('é💩€');
     const encoder = getSingleByteCodec('windows-1252')!;
     const output = new IOQueue<Uint8Array>();
-    const exec = createExecution();
+    const env = createEnvironment();
     const results: unknown[] = [];
     output.push(Uint8Array.of(0x2a));
-    encodeOrFail(input, encoder, output, exec).observe(
+    encodeOrFail(input, encoder, output, env).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -158,7 +158,7 @@ describe('Encoding §6.1: encode or fail', () => {
     expect(input.peek(2)).toEqual([0x20ac]);
 
     const remainder = new IOQueue<Uint8Array>();
-    encodeOrFail(input, encoder, remainder, exec).observe(
+    encodeOrFail(input, encoder, remainder, env).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -173,7 +173,7 @@ describe('Encoding §6.1: encode or fail', () => {
     const output = new IOQueue<Uint8Array>();
     const results: unknown[] = [];
     input.push('a');
-    encodeOrFail(input, getSingleByteCodec('windows-1252')!, output, createExecution()).observe(
+    encodeOrFail(input, getSingleByteCodec('windows-1252')!, output, createEnvironment()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     expect(output.takeBytes()).toEqual(Uint8Array.of(0x61));
@@ -195,7 +195,7 @@ describe('Encoding §6.1: completed queue hooks', () => {
     const bytes = encoding === 'UTF-16LE' ? [0x41, 0] : encoding === 'UTF-16BE' ? [0, 0x41] : [0x41];
     const output = IOQueue.from('prefix:');
     const results: unknown[] = [];
-    decodeQueue(IOQueue.from(Uint8Array.from(bytes)), encoding, output, createExecution()).observe(
+    decodeQueue(IOQueue.from(Uint8Array.from(bytes)), encoding, output, createEnvironment()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     await nextTurn();
@@ -210,7 +210,7 @@ describe('Encoding §6.1: completed queue hooks', () => {
       const output = new IOQueue<Uint8Array>();
       output.push(Uint8Array.of(0x3e));
       const results: unknown[] = [];
-      encodeQueue(input, encoding, output, createExecution()).observe(
+      encodeQueue(input, encoding, output, createEnvironment()).observe(
         (value) => { results.push(value); }, (error) => { results.push(error); },
       );
       input.push('A');
@@ -232,7 +232,7 @@ describe('Encoding §6.1: completed queue hooks', () => {
     const input = new IOQueue<Uint8Array>();
     const output = new IOQueue<string>();
     const results: unknown[] = [];
-    decodeQueue(input, 'replacement', output, createExecution()).observe(
+    decodeQueue(input, 'replacement', output, createEnvironment()).observe(
       (value) => { results.push(value); }, (error) => { results.push(error); },
     );
     for (const byte of bom) {
@@ -254,10 +254,10 @@ describe('Encoding §6.1: completed queue hooks', () => {
   it('allocates default output and processes a short BOM-only input', async () => {
     const decoded: IOQueue<string>[] = [];
     const errors: unknown[] = [];
-    decodeQueue(IOQueue.from(Uint8Array.of(0xff, 0xfe)), 'UTF-8', undefined, createExecution())
+    decodeQueue(IOQueue.from(Uint8Array.of(0xff, 0xfe)), 'UTF-8', undefined, createEnvironment())
       .observe((value) => { decoded.push(value); }, (error) => { errors.push(error); });
     const encoded: IOQueue<Uint8Array>[] = [];
-    encodeQueue(IOQueue.from('😀'), 'x-user-defined', undefined, createExecution())
+    encodeQueue(IOQueue.from('😀'), 'x-user-defined', undefined, createEnvironment())
       .observe((value) => { encoded.push(value); }, (error) => { errors.push(error); });
     await nextTurn();
     expect(errors).toEqual([]);

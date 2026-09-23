@@ -12,7 +12,7 @@ import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) => {
   it('reads UTF-8 text once and marks the body used immediately', async () => {
     const fixture = createFetchFixture();
-    const body = FetchBody.fromBytes(Uint8Array.of(0xef, 0xbb, 0xbf, 0xc3, 0xa9, 0xff), fixture.exec);
+    const body = FetchBody.fromBytes(Uint8Array.of(0xef, 0xbb, 0xbf, 0xc3, 0xa9, 0xff), fixture.env);
     const api = projectBody(fixture, kind, body);
     expect(api.bodyUsed).toBe(false);
     const result = api.text();
@@ -44,7 +44,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const fixture = createFetchFixture();
     const other = createFetchFixture(fixture.bindings);
     const source = Uint8Array.of(1, 2, 3);
-    const api = projectBody(fixture, kind, FetchBody.fromBytes(source, fixture.exec));
+    const api = projectBody(fixture, kind, FetchBody.fromBytes(source, fixture.env));
     const foreign = projectBody(other, kind, null);
     const result = method === 'arrayBuffer' ? foreign.arrayBuffer.call(api) : foreign.bytes.call(api);
     expect(result).toBeInstanceOf(fixture.realm.intrinsics.promise.constructor);
@@ -60,7 +60,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
 
   it('creates a Blob with the current parsed MIME type', async () => {
     const fixture = createFetchFixture();
-    const api = projectBody(fixture, kind, FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.exec),
+    const api = projectBody(fixture, kind, FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.env),
       'TEXT/PLAIN; charset=utf-8');
     const result = await api.blob();
     expect(fixture.bindings.getRealm(result)).toBe(fixture.realm);
@@ -73,7 +73,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const fixture = createFetchFixture();
     const other = createFetchFixture(fixture.bindings);
     const api = projectBody(fixture, kind,
-      FetchBody.fromBytes(utf8Encode('\ufeff{"items":[{"answer":42}]}'), fixture.exec));
+      FetchBody.fromBytes(utf8Encode('\ufeff{"items":[{"answer":42}]}'), fixture.env));
     const foreign = projectBody(other, kind, null);
     const json = Reflect.get(fixture.realm.global, 'JSON') as object;
     Reflect.set(json, 'parse', () => { throw new Error('Author replacement must not run'); });
@@ -86,7 +86,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
 
   it('rejects malformed JSON with a receiver-realm SyntaxError', async () => {
     const fixture = createFetchFixture();
-    const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('{'), fixture.exec));
+    const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('{'), fixture.env));
     await expect(api.json()).rejects.toBeInstanceOf(fixture.realm.intrinsics.syntaxError);
     expect(api.bodyUsed).toBe(true);
   });
@@ -94,7 +94,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
   it('parses URL-encoded fields and retains duplicate names', async () => {
     const fixture = createFetchFixture();
     const api = projectBody(fixture, kind,
-      FetchBody.fromBytes(utf8Encode('a=one+two&a=%E2%82%AC&empty=&bad=%FF'), fixture.exec),
+      FetchBody.fromBytes(utf8Encode('a=one+two&a=%E2%82%AC&empty=&bad=%FF'), fixture.env),
       'application/x-www-form-urlencoded;charset=windows-1252');
     const form = await api.formData();
     expect(fixture.bindings.getRealm(form)).toBe(fixture.realm);
@@ -106,7 +106,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
 
   it.each([null, 'text/plain', 'multipart/form-data'])('rejects formData for Content-Type %j after consuming', async (type) => {
     const fixture = createFetchFixture();
-    const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('data'), fixture.exec), type);
+    const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('data'), fixture.env), type);
     await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
     expect(api.bodyUsed).toBe(true);
   });
@@ -224,7 +224,7 @@ describe.each(['Request', 'Response'] as const)('%s multipart consumption', (kin
   it.each(['get', 'getAll', 'iteration'] as const)('keeps the producing realm when a File is first exposed by borrowed %s', async (method) => {
     const fixture = createFetchFixture();
     const other = createFetchFixture(fixture.bindings);
-    const api = projectBody(fixture, kind, FetchBody.fromBytes(multipart, fixture.exec), 'multipart/form-data; boundary=boundary');
+    const api = projectBody(fixture, kind, FetchBody.fromBytes(multipart, fixture.env), 'multipart/form-data; boundary=boundary');
     const form = await projectBody(other, kind, null).formData.call(api);
     expect(fixture.bindings.getRealm(form)).toBe(fixture.realm);
     const foreign = other.context.project(FormDataImpl, other.context.construct(FormDataImpl)) as unknown as FormData;
@@ -240,7 +240,7 @@ describe.each(['Request', 'Response'] as const)('%s multipart consumption', (kin
     expect(await file.text()).toBe('file contents');
     expect(form.get('text')).toBe('\ufefftext');
     // New entries still use HTML's create-an-entry capability and the same runtime.
-    const blob = fixture.context.project(BlobImpl, new BlobImpl(['new'], {}, fixture.exec)) as unknown as Blob;
+    const blob = fixture.context.project(BlobImpl, new BlobImpl(['new'], {}, fixture.env)) as unknown as Blob;
     form.append('added', blob, 'added.txt');
     expect((form.get('added') as File).name).toBe('added.txt');
     expect(fixture.bindings.getRealm(form.get('added') as File)).toBe(fixture.realm);
@@ -249,7 +249,7 @@ describe.each(['Request', 'Response'] as const)('%s multipart consumption', (kin
   it('rejects malformed multipart data in the consuming realm', async () => {
     const fixture = createFetchFixture();
     const api = projectBody(fixture, kind,
-      FetchBody.fromBytes(utf8Encode('--boundary\r\n'), fixture.exec), 'multipart/form-data; boundary=boundary');
+      FetchBody.fromBytes(utf8Encode('--boundary\r\n'), fixture.env), 'multipart/form-data; boundary=boundary');
     await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
   });
 });
@@ -270,7 +270,7 @@ function projectBody(
   if (type !== null) record.headerList.set('Content-Type', type);
   const platform = kind === 'Request'
     ? fixture.context.project(RequestImpl, fixture.createRequest(
-      record as ReturnType<typeof createFetchRequest>, fixture.exec.createAbortController().signal,
+      record as ReturnType<typeof createFetchRequest>, fixture.env.exec.createAbortController().signal,
     ))
     : fixture.context.project(ResponseImpl, fixture.createResponse(record as FetchResponse));
   return platform as unknown as BodyAPI;

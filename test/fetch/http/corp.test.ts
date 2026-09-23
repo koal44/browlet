@@ -3,37 +3,37 @@ import type { FetchEmbedderPolicyValue } from '../../../src/fetch/infrastructure
 import { FetchResponse } from '../../../src/fetch/response';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
-import { createClientSettings } from '../client-fixture';
+import { createClientEnvironment } from '../client-fixture';
 
 describe('CORP blocking and violation reporting', () => {
   it('allows an unrestricted response without reporting', () => {
     const response = createResponse();
-    const settings = createReportingSettings();
-    expect(response.isBlockedByCORP(originFor('https://other.test/'), settings, 'image')).toBe(false);
-    expect(settings.queueReport).not.toHaveBeenCalled();
+    const env = createReportingEnvironment();
+    expect(response.isBlockedByCORP(originFor('https://other.test/'), env, 'image')).toBe(false);
+    expect(env.queueReport).not.toHaveBeenCalled();
   });
 
   it('does not report a restriction imposed by CORP itself', () => {
     const response = createResponse('https://example.test/', 'same-origin');
-    const settings = createReportingSettings('require-corp', 'require-corp');
-    expect(response.isBlockedByCORP(originFor('https://other.test/'), settings, 'image')).toBe(true);
-    expect(settings.queueReport).not.toHaveBeenCalled();
+    const env = createReportingEnvironment('require-corp', 'require-corp');
+    expect(response.isBlockedByCORP(originFor('https://other.test/'), env, 'image')).toBe(true);
+    expect(env.queueReport).not.toHaveBeenCalled();
   });
 
   it('reports a report-only violation without blocking the response', () => {
     const response = createResponse();
-    const settings = createReportingSettings('unsafe-none', 'require-corp');
-    expect(response.isBlockedByCORP(originFor('https://other.test/'), settings, 'image')).toBe(false);
-    expect(settings.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'observe', {
+    const env = createReportingEnvironment('unsafe-none', 'require-corp');
+    expect(response.isBlockedByCORP(originFor('https://other.test/'), env, 'image')).toBe(false);
+    expect(env.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'observe', {
       type: 'corp', blockedURL: 'https://example.test/resource', destination: 'image', disposition: 'reporting',
     });
   });
 
   it('reports and blocks an enforced violation', () => {
     const response = createResponse();
-    const settings = createReportingSettings('require-corp');
-    expect(response.isBlockedByCORP(originFor('https://other.test/'), settings, 'image')).toBe(true);
-    expect(settings.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'enforce', {
+    const env = createReportingEnvironment('require-corp');
+    expect(response.isBlockedByCORP(originFor('https://other.test/'), env, 'image')).toBe(true);
+    expect(env.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'enforce', {
       type: 'corp', blockedURL: 'https://example.test/resource', destination: 'image', disposition: 'enforce',
     });
   });
@@ -41,9 +41,9 @@ describe('CORP blocking and violation reporting', () => {
   it('reports both violations in order using the sanitized first URL', () => {
     const response = createResponse('https://user:secret@example.test/original#fragment');
     response.urlList.push(parseURL('https://elsewhere.test/redirected').url!);
-    const settings = createReportingSettings('require-corp', 'require-corp');
-    expect(response.isBlockedByCORP(originFor('https://example.test/'), settings, 'image')).toBe(true);
-    expect(settings.queueReport.mock.calls).toEqual([
+    const env = createReportingEnvironment('require-corp', 'require-corp');
+    expect(response.isBlockedByCORP(originFor('https://example.test/'), env, 'image')).toBe(true);
+    expect(env.queueReport.mock.calls).toEqual([
       ['coep', 'observe', {
         type: 'corp', blockedURL: 'https://example.test/original', destination: 'image', disposition: 'reporting',
       }],
@@ -55,10 +55,10 @@ describe('CORP blocking and violation reporting', () => {
 
   it('uses the navigation exception before checking a restrictive report-only policy', () => {
     const response = createResponse('https://example.test/', 'same-origin');
-    const settings = createReportingSettings('unsafe-none', 'require-corp');
-    expect(response.isBlockedByCORP(originFor('https://other.test/'), settings, 'iframe', true))
+    const env = createReportingEnvironment('unsafe-none', 'require-corp');
+    expect(response.isBlockedByCORP(originFor('https://other.test/'), env, 'iframe', true))
       .toBe(false);
-    expect(settings.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'observe', {
+    expect(env.queueReport).toHaveBeenCalledExactlyOnceWith('coep', 'observe', {
       type: 'corp', blockedURL: 'https://example.test/', destination: 'iframe', disposition: 'reporting',
     });
   });
@@ -184,13 +184,13 @@ function originFor(url: string) {
 }
 
 // Observe the Reporting capability without implementing report generation or delivery.
-function createReportingSettings(
+function createReportingEnvironment(
   value: FetchEmbedderPolicyValue = 'unsafe-none', reportOnlyValue: FetchEmbedderPolicyValue = 'unsafe-none',
 ) {
-  const settings = createClientSettings();
-  return Object.assign(settings, {
+  const env = createClientEnvironment();
+  return Object.assign(env, {
     policyContainer: {
-      ...settings.policyContainer,
+      ...env.policyContainer,
       embedderPolicy: { value, reportOnlyValue, reportingEndpoint: 'enforce', reportOnlyReportingEndpoint: 'observe' },
     },
     queueReport: vi.fn(),

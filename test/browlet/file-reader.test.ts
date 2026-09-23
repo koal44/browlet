@@ -133,11 +133,11 @@ describe('File API §6.2: FileReader reads', () => {
     const destination = createWindow();
     const queues: (() => void)[][] = [[], []];
     const spies = [source, destination].flatMap((window, index) => {
-      const exec = getContext(window).getExecution();
-      const scheduling = exec.fileReading;
+      const env = getContext(window).getEnvironment();
+      const scheduling = env.exec.fileReading;
       const tasks = queues[index]!;
       return [
-        vi.spyOn(exec, 'runInParallel').mockImplementation((steps) => { steps(); }),
+        vi.spyOn(env.exec, 'runInParallel').mockImplementation((steps) => { steps(); }),
         vi.spyOn(scheduling, 'queueTask').mockImplementation((steps) => {
           tasks.push(steps);
           return {
@@ -189,7 +189,7 @@ describe('File API §6.2: FileReader reads', () => {
     const context = getContext(first);
     const blob = new BlobImpl([Uint8Array.of(0, 65, 128, 255)], {
       type: 'application/example',
-    }, context.getExecution());
+    }, context.getEnvironment());
 
     const dataURL = await read(context, blob, (reader) => {
       reader.readAsDataURL(blob);
@@ -220,7 +220,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('uses the interoperable octet-stream Data URL fallback', async () => {
     const context = getContext(createWindow());
-    const blob = new BlobImpl(['TEST'], {}, context.getExecution());
+    const blob = new BlobImpl(['TEST'], {}, context.getEnvironment());
     const reader = await read(context, blob, (value) => {
       value.readAsDataURL(blob);
     });
@@ -233,8 +233,8 @@ describe('File API §6.2: FileReader reads', () => {
     const context = getContext(createWindow());
     const windows1252 = new BlobImpl([Uint8Array.of(0x80)], {
       type: 'text/plain;charset=windows-1252',
-    }, context.getExecution());
-    const utf8 = new BlobImpl([Uint8Array.of(0x68, 0xC3, 0xB6)], {}, context.getExecution());
+    }, context.getEnvironment());
+    const utf8 = new BlobImpl([Uint8Array.of(0x68, 0xC3, 0xB6)], {}, context.getEnvironment());
 
     const explicit = await read(context, windows1252, (reader) => {
       reader.readAsText(windows1252, 'windows-1252');
@@ -255,7 +255,7 @@ describe('File API §6.2: FileReader reads', () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl([
       Uint8Array.of(0xFE, 0xFF, 0, 0x68, 0, 0x69),
-    ], {}, context.getExecution());
+    ], {}, context.getEnvironment());
     const reader = await read(context, blob, (value) => {
       value.readAsText(blob, 'UTF-8');
     });
@@ -265,7 +265,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('fires ordered progress events with state and byte totals', async () => {
     const context = getContext(createWindow());
-    const blob = new BlobImpl(['abc'], {}, context.getExecution());
+    const blob = new BlobImpl(['abc'], {}, context.getEnvironment());
     const reader = createReader(context);
     const events: Array<{
       type: string;
@@ -306,7 +306,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('does not fire progress for an empty Blob', async () => {
     const context = getContext(createWindow());
-    const blob = new BlobImpl([], {}, context.getExecution());
+    const blob = new BlobImpl([], {}, context.getEnvironment());
     const reader = createReader(context);
     const events: string[] = [];
 
@@ -335,23 +335,25 @@ describe('File API §6.2: FileReader reads', () => {
     },
   ])('$name', async ({ deliveryTimes, expectedLoaded }) => {
     const context = getContext(createWindow());
-    const exec = context.getExecution();
+    const env = context.getEnvironment();
     const size = 192 * 1024 + 1;
     let deliveryIndex = 0;
     let now = 0;
     const clock = vi.spyOn(monotonicClock, 'unsafeCurrentTime')
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
-      ...exec,
-      fileReading: {
-        queueTask(steps) {
+      exec: {
+        ...env.exec,
+        fileReading: {
+          queueTask(steps) {
           // Three 64 KiB chunks, one final byte, then stream close.
           // Control delivery time, rather than assuming backing-read delays survive queuing.
-          const time = deliveryTimes[deliveryIndex++]!;
-          return exec.fileReading.queueTask(() => {
-            now = time;
-            steps();
-          });
+            const time = deliveryTimes[deliveryIndex++]!;
+            return env.exec.fileReading.queueTask(() => {
+              now = time;
+              steps();
+            });
+          },
         },
       },
     });
@@ -376,7 +378,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('rejects a concurrent read while leaving the first read active', async () => {
     const context = getContext(createWindow());
-    const blob = new BlobImpl(['abc'], {}, context.getExecution());
+    const blob = new BlobImpl(['abc'], {}, context.getEnvironment());
     const reader = createReader(context);
     const done = waitForLoadEnd(reader);
 
@@ -404,9 +406,9 @@ describe('File API §6.2: FileReader reads', () => {
     first.onabort = (event) => { firstEvents.push(event.type); };
     first.onloadend = (event) => { firstEvents.push(event.type); };
 
-    first.readAsText(new BlobImpl(['first'], {}, context.getExecution()));
+    first.readAsText(new BlobImpl(['first'], {}, context.getEnvironment()));
     const secondDone = waitForLoadEnd(second);
-    second.readAsText(new BlobImpl(['second'], {}, context.getExecution()));
+    second.readAsText(new BlobImpl(['second'], {}, context.getEnvironment()));
     first.abort();
 
     expect(first.readyState).toBe(2);
@@ -420,7 +422,7 @@ describe('File API §6.2: FileReader reads', () => {
 
   it('clears a completed result without firing events when aborted', async () => {
     const context = getContext(createWindow());
-    const blob = new BlobImpl(['complete'], {}, context.getExecution());
+    const blob = new BlobImpl(['complete'], {}, context.getEnvironment());
     const reader = await read(context, blob, (value) => {
       value.readAsText(blob);
     });
@@ -450,14 +452,14 @@ describe('File API §6.2: FileReader reads', () => {
     };
     reader.onabort = (event) => {
       events.push(event.type);
-      reader.readAsText(new BlobImpl(['second'], {}, context.getExecution()));
+      reader.readAsText(new BlobImpl(['second'], {}, context.getEnvironment()));
     };
     reader.onprogress = (event) => { events.push(event.type); };
     reader.onload = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(new BlobImpl(['first'], {}, context.getExecution()));
+    reader.readAsText(new BlobImpl(['first'], {}, context.getEnvironment()));
     await done;
 
     expect(reader.result).toBe('second');
@@ -480,7 +482,7 @@ describe('File API §6.2: FileReader reads', () => {
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(new BlobImpl(['unfinished'], {}, context.getExecution()));
+    reader.readAsText(new BlobImpl(['unfinished'], {}, context.getEnvironment()));
     await done;
 
     expect(reader.result).toBeNull();
@@ -496,12 +498,12 @@ describe('File API §6.2: FileReader reads', () => {
       events.push(event.type);
       if (!firstLoad) return;
       firstLoad = false;
-      reader.readAsText(new BlobImpl(['second'], {}, context.getExecution()));
+      reader.readAsText(new BlobImpl(['second'], {}, context.getEnvironment()));
     };
     reader.onloadend = (event) => { events.push(event.type); };
 
     const done = waitForLoadEnd(reader);
-    reader.readAsText(new BlobImpl(['first'], {}, context.getExecution()));
+    reader.readAsText(new BlobImpl(['first'], {}, context.getEnvironment()));
     await done;
 
     expect(reader.result).toBe('second');
@@ -516,13 +518,13 @@ describe('File API §6.2: FileReader reads', () => {
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     };
     const failed = BlobImpl.create(
-      BlobData.fromSource(source), '', source.snapshotState, context.getExecution(),
+      BlobData.fromSource(source), '', source.snapshotState, context.getEnvironment(),
     );
     const reader = createReader(context);
     const events: string[] = [];
     reader.onerror = (event) => {
       events.push(event.type);
-      reader.readAsText(new BlobImpl(['recovered'], {}, context.getExecution()));
+      reader.readAsText(new BlobImpl(['recovered'], {}, context.getEnvironment()));
     };
     reader.onload = (event) => { events.push(event.type); };
     reader.onloadend = (event) => { events.push(event.type); };
@@ -550,7 +552,7 @@ describe('File API §6.2: FileReader reads', () => {
       read: () => Promise.reject(new BlobReadFailure(reason)),
     };
     const blob = BlobImpl.create(
-      BlobData.fromSource(source), '', source.snapshotState, context.getExecution(),
+      BlobData.fromSource(source), '', source.snapshotState, context.getEnvironment(),
     );
     const reader = createReader(context);
     const events: string[] = [];
@@ -577,7 +579,7 @@ function createWindow(): Window & typeof globalThis {
 }
 
 function createReader(context = getContext(createWindow())): FileReaderImpl {
-  return new FileReaderImpl(context.getExecution());
+  return new FileReaderImpl(context.getEnvironment());
 }
 
 function getContext(window: object): BindingContext {

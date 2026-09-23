@@ -52,9 +52,9 @@ describe('Fetch body cloning', () => {
   });
 
   it('cancels the source only after both cloned branches cancel', async () => {
-    const { exec } = createBodyFixture();
+    const { env } = createBodyFixture();
     const cancel = vi.fn();
-    const body = new FetchBody(ReadableStreamImpl.createDefault(undefined, cancel, 1, () => 1, exec), exec);
+    const body = new FetchBody(ReadableStreamImpl.createDefault(undefined, cancel, 1, () => 1, env), env);
     const clone = body.clone();
 
     const first = body.stream.cancelInternal('first');
@@ -69,7 +69,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('retains the source and length and delivers bytes through the owning global task', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(9, 1, 2, 9).subarray(1, 3);
-    const body = FetchBody.fromBytes(source, fixture.exec);
+    const body = FetchBody.fromBytes(source, fixture.env);
 
     expect(body.source).toBe(source);
     expect(body.length).toBe(2);
@@ -88,7 +88,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('supports BYOB reading in the supplied realm', async () => {
     const fixture = createBodyFixture();
-    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.exec);
+    const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.env);
     const reader = body.stream.getReader({ mode: 'byob' });
     const view = fixture.context.realm.createArrayBufferView('Uint8Array', [0, 0, 0, 0]);
     const buffer = getBufferSourceUnderlyingBuffer(view);
@@ -105,7 +105,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('closes an empty byte sequence without enqueueing an empty chunk', async () => {
     const fixture = createBodyFixture();
-    const body = FetchBody.fromBytes(new Uint8Array(), fixture.exec);
+    const body = FetchBody.fromBytes(new Uint8Array(), fixture.env);
     fixture.runTask();
     expect(body.length).toBe(0);
     expect(body.stream.isClosed).toBe(true);
@@ -115,7 +115,7 @@ describe('Fetch byte sequences as bodies', () => {
   it('allows a byte body to be cloned before its bytes are delivered', async () => {
     const fixture = createBodyFixture();
     const source = Uint8Array.of(1, 2, 3);
-    const body = FetchBody.fromBytes(source, fixture.exec);
+    const body = FetchBody.fromBytes(source, fixture.env);
     const clone = body.clone();
     const process = vi.fn();
     const error = vi.fn();
@@ -136,7 +136,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('does not revive a byte stream canceled before its delivery task runs', async () => {
     const fixture = createBodyFixture();
-    const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.exec);
+    const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.env);
     await observe(body.stream.cancelInternal('canceled'));
     expect(() => fixture.runTask()).not.toThrow();
     expect(await readBodyBytes(body)).toEqual(new Uint8Array());
@@ -144,7 +144,7 @@ describe('Fetch byte sequences as bodies', () => {
 
   it('preserves a byte stream error raised before its delivery task runs', async () => {
     const fixture = createBodyFixture();
-    const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.exec);
+    const body = FetchBody.fromBytes(Uint8Array.of(1), fixture.env);
     const failure = new Error('failed');
     body.stream.error(failure);
     fixture.runTask();

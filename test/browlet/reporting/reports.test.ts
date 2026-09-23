@@ -117,8 +117,8 @@ function createWindow(): ReportingWindow {
 }
 
 function createReport(window: object, data: IntegrityViolationReportBody | null): ReportImpl {
-  const environment = getRelevantRealm(window).environment;
-  const report = environment.generateReport(data, data === null ? 'test' : 'integrity-violation', 'default');
+  const env = getRelevantRealm(window).env;
+  const report = env.generateReport(data, data === null ? 'test' : 'integrity-violation', 'default');
   report.url = data?.documentURL ?? 'https://document.test/page';
   return report;
 }

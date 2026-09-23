@@ -20,20 +20,20 @@ import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {
     const top = createEnvironment('https://example.com/');
-    expect(top.environment.hasCrossSiteAncestor).toBe(false);
+    expect(top.env.hasCrossSiteAncestor).toBe(false);
   });
 
   it('compares sites rather than origins for a child window', () => {
     const top = createEnvironment('https://a.example.com/');
     const child = createEnvironment('https://b.example.com:8443/', top.navigable);
-    expect(child.environment.hasCrossSiteAncestor).toBe(false);
+    expect(child.env.hasCrossSiteAncestor).toBe(false);
   });
 
   it.each(['https://other.test/', 'http://a.example.com/'])(
     'recognizes a cross-site parent for %s', (url) => {
       const top = createEnvironment('https://a.example.com/');
       const child = createEnvironment(url, top.navigable);
-      expect(child.environment.hasCrossSiteAncestor).toBe(true);
+      expect(child.env.hasCrossSiteAncestor).toBe(true);
     },
   );
 
@@ -41,23 +41,23 @@ describe('Window environment cross-site ancestry', () => {
     const top = createEnvironment('https://a.example.com/');
     const middle = createEnvironment('https://other.test/', top.navigable);
     const child = createEnvironment('https://b.example.com/', middle.navigable);
-    expect(child.environment.hasCrossSiteAncestor).toBe(true);
+    expect(child.env.hasCrossSiteAncestor).toBe(true);
   });
 
   it('reads the live ancestor chain rather than retaining the first answer', () => {
     const top = createEnvironment('https://a.example.com/');
     const middle = createEnvironment('https://a.example.com/', top.navigable);
     const child = createEnvironment('https://b.example.com/', middle.navigable);
-    expect(child.environment.hasCrossSiteAncestor).toBe(false);
+    expect(child.env.hasCrossSiteAncestor).toBe(false);
 
     middle.document.origin = obtainURLOrigin(parseURL('https://other.test/').url!);
-    expect(child.environment.hasCrossSiteAncestor).toBe(true);
+    expect(child.env.hasCrossSiteAncestor).toBe(true);
   });
 
   it('does not grant same-site cookie access to a Document without a current navigable', () => {
     const top = createEnvironment('https://example.com/');
     top.document.browsingContext = null;
-    expect(top.environment.hasCrossSiteAncestor).toBe(true);
+    expect(top.env.hasCrossSiteAncestor).toBe(true);
   });
 });
 
@@ -68,21 +68,21 @@ describe('Fetch cookies through Window settings', () => {
     const middle = createEnvironment('https://other.test/', top.navigable);
     const crossSite = createEnvironment('https://b.example.com/', middle.navigable);
     const url = parseURL('https://a.example.com/').url!;
-    const userAgent = top.environment.userAgent;
+    const userAgent = top.env.userAgent;
     const response = new FetchResponse();
     response.headerList.append('Set-Cookie', 'strict=1; SameSite=Strict; Secure');
     response.headerList.append('Set-Cookie', 'none=2; SameSite=None; Secure');
-    response.parseAndStoreCookies(new FetchRequest(url, top.environment, userAgent));
+    response.parseAndStoreCookies(new FetchRequest(url, top.env, userAgent));
 
-    const allowed = new FetchRequest(url, sameSite.environment, sameSite.environment.userAgent);
-    const restricted = new FetchRequest(url, crossSite.environment, crossSite.environment.userAgent);
+    const allowed = new FetchRequest(url, sameSite.env, sameSite.env.userAgent);
+    const restricted = new FetchRequest(url, crossSite.env, crossSite.env.userAgent);
     allowed.appendCookieHeader();
     restricted.appendCookieHeader();
     expect(allowed.headerList.get('Cookie')).toBe('strict=1; none=2');
     expect(restricted.headerList.get('Cookie')).toBe('none=2');
 
     const other = createEnvironment('https://a.example.com/');
-    const isolated = new FetchRequest(url, other.environment, other.environment.userAgent);
+    const isolated = new FetchRequest(url, other.env, other.env.userAgent);
     isolated.appendCookieHeader();
     expect(isolated.headerList.get('Cookie')).toBeNull();
   });
@@ -90,7 +90,7 @@ describe('Fetch cookies through Window settings', () => {
 
 describe('Window environment referrer sources', () => {
   it('uses the live Document URL, independently of creation and base URLs', () => {
-    const { document, environment } = createEnvironment('https://example.test/initial');
+    const { document, env } = createEnvironment('https://example.test/initial');
     const url = parseURL('https://example.test/current?q=1#fragment').url!;
     document.url = url;
     const root = document.createElement('html');
@@ -98,10 +98,10 @@ describe('Window environment referrer sources', () => {
     base.setAttribute('href', 'https://different.test/base/');
     document.appendChild(root);
     root.appendChild(base);
-    expect(serializeURL(environment.apiBaseURL)).toBe('https://different.test/base/');
-    expect(environment.getReferrerSource()).toBe(url);
+    expect(serializeURL(env.apiBaseURL)).toBe('https://different.test/base/');
+    expect(env.getReferrerSource()).toBe(url);
 
-    const request = new FetchRequest(parseURL('https://example.test/target').url!, environment, environment.userAgent);
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, env, env.userAgent);
     request.referrerPolicy = 'same-origin';
     const referrer = determineRequestReferrer(request);
     expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/current?q=1');
@@ -109,9 +109,9 @@ describe('Window environment referrer sources', () => {
   });
 
   it('does not disclose the URL of an opaque-origin Document', () => {
-    const { document, environment } = createEnvironment('https://example.test/');
+    const { document, env } = createEnvironment('https://example.test/');
     document.origin = obtainURLOrigin(parseURL('data:,opaque').url!);
-    expect(environment.getReferrerSource()).toBeNull();
+    expect(env.getReferrerSource()).toBeNull();
   });
 
   it('exposes the stored srcdoc flag rather than inferring it from the URL', () => {
@@ -128,8 +128,8 @@ describe('Window environment referrer sources', () => {
     const iframe = browlet.document.getElementsByTagName('iframe').item(0)!;
     const document = iframe.contentDocument;
     expect(document).toBeTruthy();
-    const environment = getRelevantRealm(document!).environment;
-    const request = new FetchRequest(parseURL('https://example.test/target').url!, environment, environment.userAgent);
+    const env = getRelevantRealm(document!).env;
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, env, env.userAgent);
     request.referrerPolicy = 'unsafe-url';
     const referrer = determineRequestReferrer(request);
     expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/parent');
@@ -138,7 +138,7 @@ describe('Window environment referrer sources', () => {
 
 describe('Window environment reporting sources', () => {
   it('uses the live Document URL independently of the base URL and creation URL', () => {
-    const { document, environment } = createEnvironment('https://example.test/initial');
+    const { document, env } = createEnvironment('https://example.test/initial');
     const url = parseURL('https://example.test/current#fragment').url!;
     document.url = url;
     const root = document.createElement('html');
@@ -146,35 +146,35 @@ describe('Window environment reporting sources', () => {
     base.setAttribute('href', 'https://different.test/base/');
     document.appendChild(root);
     root.appendChild(base);
-    expect(serializeURL(environment.apiBaseURL)).toBe('https://different.test/base/');
-    expect(environment.getReportingSource()).toBe(url);
+    expect(serializeURL(env.apiBaseURL)).toBe('https://different.test/base/');
+    expect(env.getReportingSource()).toBe(url);
   });
 
   it('reports the srcdoc Document itself even when its origin prevents a referrer', () => {
-    const { document, environment } = createEnvironment('about:srcdoc');
+    const { document, env } = createEnvironment('about:srcdoc');
     document.isIframeSrcdocDocument = true;
-    expect(environment.getReferrerSource()).toBeNull();
-    expect(environment.getReportingSource()).toBe(document.url);
+    expect(env.getReferrerSource()).toBeNull();
+    expect(env.getReportingSource()).toBe(document.url);
   });
 });
 
 describe('Window environment prompt targets', () => {
   it('selects the window\'s own traversable', () => {
     const top = createEnvironment('https://example.test/');
-    expect(top.environment.getTraversableForUserPrompts()).toBe(top.navigable);
+    expect(top.env.getTraversableForUserPrompts()).toBe(top.navigable);
   });
 
   it('selects the containing traversable across cross-origin ancestors', () => {
     const top = createEnvironment('https://top.test/');
     const middle = createEnvironment('https://middle.test/', top.navigable);
     const child = createEnvironment('https://child.test/', middle.navigable);
-    expect(child.environment.getTraversableForUserPrompts()).toBe(top.navigable);
+    expect(child.env.getTraversableForUserPrompts()).toBe(top.navigable);
   });
 
   it('retains a populated child request\'s target independently of the top document\'s origin', () => {
     const top = createEnvironment('https://top.test/');
     const child = createEnvironment('https://child.test/', top.navigable);
-    const realm = child.environment.realm;
+    const realm = child.env.realm;
     const context = getBindingContext(realm);
     const window = realm.globalObject as Window & typeof globalThis;
     const source = new window.Request('https://resource.test/');
@@ -182,26 +182,26 @@ describe('Window environment prompt targets', () => {
     top.document.origin = obtainURLOrigin(parseURL('https://changed.test/').url!);
     const copy = context.unwrap(new window.Request(source), RequestImpl)!.getRequest();
     expect(copy.traversableForUserPrompts).toBe(top.navigable);
-    expect(copy.origin).toBe(child.environment.origin);
+    expect(copy.origin).toBe(child.env.origin);
   });
 
   it('has no prompt target when its document has no navigable', () => {
     const top = createEnvironment('https://example.test/');
     top.document.browsingContext = null;
-    expect(top.environment.getTraversableForUserPrompts()).toBeNull();
+    expect(top.env.getTraversableForUserPrompts()).toBeNull();
   });
 });
 
 describe('storage keys from browser environments', () => {
   it('uses a Window\'s actual security origin, including an inherited about:blank origin', () => {
-    const { document, environment } = createEnvironment('about:blank');
+    const { document, env } = createEnvironment('about:blank');
     document.origin = obtainURLOrigin(parseURL('https://creator.test/').url!);
-    const key = StorageKey.obtain(environment)!;
+    const key = StorageKey.obtain(env)!;
     expect(key.origin).toBe(document.origin);
 
     document.origin = createOpaqueOrigin();
-    expect(StorageKey.obtain(environment)).toBeNull();
-    expect(StorageKey.obtainForNonStoragePurposes(environment).origin).toBe(document.origin);
+    expect(StorageKey.obtain(env)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(env).origin).toBe(document.origin);
     expect(key.origin.kind).toBe('tuple');
   });
 
@@ -221,13 +221,13 @@ describe('storage keys from browser environments', () => {
   });
 
   it('reads the UserAgent preference while preserving non-storage access checks', () => {
-    const { environment } = createEnvironment('https://example.test/');
-    const key = StorageKey.obtain(environment)!;
-    environment.userAgent.storageEnabled = false;
-    expect(StorageKey.obtain(environment)).toBeNull();
-    expect(StorageKey.obtainForNonStoragePurposes(environment).equals(key)).toBe(true);
-    environment.userAgent.storageEnabled = true;
-    expect(StorageKey.obtain(environment)?.equals(key)).toBe(true);
+    const { env } = createEnvironment('https://example.test/');
+    const key = StorageKey.obtain(env)!;
+    env.userAgent.storageEnabled = false;
+    expect(StorageKey.obtain(env)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(env).equals(key)).toBe(true);
+    env.userAgent.storageEnabled = true;
+    expect(StorageKey.obtain(env)?.equals(key)).toBe(true);
   });
 });
 
@@ -235,15 +235,15 @@ describe('storage keys from browser environments', () => {
 function createEnvironment(url: string, parent: Navigable | null = null) {
   const creationURL = parseURL(url).url!;
   const origin = obtainURLOrigin(creationURL);
-  const parentSettings = parent === null ? null : getRelevantRealm(parent.activeDocument!).environment;
-  const environment = createWindowEnvironment({
-    agent: new WindowAgent(), userAgent: parentSettings?.userAgent ?? new UserAgent(),
+  const parentEnv = parent === null ? null : getRelevantRealm(parent.activeDocument!).env;
+  const env = createWindowEnvironment({
+    agent: new WindowAgent(), userAgent: parentEnv?.userAgent ?? new UserAgent(),
     creationURL, origin, parent: parent?.activeWindow ?? null,
-    topLevelCreationURL: parentSettings?.topLevelCreationURL ?? creationURL,
-    topLevelOrigin: parentSettings?.topLevelOrigin ?? origin,
+    topLevelCreationURL: parentEnv?.topLevelCreationURL ?? creationURL,
+    topLevelOrigin: parentEnv?.topLevelOrigin ?? origin,
   });
-  const { window } = environment;
-  const realm = environment.realm;
+  const { window } = env;
+  const realm = env.realm;
   const proxy = realm.globalThis as WindowProxy;
   const document = createDocument(realm);
   document.url = creationURL;
@@ -255,5 +255,5 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   const navigable = parent === null
     ? new TopLevelTraversable(documentState)
     : new Navigable(documentState, parent);
-  return { navigable, document, environment };
+  return { navigable, document, env };
 }

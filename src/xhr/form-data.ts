@@ -1,6 +1,6 @@
 import { type BlobImpl, FileImpl } from '../file/index';
 import { toScalarValueString, type ScalarValueString } from '../infra/index';
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   reference, sequence, union,
@@ -38,15 +38,15 @@ export type FormDataEntry = [
  */
 export class FormDataImpl {
   #entryList: FormDataEntry[] = [];
-  #exec: RealmExecution;
+  #env: JSEnvironment;
 
   // SPEC_MISMATCH: FormData(form?, submitter = null) -> FormData
   constructor(
     form: object | undefined = undefined,
     _submitter: object | null = null,
-    exec: RealmExecution,
+    env: JSEnvironment,
   ) {
-    this.#exec = exec;
+    this.#env = env;
 
     /*
      * XHR §4 delegates this branch to HTML's construct-the-entry-list
@@ -113,8 +113,8 @@ export class FormDataImpl {
   // -- Internal methods -------------------------------------------------
 
   /** Adopt parsed entries without running HTML's entry-creation algorithm again. */
-  static fromEntries(entries: FormDataEntry[], exec: RealmExecution): FormDataImpl {
-    const formData = new FormDataImpl(undefined, null, exec);
+  static fromEntries(entries: FormDataEntry[], env: JSEnvironment): FormDataImpl {
+    const formData = new FormDataImpl(undefined, null, env);
     formData.#entryList = entries;
     return formData;
   }
@@ -134,7 +134,7 @@ export class FormDataImpl {
     const lastModified = FileImpl.is(value) ? value.lastModified : undefined;
     return [entryName, new FileImpl(
       [value], filename ?? toScalarValueString('blob'),
-      { lastModified, type: value.type }, this.#exec,
+      { lastModified, type: value.type }, this.#env,
     )];
   }
 }
@@ -149,7 +149,7 @@ export const formDataIDL = defineInterface({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     /*

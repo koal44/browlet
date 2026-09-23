@@ -39,7 +39,7 @@ Binding stamps a `PlatformRecord` onto an implementation instance through a
 private field, independently of its implementation class. That record selects
 the owning realm and retains the eventual platform object;
 implementation methods still receive their execution dependencies explicitly
-through `RealmExecution`. Stamping does not inject Binding Context into
+through `env.exec`. Stamping does not inject Binding Context into
 implementation constructors or change their prototypes.
 Creating the record runs inherited implementation initializers before attaching
 the stamp. An initialized implementation can therefore remain unprojected.
@@ -143,7 +143,7 @@ realm-owned errors remains [binding work](./PLATFORM-OBJECT-ARCHITECTURE.md#exce
 
 Asynchronous implementations receive Infra's `Promises` dependency for
 allocation, adoption, and continuation placement. A realm owns one facility;
-Binding supplies it through RealmExecution at construction or operation
+Binding supplies it through the owning environment at construction or operation
 composition. Streams and Blobs retain that context and pass it to derived
 streams and slices. Returned
 `PromiseValue<T>` chains retain that destination, so `.then()` and `.observe()`
@@ -173,7 +173,7 @@ members of `RealmExecution`. The typed `createStyleletExecution()` adapter check
 both contracts; changing a field on either side is caught at that boundary.
 Their shared Promise machinery is already defined in Infra.
 
-The HTML document parser receives its EventLoop and RealmExecution explicitly.
+The HTML document parser receives its EventLoop and owning environment explicitly.
 Node stream completion only queues an HTML networking task; parser waits and
 load completion use `PromiseValue`. The public `Browlet.navigate()` bridges the
 finished internal operation to a native Promise for its Node caller. That
@@ -335,7 +335,7 @@ capability. If it reaches outside the runtime, use a Host Port.
 
 Existing implementation uses are migration work, not a pattern to extend.
 Move conversion and projection into declaration bindings, and supply execution
-dependencies through `RealmExecution` below. Track the remaining migration in the
+dependencies through the owning environment below. Track the remaining migration in the
 [platform-object ledger](./PLATFORM-OBJECT-ARCHITECTURE.md#migration-ledger-temporary).
 
 ### Realm execution
@@ -354,19 +354,27 @@ callback adaptation, or platform-object registry.
 The neutral contract and engine-owned buffer operations live in `js-engine/`.
 HTML task policy, DOM aborting, and HTML structured data retain their
 implementations in Browlet. `Environment` owns this contract as `exec`, alongside
-its `realm` and browser state. Portable implementations accept `RealmExecution`;
-browser-owned algorithms accept `Environment` when they also need HTML state and
-reach execution facilities through `environment.exec`. The environment does not
-forward those facilities as its own methods or implement the neutral contract.
+its `realm` and browser state. Portable implementations accept `JSEnvironment`,
+whose shared contract is `exec: RealmExecution`. Browser algorithms accept the
+existing `Environment` when they need HTML state. Both use `env.exec`;
+the browser environment satisfies the portable contract directly, without a
+second environment object. Environment operations such as `parseURL()` can
+forward to their owner; execution facilities remain grouped in `exec`.
+Name environment parameters, locals, and stored references `env`, qualifying
+them when multiple owners are in scope (`sourceEnv`, `targetEnv`). Keep type
+and factory names descriptive, such as `JSEnvironment` and `createWindowEnvironment()`.
 
 [`integration/execution.ts`](browlet/integration/execution.ts) assembles the
 execution object during Window realm registration, reusing that realm's existing
-Promise facility. `context.getExecution()` and `environment.exec` retain the same
-object. Binding-dependent closures are assembled here; neither Environment nor
+Promise facility. The registration factory constructs the actual WindowEnvironment
+and returns it to Binding; `context.getEnvironment()` retains that same object.
+Binding-dependent closures are assembled here; neither Environment nor
 portable implementations retain Binding Context. The execution object's `global`
 getter reads the Realm's installed platform global. Declaration bindings supply
-`context.getExecution()` to portable constructors and methods. Other hosts can
-supply the same neutral contract without an HTML environment.
+`context.getEnvironment()` to portable constructors and methods. Other hosts
+supply a standalone JavaScript environment with their execution facilities,
+without implementing HTML state. Early `EnvironmentRecord` values precede realm
+construction and deliberately do not implement `JSEnvironment`.
 `exec.clone(value, transferList?)` invokes HTML's structured-clone algorithm
 with that realm's binding, including transfer processing when requested.
 
@@ -377,10 +385,10 @@ High Resolution Time and Fetch connection timing directly import the stateless
 has no timing member.
 
 Implementations keep lifetime dependencies in a final constructor argument and
-pass the same `exec` to children they create. Blob slices retain their source
-execution owner; deserialized Blobs receive the destination's `exec` while sharing or
+pass the same environment to children they create. Blob slices retain their source
+environment; deserialized Blobs receive the destination environment while sharing or
 copying `BlobData` as serialization requires. FileReader obtains a stream from
-the Blob, while retaining its own `exec` for result allocation and event tasks.
+the Blob, while retaining its own environment for result allocation and event tasks.
 Invocation-specific information, such as Fetch's explicit task destination,
 remains an operation argument. Borrowing another realm's method does not change
 the receiver's execution owner.
@@ -390,7 +398,7 @@ The global identifies the Window; the networking task source selects a task
 category within its event loop. Body reading can also receive another global
 or a parallel queue explicitly. FormData implements HTML's create-an-entry
 algorithm alongside its entry list; string and Blob/File normalization need
-only its existing `exec`. Fetch constructs FormData directly, without an
+only its environment's `exec`. Fetch constructs FormData directly, without an
 entry-creation capability on constructors or RealmExecution. Constructing an
 entry list from an HTML form remains browser-owned work deferred until forms exist.
 `exec.parseJSON(text)` uses the owning realm's captured intrinsic, so nested
@@ -406,19 +414,20 @@ File-reading and networking task delivery remain separate facilities. Background
 I/O returns through those facilities before updating owner state or settling
 page-visible results. Parallel queues use the same background scheduler without
 requiring a Window task destination.
-Multipart extraction and Blob streaming use `BlobData.stream(exec)`;
-backing data retains no execution owner and each stream uses its caller's `exec`.
+Multipart extraction and Blob streaming use `BlobData.stream(env)`;
+backing data retains no execution owner and each stream uses its caller's environment.
 Blob constructor part processing stays on `BlobImpl`, which owns the part and
 option interpretation, including native line ending policy.
 
 Fetch constructor declarations obtain their relevant HTML settings through a
 registered capability. Request's factory accepts one
-`FetchEnvironment & { exec: RealmExecution }`. That environment supplies the new
+`FetchEnvironment`, which extends `JSEnvironment`. That environment supplies the new
 request's client; its `exec` supplies signal construction and allocation. Internal
-Request construction still accepts an explicit execution owner: a retained
+Request construction still accepts an explicit environment owner: a retained
 request client can differ from the result's allocation owner or be absent.
-Response.redirect receives its API base URL separately from `exec`. Client policy
-and URL inputs remain outside the neutral contract. Dependent-signal construction
+Response.redirect receives that same Fetch environment, including its API base URL
+and `parseURL()` operation. Client policy and URL inputs remain outside the neutral
+execution contract. Dependent-signal construction
 belongs to `RealmExecution`: Browlet allocates the signal in that owner and calls DOM's
 existing dependency algorithm, without a parallel Fetch-owned signal graph.
 
@@ -446,7 +455,7 @@ Web IDL adapts callbacks and HTML delivers them as global tasks. No Binding
 Context enters the observer implementation.
 Document destruction cancels its queued tasks, hands off pending outbound data,
 and releases local Reporting state; ordinary inactivity is not destruction.
-`sendReports(reports, environment)` gives browser-owned tasks fresh `ReportImpl`
+`sendReports(reports, env)` gives browser-owned tasks fresh `ReportImpl`
 copies containing JSON data and report metadata, alongside endpoint configuration. These copies omit
 the observer body and carry no binding record, so delivery retains no reference
 to the generating realm or global. Clientless upload requests carry raw bytes for later Fetch extraction.
@@ -644,17 +653,17 @@ creation URLs, and `isSecureContext` decision. It has no realm or execution
 facilities. The HTML Realm initially references this record so Web IDL can read
 the security decision before installing properties.
 
-`createWindowEnvironment()` constructs the Window, `WindowRealm`, and execution
-facilities, then installs the platform global. Only then does it construct a
-`WindowEnvironment` with the required realm and execution object. Environment
-construction attaches itself to the same Realm. The factory transfers any
-reserved identity, initializes the shared global-scope mixin, and returns the
+`createWindowEnvironment()` constructs the Window and `WindowRealm`, then
+registers the realm with a factory that constructs its execution facilities and
+`WindowEnvironment`. Environment construction attaches itself to the same Realm.
+Execution reads the global lazily, after the factory installs it. The factory
+transfers any reserved identity, initializes the shared global-scope mixin, and returns the
 environment. No partial settings object or placeholder realm is needed. The
 early record is never `[[HostDefined]]`. Document-dependent getters remain live
 queries of the associated Document and are used after document initialization.
-Code names the full object `environment` and the early state `environmentRecord`.
-Navigation retains `reservedEnvironment`, HTML's name for the reserved record's
-role. `WindowRealm` requires its Window at construction and owns Window-only
+Code names the full object `env` and the early state `envRecord`.
+Navigation's `reservedEnv` retains HTML's reserved-environment role.
+`WindowRealm` requires its Window at construction and owns Window-only
 event state access and associated-Document lookup. `WindowEnvironment.window`
 reads that same reference. A plain Realm has no Window state and returns null
 for its associated Document. The Window's Document and global-scope mixin
@@ -662,9 +671,9 @@ accessors still enforce their own initialization requirements. Browser-facing
 `getRelevantRealm()` returns `WindowRealm` for Windows and DOM nodes, and
 `Realm` for other browser objects. The same realm is retained throughout
 projection and environment attachment. Every realm has an optional
-`hostDefined` lookup for callers that allow absence and a checked `environment`
+`hostDefined` lookup for callers that allow absence and a checked `env`
 getter for callers that require attachment. Realm lookup itself does not
-require an environment; browser consumers access `realm.environment` when they
+require an environment; browser consumers access `realm.env` when they
 need it. `Environment` declares the global-scope mixin accessor abstractly;
 `WindowEnvironment` retrieves its Window's existing mixin. AbortSignal and
 engine timeout scheduling use this environment accessor, including for
@@ -788,8 +797,9 @@ its provisional Blob-only argument is converted by Web IDL, and its static
 methods use the method realm's actual environment for registration and revocation.
 Worker teardown is deferred until its lifecycle exists.
 
-`UserAgent.parseURL()` supplies the store to URL's narrow `BlobURLResolver`
-contract. URL retains an origin-facing entry view without importing File or
+`UserAgent.parseURL()` supplies its actual owner through URL's narrow `URLUserAgent`
+contract, which exposes the owner's Blob URL store. Environment's forwarding
+method uses that same owner. URL retains an origin-facing entry view without importing File or
 Browlet. Browser and Fetch consumers use that parser; URL's author API uses the
 basic parser, as specified. `FetchUserAgent.obtainBlobObject()` bridges the
 retained entry back to Browlet's concrete entry and its Storage authorization.
@@ -811,7 +821,7 @@ state initialization. Named functions on the composition-root module delegate
 to its main binding world. Document creation reuses the dependencies declared
 for its Web IDL constructor. After settings setup, `createWindowEnvironment()`
 constructs the global-scope mixin with that environment. The mixin derives
-timer routing from `environment.realm` and calls `environment.exec.clone()`
+timer routing from `env.realm` and calls `env.exec.clone()`
 without a second execution argument or a retained Binding Context. The Document retains its
 node factory. The factory uses `context.construct()`
 to establish node ownership and initialize its realm-owned event factory.
@@ -821,7 +831,7 @@ Document explicitly; only the public `DocumentFragment()` constructor injects
 the realm's associated Document.
 
 Document owns its initialization, loading completion, destruction, abortion,
-and unloading cleanup methods. It reaches `environment` through its retained
+and unloading cleanup methods. It reaches `env` through its retained
 relevant Window's global-scope mixin, whose environment is supplied at
 construction. Document does not import the binding composition root: that root
 assembles Document's Web IDL declaration and would create an initialization
@@ -849,7 +859,7 @@ policy or introduce an independent history-to-Document relationship.
 ```text
 Composition Root(s)
   |-- Binding Context -----------------> Binding
-  |-- RealmExecution -----------------> Implementation
+  |-- Environment (exec) -------------> Implementation
   |-- Cross-specification capabilities --> Implementation
   `-- Host Ports -----------------------> Implementation
 
@@ -1020,7 +1030,7 @@ The successful removal sequence was:
 
 That removed the private façade, but left Binding Context in implementations.
 The current migration separates runtime execution dependencies from Binding:
-implementations receive RealmExecution, while declaration/member bindings
+implementations receive their owning environment, while declaration/member bindings
 retain conversion, callback adaptation, and projection.
 
 ### Refactor acceptance bar

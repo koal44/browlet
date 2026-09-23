@@ -11,24 +11,26 @@ export function createBodyFixture() {
   const scheduling = {
     queueGlobalTask: vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); }),
   };
-  const exec = {
-    ...context.getExecution(),
-    runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
-    networking: scheduling,
+  const env = {
+    exec: {
+      ...context.getEnvironment().exec,
+      runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
+      networking: scheduling,
+    },
   };
   return {
     context,
-    exec,
+    env,
     scheduling,
     tasks,
     parallelSteps,
     global: context.realm.global,
     createBody: (chunks: unknown[] = []) => {
-      const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, exec);
+      const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env);
       for (const chunk of chunks) stream.enqueueChunk(chunk);
-      return new FetchBody(stream, exec);
+      return new FetchBody(stream, env);
     },
-    createParallelQueue: () => new ParallelQueue(exec.runInParallel),
+    createParallelQueue: () => new ParallelQueue(env.exec.runInParallel),
     runTask: () => tasks.shift()!.steps(),
     runParallel: () => parallelSteps.shift()!(),
   };

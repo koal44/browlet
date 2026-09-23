@@ -84,13 +84,13 @@ describe('HTML Promise jobs', () => {
     for (const { task } of observations) {
       expect(task?.source.name).toBe('microtask');
       expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
-        .toEqual(new Set([realm.environment]));
+        .toEqual(new Set([realm.env]));
     }
     expect(new Set(observations.map(({ task }) => task)).size).toBe(4);
     expect(prepare).toHaveBeenCalledTimes(4);
     expect(cleanup).toHaveBeenCalledTimes(4);
     expect(loop.currentlyRunningTask).toBeNull();
-    expect(realm.callbacks.captureContext()).toBe(realm.environment);
+    expect(realm.callbacks.captureContext()).toBe(realm.env);
   });
 
   itPassesWith('hostHooks')('queues handlerless propagation without preparing a script realm', () => {
@@ -115,7 +115,7 @@ describe('HTML Promise jobs', () => {
     expect(tasks).toHaveLength(2);
     expect(tasks[0]?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set());
     expect(tasks[1]?.scriptEvaluationEnvironmentSettingsObjectSet)
-      .toEqual(new Set([realm.environment]));
+      .toEqual(new Set([realm.env]));
   });
 
   itPassesWith('explicitQueues')('keeps Window queues independent when Node settles their Promises', () => {

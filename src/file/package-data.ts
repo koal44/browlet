@@ -1,4 +1,4 @@
-import { isomorphicDecode, type RealmExecution } from '../js-engine/index';
+import { isomorphicDecode, type JSEnvironment } from '../js-engine/index';
 
 import { decode, getEncoding } from '../encoding/index';
 import { parseMIMEType } from '../mime/index';
@@ -10,7 +10,7 @@ export function packageData(
   type: FileReadType,
   mimeType: string,
   encodingLabel: string | undefined,
-  exec: RealmExecution,
+  env: JSEnvironment,
 ): string | ArrayBuffer {
   switch (type) {
     case 'DataURL': {
@@ -24,7 +24,7 @@ export function packageData(
     case 'Text':
       return packageText(bytes, mimeType, encodingLabel);
     case 'ArrayBuffer':
-      return exec.buffers.copyArrayBuffer(bytes);
+      return env.exec.buffers.copyArrayBuffer(bytes);
     case 'BinaryString':
       return isomorphicDecode(bytes);
   }

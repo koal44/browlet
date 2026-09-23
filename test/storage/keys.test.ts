@@ -6,38 +6,38 @@ import { obtainURLOrigin, parseURL } from '../../src/url/url';
 
 describe('obtaining storage keys', () => {
   it('obtains a key from a settings object\'s origin', () => {
-    const environment = settings('https://example.test/');
-    expect(StorageKey.obtain(environment)?.origin).toBe(environment.origin);
+    const env = createStorageEnvironment('https://example.test/');
+    expect(StorageKey.obtain(env)?.origin).toBe(env.origin);
   });
 
   it('obtains a key from an earlier environment\'s creation URL', () => {
-    const environment = {
+    const env = {
       creationURL: parseURL('https://example.test:8443/created').url!,
       userAgent: createUserAgent(),
     };
-    const key = StorageKey.obtain(environment)!;
-    expect(key.equals(StorageKey.obtain(settings('https://example.test:8443/other'))!)).toBe(true);
+    const key = StorageKey.obtain(env)!;
+    expect(key.equals(StorageKey.obtain(createStorageEnvironment('https://example.test:8443/other'))!)).toBe(true);
   });
 
   it('selects the settings origin even when the creation URL has a different origin', () => {
-    const environment = { ...settings('https://inherited.test/'), creationURL: parseURL('about:blank').url! };
-    expect(StorageKey.obtain(environment)?.origin).toBe(environment.origin);
+    const env = { ...createStorageEnvironment('https://inherited.test/'), creationURL: parseURL('about:blank').url! };
+    expect(StorageKey.obtain(env)?.origin).toBe(env.origin);
   });
 
   it('fails when storage is disabled, and observes later preference changes', () => {
-    const environment = settings('https://example.test/');
-    environment.userAgent.storageEnabled = false;
-    expect(StorageKey.obtain(environment)).toBeNull();
-    environment.userAgent.storageEnabled = true;
-    expect(StorageKey.obtain(environment)?.origin).toBe(environment.origin);
+    const env = createStorageEnvironment('https://example.test/');
+    env.userAgent.storageEnabled = false;
+    expect(StorageKey.obtain(env)).toBeNull();
+    env.userAgent.storageEnabled = true;
+    expect(StorageKey.obtain(env)?.origin).toBe(env.origin);
   });
 
   it('fails for an opaque settings origin without falling back to the creation URL', () => {
-    const environment = {
+    const env = {
       origin: createOpaqueOrigin(), creationURL: parseURL('https://example.test/').url!,
       userAgent: createUserAgent(),
     };
-    expect(StorageKey.obtain(environment)).toBeNull();
+    expect(StorageKey.obtain(env)).toBeNull();
   });
 
   it.each(['about:blank', 'data:,opaque', 'file:///example.txt'])(
@@ -51,49 +51,49 @@ describe('obtaining storage keys', () => {
 
 describe('storage keys for non-storage purposes', () => {
   it('uses the same key as storage acquisition when storage is available', () => {
-    const environment = settings('https://example.test/');
-    const key = StorageKey.obtainForNonStoragePurposes(environment);
-    expect(key.equals(StorageKey.obtain(environment)!)).toBe(true);
+    const env = createStorageEnvironment('https://example.test/');
+    const key = StorageKey.obtainForNonStoragePurposes(env);
+    expect(key.equals(StorageKey.obtain(env)!)).toBe(true);
   });
 
   it('still obtains a key when storage is disabled', () => {
-    const environment = settings('https://example.test/');
-    environment.userAgent.storageEnabled = false;
-    expect(StorageKey.obtainForNonStoragePurposes(environment).origin).toBe(environment.origin);
+    const env = createStorageEnvironment('https://example.test/');
+    env.userAgent.storageEnabled = false;
+    expect(StorageKey.obtainForNonStoragePurposes(env).origin).toBe(env.origin);
   });
 
   it('preserves an opaque settings origin and its identity when storage is disabled', () => {
     const origin = createOpaqueOrigin();
-    const environment = {
+    const env = {
       origin, creationURL: parseURL('https://example.test/').url!, userAgent: createUserAgent(false),
     };
-    const first = StorageKey.obtainForNonStoragePurposes(environment);
-    const second = StorageKey.obtainForNonStoragePurposes(environment);
+    const first = StorageKey.obtainForNonStoragePurposes(env);
+    const second = StorageKey.obtainForNonStoragePurposes(env);
     expect(first.origin).toBe(origin);
     expect(first.equals(second)).toBe(true);
   });
 
   it('uses the creation URL before settings exist even when storage is disabled', () => {
-    const environment = {
+    const env = {
       creationURL: parseURL('https://example.test/').url!, userAgent: createUserAgent(false),
     };
-    expect(StorageKey.obtainForNonStoragePurposes(environment).equals(
-      StorageKey.obtainForNonStoragePurposes(settings('https://example.test/other')),
+    expect(StorageKey.obtainForNonStoragePurposes(env).equals(
+      StorageKey.obtainForNonStoragePurposes(createStorageEnvironment('https://example.test/other')),
     )).toBe(true);
   });
 
   it('permits an opaque creation-URL origin for non-storage checks', () => {
-    const environment = {
+    const env = {
       creationURL: parseURL('data:,opaque').url!, userAgent: createUserAgent(false),
     };
-    expect(StorageKey.obtainForNonStoragePurposes(environment).origin.kind).toBe('opaque');
+    expect(StorageKey.obtainForNonStoragePurposes(env).origin.kind).toBe('opaque');
   });
 });
 
 describe('storage-key equality', () => {
   it('compares separately obtained keys by origin rather than object identity', () => {
-    const first = StorageKey.obtain(settings('https://example.test/first'))!;
-    const second = StorageKey.obtain(settings('https://example.test/second?q=1#fragment'))!;
+    const first = StorageKey.obtain(createStorageEnvironment('https://example.test/first'))!;
+    const second = StorageKey.obtain(createStorageEnvironment('https://example.test/second?q=1#fragment'))!;
     expect(first).not.toBe(second);
     expect(first.origin).not.toBe(second.origin);
     expect(first.equals(second)).toBe(true);
@@ -102,8 +102,8 @@ describe('storage-key equality', () => {
 
   it.each(['http://example.test/', 'https://other.test/', 'https://example.test:8443/'])(
     'distinguishes a different scheme, host, or port: %s', (url) => {
-      const first = StorageKey.obtain(settings('https://example.test/'))!;
-      const second = StorageKey.obtain(settings(url))!;
+      const first = StorageKey.obtain(createStorageEnvironment('https://example.test/'))!;
+      const second = StorageKey.obtain(createStorageEnvironment(url))!;
       expect(first.equals(second)).toBe(false);
       expect(second.equals(first)).toBe(false);
     },
@@ -124,11 +124,11 @@ describe('storage-key equality', () => {
     const key = new StorageKey(origin);
     expect(key.equals(new StorageKey({ ...origin }))).toBe(true);
     expect(key.equals(new StorageKey(createOpaqueOrigin()))).toBe(false);
-    expect(key.equals(StorageKey.obtain(settings('https://example.test/'))!)).toBe(false);
+    expect(key.equals(StorageKey.obtain(createStorageEnvironment('https://example.test/'))!)).toBe(false);
   });
 });
 
-function settings(url: string) {
+function createStorageEnvironment(url: string) {
   const creationURL = parseURL(url).url!;
   return {
     creationURL, origin: obtainURLOrigin(creationURL), userAgent: createUserAgent(),

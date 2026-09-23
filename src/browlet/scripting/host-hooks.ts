@@ -49,16 +49,16 @@ function callJobCallback(
   receiver: unknown,
   argumentsList: unknown[],
 ): unknown {
-  const environment = record.hostDefined;
-  if (environment === null) {
+  const env = record.hostDefined;
+  if (env === null) {
     return Reflect.apply(record.callback, receiver, argumentsList);
   }
-  const loop = environment.responsibleEventLoop;
-  loop.prepareToRunCallback(environment);
+  const loop = env.responsibleEventLoop;
+  loop.prepareToRunCallback(env);
   try {
     return Reflect.apply(record.callback, receiver, argumentsList);
   } finally {
-    loop.cleanUpAfterRunningCallback(environment);
+    loop.cleanUpAfterRunningCallback(env);
   }
 }
 
@@ -71,14 +71,14 @@ function enqueuePromiseJob(
   // Node and unrelated vm jobs retain the engine-selected queue.
   const destination = queueRealm;
   if (!(destination instanceof Realm) || destination.hostDefined === undefined) return false;
-  const environment = realm instanceof Realm ? realm.hostDefined : undefined;
+  const env = realm instanceof Realm ? realm.hostDefined : undefined;
   destination.queueMicrotask(() => {
     try {
-      if (environment !== undefined) environment.responsibleEventLoop.prepareToRunScript(environment);
+      if (env !== undefined) env.responsibleEventLoop.prepareToRunScript(env);
       try {
         job();
       } finally {
-        if (environment !== undefined) environment.responsibleEventLoop.cleanUpAfterRunningScript(environment);
+        if (env !== undefined) env.responsibleEventLoop.cleanUpAfterRunningScript(env);
       }
     } catch (exception) {
       destination.callbacks.reportException(exception);
@@ -103,7 +103,7 @@ function enqueueTimeoutJob(
   if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML timeout jobs require an HTML realm');
   }
-  const timers = realm.environment.getWindowOrWorkerGlobalScopeMixin().timers;
+  const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;
   timers.runStepsAfterTimeout('JavaScript', milliseconds, () => {
     realm.queueGlobalTask(jsEngineTaskSource, job);
   });

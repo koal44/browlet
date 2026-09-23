@@ -16,7 +16,7 @@ import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchRequest } from './fetch-fixture';
-import { createClientSettings } from './client-fixture';
+import { createClientEnvironment } from './client-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {
   it('distinguishes absent and empty values and combines duplicate lines in order', () => {
@@ -454,13 +454,13 @@ describe('Sec-Purpose (Fetch §3.8)', () => {
 
 describe('default request header values', () => {
   it('selects the owning user agent\'s default when there is no emulation', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     client.userAgent.defaultUserAgentValue = 'Configured/1.0';
     expect(getEnvironmentDefaultUserAgent(client)).toBe('Configured/1.0');
   });
 
   it.each(['Emulated', '', 'Agent/\u00e9'])('preserves the emulated value %j as a byte string', (value) => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     client.userAgent.webDriverBiDiEmulatedUserAgent = () => value;
     expect(getEnvironmentDefaultUserAgent(client)).toBe(value);
   });

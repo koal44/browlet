@@ -21,6 +21,7 @@ import { createPolicyContainer, type PolicyContainer } from '../../../src/browle
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
+import { createExecution } from '../../../src/browlet/integration/execution';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { Environment, createEnvironmentRecord } from
   '../../../src/browlet/scripting/environment';
@@ -37,20 +38,21 @@ import {
 describe('HTML callback and script-entry lifecycle', () => {
   it('attaches the environment to its realm during construction', () => {
     const agent = new TestAgent(createEventLoopOptions());
-    const { realm, environment } = createTestRealm(agent, 'attachment');
+    const { realm, env, context } = createTestRealm(agent, 'attachment');
 
-    expect(realm.hostDefined).toBe(environment);
-    expect(realm.environment).toBe(environment);
-    expect(realm.environmentRecord).toBe(environment);
-    expect(environment.realm).toBe(realm);
+    expect(realm.hostDefined).toBe(env);
+    expect(realm.env).toBe(env);
+    expect(realm.envRecord).toBe(env);
+    expect(env.realm).toBe(realm);
+    expect(context.getEnvironment()).toBe(env);
   });
 
   it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {
     const options = createEventLoopOptions();
     const agent = new TestAgent(options);
-    const { realm, environment, context } = createTestRealm(agent, 'abort-timeout');
+    const { realm, env, context } = createTestRealm(agent, 'abort-timeout');
     context.install(realm.global);
-    const timers = environment.getWindowOrWorkerGlobalScopeMixin().timers;
+    const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
     const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
       .mockReturnValue(Symbol('Timer'));
 
@@ -68,8 +70,8 @@ describe('HTML callback and script-entry lifecycle', () => {
     installHostHooks();
     const options = { ...createEventLoopOptions(), createMicrotaskQueue };
     const agent = new TestAgent(options);
-    const { realm, environment } = createTestRealm(agent, 'engine-timeout');
-    const timers = environment.getWindowOrWorkerGlobalScopeMixin().timers;
+    const { realm, env } = createTestRealm(agent, 'engine-timeout');
+    const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
     const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
       .mockReturnValue(Symbol('Timer'));
     Reflect.set(realm.global, 'waitArray', new Int32Array(new SharedArrayBuffer(4)));
@@ -115,13 +117,13 @@ describe('HTML callback and script-entry lifecycle', () => {
     callbackRealm.realm.evaluate('pending.resolve()', 'settle-promise.js');
 
     expect(observations.map(({ incumbent }) => incumbent))
-      .toEqual([first.environment, second.environment]);
+      .toEqual([first.env, second.env]);
     for (const { task } of observations) {
       expect(task?.source.name).toBe('microtask');
       expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
-        .toEqual(new Set([callbackRealm.environment]));
+        .toEqual(new Set([callbackRealm.env]));
     }
-    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.environment);
+    expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.env);
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
   });
 
@@ -181,12 +183,12 @@ describe('HTML callback and script-entry lifecycle', () => {
 
     incumbentRealm.realm.evaluate('invoke()', 'invoke-callback.js');
 
-    expect(observation?.incumbent).toBe(incumbentRealm.environment);
+    expect(observation?.incumbent).toBe(incumbentRealm.env);
     expect(observation?.checkpointCount).toBe(0);
     expect(observation?.task?.scriptEvaluationEnvironmentSettingsObjectSet)
       .toEqual(new Set([
-        incumbentRealm.environment,
-        callbackRealm.environment,
+        incumbentRealm.env,
+        callbackRealm.env,
       ]));
     expect(checkpoint).toHaveBeenCalledOnce();
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
@@ -203,15 +205,15 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     const firstLoop = first.realm.agent.eventLoop;
 
-    firstLoop.prepareToRunCallback(first.environment);
+    firstLoop.prepareToRunCallback(first.env);
     try {
-      expect(first.realm.callbacks.captureContext()).toBe(first.environment);
-      expect(second.realm.callbacks.captureContext()).toBe(second.environment);
+      expect(first.realm.callbacks.captureContext()).toBe(first.env);
+      expect(second.realm.callbacks.captureContext()).toBe(second.env);
       expect(() => second.realm.agent.eventLoop
-        .prepareToRunCallback(first.environment))
+        .prepareToRunCallback(first.env))
         .toThrow('another event loop');
     } finally {
-      firstLoop.cleanUpAfterRunningCallback(first.environment);
+      firstLoop.cleanUpAfterRunningCallback(first.env);
     }
   });
 
@@ -311,7 +313,6 @@ function createTestRealm(
   const realm = createRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
-  const context = registerRealm(realm);
   const record = createEnvironmentRecord({
     userAgent: new UserAgent(),
     isSecureContext: false,
@@ -320,8 +321,9 @@ function createTestRealm(
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  const environment = new TestEnvironment(realm, record, context.getExecution());
-  return { realm, environment, context };
+  const context = registerRealm(realm, (binding) => new TestEnvironment(realm, record, createExecution(binding)));
+  const env = realm.env;
+  return { realm, env, context };
 }
 
 function createEventLoopOptions(

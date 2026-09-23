@@ -11,9 +11,9 @@ import {
 } from '../../src/fetch/url';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { parseURL } from '../../src/url/url';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { createControllerFixture } from './control-fixture';
-import { createClientSettings } from './client-fixture';
+import { createClientEnvironment } from './client-fixture';
 
 describe('Fetch §2 controllers', () => {
   it('starts ongoing with no timing, redirect steps, or serialized abort reason', () => {
@@ -54,14 +54,16 @@ describe('Fetch §2 controllers', () => {
     const error = {};
     const record = {};
     const { controller, abort } = createControllerFixture({
-      ...createExecution(),
-      serialize(value) {
-        expect(controller.state).toBe('aborted');
-        expect(controller.serializedAbortReason).toBeNull();
-        expect(value).toBe(error);
-        return record;
+      exec: {
+        ...createEnvironment().exec,
+        serialize(value) {
+          expect(controller.state).toBe('aborted');
+          expect(controller.serializedAbortReason).toBeNull();
+          expect(value).toBe(error);
+          return record;
+        },
+        deserialize: vi.fn(),
       },
-      deserialize: vi.fn(),
     });
     abort(error);
     expect(controller.serializedAbortReason).toBe(record);
@@ -73,9 +75,11 @@ describe('Fetch §2 controllers', () => {
 
   it('does not add a once-only restriction to abort or terminate', () => {
     const { controller, abort } = createControllerFixture({
-      ...createExecution(),
-      serialize: (value) => ({ value }),
-      deserialize: vi.fn(),
+      exec: {
+        ...createEnvironment().exec,
+        serialize: (value) => ({ value }),
+        deserialize: vi.fn(),
+      },
     });
     controller.terminate();
     abort('first');
@@ -86,7 +90,7 @@ describe('Fetch §2 controllers', () => {
 
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
-    const { abort } = createControllerFixture({ ...createExecution(), serialize, deserialize: vi.fn() });
+    const { abort } = createControllerFixture({ exec: { ...createEnvironment().exec, serialize, deserialize: vi.fn() } });
 
     abort();
     expect(serialize.mock.calls[0]![0]).toMatchObject({ name: 'AbortError' });
@@ -96,9 +100,11 @@ describe('Fetch §2 controllers', () => {
 
   it('falls back to AbortError if deserialization throws', () => {
     const { deserialize } = createControllerFixture({
-      ...createExecution(),
-      serialize: vi.fn(),
-      deserialize: () => { throw new Error('Unavailable serialized type'); },
+      exec: {
+        ...createEnvironment().exec,
+        serialize: vi.fn(),
+        deserialize: () => { throw new Error('Unavailable serialized type'); },
+      },
     });
     const reason = deserialize({});
     expect(reason).toMatchObject({ name: 'AbortError', message: '' });
@@ -170,15 +176,15 @@ describe('Fetch §2 task delivery', () => {
     const drains: (() => void)[] = [];
     const queue = new ParallelQueue((steps) => drains.push(steps));
     const queueGlobalTask = vi.fn();
-    const exec = createExecution();
-    exec.networking.queueGlobalTask = queueGlobalTask;
+    const env = createEnvironment();
+    env.exec.networking.queueGlobalTask = queueGlobalTask;
     const order: number[] = [];
 
     queueFetchTask(() => {
       order.push(1);
-      queueFetchTask(() => order.push(3), queue, exec);
-    }, queue, exec);
-    queueFetchTask(() => order.push(2), queue, exec);
+      queueFetchTask(() => order.push(3), queue, env);
+    }, queue, env);
+    queueFetchTask(() => order.push(2), queue, env);
     expect(order).toEqual([]);
     expect(drains).toHaveLength(1);
     drains.shift()!();
@@ -191,10 +197,10 @@ describe('Fetch §2 task delivery', () => {
     const global = {};
     const algorithm = vi.fn();
     const queueGlobalTask = vi.fn();
-    const exec = createExecution();
-    exec.networking.queueGlobalTask = queueGlobalTask;
+    const env = createEnvironment();
+    env.exec.networking.queueGlobalTask = queueGlobalTask;
 
-    queueFetchTask(algorithm, global, exec);
+    queueFetchTask(algorithm, global, env);
 
     expect(queueGlobalTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
     expect(algorithm).not.toHaveBeenCalled();
@@ -207,7 +213,7 @@ describe('Fetch §2 offline state and integer serialization', () => {
     [false, true, true], [true, true, true],
   ])('combines user-agent %s and BiDi %s offline state', (userAgent, bidi, expected) => {
     const webDriverBiDiNetworkIsOffline = vi.fn(() => bidi);
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     client.userAgent.assumeNoInternetConnectivity = userAgent;
     client.userAgent.webDriverBiDiNetworkIsOffline = webDriverBiDiNetworkIsOffline;
     expect(isOffline(client)).toBe(expected);

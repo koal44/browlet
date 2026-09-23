@@ -1,4 +1,4 @@
-import { isFixedBufferSource, type RealmExecution } from '../js-engine/index';
+import { isFixedBufferSource, type JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
@@ -25,10 +25,10 @@ export class TextDecoderStreamImpl {
   constructor(
     label: string,
     options: TextDecoderOptions,
-    exec: RealmExecution,
+    env: JSEnvironment,
   ) {
     this.#common = new TextDecoderCommonMixin(label, options);
-    const transform = new TransformStreamImpl(null, {}, {}, exec);
+    const transform = new TransformStreamImpl(null, {}, {}, env);
     transform.setUp(
       (chunk) => {
         if (!isFixedBufferSource(chunk)) {
@@ -79,7 +79,7 @@ export const textDecoderStreamIDL = defineInterface({
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
     constructWith: [
-      atArg(2, (ctx) => ctx.getExecution()),
+      atArg(2, (ctx) => ctx.getEnvironment()),
     ],
   }),
   members: [ctor([

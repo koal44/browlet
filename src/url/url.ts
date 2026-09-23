@@ -41,15 +41,19 @@ export type URLPath = string | string[];
 
 /** The part of a File API registration needed by URL's origin algorithm. */
 export type BlobURLEntry = {
-  environment: {
+  env: {
     origin: Origin;
   };
 };
 
-/** File API supplies resolution from the current user agent's Blob URL store. */
-export type BlobURLResolver = {
-  resolve(url: URLRecord): BlobURLEntry | null;
-};
+/** The browser owner supplying File API's Blob URL registrations to the URL parser. */
+export interface URLUserAgent {
+  /** Registrations shared by this user agent's environments. */
+  blobURLStore: {
+    /** Resolve the registration without obtaining its object or checking access. */
+    resolve(url: URLRecord): BlobURLEntry | null;
+  };
+}
 
 type ParseBasicURLOptions = {
   base?: URLRecord | null;
@@ -84,21 +88,20 @@ type URLParserState =
 /*
  * URL parser.
  *
- * Browser callers supply their user agent's Blob URL store. Standalone URL
- * consumers have no store and use the basic parser's result.
+ * Browser callers supply their user agent. Standalone URL consumers have no
+ * browser owner and use the basic parser's result.
  *
  * https://url.spec.whatwg.org/#concept-url-parser
  */
-// SPEC_MISMATCH: URL parser(input, base = null, encoding = UTF-8) -> URL or failure
 export function parseURL(
   input: string,
   base: URLRecord | null = null,
   encoding = 'UTF-8',
-  blobURLStore: BlobURLResolver | null = null,
+  userAgent: URLUserAgent | null = null,
 ): URLParseResult {
   const result = parseBasicURL(input, { base, encoding });
   if (result.url?.scheme === 'blob') {
-    result.url.blobURLEntry = blobURLStore?.resolve(result.url) ?? null;
+    result.url.blobURLEntry = userAgent?.blobURLStore.resolve(result.url) ?? null;
   }
   return result;
 }
@@ -704,7 +707,7 @@ export function obtainURLOrigin(url: URLRecord): Origin {
   switch (url.scheme) {
     case 'blob': {
       if (url.blobURLEntry !== null) {
-        return url.blobURLEntry.environment.origin;
+        return url.blobURLEntry.env.origin;
       }
 
       const pathURL = parseBasicURL(serializeURLPath(url)).url;

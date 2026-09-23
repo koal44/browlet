@@ -2,7 +2,7 @@ import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, throwDOMException,
 } from '../../../web-idl/index';
-import { getBufferSourceCopy, type RealmExecution } from '../../../js-engine/index';
+import { getBufferSourceCopy, type JSEnvironment } from '../../../js-engine/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
@@ -43,7 +43,7 @@ import { InternalError } from '../../../infra/internal-error';
  * };
  */
 export class FileReaderImpl extends EventTargetImpl {
-  #exec: RealmExecution;
+  #env: JSEnvironment;
   #state: FileReaderState = 'empty';
   #result: string | ArrayBuffer | null = null;
   #error: DOMException | null = null;
@@ -57,9 +57,9 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
-  constructor(exec: RealmExecution) {
+  constructor(env: JSEnvironment) {
     super();
-    this.#exec = exec;
+    this.#env = env;
   }
 
   readAsArrayBuffer(blob: BlobImpl): void {
@@ -183,7 +183,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const { fileReading, promises, runInParallel } = this.#exec;
+    const { fileReading, promises, runInParallel } = this.#env.exec;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -268,7 +268,7 @@ export class FileReaderImpl extends EventTargetImpl {
                 type,
                 blob.type,
                 encodingLabel,
-                this.#exec,
+                this.#env,
               );
               fire('load');
             } catch (error) {
@@ -306,7 +306,7 @@ export const fileReaderIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor(),

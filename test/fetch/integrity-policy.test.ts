@@ -4,7 +4,7 @@ import type { FetchEnvironment } from '../../src/fetch/infrastructure';
 import { FetchRequest, type Destination, type FetchMode } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { parseURL, serializeURL } from '../../src/url/url';
-import { createClientSettings } from './client-fixture';
+import { createClientEnvironment } from './client-fixture';
 
 describe('Integrity Policy request blocking', () => {
   it('allows requests under empty policies', () => {
@@ -191,7 +191,7 @@ function createRequest(enforced = '', reportOnly = '', url = 'https://resource.t
   if (reportOnly !== '') response.headerList.append('Integrity-Policy-Report-Only', reportOnly);
   container.parseIntegrityPolicyHeaders(response);
   const client = {
-    ...createClientSettings('https://document.test/page#fragment'), policyContainer: container,
+    ...createClientEnvironment('https://document.test/page#fragment'), policyContainer: container,
     queueReport: vi.fn<FetchEnvironment['queueReport']>(),
   };
   const request = new FetchRequest(parseURL(url).url!, client, client.userAgent);

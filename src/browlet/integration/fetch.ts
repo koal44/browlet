@@ -13,7 +13,7 @@ export function deserializeFetchAbortReason(
   context: BindingContext,
 ): unknown {
   return context.realizeException(
-    deserializeAbortReason(abortReason, context.getExecution()),
+    deserializeAbortReason(abortReason, context.getEnvironment()),
   );
 }
 
@@ -38,5 +38,5 @@ function getFetchEnvironment(context: BindingContext) {
   if (!(realm instanceof Realm)) {
     throw new InternalError('Fetch construction requires an HTML environment settings object');
   }
-  return realm.environment;
+  return realm.env;
 }

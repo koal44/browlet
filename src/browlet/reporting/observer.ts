@@ -23,12 +23,12 @@ export class ReportingObserverImpl {
 
   constructor(
     callback: ReportingObserverCallback, options: ReportingObserverOptions,
-    environment: Environment,
+    env: Environment,
   ) {
     this.#callback = callback;
     this.#types = options.types;
     this.#buffered = options.buffered;
-    this.#global = environment.getWindowOrWorkerGlobalScopeMixin();
+    this.#global = env.getWindowOrWorkerGlobalScopeMixin();
   }
 
   /** Register this observer, replaying buffered reports at most once. */
@@ -55,7 +55,7 @@ export class ReportingObserverImpl {
   takeRecords(): ReportImpl[] {
     // Disconnected observers are not retained by the global's registration set.
     // Apply the same age limit when their pending records are consumed later.
-    this.discardReportsBefore(Date.now() - this.#global.environment.userAgent.maxReportAge);
+    this.discardReportsBefore(Date.now() - this.#global.env.userAgent.maxReportAge);
     const reports = this.#reports;
     this.#reports = [];
     return reports;
@@ -130,7 +130,7 @@ export const reportingObserverIDL = defineInterface<Realm>({
         arg('callback', reference('ReportingObserverCallback'), onError('report')),
         arg('options', reference('ReportingObserverOptions'), { optional: true, default: emptyDictionary }),
       ],
-      { constructWith: [atArg(2, (ctx) => ctx.realm.environment)] },
+      { constructWith: [atArg(2, (ctx) => ctx.realm.env)] },
     ),
     op('observe', idlType.undefined),
     op('disconnect', idlType.undefined),

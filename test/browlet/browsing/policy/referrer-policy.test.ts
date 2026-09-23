@@ -9,7 +9,7 @@ import { FetchRequest } from '../../../../src/fetch/request';
 import { FetchResponse } from '../../../../src/fetch/response';
 import type { ReferrerPolicy } from '../../../../src/fetch/infrastructure';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/url';
-import { createClientSettings, createFetchUserAgent } from '../../../fetch/client-fixture';
+import { createClientEnvironment, createFetchUserAgent } from '../../../fetch/client-fixture';
 
 describe('Referrer-Policy header parsing', () => {
   it.each([
@@ -132,7 +132,7 @@ describe('Request referrer calculation', () => {
   );
 
   it('selects the client source without changing it', () => {
-    const client = createClientSettings(`${source}#fragment`);
+    const client = createClientEnvironment(`${source}#fragment`);
     const request = new FetchRequest(parseURL(targets[0]!).url!, client, new UserAgent());
     request.referrerPolicy = 'unsafe-url';
     const result = determineRequestReferrer(request);
@@ -147,7 +147,7 @@ describe('Request referrer calculation', () => {
     request.referrer = parseURL(source).url!;
     const result = determineRequestReferrer(request);
     expect(result === null ? null : serializeURL(result)).toBe(origin);
-    request.client = createClientSettings();
+    request.client = createClientEnvironment();
     request.client.getReferrerSource = () => { throw new Error('A resolved referrer does not use the client'); };
     expect(determineRequestReferrer(request)).toEqual(result);
     request.referrer = null;
@@ -157,7 +157,7 @@ describe('Request referrer calculation', () => {
   it('suppresses referrers for an absent client or a client prohibiting disclosure', () => {
     const request = createRequest();
     expect(determineRequestReferrer(request)).toBe(none);
-    request.client = createClientSettings();
+    request.client = createClientEnvironment();
     request.client.getReferrerSource = () => null;
     expect(determineRequestReferrer(request)).toBe(none);
   });

@@ -78,7 +78,7 @@ function createFixture() {
 function createReader() {
   const browlet = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(browlet.window);
-  const stream = new ReadableStreamImpl({}, {}, getBindingContext(realm).getExecution());
+  const stream = new ReadableStreamImpl({}, {}, getBindingContext(realm).getEnvironment());
   const controller = stream.controller;
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();

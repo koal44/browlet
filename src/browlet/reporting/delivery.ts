@@ -6,10 +6,10 @@ import { areSameOrigin, type Origin } from '../../url/index';
 
 /** Hand reports to browser-owned delivery without retaining their generating environment. */
 // https://w3c.github.io/reporting/#send-reports
-export function sendReports(reports: ReportImpl[], environment: Environment): void {
-  const { userAgent } = environment;
+export function sendReports(reports: ReportImpl[], env: Environment): void {
+  const { userAgent } = env;
   if (!userAgent.reportDeliveryEnabled) return;
-  const configuration = environment.getWindowOrWorkerGlobalScopeMixin().reportingEndpoints;
+  const configuration = env.getWindowOrWorkerGlobalScopeMixin().reportingEndpoints;
   const cutoff = Date.now() - userAgent.maxReportAge;
   const endpointMap = new Map<ReportingEndpoint, ReportImpl[]>();
   for (const report of reports) {

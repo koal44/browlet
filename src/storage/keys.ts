@@ -13,17 +13,17 @@ export class StorageKey {
 
   /** Obtain a storage key, or null for an opaque origin or disabled storage. */
   // https://storage.spec.whatwg.org/#obtain-a-storage-key
-  static obtain(environment: StorageEnvironment): StorageKey | null {
-    const key = StorageKey.obtainForNonStoragePurposes(environment);
+  static obtain(env: StorageEnvironment): StorageKey | null {
+    const key = StorageKey.obtainForNonStoragePurposes(env);
     if (key.origin.kind === 'opaque') return null;
-    if (!environment.userAgent.storageEnabled) return null;
+    if (!env.userAgent.storageEnabled) return null;
     return key;
   }
 
   /** Obtain an access-check key even when storage is disabled or the origin is opaque. */
   // https://storage.spec.whatwg.org/#obtain-a-storage-key-for-non-storage-purposes
-  static obtainForNonStoragePurposes(environment: StorageEnvironment): StorageKey {
-    const origin = environment.origin ?? obtainURLOrigin(environment.creationURL);
+  static obtainForNonStoragePurposes(env: StorageEnvironment): StorageKey {
+    const origin = env.origin ?? obtainURLOrigin(env.creationURL);
     return new StorageKey(origin);
   }
 

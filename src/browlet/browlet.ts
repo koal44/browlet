@@ -6,7 +6,8 @@ import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
-import { project, getBindingContext, getRelevantRealm } from './bindings';
+import { project, getRelevantRealm } from './bindings';
+import type { Environment } from './scripting/environment';
 import { createAndInitializeDocument } from './browsing/document-lifecycle';
 import {
   createNewTopLevelTraversable, type TopLevelTraversable,
@@ -117,7 +118,7 @@ export class Browlet {
   private navigateDocument(url: string | URL): PromiseValue<WindowProxy> {
     const documentURL = new URL(url);
     const source = this.getRouteSource(documentURL);
-    const documentURLRecord = requireURLRecord(documentURL.href, this.#userAgent);
+    const documentURLRecord = requireURLRecord(documentURL.href, getRelevantRealm(this.window).env);
     const navigationParams = NavigationParams.fromSource(
       this.#traversable,
       documentURLRecord,
@@ -134,7 +135,7 @@ export class Browlet {
       navigationParams,
     );
     const realm = getRelevantRealm(document);
-    const exec = getBindingContext(realm).getExecution();
+    const env = document.env;
     const historyEntry = navigationParams.createHistoryEntry(document);
     finalizeCrossDocumentNavigation(
       this.#traversable,
@@ -160,7 +161,7 @@ export class Browlet {
         );
       },
       realm.agent.eventLoop,
-      exec,
+      env,
     );
 
     return parser.parse(source).then(() => {
@@ -217,8 +218,8 @@ function getTextContent(element: ElementImpl): string {
   return content;
 }
 
-function requireURLRecord(input: string, userAgent: UserAgent) {
-  const record = userAgent.parseURL(input).url;
+function requireURLRecord(input: string, env: Environment) {
+  const record = env.parseURL(input).url;
   // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
   if (record === null) throw new Error(`Could not parse ${input}`);
   return record;

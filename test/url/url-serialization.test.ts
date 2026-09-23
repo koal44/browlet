@@ -104,11 +104,11 @@ describe('URL Standard sections 4.5 through 4.7', () => {
   });
 
   it('uses the environment origin cached by a blob URL entry', () => {
-    const environmentOrigin = urlAlgorithms()
+    const envOrigin = urlAlgorithms()
       .obtainOrigin(parse('https://example.org/'));
     const blobURL = parse('blob:https://discarded.example/id');
-    blobURL.blobURLEntry = { environment: { origin: environmentOrigin } };
+    blobURL.blobURLEntry = { env: { origin: envOrigin } };
 
-    expect(urlAlgorithms().obtainOrigin(blobURL)).toBe(environmentOrigin);
+    expect(urlAlgorithms().obtainOrigin(blobURL)).toBe(envOrigin);
   });
 });

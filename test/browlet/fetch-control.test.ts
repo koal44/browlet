@@ -12,8 +12,8 @@ import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';
 describe('Fetch client settings ownership', () => {
   it('shares networking owners across settings while separating opaque cache partitions', () => {
     const userAgent = new UserAgent();
-    const first = createFetchWindow(userAgent).realm.environment;
-    const second = createFetchWindow(userAgent).realm.environment;
+    const first = createFetchWindow(userAgent).realm.env;
+    const second = createFetchWindow(userAgent).realm.env;
     const firstRequest = new FetchRequest(first.creationURL, first, first.userAgent);
     const secondRequest = new FetchRequest(second.creationURL, second, second.userAgent);
     const partitions = userAgent.httpCachePartitions;
@@ -32,8 +32,8 @@ describe('Fetch client settings ownership', () => {
 
   it('owns a separate fetch group for each settings object in the same user agent', () => {
     const userAgent = new UserAgent();
-    const first = createFetchWindow(userAgent).realm.environment;
-    const second = createFetchWindow(userAgent).realm.environment;
+    const first = createFetchWindow(userAgent).realm.env;
+    const second = createFetchWindow(userAgent).realm.env;
     const request = new FetchRequest(first.creationURL, first, first.userAgent);
     const controller = new FetchController();
 
@@ -52,9 +52,9 @@ describe('Fetch client settings ownership', () => {
 
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
-    const environment = realm.environment;
-    const request = new FetchRequest(parseURL('https://example.test/').url!, environment, environment.userAgent);
-    request.origin = environment.origin;
+    const env = realm.env;
+    const request = new FetchRequest(parseURL('https://example.test/').url!, env, env.userAgent);
+    request.origin = env.origin;
     const container = document!.policyContainer;
 
     expect(request.client!.policyContainer).toBe(container);
@@ -77,27 +77,27 @@ describe('Fetch client settings ownership', () => {
   it('reads the owning browser\'s live offline state even after its browsing context is detached', () => {
     const first = createFetchWindow();
     const second = createFetchWindow();
-    const environment = first.realm.environment;
-    const otherSettings = second.realm.environment;
-    const request = new FetchRequest(environment.creationURL, environment, environment.userAgent);
+    const env = first.realm.env;
+    const otherEnv = second.realm.env;
+    const request = new FetchRequest(env.creationURL, env, env.userAgent);
 
-    expect(request.client).toBe(environment);
-    expect(environment.userAgent).not.toBe(otherSettings.userAgent);
-    expect(environment.userAgent.webDriverBiDiNetworkIsOffline(environment)).toBe(false);
+    expect(request.client).toBe(env);
+    expect(env.userAgent).not.toBe(otherEnv.userAgent);
+    expect(env.userAgent.webDriverBiDiNetworkIsOffline(env)).toBe(false);
     expect(isOffline(request.client!)).toBe(false);
 
-    environment.userAgent.assumeNoInternetConnectivity = true;
+    env.userAgent.assumeNoInternetConnectivity = true;
     expect(isOffline(request.client!)).toBe(true);
-    expect(isOffline(otherSettings)).toBe(false);
+    expect(isOffline(otherEnv)).toBe(false);
 
     const context = first.document!.browsingContext!;
-    expect(context.group!.userAgent).toBe(environment.userAgent);
+    expect(context.group!.userAgent).toBe(env.userAgent);
     context.group!.remove(context);
     expect(context.group).toBeNull();
-    expect(isOffline(environment)).toBe(true);
+    expect(isOffline(env)).toBe(true);
 
-    environment.userAgent.assumeNoInternetConnectivity = false;
-    expect(isOffline(environment)).toBe(false);
+    env.userAgent.assumeNoInternetConnectivity = false;
+    expect(isOffline(env)).toBe(false);
   });
 });
 
@@ -113,11 +113,11 @@ describe('RealmExecution structured serialization', () => {
       value.self = value;
       return value;
     })()`, 'execution-serialize.js') as Value;
-    const record = source.exec.serialize(value);
+    const record = source.env.exec.serialize(value);
     value.bytes[0] = 9;
 
-    const first = target.exec.deserialize(record) as Value;
-    const second = other.exec.deserialize(record) as Value;
+    const first = target.env.exec.deserialize(record) as Value;
+    const second = other.env.exec.deserialize(record) as Value;
     for (const [restored, destination] of [[first, target], [second, other]] as const) {
       expect([...restored.bytes]).toEqual([1, 2]);
       expect(restored.self).toBe(restored);
@@ -181,7 +181,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
 
   it('uses AbortError for a missing record and for serialized undefined', () => {
     const target = createFetchWindow();
-    for (const record of [null, target.exec.serialize(undefined)]) {
+    for (const record of [null, target.env.exec.serialize(undefined)]) {
       expectAbortError(target.deserialize(record), target);
     }
   });

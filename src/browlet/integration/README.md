@@ -15,8 +15,8 @@ shared global-scope mixin. The Document lifecycle algorithms retain their own
 initialization. `createDocument()` obtains the node factory and
 Stylelet execution facilities through Document's existing construction declaration. Record
 creation initializes its realm-owned event factory without projecting it.
-The mixin uses `environment.exec.clone()` and derives timer ownership from
-`environment.realm`, without retaining a Binding Context or a separate execution
+The mixin uses `env.exec.clone()` and derives timer ownership from
+`env.realm`, without retaining a Binding Context or a separate execution
 argument.
 
 A standalone subsystem owns the contract for each capability it consumes. A
@@ -43,8 +43,9 @@ Domain-local behavior still remains with its owning subsystem.
   acquisition to URL and Fetch without exposing store mutation to Fetch.
 - `execution.ts` composes engine facilities, DOM AbortController construction,
   HTML task delivery, and structured cloning into `RealmExecution`. The binding's
-  `getExecution()` and `environment.exec` retain that same execution object;
-  declarations supply it to portable implementations. Clone and serialization
+  `getEnvironment()` retains the actual browser environment; declarations supply
+  it to portable implementations through the `JSEnvironment` contract and its
+  `exec` field. Clone and serialization
   operations capture the explicit destination binding here.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected

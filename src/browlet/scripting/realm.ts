@@ -37,7 +37,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   crossOriginIsolated: boolean;
   globalNames: ReadonlySet<string>;
   isGlobalPrototypeChainMutable: boolean;
-  #environmentRecord: EnvironmentRecord | undefined;
+  #envRecord: EnvironmentRecord | undefined;
   #hostDefined: Environment | undefined;
 
   constructor(options: RealmOptions = {}) {
@@ -51,40 +51,40 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     this.globalNames = new Set(options.globalNames ?? []);
     this.isGlobalPrototypeChainMutable =
       options.isGlobalPrototypeChainMutable ?? false;
-    this.#environmentRecord = options.environmentRecord;
+    this.#envRecord = options.envRecord;
     this.callbacks = {
       /* Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3. */
       captureContext: () => {
-        const environment = this.#hostDefined;
-        if (environment === undefined) return this;
-        return environment.responsibleEventLoop
-          .getIncumbentSettingsObject(environment);
+        const env = this.#hostDefined;
+        if (env === undefined) return this;
+        return env.responsibleEventLoop
+          .getIncumbentSettingsObject(env);
       },
       cleanUpAfterRunningCallback: (context) => {
-        const environment = this.#getCallbackSettings(context);
-        if (environment !== undefined) {
-          environment.responsibleEventLoop
-            .cleanUpAfterRunningCallback(environment);
+        const env = this.#getCallbackSettings(context);
+        if (env !== undefined) {
+          env.responsibleEventLoop
+            .cleanUpAfterRunningCallback(env);
         }
       },
       cleanUpAfterRunningScript: () => {
-        const environment = this.#hostDefined;
-        if (environment !== undefined) {
-          environment.responsibleEventLoop.cleanUpAfterRunningScript(environment);
+        const env = this.#hostDefined;
+        if (env !== undefined) {
+          env.responsibleEventLoop.cleanUpAfterRunningScript(env);
         }
       },
       getAssociatedRealm: (value) =>
         Realm.getAssociatedRealm(value) ?? this,
       prepareToRunCallback: (context) => {
-        const environment = this.#getCallbackSettings(context);
-        if (environment !== undefined) {
-          this.agent.eventLoop.prepareToRunCallback(environment);
+        const env = this.#getCallbackSettings(context);
+        if (env !== undefined) {
+          this.agent.eventLoop.prepareToRunCallback(env);
         }
       },
       prepareToRunScript: () => {
-        const environment = this.#hostDefined;
-        if (environment !== undefined) {
-          environment.responsibleEventLoop.prepareToRunScript(environment);
+        const env = this.#hostDefined;
+        if (env !== undefined) {
+          env.responsibleEventLoop.prepareToRunScript(env);
         }
       },
       reportException: (exception) => {
@@ -105,37 +105,37 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     return this.#hostDefined;
   }
 
-  // TODO: Revisit merging environment and hostDefined when additional realm
+  // TODO: Revisit merging env and hostDefined when additional realm
   // lifecycles clarify which callers still need an optional environment.
   /** Attached browser environment; throws before environment construction. */
-  get environment(): Environment {
+  get env(): Environment {
     if (this.#hostDefined === undefined) throw new InternalError('Realm has no environment');
     return this.#hostDefined;
   }
 
-  get environmentRecord(): EnvironmentRecord | undefined {
-    return this.#environmentRecord;
+  get envRecord(): EnvironmentRecord | undefined {
+    return this.#envRecord;
   }
 
   get secureContext(): boolean {
-    return this.#environmentRecord?.isSecureContext ?? false;
+    return this.#envRecord?.isSecureContext ?? false;
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    const environment = this.#hostDefined;
-    if (environment === undefined) return super.evaluate(source, filename, lineOffset);
-    return environment.responsibleEventLoop.runScriptEvaluation(
-      environment,
+    const env = this.#hostDefined;
+    if (env === undefined) return super.evaluate(source, filename, lineOffset);
+    return env.responsibleEventLoop.runScriptEvaluation(
+      env,
       () => super.evaluate(source, filename, lineOffset),
     );
   }
 
   eventTimeStamp(): DOMHighResTimeStamp {
-    const environment = this.#hostDefined;
-    if (environment === undefined) {
+    const env = this.#hostDefined;
+    if (env === undefined) {
       return coarsenedSharedCurrentTime().milliseconds;
     }
-    return environment.timing.currentHighResolutionTime().toTimestamp();
+    return env.timing.currentHighResolutionTime().toTimestamp();
   }
 
   /** Document used for HTML task activity checks; non-Window globals have none. */
@@ -185,9 +185,9 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
   }
 
   /** Attach this realm's HTML environment. */
-  setHostDefined(environment: Environment): void {
-    this.#environmentRecord = environment;
-    this.#hostDefined = environment;
+  setHostDefined(env: Environment): void {
+    this.#envRecord = env;
+    this.#hostDefined = env;
   }
 
   // -- Private ----------------------------------------------------------
@@ -196,9 +196,9 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     context: object,
   ): Environment | undefined {
     if (this.#hostDefined === undefined && context instanceof Realm) return undefined;
-    const environment = context as Environment;
-    if (environment.realm.hostDefined === environment) {
-      return environment;
+    const env = context as Environment;
+    if (env.realm.hostDefined === env) {
+      return env;
     }
     throw new InternalError('A JavaScript callback context is not a settings object');
   }
@@ -256,12 +256,12 @@ export type RealmOptions = {
   crossOriginIsolated?: boolean;
   globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;
-  environmentRecord?: EnvironmentRecord;
+  envRecord?: EnvironmentRecord;
 };
 
 export type WindowRealmOptions = Omit<RealmOptions, 'globalNames' | 'isGlobalPrototypeChainMutable'> & {
   agent: WindowAgent;
-  environmentRecord: EnvironmentRecord;
+  envRecord: EnvironmentRecord;
 };
 
 type SecurityCheckType = Parameters<

@@ -1,7 +1,7 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon } from '../js-engine/index';
+import { addon, type JSEnvironment } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -90,8 +90,11 @@ export function unwrap<Value extends object>(value: object): StampedImplInstance
   return browletBindings.unwrap<Value>(value);
 }
 
-export function registerRealm(realm: Realm): BindingContext<Realm> {
-  return browletBindings.register(realm);
+export function registerRealm(
+  realm: Realm,
+  createEnvironment?: (context: BindingContext<Realm>) => JSEnvironment,
+): BindingContext<Realm> {
+  return browletBindings.register(realm, createEnvironment);
 }
 
 /** Retrieve the realm's context in Browlet's main binding world. */
@@ -112,8 +115,12 @@ class BrowletBindings {
     );
   }
 
-  register(realm: Realm): BindingContext<Realm> {
-    return this.#world.register(realm, createExecution);
+  register(
+    realm: Realm,
+    createEnvironment: (context: BindingContext<Realm>) => JSEnvironment =
+      (context) => ({ exec: createExecution(context) }),
+  ): BindingContext<Realm> {
+    return this.#world.register(realm, createEnvironment);
   }
 
   forRealm(realm: Realm): BindingContext<Realm> {
@@ -128,13 +135,13 @@ class BrowletBindings {
   ): WindowEnvironment {
     const {
       agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
-      reservedEnvironment = null, previousRealm,
+      reservedEnv = null, previousRealm,
     } = initialization;
     // HTML secure-context determination; browser ancestry checks include the
     // parent's full chain. A reserved environment already carries that decision.
     // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
     // https://w3c.github.io/webappsec-secure-contexts/#ancestors
-    const environmentRecord = reservedEnvironment ?? createEnvironmentRecord({
+    const envRecord = reservedEnv ?? createEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
@@ -148,12 +155,21 @@ class BrowletBindings {
     if (useAddonGlobals) previousRealm?.detachGlobal();
     const realm = new WindowRealm(window, {
       agent,
-      environmentRecord,
+      envRecord,
       reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
       // Window.prototype -> named properties -> EventTarget.prototype.
       globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
     });
-    const context = this.register(realm);
+    // This new realm is registered exactly once; composition runs synchronously.
+    let env!: WindowEnvironment;
+    const context = this.#world.register(realm, (binding) => {
+      // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+      // Execution reads the installed global lazily; all consumers retain this environment.
+      env = new WindowEnvironment(realm, {
+        ...envRecord, creationURL, topLevelCreationURL, topLevelOrigin,
+      }, createExecution(binding));
+      return env;
+    });
     const chain = realm.globalPrototypeChain;
     let globalObject: Window;
     if (chain) {
@@ -181,14 +197,9 @@ class BrowletBindings {
       ? adoptNativeWindowProxy(realm.globalThis)
       : previousRealm?.globalThis ?? createWindowProxy();
     realm.setGlobalObjects(globalObject, globalThis);
-    // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
-    // The environment constructor attaches itself to this same WindowRealm.
-    const environment = new WindowEnvironment(realm, {
-      ...environmentRecord, creationURL, topLevelCreationURL, topLevelOrigin,
-    }, context.getExecution());
-    if (reservedEnvironment !== null) reservedEnvironment.id = '';
-    window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(environment));
-    return environment;
+    if (reservedEnv !== null) reservedEnv.id = '';
+    window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+    return env;
   }
 
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
@@ -235,7 +246,7 @@ type WindowEnvironmentInit = {
   parent: WindowImpl | null;
   topLevelCreationURL: URLRecord;
   topLevelOrigin: Origin;
-  reservedEnvironment?: EnvironmentRecord | null;
+  reservedEnv?: EnvironmentRecord | null;
   previousRealm?: WindowRealm;
 };
 

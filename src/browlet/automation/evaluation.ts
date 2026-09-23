@@ -115,7 +115,7 @@ export class PageEvaluation {
     const realm = this.#realm;
     const task = realm.queueGlobalTask(evaluationTaskSource, () => {
       this.#tasks.delete(task);
-      realm.agent.eventLoop.runScriptEvaluation(realm.environment, steps);
+      realm.agent.eventLoop.runScriptEvaluation(realm.env, steps);
     });
     this.#tasks.add(task);
   }

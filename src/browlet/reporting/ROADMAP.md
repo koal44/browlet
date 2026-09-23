@@ -173,7 +173,7 @@ inactivity nor every navigation is a destruction notification.
 
 **Independent algorithms implemented:** §§2.4, 3.5, 5, §7's report generator,
 and outbound opt-out. Globals retain their specified local queues and call
-`sendReports(reports, environment)` to hand off pending reports. It groups
+`sendReports(reports, env)` to hand off pending reports. It groups
 by endpoint identity and report origin, drops unknown
 destinations, and uses `ReportImpl.cloneForDelivery()` to copy JSON data and
 metadata into a fresh `ReportImpl`. The copy omits the observer body and has no

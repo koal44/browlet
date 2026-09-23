@@ -35,7 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { asciiLower } from '../infra/ascii';
 import { RangeError } from '../infra/exceptions';
 import type { PromiseValue } from '../infra/promises';
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 import { GB18030Decoder, GB18030Encoder } from './codecs/gb18030';
 import { Big5Decoder, Big5Encoder } from './codecs/big5';
@@ -239,13 +239,13 @@ export function decode(
 /** §6.1 — Decode into supplied output as input arrives; one leading BOM overrides the fallback. */
 export function decodeQueue(
   input: IOQueue<Uint8Array>, encoding: Encoding,
-  output: IOQueue<string> = new IOQueue<string>(), exec: RealmExecution,
+  output: IOQueue<string> = new IOQueue<string>(), env: JSEnvironment,
 ): PromiseValue<IOQueue<string>> {
-  return input.waitFor(3, exec).then(() => {
+  return input.waitFor(3, env).then(() => {
     const bom = bomSniff(input);
     if (bom) input.readAvailable(bom === 'UTF-8' ? 3 : 2);
     const decoder = getDecoder(bom ?? encoding);
-    return processQueue(input, () => decoder.decode(input, output, 'replacement'), exec).then(() => output);
+    return processQueue(input, () => decoder.decode(input, output, 'replacement'), env).then(() => output);
   });
 }
 
@@ -265,10 +265,10 @@ export function encode(input: string, encoding: Encoding): Uint8Array {
 
 /** §6.1 — Encode with HTML error handling, appending to the caller's output. */
 export function encodeQueue(
-  input: IOQueue<string>, encoding: Encoding, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), exec: RealmExecution,
+  input: IOQueue<string>, encoding: Encoding, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), env: JSEnvironment,
 ): PromiseValue<IOQueue<Uint8Array>> {
   const encoder = getEncoder(encoding);
-  return processQueue(input, () => encoder.encode(input, output, 'html'), exec).then(() => output);
+  return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output);
 }
 
 /** §6.1 — Encode or fail for complete input, as used by synchronous URL parsing. */
@@ -280,9 +280,9 @@ export function encodeOrFailSync(input: IOQueue<string>, encoder: Encoder, outpu
 
 /** §6.1 — Encode or fail; end this output even when encoding stops at an error. */
 export function encodeOrFail(
-  input: IOQueue<string>, encoder: Encoder, output: IOQueue<Uint8Array>, exec: RealmExecution,
+  input: IOQueue<string>, encoder: Encoder, output: IOQueue<Uint8Array>, env: JSEnvironment,
 ): PromiseValue<number | null> {
-  return processQueue(input, () => encoder.encode(input, output, 'fatal'), exec).then((result) => {
+  return processQueue(input, () => encoder.encode(input, output, 'fatal'), env).then((result) => {
     output.push(endOfQueue);
     return typeof result === 'object' ? result.error : null;
   });

@@ -49,7 +49,7 @@ describe('Reporting serialization', () => {
 
 describe('Reporting delivery', () => {
   it('groups by endpoint identity and source origin, preserving report order within each group', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     const first = new ReportingEndpoint('first', parseURL('https://collector.test/').url!);
     const second = new ReportingEndpoint('second', first.url);
     scope.reportingEndpoints.push(first, second);
@@ -57,7 +57,7 @@ describe('Reporting delivery', () => {
       makeReport('https://a.test/1', 'first'), makeReport('https://a.test/2', 'second'),
       makeReport('https://b.test/3', 'first'), makeReport('https://a.test/4', 'first'),
       makeReport('https://a.test/ignored', 'missing'),
-    ], environment);
+    ], env);
     expect(fetchRequest).not.toHaveBeenCalled();
     await runReportingTasks(userAgent);
     const requests = fetchRequest.mock.calls.map(([request]) => request);
@@ -71,9 +71,9 @@ describe('Reporting delivery', () => {
   });
 
   it('passes a clientless Fetch request and parallel response processing to Fetch', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     scope.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://collector.test/reports').url!));
-    sendReports([makeReport('https://source.test/page')], environment);
+    sendReports([makeReport('https://source.test/page')], env);
     await runReportingTasks(userAgent);
     const [request, options] = fetchRequest.mock.calls[0]!;
     expect(request).toBeInstanceOf(FetchRequest);
@@ -93,7 +93,7 @@ describe('Reporting delivery', () => {
   });
 
   it('copies producer data at handoff but measures age when delivery begins', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     scope.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://collector.test/').url!));
     const report = makeReport('https://source.test/');
     const body = { nested: { message: 'original' } };
@@ -101,7 +101,7 @@ describe('Reporting delivery', () => {
     report.timestamp = 8000;
     const clock = vi.spyOn(Date, 'now').mockReturnValue(9000);
     try {
-      sendReports([report], environment);
+      sendReports([report], env);
       body.nested.message = 'changed';
       clock.mockReturnValue(10_000);
       await runReportingTasks(userAgent);
@@ -114,21 +114,21 @@ describe('Reporting delivery', () => {
   });
 
   it('does not merge distinct opaque origins merely because they serialize as null', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     scope.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://collector.test/').url!));
     const first = makeReport('https://source.test/');
     const second = makeReport('https://source.test/');
     first.url = second.url = 'data';
     first.origin = createOpaqueOrigin();
     second.origin = createOpaqueOrigin();
-    sendReports([first, second], environment);
+    sendReports([first, second], env);
     await runReportingTasks(userAgent);
     expect(fetchRequest.mock.calls.map(([request]) => request.origin)).toEqual([first.origin, second.origin]);
   });
 
   it('copies a projected report without retaining its body or binding identity', async () => {
-    const { userAgent, realm, environment, scope } = createWindow();
-    const report = environment.generateReport({ message: 'test' }, 'test', 'default');
+    const { userAgent, realm, env, scope } = createWindow();
+    const report = env.generateReport({ message: 'test' }, 'test', 'default');
     const platform = getBindingContext(realm).project(ReportImpl, report);
     Reflect.get(platform, 'body');
     expect(isStampedImplInstance(report)).toBe(true);
@@ -136,7 +136,7 @@ describe('Reporting delivery', () => {
     report.attempts = 2;
     scope.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://collector.test/').url!));
     const cloning = vi.spyOn(report, 'cloneForDelivery');
-    sendReports([report], environment);
+    sendReports([report], env);
     const copy = cloning.mock.results[0]!.value as ReportImpl;
     expect(copy).toBeInstanceOf(ReportImpl);
     expect(copy).not.toBe(report);
@@ -157,8 +157,8 @@ describe('Reporting delivery', () => {
     const url = parseURL('https://collector.test/').url!;
     first.scope.reportingEndpoints.push(new ReportingEndpoint('default', url));
     second.scope.reportingEndpoints.push(new ReportingEndpoint('default', url));
-    sendReports([makeReport('https://source.test/1')], first.environment);
-    sendReports([makeReport('https://source.test/2')], second.environment);
+    sendReports([makeReport('https://source.test/1')], first.env);
+    sendReports([makeReport('https://source.test/2')], second.env);
     await runReportingTasks(first.userAgent);
     fetchRequest.mock.calls[0]![1]!.processResponse!(response(410));
     await runReportingTasks(first.userAgent);
@@ -170,24 +170,24 @@ describe('Reporting delivery', () => {
   });
 
   it('honors opt-out both before handoff and before running the delivery task', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     scope.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://collector.test/').url!));
-    sendReports([makeReport('https://source.test/1')], environment);
+    sendReports([makeReport('https://source.test/1')], env);
     userAgent.reportDeliveryEnabled = false;
     await runReportingTasks(userAgent);
     expect(fetchRequest).not.toHaveBeenCalled();
-    sendReports([makeReport('https://source.test/2')], environment);
+    sendReports([makeReport('https://source.test/2')], env);
     userAgent.reportDeliveryEnabled = true;
     await runReportingTasks(userAgent);
     expect(fetchRequest).not.toHaveBeenCalled();
   });
 
   it('retires old pending reports and failing endpoints before making requests', async () => {
-    const { userAgent, environment, scope } = createWindow();
+    const { userAgent, env, scope } = createWindow();
     const endpoint = new ReportingEndpoint('default', parseURL('https://collector.test/').url!);
     scope.reportingEndpoints.push(endpoint);
     const report = makeReport('https://source.test/');
-    sendReports([report], environment);
+    sendReports([report], env);
     const clock = vi.spyOn(Date, 'now').mockReturnValue(report.timestamp + userAgent.maxReportAge + 1);
     try {
       await runReportingTasks(userAgent);
@@ -195,7 +195,7 @@ describe('Reporting delivery', () => {
     } finally {
       clock.mockRestore();
     }
-    sendReports([makeReport('https://source.test/')], environment);
+    sendReports([makeReport('https://source.test/')], env);
     endpoint.failures = userAgent.maxReportingEndpointFailures + 1;
     await runReportingTasks(userAgent);
     expect(fetchRequest).not.toHaveBeenCalled();
@@ -267,8 +267,8 @@ describe('Reporting delivery results', () => {
   });
 
   it('removes an endpoint on 410 and discards further queued reports for that configuration', async () => {
-    const { processResponse, scope, userAgent, environment } = await startDelivery();
-    sendReports([makeReport('https://source.test/later')], environment);
+    const { processResponse, scope, userAgent, env } = await startDelivery();
+    sendReports([makeReport('https://source.test/later')], env);
     processResponse(response(410));
     await runReportingTasks(userAgent);
     expect(scope.reportingEndpoints).toEqual([]);
@@ -279,8 +279,8 @@ describe('Reporting delivery results', () => {
 function createWindow(userAgent = new UserAgent()) {
   const traversable = createNewTopLevelTraversable(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeDocument!);
-  const environment = realm.environment;
-  return { userAgent, traversable, realm, environment, scope: environment.getWindowOrWorkerGlobalScopeMixin() };
+  const env = realm.env;
+  return { userAgent, traversable, realm, env, scope: env.getWindowOrWorkerGlobalScopeMixin() };
 }
 
 // Wait through the real host scheduler; no HTML checkpoint is needed for delivery.
@@ -298,7 +298,7 @@ async function startDelivery() {
   const result = createWindow();
   const endpoint = new ReportingEndpoint('default', parseURL('https://collector.test/').url!);
   result.scope.reportingEndpoints.push(endpoint);
-  sendReports([makeReport('https://source.test/')], result.environment);
+  sendReports([makeReport('https://source.test/')], result.env);
   await runReportingTasks(result.userAgent);
   return { ...result, endpoint, processResponse: fetchRequest.mock.calls[0]![1]!.processResponse! };
 }

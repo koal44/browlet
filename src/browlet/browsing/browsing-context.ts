@@ -126,7 +126,7 @@ export function createNewBrowsingContextAndDocument(
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
-  const environment = createWindowEnvironment({
+  const env = createWindowEnvironment({
     agent, userAgent: group.userAgent,
     creationURL: aboutBlankURL,
     origin,
@@ -134,7 +134,7 @@ export function createNewBrowsingContextAndDocument(
     topLevelCreationURL,
     topLevelOrigin,
   });
-  const { window, realm } = environment;
+  const { window, realm } = env;
   browsingContext.initializeWindowProxy(
     realm.globalThis as WindowProxy,
   );
@@ -148,7 +148,7 @@ export function createNewBrowsingContextAndDocument(
   document.permissionsPolicy = permissionsPolicy;
   document.setActiveSandboxingFlagSet(sandboxFlags);
   document.initializeLoadTimingInfo(
-    unsafeContextCreationTime.coarsen(environment.crossOriginIsolatedCapability).milliseconds,
+    unsafeContextCreationTime.coarsen(env.crossOriginIsolatedCapability).milliseconds,
   );
   document.isInitialAboutBlank = true;
   document.aboutBaseURL = creatorBaseURL;
@@ -166,7 +166,7 @@ export function createNewBrowsingContextAndDocument(
 
   if (
     document.URL !== 'about:blank' ||
-    serializeURL(environment.creationURL) !== 'about:blank'
+    serializeURL(env.creationURL) !== 'about:blank'
   ) {
     throw new InternalError('Initial Document and environment must use about:blank');
   }
@@ -395,8 +395,8 @@ function makeActive(
   }
 
   retargetWindowProxy(browsingContext.windowProxy, window);
-  const environment = realm.environment;
-  environment.markExecutionReady();
+  const env = realm.env;
+  env.markExecutionReady();
 }
 
 function requireURLRecord(input: string): URLRecord {

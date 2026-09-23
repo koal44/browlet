@@ -18,13 +18,13 @@ import {
 
 describe('BrowletParser', () => {
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
-    const { document, realm, exec, drain } = createParserDocument();
+    const { document, realm, env, drain } = createParserDocument();
     const blocker = document.createElement('style');
     document.addScriptBlockingStyleSheet(blocker);
     let scripts = 0;
     let complete = false;
     const errors: unknown[] = [];
-    const parser = new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, exec);
+    const parser = new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, env);
     void parser.parse('<script></script><main id="after"></main>').then(
       () => { complete = true; },
       (error) => { errors.push(error); },
@@ -52,14 +52,14 @@ describe('BrowletParser', () => {
 
   it('waits for script-blocking style sheets before executing a script', async () => {
     const scripts: Element[] = [];
-    const { document, realm, exec, drain } = createParserDocument();
+    const { document, realm, env, drain } = createParserDocument();
     const parser = new BrowletParser(
       document,
       (script) => {
         scripts.push(script);
       },
       realm.agent.eventLoop,
-      exec,
+      env,
     );
     expect(parser.document).toBe(document);
     const first = parser.document.createElement('style');
@@ -103,13 +103,13 @@ describe('BrowletParser', () => {
   });
 
   it.each([false, true])('rechecks a new stylesheet blocker (later task: %s)', async (laterTask) => {
-    const { document, realm, exec, drain } = createParserDocument();
+    const { document, realm, env, drain } = createParserDocument();
     const first = document.createElement('style');
     const second = document.createElement('style');
     document.addScriptBlockingStyleSheet(first);
     let scripts = 0;
     const errors: unknown[] = [];
-    new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, exec)
+    new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, env)
       .parse('<script></script>').observe(() => {}, (error) => { errors.push(error); });
     await inNodeTask(drain);
 
@@ -135,10 +135,10 @@ describe('BrowletParser', () => {
   });
 
   it('checkpoints pending microtasks before running a parser script', async () => {
-    const { document, realm, exec, drain } = createParserDocument();
+    const { document, realm, env, drain } = createParserDocument();
     const order: string[] = [];
-    exec.queueMicrotask(() => { order.push('microtask'); });
-    new BrowletParser(document, () => { order.push('script'); }, realm.agent.eventLoop, exec)
+    env.exec.queueMicrotask(() => { order.push('microtask'); });
+    new BrowletParser(document, () => { order.push('script'); }, realm.agent.eventLoop, env)
       .parse('<script></script>').observe(
         () => { order.push('complete'); },
         () => { order.push('error'); },
@@ -149,12 +149,12 @@ describe('BrowletParser', () => {
   });
 
   it.each([false, true])('waits for an internal script result (rejection: %s)', async (reject) => {
-    const { document, realm, exec, drain } = createParserDocument();
-    const ready = exec.promises.withResolvers<void>();
+    const { document, realm, env, drain } = createParserDocument();
+    const ready = env.exec.promises.withResolvers<void>();
     const failure = new Error('script preparation failed');
     let complete = false;
     const errors: unknown[] = [];
-    new BrowletParser(document, () => ready.promise, realm.agent.eventLoop, exec)
+    new BrowletParser(document, () => ready.promise, realm.agent.eventLoop, env)
       .parse('<script></script><main id="after"></main>').observe(
         () => { complete = true; },
         (error) => { errors.push(error); },
@@ -192,14 +192,14 @@ function createParserDocument() {
   if (document === null) throw new Error('Expected an active document');
   while (document.firstChild) document.firstChild.removeFromTree();
   const realm = getRelevantRealm(document);
-  const exec = getBindingContext(realm).getExecution();
+  const env = getBindingContext(realm).getEnvironment();
   const options = {
     createMicrotaskQueue,
     requestEventLoopTurn: () => {},
     unsafeSharedCurrentTime,
   };
   return {
-    document, realm, exec,
+    document, realm, env,
     drain(this: void) {
       while (realm.agent.eventLoop.runTaskTurn(options)) { /* Run pending HTML tasks. */ }
     },

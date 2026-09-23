@@ -7,14 +7,14 @@ import { BlobData, FileImpl } from '../../../src/file/index';
 import { toScalarValueString } from '../../../src/infra/index';
 import { parseMIMEType } from '../../../src/mime/index';
 import type { FormDataEntry } from '../../../src/xhr/index';
-import { createExecution } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 
-const exec = createExecution();
+const env = createEnvironment();
 
 describe('HTML multipart/form-data encoding', () => {
   it('leaves File byte sources unread when preparing the body', async () => {
     const read = vi.fn(() => Promise.resolve(Uint8Array.of(7)));
-    const file = new FileImpl([], 'deferred.bin', {}, exec);
+    const file = new FileImpl([], 'deferred.bin', {}, env);
     file.setSerializationState({
       data: BlobData.fromSource({ size: 1, snapshotState: undefined, read }),
       type: '', snapshotState: undefined,
@@ -77,7 +77,7 @@ describe('HTML multipart/form-data encoding', () => {
     ['a"b', 'a%22b'],
     ['a\\b%0A +\0', 'a\\b%0A +\0'],
   ])('escapes filename %j without normalizing its line endings', async (name, expectedName) => {
-    const file = new FileImpl([], name, { type: 'text/plain' }, exec);
+    const file = new FileImpl([], name, { type: 'text/plain' }, env);
     const { boundary, bytes } = await readEncoding([entry('file', file)]);
     expect(bytes).toEqual(isomorphicEncode(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
@@ -97,7 +97,7 @@ describe('HTML multipart/form-data encoding', () => {
   });
 
   it('encodes names, filenames, and text as UTF-8 without stripping a BOM', async () => {
-    const entries = [entry('é', '\ufeff💩'), entry('file', new FileImpl([], '日本.txt', {}, exec))];
+    const entries = [entry('é', '\ufeff💩'), entry('file', new FileImpl([], '日本.txt', {}, env))];
     const { boundary, bytes } = await readEncoding(entries);
     expect(bytes).toEqual(new TextEncoder().encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="é"\r\n\r\n\ufeff💩\r\n` +
@@ -107,7 +107,7 @@ describe('HTML multipart/form-data encoding', () => {
   });
 
   it('uses the chosen legacy encoding and character references for names and values', async () => {
-    const entries = [entry('é€💩', 'é€💩%80'), entry('file', new FileImpl([], 'é💩.txt', {}, exec))];
+    const entries = [entry('é€💩', 'é€💩%80'), entry('file', new FileImpl([], 'é💩.txt', {}, env))];
     const { boundary, bytes } = await readEncoding(entries, 'windows-1252');
     expect(bytes).toEqual(isomorphicEncode(
       `--${boundary}\r\nContent-Disposition: form-data; name="\xe9\x80&#128169;"\r\n\r\n` +
@@ -119,8 +119,8 @@ describe('HTML multipart/form-data encoding', () => {
 
   it('keeps multiple files as separate parts with unchanged binary contents', async () => {
     const data = new Uint8Array([0, 0xff, 13, 10, 13, 34, 0x25]);
-    const first = new FileImpl([data], 'one.bin', { type: 'Application/Example' }, exec);
-    const second = new FileImpl([], 'two.bin', {}, exec);
+    const first = new FileImpl([data], 'one.bin', { type: 'Application/Example' }, env);
+    const second = new FileImpl([], 'two.bin', {}, env);
     const { boundary, bytes } = await readEncoding([
       entry('files', first), entry('files', second),
     ]);
@@ -139,7 +139,7 @@ describe('HTML multipart/form-data encoding', () => {
   it('captures entries, file metadata, and byte sources during encoding', async () => {
     let finishRead!: (bytes: Uint8Array) => void;
     const pending = new Promise<Uint8Array>((resolve) => { finishRead = resolve; });
-    const file = new FileImpl([], 'before.txt', { type: 'text/plain' }, exec);
+    const file = new FileImpl([], 'before.txt', { type: 'text/plain' }, env);
     file.setSerializationState({
       data: BlobData.fromSource({ size: 3, snapshotState: undefined, read: () => pending }),
       type: file.type, snapshotState: undefined,
@@ -165,7 +165,7 @@ describe('HTML multipart/form-data encoding', () => {
 
   it('propagates a file failure when reading the encoded body', async () => {
     const failure = new Error('file snapshot unavailable');
-    const file = new FileImpl([], 'broken', {}, exec);
+    const file = new FileImpl([], 'broken', {}, env);
     file.setSerializationState({
       data: BlobData.fromSource({
         size: 1, snapshotState: undefined, read: () => Promise.reject(failure),

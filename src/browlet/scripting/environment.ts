@@ -10,7 +10,9 @@ import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import type { WindowImpl } from '../browsing/window/window';
-import { areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLRecord } from '../../url/index';
+import {
+  areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
+} from '../../url/index';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
@@ -84,6 +86,11 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   /** Mark HTML setup complete. */
   markExecutionReady(): void {
     this.#executionReady = true;
+  }
+
+  /** Parse with this browser's Blob URL store; the caller selects any base URL. */
+  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
+    return this.userAgent.parseURL(input, base, encoding);
   }
 
   abstract get apiBaseURL(): URLRecord;

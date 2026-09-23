@@ -1,31 +1,31 @@
 import { InternalError } from '../../../infra/internal-error';
-import { StorageKey, type StorageEnvironment, type StorageUserAgent } from '../../../storage/index';
-import { parseURL, serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
+import { StorageKey, type StorageEnvironment } from '../../../storage/index';
+import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
 import type { BlobImpl } from '../../../file/index';
+import type { UserAgent } from '../../user-agent';
 
 /** User-agent-owned registrations that retain their objects and creating environments. */
 // https://w3c.github.io/FileAPI/#BlobURLStore
 export class BlobURLStore {
   #entries = new Map<string, BlobURLEntry>();
-  #userAgent: StorageUserAgent;
+  #userAgent: UserAgent;
 
-  constructor(userAgent: StorageUserAgent) {
+  constructor(userAgent: UserAgent) {
     this.#userAgent = userAgent;
   }
 
   /** Generate a URL in the creating environment's origin without registering it. */
   // https://w3c.github.io/FileAPI/#unicodeBlobURL
-  // SPEC_MISMATCH: generate a new blob URL() -> string
-  generateURL(environment: BlobURLEnvironment): string {
+  generateURL(env: BlobURLEnvironment): string {
     // The opaque-origin spelling is implementation-defined; browsers use "null".
-    return `blob:${serializeOrigin(environment.origin)}/${this.#userAgent.generateUUID()}`;
+    return `blob:${serializeOrigin(env.origin)}/${this.#userAgent.generateUUID()}`;
   }
 
   /** Register an object without copying its data; repeated registration creates distinct URLs. */
   // https://w3c.github.io/FileAPI/#add-an-entry
-  add(object: BlobImpl, environment: BlobURLEnvironment): string {
-    const url = this.generateURL(environment);
-    this.#entries.set(url, new BlobURLEntry(object, environment));
+  add(object: BlobImpl, env: BlobURLEnvironment): string {
+    const url = this.generateURL(env);
+    this.#entries.set(url, new BlobURLEntry(object, env));
     return url;
   }
 
@@ -40,19 +40,19 @@ export class BlobURLStore {
 
   /** Revoke an author-supplied URL when its registration belongs to the caller's storage partition. */
   // https://w3c.github.io/FileAPI/#dfn-revokeObjectURL
-  revoke(url: string, environment: StorageEnvironment): void {
-    const record = parseURL(url, null, 'UTF-8', this).url;
+  revoke(url: string, env: StorageEnvironment): void {
+    const record = this.#userAgent.parseURL(url).url;
     if (record === null || record.scheme !== 'blob') return;
     const entry = record.blobURLEntry;
-    if (!(entry instanceof BlobURLEntry) || !entry.isSamePartition(environment)) return;
+    if (!(entry instanceof BlobURLEntry) || !entry.isSamePartition(env)) return;
     this.remove(record);
   }
 
   /** Remove every registration created by this environment when its document is unloaded. */
   // https://w3c.github.io/FileAPI/#lifeTime
-  removeForEnvironment(environment: BlobURLEnvironment): void {
+  removeForEnvironment(env: BlobURLEnvironment): void {
     for (const [url, entry] of this.#entries) {
-      if (entry.environment === environment) this.#entries.delete(url);
+      if (entry.env === env) this.#entries.delete(url);
     }
   }
 
@@ -64,17 +64,17 @@ export class BlobURLStore {
   }
 }
 
-/** Retains a registered object and the environment whose storage key controls access. */
+/** Retains a registered object and its creator for origin, partition access, and lifetime cleanup. */
 // https://w3c.github.io/FileAPI/#blob-url-entry
 // PROVISIONAL: entries retain BlobImpl; extend the object type when MediaSource is implemented.
 export class BlobURLEntry {
-  /** Actual creating settings object, also used by URL's origin algorithm. */
-  environment: BlobURLEnvironment;
+  /** Actual creator supplies the origin and storage key; its identity selects unloading cleanup. */
+  env: BlobURLEnvironment;
   #object: BlobImpl;
 
-  constructor(object: BlobImpl, environment: BlobURLEnvironment) {
+  constructor(object: BlobImpl, env: BlobURLEnvironment) {
     this.#object = object;
-    this.environment = environment;
+    this.env = env;
   }
 
   /**
@@ -82,19 +82,17 @@ export class BlobURLEntry {
    * A caller-established top-level exemption bypasses that check.
    */
   // https://w3c.github.io/FileAPI/#blob-url-obtain-object
-  // SPEC_MISMATCH: obtain a blob object(blobUrlEntry, environment) -> object or failure
-  obtainObject(environment: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch'): BlobImpl | null {
-    if (typeof environment !== 'string' && !this.isSamePartition(environment)) return null;
-    return this.#object;
+  obtainObject(env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch'): BlobImpl | null {
+    if (env === 'top-level-navigation' || env === 'top-level-self-fetch') return this.#object;
+    return this.isSamePartition(env) ? this.#object : null;
   }
 
   /** Whether another environment may fetch or revoke this entry; disabled storage does not deny access. */
   // https://w3c.github.io/FileAPI/#check-for-same-partition-blob-url-usage
-  // SPEC_MISMATCH: check for same-partition blob URL usage(blobUrlEntry, environment) -> boolean
-  isSamePartition(environment: StorageEnvironment): boolean {
-    const blobStorageKey = StorageKey.obtainForNonStoragePurposes(this.environment);
-    const environmentStorageKey = StorageKey.obtainForNonStoragePurposes(environment);
-    return blobStorageKey.equals(environmentStorageKey);
+  isSamePartition(env: StorageEnvironment): boolean {
+    const blobStorageKey = StorageKey.obtainForNonStoragePurposes(this.env);
+    const envStorageKey = StorageKey.obtainForNonStoragePurposes(env);
+    return blobStorageKey.equals(envStorageKey);
   }
 }
 

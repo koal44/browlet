@@ -11,7 +11,7 @@ import {
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
 import { registerDefinitionBindings } from './implementation-binding';
-import type { RealmExecution, JSRealm } from '../js-engine/index';
+import type { JSEnvironment, JSRealm } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 
 /**
@@ -41,11 +41,11 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
 
   /**
    * Register a realm in this world, returning its shared binding context.
-   * Supply an execution factory when its implementations need host facilities.
+   * Supply an environment factory when its implementations need host facilities.
    */
   register(
     realm: Realm,
-    createExecution?: (context: BindingContext<Realm>) => RealmExecution,
+    createEnvironment?: (context: BindingContext<Realm>) => JSEnvironment,
   ): BindingContext<Realm> {
     const registered = this.forRealm(realm);
     if (registered) return registered;
@@ -54,7 +54,7 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       this.#definitions,
       realm,
       this,
-      createExecution,
+      createEnvironment,
     );
     registerDefinitionBindings(binding);
     return binding.context;

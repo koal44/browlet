@@ -1,4 +1,4 @@
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
@@ -62,7 +62,7 @@ describe('TextDecoderStream chunk conversion', () => {
 
 function createDecoder() {
   const decoder = new TextDecoderStreamImpl(
-    'utf-8', { fatal: false, ignoreBOM: false }, createExecution(),
+    'utf-8', { fatal: false, ignoreBOM: false }, createEnvironment(),
   );
   return { reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
 }

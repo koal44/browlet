@@ -3,7 +3,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../assertions/bytes';
 import { japaneseKoreanDigests } from './gen/japanese-korean-vectors';
 
@@ -197,7 +197,7 @@ describe('Encoding §12.2: ISO-2022-JP modes and recovery', () => {
     const input = IOQueue.from(prefix + '😀' + prefix);
     const output = new IOQueue<Uint8Array>();
     const completed: unknown[] = [];
-    encodeOrFail(input, encoder, output, createExecution())
+    encodeOrFail(input, encoder, output, createEnvironment())
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     await nextTurn();
     expect(completed).toEqual([0x1f600]);
@@ -254,7 +254,7 @@ describe('Encoding §12.2: ISO-2022-JP modes and recovery', () => {
     const input = new IOQueue<string>();
     const output = new IOQueue<Uint8Array>();
     const completed: unknown[] = [];
-    processQueue(input, () => encoder.encode(input, output, 'fatal'), createExecution())
+    processQueue(input, () => encoder.encode(input, output, 'fatal'), createEnvironment())
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     input.push('¥');
     await nextTurn();

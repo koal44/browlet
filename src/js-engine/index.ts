@@ -1,4 +1,5 @@
 export { JSRealm, type JSRealmOptions } from './realm';
+export type { JSEnvironment } from './environment';
 export { addon } from './node-addons';
 export {
   bindAsyncContext, createMicrotaskQueue, getAssociatedRealm,

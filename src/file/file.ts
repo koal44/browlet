@@ -1,5 +1,5 @@
 import { parseMIMEType } from '../mime/index';
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
@@ -32,9 +32,9 @@ export class FileImpl extends BlobImpl {
     fileBits: Iterable<BlobPart> = [],
     fileName = '',
     options: FilePropertyBag = {},
-    exec: RealmExecution,
+    env: JSEnvironment,
   ) {
-    super(fileBits, options, exec);
+    super(fileBits, options, env);
     this.#name = fileName;
     this.#lastModified = options.lastModified ?? Date.now();
   }
@@ -54,11 +54,11 @@ export class FileImpl extends BlobImpl {
   static fromHost(
     source: BlobByteSource,
     metadata: HostFileMetadata,
-    exec: RealmExecution,
+    env: JSEnvironment,
   ): FileImpl {
     const type = requireHostFileType(metadata.type);
     const file = new FileImpl(
-      [], metadata.name, { lastModified: metadata.lastModified ?? 0, type }, exec,
+      [], metadata.name, { lastModified: metadata.lastModified ?? 0, type }, env,
     );
     file.setSerializationState({
       data: BlobData.fromSource(source),
@@ -139,7 +139,7 @@ export const fileIDL = defineInterface({
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
   implementation: impl(FileImpl, {
-    constructWith: [atArg(3, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor([

@@ -1,6 +1,6 @@
 import {
   getBufferSourceByteLength, getBufferSourceByteOffset, getBufferSourceUnderlyingBuffer,
-  type RealmExecution,
+  type JSEnvironment,
 } from '../js-engine/index';
 import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 import {
@@ -30,10 +30,10 @@ import {
  * };
  */
 export class TextEncoderImpl {
-  #exec: RealmExecution;
+  #env: JSEnvironment;
 
-  constructor(exec: RealmExecution) {
-    this.#exec = exec;
+  constructor(env: JSEnvironment) {
+    this.#env = env;
   }
 
   get encoding(): string {
@@ -42,7 +42,7 @@ export class TextEncoderImpl {
 
   /** Encode directly into the returned typed array in the receiver's realm. */
   encode(input: string): Uint8Array {
-    return utf8Encode(input, this.#exec);
+    return utf8Encode(input, this.#env);
   }
 
   encodeInto(
@@ -78,7 +78,7 @@ export const textEncoderIDL = defineInterface({
   name: 'TextEncoder',
   exposed: '*',
   implementation: impl(TextEncoderImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor(),

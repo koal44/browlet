@@ -4,11 +4,13 @@ This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
-It also defines the neutral [`RealmExecution`](./realm-execution.ts) contract
-shared by implementations. Browlet's `Environment` owns it as `exec`, with task,
+It also defines [`JSEnvironment`](./environment.ts), the portable contract for an
+environment owning `exec: RealmExecution`. Implementations receive this environment
+and pass it to derived implementations. Browlet's existing `Environment` satisfies
+the contract, with task,
 abort, and structured-data facilities assembled at its composition root.
-Portable implementations use the neutral contract without depending on HTML
-environments; other hosts may supply their own implementation. Specification
+Portable implementations need no HTML state; other hosts supply a standalone
+environment and its [`RealmExecution`](./realm-execution.ts) facilities. Specification
 policy stays above this layer. High Resolution Time and Fetch directly import
 the stateless coarsening calculation from Infra. `serialize()` captures
 an opaque record, `deserialize()` reconstructs it in the destination runtime's

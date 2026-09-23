@@ -3,7 +3,7 @@ import {
   type ExecutionCaps as StyleletExecutionCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import type { PromiseValue, PromiseValueCapability } from '../../../infra/promises';
-import type { RealmExecution } from '../../../js-engine/index';
+import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
 import { fireEvent, type EventTargetImpl } from '../events/event-target';
@@ -452,11 +452,11 @@ export class DocumentImpl extends NodeImpl {
    * ------------------------------------------------------------------ */
 
   /** Environment of this document's relevant Window, required by HTML lifecycle operations. */
-  get environment(): Environment {
+  get env(): Environment {
     if (this.#relevantGlobalObject === null) {
       throw new InternalError('Document lifecycle requires a relevant Window');
     }
-    return this.#relevantGlobalObject.getWindowOrWorkerGlobalScopeMixin().environment;
+    return this.#relevantGlobalObject.getWindowOrWorkerGlobalScopeMixin().env;
   }
 
   /** Finish the loading milestones and load event for Browlet's local route. */
@@ -471,8 +471,8 @@ export class DocumentImpl extends NodeImpl {
     }
 
     // PROVISIONAL: the local route completes these parser/loading phases together.
-    const environment = this.environment;
-    const now = environment.timing.currentHighResolutionTime().toTimestamp();
+    const env = this.env;
+    const now = env.timing.currentHighResolutionTime().toTimestamp();
     const timing = this.loadTimingInfo;
     timing.domInteractiveTime = now;
     timing.domContentLoadedEventStartTime = now;
@@ -482,7 +482,7 @@ export class DocumentImpl extends NodeImpl {
     this.currentDocumentReadiness = 'complete';
     this.readyForPostLoadTasks = true;
     fireEvent('load', window);
-    timing.loadEventEndTime = environment.timing.currentHighResolutionTime().toTimestamp();
+    timing.loadEventEndTime = env.timing.currentHighResolutionTime().toTimestamp();
     this.completelyFinishLoading();
   }
 
@@ -499,8 +499,8 @@ export class DocumentImpl extends NodeImpl {
   /** Destroy an active document from a task on its owning event loop. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
   destroy(): void {
-    const environment = this.environment;
-    const eventLoop = environment.responsibleEventLoop;
+    const env = this.env;
+    const eventLoop = env.responsibleEventLoop;
     if (eventLoop.currentlyRunningTask === null) {
       throw new InternalError('Document destruction requires a task on its owning event loop');
     }
@@ -512,7 +512,7 @@ export class DocumentImpl extends NodeImpl {
       throw new InternalError('Inactive document destruction needs session-history ownership');
     }
     const documentState = navigable.activeSessionHistoryEntry.documentState;
-    const global = environment.getWindowOrWorkerGlobalScopeMixin();
+    const global = env.getWindowOrWorkerGlobalScopeMixin();
 
     this.abort();
     this.salvageable = false;
@@ -533,15 +533,15 @@ export class DocumentImpl extends NodeImpl {
   /** Stop this document's fetches and active parser from its owning event-loop task. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document
   abort(): void {
-    const environment = this.environment;
-    if (environment.responsibleEventLoop.currentlyRunningTask === null) {
+    const env = this.env;
+    if (env.responsibleEventLoop.currentlyRunningTask === null) {
       throw new InternalError('Document abortion requires a task on its owning event loop');
     }
-    if (environment.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
+    if (env.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
 
     const navigationID = this.duringLoadingNavigationID;
     if (navigationID !== null) {
-      environment.userAgent.webDriverBiDiNavigationAborted(this.getNodeNavigable(), {
+      env.userAgent.webDriverBiDiNavigationAborted(this.getNodeNavigable(), {
         id: navigationID, status: 'canceled', url: this.url,
       });
       this.duringLoadingNavigationID = null;
@@ -558,8 +558,8 @@ export class DocumentImpl extends NodeImpl {
   /** Clean up document-owned resources during unloading or destruction. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unloading-document-cleanup-steps
   runUnloadingCleanup(): void {
-    const environment = this.environment;
-    const global = environment.getWindowOrWorkerGlobalScopeMixin();
+    const env = this.env;
+    const global = env.getWindowOrWorkerGlobalScopeMixin();
     for (const socket of global.webSockets) {
       socket.makeDisappear();
       this.makeUnsalvageable('websocket');
@@ -569,7 +569,7 @@ export class DocumentImpl extends NodeImpl {
       for (const source of global.eventSources) source.close();
       global.timers.clear();
     }
-    environment.userAgent.blobURLStore.removeForEnvironment(environment);
+    env.userAgent.blobURLStore.removeForEnvironment(env);
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.
   }
 
@@ -821,13 +821,13 @@ export class DocumentImpl extends NodeImpl {
     return this.#scriptBlockingStyleSheets.size > 0;
   }
 
-  waitForScriptBlockingStyleSheets(exec: RealmExecution): PromiseValue<void> {
-    return exec.promises.try(() => {
+  waitForScriptBlockingStyleSheets(env: JSEnvironment): PromiseValue<void> {
+    return env.exec.promises.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=
-        exec.promises.withResolvers<void>();
+        env.exec.promises.withResolvers<void>();
       return ready.promise.then(() =>
-        this.waitForScriptBlockingStyleSheets(exec),
+        this.waitForScriptBlockingStyleSheets(env),
       );
     });
   }
@@ -849,7 +849,7 @@ export const documentIDL = defineInterface({
           return ctx.construct(implClass, ...argumentsList);
         },
       })),
-      atArg<Realm>(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getExecution())),
+      atArg<Realm>(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getEnvironment())),
     ],
   }),
   members: [

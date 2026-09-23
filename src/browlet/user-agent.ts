@@ -17,7 +17,7 @@ import type { BlobImpl } from '../file/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
-  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord,
+  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { InternalError } from '../infra/internal-error';
 import type { PromiseValue } from '../infra/promises';
@@ -27,7 +27,7 @@ import type { PromiseValue } from '../infra/promises';
  * traversables normally presented as browser windows or tabs. Browlet is one
  * such host, but these collections outlive any individual realm or Document.
  */
-export class UserAgent implements FetchUserAgent, StorageUserAgent {
+export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent {
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   eventLoopOptions: EventLoopOptions | null;
@@ -93,16 +93,16 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent {
 
   /** Parse a browser URL and retain its Blob registration before revocation can remove it. */
   parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
-    return parseURL(input, base, encoding, this.blobURLStore);
+    return parseURL(input, base, encoding, this);
   }
 
   /** Acquire a captured Blob entry without resolving its URL again after revocation. */
   obtainBlobObject(
     entry: URLBlobURLEntry | null,
-    environment: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+    env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
   ): BlobImpl | null {
     if (!(entry instanceof BlobURLEntry)) return null;
-    return entry.obtainObject(environment);
+    return entry.obtainObject(env);
   }
 
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */
@@ -165,14 +165,14 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent {
 
   /** Whether automation emulates an offline network for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
-  webDriverBiDiNetworkIsOffline(_environment: Environment): boolean {
+  webDriverBiDiNetworkIsOffline(_env: Environment): boolean {
     // PROVISIONAL: no BiDi sessions; select scoped network conditions when implemented.
     return false;
   }
 
   /** Identification override selected for the given environment, or null when absent. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
-  webDriverBiDiEmulatedUserAgent(_environment: Environment): string | null {
+  webDriverBiDiEmulatedUserAgent(_env: Environment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped emulation when implemented.
     return null;
   }

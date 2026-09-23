@@ -2,12 +2,12 @@ import { streamsIDLDefinitions } from '../../../src/streams/index';
 import {
   BindingWorld, defineInterface, xattr, type BindingContext,
 } from '../../../src/web-idl/index';
-import { createExecution } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 import { TestRealm } from '../../web-idl/test-realm';
 
 export function createTestContext(): BindingContext {
   const realm = new TestRealm();
-  const realmBindings = new BindingWorld(testDefinitions).register(realm, () => createExecution(realm));
+  const realmBindings = new BindingWorld(testDefinitions).register(realm, () => createEnvironment(realm));
   realmBindings.projectGlobalObject(realm.global, testGlobalIDL.name);
   return realmBindings;
 }

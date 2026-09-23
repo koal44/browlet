@@ -8,11 +8,11 @@ import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { createFetchRequest } from './fetch-fixture';
-import { createClientSettings } from './client-fixture';
+import { createClientEnvironment } from './client-fixture';
 
 describe('Fetch request cloning', () => {
   it('copies owned data, retains owner references, and gives the clone a fresh WebDriver ID', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     const request = createFetchRequest('https://[::1]/start', client);
     request.method = 'POST';
     request.credentialsMode = 'include';
@@ -65,7 +65,7 @@ describe('Fetch request cloning', () => {
 
   it('preserves the identity of a blob URL entry', () => {
     const request = createFetchRequest('blob:https://example.test/id');
-    request.url.blobURLEntry = { environment: { origin: createOpaqueOrigin() } };
+    request.url.blobURLEntry = { env: { origin: createOpaqueOrigin() } };
     expect(request.clone().url.blobURLEntry).toBe(request.url.blobURLEntry);
   });
 
@@ -111,7 +111,7 @@ describe('Fetch request cloning', () => {
 
 describe('Fetch request User-Agent headers', () => {
   it('uses the client\'s effective value when inserting a missing header', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     client.userAgent.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
     const request = createFetchRequest(undefined, client);
     expect(request.headerList.has('User-Agent')).toBe(false);
@@ -313,7 +313,7 @@ describe('Fetch request origin serialization', () => {
 describe('Fetch request COEP credentials', () => {
   const home = 'https://a.example.test/';
   const foreign = 'https://outside.test/';
-  const client = createClientSettings();
+  const client = createClientEnvironment();
   client.policyContainer.embedderPolicy.value = 'credentialless';
 
   it.each<{ name: string; urls: [string, ...string[]]; allowed: boolean; }>([
@@ -375,10 +375,10 @@ describe('Fetch request COEP credentials', () => {
 
 describe('Fetch client population', () => {
   it('retains explicitly supplied fields', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     const request = createFetchRequest('https://example.test/', client);
     const origin = createOpaqueOrigin();
-    const policy = createClientSettings().policyContainer;
+    const policy = createClientEnvironment().policyContainer;
     request.traversableForUserPrompts = null;
     request.origin = origin;
     request.policyContainer = policy;
@@ -389,7 +389,7 @@ describe('Fetch client population', () => {
   });
 
   it('resolves the origin once instead of following later client changes', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     const request = createFetchRequest('https://example.test/', client);
     const origin = client.origin;
     request.traversableForUserPrompts = null;

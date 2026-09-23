@@ -150,12 +150,12 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const agent = previous?.agent ?? new WindowAgent();
   const creationURL = parseURL('https://example.test/').url!;
   const origin = createOpaqueOrigin();
-  const environment = createWindowEnvironment({
-    agent, userAgent: previous?.realm.environment.userAgent ?? new UserAgent(),
+  const env = createWindowEnvironment({
+    agent, userAgent: previous?.realm.env.userAgent ?? new UserAgent(),
     creationURL, origin, parent: null,
     topLevelCreationURL: creationURL, topLevelOrigin: origin, previousRealm: previous?.realm,
   });
-  const { window, realm } = environment;
+  const { window, realm } = env;
   const proxy = realm.globalThis as WindowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;

@@ -132,7 +132,7 @@ describe('implementation Promise delivery', () => {
     a.realm.evaluate(`operation.invoke(callback).then(
       value => record(value), reason => record('rejected ' + reason))`, 'invoke.js');
     expect(trace).toEqual(['author B']);
-    expect(b.callbackSettings).toEqual([new Set([b.realm.environment])]);
+    expect(b.callbackEnv).toEqual([new Set([b.realm.env])]);
     pending.resolve('done');
     a.realm.agent.eventLoop.performMicrotaskCheckpoint();
     expect(trace).toEqual(mode === 'fulfill'
@@ -170,7 +170,7 @@ function createFixture(sharedAgent = false) {
   const entries = [first.window, secondWindow].map((window, index) => {
     const name = index === 0 ? 'A' : 'B';
     const realm = getRelevantRealm(window);
-    const callbackSettings: unknown[] = [];
+    const callbackEnv: unknown[] = [];
     const expose = (key: string, value: unknown) => {
       Object.defineProperty(window, key, { configurable: true, value });
     };
@@ -181,13 +181,13 @@ function createFixture(sharedAgent = false) {
     const object = binding.project(OwnershipProbeImpl, implementation);
     expose('record', (value: string) => {
       if (value === 'author B') {
-        const environment = realm.agent.eventLoop.currentlyRunningTask
+        const env = realm.agent.eventLoop.currentlyRunningTask
           ?.scriptEvaluationEnvironmentSettingsObjectSet;
-        callbackSettings.push(environment && new Set(environment));
+        callbackEnv.push(env && new Set(env));
       }
       trace.push(value);
     });
-    return { expose, realm, object, implementation, callbackSettings };
+    return { expose, realm, object, implementation, callbackEnv };
   });
   return { a: entries[0]!, b: entries[1]!, trace, pending };
 }
@@ -195,15 +195,15 @@ function createFixture(sharedAgent = false) {
 // Compose a second Window on the existing agent without requiring iframe navigation.
 function createSiblingWindow(first: Browlet): Window {
   const firstRealm = getRelevantRealm(first.window);
-  const { agent, environment } = firstRealm;
+  const { agent, env } = firstRealm;
   if (!(agent instanceof WindowAgent)) throw new Error('Expected a Window agent');
-  const siblingSettings = createWindowEnvironment({
-    agent, userAgent: environment.userAgent, creationURL: environment.creationURL,
-    origin: environment.origin, parent: null,
-    topLevelCreationURL: environment.creationURL, topLevelOrigin: environment.origin,
+  const siblingEnv = createWindowEnvironment({
+    agent, userAgent: env.userAgent, creationURL: env.creationURL,
+    origin: env.origin, parent: null,
+    topLevelCreationURL: env.creationURL, topLevelOrigin: env.origin,
   });
-  const { window } = siblingSettings;
-  const { realm } = siblingSettings;
+  const { window } = siblingEnv;
+  const { realm } = siblingEnv;
   const document = createDocument(realm);
   window.setAssociatedDocument(document);
   return realm.globalThis as Window;

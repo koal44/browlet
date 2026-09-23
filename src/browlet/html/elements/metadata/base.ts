@@ -22,8 +22,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   get href(): string {
     const document = this.getNodeDocument()!;
     const href = this.getAttributeNS(null, 'href') ?? '';
-    const { userAgent } = document.environment;
-    const url = userAgent.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
+    const { env } = document;
+    const url = env.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
     return url === null ? href : serializeURL(url);
   }
 
@@ -46,8 +46,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   setFrozenBaseURL(): void {
     const document = this.getNodeDocument()!;
     const fallback = document.getFallbackBaseURL();
-    const { userAgent } = document.environment;
-    const url = userAgent.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
+    const { env } = document;
+    const url = env.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
     // TODO: apply CSP's "Is base allowed for Document?" check when CSP is implemented.
     this.frozenBaseURL = url === null || url.scheme === 'data' || url.scheme === 'javascript'
       ? fallback : url;

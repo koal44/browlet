@@ -91,11 +91,11 @@ describe('browsing context groups', () => {
     const agent = new WindowAgent();
     const creationURL = requireURL('about:blank');
     const origin = createOpaqueOrigin();
-    const environment = createWindowEnvironment({
+    const env = createWindowEnvironment({
       agent, userAgent: new UserAgent(), creationURL, origin, parent: null,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
-    const { window, realm } = environment;
+    const { window, realm } = env;
     const context = new BrowsingContext(realm.globalThis as InternalWindowProxy);
 
     expect(realm).toBeInstanceOf(WindowRealm);
@@ -114,7 +114,7 @@ describe('browsing context groups', () => {
     window.setAssociatedDocument(document);
     const realm = new WindowRealm(window, {
       agent: new WindowAgent(),
-      environmentRecord: createEnvironmentRecord({
+      envRecord: createEnvironmentRecord({
         userAgent: new UserAgent(), creationURL: document.url,
         topLevelCreationURL: document.url, topLevelOrigin: document.origin,
         targetBrowsingContext: null, isSecureContext: false,
@@ -124,14 +124,14 @@ describe('browsing context groups', () => {
     expect(realm.windowImplementation).toBe(window);
     expect(realm.getAssociatedDocument()).toBe(document);
     expect(realm.hostDefined).toBeUndefined();
-    expect(() => realm.environment).toThrow('Realm has no environment');
+    expect(() => realm.env).toThrow('Realm has no environment');
   });
 
   it('rejects required environment access before attachment', () => {
     const realm = new Realm();
 
     expect(realm.hostDefined).toBeUndefined();
-    expect(() => realm.environment).toThrow('Realm has no environment');
+    expect(() => realm.env).toThrow('Realm has no environment');
   });
 
   it('finds the relevant realm before its environment is attached', () => {
@@ -140,7 +140,7 @@ describe('browsing context groups', () => {
 
     expect(Realm.getAssociatedRealm(object)).toBe(realm);
     expect(getRelevantRealm(object)).toBe(realm);
-    expect(() => getRelevantRealm(object).environment).toThrow('Realm has no environment');
+    expect(() => getRelevantRealm(object).env).toThrow('Realm has no environment');
   });
 
   it('hides SharedArrayBuffer in a non-isolated Window realm', () => {
@@ -149,11 +149,11 @@ describe('browsing context groups', () => {
     const origin = createOpaqueOrigin();
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
     const creationURL = requireURL('about:blank');
-    const environment = createWindowEnvironment({
+    const env = createWindowEnvironment({
       agent, userAgent, creationURL, origin, parent: null,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
-    const { window, realm } = environment;
+    const { window, realm } = env;
     window.setAssociatedDocument(new DocumentImpl());
 
     expect(Reflect.has(realm.globalObject, 'SharedArrayBuffer')).toBe(false);
@@ -294,9 +294,9 @@ describe('navigables', () => {
       throw new Error('Expected a complete initial browsing context graph');
     }
     const realm = getRelevantRealm(document);
-    const environment = realm.environment;
+    const env = realm.env;
 
-    expect(environment.userAgent).toBe(userAgent);
+    expect(env.userAgent).toBe(userAgent);
     expect(userAgent.topLevelTraversableSet).toEqual(new Set([traversable]));
     expect(userAgent.browsingContextGroupSet)
       .toEqual(new Set([browsingContext.group]));
@@ -335,12 +335,12 @@ describe('navigables', () => {
     expect(document.head?.localName).toBe('head');
     expect(document.body?.localName).toBe('body');
 
-    expect(environment.executionReady).toBe(true);
-    expect(serializeURL(environment.creationURL)).toBe('about:blank');
-    expect(serializeURL(environment.topLevelCreationURL!)).toBe('about:blank');
-    expect(environment.topLevelOrigin).toBe(document.origin);
-    expect(environment.timeOrigin.clock).toBe(monotonicClock);
-    expect(environment.timeOrigin.milliseconds)
+    expect(env.executionReady).toBe(true);
+    expect(serializeURL(env.creationURL)).toBe('about:blank');
+    expect(serializeURL(env.topLevelCreationURL!)).toBe('about:blank');
+    expect(env.topLevelOrigin).toBe(document.origin);
+    expect(env.timeOrigin.clock).toBe(monotonicClock);
+    expect(env.timeOrigin.milliseconds)
       .toBe(document.loadTimingInfo.navigationStartTime);
 
     const initialEntry = traversable.activeSessionHistoryEntry;
@@ -361,60 +361,60 @@ describe('environment settings objects', () => {
     const creationURL = requireURL('https://example.test/');
     const origin = obtainURLOrigin(creationURL);
     const agent = new WindowAgent();
-    const environment = createWindowEnvironment({
+    const env = createWindowEnvironment({
       agent, userAgent: new UserAgent(), creationURL, origin, parent: null,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
 
-    expect(environment.responsibleEventLoop).toBe(agent.eventLoop);
-    expect(environment.executionReady).toBe(false);
+    expect(env.responsibleEventLoop).toBe(agent.eventLoop);
+    expect(env.executionReady).toBe(false);
 
-    environment.markExecutionReady();
+    env.markExecutionReady();
 
-    expect(environment.executionReady).toBe(true);
+    expect(env.executionReady).toBe(true);
   });
 
   it('transfers a reserved environment into Window settings with the same user agent', () => {
     const creationURL = requireURL('https://example.test/');
     const origin = obtainURLOrigin(creationURL);
     const userAgent = new UserAgent();
-    const reservedEnvironment = createEnvironmentRecord({
+    const reservedEnv = createEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {}, isSecureContext: true,
     });
-    const reservedId = reservedEnvironment.id;
-    expect(reservedEnvironment.userAgent).toBe(userAgent);
-    const environment = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnvironment,
+    const reservedId = reservedEnv.id;
+    expect(reservedEnv.userAgent).toBe(userAgent);
+    const env = createWindowEnvironment({
+      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
-    const { realm, window } = environment;
-    const exec = getBindingContext(realm).getExecution();
+    const { realm, window } = env;
+    const bindingEnv = getBindingContext(realm).getEnvironment();
     const document = new DocumentImpl();
     document.origin = origin;
     document.url = creationURL;
     window.setAssociatedDocument(document);
 
-    expect(environment.userAgent).toBe(userAgent);
-    expect(environment.id).toBe(reservedId);
-    expect(reservedEnvironment.id).toBe('');
-    expect(environment.targetBrowsingContext).toBe(reservedEnvironment.targetBrowsingContext);
-    expect(environment.activeServiceWorker).toBe(reservedEnvironment.activeServiceWorker);
-    expect(environment.exec).toBe(exec);
-    expect(environment.global).toBe(exec.global);
-    expect(realm.hostDefined).toBe(environment);
-    expect(realm.environmentRecord).toBe(environment);
+    expect(env.userAgent).toBe(userAgent);
+    expect(env.id).toBe(reservedId);
+    expect(reservedEnv.id).toBe('');
+    expect(env.targetBrowsingContext).toBe(reservedEnv.targetBrowsingContext);
+    expect(env.activeServiceWorker).toBe(reservedEnv.activeServiceWorker);
+    expect(bindingEnv).toBe(env);
+    expect(env.exec.global).toBe(env.global);
+    expect(realm.hostDefined).toBe(env);
+    expect(realm.envRecord).toBe(env);
     expect(realm.secureContext).toBe(true);
-    expect(environment.isSecureContext).toBe(true);
-    expect(environment.moduleMap).toBe(document.moduleMap);
-    expect(environment.policyContainer)
+    expect(env.isSecureContext).toBe(true);
+    expect(env.moduleMap).toBe(document.moduleMap);
+    expect(env.policyContainer)
       .toBe(document.policyContainer);
-    expect(environment.timeOrigin.clock).toBe(monotonicClock);
-    expect(environment.timeOrigin.milliseconds).toBe(0);
-    expect(serializeURL(environment.apiBaseURL)).toBe('https://example.test/');
-    expect(environment.crossOriginIsolatedCapability).toBe(false);
+    expect(env.timeOrigin.clock).toBe(monotonicClock);
+    expect(env.timeOrigin.milliseconds).toBe(0);
+    expect(serializeURL(env.apiBaseURL)).toBe('https://example.test/');
+    expect(env.crossOriginIsolatedCapability).toBe(false);
     // The Document is not active in a navigable yet, so it cannot establish a cookie site.
-    expect(environment.hasCrossSiteAncestor).toBe(true);
+    expect(env.hasCrossSiteAncestor).toBe(true);
   });
 });
 
@@ -489,7 +489,7 @@ describe('navigation lifecycle', () => {
     expect(document).not.toBe(initialDocument);
     expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
-    expect(realm.environment.userAgent).toBe(initialRealm.environment.userAgent);
+    expect(realm.env.userAgent).toBe(initialRealm.env.userAgent);
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);

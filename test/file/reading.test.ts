@@ -5,7 +5,7 @@ import {
 import type { TaskScheduling } from '../../src/infra/index';
 import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
 import type { PromiseValue } from '../../src/infra/promises';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../assertions/bytes';
 
 describe('File reading implementation', () => {
@@ -13,8 +13,8 @@ describe('File reading implementation', () => {
     { name: 'empty input', text: '' },
     { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
   ])('reads bytes and text for $name', async ({ text }) => {
-    const exec = { ...createExecution(), runInParallel: queueMicrotask, fileReading: scheduling };
-    const blob = new BlobImpl([text], {}, exec);
+    const env = { ...createEnvironment(), runInParallel: queueMicrotask, fileReading: scheduling };
+    const blob = new BlobImpl([text], {}, env);
     const [decoded, bytes, bufferBytes] = await Promise.all([
       observe(blob.text()),
       observe(blob.bytes()),
@@ -31,8 +31,8 @@ describe('File reading implementation', () => {
       snapshotState: null,
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
-    const exec = { ...createExecution(), runInParallel: queueMicrotask, fileReading: scheduling };
-    const blob = BlobImpl.create(data, '', null, exec);
+    const env = { ...createEnvironment(), runInParallel: queueMicrotask, fileReading: scheduling };
+    const blob = BlobImpl.create(data, '', null, env);
     const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
     expect(InternalDOMException.is(failure)).toBe(true);
@@ -40,14 +40,14 @@ describe('File reading implementation', () => {
   });
 
   it('packages bytes without a binding context and preserves the source', () => {
-    const exec = createExecution();
+    const env = createEnvironment();
     const bytes = Uint8Array.of(65, 66, 67);
-    const result = packageData(bytes, 'ArrayBuffer', '', undefined, exec) as ArrayBuffer;
+    const result = packageData(bytes, 'ArrayBuffer', '', undefined, env) as ArrayBuffer;
     expect(new Uint8Array(result)).toEqual(bytes);
     new Uint8Array(result)[0] = 90;
     expect(bytes[0]).toBe(65);
-    expect(packageData(bytes, 'Text', '', undefined, exec)).toBe('ABC');
-    expect(packageData(bytes, 'DataURL', '', undefined, exec)).toBe('data:application/octet-stream;base64,QUJD');
+    expect(packageData(bytes, 'Text', '', undefined, env)).toBe('ABC');
+    expect(packageData(bytes, 'DataURL', '', undefined, env)).toBe('data:application/octet-stream;base64,QUJD');
   });
 });
 

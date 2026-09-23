@@ -1,4 +1,4 @@
-import { getAssociatedRealm, isObject, type JSFunction, type RealmExecution } from '../js-engine/index';
+import { getAssociatedRealm, isObject, type JSFunction, type JSEnvironment } from '../js-engine/index';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
@@ -71,7 +71,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     definitions: DefinitionAssembly,
     realm: Realm,
     world: BindingWorld,
-    createExecution?: (ctx: BindingContext<Realm>) => RealmExecution,
+    createEnvironment?: (ctx: BindingContext<Realm>) => JSEnvironment,
   ) {
     this.definitions = definitions;
     this.hostDefinedInterfaces = world.hostDefinedInterfaces;
@@ -105,7 +105,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     this.#iterables = new SynchronousIterableBinding(this);
     this.#legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
     this.#observableArrays = new ObservableArrayBinding(this);
-    this.context = new BindingContext(this, createExecution);
+    this.context = new BindingContext(this, createEnvironment);
   }
 
   // The constructor belongs to this realm's binding world and shares its interface-object cache.

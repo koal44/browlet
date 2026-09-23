@@ -74,7 +74,7 @@ function createWindow() {
   const realm = getRelevantRealm(traversable.activeWindow!);
   return {
     userAgent, window: realm.global as Window & typeof globalThis,
-    scope: realm.environment.getWindowOrWorkerGlobalScopeMixin(),
+    scope: realm.env.getWindowOrWorkerGlobalScopeMixin(),
   };
 }
 

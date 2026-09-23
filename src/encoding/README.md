@@ -12,7 +12,7 @@ UTF-8; legacy output encodings are available through the internal operations.
 | `index.ts` | Entry point for other subsystems. |
 | `encodings.ts` | Canonical encoding type, label lookup, codec factories, and complete-input/queue operations. |
 | `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |
-| `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through RealmExecution. |
+| `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through the owning environment. |
 | `indexes.ts`, `gen/` | Lazy lookup tables and checked-in packed mapping data. |
 | `text-*.ts` | Interface implementation, stream composition, and Web IDL declarations. |
 | `scripts/` | Mapping-data generator and its source license. |
@@ -26,7 +26,7 @@ replacement and UTF-16 deliberately have no encoders.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `PromiseValue`
-completion through the trailing RealmExecution. `encodeOrFailSync` provides the
+completion through the trailing JSEnvironment and its exec facilities. `encodeOrFailSync` provides the
 immediate operation used by URL processing; it requires complete input and
 retains the supplied encoder's state across failures.
 

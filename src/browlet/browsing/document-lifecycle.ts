@@ -47,7 +47,7 @@ export function createAndInitializeDocument(
       parent: navigationParams.navigable.parent?.activeWindow ?? null,
       topLevelCreationURL: creationURL,
       topLevelOrigin: navigationParams.origin,
-      reservedEnvironment: navigationParams.reservedEnvironment,
+      reservedEnv: navigationParams.reservedEnv,
       previousRealm: getRelevantRealm(activeDocument),
     }).window;
   }

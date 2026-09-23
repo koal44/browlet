@@ -8,13 +8,13 @@ import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
 import { parseURL } from '../../src/url/url';
 import type { BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
-import { createClientSettings, createFetchUserAgent } from './client-fixture';
+import { createClientEnvironment, createFetchUserAgent } from './client-fixture';
 
 describe('Fetch request and response state', () => {
   it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
-    const client = createClientSettings();
+    const client = createClientEnvironment();
     const request = createFetchRequest(undefined, client);
     expect(request).toMatchObject({
       method: 'GET', localURLsOnly: false, headerList: new FetchHeaders(), unsafeRequest: false, body: null,
@@ -90,7 +90,7 @@ describe('Fetch state/API sharing', () => {
   it('retains the same request, signal, and duplicate-preserving Headers list', () => {
     const fixture = createFetchFixture();
     const record = createFetchRequest();
-    const signal = fixture.exec.createAbortController().signal;
+    const signal = fixture.env.exec.createAbortController().signal;
     const request = fixture.createRequest(record, signal);
     expect(request.getRequest()).toBe(record);
     expect(request.signal).toBe(signal);
@@ -132,10 +132,10 @@ describe('Fetch state/API sharing', () => {
   it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
     const fixture = createFetchFixture();
     const foreignRealm = new TestRealm();
-    const foreign = fixture.bindings.register(foreignRealm, () => createExecution(foreignRealm));
+    const foreign = fixture.bindings.register(foreignRealm, () => createEnvironment(foreignRealm));
     const createObject = (context: BindingContext) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
-        RequestImpl, createFetchRequest(), 'request', context.getExecution().createAbortController().signal,
+        RequestImpl, createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal,
       ))
       : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
     const receiver = createObject(fixture.context);
@@ -157,7 +157,7 @@ describe('Fetch state/API sharing', () => {
     const fixture = createFetchFixture();
     const record = new FetchResponse();
     const response = fixture.createResponse(record);
-    const mixin = new BodyMixin(record, fixture.exec);
+    const mixin = new BodyMixin(record, fixture.env);
     const first = fixture.createBody();
     expect(first.source).toBeNull();
     expect(first.length).toBeNull();

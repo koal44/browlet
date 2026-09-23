@@ -1,4 +1,4 @@
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
 import type { FetchEnvironment } from '../../src/fetch/infrastructure';
 import {
@@ -37,15 +37,15 @@ export function createFetchRequest(
 export function createFetchFixture(world?: BindingWorld) {
   const bindings = world ?? new BindingWorld(fetchDefinitions);
   const realm = new TestRealm();
-  const context = bindings.register(realm, () => createExecution(realm));
-  const exec = context.getExecution();
+  const context = bindings.register(realm, () => createEnvironment(realm));
+  const env = context.getEnvironment();
   // This fixture allocates implementations without installing the browser API.
   return {
     bindings,
     realm,
     context,
-    exec,
-    createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, exec), exec),
+    env,
+    createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env), env),
     createRequest: (record: FetchRequest, signal: AbortSignalCapability, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, record, guard, signal),
     createResponse: (record = new FetchResponse(), guard: HeadersGuard = 'response') =>

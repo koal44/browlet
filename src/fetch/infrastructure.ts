@@ -4,22 +4,24 @@ import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#is-offline */
-export function isOffline(environment: FetchEnvironment): boolean {
-  return environment.userAgent.assumeNoInternetConnectivity ||
-    environment.userAgent.webDriverBiDiNetworkIsOffline(environment);
+export function isOffline(env: FetchEnvironment): boolean {
+  return env.userAgent.assumeNoInternetConnectivity ||
+    env.userAgent.webDriverBiDiNetworkIsOffline(env);
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
-export interface FetchEnvironment extends FetchEnvironmentRecord {
+export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
+  /** Parse a URL using this environment's browser and Blob URL store. */
+  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLParseResult;
   /** Client origin used by Fetch's origin and policy checks. */
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */
@@ -92,9 +94,9 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
   assumeNoInternetConnectivity: boolean;
   /** Whether WebDriver BiDi emulates an offline network for the given environment. */
-  webDriverBiDiNetworkIsOffline(environment: FetchEnvironment): boolean;
+  webDriverBiDiNetworkIsOffline(env: FetchEnvironment): boolean;
   /** Identification override for the given environment, or null when BiDi supplies none. */
-  webDriverBiDiEmulatedUserAgent(environment: FetchEnvironment): string | null;
+  webDriverBiDiEmulatedUserAgent(env: FetchEnvironment): string | null;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */
   connectionPool: ConnectionPool;
   /** Shared logical HTTP caches, separated by network partition key. */
@@ -117,7 +119,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Acquire an already-captured File API entry with the caller-selected access context. */
   obtainBlobObject(
     entry: BlobURLEntry | null,
-    environment: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+    env: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
   ): BlobImpl | null;
 }
 
@@ -128,12 +130,12 @@ export function serializeInteger(integer: number | bigint): string {
 
 /** Binding integration: HTML supplies the relevant browser environment and its execution facilities. */
 export const fetchEnvironment =
-  defineCapability<(context: BindingContext) => FetchEnvironment & { exec: RealmExecution; }>('Fetch environment');
+  defineCapability<(context: BindingContext) => FetchEnvironment>('Fetch environment');
 
 export function getFetchEnvironment(
   context: BindingContext, definition: InterfaceDefinition<never>,
-): FetchEnvironment & { exec: RealmExecution; } {
-  const getSettings = context.getCapability(definition, fetchEnvironment);
-  if (!getSettings) throw new InternalError('Fetch API requires HTML environment settings');
-  return getSettings(context);
+): FetchEnvironment {
+  const getEnvironment = context.getCapability(definition, fetchEnvironment);
+  if (!getEnvironment) throw new InternalError('Fetch API requires HTML environment settings');
+  return getEnvironment(context);
 }

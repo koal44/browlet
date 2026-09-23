@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../assertions/bytes';
 import { chineseDecodeDigests } from './gen/chinese-vectors';
 
@@ -158,8 +158,8 @@ describe('Encoding §§10–11: Chinese codecs', () => {
     const input = IOQueue.from('A\ue5e5中文');
     const output = new IOQueue<Uint8Array>();
     const completed: unknown[] = [];
-    const exec = createExecution();
-    encodeOrFail(input, encoder, output, exec)
+    const env = createEnvironment();
+    encodeOrFail(input, encoder, output, env)
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     await nextTurn();
     expect(completed).toEqual([0xe5e5]);
@@ -190,7 +190,7 @@ describe('Encoding §§10–11: Chinese codecs', () => {
     const output = new IOQueue<string>();
     const decoder = getDecoder('gb18030');
     const completed: unknown[] = [];
-    processQueue(input, () => decoder.decode(input, output, 'replacement'), createExecution())
+    processQueue(input, () => decoder.decode(input, output, 'replacement'), createEnvironment())
       .observe((value) => { completed.push(value); }, (error) => { completed.push(error); });
     input.push(Uint8Array.of(0x41, 0x94, 0x39));
     await nextTurn();

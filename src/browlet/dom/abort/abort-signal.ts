@@ -254,7 +254,7 @@ export const abortSignalIDL = defineInterface<Realm>({
           atArg(0, (ctx) => ctx.construct(AbortSignalImpl)),
           atArg(2, (ctx) => {
             const { realm } = ctx;
-            const timers = realm.environment.getWindowOrWorkerGlobalScopeMixin().timers;
+            const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;
             return (milliseconds: number, steps: () => void) => {
               timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
                 realm.queueGlobalTask(timerTaskSource, steps);

@@ -27,7 +27,7 @@ export function createFetchWindow(userAgent = new UserAgent()) {
     realm,
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      queueFetchTask(steps, realm.global, context.getExecution());
+      queueFetchTask(steps, realm.global, context.getEnvironment());
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];
@@ -47,14 +47,14 @@ export function createIsolatedFetchRealm() {
   new AgentCluster('concrete').add(realm.agent);
   const registration = new BindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
-  }).register(realm, createExecution);
+  }).register(realm, (context) => ({ exec: createExecution(context) }));
   registration.install(realm.global);
   return createFetchRealmFixture(registration);
 }
 
 function createFetchRealmFixture(context: BindingContext<Realm>) {
   return {
-    ...createControllerFixture(context.getExecution()),
+    ...createControllerFixture(context.getEnvironment()),
     context,
     realm: context.realm,
     deserialize: (reason: object | null) => deserializeFetchAbortReason(reason, context),

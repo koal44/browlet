@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMicrotaskQueue } from '../../src/js-engine/index';
 import type { PromiseValue } from '../../src/infra/promises';
 import { BindingWorld } from '../../src/web-idl/index';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
 
 import { parseMIMEType, serializeMIMEType, type MIMEType } from '../../src/mime/mime-type';
@@ -15,7 +15,7 @@ import {
 import { sniffMIMEType } from '../../src/mime/sniffing';
 
 const encoder = new TextEncoder();
-const exec = createExecution();
+const env = createEnvironment();
 
 describe('MIME Sniffing §5.1: detecting a supplied MIME type', () => {
   for (const value of [
@@ -92,14 +92,14 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
 
   it('completes collection through the byte source\'s promise queue', async () => {
     const queue = createMicrotaskQueue();
-    const exec = createExecution(new TestRealm({ microtaskQueue: queue }));
-    const source = exec.promises.withResolvers<Uint8Array | null>();
+    const env = createEnvironment(new TestRealm({ microtaskQueue: queue }));
+    const source = env.exec.promises.withResolvers<Uint8Array | null>();
     const bytes = Uint8Array.of(4, 5);
     const headers: Uint8Array[] = [];
     const errors: unknown[] = [];
     const readBytes = vi.fn<ReadResourceBytes>()
       .mockReturnValueOnce(source.promise)
-      .mockImplementation(() => exec.promises.resolve(null));
+      .mockImplementation(() => env.exec.promises.resolve(null));
 
     void readResourceHeader(readBytes, deadline).then(
       (header) => { headers.push(header); },
@@ -119,9 +119,9 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it('realizes invalid-reader failures in the binding realm', async () => {
     const realm = new TestRealm();
     const context = new BindingWorld([]).register(realm);
-    const exec = createExecution(realm);
+    const env = createEnvironment(realm);
     const failure = await observe(readResourceHeader(
-      () => exec.promises.resolve(new Uint8Array()),
+      () => env.exec.promises.resolve(new Uint8Array()),
       deadline,
     )).catch((error: unknown) => context.realizeException(error));
 
@@ -133,7 +133,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it('reads incrementally with one deadline and combines the prefix into exact-sized storage', async () => {
     const reads = [Uint8Array.of(1, 2), Uint8Array.of(3), null];
     const readBytes = vi.fn<ReadResourceBytes>(() =>
-      exec.promises.resolve(reads.shift() ?? null));
+      env.exec.promises.resolve(reads.shift() ?? null));
 
     const header = await observe(readResourceHeader(readBytes, deadline));
 
@@ -149,8 +149,8 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const chunk = storage.subarray(2, 2 + length);
     chunk.fill(7);
     const readBytes = vi.fn<ReadResourceBytes>()
-      .mockReturnValueOnce(exec.promises.resolve(chunk))
-      .mockImplementation(() => exec.promises.resolve(null));
+      .mockReturnValueOnce(env.exec.promises.resolve(chunk))
+      .mockImplementation(() => env.exec.promises.resolve(null));
 
     const header = await observe(readResourceHeader(readBytes, deadline));
 
@@ -167,10 +167,10 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     let offset = 0;
     const readBytes = vi.fn<ReadResourceBytes>((max) => {
       const length = Math.min(max, 127, source.length - offset);
-      if (length === 0) return exec.promises.resolve(null);
+      if (length === 0) return env.exec.promises.resolve(null);
       const chunk = source.subarray(offset, offset + length);
       offset += length;
-      return exec.promises.resolve(chunk);
+      return env.exec.promises.resolve(chunk);
     });
 
     const header = await observe(readResourceHeader(readBytes, deadline));
@@ -184,9 +184,9 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const chunks = [Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5)];
     let now = 90;
     const readBytes = vi.fn<ReadResourceBytes>((_maxBytes, readDeadline) => {
-      if (now >= readDeadline) return exec.promises.resolve(null);
+      if (now >= readDeadline) return env.exec.promises.resolve(null);
       now += 10;
-      return exec.promises.resolve(chunks.shift() ?? null);
+      return env.exec.promises.resolve(chunks.shift() ?? null);
     });
 
     expect([...await observe(readResourceHeader(readBytes, deadline))]).toEqual([1, 2, 3]);
@@ -195,10 +195,10 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   });
 
   it('keeps collected bytes when a pending source read ends at the deadline', async () => {
-    const pending = exec.promises.withResolvers<Uint8Array | null>();
-    const readStarted = exec.promises.withResolvers<void>();
+    const pending = env.exec.promises.withResolvers<Uint8Array | null>();
+    const readStarted = env.exec.promises.withResolvers<void>();
     const readBytes = vi.fn<ReadResourceBytes>()
-      .mockReturnValueOnce(exec.promises.resolve(Uint8Array.of(1, 2, 3)))
+      .mockReturnValueOnce(env.exec.promises.resolve(Uint8Array.of(1, 2, 3)))
       .mockImplementationOnce(() => {
         readStarted.resolve();
         return pending.promise;
@@ -214,7 +214,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   });
 
   it('returns an empty header when the source ends before supplying bytes', async () => {
-    const readBytes = vi.fn<ReadResourceBytes>(() => exec.promises.resolve(null));
+    const readBytes = vi.fn<ReadResourceBytes>(() => env.exec.promises.resolve(null));
 
     expect(await observe(readResourceHeader(readBytes, deadline))).toEqual(new Uint8Array());
     expect(readBytes).toHaveBeenCalledExactlyOnceWith(maximumResourceHeaderLength, deadline);
@@ -223,8 +223,8 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it('returns the header for the caller to retain before sniffing', async () => {
     const bytes = encoder.encode('<html>');
     const readBytes = vi.fn<ReadResourceBytes>()
-      .mockReturnValueOnce(exec.promises.resolve(bytes))
-      .mockReturnValueOnce(exec.promises.resolve(null));
+      .mockReturnValueOnce(env.exec.promises.resolve(bytes))
+      .mockReturnValueOnce(env.exec.promises.resolve(null));
 
     const resourceHeader = await observe(readResourceHeader(readBytes, deadline));
     const detection = detectSuppliedMIMEType({
@@ -246,7 +246,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const cancellation = new Error('cancelled');
 
     await expect(observe(readResourceHeader(
-      () => exec.promises.reject(cancellation),
+      () => env.exec.promises.reject(cancellation),
       deadline,
     ))).rejects.toBe(cancellation);
   });
@@ -254,8 +254,8 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it.each(['first', 'later'] as const)('propagates a %s read failure rejected by the source runtime', async (which) => {
     const failure = new Error('source failed');
     const readBytes = vi.fn<ReadResourceBytes>(() =>
-      exec.promises.try(() => { throw failure; }));
-    if (which === 'later') readBytes.mockReturnValueOnce(exec.promises.resolve(Uint8Array.of(1)));
+      env.exec.promises.try(() => { throw failure; }));
+    if (which === 'later') readBytes.mockReturnValueOnce(env.exec.promises.resolve(Uint8Array.of(1)));
 
     const result = readResourceHeader(readBytes, deadline);
     await expect(observe(result)).rejects.toBe(failure);
@@ -263,12 +263,12 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
 
   it('rejects byte sources that make no progress or over-read', async () => {
     await expect(observe(readResourceHeader(
-      () => exec.promises.resolve(new Uint8Array()),
+      () => env.exec.promises.resolve(new Uint8Array()),
       deadline,
     ))).rejects.toThrow(RangeError);
 
     await expect(observe(readResourceHeader(
-      (max) => exec.promises.resolve(new Uint8Array(max + 1)),
+      (max) => env.exec.promises.resolve(new Uint8Array(max + 1)),
       deadline,
     ))).rejects.toThrow(RangeError);
   });

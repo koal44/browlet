@@ -76,23 +76,23 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Recent reports for buffered observation, limited to 100 entries per type. */
   reportBuffer: ReportImpl[] = [];
   /** Environment shared by this global's browser facilities. */
-  environment: Environment;
+  env: Environment;
   #performance: PerformanceImpl;
 
-  constructor(environment: Environment) {
-    this.environment = environment;
-    this.#performance = new PerformanceImpl(environment.timing);
-    const { realm } = environment;
+  constructor(env: Environment) {
+    this.env = env;
+    this.#performance = new PerformanceImpl(env.timing);
+    const { realm } = env;
     this.timers = new GlobalTimers({
-      eventLoop: environment.responsibleEventLoop,
+      eventLoop: env.responsibleEventLoop,
       queueTask: (steps, options) => realm.queueGlobalTask(timerTaskSource, steps, options),
-      time: environment.timing,
+      time: env.timing,
     });
   }
 
   /** https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext */
   get isSecureContext(): boolean {
-    return this.environment.isSecureContext;
+    return this.env.isSecureContext;
   }
 
   get performance(): PerformanceImpl {
@@ -120,28 +120,28 @@ export class WindowOrWorkerGlobalScopeMixin {
   }
 
   queueMicrotask(callback: VoidFunction): void {
-    this.environment.responsibleEventLoop.queueMicrotask(() => { callback(); });
+    this.env.responsibleEventLoop.queueMicrotask(() => { callback(); });
   }
 
   structuredClone(
     value: unknown,
     options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
-    return this.environment.exec.clone(value, options.transfer);
+    return this.env.exec.clone(value, options.transfer);
   }
 
   /** Replace this global's Reporting endpoint list using its resource response. */
   // https://w3c.github.io/reporting/#initialize-a-globals-endpoint-list
   initializeReportingEndpoints(response: FetchResponse): void {
-    this.reportingEndpoints = ReportingEndpoint.parse(response, this.environment.userAgent);
+    this.reportingEndpoints = ReportingEndpoint.parse(response, this.env);
   }
 
   /** Generate a report for local observation and, when enabled, later network delivery. */
   // https://w3c.github.io/reporting/#generate-report
   queueReport(type: string, destination: string, body: unknown): void {
-    const report = this.environment.generateReport(body, type, destination);
+    const report = this.env.generateReport(body, type, destination);
     this.notifyReportingObservers(report);
-    if (this.environment.userAgent.reportDeliveryEnabled) this.reports.push(report);
+    if (this.env.userAgent.reportDeliveryEnabled) this.reports.push(report);
     else this.reports.length = 0;
   }
 
@@ -168,7 +168,7 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   /** Queue observer work on the HTML event loop owning this global. */
   queueReportingTask(steps: () => void): QueuedTaskHandle {
-    return this.environment.realm.queueGlobalTask(reportingTaskSource, steps);
+    return this.env.realm.queueGlobalTask(reportingTaskSource, steps);
   }
 
   /** Release global report state and registered observer batches during destruction. */
@@ -186,14 +186,14 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Transfer outbound data to the browser before this global releases its local state. */
   handoffReports(): void {
     this.retireReports();
-    sendReports(this.reports, this.environment);
+    sendReports(this.reports, this.env);
     this.reports.length = 0;
   }
 
   /** Remove expired reports from delivery queues, replay buffers, and pending observer batches. */
   // https://w3c.github.io/reporting/#gc
   retireReports(): void {
-    const { userAgent } = this.environment;
+    const { userAgent } = this.env;
     const cutoff = Date.now() - userAgent.maxReportAge;
     this.reports = this.reports.filter((report) => report.timestamp >= cutoff);
     this.reportBuffer = this.reportBuffer.filter((report) => report.timestamp >= cutoff);

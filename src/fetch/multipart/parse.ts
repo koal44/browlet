@@ -1,4 +1,4 @@
-import { isomorphicDecode, type RealmExecution } from '../../js-engine/index';
+import { isomorphicDecode, type JSEnvironment } from '../../js-engine/index';
 import { TypeError } from '../../infra/exceptions';
 import { utf8DecodeWithoutBOM } from '../../encoding/index';
 import { FileImpl } from '../../file/index';
@@ -17,7 +17,7 @@ import type { FormDataEntry } from '../../xhr/index';
 export function parseMultipartFormData(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: MIMEType,
-  exec: RealmExecution,
+  env: JSEnvironment,
 ): FormDataEntry[] {
   const boundary = mimeType.parameters.get('boundary');
   if (
@@ -66,7 +66,7 @@ export function parseMultipartFormData(
       ? toScalarValueString(utf8DecodeWithoutBOM(body))
       : new FileImpl([body], filename, {
         type: contentType ?? 'text/plain',
-      }, exec);
+      }, env);
     entries.push([toScalarValueString(name), value]);
     position = nextDelimiter + 2;
   }

@@ -4,16 +4,16 @@ import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
   type ExecutionCaps as StyleletExecutionCaps,
 } from '../../stylelet/index';
-import type { RealmExecution } from '../../js-engine/index';
+import type { JSEnvironment } from '../../js-engine/index';
 import { createDOMException } from '../../web-idl/index';
 import type { Realm } from '../scripting/realm';
 import { domManipulationTaskSource } from '../scripting/tasks';
 
 /** Compose Stylelet with this owner's task delivery, promises, and exception requests. */
-export function createStyleletExecution(realm: Realm, exec: RealmExecution): StyleletExecutionCaps {
+export function createStyleletExecution(realm: Realm, env: JSEnvironment): StyleletExecutionCaps {
   return {
-    promises: exec.promises,
-    runInParallel: exec.runInParallel,
+    promises: env.exec.promises,
+    runInParallel: env.exec.runInParallel,
     // CSSOM leaves the source unspecified; DOM manipulation delivers stylesheet updates.
     queueTask: (steps) => { realm.queueGlobalTask(domManipulationTaskSource, steps); },
     createDOMException,

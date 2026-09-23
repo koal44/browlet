@@ -29,7 +29,7 @@ describe('Document destruction', () => {
   it('releases global Reporting state without clearing a different global', () => {
     const first = createDocument();
     const second = createDocument();
-    const observer = new ReportingObserverImpl(vi.fn(), { buffered: false }, first.environment);
+    const observer = new ReportingObserverImpl(vi.fn(), { buffered: false }, first.env);
     observer.observe();
     first.global.reportingEndpoints.push(new ReportingEndpoint('default', parseURL('https://reports.test/').url!));
     first.global.queueReport('coep', 'default', corpBody);
@@ -47,15 +47,15 @@ describe('Document destruction', () => {
   });
 
   it('destroys an active document and cancels its queued reports and tasks', () => {
-    const { document, traversable, environment, global } = createDocument();
-    const eventLoop = environment.responsibleEventLoop;
+    const { document, traversable, env, global } = createDocument();
+    const eventLoop = env.responsibleEventLoop;
     const observerCallback = vi.fn();
     const networkingCallback = vi.fn();
-    const observer = new ReportingObserverImpl(observerCallback, { buffered: false }, environment);
+    const observer = new ReportingObserverImpl(observerCallback, { buffered: false }, env);
     observer.observe();
-    environment.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
     global.queueReport('coep', 'default', corpBody);
-    environment.realm.queueGlobalTask(networkingTaskSource, networkingCallback);
+    env.realm.queueGlobalTask(networkingTaskSource, networkingCallback);
 
     eventLoop.runTaskTurn({
       createMicrotaskQueue,
@@ -75,7 +75,7 @@ describe('Document destruction', () => {
   });
 
   it('runs registered cleanup and removes only this document from worker ownership', () => {
-    const { document, environment, global } = createDocument();
+    const { document, env, global } = createDocument();
     const otherDocument = createDocument().document;
     const disentangle = vi.fn();
     const makeDisappear = vi.fn();
@@ -90,8 +90,8 @@ describe('Document destruction', () => {
     document.ownedWorkers.push({ ownerSet });
     document.workletGlobalScopes.push({ terminate });
 
-    environment.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
-    environment.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
 
     for (const operation of [disentangle, makeDisappear, cleanup, close, terminate]) {
       expect(operation).toHaveBeenCalledExactlyOnceWith();
@@ -105,29 +105,29 @@ describe('Document destruction', () => {
     const userAgent = new UserAgent();
     const first = createDocument(userAgent);
     const second = createDocument(userAgent);
-    const blob = new BlobImpl(['data'], {}, first.environment.exec);
+    const blob = new BlobImpl(['data'], {}, first.env);
     const store = userAgent.blobURLStore;
-    const firstURL = parseURL(store.add(blob, first.environment)).url!;
-    const secondURL = parseURL(store.add(blob, second.environment)).url!;
+    const firstURL = parseURL(store.add(blob, first.env)).url!;
+    const secondURL = parseURL(store.add(blob, second.env)).url!;
     expect(store.resolve(firstURL)).not.toBeNull();
     expect(store.resolve(secondURL)).not.toBeNull();
 
-    first.environment.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { first.document.destroy(); });
-    first.environment.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    first.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { first.document.destroy(); });
+    first.env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
 
     expect(store.resolve(firstURL)).toBeNull();
-    expect(store.resolve(secondURL)!.obtainObject(second.environment)).toBe(blob);
+    expect(store.resolve(secondURL)!.obtainObject(second.env)).toBe(blob);
   });
 
   it('aborts a registered parser and reports the canceled navigation without destroying the document', () => {
-    const { document, traversable, environment } = createDocument();
+    const { document, traversable, env } = createDocument();
     const abort = vi.fn();
-    const notifyAborted = vi.spyOn(environment.userAgent, 'webDriverBiDiNavigationAborted');
+    const notifyAborted = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationAborted');
     document.activeParser = { abort };
     document.duringLoadingNavigationID = 'navigation-1';
 
-    environment.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.abort(); });
-    environment.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.abort(); });
+    env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
 
     expect(abort).toHaveBeenCalledExactlyOnceWith();
     expect(notifyAborted).toHaveBeenCalledExactlyOnceWith(traversable, {
@@ -145,8 +145,8 @@ describe('Document destruction', () => {
 function createDocument(userAgent = new UserAgent()) {
   const traversable = createNewTopLevelTraversable(userAgent, null, '');
   const document = traversable.activeDocument!;
-  const environment = getRelevantRealm(document).environment;
-  return { document, traversable, environment, global: environment.getWindowOrWorkerGlobalScopeMixin() };
+  const env = getRelevantRealm(document).env;
+  return { document, traversable, env, global: env.getWindowOrWorkerGlobalScopeMixin() };
 }
 
 const corpBody = {

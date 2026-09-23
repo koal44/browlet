@@ -93,7 +93,7 @@ timer cancellation, and isolation of report state between globals.
 
 | Provisional dependency | Required owner and behavior |
 | --- | --- |
-| `environment.fetchGroup.cancel()` | Currently returns false without changing records. Fetch must cancel in-flight work, discard its queued callbacks and subsequent data, and report whether anything was canceled. Existing `terminate()` only changes controller state and processes deferred fetches; it excludes keepalive requests. Settle cancellation/lifetime rules with Fetch orchestration. No DOM types should enter Fetch. |
+| `env.fetchGroup.cancel()` | Currently returns false without changing records. Fetch must cancel in-flight work, discard its queued callbacks and subsequent data, and report whether anything was canceled. Existing `terminate()` only changes controller state and processes deferred fetches; it excludes keepalive requests. Settle cancellation/lifetime rules with Fetch orchestration. No DOM types should enter Fetch. |
 | `document.activeParser` and `parser.abort()` | HTML parser integration must track an actually active parser, stop its input and resumptions, and perform §13.2's abort readiness/stack steps. The current `document.write()` callback does not supply this lifetime. |
 | `userAgent.webDriverBiDiNavigationAborted()` | A no-op until BiDi sessions exist. The lifecycle call supplies the navigation ID, canceled status, URL, and navigable. UserAgent also owns the environment-scoped BiDi queries. |
 | Global `messagePorts` | Messaging must maintain relevant-global membership and disentangle those ports. MessagePort itself is not implemented. |

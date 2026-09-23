@@ -6,7 +6,7 @@ import { FetchTimingInfo, ResponseBodyInfo } from '../../src/fetch/timing';
 import { parseURL, serializeURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
-import { createFetchUserAgent } from './client-fixture';
+import { createClientEnvironment } from './client-fixture';
 
 describe('Fetch response reporting URLs', () => {
   it('reports the first URL without credentials or fragment, preserving the response URLs', () => {
@@ -243,14 +243,14 @@ describe('Fetch response freshness', () => {
 });
 
 describe('Fetch response Location URLs', () => {
-  const userAgent = createFetchUserAgent();
+  const env = createClientEnvironment();
 
   it.each([301, 302, 303, 307, 308])('resolves Location against the current URL for status %s', (status) => {
     const response = new FetchResponse();
     response.status = status;
     response.urlList.push(parseURL('https://first.test/').url!, parseURL('https://last.test/path/page').url!);
     response.headerList.list.push(['LOCATION', '../next?a,b']);
-    const location = response.getLocationURL('inherited', userAgent);
+    const location = response.getLocationURL('inherited', env);
     expect(serializeURL(location!)).toBe('https://last.test/next?a,b#inherited');
     expect(response.url!.fragment).toBeNull();
   });
@@ -266,37 +266,37 @@ describe('Fetch response Location URLs', () => {
     response.status = 302;
     response.urlList.push(parseURL('https://example.test/start').url!);
     response.headerList.list.push(['Location', value]);
-    expect(serializeURL(response.getLocationURL(fragment, userAgent)!)).toBe(expected);
+    expect(serializeURL(response.getLocationURL(fragment, env)!)).toBe(expected);
   });
 
   it('distinguishes absence from failure', () => {
     const response = new FetchResponse();
     response.status = 302;
-    expect(response.getLocationURL(null, userAgent)).toBeUndefined();
+    expect(response.getLocationURL(null, env)).toBeUndefined();
     response.headerList.list.push(['Location', '/relative-without-base']);
-    expect(response.getLocationURL(null, userAgent)).toBeNull();
+    expect(response.getLocationURL(null, env)).toBeNull();
     response.headerList.list[0]![1] = 'https://[invalid]/';
-    expect(response.getLocationURL(null, userAgent)).toBeNull();
+    expect(response.getLocationURL(null, env)).toBeNull();
   });
 
   it('parses an absolute Location for a synthetic response without a URL', () => {
     const response = new FetchResponse();
     response.status = 302;
     response.headerList.list.push(['Location', 'https://elsewhere.test/']);
-    expect(serializeURL(response.getLocationURL('request', userAgent)!)).toBe('https://elsewhere.test/#request');
+    expect(serializeURL(response.getLocationURL('request', env)!)).toBe('https://elsewhere.test/#request');
   });
 
   it('rejects duplicate Location fields, even with the same value', () => {
     const response = new FetchResponse();
     response.status = 302;
     response.headerList.list.push(['Location', 'https://example.test/'], ['location', 'https://example.test/']);
-    expect(response.getLocationURL(null, userAgent)).toBeNull();
+    expect(response.getLocationURL(null, env)).toBeNull();
   });
 
   it.each([200, 300, 304, 305, 306, 404])('ignores Location on status %s', (status) => {
     const response = new FetchResponse();
     response.status = status;
     response.headerList.list.push(['Location', 'https://example.test/']);
-    expect(response.getLocationURL(null, userAgent)).toBeUndefined();
+    expect(response.getLocationURL(null, env)).toBeUndefined();
   });
 });

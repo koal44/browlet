@@ -1,4 +1,4 @@
-import { createExecution } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 import { createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -12,7 +12,7 @@ import {
 
 describe('Streams operations for other specifications', () => {
   it('drains buffered bytes without recursion or Node microtask scheduling', () => {
-    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createExecution());
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createEnvironment());
     for (let i = 0; i < 4_096; i++) stream.enqueueChunk(Uint8Array.of(i % 256));
     stream.close();
     const success = vi.fn();
@@ -31,7 +31,7 @@ describe('Streams operations for other specifications', () => {
   });
 
   it('resumes byte reading when later chunks arrive', () => {
-    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createExecution());
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createEnvironment());
     const success = vi.fn();
     const failure = vi.fn();
     stream.getDefaultReader().readAllBytes(success, failure);
@@ -65,7 +65,7 @@ describe('Streams operations for other specifications', () => {
       undefined,
       1,
       () => 1,
-      createExecution(),
+      createEnvironment(),
     );
 
     expect(stream.desiredSize).toBe(1);
@@ -101,7 +101,7 @@ describe('Streams operations for other specifications', () => {
       },
       undefined,
       0,
-      createExecution(),
+      createEnvironment(),
     );
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
@@ -123,7 +123,7 @@ describe('Streams operations for other specifications', () => {
       },
       undefined,
       0,
-      createExecution(),
+      createEnvironment(),
     );
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
@@ -136,11 +136,11 @@ describe('Streams operations for other specifications', () => {
   });
 
   it('waits for internal promises returned by writable algorithms', async () => {
-    const exec = createExecution();
-    const { promises } = exec;
+    const env = createEnvironment();
+    const { promises } = env.exec;
     const finishWrite = promises.withResolvers<void>();
     const write = vi.fn(() => finishWrite.promise);
-    const stream = WritableStreamImpl.createDefault(write, undefined, undefined, 1, () => 1, exec);
+    const stream = WritableStreamImpl.createDefault(write, undefined, undefined, 1, () => 1, env);
     const writer = stream.getWriter();
     const writing = writer.writeInternal('chunk');
     let settled = false;
@@ -164,15 +164,15 @@ describe('Streams operations for other specifications', () => {
       undefined,
       1,
       () => 1,
-      createExecution(),
+      createEnvironment(),
     );
     const writer = writable.getWriter();
     const failure = new Error('sink failed');
     writable.error(failure);
     await expect(observe(writer.closed)).rejects.toBe(failure);
 
-    const source = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createExecution());
-    const proxy = createReadableStreamProxy(source, source.exec);
+    const source = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, createEnvironment());
+    const proxy = createReadableStreamProxy(source, source.env);
     expect(source.locked).toBe(true);
     expect(source.disturbed).toBe(true);
     const reading = observe(proxy.getReader({}).read());

@@ -1,4 +1,4 @@
-import type { RealmExecution } from '../js-engine/index';
+import type { JSEnvironment } from '../js-engine/index';
 import type { PromiseValue, PromiseValueCapability } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
@@ -34,7 +34,7 @@ export class TransformStreamImpl {
     transformer: TransformerRecord | null = {},
     writableStrategy: QueuingStrategyRecord = {},
     readableStrategy: QueuingStrategyRecord = {},
-    public exec: RealmExecution,
+    public env: JSEnvironment,
   ) {
     if (transformer === null) return;
 
@@ -49,7 +49,7 @@ export class TransformStreamImpl {
     const readableSizeAlgorithm = extractSizeAlgorithm(readableStrategy);
     const writableHighWaterMark = extractHighWaterMark(writableStrategy, 1);
     const writableSizeAlgorithm = extractSizeAlgorithm(writableStrategy);
-    const start = exec.promises.withResolvers<unknown>();
+    const start = env.exec.promises.withResolvers<unknown>();
     this.#initialize(
       start.promise,
       writableHighWaterMark,
@@ -63,12 +63,12 @@ export class TransformStreamImpl {
     const startResult = transformer.start
       ? Reflect.apply(transformer.start, transformer, [controller])
       : undefined;
-    exec.promises.resolve(startResult).observe(start.resolve, start.reject);
+    env.exec.promises.resolve(startResult).observe(start.resolve, start.reject);
   }
 
   /** Streams §9.3.1, creating an identity TransformStream. */
-  static createIdentity(exec: RealmExecution): TransformStreamImpl {
-    const stream = new TransformStreamImpl(null, {}, {}, exec);
+  static createIdentity(env: JSEnvironment): TransformStreamImpl {
+    const stream = new TransformStreamImpl(null, {}, {}, env);
     stream.setUp((chunk) => stream.enqueue(chunk));
     return stream;
   }
@@ -96,7 +96,7 @@ export class TransformStreamImpl {
     cancelAlgorithm?: (reason: unknown) => PromiseValue<unknown> | void,
   ): void {
     this.#initialize(
-      this.exec.promises.resolve(),
+      this.env.exec.promises.resolve(),
       1,
       () => 1,
       0,
@@ -104,9 +104,9 @@ export class TransformStreamImpl {
     );
     new TransformStreamDefaultControllerImpl().setUp(
       this,
-      (chunk) => this.exec.promises.try(() => transformAlgorithm(chunk)),
-      () => this.exec.promises.try(() => flushAlgorithm?.()),
-      (reason) => this.exec.promises.try(() => cancelAlgorithm?.(reason)),
+      (chunk) => this.env.exec.promises.try(() => transformAlgorithm(chunk)),
+      () => this.env.exec.promises.try(() => flushAlgorithm?.()),
+      (reason) => this.env.exec.promises.try(() => cancelAlgorithm?.(reason)),
     );
   }
 
@@ -137,7 +137,7 @@ export class TransformStreamImpl {
       throw new InternalError('Transform stream backpressure did not change');
     }
     this.state.backpressureChange?.resolve();
-    this.state.backpressureChange = this.exec.promises.withResolvers<void>();
+    this.state.backpressureChange = this.env.exec.promises.withResolvers<void>();
     this.state.backpressure = backpressure;
   }
 
@@ -163,7 +163,7 @@ export class TransformStreamImpl {
       (reason) => this.#abort(reason),
       writableHighWaterMark,
       writableSizeAlgorithm,
-      this.exec,
+      this.env,
     );
     this.state.readable = ReadableStreamImpl.create(
       () => startPromise,
@@ -171,7 +171,7 @@ export class TransformStreamImpl {
       (reason) => this.#cancel(reason),
       readableHighWaterMark,
       readableSizeAlgorithm,
-      this.exec,
+      this.env,
     );
     this.setBackpressure(true);
   }
@@ -200,7 +200,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.promises.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
@@ -224,7 +224,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.promises.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const flushPromise = controller.flush();
     controller.clearAlgorithms();
@@ -257,7 +257,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.promises.withResolvers<void>();
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
@@ -320,7 +320,7 @@ export const transformStreamIDL = defineInterface({
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
     constructWith: [
-      atArg(3, (ctx) => ctx.getExecution()),
+      atArg(3, (ctx) => ctx.getEnvironment()),
     ],
   }),
   members: [
@@ -470,9 +470,9 @@ export class TransformStreamDefaultControllerImpl {
     const { transform, flush, cancel } = transformer;
     this.setUp(
       stream,
-      (chunk) => stream.exec.promises.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk)),
-      () => stream.exec.promises.try(() => flush?.call(transformer, this)),
-      (reason) => stream.exec.promises.try(() => cancel?.call(transformer, reason)),
+      (chunk) => stream.env.exec.promises.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk)),
+      () => stream.env.exec.promises.try(() => flush?.call(transformer, this)),
+      (reason) => stream.env.exec.promises.try(() => cancel?.call(transformer, reason)),
     );
   }
 
@@ -593,7 +593,7 @@ function requireStateMember<Value>(
 
 /** Streams §9.5, create a proxy for a readable stream. */
 export function createReadableStreamProxy(
-  stream: ReadableStreamImpl, exec: RealmExecution,
+  stream: ReadableStreamImpl, env: JSEnvironment,
 ): ReadableStreamImpl {
-  return stream.pipeThroughTransform(TransformStreamImpl.createIdentity(exec));
+  return stream.pipeThroughTransform(TransformStreamImpl.createIdentity(env));
 }

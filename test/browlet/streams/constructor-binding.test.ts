@@ -119,17 +119,17 @@ function construct(global: object, name: string, args: unknown[] = []): object {
 
 function createRelatedWindow(first: Window): WindowProxy {
   const firstRealm = getRelevantRealm(first);
-  const { agent, environment } = firstRealm;
+  const { agent, env } = firstRealm;
   if (!(agent instanceof WindowAgent)) {
     throw new Error('Expected an initialized Window realm');
   }
-  const relatedSettings = createWindowEnvironment({
-    agent, userAgent: environment.userAgent, creationURL: environment.creationURL,
-    origin: environment.origin, parent: null,
-    topLevelCreationURL: environment.creationURL, topLevelOrigin: environment.origin,
+  const relatedEnv = createWindowEnvironment({
+    agent, userAgent: env.userAgent, creationURL: env.creationURL,
+    origin: env.origin, parent: null,
+    topLevelCreationURL: env.creationURL, topLevelOrigin: env.origin,
   });
-  const { window } = relatedSettings;
-  const { realm } = relatedSettings;
+  const { window } = relatedEnv;
+  const { realm } = relatedEnv;
   const proxy = realm.globalThis as WindowProxy;
   const document = new DocumentImpl();
   document.browsingContext = new BrowsingContext(proxy);

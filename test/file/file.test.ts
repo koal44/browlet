@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { BlobImpl, FileImpl, FileListImpl } from '../../src/file/index';
-import { createExecution } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 
-const exec = createExecution();
+const env = createEnvironment();
 
 describe('File API §4: File', () => {
   it('extends Blob with captured name and modification metadata', async () => {
@@ -11,7 +11,7 @@ describe('File API §4: File', () => {
       endings: 'native',
       lastModified: 42,
       type: 'Text/PLAIN',
-    }, exec);
+    }, env);
 
     expect(file).toBeInstanceOf(BlobImpl);
     expect(file.name).toBe('notes.txt');
@@ -24,7 +24,7 @@ describe('File API §4: File', () => {
     let currentTime = 100;
     const clock = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
     try {
-      const file = new FileImpl([], 'empty', {}, exec);
+      const file = new FileImpl([], 'empty', {}, env);
       expect(file.lastModified).toBe(100);
       expect(file.lastModified).toBe(100);
       expect(currentTime).toBe(101);
@@ -34,8 +34,8 @@ describe('File API §4: File', () => {
   });
 
   it('shares File parts through inherited Blob processing', async () => {
-    const first = new FileImpl(['first'], 'first.txt', { lastModified: 1 }, exec);
-    const second = new FileImpl([first, '-second'], 'second.txt', { lastModified: 2 }, exec);
+    const first = new FileImpl(['first'], 'first.txt', { lastModified: 1 }, env);
+    const second = new FileImpl([first, '-second'], 'second.txt', { lastModified: 2 }, env);
 
     expect(new TextDecoder().decode(await second.data.read()))
       .toBe('first-second');
@@ -43,8 +43,8 @@ describe('File API §4: File', () => {
 });
 
 describe('File API §5: FileList', () => {
-  const first = new FileImpl([], 'first', { lastModified: 1 }, exec);
-  const second = new FileImpl([], 'second', { lastModified: 2 }, exec);
+  const first = new FileImpl([], 'first', { lastModified: 1 }, env);
+  const second = new FileImpl([], 'second', { lastModified: 2 }, env);
 
   it('retains ordered File identity and returns null out of range', () => {
     const list = new FileListImpl([first, second]);

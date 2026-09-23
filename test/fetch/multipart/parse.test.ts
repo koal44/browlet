@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { parseMultipartFormData } from '../../../src/fetch/multipart/parse';
 import { FileImpl } from '../../../src/file/index';
 import { parseMIMEType } from '../../../src/mime/index';
-import { createExecution } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 
 const mimeType = parseMIMEType('multipart/form-data; boundary=Boundary')!;
-const exec = createExecution();
+const env = createEnvironment();
 
 describe('Fetch multipart/form-data parsing', () => {
   it('preserves order, repeated names, and empty names and values', () => {
@@ -25,7 +25,7 @@ describe('Fetch multipart/form-data parsing', () => {
       '--Boundary\r\nContent-Disposition: form-data; name="file"; filename="日本.txt"\r\n\r\n' +
       '\ufeffcontent\r\n--Boundary--\r\n',
     );
-    const entries = parseMultipartFormData(bytes, mimeType, exec);
+    const entries = parseMultipartFormData(bytes, mimeType, env);
     expect(entries[0]).toEqual(['é💩', '\ufeff日本']);
     const file = entries[1]![1] as FileImpl;
     expect(file.name).toBe('日本.txt');
@@ -47,7 +47,7 @@ describe('Fetch multipart/form-data parsing', () => {
       'Content-Type: Application/Octet-Stream',
       '\0\xff\r\n\x80\n',
     )));
-    const [name, value] = parseMultipartFormData(bytes, mimeType, exec)[0]!;
+    const [name, value] = parseMultipartFormData(bytes, mimeType, env)[0]!;
     expect(name).toBe('file');
     expect(value).toBeInstanceOf(FileImpl);
     const file = value as FileImpl;
@@ -146,10 +146,10 @@ describe('RFC 2046 multipart framing', () => {
   it('uses the case-sensitive boundary from an already parsed MIME type', () => {
     const type = parseMIMEType('Multipart/Form-Data; boundary="B: a"')!;
     const bytes = Uint8Array.from(isomorphicEncode('--B: a--\r\n'));
-    expect(parseMultipartFormData(bytes, type, exec)).toEqual([]);
+    expect(parseMultipartFormData(bytes, type, env)).toEqual([]);
     expect(() => parseMultipartFormData(bytes, {
       ...type, parameters: new Map([['boundary', 'b: a']]),
-    }, exec)).toThrow(TypeError);
+    }, env)).toThrow(TypeError);
   });
 
   it.each([
@@ -199,14 +199,14 @@ describe('RFC 2046 multipart framing', () => {
         ...mimeType,
         parameters: new Map(boundary === undefined ? [] : [['boundary', boundary]]),
       };
-      expect(() => parseMultipartFormData(new Uint8Array(), type, exec))
+      expect(() => parseMultipartFormData(new Uint8Array(), type, env))
         .toThrow(TypeError);
     },
   );
 });
 
 function parse(body: string) {
-  return parseMultipartFormData(Uint8Array.from(isomorphicEncode(body)), mimeType, exec);
+  return parseMultipartFormData(Uint8Array.from(isomorphicEncode(body)), mimeType, env);
 }
 
 function part(headers: string, body: string): string {

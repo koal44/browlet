@@ -3,7 +3,7 @@ import { InternalError } from '../../../src/infra/internal-error';
 import { FetchRequest, type Destination, type FetchMode } from '../../../src/fetch/request';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
-import { createClientSettings, createFetchUserAgent } from '../client-fixture';
+import { createClientEnvironment, createFetchUserAgent } from '../client-fixture';
 
 describe('Fetch Metadata headers', () => {
   it('sets the three ordinary headers in specification order', () => {
@@ -209,7 +209,7 @@ describe('Fetch Metadata target trustworthiness', () => {
 });
 
 function createRequest(target = 'https://example.test/', origin = 'https://example.test/'): FetchRequest {
-  const client = createClientSettings(origin);
+  const client = createClientEnvironment(origin);
   const request = new FetchRequest(parseURL(target).url!, client, client.userAgent);
   request.populateFromClient();
   return request;

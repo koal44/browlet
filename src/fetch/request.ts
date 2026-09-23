@@ -1,6 +1,6 @@
 import type { BlobImpl } from '../file/index';
 import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
-import { type AbortSignalCapability, type RealmExecution, isomorphicEncode } from '../js-engine/index';
+import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
@@ -271,8 +271,8 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */
   determineNetworkPartitionKey(): NetworkPartitionKey | null {
-    const environment = this.reservedClient ?? this.client;
-    return environment === null ? null : determineNetworkPartitionKey(environment);
+    const env = this.reservedClient ?? this.client;
+    return env === null ? null : determineNetworkPartitionKey(env);
   }
 
   /** Supply the client's identification value only when the request has no User-Agent header. */
@@ -526,43 +526,42 @@ export class RequestImpl {
   /** Body operations reading this request's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution, allocation, and abort-construction facilities. */
-  #exec: RealmExecution;
+  #env: JSEnvironment;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
   // https://fetch.spec.whatwg.org/#request-create
   constructor(
-    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, exec: RealmExecution,
+    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, env: JSEnvironment,
   ) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
     this.#signal = signal;
-    this.#bodyMixin = new BodyMixin(request, exec);
-    this.#exec = exec;
+    this.#bodyMixin = new BodyMixin(request, env);
+    this.#env = env;
   }
 
   /** Construct a Request from converted author arguments and its relevant settings. */
   // https://fetch.spec.whatwg.org/#dom-request
   static create(
     input: FetchRequestInfo, init: FetchRequestInit,
-    environment: FetchEnvironment & { exec: RealmExecution; },
+    env: FetchEnvironment,
   ): RequestImpl {
-    const { exec } = environment;
-    const baseURL = environment.apiBaseURL;
+    const baseURL = env.apiBaseURL;
     let source: FetchRequest;
     let fallbackMode: RequestMode | null = null;
     let signal: AbortSignalCapability | null = null;
     if (typeof input === 'string') {
-      const url = environment.userAgent.parseURL(input, baseURL).url;
+      const url = env.parseURL(input, baseURL).url;
       if (url === null) throw new TypeError('Invalid Request URL');
       if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
-      source = new FetchRequest(url, environment, environment.userAgent);
+      source = new FetchRequest(url, env, env.userAgent);
       fallbackMode = 'cors';
     } else {
       source = input.#request;
       signal = input.#signal;
     }
 
-    const origin = environment.origin;
+    const origin = env.origin;
     let traversable: FetchRequest['traversableForUserPrompts'] = undefined;
     // PROVISIONAL: Fetch's constructor still names an environment target; compare the source request origin.
     if (source.traversableForUserPrompts && source.origin !== undefined && areSameOrigin(source.origin, origin)) {
@@ -573,7 +572,7 @@ export class RequestImpl {
       traversable = null;
     }
 
-    const request = new FetchRequest(source.url, environment, environment.userAgent);
+    const request = new FetchRequest(source.url, env, env.userAgent);
     request.method = source.method;
     request.headerList = source.headerList.clone();
     request.unsafeRequest = true;
@@ -607,7 +606,7 @@ export class RequestImpl {
       if (init.referrer === '') {
         request.referrer = null;
       } else {
-        const referrer = environment.userAgent.parseURL(init.referrer, baseURL).url;
+        const referrer = env.parseURL(init.referrer, baseURL).url;
         if (referrer === null) throw new TypeError('Invalid Request referrer');
         request.referrer = (referrer.scheme === 'about' && referrer.path === 'client') ||
           !areSameOrigin(obtainURLOrigin(referrer), origin) ? undefined : referrer;
@@ -636,7 +635,7 @@ export class RequestImpl {
     }
 
     const result = new RequestImpl(
-      request, 'request', exec.createDependentAbortSignal(signal === null ? [] : [signal]), exec,
+      request, 'request', env.exec.createDependentAbortSignal(signal === null ? [] : [signal]), env,
     );
     if (request.mode === 'no-cors') {
       if (!isCORSSafelistedMethod(request.method)) throw new TypeError('Invalid method for no-cors mode');
@@ -655,7 +654,7 @@ export class RequestImpl {
     }
     let initBody: FetchBody | null = null;
     if (bodyInit !== null) {
-      const extracted = FetchBody.extract(bodyInit, request.keepalive, exec);
+      const extracted = FetchBody.extract(bodyInit, request.keepalive, env);
       initBody = extracted.body;
       if (extracted.type !== null && !request.headerList.has('Content-Type')) {
         result.#headers.append('Content-Type', extracted.type);
@@ -671,7 +670,7 @@ export class RequestImpl {
     }
     if (initBody === null && inputBody !== null) {
       if (inputBody.stream.disturbed || inputBody.stream.locked) throw new TypeError('Request body is disturbed or locked');
-      body = new FetchBody(createReadableStreamProxy(inputBody.stream, exec), exec);
+      body = new FetchBody(createReadableStreamProxy(inputBody.stream, env), env);
       body.source = inputBody.source;
       body.length = inputBody.length;
     }
@@ -707,8 +706,8 @@ export class RequestImpl {
   clone(): RequestImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Request body is disturbed or locked');
     const request = this.#request.clone();
-    const signal = this.#exec.createDependentAbortSignal([this.#signal]);
-    return new RequestImpl(request, this.#headers.guard, signal, this.#exec);
+    const signal = this.#env.exec.createDependentAbortSignal([this.#signal]);
+    return new RequestImpl(request, this.#headers.guard, signal, this.#env);
   }
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
@@ -835,7 +834,7 @@ export const requestIDL = defineInterface({
   name: 'Request',
   exposed: ['Window', 'Worker'],
   implementation: impl(RequestImpl, {
-    constructWith: [atArg(3, (ctx) => ctx.getExecution())],
+    constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor(

@@ -19,8 +19,8 @@ export const objectURLIDL = definePartialInterface<Realm>({
       [arg('obj', reference('Blob'))],
       {
         invoke(context, object) {
-          const environment = context.realm.environment;
-          return environment.userAgent.blobURLStore.add(object as BlobImpl, environment);
+          const env = context.realm.env;
+          return env.userAgent.blobURLStore.add(object as BlobImpl, env);
         },
       },
     ),
@@ -28,8 +28,8 @@ export const objectURLIDL = definePartialInterface<Realm>({
       [arg('url', idlType.DOMString)],
       {
         invoke(context, url) {
-          const environment = context.realm.environment;
-          environment.userAgent.blobURLStore.revoke(url as string, environment);
+          const env = context.realm.env;
+          env.userAgent.blobURLStore.revoke(url as string, env);
         },
       },
     ),
