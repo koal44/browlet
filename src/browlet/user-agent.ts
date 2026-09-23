@@ -2,6 +2,7 @@ import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { Navigable, TopLevelTraversable } from './browsing/navigable';
 import type { Environment } from './scripting/environment';
 import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
+import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { hostPromises, requestNodeEventLoopTurn } from './integration/scripting';
 import type { ReportingEndpoint } from './reporting/endpoint';
@@ -31,6 +32,8 @@ export class UserAgent implements FetchUserAgent {
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
   cookieStore = new CookieStore();
+  /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
+  hstsStore = new HSTSStore();
   /** Browser-owned Blob URL storage used by environment teardown. */
   // PROVISIONAL: the storage-keys/Blob-URLs detour will supply the real store.
   blobURLStore = {

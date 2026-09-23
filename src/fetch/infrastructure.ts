@@ -4,7 +4,7 @@ import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { CookieStore } from '../http/index';
 import type { RealmExecution } from '../js-engine/index';
-import type { Origin, URLRecord } from '../url/index';
+import type { Host, Origin, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
@@ -101,6 +101,11 @@ export type FetchUserAgent = {
   cookieStore: CookieStore;
   /** Enables sending and accepting cookies without deleting the store when disabled. */
   cookiesEnabled: boolean;
+  /** Browser-owned transport-security state shared by this user agent's requests. */
+  hstsStore: {
+    /** Whether a URL host has an unexpired exact or inherited HTTPS requirement. */
+    requiresHTTPS(host: Host | null): boolean;
+  };
   /** Applies this user agent's trust policy to a URL, including loopback and configured origins. */
   isURLPotentiallyTrustworthy(url: URLRecord): boolean;
   /** Create HTML's default policy container for a request without a client. */

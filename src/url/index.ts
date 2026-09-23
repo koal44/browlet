@@ -10,7 +10,7 @@ export {
   type Origin, type Site, type TupleOrigin,
 } from './origin';
 export {
-  hostsEqual, obtainPublicSuffix, parseHost, type Domain, type IPAddress,
+  hostsEqual, obtainPublicSuffix, parseHost, type Domain, type Host, type IPAddress,
 } from './host';
 export { parseFormUrlEncoded } from './form-url-encoded';
 export { percentEncodeByte } from './percent-encoding';

@@ -199,10 +199,82 @@ The User Agent owns this host state; it is not a per-Document policy-container
 slot. Fetch consumes host matching and upgrades; transport supplies verified
 secure-connection results and enforces the required failure behavior.
 
-Test learning over secure versus insecure transport, expiry, domain matching,
-and port mapping with controlled clocks. Later network tests must prove an
-HSTS certificate failure cannot fall back to HTTP. Preload distribution and
-disk persistence remain explicit host choices.
+Keep this detour in two slices:
+
+- **A — Header processing and remembered hosts:** `hsts.ts` now supplies
+  `HSTSPolicy.parse()` and `HSTSStore`, owned by `UserAgent.hstsStore`.
+  Processing uses the first STS field only, requires verified TLS without
+  errors or warnings, excludes IP addresses, and supports refresh, exact-host
+  removal, and expiry. URL supplies IDNA/case normalization; the DNS root dot
+  is omitted from the storage key. Lifetimes and absolute expiry use bigint
+  so valid delta-seconds cannot overflow. Parsing expects an already unfolded
+  HTTP field value. These independent operations have focused tests; the
+  network response caller remains with Fetch's HTTP-network fetch work.
+- **B — Matching, upgrading, and consumer contracts:** `HSTSStore.requiresHTTPS()`
+  checks the exact host and successive DNS-label ancestors, requiring
+  includeSubDomains for inherited protection. Expired entries are ignored and
+  removed along that path; a closer entry, removal, or expiry cannot suppress a
+  covering ancestor. `FetchRequest.upgradeForHSTS()` uses the owning UserAgent's
+  store through Fetch's narrow contract, including for clientless requests.
+  It upgrades the current HTTP URL, preserves non-default ports and other URL
+  components, and applies Fetch's localhost/public-suffix exception. Parsed port
+  80 is already null; explicit 443 is normalized to HTTPS's null default port.
+  Both slices' independent algorithms and their store-to-request integration
+  are implemented and tested. The dispatch and transport calls below remain.
+
+Expired entries are removed along the lookup path, as in Chromium and Gecko.
+Accepting a valid policy also sweeps unrelated expired entries at most once
+per minute; missing, invalid, or unauthenticated policies do not trigger a
+sweep. This uses one timestamp, without a background timer. Focused tests
+cover the maintenance interval, eligibility, explicit sweeping, and immediate
+rejection of expired policies during lookup. The full RFC audit and browser
+source comparison are recorded in `scratch/HSTS-AUDIT.md`.
+
+Accepted parser choice: follow §6.1's rule that every directive may appear only
+once, rejecting the whole header even for repeated unknown extensions. Gecko's
+`nsSiteSecurityService::ParseSSSHeaders` and Chromium's
+[`ParseHSTSHeader`](https://github.com/chromium/chromium/blob/main/net/http/http_security_headers.cc)
+reject repetitions only of recognized directives. WebKit's libsoup-based ports
+use [`soup_header_parse_semi_param_list_strict`](https://github.com/GNOME/libsoup/blob/master/libsoup/soup-headers.c),
+which rejects all duplicate names, case-insensitively. This does not establish
+Safari's behavior: its HSTS implementation belongs to Apple's networking stack.
+These are source comparisons, not fresh browser probes. Well-formed unknown
+directives are ignored; malformed directives invalidate the complete policy.
+The RFC also specifies quoted-string unescaping before checking max-age.
+Browser lifetime caps are implementation choices; no preload list, disk
+persistence, or arbitrary age cap is introduced here.
+
+Consumer gates:
+
+- **Fetch 8A:** call `request.upgradeForHSTS()` in main fetch after referrer
+  selection, including on redirect re-entry, before dispatch. Construction must
+  not perform this step early. The same Fetch step's DNS HTTPS-record condition
+  still needs the DNS/transport owner; this method implements only its HSTS branch.
+- **Fetch 9:** on an unfiltered network response, reach
+  `userAgent.hstsStore.processResponse(response, hasValidTLS)` with actual
+  authenticated connection evidence. Extend Fetch's store contract at that
+  consumer. A response URL alone, cached response, or synthetic Response cannot
+  supply the TLS proof. `requiresHTTPS(host)` also supplies the connection's HSTS
+  requirement for RFC §8.4: every TLS error or warning must terminate the
+  connection, without an HTTP fallback or user bypass. This applies to direct
+  HTTPS loads too, not only requests that were upgraded.
+- **Transport regression details:** preserve separate STS fields and their
+  arrival order, process each verified redirect response before following its
+  Location, and include non-2xx responses. Test a configured trusted CA
+  separately from bypassed certificate errors; the latter must not qualify as
+  verified transport or bypass an existing HSTS requirement.
+- **HTML meta:** when adding `http-equiv` processing, prove that
+  `Strict-Transport-Security` is ignored for both learning and removal (§8.5).
+
+Focused tests cover learning over secure versus insecure transport, duplicate
+rejection, expiry, inherited matching, port mapping, redirects, and UserAgent
+isolation with controlled clocks. The real transport must add proof of TLS
+failure behavior; it cannot be demonstrated by these synchronous policy tests.
+Preload distribution and disk persistence remain explicit host choices.
+Section 12's configured policies and deliberate per-host deletion are optional
+host features, not new preflight prerequisites. If persistent/private profiles
+or browsing-data clearing are added, explicitly address HSTS retention and
+deletion because the store can encode browsing history (§14.9).
 
 HTTP Public Key Pinning (RFC 7469) is not a prerequisite or planned feature.
 Its mention in SRI's introduction is an informative reference: dynamic HPKP was

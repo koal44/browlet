@@ -395,21 +395,27 @@ and automatic response-policy delivery remains with HTML's loader.
 Reporting A implements records, endpoint parsing, and explicit global
 initialization. HTML's loader still needs to provide actual Fetch responses.
 Reporting B supplies Window generation, queues, observers, and outbound opt-out;
-HTML destruction and worker lifecycle remain explicit consumer gates. Review
-Reporting C's implemented serialization, request preparation, response handling,
+HTML destruction and worker lifecycle remain explicit consumer gates.
+Reporting C implements serialization, request preparation, response handling,
 retirement, and destruction handoff. UserAgent supplies delivery scheduling and
 Promise-returning attempts; Fetch's entry is a provisional no-op pending Slice 8A.
-Then continue HSTS, Storage keys/Blob URLs,
+HSTS A–B implement header parsing, UserAgent-owned remembered hosts, inherited
+host matching, and `FetchRequest.upgradeForHSTS()`. The approved parser rejects
+the complete header when any directive repeats, including unknown extensions.
+Main fetch must invoke upgrading in 8A; verified response learning and mandatory
+TLS failure handling belong to Slice 9. Continue Storage keys/Blob URLs
 and the independent policy work below before returning
 to Fetch 8A. Their consumer integration gates remain with Fetch and HTML.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 
-Finish the independent policy work in this order:
+Finish the remaining independent preflight work in this order:
 
-1. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
-2. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
+1. [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then the
+   [Blob URL store and integration](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred).
+2. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
+3. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
    its inputs to the preceding policy algorithms.
 
 [Reporting](../browlet/reporting/ROADMAP.md)'s network delivery completes when

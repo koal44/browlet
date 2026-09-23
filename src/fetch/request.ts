@@ -6,7 +6,7 @@ import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin, parseURL,
-  serializeURL, stripURLForReporting, type URLRecord,
+  obtainPublicSuffix, serializeURL, stripURLForReporting, type URLRecord,
 } from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
@@ -201,6 +201,22 @@ export class FetchRequest {
       // Before body extraction, a byte sequence is copied as a value; a body tees its stream.
       body: this.body === null ? null : this.body instanceof FetchBody ? this.body.clone() : new Uint8Array(this.body),
     });
+  }
+
+  /** Upgrade the current HTTP URL when this user agent's HSTS policy requires HTTPS. */
+  // https://www.rfc-editor.org/rfc/rfc6797.html#section-8.3
+  // HSTS branch of https://fetch.spec.whatwg.org/#concept-main-fetch, after referrer selection.
+  upgradeForHSTS(): void {
+    const url = this.currentURL;
+    if (url.scheme !== 'http' || url.host?.kind !== 'domain') return;
+    const suffix = obtainPublicSuffix(url.host)?.value;
+    if (suffix === 'localhost' || suffix === 'localhost.') return;
+    if (!this.userAgent.hstsStore.requiresHTTPS(url.host)) return;
+
+    url.scheme = 'https';
+    // URL parsing already represents HTTP's port 80 as null. Keep HTTPS's
+    // default port canonical too; every other explicit port remains unchanged.
+    if (url.port === 443) url.port = null;
   }
 
   /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */

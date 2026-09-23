@@ -26,6 +26,11 @@ IDL constructors and element-specific reflected members still have to be
 added eventually; the generic implementation is sequencing, not a claim of
 full conformance.
 
+When implementing `meta`'s `http-equiv` processing, retain the HSTS negative
+case: `Strict-Transport-Security` must neither learn nor remove a host policy
+([RFC 6797 §8.5](https://www.rfc-editor.org/rfc/rfc6797.html#section-8.5)).
+HSTS learning belongs to verified network responses, not document metadata.
+
 **Completed Fetch prerequisite:** the document base URL and `HTMLBaseElement`
 (HTML §§2.4.3 and 4.2.3) now supply `Document.baseURI` and the settings object's
 API base URL. First-base selection and frozen URLs follow attribute changes,

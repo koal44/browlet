@@ -35,6 +35,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     httpCachePartitions: new HTTPCachePartitions(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
+    hstsStore: { requiresHTTPS: () => false },
     // Tests exercising browser trust policy use Browlet's real UserAgent instead.
     isURLPotentiallyTrustworthy: (url) => url.scheme === 'https' || url.scheme === 'wss',
     createPolicyContainer: createFetchPolicyContainer,

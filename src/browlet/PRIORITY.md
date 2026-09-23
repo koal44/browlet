@@ -268,7 +268,11 @@ Current implementation sequence:
    Reporting C's independent serialization, request preparation, retirement,
    and destruction handoff are implemented. UserAgent owns delivery scheduling
    and Promise-returning attempts; Fetch's entry is a provisional no-op pending
-   Slice 8A. Continue HSTS, Storage keys/Blob URLs,
+   Slice 8A. HSTS A–B supply header parsing, UserAgent-owned remembered hosts,
+   inherited host matching, and Fetch's callable URL-upgrade step. Duplicate
+   directives invalidate the whole header, including unknown extensions.
+   Main-fetch invocation remains in 8A; secure-response learning and mandatory
+   TLS failure handling remain in Slice 9. Continue Storage keys/Blob URLs,
    Mixed Content/upgrading, and CSP. Network
    report delivery remains gated on Fetch. CSP copying and policy delivery
    remain with their policy owners.

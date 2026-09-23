@@ -783,6 +783,13 @@ preflight-cache invalidation, and Resource Timing. Preserve the planned owner
 boundaries and pause at unresolved dependencies; a test host's policy decisions
 do not constitute Browlet policy enforcement.
 
+HSTS's independent algorithms are implemented. Main fetch must call
+`request.upgradeForHSTS()` after referrer selection and before dispatch, including
+on redirect re-entry. It uses the request's UserAgent store and exempts localhost
+and its subdomains as required by Fetch. Do not move this step into Request
+construction. The sibling DNS HTTPS-record upgrade condition still depends on
+DNS/transport support; the HSTS method does not stand in for that condition.
+
 `about:`, `blob:`, and `file:` branches remain explicit until their owning URL
 store, File API, and host filesystem decisions exist. `file:` behavior is an
 embedder policy, not permission to expose arbitrary Node filesystem access.
@@ -822,6 +829,19 @@ version-specific conformance and cancellation/backpressure tests.
 insertion step, preserving an existing header and using the owning UserAgent's
 default for clientless requests. Call it at the prescribed HTTP-network-or-cache
 stage; public Request construction must not insert it early.
+
+HSTS response processing must reach the browser-owned
+`userAgent.hstsStore.processResponse(response, hasValidTLS)` with the unfiltered
+network response and authenticated connection evidence. Extend Fetch's narrow
+store contract when adding this consumer; HTTPS URL syntax alone is insufficient.
+Preserve separate STS fields in arrival order rather than combining their
+values. Process verified redirect responses before following Location, and
+include non-2xx responses. Test a same-host HTTPS-to-HTTP redirect that learns
+HSTS on the first response and therefore upgrades the next request.
+For a matching HSTS host, every TLS error or warning must fail the connection,
+including direct HTTPS requests; never offer a bypass or retry over HTTP.
+See the [HSTS owner roadmap](../browlet/browsing/policy/ROADMAP.md#hsts) for the
+implemented parser, expiry, host matching, and port rules.
 
 **Exit proof:** a basic HTTP(S) request through an injected transport produces
 a Browlet `Response`, streams bytes with backpressure, resolves through an
