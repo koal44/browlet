@@ -88,6 +88,23 @@ describe('task queues', () => {
     expect(second).toHaveBeenCalledOnce();
   });
 
+  it('removes a destroyed document\'s tasks across sources while preserving other documents and host tasks', () => {
+    const eventLoop = createEventLoop();
+    const document = new DocumentImpl();
+    const otherDocument = new DocumentImpl();
+    const canceled = vi.fn();
+    eventLoop.queueTask(networkingTaskSource, document, canceled);
+    eventLoop.queueTask(domManipulationTaskSource, document, canceled);
+    const other = eventLoop.queueTask(networkingTaskSource, otherDocument, vi.fn());
+    const host = eventLoop.queueTask(domManipulationTaskSource, null, vi.fn());
+
+    eventLoop.removeTasksForDocument(document);
+
+    expect([...eventLoop.getTaskQueue(networkingTaskSource)]).toEqual([other]);
+    expect([...eventLoop.getTaskQueue(domManipulationTaskSource)]).toEqual([host]);
+    expect(canceled).not.toHaveBeenCalled();
+  });
+
   it('associates sources independently on each event loop', () => {
     const firstLoop = createEventLoop();
     const secondLoop = createEventLoop();

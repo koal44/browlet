@@ -6,12 +6,16 @@ import type { PromiseValue, PromiseValueCapability } from '../../../infra/promis
 import type { RealmExecution } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
-import type { EventTargetImpl } from '../events/event-target';
+import { fireEvent, type EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
+import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
+import type { NavigationParams, NavigationRequest } from '../../browsing/navigation/navigation';
+import type { Environment } from '../../scripting/environment';
+import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
 import type { Realm } from '../../scripting/realm';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
@@ -141,6 +145,22 @@ export class DocumentImpl extends NodeImpl {
   aboutBaseURL: URLRecord | null = null;
   /** Loading state exposed by readyState. */
   currentDocumentReadiness: DocumentReadyState = 'complete';
+  /** Whether this document may be retained for restoration from session history. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#concept-document-salvageable
+  salvageable = true;
+  /** Reasons recorded when this document becomes ineligible for restoration. */
+  bfcacheBlockingDetails = new Set<NotRestoredReasonDetails>();
+  /** Whether load abortion has stopped this document's active parser. */
+  activeParserWasAborted = false;
+  /** Parser currently consuming this document, or null when none is registered. */
+  // PROVISIONAL: connect BrowletParser's lifetime and implement its abort algorithm.
+  activeParser: { abort(): void; } | null = null;
+  /** Worker globals whose owner sets contain this document. */
+  // PROVISIONAL: worker creation and ownership registration are not implemented.
+  ownedWorkers: { ownerSet: Set<DocumentImpl>; }[] = [];
+  /** Worklet globals whose lifetime is tied to this document. */
+  // PROVISIONAL: worklet creation and registration are not implemented.
+  workletGlobalScopes: { terminate(): void; }[] = [];
   /** Referrer recorded when the document was created, or the empty string. */
   referrer = '';
   /** Custom element registry associated with this document, if any. */
@@ -427,6 +447,183 @@ export class DocumentImpl extends NodeImpl {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
+  /* ------------------------------------------------------------------
+   * HTML document lifecycle
+   * ------------------------------------------------------------------ */
+
+  /** Environment of this document's relevant Window, required by HTML lifecycle operations. */
+  get environment(): Environment {
+    if (this.#relevantGlobalObject === null) {
+      throw new InternalError('Document lifecycle requires a relevant Window');
+    }
+    return this.#relevantGlobalObject.getWindowOrWorkerGlobalScopeMixin().environment;
+  }
+
+  /** Finish the loading milestones and load event for Browlet's local route. */
+  finishLoading(): void {
+    const browsingContext = this.browsingContext;
+    if (browsingContext === null) {
+      throw new InternalError('A completely loaded Document needs a browsing context');
+    }
+    const window = browsingContext.activeWindow;
+    if (window.getAssociatedDocument() !== this) {
+      throw new InternalError('Only an active Document can finish loading');
+    }
+
+    // PROVISIONAL: the local route completes these parser/loading phases together.
+    const environment = this.environment;
+    const now = environment.timing.currentHighResolutionTime().toTimestamp();
+    const timing = this.loadTimingInfo;
+    timing.domInteractiveTime = now;
+    timing.domContentLoadedEventStartTime = now;
+    timing.domContentLoadedEventEndTime = now;
+    timing.domCompleteTime = now;
+    timing.loadEventStartTime = now;
+    this.currentDocumentReadiness = 'complete';
+    this.readyForPostLoadTasks = true;
+    fireEvent('load', window);
+    timing.loadEventEndTime = environment.timing.currentHighResolutionTime().toTimestamp();
+    this.completelyFinishLoading();
+  }
+
+  /** Record that this document has completely finished loading. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#completely-finish-loading
+  completelyFinishLoading(): void {
+    if (this.browsingContext === null) {
+      throw new InternalError('A completely loaded Document needs a browsing context');
+    }
+    this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
+    // PROVISIONAL: container/iframe load completion enters with child navigables.
+  }
+
+  /** Destroy an active document from a task on its owning event loop. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
+  destroy(): void {
+    const environment = this.environment;
+    const eventLoop = environment.responsibleEventLoop;
+    if (eventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Document destruction requires a task on its owning event loop');
+    }
+
+    // PROVISIONAL: inactive history destruction needs the retained document state;
+    // using the navigable's current active entry would clear a different document.
+    const navigable = this.getNodeNavigable();
+    if (navigable === null) {
+      throw new InternalError('Inactive document destruction needs session-history ownership');
+    }
+    const documentState = navigable.activeSessionHistoryEntry.documentState;
+    const global = environment.getWindowOrWorkerGlobalScopeMixin();
+
+    this.abort();
+    this.salvageable = false;
+    for (const port of global.messagePorts) port.disentangle();
+    this.runUnloadingCleanup();
+    eventLoop.removeTasksForDocument(this);
+    // PROVISIONAL: Reporting C must hand off outbound reports before this cleanup.
+    global.clearReportingState();
+
+    this.browsingContext = null;
+    documentState.document = null;
+    this.notifyFullyActiveStateChanged();
+
+    for (const worker of this.ownedWorkers) worker.ownerSet.delete(this);
+    for (const worklet of this.workletGlobalScopes) worklet.terminate();
+  }
+
+  /** Stop this document's fetches and active parser from its owning event-loop task. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#abort-a-document
+  abort(): void {
+    const environment = this.environment;
+    if (environment.responsibleEventLoop.currentlyRunningTask === null) {
+      throw new InternalError('Document abortion requires a task on its owning event loop');
+    }
+    if (environment.fetchGroup.cancel()) this.makeUnsalvageable('fetch');
+
+    const navigationID = this.duringLoadingNavigationID;
+    if (navigationID !== null) {
+      environment.userAgent.webDriverBiDiNavigationAborted(this.getNodeNavigable(), {
+        id: navigationID, status: 'canceled', url: this.url,
+      });
+      this.duringLoadingNavigationID = null;
+    }
+
+    const parser = this.activeParser;
+    if (parser !== null) {
+      this.activeParserWasAborted = true;
+      parser.abort();
+      this.makeUnsalvageable('parser-aborted');
+    }
+  }
+
+  /** Clean up document-owned resources during unloading or destruction. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unloading-document-cleanup-steps
+  runUnloadingCleanup(): void {
+    const environment = this.environment;
+    const global = environment.getWindowOrWorkerGlobalScopeMixin();
+    for (const socket of global.webSockets) {
+      socket.makeDisappear();
+      this.makeUnsalvageable('websocket');
+    }
+    for (const transport of global.webTransports) transport.cleanup();
+    if (!this.salvageable) {
+      for (const source of global.eventSources) source.close();
+      global.timers.clear();
+    }
+    environment.userAgent.blobURLStore.removeForEnvironment(environment);
+    // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.
+  }
+
+  /** Initialize ancestor origins for the document selected by this navigation. */
+  initializeAncestry(navigationParams: NavigationParams): void {
+    if (!navigationParams.navigable.isTopLevelTraversable) {
+      throw new InternalError('Nested Document ancestry is not implemented');
+    }
+    // A top-level document has no ancestors; its iframe referrer policy is unused.
+    this.internalAncestorOriginObjectsList = [];
+    this.ancestorOriginsList = [];
+  }
+
+  /** Initialize the document's delivered Content Security Policies. */
+  initializeCSP(): void {
+    // PROVISIONAL: run CSP initialization when response parsing and CSP lists exist.
+  }
+
+  /** Record the referrer selected by the request that created this document. */
+  initializeReferrer(request: NavigationRequest | null): void {
+    if (request !== null) this.referrer = request.referrer === null ? '' : serializeURL(request.referrer);
+  }
+
+  /** Reset document-loading milestones around the selected navigation start. */
+  initializeLoadTimingInfo(navigationStartTime: DOMHighResTimeStamp): void {
+    this.loadTimingInfo = {
+      navigationStartTime, domInteractiveTime: 0, domContentLoadedEventStartTime: 0,
+      domContentLoadedEventEndTime: 0, domCompleteTime: 0, loadEventStartTime: 0, loadEventEndTime: 0,
+    };
+  }
+
+  /** Create this document's navigation performance entry from the response timing. */
+  createNavigationTimingEntry(navigationParams: NavigationParams): void {
+    if (navigationParams.fetchController !== null) {
+      throw new InternalError('Fetch timing extraction is not implemented');
+    }
+    // PROVISIONAL: create PerformanceNavigationTiming when its implementation exists.
+  }
+
+  /** Apply response integrations that require the newly created document. */
+  processResponseIntegrations(navigationParams: NavigationParams): void {
+    if (navigationParams.getResponseHeader('Refresh') !== null) {
+      throw new InternalError('Refresh response processing is not implemented');
+    }
+    if (navigationParams.getResponseHeader('Link') !== null) {
+      throw new InternalError('Link response processing is not implemented');
+    }
+    if (navigationParams.getResponseHeader('Speculation-Rules') !== null) {
+      throw new InternalError('Speculation-Rules response processing is not implemented');
+    }
+    navigationParams.commitEarlyHints?.(this);
+    // TODO(Fetch): potentially free deferred-fetch quota for this document.
+  }
+
   // -- Internal ---------------------------------------------------------
 
   /** The URL used to resolve relative URLs in this document. */
@@ -498,6 +695,13 @@ export class DocumentImpl extends NodeImpl {
     for (const observer of this.#fullyActiveObservers) {
       observer(fullyActive);
     }
+  }
+
+  /** Prevent restoration from history and retain the reason for that decision. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#make-document-unsalvageable
+  makeUnsalvageable(reason: string): void {
+    this.bfcacheBlockingDetails.add({ reason });
+    this.salvageable = false;
   }
 
   /** Copy the selected restrictions into the document's existing flag set. */

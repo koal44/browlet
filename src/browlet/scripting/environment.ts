@@ -115,19 +115,6 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void {
     this.getWindowOrWorkerGlobalScopeMixin().queueReport(type, endpoint, body);
   }
-
-  /** https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline */
-  webDriverBiDiNetworkIsOffline(): boolean {
-    // PROVISIONAL: no BiDi sessions; replace with the environment's scoped network-condition lookup.
-    return false;
-  }
-
-  /** Identification override selected for this environment, or null when absent. */
-  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
-  webDriverBiDiEmulatedUserAgent(): string | null {
-    // PROVISIONAL: no BiDi sessions; replace with the environment's scoped emulation lookup.
-    return null;
-  }
 }
 
 export class WindowEnvironment extends Environment {

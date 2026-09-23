@@ -488,7 +488,8 @@ export function isRequestBodyHeaderName(name: string): boolean {
 // https://fetch.spec.whatwg.org/#environment-default-user-agent-value
 export function getEnvironmentDefaultUserAgent(environment: FetchEnvironment): string {
   // Header values already use isomorphic strings; no intermediate byte array is needed.
-  return environment.webDriverBiDiEmulatedUserAgent() ?? environment.userAgent.defaultUserAgentValue;
+  const { userAgent } = environment;
+  return userAgent.webDriverBiDiEmulatedUserAgent(environment) ?? userAgent.defaultUserAgentValue;
 }
 
 export const documentAcceptHeaderValue = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';

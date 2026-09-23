@@ -261,8 +261,11 @@ Current implementation sequence:
    parsing, and explicit per-global initialization; loader invocation remains
    gated on actual Fetch responses. Reporting B's generation, queues, user
    controls, and observers are implemented for Windows; HTML destruction and
-   worker lifecycle remain consumer gates. Review Reporting C's independent
-   serialization/retirement work next; then HSTS, Storage keys/Blob URLs,
+   worker lifecycle remain consumer gates. The single-document destruction
+   scaffold has provisional Fetch/parser/resource dependencies; retained-history
+   ownership and inactive disposal have their own
+   [HTML lifecycle slice](browsing/ROADMAP.md#planned-slice-history-ownership-and-document-disposal).
+   Continue Reporting C's independent serialization/retirement work, HSTS, Storage keys/Blob URLs,
    Mixed Content/upgrading, and CSP. Network
    report delivery remains gated on Fetch. CSP copying and policy delivery
    remain with their policy owners.

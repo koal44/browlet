@@ -20,8 +20,6 @@ export function createClientSettings(url = 'https://example.test/'): FetchEnviro
     userAgent: createFetchUserAgent(),
     topLevelOrigin: obtainURLOrigin(topLevelCreationURL),
     topLevelCreationURL,
-    webDriverBiDiNetworkIsOffline: () => false,
-    webDriverBiDiEmulatedUserAgent: () => null,
     policyContainer: createFetchPolicyContainer(),
     queueReport() {},
   };
@@ -31,6 +29,8 @@ export function createFetchUserAgent(): FetchUserAgent {
   return {
     defaultUserAgentValue: 'Browlet',
     assumeNoInternetConnectivity: false,
+    webDriverBiDiNetworkIsOffline: () => false,
+    webDriverBiDiEmulatedUserAgent: () => null,
     connectionPool: new ConnectionPool(),
     httpCachePartitions: new HTTPCachePartitions(),
     cookieStore: new CookieStore(),

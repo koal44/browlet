@@ -145,7 +145,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent` and BiDi query; decimal serialization precedes §2.1 |
+| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent`, which provides the scoped BiDi query; decimal serialization precedes §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
@@ -162,12 +162,12 @@ existing [Performance owner](../browlet/performance/ROADMAP.md#fetch-and-navigat
 Service Worker timing defaults to null; its shared data type records the six
 fields supplied by Service Workers, whose execution remains deferred.
 `isOffline(environment)` reads the owning UserAgent's live offline assumption
-before querying environment-scoped BiDi state. Browlet's base `Environment`
+before asking the same UserAgent for environment-scoped BiDi state. Browlet's base `Environment`
 retains the UserAgent supplied during construction; Window setup receives the
 target browsing-context group's owner, including across navigation.
 Provisional integration: `UserAgent.assumeNoInternetConnectivity` defaults to
-false; host connectivity detection is not wired yet. The settings object's
-BiDi query follows the no-session path. Replace that query with
+false; host connectivity detection is not wired yet. The UserAgent's
+BiDi query receives the environment and follows the no-session path. Replace it with
 navigable/user-context/session lookup
 when automation owns network emulation. Worker settings and reserved navigation
 environments must receive their owner's UserAgent when those paths are implemented.
@@ -257,8 +257,8 @@ Header-list extraction takes the field's parser and its single/multiple-line
 rule explicitly. It implements absence, duplicate rejection, ordering, and
 whole-field failure, returning undefined for absence and null for failure;
 concrete field grammars join it at their consumers.
-The default User-Agent selector takes the actual settings object, checks its
-environment-scoped BiDi override, and otherwise reads the owning UserAgent's
+The default User-Agent selector takes the actual settings object, asks its
+UserAgent for the environment-scoped BiDi override, and otherwise reads that owner's
 configured default. Header values remain isomorphic strings, including an
 explicit empty override. Browlet supplies the default; BiDi session lookup is
 still provisional.

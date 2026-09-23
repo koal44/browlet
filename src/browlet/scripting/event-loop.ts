@@ -326,6 +326,16 @@ export class EventLoop {
     return this.#getTaskQueue(task.source).delete(task);
   }
 
+  /** Discard queued tasks associated with a document, across all task sources. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#destroy-a-document
+  removeTasksForDocument(document: DocumentImpl): void {
+    for (const queue of this.#taskQueues) {
+      for (const task of queue) {
+        if (task.document === document) queue.delete(task);
+      }
+    }
+  }
+
   notifyTaskRunnabilityChanged(): void {
     this.#requestTurnIfNeeded();
   }

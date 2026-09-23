@@ -26,6 +26,12 @@ export type DocumentState = {
 /** Session-history state while its Document is present. */
 export type DocumentBackedState = DocumentState & { document: DocumentImpl; };
 
+/** One reason that a document cannot be restored from the back/forward cache. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#nrr-details-struct
+export type NotRestoredReasonDetails = {
+  reason: string;
+};
+
 export type SessionHistoryEntry = {
   step: number | 'pending';
   url: URLRecord;

@@ -83,7 +83,7 @@ describe('Fetch client settings ownership', () => {
 
     expect(request.client).toBe(environment);
     expect(environment.userAgent).not.toBe(otherSettings.userAgent);
-    expect(environment.webDriverBiDiNetworkIsOffline()).toBe(false);
+    expect(environment.userAgent.webDriverBiDiNetworkIsOffline(environment)).toBe(false);
     expect(isOffline(request.client!)).toBe(false);
 
     environment.userAgent.assumeNoInternetConnectivity = true;

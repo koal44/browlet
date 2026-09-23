@@ -17,8 +17,9 @@
 - Each `EnvironmentRecord` and full `Environment` retains its owning UserAgent. Window creation/navigation
   supplies the target group's owner; this reference does not depend on a live
   Document or browsing-context association. Settings objects satisfy Fetch's
-  narrow environment contract; their provisional BiDi query returns false
-  until automation supplies scoped network conditions.
+  narrow environment contract. UserAgent owns the provisional BiDi hooks;
+  scoped queries receive the environment explicitly and follow the no-session
+  result until automation supplies scoped conditions and overrides.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
   queues, deterministic task turns, currently-running-task state, task timing
   hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,

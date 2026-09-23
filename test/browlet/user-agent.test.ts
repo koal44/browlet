@@ -29,15 +29,17 @@ describe('User-Agent identification', () => {
     userAgent.defaultUserAgentValue = 'Shared/1.0';
     const first = createFetchWindow(userAgent).realm.environment;
     const second = createFetchWindow(userAgent).realm.environment;
-    const override = vi.spyOn(first, 'webDriverBiDiEmulatedUserAgent').mockReturnValue('Emulated/1.0');
+    let override: string | null = 'Emulated/1.0';
+    vi.spyOn(userAgent, 'webDriverBiDiEmulatedUserAgent')
+      .mockImplementation((environment) => environment === first ? override : null);
     expect(getEnvironmentDefaultUserAgent(first)).toBe('Emulated/1.0');
     expect(getEnvironmentDefaultUserAgent(second)).toBe('Shared/1.0');
     userAgent.defaultUserAgentValue = 'Shared/2.0';
     expect(getEnvironmentDefaultUserAgent(first)).toBe('Emulated/1.0');
     expect(getEnvironmentDefaultUserAgent(second)).toBe('Shared/2.0');
-    override.mockReturnValue('');
+    override = '';
     expect(getEnvironmentDefaultUserAgent(first)).toBe('');
-    override.mockReturnValue(null);
+    override = null;
     expect(getEnvironmentDefaultUserAgent(first)).toBe('Shared/2.0');
   });
 

@@ -11,7 +11,7 @@ import { InternalError } from '../infra/internal-error';
 /** https://fetch.spec.whatwg.org/#is-offline */
 export function isOffline(environment: FetchEnvironment): boolean {
   return environment.userAgent.assumeNoInternetConnectivity ||
-    environment.webDriverBiDiNetworkIsOffline();
+    environment.userAgent.webDriverBiDiNetworkIsOffline(environment);
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
@@ -30,10 +30,6 @@ export type FetchEnvironment = FetchEnvironmentRecord & {
   getTraversableForUserPrompts(): FetchPromptTarget | null;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup: FetchGroup;
-  /** Whether WebDriver BiDi emulates an offline network for this environment. */
-  webDriverBiDiNetworkIsOffline(): boolean;
-  /** Environment-scoped identification override, or null when BiDi supplies none. */
-  webDriverBiDiEmulatedUserAgent(): string | null;
   /** Client's live policy container, exposing the policies currently consumed by Fetch. */
   policyContainer: FetchPolicyContainer;
   /** Submit a policy report for this client, retaining each field's JSON value type. */
@@ -93,6 +89,10 @@ export type FetchUserAgent = {
   defaultUserAgentValue: string;
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
   assumeNoInternetConnectivity: boolean;
+  /** Whether WebDriver BiDi emulates an offline network for the given environment. */
+  webDriverBiDiNetworkIsOffline(environment: FetchEnvironment): boolean;
+  /** Identification override for the given environment, or null when BiDi supplies none. */
+  webDriverBiDiEmulatedUserAgent(environment: FetchEnvironment): string | null;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */
   connectionPool: ConnectionPool;
   /** Shared logical HTTP caches, separated by network partition key. */

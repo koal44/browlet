@@ -461,7 +461,7 @@ describe('default request header values', () => {
 
   it.each(['Emulated', '', 'Agent/\u00e9'])('preserves the emulated value %j as a byte string', (value) => {
     const client = createClientSettings();
-    client.webDriverBiDiEmulatedUserAgent = () => value;
+    client.userAgent.webDriverBiDiEmulatedUserAgent = () => value;
     expect(getEnvironmentDefaultUserAgent(client)).toBe(value);
   });
 

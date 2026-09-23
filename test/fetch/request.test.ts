@@ -111,7 +111,7 @@ describe('Fetch request cloning', () => {
 describe('Fetch request User-Agent headers', () => {
   it('uses the client\'s effective value when inserting a missing header', () => {
     const client = createClientSettings();
-    client.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
+    client.userAgent.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
     const request = createFetchRequest(undefined, client);
     expect(request.headerList.has('User-Agent')).toBe(false);
     request.appendUserAgentHeader();

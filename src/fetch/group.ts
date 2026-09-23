@@ -9,6 +9,14 @@ export class FetchGroup {
   /** Deferred requests and invocation state retained for that environment. */
   deferredFetchRecords: DeferredFetchRecord[] = [];
 
+  /** Cancel document-owned fetch work, reporting whether any work was discarded. */
+  // PROVISIONAL: Fetch orchestration does not yet start or register requests.
+  // Implement task/data cancellation and its keepalive/deferred-fetch rules there.
+  // terminate() is not a substitute: it only changes controller state.
+  cancel(): boolean {
+    return false;
+  }
+
   /** https://fetch.spec.whatwg.org/#concept-fetch-group-terminate */
   terminate(): void {
     for (const { request, controller } of this.fetchRecords) {

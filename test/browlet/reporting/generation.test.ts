@@ -27,7 +27,7 @@ describe('Reporting record generation', () => {
   it('captures the same effective identification value used for a missing request header', () => {
     const browlet = new Browlet({ route: () => '', userAgent: 'Configured/1.0' });
     const environment = getRelevantRealm(browlet.window).environment;
-    const override = vi.spyOn(environment, 'webDriverBiDiEmulatedUserAgent').mockReturnValue('Emulated/1.0');
+    const override = vi.spyOn(environment.userAgent, 'webDriverBiDiEmulatedUserAgent').mockReturnValue('Emulated/1.0');
     const request = new FetchRequest(environment.creationURL, environment, environment.userAgent);
     request.appendUserAgentHeader();
     const report = generateReport(null, 'test', 'endpoint', environment);

@@ -209,9 +209,10 @@ describe('Fetch §2 offline state and integer serialization', () => {
     const webDriverBiDiNetworkIsOffline = vi.fn(() => bidi);
     const client = createClientSettings();
     client.userAgent.assumeNoInternetConnectivity = userAgent;
-    client.webDriverBiDiNetworkIsOffline = webDriverBiDiNetworkIsOffline;
+    client.userAgent.webDriverBiDiNetworkIsOffline = webDriverBiDiNetworkIsOffline;
     expect(isOffline(client)).toBe(expected);
     expect(webDriverBiDiNetworkIsOffline).toHaveBeenCalledTimes(userAgent ? 0 : 1);
+    if (!userAgent) expect(webDriverBiDiNetworkIsOffline).toHaveBeenCalledWith(client);
   });
 
   it.each([

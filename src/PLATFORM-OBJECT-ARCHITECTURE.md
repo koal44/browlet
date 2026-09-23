@@ -932,6 +932,13 @@ the mixin does not assemble node projection or retain a Binding Context. Reporti
 receives settings and retrieves the same existing mixin, preserving shared
 registrations and buffered reports. Settings' Document-dependent getters read
 the live associated Document rather than copying its state during construction.
+Document's lifecycle methods reach their environment through the retained
+relevant Window and that mixin. These are existing implementation relationships;
+the methods do not import the binding composition root or perform projection.
+The global-scope mixin owns state common to Windows and workers, including
+provisional resource collections. Each global has its own instance. Internal
+fields on that mixin are not projected as author properties merely because
+the includer's Web IDL exposes other members of the mixin.
 Internal Document/node construction initializes EventTarget's realm-owned event
 factory when it creates the record;
 projection remains lazy. Window's implementation is constructed before its

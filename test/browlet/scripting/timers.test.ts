@@ -84,6 +84,25 @@ describe('HTML timers', () => {
     expect(interval).toHaveBeenCalledOnce();
   });
 
+  it('clears delayed completions and already queued timer callbacks during destruction', () => {
+    const fixture = createTimerFixture();
+    const timeout = vi.fn();
+    const interval = vi.fn();
+    const delayed = vi.fn();
+    fixture.timers.setTimeout(timeout, 0, []);
+    fixture.timers.setInterval(interval, 0, []);
+    fixture.timers.runStepsAfterTimeout('completion', 10, delayed);
+    fixture.host.advanceBy(0);
+
+    fixture.timers.clear();
+    while (fixture.eventLoop.hasRunnableTasks()) runNextTask(fixture.eventLoop);
+    fixture.host.advanceBy(100);
+
+    expect(timeout).not.toHaveBeenCalled();
+    expect(interval).not.toHaveBeenCalled();
+    expect(delayed).not.toHaveBeenCalled();
+  });
+
   it('clamps timers nested beyond level five to four milliseconds', () => {
     const fixture = createTimerFixture();
     let calls = 0;

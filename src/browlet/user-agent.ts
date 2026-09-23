@@ -1,5 +1,6 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
-import type { TopLevelTraversable } from './browsing/navigable';
+import type { Navigable, TopLevelTraversable } from './browsing/navigable';
+import type { Environment } from './scripting/environment';
 import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
@@ -23,6 +24,13 @@ export class UserAgent implements FetchUserAgent {
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
   cookieStore = new CookieStore();
+  /** Browser-owned Blob URL storage used by environment teardown. */
+  // PROVISIONAL: the storage-keys/Blob-URLs detour will supply the real store.
+  blobURLStore = {
+    removeForEnvironment(_environment: Environment): void {
+      // No Blob URLs are registered until their store is implemented.
+    },
+  };
   /** Controls both sending and accepting cookies without clearing the store. */
   cookiesEnabled = true;
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
@@ -64,6 +72,29 @@ export class UserAgent implements FetchUserAgent {
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */
   createPolicyContainer(): PolicyContainer {
     return createPolicyContainer();
+  }
+
+  /** Whether automation emulates an offline network for the given environment. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
+  webDriverBiDiNetworkIsOffline(_environment: Environment): boolean {
+    // PROVISIONAL: no BiDi sessions; select scoped network conditions when implemented.
+    return false;
+  }
+
+  /** Identification override selected for the given environment, or null when absent. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
+  webDriverBiDiEmulatedUserAgent(_environment: Environment): string | null {
+    // PROVISIONAL: no BiDi sessions; select scoped emulation when implemented.
+    return null;
+  }
+
+  /** Notify automation that an identified navigation was canceled. */
+  // PROVISIONAL: no WebDriver BiDi sessions exist to receive this notification.
+  webDriverBiDiNavigationAborted(
+    _navigable: Navigable | null,
+    _status: { id: string; status: 'canceled'; url: URLRecord; },
+  ): void {
+    // Connect the BiDi navigation-aborted algorithm when sessions are implemented.
   }
 
   /*

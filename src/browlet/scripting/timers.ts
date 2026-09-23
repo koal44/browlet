@@ -87,6 +87,17 @@ export class GlobalTimers {
     this.#idMap.delete(id);
   }
 
+  /** Release timer state and host wakeups when its document cannot be restored. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unloading-document-cleanup-steps
+  clear(): void {
+    for (const timer of this.#activeTimers.values()) timer.cancelWakeUp?.();
+    this.#activeTimers.clear();
+    this.#idMap.clear();
+    this.#stopObservingDocument?.();
+    this.#stopObservingDocument = null;
+    this.#fullyActive = false;
+  }
+
   #initializeTimer(
     action: TimerAction,
     timeout: number,

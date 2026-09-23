@@ -18,17 +18,13 @@ import {
   type WindowProxy,
 } from './window/window-proxy';
 import type { WindowImpl } from './window/window';
-import {
-  DocumentMode, type DocumentImpl, type DocumentLoadTimingInfo,
-} from '../dom/nodes/document';
+import { DocumentMode, type DocumentImpl } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
 import type { ReferrerPolicy } from '../../fetch/index';
 import { HTML_NAMESPACE } from '../../infra/index';
-import {
-  currentCoarsenedWallTime, unsafeSharedCurrentTime,
-} from '../performance/high-resolution-time';
+import { unsafeSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 
 /*
@@ -142,9 +138,6 @@ export function createNewBrowsingContextAndDocument(
   browsingContext.initializeWindowProxy(
     realm.globalThis as WindowProxy,
   );
-  const loadTimingInfo = createDocumentLoadTimingInfo(
-    unsafeContextCreationTime.coarsen(environment.crossOriginIsolatedCapability).milliseconds,
-  );
   const document = createDocument(realm);
 
   document.type = 'html';
@@ -154,7 +147,9 @@ export function createNewBrowsingContextAndDocument(
   document.browsingContext = browsingContext;
   document.permissionsPolicy = permissionsPolicy;
   document.setActiveSandboxingFlagSet(sandboxFlags);
-  document.loadTimingInfo = loadTimingInfo;
+  document.initializeLoadTimingInfo(
+    unsafeContextCreationTime.coarsen(environment.crossOriginIsolatedCapability).milliseconds,
+  );
   document.isInitialAboutBlank = true;
   document.aboutBaseURL = creatorBaseURL;
   document.allowDeclarativeShadowRoots = true;
@@ -180,7 +175,7 @@ export function createNewBrowsingContextAndDocument(
   document.readyForPostLoadTasks = true;
   populateWithHTMLHeadBody(document);
   makeActive(document);
-  completelyFinishLoading(document);
+  document.completelyFinishLoading();
 
   return [browsingContext, document];
 }
@@ -398,30 +393,6 @@ function makeActive(
   retargetWindowProxy(browsingContext.windowProxy, window);
   const environment = realm.environment;
   environment.markExecutionReady();
-}
-
-function completelyFinishLoading(document: DocumentImpl): void {
-  if (document.browsingContext === null) {
-    throw new InternalError('A completely loaded Document needs a browsing context');
-  }
-  document.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
-
-  // A newly-created top-level Document has no container, so the remaining
-  // iframe/container load-event steps have no effect.
-}
-
-function createDocumentLoadTimingInfo(
-  navigationStartTime: DOMHighResTimeStamp,
-): DocumentLoadTimingInfo {
-  return {
-    navigationStartTime,
-    domInteractiveTime: 0,
-    domContentLoadedEventStartTime: 0,
-    domContentLoadedEventEndTime: 0,
-    domCompleteTime: 0,
-    loadEventStartTime: 0,
-    loadEventEndTime: 0,
-  };
 }
 
 function requireURLRecord(input: string): URLRecord {

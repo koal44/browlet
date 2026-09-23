@@ -657,13 +657,15 @@ This makes HTML's implicit user agent explicit without a Document lookup or a
 process-wide singleton. Fetch's `FetchEnvironment` and
 `FetchUserAgent` types describe narrow views of those same objects; a request
 retains its actual HTML settings object when it has a client, and always retains
-its owning UserAgent. The UserAgent owns its live connectivity assumption,
-while the settings object supplies the environment-scoped BiDi query.
+its owning UserAgent. The UserAgent owns its live connectivity assumption and
+all BiDi hooks. Scoped queries receive the environment explicitly; callers reach
+the UserAgent directly, without forwarding methods on Environment. Navigation
+notifications receive their navigable and status on the same owner.
 Host connectivity detection and BiDi session lookup are provisional; their replacement work is
 tracked in the [Fetch roadmap](fetch/ROADMAP.md#slice-1--control-and-task-delivery).
 
 The UserAgent also owns the configured default identification header value.
-Fetch's environment-default User-Agent algorithm reads that owner and the
+Fetch's environment-default User-Agent algorithm asks that owner for the
 settings object's scoped BiDi override. Request-header insertion, Reporting
 generation, and the future NavigatorID getter share this selector. Reporting
 captures a string at generation time; an explicit per-request header does not
@@ -755,6 +757,30 @@ Document and node platform objects are allocated when projection is needed.
 Internal fragment creation supplies its owning
 Document explicitly; only the public `DocumentFragment()` constructor injects
 the realm's associated Document.
+
+Document owns its initialization, loading completion, destruction, abortion,
+and unloading cleanup methods. It reaches `environment` through its retained
+relevant Window's global-scope mixin, whose environment is supplied at
+construction. Document does not import the binding composition root: that root
+assembles Document's Web IDL declaration and would create an initialization
+cycle. `NavigationParams` owns response/destination operations; the creation
+factory remains in `document-lifecycle.ts` because it selects or creates the
+Window and realm before constructing the Document. References to navigation
+parameters in Document and to Document in navigation are type-only.
+
+The global-scope mixin holds the provisional MessagePort, WebSocket, WebTransport,
+and EventSource collections, alongside timer, Performance, and Reporting state.
+These resources exist in both Windows and workers. Each global owns a distinct
+mixin instance; the shared implementation does not share resources between
+globals. Their registration and resource-specific cleanup belong to the
+corresponding subsystems when implemented. Document and worker lifecycle
+algorithms choose when to invoke that cleanup; common membership does not imply
+identical teardown steps. Environment supplies execution, policy, and browser
+context to algorithms without duplicating the global's resource collections.
+Retained-history ownership and inactive-document disposal are a separate
+[HTML lifecycle slice](browlet/browsing/ROADMAP.md#planned-slice-history-ownership-and-document-disposal).
+Reporting consumes its destruction notification; it does not choose eviction
+policy or introduce an independent history-to-Document relationship.
 
 ## Composition map
 

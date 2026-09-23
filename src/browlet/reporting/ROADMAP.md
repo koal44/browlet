@@ -138,13 +138,28 @@ HTML task delivery, batching, type conversion/filtering, buffer limits, synchron
 replay, disconnect/takeRecords, reentrant callbacks, exception reporting, realm
 ownership, both policy producers, and outbound opt-out.
 
-**Remaining lifecycle dependency:** HTML does not yet implement Document
-destruction. Its teardown must cancel reporting tasks and release endpoint,
-outbound-queue, observer-registration, and buffered-report state in the prescribed
-order. Do not substitute a fully-active transition or every navigation for
-destruction: an inactive Document can be retained, and initial about:blank
-replacement can reuse its Window. The [browsing roadmap](../browsing/ROADMAP.md)
-owns that integration. No destruction hook is claimed complete here.
+**Remaining lifecycle dependency:** Document's single-document destroy/abort
+methods now call their owners through reviewed provisional contracts. Task
+removal, timer cleanup, and `clearReportingState()` work; unimplemented
+subsystems use empty typed collections and explicit no-ops. The active-document
+destruction test passes, but Fetch cancellation, parser registration, and the
+remaining producers still need implementation.
+The [browsing roadmap](../browsing/ROADMAP.md#document-destruction-review) owns
+that dependency review. Navigation does not invoke destruction yet.
+Inactive-document disposal belongs to its own
+[HTML lifecycle slice](../browsing/ROADMAP.md#planned-slice-history-ownership-and-document-disposal),
+covering history identity, restoration, Window reuse, and child navigables.
+Reporting C's independent work can proceed without settling that history API;
+production destruction integration remains an explicit consumer gate.
+Reporting does not prescribe a destruction flush: slice C must settle any final
+outbound handoff before discarding queues/endpoints. Browser source supports
+handing delivery data to its owner at generation time: Blink uses its reporting
+service, Gecko captures the report for ReportDeliver, and WebKit uses keepalive
+violation-report requests. Delivery should survive local observer cleanup
+without requiring a synchronous destruction-time flush. Local observer tasks must
+be removed before releasing their global state. An inactive Document can be
+retained, and initial about:blank replacement can reuse its Window, so neither
+inactivity nor every navigation is a destruction notification.
 
 ### C. Delivery, serialization, and retirement
 
@@ -193,8 +208,9 @@ network measurements.
 `UserAgent.defaultUserAgentValue` owns the configured default, selected through
 `BrowletConfig.userAgent` before the first Window is created. The default is
 `Mozilla/5.0 (compatible; Browlet)`, without claiming another browser engine.
-Fetch's `getEnvironmentDefaultUserAgent(settings)` checks the settings' BiDi
-override first, including an empty override. BiDi session lookup remains an
+Fetch's `getEnvironmentDefaultUserAgent(settings)` asks the UserAgent for the
+settings' BiDi override first, including an empty override. Environment has no
+BiDi forwarding methods. BiDi session lookup remains an
 explicit provisional null result. NavigatorID's future getter should use the
 same selector; Reporting does not need a Navigator object to obtain that value.
 

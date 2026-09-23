@@ -54,6 +54,18 @@ import type { QueuedTaskHandle } from './tasks';
  */
 export class WindowOrWorkerGlobalScopeMixin {
   timers: GlobalTimers;
+  /** Ports whose relevant global is this scope. */
+  // PROVISIONAL: MessagePort must register and unregister its global membership.
+  messagePorts: { disentangle(): void; }[] = [];
+  /** WebSockets registered for cleanup in this global. */
+  // PROVISIONAL: WebSocket creation and registration are not implemented.
+  webSockets: { makeDisappear(): void; }[] = [];
+  /** WebTransports registered for cleanup in this global. */
+  // PROVISIONAL: WebTransport creation and registration are not implemented.
+  webTransports: { cleanup(): void; }[] = [];
+  /** EventSources registered for cleanup in this global. */
+  // PROVISIONAL: EventSource creation and registration are not implemented.
+  eventSources: { close(): void; }[] = [];
   /** Named Reporting destinations configured by this global's resource response. */
   reportingEndpoints: ReportingEndpoint[] = [];
   /** Reports awaiting delivery for this global, independent of other globals. */
@@ -62,11 +74,12 @@ export class WindowOrWorkerGlobalScopeMixin {
   reportingObservers = new Set<ReportingObserverImpl>();
   /** Recent reports for buffered observation, limited to 100 entries per type. */
   reportBuffer: Report[] = [];
-  #environment: Environment;
+  /** Environment shared by this global's browser facilities. */
+  environment: Environment;
   #performance: PerformanceImpl;
 
   constructor(environment: Environment) {
-    this.#environment = environment;
+    this.environment = environment;
     this.#performance = new PerformanceImpl(environment.timing);
     const { realm } = environment;
     this.timers = new GlobalTimers({
@@ -78,7 +91,7 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   /** https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext */
   get isSecureContext(): boolean {
-    return this.#environment.isSecureContext;
+    return this.environment.isSecureContext;
   }
 
   get performance(): PerformanceImpl {
@@ -106,28 +119,28 @@ export class WindowOrWorkerGlobalScopeMixin {
   }
 
   queueMicrotask(callback: VoidFunction): void {
-    this.#environment.responsibleEventLoop.queueMicrotask(() => { callback(); });
+    this.environment.responsibleEventLoop.queueMicrotask(() => { callback(); });
   }
 
   structuredClone(
     value: unknown,
     options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
-    return this.#environment.exec.clone(value, options.transfer);
+    return this.environment.exec.clone(value, options.transfer);
   }
 
   /** Replace this global's Reporting endpoint list using its resource response. */
   // https://w3c.github.io/reporting/#initialize-a-globals-endpoint-list
   initializeReportingEndpoints(response: FetchResponse): void {
-    this.reportingEndpoints = ReportingEndpoint.parse(response, this.#environment.userAgent);
+    this.reportingEndpoints = ReportingEndpoint.parse(response, this.environment.userAgent);
   }
 
   /** Generate a report for local observation and, when enabled, later network delivery. */
   // https://w3c.github.io/reporting/#generate-report
   queueReport(type: string, destination: string, body: unknown): void {
-    const report = generateReport(body, type, destination, this.#environment);
+    const report = generateReport(body, type, destination, this.environment);
     this.notifyReportingObservers(report);
-    if (this.#environment.userAgent.reportDeliveryEnabled) this.reports.push(report);
+    if (this.environment.userAgent.reportDeliveryEnabled) this.reports.push(report);
     else this.reports.length = 0;
   }
 
@@ -148,7 +161,18 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   /** Queue observer work on the HTML event loop owning this global. */
   queueReportingTask(steps: () => void): QueuedTaskHandle {
-    return this.#environment.realm.queueGlobalTask(reportingTaskSource, steps);
+    return this.environment.realm.queueGlobalTask(reportingTaskSource, steps);
+  }
+
+  /** Release global report state and registered observer batches during destruction. */
+  // HTML removes this document's queued callback tasks before this cleanup.
+  // Reporting C must decide any final delivery before disposing of outbound data.
+  clearReportingState(): void {
+    for (const observer of this.reportingObservers) observer.takeRecords();
+    this.reportingObservers.clear();
+    this.reportingEndpoints.length = 0;
+    this.reports.length = 0;
+    this.reportBuffer.length = 0;
   }
 
   // -- Internal ---------------------------------------------------------

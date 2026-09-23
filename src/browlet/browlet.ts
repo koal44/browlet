@@ -8,14 +8,12 @@ import { createMicrotaskQueue } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getBindingContext, getRelevantRealm } from './bindings';
-import {
-  completelyFinishLoading, createAndInitializeDocument,
-} from './browsing/document-lifecycle';
+import { createAndInitializeDocument } from './browsing/document-lifecycle';
 import {
   createNewTopLevelTraversable, type TopLevelTraversable,
 } from './browsing/navigable';
 import {
-  createNavigationHistoryEntry, createNavigationParams,
+  NavigationParams,
   finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
 } from './browsing/navigation/navigation';
 import {
@@ -121,7 +119,7 @@ export class Browlet {
     const documentURL = new URL(url);
     const source = this.getRouteSource(documentURL);
     const documentURLRecord = requireURLRecord(documentURL.href);
-    const navigationParams = createNavigationParams(
+    const navigationParams = NavigationParams.fromSource(
       this.#traversable,
       documentURLRecord,
       source,
@@ -138,10 +136,7 @@ export class Browlet {
     );
     const realm = getRelevantRealm(document);
     const exec = getBindingContext(realm).getExecution();
-    const historyEntry = createNavigationHistoryEntry(
-      document,
-      navigationParams,
-    );
+    const historyEntry = navigationParams.createHistoryEntry(document);
     finalizeCrossDocumentNavigation(
       this.#traversable,
       historyHandling,
@@ -170,7 +165,7 @@ export class Browlet {
     );
 
     return parser.parse(source).then(() => {
-      completelyFinishLoading(document);
+      document.finishLoading();
       return this.window;
     });
   }
