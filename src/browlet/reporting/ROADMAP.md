@@ -10,14 +10,18 @@ owns the shared lifecycle.
 initialization are implemented. Slice B's Window report submission, queues,
 observer interfaces, buffering, callback delivery, and outbound opt-out are
 implemented. Destruction cleanup still needs HTML's unfinished Document lifecycle;
-worker integration needs worker globals. Slice C owns serialization, retirement,
-and delivery. URL owns the stateless stripping helper.
+worker integration needs worker globals. Slice C's serialization, handoff,
+request preparation, response handling, retirement, and test-report generator
+are implemented. UserAgent schedules browser-owned delivery work and returns
+internal Promises for attempt results. Fetch's entry is an explicitly approved
+provisional no-op until Slice 8A; no network delivery or response completion
+occurs yet. URL owns the stateless stripping helper.
 
 Fetch 7c has reached the first concrete consumer: COEP's CORP violation reports.
 FetchResponse implements the policy checks and submits violations through
 `settings.queueReport()`. Environment routes those submissions to
-its actual Window's global-scope mixin, which generates a report, notifies local
-observers, and adds it to the outbound queue when delivery is enabled. Network
+its actual Window's global-scope mixin, which calls `Environment.generateReport()`,
+notifies local observers, and adds the report to the outbound queue when delivery is enabled. Network
 delivery still needs the later Fetch pipeline.
 
 `FetchRequest.isBlockedByIntegrityPolicy()` also submits reports through that same method, with boolean
@@ -56,8 +60,8 @@ pending reports according to the user agent's schedule.
 ### A. Records and endpoint configuration
 
 **Implemented:** §2.1's data model and §§3.1–3.3. `ReportingEndpoint` owns each named URL and
-failure count. `Report` describes pending data and delivery bookkeeping;
-its body is retained as `unknown`, with each producer responsible for its
+failure count. `ReportImpl` owns report data and delivery bookkeeping;
+producer data is retained as `unknown`, with each producer responsible for its
 concrete type and JSON-serializable data.
 `WindowOrWorkerGlobalScopeMixin` owns independent endpoint/report lists and
 `initializeReportingEndpoints(response)`. The parser takes the actual Fetch
@@ -84,9 +88,11 @@ and Integrity Policy producers reach actual queues and observers; disabling
 outbound reports leaves both enforcement and local observation intact.
 Report queues and observer buffers are distinct.
 
-**Implemented boundary:** `ReportImpl` holds the observer-visible type, URL, and
-nullable `ReportBodyImpl`; queued `Report` data retains `body: unknown` and its
-delivery bookkeeping. `IntegrityViolationReportBodyImpl` snapshots the producer's
+**Implemented boundary:** `ReportImpl` owns the observer-visible type, URL, and
+nullable `ReportBodyImpl`, along with `data: unknown` and delivery bookkeeping.
+Environment constructs the concrete body once, and observers and buffered replay
+share the report rather than creating separate observer representations.
+`IntegrityViolationReportBodyImpl` snapshots the producer's
 four fields. `COEPViolationReportBodyImpl` snapshots CORP's type, blocked URL,
 destination, and disposition. Normal Web IDL interface inheritance preserves the concrete body
 through `Report.body`, and `[Default] toJSON` supplies serialization. No report-type
@@ -105,16 +111,16 @@ do not import browser feature flags or unrelated report fields.
 
 `test/browlet/reporting/reports.test.ts` covers base-typed derived projection,
 JSON output, producer snapshots, getter-only attributes, stable identity, and
-cross-realm projection/serialization. The observer constructs the concrete body
-before projection. Its constructor receives the owning settings object from
+cross-realm projection/serialization. Generation constructs the concrete body
+before projection. The observer constructor receives the owning settings object from
 Web IDL and retrieves that environment's existing global-scope mixin. The
 environment owns `exec`, so consumers need no separate execution input.
 The observer does not construct another mixin or retain a Binding Context.
 
-`generateReport()` implements the generic generation algorithm: it retains
+`Environment.generateReport()` implements the generic generation algorithm: it retains
 producer data, sanitizes the settings' creation URL without mutating it, and
 captures the effective User-Agent, timestamp, destination, and zero attempts.
-It does not enqueue or project a report. `test/browlet/reporting/generation.test.ts`
+It constructs the typed observer body but does not enqueue or project a report. `test/browlet/reporting/generation.test.ts`
 covers that data and the shared identification source described below.
 
 `ReportingObserverImpl` owns registration options and its pending callback batch.
@@ -135,7 +141,7 @@ These details and the accepted draft departure are recorded in
 
 `test/browlet/reporting/observers.test.ts` covers actual Window bindings, automatic
 HTML task delivery, batching, type conversion/filtering, buffer limits, synchronous
-replay, disconnect/takeRecords, reentrant callbacks, exception reporting, realm
+replay with shared report/body identity, disconnect/takeRecords, reentrant callbacks, exception reporting, realm
 ownership, both policy producers, and outbound opt-out.
 
 **Remaining lifecycle dependency:** Document's single-document destroy/abort
@@ -151,27 +157,103 @@ Inactive-document disposal belongs to its own
 covering history identity, restoration, Window reuse, and child navigables.
 Reporting C's independent work can proceed without settling that history API;
 production destruction integration remains an explicit consumer gate.
-Reporting does not prescribe a destruction flush: slice C must settle any final
-outbound handoff before discarding queues/endpoints. Browser source supports
+Reporting does not prescribe a destruction flush. The reviewed handoff transfers
+copied outbound reports to browser-owned tasks before discarding local queues/endpoints.
+Browser source supports
 handing delivery data to its owner at generation time: Blink uses its reporting
 service, Gecko captures the report for ReportDeliver, and WebKit uses keepalive
 violation-report requests. Delivery should survive local observer cleanup
-without requiring a synchronous destruction-time flush. Local observer tasks must
+without requiring a synchronous destruction-time flush. Document.destroy now
+calls `handoffReports()` before `clearReportingState()`. Local observer tasks must
 be removed before releasing their global state. An inactive Document can be
 retained, and initial about:blank replacement can reuse its Window, so neither
 inactivity nor every navigation is a destruction notification.
 
 ### C. Delivery, serialization, and retirement
 
-Implement §§2.4, 3.5, 5, and the remaining delivery-related privacy rules:
-group by endpoint and report origin, create reporting Fetch requests, process
-success/failure/410 results, and retire old reports/failing endpoints. Keep
-delivery scheduling deterministic in tests and lower priority than page work.
-Review the draft's attempt increment inside serialization: bookkeeping belongs
-with an actual delivery attempt, while JSON output is a view of report data.
-Cover §7's test-report generator; the WebDriver command remains with automation
-until that protocol exists. Sections 6 and 10 add examples/registrations, not
-another runtime subsystem.
+**Independent algorithms implemented:** §§2.4, 3.5, 5, §7's report generator,
+and outbound opt-out. Globals retain their specified local queues and call
+`sendReports(reports, environment)` to hand off pending reports. It groups
+by endpoint identity and report origin, drops unknown
+destinations, and uses `ReportImpl.cloneForDelivery()` to copy JSON data and
+metadata into a fresh `ReportImpl`. The copy omits the observer body and has no
+binding record, retaining no Environment, Window, observer, or producer-owned objects.
+`ReportImpl.serialize()` produces its UTF-8 outbound representation without
+changing bookkeeping. Distinct globals' equally named or
+equal-URL endpoints retain independent configuration and failure counts.
+
+`ReportImpl.origin` retains the source URL's origin before sanitization. This is
+delivery bookkeeping, not a JSON field: non-HTTP URLs are reduced to a scheme
+name, from which delivery cannot reconstruct their origin. Opaque origins are
+compared by identity, not by their common `null` serialization.
+
+Each delivery task retires stale data, honors the current opt-out, and creates a
+clientless `FetchRequest`: POST, report destination, CORS, same-origin
+credentials, no prompt target or Service Worker interception, and low priority.
+Its body contains UTF-8 `application/reports+json` bytes. Fetch accepts bytes
+before body extraction; no stream or execution owner from a retiring Window
+is captured. `UserAgent.attemptReportDelivery(endpoint, origin, reports)` calls
+Fetch with `useParallelQueue: true`, because this clientless request has no
+Window to receive callbacks. It returns `PromiseValue<ReportDeliveryResult>`:
+`success`, `remove-endpoint`, or `failure`. The internal Promise represents the
+draft's wait for a response. Fetch's processing callback only classifies the
+response and settles that Promise; the caller resets consecutive failures after
+success, increments them on failure, or removes the selected endpoint from its
+original configuration list. Attempted reports are released; the draft leaves
+retries unresolved.
+
+The selected endpoint and its configuration list have distinct roles. Tasks
+retain both so they can remove that endpoint without affecting another global's
+configuration or a replacement list. Neither role requires a batch record or
+an upload object. The queued closure is created outside the environment's scope;
+its inputs are copied reports, endpoint configuration, and UserAgent.
+
+**Reviewed interpretations:** serialization does not increment attempts;
+beginning delivery does. Successful delivery resets the endpoint's consecutive
+failure count, despite the draft's send algorithm omitting that reset.
+The test generator uses the browsers' hidden `TestReportBody` with `message`,
+rather than the draft's ambiguous `body_message` field. Eric accepted these
+choices on 2026-09-22; details are recorded in `scratch/SPEC-ISSUES.md`.
+Serialization measures age at delivery and omits absolute timestamps, routing
+fields, and attempt counters.
+
+UserAgent owns `maxReportAge` and `maxReportingEndpointFailures`, using the
+draft's suggested two-day report age and five-failure limit. Global retirement removes expired
+outbound reports, replay buffers, and registered observer batches. Disconnected
+observers apply the same age limit when records are consumed, without keeping
+them registered. Queued delivery tasks recheck age and failures when they run. Global
+cleanup replaces its endpoint-list reference, leaving already handed-off
+tasks' configuration alive without retaining their global.
+
+`generateTestReport(message, group)` supplies the ordinary observer and outbound
+paths, including default group, empty messages, buffering, and opt-out. The
+WebDriver command's protocol validation, current-context lookup, and prompt
+handling remain with automation. Sections 6 and 10 add examples/registrations,
+not another runtime subsystem.
+
+`UserAgent.queueReportingTask()` schedules a later Node host turn and defers
+while any of its started HTML event loops has runnable tasks. Inactive-Document
+tasks do not block it, nor do manually driven loops without an automatic
+scheduler. The task is not associated with a Window or Document and therefore
+survives document task removal. Integration's `hostPromises` uses Infra's
+internal Promise machinery with Node's host continuation queue, independently
+of any Window's microtask queue. Page implementations continue using their
+environment's execution facilities.
+
+**Fetch consumer gate:** [fetch.ts](../../fetch/fetch.ts) is the approved
+provisional no-op. It does not dispatch a request, call processing steps, or
+return a controller. An attempt remains pending until real Fetch processing is
+implemented. Do not substitute Node fetch or another transport. Automatic
+collection of live globals' report queues and periodic retirement remain to be
+connected; implementing task delivery does not supply those policies.
+
+`test/browlet/reporting/delivery.test.ts` verifies actual request records,
+serialization, grouping, result bookkeeping, isolation, opt-out, expiry, and
+handoff through the current active-document destruction path. It uses the real
+browser-owned scheduler with controlled Fetch responses. The scheduling tests
+cover asynchronous delivery, page-work precedence, and inactive tasks. Retirement and
+observer tests cover local expiration and projected test-report bodies. These
+prove the independent algorithms, not network delivery or inactive destruction.
 
 Reporting is the preflight detour after SRI, before HSTS. Network delivery
 depends on Fetch and is completed at the
@@ -215,7 +297,7 @@ explicit provisional null result. NavigatorID's future getter should use the
 same selector; Reporting does not need a Navigator object to obtain that value.
 
 Reporting's generic generation algorithm explicitly uses the current
-`navigator.userAgent`. `generateReport()` captures that effective value so later
+`navigator.userAgent`. `Environment.generateReport()` captures that effective value so later
 configuration changes cannot alter an existing report. The draft's descriptive
 definition instead refers to the original request's User-Agent; follow the
 generation algorithm here. An explicit header on an individual Fetch request

@@ -89,6 +89,14 @@ perform the HTML checkpoint after every task. The task turn uses its required
 `JSMicrotaskQueue`; it does not silently use Node's ambient end-of-turn
 behavior as an approximation.
 
+Browser-owned Reporting delivery has no author callback or Document owner.
+`UserAgent.queueReportingTask()` runs on a later Node host turn, yielding while
+any of that UserAgent's started HTML loops has runnable work. It survives
+Document task removal. Delivery's internal `PromiseValue` continuations use
+the host queue through integration's `hostPromises`; they neither enter an
+HTML realm nor require a Window checkpoint. ReportingObserver callbacks remain
+ordinary global tasks on their owning HTML event loop.
+
 The same host supplies unsafe shared time because the processing model samples
 it immediately before removing the chosen task and after its checkpoint. The
 event loop preserves that ordering and exposes task-start, long-task-reporting,

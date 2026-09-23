@@ -756,6 +756,10 @@ default containers for clientless requests. Integration tests cover these paths
 with real settings and traversables, including a cross-origin child Window.
 The Fetch entry algorithm and main-fetch processing have not been implemented;
 client population is their first completed dependency, not the whole of 8A.
+`fetch.ts` exposes an approved provisional entry for Reporting's delivery caller.
+It returns void and does nothing: no dispatch, processing callbacks, or controller.
+Replace it with the real entry algorithm here; a pending Reporting delivery
+Promise is not evidence that any network request has been sent.
 
 The accepted provisional Request-constructor rule preserves a selected target
 only when the source request's resolved origin matches the new environment.

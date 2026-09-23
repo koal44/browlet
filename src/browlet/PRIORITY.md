@@ -265,7 +265,10 @@ Current implementation sequence:
    scaffold has provisional Fetch/parser/resource dependencies; retained-history
    ownership and inactive disposal have their own
    [HTML lifecycle slice](browsing/ROADMAP.md#planned-slice-history-ownership-and-document-disposal).
-   Continue Reporting C's independent serialization/retirement work, HSTS, Storage keys/Blob URLs,
+   Reporting C's independent serialization, request preparation, retirement,
+   and destruction handoff are implemented. UserAgent owns delivery scheduling
+   and Promise-returning attempts; Fetch's entry is a provisional no-op pending
+   Slice 8A. Continue HSTS, Storage keys/Blob URLs,
    Mixed Content/upgrading, and CSP. Network
    report delivery remains gated on Fetch. CSP copying and policy delivery
    remain with their policy owners.

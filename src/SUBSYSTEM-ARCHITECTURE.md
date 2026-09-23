@@ -436,19 +436,37 @@ initialization method parses the actual Fetch response using the
 settings object's UserAgent for trust decisions; there is no additional global
 registry or Reporting environment facade. Automatic response delivery remains
 with the HTML loader. Settings route submissions to the actual global's mixin;
-it generates reports, notifies observers, and queues outbound data when the
+the mixin calls `Environment.generateReport()`, notifies observers, and queues outbound data when the
 UserAgent's delivery preference permits it. ReportingObserver receives its
 owning settings object at construction and obtains the existing global-scope
-mixin from it. Each observer retains its own pending records while sharing the
-global's registrations and buffered reports; it does not construct another mixin.
+mixin from it. Each observer retains its own pending list of shared `ReportImpl`
+instances; buffered replay preserves those same report and body identities.
+Observers do not construct another mixin or duplicate report implementations.
 Web IDL adapts callbacks and HTML delivers them as global tasks. No Binding
 Context enters the observer implementation.
-Document destruction must eventually cancel tasks and release Reporting state;
-ordinary inactivity is not destruction. Network delivery remains a Fetch consumer.
-Observer-facing `ReportImpl` and derived `ReportBodyImpl` classes are composed
-in Browlet. Fetch supplies plain report data; constructing its concrete body is
-Reporting integration work, while Web IDL preserves the derived interface during
-projection and provides default JSON conversion.
+Document destruction cancels its queued tasks, hands off pending outbound data,
+and releases local Reporting state; ordinary inactivity is not destruction.
+`sendReports(reports, environment)` gives browser-owned tasks fresh `ReportImpl`
+copies containing JSON data and report metadata, alongside endpoint configuration. These copies omit
+the observer body and carry no binding record, so delivery retains no reference
+to the generating realm or global. Clientless upload requests carry raw bytes for later Fetch extraction.
+Response handlers update the original endpoint configuration; replacing the
+global's configuration cannot redirect those results into a new list.
+UserAgent's reporting scheduler yields to runnable work in its started HTML
+event loops, then runs on a later host turn without a Document association.
+`UserAgent.attemptReportDelivery()` returns an internal Promise of a delivery
+result; its caller owns endpoint bookkeeping. Integration composes `hostPromises`
+from Infra's Promise machinery and Node's host queue for this browser-owned work.
+These continuations have no HTML realm and do not replace page Promise routing.
+Fetch response processing selects a parallel queue, independent of the retiring
+Window. Fetch's entry is currently an approved provisional no-op, so no response
+settles that result yet. Periodic collection and retirement remain consumer work. The current
+active-document destruction scaffold does not settle inactive history disposal.
+`ReportImpl` and derived `ReportBodyImpl` classes are composed in Browlet.
+Fetch supplies plain report data; `Environment.generateReport()` captures its
+environment metadata and constructs the concrete body. Web IDL preserves the
+derived interface during projection and provides default JSON conversion;
+`ReportImpl.serialize()` produces the outbound representation independently.
 Its stateless URL sanitization algorithm lives in URL, retaining its Reporting
 citation, so both policy checks and Reporting can import it directly.
 

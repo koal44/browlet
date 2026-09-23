@@ -15,6 +15,7 @@ import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
 import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
 import { coepViolationReportBodyIDL } from './browsing/policy/coep';
 import { reportIDL, reportBodyIDL } from './reporting/report';
+import { testReportBodyIDL } from './reporting/test-report';
 import {
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
 } from './reporting/observer';
@@ -274,7 +275,7 @@ const browletDefinitions = [
   originIDL,
   locationIDL,
   referrerPolicyIDL,
-  reportIDL, reportBodyIDL, integrityViolationReportBodyIDL,
+  reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL,
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
   domHighResTimeStampIDL,

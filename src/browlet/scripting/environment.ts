@@ -1,18 +1,24 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { TraversableNavigable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
-import { FetchGroup, type FetchEnvironment } from '../../fetch/index';
+import {
+  FetchGroup, getEnvironmentDefaultUserAgent, type FetchEnvironment, type IntegrityViolationReportBody,
+} from '../../fetch/index';
 import type { EventLoop } from './event-loop';
 import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
 import type { PolicyContainer } from '../browsing/policy/container';
 import type { WindowImpl } from '../browsing/window/window';
-import { areSameSite, type Origin, type URLRecord } from '../../url/index';
+import { areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLRecord } from '../../url/index';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { RealmExecution } from '../../js-engine/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
+import { ReportImpl } from '../reporting/report';
+import { TestReportBodyImpl } from '../reporting/test-report';
+import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
+import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
 
 /** Browser state and operations associated with one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
@@ -109,6 +115,30 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
 
   /** Existing state shared by all consumers of this environment's global scope. */
   abstract getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin;
+
+  /** Create a report and its observer body, capturing this environment's current identification value. */
+  // https://w3c.github.io/reporting/#queue-report
+  generateReport(data: unknown, type: string, destination: string): ReportImpl {
+    // HTML's NavigatorID.userAgent uses this same environment-default algorithm.
+    const report = new ReportImpl(
+      data, type, destination, stripURLForReporting(this.creationURL),
+      obtainURLOrigin(this.creationURL), getEnvironmentDefaultUserAgent(this),
+    );
+    if (data !== null) {
+      switch (type) {
+        case 'test':
+          report.body = new TestReportBodyImpl((data as { message: string; }).message);
+          break;
+        case 'integrity-violation':
+          report.body = new IntegrityViolationReportBodyImpl(data as IntegrityViolationReportBody);
+          break;
+        case 'coep':
+          report.body = new COEPViolationReportBodyImpl(data as COEPViolationReportBody);
+          break;
+      }
+    }
+    return report;
+  }
 
   /** Submit a report to this environment's actual global scope. */
   // https://w3c.github.io/reporting/#generate-report

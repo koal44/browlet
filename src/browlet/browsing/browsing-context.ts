@@ -256,6 +256,10 @@ class AgentClusterMap {
   set(key: AgentClusterKey, value: AgentCluster): void {
     this.#values.set(obtainAgentClusterMapKey(key), value);
   }
+
+  values(): MapIterator<AgentCluster> {
+    return this.#values.values();
+  }
 }
 
 class HistoricalAgentClusterKeyMap {

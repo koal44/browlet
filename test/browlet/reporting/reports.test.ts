@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
-import { IntegrityViolationReportBodyImpl } from '../../../src/browlet/browsing/policy/integrity-policy';
 import { ReportImpl, ReportBodyImpl } from '../../../src/browlet/reporting/report';
 import type { IntegrityViolationReportBody } from '../../../src/fetch/integrity';
 import { reference } from '../../../src/web-idl/index';
@@ -19,11 +18,14 @@ describe('Reporting platform objects', () => {
 
   it('projects a report with no body and serializes its public fields', () => {
     const window = createWindow();
-    const report = projectReport(window, new ReportImpl('test', 'https://document.test/page', null));
+    const report = projectReport(window, createReport(window, null));
     expect(report.type).toBe('test');
     expect(report.url).toBe('https://document.test/page');
     expect(report.body).toBeNull();
     expect(report.toJSON()).toEqual({ type: 'test', url: 'https://document.test/page', body: null });
+    for (const name of ['data', 'origin', 'userAgent', 'destination', 'timestamp', 'attempts', 'cloneForDelivery']) {
+      expect(Reflect.has(report, name)).toBe(false);
+    }
     expect(Object.prototype.toString.call(report)).toBe('[object Report]');
   });
 
@@ -31,8 +33,9 @@ describe('Reporting platform objects', () => {
     const window = createWindow();
     const context = getBindingContext(getRelevantRealm(window));
     const data = integrityBody();
-    const implementation = new IntegrityViolationReportBodyImpl(data);
-    const report = projectReport(window, new ReportImpl('integrity-violation', data.documentURL, implementation));
+    const reportImplementation = createReport(window, data);
+    const implementation = reportImplementation.body!;
+    const report = projectReport(window, reportImplementation);
     const body = report.body!;
     expect(body).toMatchObject(data);
     expect(body).toBeInstanceOf(window.ReportBody);
@@ -47,9 +50,7 @@ describe('Reporting platform objects', () => {
   it('serializes all derived fields through the default toJSON operations', () => {
     const window = createWindow();
     const data = integrityBody();
-    const report = projectReport(window, new ReportImpl(
-      'integrity-violation', data.documentURL, new IntegrityViolationReportBodyImpl(data),
-    ));
+    const report = projectReport(window, createReport(window, data));
     const bodyJSON = report.body!.toJSON();
     expect(bodyJSON).toBeInstanceOf(window.Object);
     expect(bodyJSON).toEqual(data);
@@ -66,10 +67,10 @@ describe('Reporting platform objects', () => {
     const window = createWindow();
     const data = integrityBody();
     const expected = { ...data };
-    const implementation = new IntegrityViolationReportBodyImpl(data);
+    const implementation = createReport(window, data);
     data.blockedURL = 'https://other.test/changed.js';
     data.reportOnly = false;
-    const report = projectReport(window, new ReportImpl('integrity-violation', expected.documentURL, implementation));
+    const report = projectReport(window, implementation);
     expect(report.body!.toJSON()).toEqual(expected);
     expect(Reflect.set(report, 'type', 'changed')).toBe(false);
     expect(Reflect.set(report, 'body', null)).toBe(false);
@@ -82,9 +83,9 @@ describe('Reporting platform objects', () => {
     const owner = createWindow();
     const other = createWindow();
     const data = integrityBody();
-    const implementation = new IntegrityViolationReportBodyImpl(data);
-    const body = getBindingContext(getRelevantRealm(owner)).project(ReportBodyImpl, implementation);
-    const report = projectReport(other, new ReportImpl('integrity-violation', data.documentURL, implementation));
+    const implementation = createReport(other, data);
+    const body = getBindingContext(getRelevantRealm(owner)).project(ReportBodyImpl, implementation.body!);
+    const report = projectReport(other, implementation);
     expect(report).toBeInstanceOf(other.Object);
     expect(report.body).toBe(body);
     expect(report.body).toBeInstanceOf(owner.ReportBody);
@@ -99,10 +100,8 @@ describe('Reporting platform objects', () => {
     const owner = createWindow();
     const other = createWindow();
     const data = integrityBody();
-    const report = projectReport(owner, new ReportImpl(
-      'integrity-violation', data.documentURL, new IntegrityViolationReportBodyImpl(data),
-    ));
-    const foreignReport = projectReport(other, new ReportImpl('test', data.documentURL, null));
+    const report = projectReport(owner, createReport(owner, data));
+    const foreignReport = projectReport(other, createReport(other, null));
     const json = foreignReport.toJSON.call(report);
     expect(json).toBeInstanceOf(other.Object);
     expect(json.body).toBeInstanceOf(owner.ReportBody);
@@ -115,6 +114,13 @@ describe('Reporting platform objects', () => {
 
 function createWindow(): ReportingWindow {
   return new Browlet({ route: () => '' }).window as ReportingWindow;
+}
+
+function createReport(window: object, data: IntegrityViolationReportBody | null): ReportImpl {
+  const environment = getRelevantRealm(window).environment;
+  const report = environment.generateReport(data, data === null ? 'test' : 'integrity-violation', 'default');
+  report.url = data?.documentURL ?? 'https://document.test/page';
+  return report;
 }
 
 function projectReport(window: object, implementation: ReportImpl): ReportObject {

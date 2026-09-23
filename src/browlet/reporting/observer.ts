@@ -5,10 +5,7 @@ import {
 import type { Realm } from '../scripting/realm';
 import type { Environment } from '../scripting/environment';
 import type { WindowOrWorkerGlobalScopeMixin } from '../scripting/global-scope';
-import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
-import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
-import type { IntegrityViolationReportBody } from '../../fetch/index';
-import { ReportImpl, type Report } from './report';
+import type { ReportImpl } from './report';
 
 /** An observer's registration, type filter, and pending callback batch. */
 // https://w3c.github.io/reporting/#interface-reporting-observer
@@ -37,6 +34,7 @@ export class ReportingObserverImpl {
   /** Register this observer, replaying buffered reports at most once. */
   // https://w3c.github.io/reporting/#dom-reportingobserver-observe
   observe(): void {
+    this.#global.retireReports();
     this.#global.reportingObservers.add(this);
     if (!this.#buffered) return;
     this.#buffered = false;
@@ -55,6 +53,9 @@ export class ReportingObserverImpl {
   /** Drain the pending batch, independently of registration and the global buffer. */
   // https://w3c.github.io/reporting/#dom-reportingobserver-takerecords
   takeRecords(): ReportImpl[] {
+    // Disconnected observers are not retained by the global's registration set.
+    // Apply the same age limit when their pending records are consumed later.
+    this.discardReportsBefore(Date.now() - this.#global.environment.userAgent.maxReportAge);
     const reports = this.#reports;
     this.#reports = [];
     return reports;
@@ -62,13 +63,10 @@ export class ReportingObserverImpl {
 
   /** Add an observable report matching the type filter and schedule batch delivery. */
   // https://w3c.github.io/reporting/#add-report
-  queueReport(report: Report): void {
+  queueReport(report: ReportImpl): void {
     if (!visibleReportTypes.has(report.type)) return;
     if (this.#types?.length && !this.#types.includes(report.type)) return;
-    const body = report.type === 'integrity-violation'
-      ? new IntegrityViolationReportBodyImpl(report.body as IntegrityViolationReportBody)
-      : new COEPViolationReportBodyImpl(report.body as COEPViolationReportBody);
-    this.#reports.push(new ReportImpl(report.type, report.url, body));
+    this.#reports.push(report);
     if (this.#reports.length !== 1) return;
     const observers = [...this.#global.reportingObservers];
     this.#global.queueReportingTask(() => {
@@ -76,11 +74,17 @@ export class ReportingObserverImpl {
     });
   }
 
+  /** Remove expired pending records without changing this observer's registration. */
+  discardReportsBefore(cutoff: number): void {
+    this.#reports = this.#reports.filter((report) => report.timestamp >= cutoff);
+  }
+
   /** Deliver a nonempty batch, clearing it before invoking author code. */
   // https://w3c.github.io/reporting/#invoke-observers
   private invokeCallback(): void {
-    if (this.#reports.length === 0) return;
-    this.#callback.call(this, this.takeRecords(), this);
+    const reports = this.takeRecords();
+    if (reports.length === 0) return;
+    this.#callback.call(this, reports, this);
   }
 }
 
@@ -95,9 +99,9 @@ export type ReportingObserverCallback = (
   this: ReportingObserverImpl, reports: ReportImpl[], observer: ReportingObserverImpl,
 ) => void;
 
-// HTML defines coep as observable; SRI's Integrity Policy example likewise exposes its reports.
+// HTML defines coep as observable; SRI exposes integrity violations and Reporting exposes test reports.
 // Other report types remain invisible until their definitions and body interfaces are integrated.
-const visibleReportTypes = new Set(['coep', 'integrity-violation']);
+const visibleReportTypes = new Set(['coep', 'integrity-violation', 'test']);
 
 // -- Web IDL ------------------------------------------------------------
 

@@ -396,8 +396,11 @@ Reporting A implements records, endpoint parsing, and explicit global
 initialization. HTML's loader still needs to provide actual Fetch responses.
 Reporting B supplies Window generation, queues, observers, and outbound opt-out;
 HTML destruction and worker lifecycle remain explicit consumer gates. Review
-Reporting C's independent serialization/retirement work, then HSTS, Storage
-keys/Blob URLs, and the independent policy work below before returning
+Reporting C's implemented serialization, request preparation, response handling,
+retirement, and destruction handoff. UserAgent supplies delivery scheduling and
+Promise-returning attempts; Fetch's entry is a provisional no-op pending Slice 8A.
+Then continue HSTS, Storage keys/Blob URLs,
+and the independent policy work below before returning
 to Fetch 8A. Their consumer integration gates remain with Fetch and HTML.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;

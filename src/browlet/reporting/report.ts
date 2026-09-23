@@ -1,78 +1,67 @@
 import {
   defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
 } from '../../web-idl/index';
-import { getEnvironmentDefaultUserAgent } from '../../fetch/index';
-import { stripURLForReporting } from '../../url/index';
-import type { Environment } from '../scripting/environment';
+import { utf8Encode } from '../../encoding/index';
+import type { Origin } from '../../url/index';
 
-/** Observer-facing report data, independent of network delivery bookkeeping. */
+/** A generated report shared by local observers, buffering, and the outbound queue. */
 // https://w3c.github.io/reporting/#dom-report
 export class ReportImpl {
+  /** Producer-supplied JSON-serializable object, or null when there is no body. */
+  data: unknown;
   /** Report type identifying the body's format. */
-  #type: string;
+  type: string;
   /** Sanitized URL of the document or worker that generated the report. */
-  #url: string;
-  /** Concrete report body, or null when the report has no body. */
-  #body: ReportBodyImpl | null;
+  url: string;
+  /** Concrete observer body, or null when absent or its interface is not implemented. */
+  body: ReportBodyImpl | null = null;
+  /** Source URL's origin retained before sanitization can remove the URL's structure. */
+  origin: Origin;
+  /** Environment's effective identification value captured at generation. */
+  userAgent: string;
+  /** Name of the endpoint selected by the reporting policy. */
+  destination: string;
+  /** Generation time as a Unix timestamp in milliseconds. */
+  timestamp = Date.now();
+  /** Number of attempts to deliver this report. */
+  attempts = 0;
 
-  constructor(type: string, url: string, body: ReportBodyImpl | null) {
-    this.#type = type;
-    this.#url = url;
-    this.#body = body;
+  constructor(data: unknown, type: string, destination: string, url: string, origin: Origin, userAgent: string) {
+    this.data = data;
+    this.type = type;
+    this.destination = destination;
+    this.url = url;
+    this.origin = origin;
+    this.userAgent = userAgent;
   }
 
-  get type(): string {
-    return this.#type;
+  /** Copy outbound data without retaining the observer body or binding-owned identity. */
+  cloneForDelivery(): ReportImpl {
+    const data: unknown = JSON.parse(JSON.stringify(this.data));
+    const copy = new ReportImpl(data, this.type, this.destination, this.url, this.origin, this.userAgent);
+    copy.timestamp = this.timestamp;
+    copy.attempts = this.attempts;
+    return copy;
   }
 
-  get url(): string {
-    return this.#url;
-  }
-
-  get body(): ReportBodyImpl | null {
-    return this.#body;
+  /** Serialize reports without changing delivery bookkeeping. */
+  // https://w3c.github.io/reporting/#serialize-reports
+  // Reviewed departure: attempts advance when delivery begins, not when data is inspected.
+  static serialize(reports: ReportImpl[]): Uint8Array<ArrayBuffer> {
+    const now = Date.now();
+    return utf8Encode(JSON.stringify(reports.map((report) => ({
+      age: now - report.timestamp,
+      type: report.type,
+      url: report.url,
+      user_agent: report.userAgent,
+      body: report.data,
+    }))));
   }
 }
 
 /** Base implementation for report-specific platform interfaces. */
 // https://w3c.github.io/reporting/#reportbody
 export class ReportBodyImpl {}
-
-/** Create pending report data, capturing the environment's current identification value. */
-// https://w3c.github.io/reporting/#queue-report
-export function generateReport(
-  data: unknown, type: string, destination: string, environment: Environment,
-): Report {
-  // HTML's NavigatorID.userAgent uses this same environment-default algorithm.
-  return {
-    body: data,
-    url: stripURLForReporting(environment.creationURL),
-    userAgent: getEnvironmentDefaultUserAgent(environment),
-    destination,
-    type,
-    timestamp: Date.now(),
-    attempts: 0,
-  };
-}
-
-/** Pending report data and delivery bookkeeping, separate from its observer projection. */
-// https://w3c.github.io/reporting/#concept-reports
-export type Report = {
-  /** Producer-supplied JSON-serializable object, or null when there is no body. */
-  body: unknown;
-  /** Serialized source URL with credentials and fragment removed. */
-  url: string;
-  /** Environment's effective identification value captured when the report was generated. */
-  userAgent: string;
-  /** Name of the endpoint selected by the reporting policy. */
-  destination: string;
-  /** Nonempty report type identifying the body's format. */
-  type: string;
-  /** Generation time as a Unix timestamp in milliseconds. */
-  timestamp: number;
-  /** Number of attempts to deliver this report. */
-  attempts: number;
-};
 
 // -- Web IDL ------------------------------------------------------------
 

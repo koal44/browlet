@@ -100,7 +100,7 @@ They stay on the WindowOrWorkerGlobalScope mixin because these resources are
 available to both global types. Document and worker lifecycle algorithms remain
 responsible for their respective teardown ordering and conditions.
 
-Two lifecycle questions remain before general use:
+History disposal remains a lifecycle question before general use:
 
 - Our node-navigable lookup reaches the browsing context, so destruction retains
   the active document state before clearing that association. HTML instead
@@ -116,16 +116,17 @@ Two lifecycle questions remain before general use:
   history-ownership slice below, not as a Reporting-specific parameter. The local HTML
   inconsistency is recorded in `scratch/SPEC-ISSUES.md`.
 - Reporting defines best-effort delivery and retirement, but no explicit
-  document-destruction flush. The provisional implementation discards local report state after
-  removing document tasks. Slice C must settle any handoff of pending outbound
-  reports before this cleanup is used in production. Destroying a Document must
-  not erase an unrelated or reused Window's state. Blink's
+  document-destruction flush. Reporting C's `sendReports()` flow hands
+  copied outbound reports to browser-owned tasks before clearing local report
+  state, after removing document tasks. UserAgent's scheduler survives that
+  removal; Fetch's entry remains a provisional no-op. Extending destruction must still ensure
+  it does not erase an unrelated or reused Window's state. Blink's
   `core/frame/reporting_context.cc` hands reports to the reporting service when
   generated; Gecko's `dom/reporting/ReportDeliver.cpp` captures delivery data
   then; WebKit's `loader/PingLoader.cpp` uses keepalive for violation reports.
-  For Reporting C, hand delivery data to its owner while the global is alive,
-  so document cleanup does not erase pending delivery or require a synchronous
-  network flush.
+  The handoff retains no Environment or Window, so document cleanup does not
+  erase pending delivery or require a synchronous network flush. This bounded
+  implementation does not settle retained-history ownership or Window reuse.
 
 ### Planned slice: history ownership and document disposal
 

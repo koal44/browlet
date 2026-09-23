@@ -3,10 +3,17 @@ import type { Navigable, TopLevelTraversable } from './browsing/navigable';
 import type { Environment } from './scripting/environment';
 import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { ConnectionPool, HTTPCachePartitions, type FetchUserAgent } from '../fetch/index';
+import { hostPromises, requestNodeEventLoopTurn } from './integration/scripting';
+import type { ReportingEndpoint } from './reporting/endpoint';
+import { ReportImpl } from './reporting/report';
+import type { ReportDeliveryResult } from './reporting/delivery';
+import {
+  ConnectionPool, HTTPCachePartitions, fetch, FetchRequest, isOkStatus, type FetchUserAgent,
+} from '../fetch/index';
 import { CookieStore } from '../http/index';
 import { areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, type URLRecord } from '../url/index';
 import { InternalError } from '../infra/internal-error';
+import type { PromiseValue } from '../infra/promises';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -35,6 +42,10 @@ export class UserAgent implements FetchUserAgent {
   cookiesEnabled = true;
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
+  /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
+  maxReportAge = 2 * 24 * 60 * 60 * 1000;
+  /** Reporting endpoints are retired after exceeding this consecutive-failure count. */
+  maxReportingEndpointFailures = 5;
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
   // Applies to tuple origins supplied by an authenticated protocol implementation.
@@ -72,6 +83,59 @@ export class UserAgent implements FetchUserAgent {
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */
   createPolicyContainer(): PolicyContainer {
     return createPolicyContainer();
+  }
+
+  /** Run browser-owned reporting work on a later host turn, yielding to runnable page tasks. */
+  queueReportingTask(steps: () => void): void {
+    requestNodeEventLoopTurn(() => {
+      for (const group of this.browsingContextGroupSet) {
+        for (const cluster of group.agentClusterMap.values()) {
+          for (const agent of cluster.agents) {
+            const { eventLoop } = agent;
+            // Manually driven loops do not request turns that could unblock us.
+            if (eventLoop.started && eventLoop.hasRunnableTasks()) {
+              this.queueReportingTask(steps);
+              return;
+            }
+          }
+        }
+      }
+      steps();
+    });
+  }
+
+  /** Attempt delivery and return its outcome without changing endpoint bookkeeping. */
+  // https://w3c.github.io/reporting/#try-delivery
+  // The internal Promise represents the draft's "wait for a response" step.
+  // Its continuations belong to the browser, not the report's retiring Window.
+  attemptReportDelivery(
+    endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
+  ): PromiseValue<ReportDeliveryResult> {
+    const request = new FetchRequest(endpoint.url, null, this);
+    request.method = 'POST';
+    request.origin = origin;
+    request.headerList.append('Content-Type', 'application/reports+json');
+    request.traversableForUserPrompts = null;
+    request.allowServiceWorkerInterception = false;
+    request.destination = 'report';
+    request.mode = 'cors';
+    request.unsafeRequest = true;
+    request.credentialsMode = 'same-origin';
+    request.priority = 'low';
+    // Bytes need no stream or execution owner from the retiring Window.
+    request.body = ReportImpl.serialize(reports);
+    for (const report of reports) report.attempts++;
+    const result = hostPromises.withResolvers<ReportDeliveryResult>();
+    // This clientless request has no Window to receive response callbacks.
+    fetch(request, {
+      processResponse: (response) => {
+        if (isOkStatus(response.status)) result.resolve('success');
+        else if (response.status === 410) result.resolve('remove-endpoint');
+        else result.resolve('failure');
+      },
+      useParallelQueue: true,
+    });
+    return result.promise;
   }
 
   /** Whether automation emulates an offline network for the given environment. */

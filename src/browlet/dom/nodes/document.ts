@@ -519,7 +519,7 @@ export class DocumentImpl extends NodeImpl {
     for (const port of global.messagePorts) port.disentangle();
     this.runUnloadingCleanup();
     eventLoop.removeTasksForDocument(this);
-    // PROVISIONAL: Reporting C must hand off outbound reports before this cleanup.
+    global.handoffReports();
     global.clearReportingState();
 
     this.browsingContext = null;

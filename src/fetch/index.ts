@@ -9,6 +9,7 @@ import {
 import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
 
 export { FetchController, deserializeAbortReason } from './controller';
+export { fetch, type FetchOptions } from './fetch';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
 export { HTTPCachePartitions } from './http/cache/partitions';
@@ -18,13 +19,14 @@ export type {
 } from './infrastructure';
 export { fetchEnvironment } from './infrastructure';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
-export { requestIDL, type FetchRequest } from './request';
+export { requestIDL, FetchRequest } from './request';
 export { responseIDL, type FetchResponse } from './response';
 export {
   parseIntegrityMetadata, type IntegrityMetadata, type IntegrityAlgorithm,
   type FetchIntegrityPolicy, type IntegrityViolationReportBody,
 } from './integrity';
 export { isLocalScheme } from './url';
+export { isOkStatus } from './http/statuses';
 
 export const fetchIDLDefinitions: Definition[] = [
   headersInitIDL,

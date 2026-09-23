@@ -87,6 +87,59 @@ describe('ReportingObserver', () => {
     expect(scope.reports.map((report) => report.type)).toEqual(['coep', 'integrity-violation', 'future-type']);
   });
 
+  it('shares report and body identity across observers and buffered replay', () => {
+    const { window, environment } = createWindow();
+    const first = new window.ReportingObserver(() => {});
+    const second = new window.ReportingObserver(() => {});
+    first.observe();
+    second.observe();
+    environment.queueReport('coep', 'reports', coepBody());
+    const [report] = first.takeRecords();
+    const [other] = second.takeRecords();
+    expect(other).toBe(report);
+    expect(other!.body).toBe(report!.body);
+
+    const buffered = new window.ReportingObserver(() => {}, { buffered: true });
+    buffered.observe();
+    const [replayed] = buffered.takeRecords();
+    expect(replayed).toBe(report);
+    expect(replayed!.body).toBe(report!.body);
+  });
+
+  it('generates an observable test report with a hidden, typed message body', () => {
+    const { window, scope } = createWindow();
+    const observer = new window.ReportingObserver(() => {}, { types: ['test'] });
+    observer.observe();
+    scope.generateTestReport('A test message');
+    const [report] = observer.takeRecords();
+    expect(report!.type).toBe('test');
+    expect(report!.body).toBeInstanceOf(window.ReportBody);
+    expect(Object.prototype.toString.call(report!.body)).toBe('[object TestReportBody]');
+    expect(report!.body!.toJSON()).toEqual({ message: 'A test message' });
+    expect(Reflect.set(report!.body!, 'message', 'changed')).toBe(false);
+    expect(Reflect.has(window, 'TestReportBody')).toBe(false);
+    expect(scope.reports[0]!.destination).toBe('default');
+  });
+
+  it('preserves an explicit test-report destination and empty message', () => {
+    const { window, scope } = createWindow();
+    scope.generateTestReport('', 'custom');
+    expect(scope.reports[0]).toMatchObject({ destination: 'custom', body: { message: '' } });
+    const observer = new window.ReportingObserver(() => {}, { types: ['test'], buffered: true });
+    observer.observe();
+    expect(observer.takeRecords()[0]!.body!.toJSON()).toEqual({ message: '' });
+  });
+
+  it('keeps local test-report observation available when outbound reporting is disabled', () => {
+    const { window, scope, environment } = createWindow();
+    environment.userAgent.reportDeliveryEnabled = false;
+    const observer = new window.ReportingObserver(() => {});
+    observer.observe();
+    scope.generateTestReport('local');
+    expect(scope.reports).toEqual([]);
+    expect(observer.takeRecords()[0]!.body!.toJSON()).toEqual({ message: 'local' });
+  });
+
   it('makes buffered reports available during observe and replays them only once', () => {
     const { window, environment } = createWindow();
     environment.queueReport('coep', 'reports', coepBody());

@@ -219,12 +219,19 @@ Fetch state remains on the implementation constructors, with the selected guard,
 signal where applicable, and RealmExecution. A retained client's identity does
 not implicitly select the allocation owner.
 
-Reporting separates queued `Report` data and delivery bookkeeping from the
-observer-facing `ReportImpl`. Its `body` holds a `ReportBodyImpl` subclass, such
-as `IntegrityViolationReportBodyImpl`. A base-typed attribute preserves the
-concrete platform interface through ordinary projection; default Web IDL
-`toJSON` operations expose its declared fields. Producer data remains independent
-of this platform representation.
+Reporting's `ReportImpl` owns producer data, delivery bookkeeping, and the
+observer-visible attributes. Environment constructs its typed `ReportBodyImpl`
+once; observers and buffered replay share the same report and body identities.
+A base-typed attribute preserves the concrete platform interface through ordinary
+projection; default Web IDL `toJSON` operations expose only declared attributes.
+Internal metadata and the original producer data are not exposed by that projection.
+
+Reporting delivery tasks retain fresh, unprojected `ReportImpl` copies under UserAgent.
+Each copy has independent JSON data and omits the observer body, so neither the
+report nor its body retains the generating realm through a binding record.
+`ReportImpl.serialize()` uses the retained data without invoking platform APIs.
+`TestReportBodyImpl`, like policy-specific bodies, projects through
+normal ReportBody inheritance; it has no global interface object.
 
 ### Binding machinery
 
