@@ -23,6 +23,7 @@
     { "path": "./src/http" },
     { "path": "./src/mime" },
     { "path": "./src/url" },
+    { "path": "./src/storage" },
     { "path": "./src/web-idl/core" },
     { "path": "./src/web-idl" },
     { "path": "./src/streams" },

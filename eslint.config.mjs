@@ -85,7 +85,8 @@ export default defineConfig(
         },
       ],
       '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true }],
-      '@typescript-eslint/consistent-type-definitions': ['warn', 'type'],
+      // Allow interfaces for extending object contracts alongside type aliases.
+      '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/consistent-type-imports': ['warn', { prefer: 'type-imports' }],
 
       eqeqeq: 'warn',
@@ -291,7 +292,6 @@ export default defineConfig(
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',
-      '@typescript-eslint/consistent-type-definitions': 'off',
     },
   },
 

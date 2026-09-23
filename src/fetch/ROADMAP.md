@@ -790,8 +790,14 @@ and its subdomains as required by Fetch. Do not move this step into Request
 construction. The sibling DNS HTTPS-record upgrade condition still depends on
 DNS/transport support; the HSTS method does not stand in for that condition.
 
-`about:`, `blob:`, and `file:` branches remain explicit until their owning URL
-store, File API, and host filesystem decisions exist. `file:` behavior is an
+The Blob URL preflight now supplies URL parsing, captured entry retention,
+and `FetchUserAgent.obtainBlobObject()` for authorized acquisition. In 8C,
+consume `request.currentURL.blobURLEntry` instead of resolving the URL again;
+revocation must not invalidate an entry already captured by Request parsing.
+Select the reserved/client environment or the specified top-level exemption
+at scheme fetch, then construct the response, headers, and range body.
+
+`about:` and `file:` branches remain explicit until their dependencies exist. `file:` behavior is an
 embedder policy, not permission to expose arbitrary Node filesystem access.
 
 **Exit proof:** an injected test host can perform a `data:` fetch and exercise
@@ -996,7 +1002,7 @@ does not complete every Fetch branch.
 - Store, policy, and timing integrations close under their linked owners in
   the dependency ledger. Fetch-owned CORP remains in the HTTP slice; Metadata
   and trustworthiness are required for the corresponding outgoing headers.
-- `blob:` URL fetching waits for the [File-owned store and lifetime integration](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred);
+- `blob:` URL fetching waits for the [File-owned store and lifetime integration](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration);
   existing Blob/File bytes are already available. `file:` fetching needs an
   explicit embedder policy.
 - WebSockets, WebTransport, and unsupported transport protocols such as HTTP/3

@@ -81,7 +81,7 @@ They belong with their consuming subsystem rather than in one miscellaneous
 | Owner | Supporting Web IDL surface | Timing |
 | --- | --- | --- |
 | `text/hyperlink.ts` | `HyperlinkElementUtils` and `HTMLHyperlinkElementUtils`, shared by `a` and `area` | Add with the first complete anchor implementation |
-| `embedded/media/` | `HTMLMediaElement`, `MediaError`, `TimeRanges`, audio/video/text track objects and lists, `TrackEvent`, media enums, and the `MediaProvider` union | Later media subsystem; not a lifecycle prerequisite |
+| `embedded/media.ts` with [`media/`](../../media/ROADMAP.md) support types | HTMLMediaElement stays with elements; MediaError, TimeRanges, tracks/lists, and media state belong to the shared media area | Deferred to the media roadmap; Blob URL integration proceeds independently with Blob support |
 | `forms/` | `ValidityState`, `SelectionMode`, `SubmitEvent`, `FormDataEvent`, and their dictionaries; consume rather than redefine the external `FormData` API | Add with form association, validation, and submission |
 | `scripting/slot.ts` | `AssignedNodesOptions` | Add as a declaration beside slot behavior; it does not require a runtime class |
 | `canvas/` | Canvas and offscreen rendering contexts, state/path/style mixins, gradients, patterns, text metrics, `Path2D`, callbacks, dictionaries, and enums | Separate later graphics slice; do not bury it in `canvas.ts` |

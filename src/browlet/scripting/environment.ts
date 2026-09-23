@@ -4,6 +4,7 @@ import type { UserAgent } from '../user-agent';
 import {
   FetchGroup, getEnvironmentDefaultUserAgent, type FetchEnvironment, type IntegrityViolationReportBody,
 } from '../../fetch/index';
+import type { StorageEnvironment } from '../../storage/index';
 import type { EventLoop } from './event-loop';
 import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
@@ -235,7 +236,7 @@ export class WindowEnvironment extends Environment {
 
 /** State that can identify an environment before a realm or global exists. */
 // HTML's environment, including reserved environments and reserved Fetch clients.
-export type EnvironmentRecord = {
+export interface EnvironmentRecord extends StorageEnvironment {
   /** Identity transferred to the full environment when a reservation is consumed. */
   id: string;
   /** Browser owner shared by navigation and networking. */
@@ -254,7 +255,7 @@ export type EnvironmentRecord = {
   isSecureContext: boolean;
   /** Whether HTML has completed setup for script execution. */
   executionReady: boolean;
-};
+}
 
 /** Create the state needed before allocating a realm. */
 export function createEnvironmentRecord(initialization: EnvironmentInit): EnvironmentRecord {
@@ -266,6 +267,6 @@ export function createEnvironmentRecord(initialization: EnvironmentInit): Enviro
   };
 }
 
-export type EnvironmentInit = Omit<EnvironmentRecord, 'id' | 'executionReady' | 'activeServiceWorker'> & {
+export interface EnvironmentInit extends Omit<EnvironmentRecord, 'id' | 'executionReady' | 'activeServiceWorker'> {
   activeServiceWorker?: object | null;
-};
+}

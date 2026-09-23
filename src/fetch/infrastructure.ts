@@ -3,8 +3,10 @@ import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { CookieStore } from '../http/index';
+import type { BlobImpl } from '../file/index';
 import type { RealmExecution } from '../js-engine/index';
-import type { Host, Origin, URLRecord } from '../url/index';
+import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
@@ -15,7 +17,7 @@ export function isOffline(environment: FetchEnvironment): boolean {
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
-export type FetchEnvironment = FetchEnvironmentRecord & {
+export interface FetchEnvironment extends FetchEnvironmentRecord {
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
   /** Client origin used by Fetch's origin and policy checks. */
@@ -34,7 +36,7 @@ export type FetchEnvironment = FetchEnvironmentRecord & {
   policyContainer: FetchPolicyContainer;
   /** Submit a policy report for this client, retaining each field's JSON value type. */
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
-};
+}
 
 /** An opaque reference to the HTML traversable selected for user prompts. */
 export type FetchPromptTarget = {
@@ -75,16 +77,16 @@ export type ReferrerPolicy = '' | 'no-referrer' | 'no-referrer-when-downgrade' |
   'origin' | 'strict-origin' | 'origin-when-cross-origin' | 'strict-origin-when-cross-origin' | 'unsafe-url';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
-export type FetchEnvironmentRecord = {
+export interface FetchEnvironmentRecord extends StorageEnvironment {
   /** Shared user agent owning this environment's networking state. */
   userAgent: FetchUserAgent;
   /** Top-level origin used for network partitioning, or null when it must be derived. */
   topLevelOrigin: Origin | null;
   /** Top-level creation URL used to derive an unavailable top-level origin, or null. */
   topLevelCreationURL: URLRecord | null;
-};
+}
 
-export type FetchUserAgent = {
+export interface FetchUserAgent extends StorageUserAgent {
   /** Default identification header value before an environment-specific override. */
   defaultUserAgentValue: string;
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
@@ -110,7 +112,14 @@ export type FetchUserAgent = {
   isURLPotentiallyTrustworthy(url: URLRecord): boolean;
   /** Create HTML's default policy container for a request without a client. */
   createPolicyContainer(): FetchPolicyContainer;
-};
+  /** Browser URL parsing, including capture of the current Blob URL registration. */
+  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLParseResult;
+  /** Acquire an already-captured File API entry with the caller-selected access context. */
+  obtainBlobObject(
+    entry: BlobURLEntry | null,
+    environment: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+  ): BlobImpl | null;
+}
 
 /** Fetch §2, serialize an integer as its shortest decimal representation. */
 export function serializeInteger(integer: number | bigint): string {

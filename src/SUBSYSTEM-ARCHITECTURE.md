@@ -754,6 +754,50 @@ opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
 partitions; they outlive an individual environment. Connection establishment
 and cache response storage remain deferred under Fetch's HTTP roadmap.
 
+Storage's `StorageKey` similarly consumes a narrow structural view of the actual
+`Environment` or `EnvironmentRecord`. Full settings supply their security origin;
+earlier records supply their creation URL. Storage acquisition also consults
+`UserAgent.storageEnabled`; non-storage acquisition preserves opaque identities
+and ignores that preference. Key comparison belongs to Storage, separate from
+Fetch's network partition keys. These are direct shared algorithms, without a
+Binding capability, execution dependency, or browser-to-Storage adapter object.
+`storage/environment.ts` defines the `StorageEnvironment` and `StorageUserAgent`
+interfaces; the latter supplies the storage preference and UUID generation.
+HTML's `EnvironmentRecord` extends `StorageEnvironment`, so both early records
+and the full `Environment` implementing that record satisfy the same contract.
+
+Browlet's File integration owns `BlobURLStore` and `BlobURLEntry` in
+`browlet/integration/file/blob-url.ts`. The store retains each registered Blob
+and its actual creating environment. The creator contract extends
+`StorageEnvironment` with a required origin. Its `BlobURLEntry` accepts the
+broader `StorageEnvironment` for object
+acquisition and delegates partition comparison to Storage, including when only
+an earlier environment record is available. Lookup returns the entry without exposing its
+private object; origin inspection and authorized acquisition remain distinct.
+Each UserAgent constructs its store with itself and supplies `generateUUID()`;
+the store has no Node crypto import and is not module-global. Document unloading
+removes entries by their creating environment's identity. `add()` returns the
+serialized key; exact removal accepts that string directly or serializes an
+existing URL record once. The browser placement permits the future concrete
+`BlobImpl | MediaSourceImpl` union without making portable File depend on
+Browlet's EventTarget or media objects. Portable Blob/File remain in `file/`;
+MediaSource belongs to `browlet/media/` and remains deferred under its
+[roadmap](browlet/media/ROADMAP.md). The store retains `BlobImpl` for now.
+File's partial URL declaration lives in `browlet/integration/file/object-url.ts`;
+its provisional Blob-only argument is converted by Web IDL, and its static
+methods use the method realm's actual environment for registration and revocation.
+Worker teardown is deferred until its lifecycle exists.
+
+`UserAgent.parseURL()` supplies the store to URL's narrow `BlobURLResolver`
+contract. URL retains an origin-facing entry view without importing File or
+Browlet. Browser and Fetch consumers use that parser; URL's author API uses the
+basic parser, as specified. `FetchUserAgent.obtainBlobObject()` bridges the
+retained entry back to Browlet's concrete entry and its Storage authorization.
+It never resolves the URL again: revocation removes future lookups, while an
+already-parsed Request retains the original entry. Fetch's early environment
+contract extends `StorageEnvironment` so reserved clients can use the same
+authorization path without a second environment object.
+
 Secure Contexts' origin/URL trustworthiness algorithms are methods on Browlet's
 `UserAgent`, alongside its trust exceptions. URL owns the origin records,
 including a trust flag on opaque origins; file origins set it without changing

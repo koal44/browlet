@@ -35,6 +35,12 @@ Domain-local behavior still remains with its owning subsystem.
 - `file/` connects File API algorithms to HTML scheduling and structured data,
   supplies platform line ending policy, and owns `FileReader`, whose concrete
   implementation depends on Browlet's EventTarget, tasks, timing, and events.
+  It also owns the UserAgent's Blob URL store and entries, allowing them to
+  retain browser-owned MediaSource implementations alongside portable Blobs
+  when the [media foundation](../media/ROADMAP.md) is implemented. Its partial
+  URL declaration exposes Blob registration and revocation using the static
+  method's environment. UserAgent supplies parsing and captured-entry
+  acquisition to URL and Fetch without exposing store mutation to Fetch.
 - `execution.ts` composes engine facilities, DOM AbortController construction,
   HTML task delivery, and structured cloning into `RealmExecution`. The binding's
   `getExecution()` and `environment.exec` retain that same execution object;

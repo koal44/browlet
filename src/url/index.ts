@@ -2,7 +2,7 @@ export { URLSearchParamsImpl, urlIDLDefinitions } from './api';
 export { originIDL } from './origin-api';
 export {
   copyURL, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,
-  type URLPath, type URLRecord,
+  type BlobURLEntry, type BlobURLResolver, type URLParseResult, type URLPath, type URLRecord,
 } from './url';
 export {
   areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, createOpaqueOrigin, isOrigin,

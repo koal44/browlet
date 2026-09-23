@@ -5,7 +5,7 @@ import { URLImpl } from './api';
 import {
   areSameOrigin, areSameSite, createOpaqueOrigin, type Origin,
 } from './origin';
-import { obtainURLOrigin, parseURL } from './url';
+import { parseBasicURL, obtainURLOrigin } from './url';
 import { TypeError } from '../infra/exceptions';
 
 /*
@@ -35,7 +35,7 @@ export class OriginImpl {
     } else if (URLImpl.is(value)) {
       origin = value.getOrigin();
     } else if (typeof value === 'string') {
-      const url = parseURL(value).url;
+      const url = parseBasicURL(value).url;
       if (url !== null) origin = obtainURLOrigin(url);
     }
     if (origin === undefined) throw new TypeError('Value has no origin');

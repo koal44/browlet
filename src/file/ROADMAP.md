@@ -2,7 +2,8 @@
 
 This directory will own Browlet's host-neutral implementation of the
 [File API Editor's Draft](https://w3c.github.io/FileAPI/): immutable Blob data,
-`Blob`, `File`, `FileList`, file-reading algorithms, and the blob-URL store.
+`Blob`, `File`, `FileList`, and file-reading algorithms. The browser-owned
+blob-URL store and URL declaration contribution live in Browlet's File integration.
 Browlet will supply realms, events, task destinations, environment settings,
 user-agent lifetime, storage partitions, and browser-selected file sources.
 Fetch and XHR will consume the resulting semantic objects; neither should
@@ -14,8 +15,11 @@ backing, projected stream and promise reads, realm-correct result objects,
 cancellation and failure routing, and HTML Serializable integration. FileList
 preserves owner-controlled mutation, indexed access, and graph identity.
 FileReader is implemented through §6.4 except for shared global teardown.
-Slice 4, the Blob URL work in §§8.2–8.4, remains deferred until its storage-key
-and Fetch dependencies exist; §6.5 `FileReaderSync` waits for real workers.
+Slice 4, the Blob URL work in §§8.2–8.4, is implemented for Blobs through the
+A–C preflight plan below: storage keys, the browser-owned store, URL parsing,
+Document cleanup, and the public URL methods. Actual Fetch dispatch remains
+in Fetch 8C; MediaSource and worker lifecycle remain deferred. §6.5
+`FileReaderSync` waits for real workers.
 
 Blob's `text()`, `bytes()`, and `arrayBuffer()` share a runtime-owned Promise
 read-result path, with focused coverage for HTML delivery and binding projection.
@@ -93,6 +97,27 @@ Realm, or an individual Window. Entries strongly retain their object and the
 creating environment. URL parsing and Fetch receive narrow lookup operations;
 they do not own the store.
 
+The concrete store and entries live in `src/browlet/integration/file/blob-url.ts`,
+alongside FileReader. This placement allows the real browser-owned MediaSource
+to join the retained object union without making portable File import Browlet.
+The [media roadmap](../browlet/media/ROADMAP.md) owns that implementation and its
+dependency gates. Store tests live in `test/browlet/blob-url.test.ts`.
+
+`BlobURLStore` owns generation, registration, exact removal, and fragment-free
+lookup, plus creating-environment cleanup. `BlobURLEntry` owns partition checks
+and object acquisition; its retained object is private so consumers go through
+that check. Both environments supply
+Storage-owned non-storage keys, including opaque-origin identity. Each UserAgent
+constructs its store with itself, satisfying `StorageUserAgent` and supplying
+`generateUUID()`. `add()` returns the serialized key; `remove()` accepts that
+string directly or an existing URL record. Author revocation must still parse
+its input and authorize access before removing an entry.
+
+The creating environment must provide its actual origin. Acquisition and
+partition checks accept the broader `StorageEnvironment`, including an earlier
+record whose origin comes from its creation URL. Fetch and HTML select the
+explicit top-level exemptions before calling object acquisition.
+
 ## Planned ownership
 
 Create modules only as their behavior arrives. The likely final division is:
@@ -103,7 +128,7 @@ Create modules only as their behavior arrives. The likely final division is:
 | `blob.ts` | Blob construction, part processing, type normalization, attributes, slicing, streams, promises, and declaration | §§2–3 |
 | `file.ts` | File construction, name, modification time, file type, host-file source integration, and declaration | §4 |
 | `file-list.ts` | Owner-mutable ordered File collection, indexed getter, serialization state, and declaration | §5 |
-| `blob-url-store.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
+| `browlet/integration/file/blob-url.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
 | `browlet/integration/file/file-reader.ts` | Browlet's concrete asynchronous reader state, methods, cancellation, stream consumption, declaration, and event sequencing | §§6.1–6.4 and 7 |
 | `package-data.ts` | Data URL, text, ArrayBuffer, and binary-string materialization | §6.3 |
 | `integration.ts` | Native-line-ending policy plus the File-reading scheduler capability. Keep future UUID and host-I/O effects with their actual owner rather than rebuilding a service bag | Cross-cutting |
@@ -129,16 +154,16 @@ and deserialization steps without duplicating Blob state.
 | XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Implemented in `src/browlet/dom/events/progress-event.ts`, with XHR contributing its declaration | Reuse that event and helper when implementing FileReader; File API must not create a private lookalike event |
 | HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
 | MIME parsing and file-type policy | §§3.2, 4, and 6.3 | MIME parsing/sniffing is implemented; host-selected file type discovery is not | Constructed type normalization is entirely File API-owned. A future file-selection host may provide a validated MIME type under the file-type guidelines; never sniff an encoding statistically |
-| URL records, parsing, origins, and serialization | §8 | Implemented in `src/url`; blob-entry lookup is explicitly provisional and always null | Add an explicit resolver seam so a host parse can attach the User Agent's entry without making URL depend on File. Remove the provisional private entry shape rather than adding a second parser |
+| URL records, parsing, origins, and serialization | §8 | Implemented in `src/url`; B supplies store resolution, but parsing still leaves the entry null | In C, add an explicit resolver seam so a host parse can attach the User Agent's entry without making URL depend on File. Remove the provisional private entry shape rather than adding a second parser |
 | Environment settings and origins | §§8.2–8.4 | Window settings and origins exist; worker settings are incomplete | Blob URL entries retain the creating settings object through a Browlet-owned store. URL generation uses its origin, including implementation-defined serialization for opaque origins |
-| Storage keys for non-storage purposes | §8.3.2 | Roadmapped but not implemented | Deliver the bounded Storage Standard key/partition comparison before author-facing blob URL fetch or revocation. Same-origin is not an acceptable partition substitute |
-| Fetch `blob:` scheme handling | §8.3 | Fetch is roadmapped but not implemented | File API owns store resolution and authorization; Fetch owns the response, range/header behavior, network errors, and body stream |
-| Document and worker cleanup | §8.3.3 | Full unload/destroy cleanup and worker lifecycle are incomplete | Add one environment-destruction hook that removes matching store entries. Never rely on wrapper garbage collection to revoke URLs |
-| MediaSource | §8 and the partial `URL` interface | Not implemented | Keep MediaSource-capable store typing extensible, but do not invent MediaSource or publish a knowingly false Blob-only signature for the normative union. Reassess declaration assembly when exposing `createObjectURL()` |
+| Storage keys for non-storage purposes | §8.3.2 | Slice A implements acquisition and comparison in `src/storage` | Consume Storage-owned keys, preserving opaque-origin identity and the distinction from storage-disabled policy. Do not substitute a local origin check |
+| Fetch `blob:` scheme handling | §8.3 | Request/Response/body primitives exist; scheme dispatch remains in Fetch 8C | File API owns store resolution and authorization; Fetch owns the response, range/header behavior, network errors, and body stream |
+| Document and worker cleanup | §8.3.3 | Document unloading cleanup calls the real `UserAgent.blobURLStore.removeForEnvironment()`, with destruction coverage; worker lifecycle is incomplete | Remove registrations by creating-environment identity. Never rely on platform-object garbage collection to revoke URLs; connect worker cleanup when its lifecycle exists |
+| MediaSource | §8 and the partial `URL` interface | Deferred to the [media roadmap](../browlet/media/ROADMAP.md); not a Blob URL prerequisite | Entries remain typed as `BlobImpl`; C exposes a provisional Blob-only `createObjectURL()` declaration. Extend both with the real MediaSource implementation when available |
 | Worker globals | §§3–6 and 8 | Worker execution/lifecycle is roadmapped but incomplete | Preserve exposure metadata. Blob/File core remains usable in Window; FileReaderSync and executable worker installation wait for real worker globals |
 | Native file selection and filesystem access | §§4, 7, and 9 | Constructed Files and the opaque host-source factory exist; HTML selection, drag-and-drop, permission UI, and a host-file backend do not | The future selecting host supplies sanitized metadata and an existing byte source; never read arbitrary paths or expose a path-based constructor |
 | Wall-clock time | §4.1 | Uses the directly available ECMAScript `Date.now()` operation | Capture a constructed File's default once; read again only for a host file whose modification time remains unknown |
-| UUID generation | §8.2 | The runtime can generate UUIDs, but `src/file` has no narrow composition seam for it | Add the operation with the blob-URL store; do not import Node crypto into the project |
+| UUID generation | §8.2 | The store retains its `StorageUserAgent`; Browlet supplies `generateUUID()` and tests use deterministic UUIDs | Each UserAgent owns its store; File calls the supplied owner without importing Node crypto |
 
 ## Delivery order
 
@@ -255,35 +280,59 @@ cloning, and repeated File identity through FileList sub-serialization. At this
 checkpoint XHR FormData and Fetch Body can consume Blob and File without
 FileReader.
 
-### Slice 4 — Blob URL store and URL/Fetch integration (deferred)
+### Slice 4 — Blob URL store and URL/Fetch integration
 
 **Scope:** File API §§8.2–8.4, after the
 [bounded storage-key prerequisite](../storage/ROADMAP.md#first-slice--storage-keys).
 
-- Add a Blob URL store owned by each Browlet User Agent, with strong entry
-  retention and creating-environment identity.
-- Implement generate, add, remove, resolve, obtain-object, and same-partition
-  checks over URL records and storage keys.
-- Add the host resolver used by URL parsing and origin calculation; remove the
-  current always-null provisional behavior.
-- Add the File-owned contribution for `URL.createObjectURL()` and
-  `URL.revokeObjectURL()` only when the complete declared union can be
-  assembled honestly.
-- Add Document environment-destruction cleanup and reserve the equivalent
-  worker hook.
-- Expose store resolution to Fetch's `blob:` scheme implementation without
-  giving Fetch mutation authority.
-- Prove that revocation prevents later acquisition while reads/fetches that
-  already retained the object can complete.
+The Fetch preflight detour uses three subdivisions:
 
-MediaSource remains a named declaration/exposure dependency. The Blob store
-algorithms and Fetch-facing Blob branch can be complete before MediaSource,
-but the author-facing partial URL interface must not lie about its union.
+- **A — Storage keys (implemented).** Storage §4.2 acquisition and equality,
+  environment/settings origin selection, opaque identities, and the
+  user-agent storage preference. Owned by the linked Storage roadmap.
+- **B — Blob URL store (Blob branch implemented).** File API §§8.2–8.3.2 generation, strong retention,
+  entry lookup/removal, object acquisition, and storage-key authorization.
+  The UserAgent owns the store and supplies UUID generation; §8.3.3 Document
+  cleanup is also connected through the existing unloading hook.
+  Focused tests cover fragments, opaque origins, cross-environment access,
+  denied access, removal, the explicit top-level acquisition exemptions, and
+  reads retaining an already-acquired Blob. Generation uses `blob:null/UUID`
+  for opaque origins. Lookup excludes fragments; exact removal includes them.
+- **C — Browser and consumer integration (Blob branch implemented).**
+  `UserAgent.parseURL()` supplies URL's resolver with the browser-owned store.
+  Request and redirect parsing retain entries and their origins; author-facing
+  URL construction, parsing, and href assignment use the basic parser, as URL
+  specifies. File's partial URL declaration supplies `createObjectURL()` and
+  partition-checked `revokeObjectURL()` using the static method's environment.
+  Fetch's UserAgent contract supplies authorized acquisition from the captured
+  entry, without resolving again after revocation. Its actual `blob:` response,
+  range handling, and dispatch remain in Fetch 8C.
+
+A–C's Blob branch, UserAgent composition, and Document cleanup are implemented.
+Worker lifecycle remains deferred to Workers. Document cleanup uses the existing
+unloading hook, without a second resource-lifetime registry.
+
+`test/browlet/object-url.test.ts` covers projected argument conversion, static
+method ownership, cross-global authorization, opaque origins, disabled-storage
+policy, redirect parsing, Request cloning across revocation, and destruction.
+A frozen base URL also retains its captured entry after revocation. The test
+for inheriting that base into a new browsing context is an approved TODO:
+HTML's creator-context and Document-state inheritance helpers still throw.
+The [browsing roadmap](../browlet/browsing/ROADMAP.md#missing-structural-concepts)
+owns that dependency; the existing URL record is preserved at the inheritance
+step instead of being serialized and reparsed.
+
+MediaSource support is explicitly deferred. Entries, registration, and
+acquisition retain their concrete `BlobImpl` typing. The author-facing
+`createObjectURL()` declaration accepts Blob provisionally, with the full
+specification IDL and the missing MediaSource branch recorded nearby. Extend
+the entry and declaration together when the [media roadmap](../browlet/media/ROADMAP.md)
+provides the real implementation. No media work is required to finish C.
 
 **Exit proof:** opaque/tuple-origin generation, lookup, fragments, revocation,
 cross-global same-partition use, cross-partition denial, environment cleanup,
 strong retention, and already-started reads pass deterministic multi-global
-tests. Fetch can resolve a Blob entry without using Node object URLs.
+tests. Fetch can acquire a captured Blob entry without using Node object URLs.
 
 ### Slice 5 — FileReader foundation (FileReader slice 1; implemented)
 
@@ -376,7 +425,8 @@ the asynchronous Streams API.
 - Do not implement a FileReader-specific progress event; consume XHR §5.
 - Do not expose `FileReaderSync` before workers can satisfy its execution
   model.
-- Do not silently omit MediaSource from a public normative union.
+- Keep the provisional Blob-only `createObjectURL()` limitation explicit;
+  do not substitute `object` or a fake MediaSource for the missing union member.
 - Do not let serialization resolve, decode, normalize, or reread a File; it
   preserves the value's captured byte and snapshot state.
 

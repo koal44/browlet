@@ -6,7 +6,7 @@ import type { RealmExecution } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
-  areSameOrigin, areSchemelesslySameSite, copyURL, obtainURLOrigin, parseURL, serializeURL,
+  areSameOrigin, areSchemelesslySameSite, copyURL, obtainURLOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../url/index';
 import {
@@ -22,7 +22,7 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
-  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment,
+  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment, type FetchUserAgent,
 } from './infrastructure';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
@@ -175,11 +175,12 @@ export class FetchResponse {
    * https://fetch.spec.whatwg.org/#concept-response-location-url
    * Undefined means absent; null means extraction or URL parsing failed.
    */
-  getLocationURL(requestFragment: string | null): URLRecord | undefined | null {
+  // SPEC_MISMATCH: location URL(response, requestFragment) -> URL, null, or failure
+  getLocationURL(requestFragment: string | null, userAgent: FetchUserAgent): URLRecord | undefined | null {
     if (!isRedirectStatus(this.status)) return undefined;
     const values = this.headerList.extractValues('Location', (value) => [value], false);
     if (values === undefined || values === null) return values;
-    const url = parseURL(values[0]!, this.url).url;
+    const url = userAgent.parseURL(values[0]!, this.url).url;
     if (url !== null && url.fragment === null) url.fragment = requestFragment;
     return url;
   }
@@ -337,14 +338,16 @@ export class ResponseImpl {
 
   // https://fetch.spec.whatwg.org/#dom-response-redirect
   // SPEC_MISMATCH: Response.redirect(url, status) -> Response
-  static redirect(url: string, status: number, baseURL: URLRecord, exec: RealmExecution): ResponseImpl {
-    const parsedURL = parseURL(url, baseURL).url;
+  static redirect(
+    url: string, status: number, environment: FetchEnvironment & { exec: RealmExecution; },
+  ): ResponseImpl {
+    const parsedURL = environment.userAgent.parseURL(url, environment.apiBaseURL).url;
     if (parsedURL === null) throw new TypeError('Invalid redirect URL');
     if (!isRedirectStatus(status)) throw new RangeError('Invalid redirect status');
     const response = new FetchResponse();
     response.status = status;
     response.headerList.append('Location', serializeURL(parsedURL));
-    return new ResponseImpl(response, 'immutable', exec);
+    return new ResponseImpl(response, 'immutable', environment.exec);
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-json
@@ -462,10 +465,8 @@ export const responseIDL = defineInterface({
       ],
       {
         ...xattr('NewObject'),
-        ...invokeWith(
-          atArg(2, (ctx): URLRecord => getFetchEnvironment(ctx, responseIDL).apiBaseURL),
-          atArg(3, (ctx) => ctx.getExecution()),
-        ),
+        ...invokeWith(atArg(2, (ctx): FetchEnvironment & { exec: RealmExecution; } =>
+          getFetchEnvironment(ctx, responseIDL))),
       },
     ),
     staticOp('json', reference('Response'),

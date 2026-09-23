@@ -11,6 +11,7 @@ export function createClientSettings(url = 'https://example.test/'): FetchEnviro
   const topLevelCreationURL = parseURL(url).url!;
   return {
     apiBaseURL: topLevelCreationURL,
+    creationURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),
     hasCrossSiteAncestor: false,
     getReferrerSource: () => topLevelCreationURL,
@@ -35,6 +36,11 @@ export function createFetchUserAgent(): FetchUserAgent {
     httpCachePartitions: new HTTPCachePartitions(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
+    storageEnabled: true,
+    generateUUID: () => crypto.randomUUID(),
+    parseURL,
+    // Blob URL tests use Browlet's actual store and acquisition boundary.
+    obtainBlobObject: () => null,
     hstsStore: { requiresHTTPS: () => false },
     // Tests exercising browser trust policy use Browlet's real UserAgent instead.
     isURLPotentiallyTrustworthy: (url) => url.scheme === 'https' || url.scheme === 'wss',

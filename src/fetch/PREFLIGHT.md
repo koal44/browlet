@@ -97,7 +97,7 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 | 8 | [SRI verification](ROADMAP.md#subresource-integrity) and [Integrity Policy](../browlet/browsing/policy/ROADMAP.md#integrity-policy) | Response bytes and request policy |
 | 9 | [Reporting](../browlet/reporting/ROADMAP.md): configuration, queues, user controls, and observers | COEP and Integrity Policy report submission; network delivery remains a Fetch consumer |
 | 10 | [HSTS](../browlet/browsing/policy/ROADMAP.md#hsts), RFC 6797 | Scheme upgrading and secure transport |
-| 11 | [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then [File's Blob URL slice](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred) | URL resolution, Fetch, and environment teardown |
+| 11 | [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then [File's Blob URL slice](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration) | URL resolution, Fetch, and environment teardown |
 
 Existing foundations are indexed in Fetch's
 [dependency ledger](ROADMAP.md#dependency-ledger). In particular, the
@@ -403,8 +403,15 @@ HSTS A–B implement header parsing, UserAgent-owned remembered hosts, inherited
 host matching, and `FetchRequest.upgradeForHSTS()`. The approved parser rejects
 the complete header when any directive repeats, including unknown extensions.
 Main fetch must invoke upgrading in 8A; verified response learning and mandatory
-TLS failure handling belong to Slice 9. Continue Storage keys/Blob URLs
-and the independent policy work below before returning
+TLS failure handling belong to Slice 9. Storage keys/Blob URLs A–C are
+implemented for Blobs: keys, store authorization, UserAgent ownership,
+Document cleanup, browser URL parsing, and public object URL methods.
+Fetch can acquire captured entries after revocation; response/range handling
+and scheme dispatch remain in 8C. The store lives in Browlet's File integration
+and retains `BlobImpl` entries behind a provisional Blob-only declaration.
+MediaSource support is deferred to the [media roadmap](../browlet/media/ROADMAP.md),
+and worker cleanup waits for its lifecycle. Neither blocks the Blob URL preflight.
+Continue with the independent policy work below before returning
 to Fetch 8A. Their consumer integration gates remain with Fetch and HTML.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
@@ -412,10 +419,8 @@ do not construct parallel Request/Response models to avoid those dependencies.
 
 Finish the remaining independent preflight work in this order:
 
-1. [Storage keys](../storage/ROADMAP.md#first-slice--storage-keys), then the
-   [Blob URL store and integration](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred).
-2. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
-3. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
+1. [Mixed Content and Upgrade Insecure Requests](../browlet/browsing/policy/ROADMAP.md#mixed-content-and-upgrade-insecure-requests).
+2. [CSP](../browlet/browsing/policy/csp/ROADMAP.md), last, including delivery of
    its inputs to the preceding policy algorithms.
 
 [Reporting](../browlet/reporting/ROADMAP.md)'s network delivery completes when

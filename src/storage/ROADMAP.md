@@ -1,13 +1,13 @@
 # Storage substrate roadmap
 
-This project will own the shared algorithms and records of the
+This project owns the shared algorithms and records of the
 [Storage Standard](https://storage.spec.whatwg.org/). File API's Blob URLs are
 the first planned consumer outside HTML Web Storage, so the substrate has its
 own project. Browlet supplies environment inputs and owns the user-agent and
 traversable storage instances.
 
-**Status:** planned. The first slice is storage keys, not a complete storage
-backend or a new author-facing API.
+**Status:** storage-key slice A is implemented. Storage backends and the
+author-facing StorageManager API remain later work.
 
 ## Sources and boundaries
 
@@ -16,7 +16,7 @@ Local source: `whatwg-storage/storage.bs`, relative to the
 Read §4's model before implementing §4.2 keys. Later substrate work follows
 §§4–7; the §8 public API needs explicit browser integration.
 
-- [File API](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration-deferred)
+- [File API](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration)
   owns Blob URL entries, authorization, revocation, and cleanup.
 - [HTML Web Storage](../browlet/storage/ROADMAP.md) owns `Storage`,
   `StorageEvent`, per-Document holders, and local/session API behavior.
@@ -26,21 +26,35 @@ Read §4's model before implementing §4.2 keys. Later substrate work follows
 
 ## First slice — storage keys
 
-Implement the storage-key record and obtain/compare algorithms in `keys.ts`.
-Distinguish obtaining a key for storage from obtaining one for non-storage
-purposes: the former can fail for opaque origins or disabled storage; Blob
-URL checks use the latter.
+This is **A** of the combined Storage keys/Blob URLs detour. File's roadmap
+owns [B–C](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration).
 
-Browlet selects the required environment-settings or creation-URL input;
-the shared project consumes existing URL/origin records. The current standard
-defines an origin tuple and explicitly anticipates partitioning changes.
-Keep one Storage-owned comparison operation, rather than allowing each
-consumer to substitute its own origin check or invent extra partition fields.
+`StorageKey` in `keys.ts` owns `obtain()`, `obtainForNonStoragePurposes()`, and
+`equals()`. The one-member tuple is represented by its named `origin` field.
+Storage acquisition returns null for opaque origins or disabled storage;
+non-storage acquisition preserves opaque-origin identity and remains available
+when storage is disabled. Blob URL checks use the latter.
+
+The narrow `StorageEnvironment` interface in `environment.ts` is extended by
+Browlet's `EnvironmentRecord`. Full `Environment` objects implement that record;
+no adapter object is constructed. Settings supply their security origin;
+earlier records supply their creation URL.
+Its `StorageUserAgent` contract supplies `storageEnabled`, read at acquisition
+time, and `generateUUID()`, used by File's user-agent-owned Blob URL store.
+
+The current standard defines an origin-only key and explicitly anticipates
+partitioning changes. Keep equality in Storage even while it delegates to
+origin equality; consumers must not replace it with their own origin check.
+Top-level-site, ancestor-chain, and nonce partitioning need a separately
+reviewed policy and input model when adopted. The current key does not claim
+to reproduce those additional browser privacy partitions.
 
 **Exit proof:** tuple and opaque origins, equal and unequal keys, settings
 versus creation-URL selection, and the two acquisition operations have focused
-tests. The File-owned tests then exercise those keys at the Blob URL boundary.
-Implementing keys alone does not complete Blob URL lifetime or Fetch support.
+tests, including real Window settings and pre-realm environment records.
+The File-owned tests in B–C exercise those keys at the Blob URL boundary.
+The Blob preflight is complete; response construction and dispatch still belong
+to Fetch 8C.
 
 ## Later substrate slices
 

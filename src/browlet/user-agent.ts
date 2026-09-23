@@ -5,6 +5,7 @@ import { createPolicyContainer, type PolicyContainer } from './browsing/policy/c
 import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { hostPromises, requestNodeEventLoopTurn } from './integration/scripting';
+import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
 import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
@@ -12,7 +13,12 @@ import {
   ConnectionPool, HTTPCachePartitions, fetch, FetchRequest, isOkStatus, type FetchUserAgent,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
-import { areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, type URLRecord } from '../url/index';
+import type { BlobImpl } from '../file/index';
+import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import {
+  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
+  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord,
+} from '../url/index';
 import { InternalError } from '../infra/internal-error';
 import type { PromiseValue } from '../infra/promises';
 
@@ -21,7 +27,7 @@ import type { PromiseValue } from '../infra/promises';
  * traversables normally presented as browser windows or tabs. Browlet is one
  * such host, but these collections outlive any individual realm or Document.
  */
-export class UserAgent implements FetchUserAgent {
+export class UserAgent implements FetchUserAgent, StorageUserAgent {
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   eventLoopOptions: EventLoopOptions | null;
@@ -34,15 +40,12 @@ export class UserAgent implements FetchUserAgent {
   cookieStore = new CookieStore();
   /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
   hstsStore = new HSTSStore();
-  /** Browser-owned Blob URL storage used by environment teardown. */
-  // PROVISIONAL: the storage-keys/Blob-URLs detour will supply the real store.
-  blobURLStore = {
-    removeForEnvironment(_environment: Environment): void {
-      // No Blob URLs are registered until their store is implemented.
-    },
-  };
+  /** Blob URL registrations shared by this user agent's environments. */
+  blobURLStore = new BlobURLStore(this);
   /** Controls both sending and accepting cookies without clearing the store. */
   cookiesEnabled = true;
+  /** Allows storage APIs to obtain keys; Blob URL access checks remain available. */
+  storageEnabled = true;
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
   /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
@@ -81,6 +84,25 @@ export class UserAgent implements FetchUserAgent {
     }
 
     this.browsingContextGroupSet.delete(group);
+  }
+
+  /** Generate a fresh canonical UUID for browser-owned registrations. */
+  generateUUID(): string {
+    return crypto.randomUUID();
+  }
+
+  /** Parse a browser URL and retain its Blob registration before revocation can remove it. */
+  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
+    return parseURL(input, base, encoding, this.blobURLStore);
+  }
+
+  /** Acquire a captured Blob entry without resolving its URL again after revocation. */
+  obtainBlobObject(
+    entry: URLBlobURLEntry | null,
+    environment: StorageEnvironment | 'top-level-navigation' | 'top-level-self-fetch',
+  ): BlobImpl | null {
+    if (!(entry instanceof BlobURLEntry)) return null;
+    return entry.obtainObject(environment);
   }
 
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */

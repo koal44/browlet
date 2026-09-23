@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
-import { parseURL, serializeURL, type URLRecord } from '../../../../url/index';
+import { serializeURL, type URLRecord } from '../../../../url/index';
 import { attr, defineInterface, idlType, impl, xattr } from '../../../../web-idl/index';
 import { defineElementInterface } from '../../../dom/nodes/element';
 import { HTMLElementImpl } from '../html-element';
@@ -22,7 +22,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   get href(): string {
     const document = this.getNodeDocument()!;
     const href = this.getAttributeNS(null, 'href') ?? '';
-    const url = parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
+    const { userAgent } = document.environment;
+    const url = userAgent.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
     return url === null ? href : serializeURL(url);
   }
 
@@ -45,7 +46,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   setFrozenBaseURL(): void {
     const document = this.getNodeDocument()!;
     const fallback = document.getFallbackBaseURL();
-    const url = parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
+    const { userAgent } = document.environment;
+    const url = userAgent.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
     // TODO: apply CSP's "Is base allowed for Document?" check when CSP is implemented.
     this.frozenBaseURL = url === null || url.scheme === 'data' || url.scheme === 'javascript'
       ? fallback : url;

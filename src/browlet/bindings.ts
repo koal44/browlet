@@ -34,6 +34,7 @@ import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
 import { fetchCapabilities } from './integration/fetch';
 import { fileReaderIDL } from './integration/file/file-reader';
+import { objectURLIDL } from './integration/file/object-url';
 import { createExecution } from './integration/execution';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
@@ -296,6 +297,7 @@ const browletDefinitions = [
   ...encodingIDLDefinitions,
   ...fileIDLDefinitions,
   fileReaderIDL,
+  objectURLIDL,
   ...xhrIDLDefinitions,
   ...urlIDLDefinitions,
   ...fetchIDLDefinitions,

@@ -4,7 +4,7 @@ import {
   parseFormUrlEncodedString, serializeFormUrlEncoded, type FormTuple,
 } from './form-url-encoded';
 import {
-  basicURLParse, obtainURLOrigin, parseURL, serializeURL, serializeURLPath,
+  parseBasicURL, obtainURLOrigin, serializeURL, serializeURLPath,
   setURLPassword, setURLUsername, type URLRecord,
 } from './url';
 import {
@@ -75,7 +75,7 @@ export class URLImpl {
   }
 
   set href(value: string) {
-    const parsed = parseURL(value).url;
+    const parsed = parseBasicURL(value).url;
     if (parsed === null) throw new TypeError('Invalid URL');
     this.#initialize(parsed);
   }
@@ -89,7 +89,7 @@ export class URLImpl {
   }
 
   set protocol(value: string) {
-    basicURLParse(`${value}:`, {
+    parseBasicURL(`${value}:`, {
       stateOverride: 'scheme start',
       url: this.#url,
     });
@@ -121,7 +121,7 @@ export class URLImpl {
 
   set host(value: string) {
     if (hasOpaquePath(this.#url)) return;
-    basicURLParse(value, {
+    parseBasicURL(value, {
       stateOverride: 'host',
       url: this.#url,
     });
@@ -133,7 +133,7 @@ export class URLImpl {
 
   set hostname(value: string) {
     if (hasOpaquePath(this.#url)) return;
-    basicURLParse(value, {
+    parseBasicURL(value, {
       stateOverride: 'hostname',
       url: this.#url,
     });
@@ -146,7 +146,7 @@ export class URLImpl {
   set port(value: string) {
     if (cannotHaveUsernamePasswordPort(this.#url)) return;
     if (value === '') this.#url.port = null;
-    else basicURLParse(value, { stateOverride: 'port', url: this.#url });
+    else parseBasicURL(value, { stateOverride: 'port', url: this.#url });
   }
 
   get pathname(): string {
@@ -156,7 +156,7 @@ export class URLImpl {
   set pathname(value: string) {
     if (hasOpaquePath(this.#url)) return;
     this.#url.path = [];
-    basicURLParse(value, { stateOverride: 'path start', url: this.#url });
+    parseBasicURL(value, { stateOverride: 'path start', url: this.#url });
   }
 
   get search(): string {
@@ -173,7 +173,7 @@ export class URLImpl {
 
     const input = value.startsWith('?') ? value.slice(1) : value;
     this.#url.query = '';
-    basicURLParse(input, { stateOverride: 'query', url: this.#url });
+    parseBasicURL(input, { stateOverride: 'query', url: this.#url });
     this.#queryObject.replaceList(parseFormUrlEncodedString(input));
   }
 
@@ -194,7 +194,7 @@ export class URLImpl {
 
     const input = value.startsWith('#') ? value.slice(1) : value;
     this.#url.fragment = '';
-    basicURLParse(input, { stateOverride: 'fragment', url: this.#url });
+    parseBasicURL(input, { stateOverride: 'fragment', url: this.#url });
   }
 
   toJSON(): string {
@@ -507,10 +507,10 @@ export type URLSearchParamsInit =
 export function parseAPIURL(input: string, base?: string): URLRecord | null {
   let parsedBase: URLRecord | null = null;
   if (base !== undefined) {
-    parsedBase = parseURL(base).url;
+    parsedBase = parseBasicURL(base).url;
     if (parsedBase === null) return null;
   }
-  return parseURL(input, parsedBase).url;
+  return parseBasicURL(input, { base: parsedBase }).url;
 }
 
 function cannotHaveUsernamePasswordPort(url: URLRecord): boolean {

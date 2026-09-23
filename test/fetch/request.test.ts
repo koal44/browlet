@@ -21,7 +21,8 @@ describe('Fetch request cloning', () => {
     request.origin = obtainURLOrigin(request.url);
     request.policyContainer = client.policyContainer;
     request.reservedClient = {
-      userAgent: client.userAgent, topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
+      userAgent: client.userAgent, creationURL: request.url,
+      topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
     };
     request.referrer = parseURL('https://example.test/referrer').url!;
     request.headerList.list.push(['X-Test', 'first'], ['X-Test', 'second']);

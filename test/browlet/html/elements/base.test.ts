@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
-import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { getRelevantRealm } from '../../../../src/browlet/bindings';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import { parseURL } from '../../../../src/url/url';
 
@@ -194,9 +194,9 @@ describe('Frozen base URLs', () => {
 });
 
 function createDocument() {
-  const document = new DocumentImpl();
+  const browlet = new Browlet({ route: () => '' });
+  const document = getRelevantRealm(browlet.window).windowImplementation.getAssociatedDocument();
   document.url = parseURL('https://example.test/dir/page').url!;
-  const root = document.createElement('html');
-  document.appendChild(root);
+  const root = document.documentElement!;
   return { document, root };
 }

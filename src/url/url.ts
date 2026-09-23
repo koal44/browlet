@@ -39,13 +39,19 @@ export type URLRenderOptions = {
 /** Opaque paths are strings; hierarchical paths are segment lists. https://url.spec.whatwg.org/#url-path */
 export type URLPath = string | string[];
 
-type BlobURLEntry = {
+/** The part of a File API registration needed by URL's origin algorithm. */
+export type BlobURLEntry = {
   environment: {
     origin: Origin;
   };
 };
 
-type BasicURLParserOptions = {
+/** File API supplies resolution from the current user agent's Blob URL store. */
+export type BlobURLResolver = {
+  resolve(url: URLRecord): BlobURLEntry | null;
+};
+
+type ParseBasicURLOptions = {
   base?: URLRecord | null;
   encoding?: string;
   url?: URLRecord;
@@ -78,17 +84,23 @@ type URLParserState =
 /*
  * URL parser.
  *
- * Blob URL entry resolution belongs to the host's blob URL store. Until that
- * service exists, parsed blob URLs retain their record's initial null entry.
+ * Browser callers supply their user agent's Blob URL store. Standalone URL
+ * consumers have no store and use the basic parser's result.
  *
  * https://url.spec.whatwg.org/#concept-url-parser
  */
+// SPEC_MISMATCH: URL parser(input, base = null, encoding = UTF-8) -> URL or failure
 export function parseURL(
   input: string,
   base: URLRecord | null = null,
   encoding = 'UTF-8',
+  blobURLStore: BlobURLResolver | null = null,
 ): URLParseResult {
-  return basicURLParse(input, { base, encoding });
+  const result = parseBasicURL(input, { base, encoding });
+  if (result.url?.scheme === 'blob') {
+    result.url.blobURLEntry = blobURLStore?.resolve(result.url) ?? null;
+  }
+  return result;
 }
 
 /*
@@ -96,9 +108,9 @@ export function parseURL(
  *
  * https://url.spec.whatwg.org/#concept-basic-url-parser
  */
-export function basicURLParse(
+export function parseBasicURL(
   input: string,
-  options: BasicURLParserOptions = {},
+  options: ParseBasicURLOptions = {},
 ): URLParseResult {
   const validationErrors: URLValidationError[] = [];
   const suppliedURL = options.url;
@@ -695,7 +707,7 @@ export function obtainURLOrigin(url: URLRecord): Origin {
         return url.blobURLEntry.environment.origin;
       }
 
-      const pathURL = parseURL(serializeURLPath(url)).url;
+      const pathURL = parseBasicURL(serializeURLPath(url)).url;
       if (
         pathURL !== null &&
         (pathURL.scheme === 'http' ||

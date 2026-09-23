@@ -272,9 +272,17 @@ Current implementation sequence:
    inherited host matching, and Fetch's callable URL-upgrade step. Duplicate
    directives invalidate the whole header, including unknown extensions.
    Main-fetch invocation remains in 8A; secure-response learning and mandatory
-   TLS failure handling remain in Slice 9. Continue Storage keys/Blob URLs,
-   Mixed Content/upgrading, and CSP. Network
-   report delivery remains gated on Fetch. CSP copying and policy delivery
+   TLS failure handling remain in Slice 9. Storage keys/Blob URLs A–C are
+   complete for Blobs: keys, store authorization, UserAgent ownership, Document
+   cleanup, browser URL parsing, and public object URL methods under the
+   [File roadmap](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration).
+   MediaSource support is deferred to the [media roadmap](media/ROADMAP.md);
+   entries and the provisional author declaration support Blob. Worker lifecycle
+   remains with Workers. Neither media nor worker implementation gates this
+   preflight work. Blob response/range handling and dispatch remain in Fetch 8C;
+   creator-document inheritance has an approved HTML TODO regression.
+   Continue with Mixed Content/upgrading and CSP. Network report delivery remains gated on
+   Fetch. CSP copying and policy delivery
    remain with their policy owners.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
@@ -505,7 +513,7 @@ proof.
 
 Primary roadmaps: [legacy HTML](html/legacy/ROADMAP.md),
 [microdata](html/microdata/ROADMAP.md), [remaining elements](html/elements/ROADMAP.md),
-[rendering](rendering/ROADMAP.md), [graphics](graphics/ROADMAP.md),
+[rendering](rendering/ROADMAP.md), [graphics](graphics/ROADMAP.md), [media](media/ROADMAP.md),
 [interaction](interaction/ROADMAP.md), [Navigator](navigator/ROADMAP.md),
 [storage](storage/ROADMAP.md), and the top-level [Browlet roadmap](ROADMAP.md).
 
@@ -546,7 +554,7 @@ late public compatibility does not justify rejecting legacy syntax now.
 | 8 | [DOM parsing](dom/parsing/ROADMAP.md), [sanitization](html/sanitization/ROADMAP.md), [HTML collections](html/collections/ROADMAP.md), [Navigator](navigator/ROADMAP.md) |
 | 9 | [workers](workers/ROADMAP.md), [storage](storage/ROADMAP.md), [worklets](worklets/ROADMAP.md) |
 | 10 | [SVG](svg/ROADMAP.md), [MathML](mathml/ROADMAP.md), [XPath](dom/xpath/ROADMAP.md), [XSLT](dom/xslt/ROADMAP.md) |
-| 11 | [microdata](html/microdata/ROADMAP.md), [legacy HTML](html/legacy/ROADMAP.md), and the remaining consumer-driven portions of the broader roadmaps |
+| 11 | [microdata](html/microdata/ROADMAP.md), [legacy HTML](html/legacy/ROADMAP.md), [media](media/ROADMAP.md), and the remaining consumer-driven portions of the broader roadmaps |
 
 ## Removal condition
 

@@ -22,6 +22,14 @@
 | existing `document-lifecycle.ts`, `NavigationParams`, and `DocumentImpl` | Creation factory selects Window/realm; navigation owns response/destination operations; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
 | existing `user-agent.ts` plus the future embedder/automation boundary | Browser-UI navigation, reload, stop, traversal, creation, closing, POST confirmation, and cache-bypass requests routed through the ordinary algorithms with `browser UI` involvement | HTML §7.9 |
 
+Creator-based browsing-context creation still stops at
+`inheritCreatorVirtualBrowsingContextGroupID()` and `inheritCreatorDocumentState()`.
+When implementing them, enable the approved TODO in
+`test/browlet/object-url.test.ts`: a new Document must inherit its creator's
+existing base URL record, including a captured Blob entry after revocation.
+Serializing and reparsing the record would lose that entry. The independent
+frozen-base and Blob acquisition tests already cover retention.
+
 ## Section 7 invariants
 
 - A browsing context owns the stable WindowProxy and the series of Windows it

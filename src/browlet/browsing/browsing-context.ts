@@ -108,7 +108,7 @@ export function createNewBrowsingContextAndDocument(
 
   if (creator !== null) {
     creatorOrigin = creator.origin;
-    creatorBaseURL = requireURLRecord(creator.baseURI);
+    creatorBaseURL = creator.getBaseURL();
     inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
   }
 

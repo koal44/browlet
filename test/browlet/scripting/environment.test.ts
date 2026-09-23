@@ -9,6 +9,9 @@ import type { WindowProxy } from '../../../src/browlet/browsing/window/window-pr
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { createEnvironmentRecord } from '../../../src/browlet/scripting/environment';
+import { StorageKey } from '../../../src/storage/keys';
+import { createOpaqueOrigin } from '../../../src/url/origin';
 import { determineRequestReferrer } from '../../../src/browlet/browsing/policy/referrer-policy';
 import { FetchRequest, RequestImpl } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
@@ -186,6 +189,45 @@ describe('Window environment prompt targets', () => {
     const top = createEnvironment('https://example.test/');
     top.document.browsingContext = null;
     expect(top.environment.getTraversableForUserPrompts()).toBeNull();
+  });
+});
+
+describe('storage keys from browser environments', () => {
+  it('uses a Window\'s actual security origin, including an inherited about:blank origin', () => {
+    const { document, environment } = createEnvironment('about:blank');
+    document.origin = obtainURLOrigin(parseURL('https://creator.test/').url!);
+    const key = StorageKey.obtain(environment)!;
+    expect(key.origin).toBe(document.origin);
+
+    document.origin = createOpaqueOrigin();
+    expect(StorageKey.obtain(environment)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(environment).origin).toBe(document.origin);
+    expect(key.origin.kind).toBe('tuple');
+  });
+
+  it('uses the creation URL of a reserved environment before any realm exists', () => {
+    const userAgent = new UserAgent();
+    const creationURL = parseURL('https://reserved.test/').url!;
+    const record = createEnvironmentRecord({
+      userAgent, creationURL, topLevelCreationURL: creationURL,
+      topLevelOrigin: obtainURLOrigin(creationURL), targetBrowsingContext: null, isSecureContext: true,
+    });
+    const key = StorageKey.obtain(record)!;
+    expect(key.equals(new StorageKey(obtainURLOrigin(creationURL)))).toBe(true);
+
+    userAgent.storageEnabled = false;
+    expect(StorageKey.obtain(record)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(record).equals(key)).toBe(true);
+  });
+
+  it('reads the UserAgent preference while preserving non-storage access checks', () => {
+    const { environment } = createEnvironment('https://example.test/');
+    const key = StorageKey.obtain(environment)!;
+    environment.userAgent.storageEnabled = false;
+    expect(StorageKey.obtain(environment)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(environment).equals(key)).toBe(true);
+    environment.userAgent.storageEnabled = true;
+    expect(StorageKey.obtain(environment)?.equals(key)).toBe(true);
   });
 });
 

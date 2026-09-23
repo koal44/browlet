@@ -17,6 +17,7 @@
     { "path": "../web-idl" },
     { "path": "../streams" },
     { "path": "../url" },
+    { "path": "../storage" },
     { "path": "../file" },
     { "path": "../xhr" },
     { "path": "../fetch" },

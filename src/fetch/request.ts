@@ -5,7 +5,7 @@ import type { PromiseValue } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
-  areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin, parseURL,
+  areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
   obtainPublicSuffix, serializeURL, stripURLForReporting, type URLRecord,
 } from '../url/index';
 import {
@@ -552,7 +552,7 @@ export class RequestImpl {
     let fallbackMode: RequestMode | null = null;
     let signal: AbortSignalCapability | null = null;
     if (typeof input === 'string') {
-      const url = parseURL(input, baseURL).url;
+      const url = environment.userAgent.parseURL(input, baseURL).url;
       if (url === null) throw new TypeError('Invalid Request URL');
       if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
       source = new FetchRequest(url, environment, environment.userAgent);
@@ -607,7 +607,7 @@ export class RequestImpl {
       if (init.referrer === '') {
         request.referrer = null;
       } else {
-        const referrer = parseURL(init.referrer, baseURL).url;
+        const referrer = environment.userAgent.parseURL(init.referrer, baseURL).url;
         if (referrer === null) throw new TypeError('Invalid Request referrer');
         request.referrer = (referrer.scheme === 'about' && referrer.path === 'client') ||
           !areSameOrigin(obtainURLOrigin(referrer), origin) ? undefined : referrer;

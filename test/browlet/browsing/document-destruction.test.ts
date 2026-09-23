@@ -7,6 +7,7 @@ import { navigationAndTraversalTaskSource, networkingTaskSource } from '../../..
 import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { requestNodeEventLoopTurn } from '../../../src/browlet/integration/scripting';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { BlobImpl } from '../../../src/file/blob';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { parseURL } from '../../../src/url/index';
 
@@ -100,6 +101,24 @@ describe('Document destruction', () => {
     expect(otherDocument.browsingContext).not.toBeNull();
   });
 
+  it('revokes only the destroyed document\'s Blob URLs from the shared user-agent store', () => {
+    const userAgent = new UserAgent();
+    const first = createDocument(userAgent);
+    const second = createDocument(userAgent);
+    const blob = new BlobImpl(['data'], {}, first.environment.exec);
+    const store = userAgent.blobURLStore;
+    const firstURL = parseURL(store.add(blob, first.environment)).url!;
+    const secondURL = parseURL(store.add(blob, second.environment)).url!;
+    expect(store.resolve(firstURL)).not.toBeNull();
+    expect(store.resolve(secondURL)).not.toBeNull();
+
+    first.environment.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { first.document.destroy(); });
+    first.environment.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+
+    expect(store.resolve(firstURL)).toBeNull();
+    expect(store.resolve(secondURL)!.obtainObject(second.environment)).toBe(blob);
+  });
+
   it('aborts a registered parser and reports the canceled navigation without destroying the document', () => {
     const { document, traversable, environment } = createDocument();
     const abort = vi.fn();
@@ -123,8 +142,8 @@ describe('Document destruction', () => {
   });
 });
 
-function createDocument() {
-  const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+function createDocument(userAgent = new UserAgent()) {
+  const traversable = createNewTopLevelTraversable(userAgent, null, '');
   const document = traversable.activeDocument!;
   const environment = getRelevantRealm(document).environment;
   return { document, traversable, environment, global: environment.getWindowOrWorkerGlobalScopeMixin() };

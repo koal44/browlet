@@ -51,6 +51,7 @@ describe('Fetch network partition keys', () => {
     const request = createFetchRequest('https://resource.test/', client);
     const reserved = {
       userAgent: client.userAgent, topLevelOrigin: null,
+      creationURL: parseURL('https://reserved.test/').url!,
       topLevelCreationURL: parseURL('https://reserved.test/').url!,
     };
     request.reservedClient = reserved;

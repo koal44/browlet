@@ -15,6 +15,7 @@
     { "path": "../infra" },
     { "path": "../js-engine" },
     { "path": "../mime" },
+    { "path": "../storage" },
     { "path": "../streams" },
     { "path": "../url" },
     { "path": "../web-idl" },
