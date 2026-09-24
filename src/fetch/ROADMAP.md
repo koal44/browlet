@@ -7,7 +7,8 @@
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
-- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A–8C and 8E are complete. HTTP fetch and redirect handling in 8D are next.
+- **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
+- **Next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch).
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -764,7 +765,8 @@ with real settings and traversables, including a cross-origin child Window.
 `FetchParams.mainFetch()` supplies policy ordering, response selection/filtering,
 SRI verification, and handover, including body-end and consumption callbacks.
 It replaces the entry no-op; policy-blocked, preload, and overridden-response
-paths can complete. 8C adds ordinary local-scheme responses; HTTP processing waits for 8D.
+paths can complete. 8C supplies local-scheme dispatch, 8D HTTP/redirect
+orchestration, and 8E data URL processing.
 Tests control the provisional owner operations and later HTTP stages,
 while using real Window environments, policies, streams, bindings, and running
 HTML event loops. They do not demonstrate actual network delivery.
@@ -866,8 +868,8 @@ and `FetchUserAgent.obtainBlobObject()` for authorized acquisition. 8C now
 consumes `request.currentURL.blobURLEntry` instead of resolving the URL again;
 revocation must not invalidate an entry already captured by Request parsing.
 Scheme fetch selects the reserved/client environment or the specified top-level
-exemption, then constructs the response, headers, and range body. The unresolved
-clientless access case is recorded below.
+exemption, then constructs the response, headers, and range body. The reviewed
+clientless-access precondition is recorded below.
 
 Scheme fetch implements `about:blank` and uses Fetch's permitted network-error
 result for `file:`. File-scheme support remains an embedder policy.
@@ -947,6 +949,81 @@ Coverage in `test/browlet/fetch-schemes.test.ts` includes local scheme responses
 cancellation, current-URL dispatch, HTTP delegation, revocation, partitions,
 reserved clients, top-level exemptions, range syntax/bytes/headers, and lifetime.
 
+### 8D — HTTP fetch and redirects
+
+**Consumer algorithms complete; dependencies provisional.**
+`FetchParams.httpFetch()` offers a cloned request to Service Workers,
+validates intercepted responses, selects preflight from cached permissions,
+delegates network/cache work, applies CORS/TAO/CORP checks, and handles redirect
+modes. `httpRedirectFetch()` resolves Location, checks scheme/credentials/count,
+rewrites methods and body headers, removes cross-origin Authorization, replays
+retained bodies, updates timing and Referrer Policy, and re-enters main fetch.
+Manual navigations install the controller continuation and restart nonrecursive
+main fetch; other manual requests receive an opaque-redirect response.
+
+The future-owner calls now have explicit provisional implementations:
+
+| Call | Owner and remaining work |
+| --- | --- |
+| `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
+| `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
+| `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | Return false while the cache cannot store entries. Slice 9 supplies §4.9 permissions, including partition, origin, credentials, and expiry. |
+| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Reject with an explicit unimplemented InternalError. Slice 9 supplies §§4.6 and 4.8, including transport, caching, and cancellation. |
+| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | Delegate to provisional Fetch policy functions that throw an unimplemented InternalError. Slice 9 supplies §§4.10–4.11. |
+
+**`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
+explicitly permits a null client with retained origin and policy-container state,
+but HTTP fetch passes that nullable client to a CORP algorithm requiring settings.
+The reviewed implementation supplies the embedder policy separately from the
+nullable reporting environment. HTTP fetch selects the client's live policy when
+present, otherwise the request's already-populated policy container. Explicit
+CORP restrictions and enforced COEP remain effective without a client; violations
+are reported only when a reporting environment exists. No reporting recipient or
+partition authority is inferred from the execution sandbox.
+
+Browser evidence separates enforcement inputs from live reporting machinery:
+[Chromium's CORP checker](https://chromium.googlesource.com/chromium/src/+/main/services/network/public/cpp/cross_origin_resource_policy.cc)
+takes an initiator, embedder policy, and optional reporter; Gecko's
+`dom/fetch/FetchDriver.cpp` creates a channel without a Document or client info
+while retaining its principal and copying `InternalRequest`'s embedder policy;
+[WebKit's network checker](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/NetworkProcess/NetworkLoadChecker.cpp)
+also enforces policy independently of its optional reporting loader. Chromium's
+missing-initiator and Gecko's system-principal exemptions are separate privileged
+cases, not equivalents of a null Fetch client.
+
+Four main-fetch regressions first reproduced the null dereference. They now
+cover unrestricted and CORP-restricted responses, plus enforced and report-only
+COEP without a client. Separate cases preserve live-client policy selection and
+verify that reports use the endpoints from the supplied policy.
+
+URL Location parsing now accepts the actual UserAgent as well as settings,
+because clientless redirects still have a URL-parsing owner. The existing
+browser Referrer Policy algorithm is connected through that owner. Body teeing,
+transforms, cancellation, and replay run on the supplied environment's networking
+task, with completion observed by host Promises. These tasks supply the automatic
+microtask checkpoint under the compatibility addon.
+
+`test/browlet/fetch-http.test.ts` controls the named later algorithms and worker
+boundary while testing the actual 8D flow. It covers network and worker response
+selection, preflight selection, policy ordering, redirects and limits, replay,
+manual continuation, and complete main-fetch body delivery through a running
+Window. These are orchestration tests, not evidence that transport or CORS/TAO
+checks exist.
+
+**`SPEC_CLASH(multipart-redirect-replay)`:** the draft retains live FormData and
+re-extracts it on redirect without replacing Content-Type. It does not specify
+how to preserve the original boundary and captured entries. Following the
+reviewed Blink, Gecko, and WebKit behavior, extraction now retains the already
+encoded `BlobData` as the replay source. `FetchBody.fromSource()` creates a fresh
+stream over that source, preserving the boundary, length, fields, and file data
+without re-encoding or flattening the shared file segments. Author BodyInit
+conversion remains separate from this internal replay path. Regressions cover
+307 and 308 boundaries, post-extraction FormData mutations, and repeated replay
+after consumption, including lazy binary file reads.
+
+Validation: all 1,317 tests in the 33 Fetch and browser-Fetch suites pass on
+custom Node with the compatibility addon. TypeScript and modified-file lint pass.
+
 ### 8E — Data URLs
 
 **Complete:** `processDataURL()` implements [Fetch §6](https://fetch.spec.whatwg.org/#data-urls),
@@ -966,11 +1043,15 @@ no new environment contracts or transport dependency.
 `fetch/data-urls/resources/data-urls.json` cases. Browser integration adds 14
 cases for response construction, malformed input, basic filtering in all three
 ordinary request modes, HEAD body removal, clientless navigation, SRI, and
-completion through the automatic Window event loop.
+completion through the automatic Window event loop. TypeScript and changed-file
+lint pass; all 1,400 tests in the 34 Fetch and browser-Fetch suites pass on custom
+Node with the compatibility addon.
 
-**Local-scheme exit proof:** Blob and data URLs complete through Fetch entry,
-scheme dispatch, response filtering, and callbacks without network transport.
-HTTP response selection and redirect handling remain the next Slice 8D work.
+**Slice 8 exit proof:** data URLs complete through Fetch entry, scheme dispatch,
+main-response processing, and callbacks without a network. The HTTP/redirect
+tests exercise deterministic injected responses through those same consumers.
+Actual network/cache transactions, CORS/TAO enforcement, and the public `fetch()`
+binding remain in Slice 9; the later-owner hooks listed above remain provisional.
 
 ## Slice 9 — HTTP transport, CORS, and public fetch
 

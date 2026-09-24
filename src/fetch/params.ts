@@ -1,25 +1,28 @@
 import type { ParallelQueue } from '../infra/parallel-queue';
-import type { GlobalObject, JSEnvironment } from '../js-engine/index';
+import { getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 import type { PromiseValue } from '../infra/promises';
 import { surroundingTabOrSpacePattern } from '../infra/patterns';
+import { coarsenTime } from '../infra/time';
 import { isHTTPToken } from '../http/index';
 import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
 import { TransformStreamImpl } from '../streams/index';
 import { areSameOrigin, obtainURLOrigin } from '../url/index';
 import { FetchBody } from './body';
 import { FetchController } from './controller';
-import { convertHeaderNamesToSortedLowercaseSet } from './headers';
+import {
+  convertHeaderNamesToSortedLowercaseSet, isCORSNonWildcardRequestHeaderName, isRequestBodyHeaderName,
+} from './headers';
 import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff } from './http/blocking';
 import { isCORSSafelistedMethod } from './http/methods';
-import { isNullBodyStatus, isRangeStatus } from './http/statuses';
+import { isNullBodyStatus, isRangeStatus, isRedirectStatus } from './http/statuses';
 import { bytesMatchIntegrityMetadata } from './integrity';
 import type { FetchRequest } from './request';
 import { FetchResponse, isFilteredResponse } from './response';
 import { fetchBlob } from './schemes/blob';
 import { processDataURL } from './schemes/data';
 import { queueFetchTask } from './tasks';
-import type { FetchTimingInfo } from './timing';
+import type { FetchTimingInfo, ServiceWorkerTimingInfo } from './timing';
 import { isHTTPScheme, isLocalURL } from './url';
 
 /** State and processing steps for one Fetch execution. */
@@ -154,9 +157,206 @@ export class FetchParams {
 
   /** Obtain an HTTP response, performing a CORS preflight when requested. */
   // https://fetch.spec.whatwg.org/#concept-http-fetch
-  httpFetch(_makeCORSPreflight = false): PromiseValue<FetchResponse> {
-    // PROVISIONAL(Fetch 8D): HTTP policy and redirects delegate transport to Slice 9.
-    return this.request.userAgent.hostPromises.reject(new InternalError('HTTP fetch is not implemented'));
+  httpFetch(makeCORSPreflight = false): PromiseValue<FetchResponse> {
+    const { request } = this;
+    const { userAgent } = request;
+    return userAgent.hostPromises.try(() => request.allowServiceWorkerInterception
+      ? this.#fetchFromServiceWorker() : null).then((response) => {
+      return response ?? this.#fetchFromNetwork(makeCORSPreflight);
+    }).then((response) => {
+      if (response.type === 'error') return response;
+      const internal = isFilteredResponse(response) ? response.internalResponse : response;
+      if (request.responseTainting === 'opaque' || response.type === 'opaque') {
+        if (request.origin === undefined) throw new InternalError('HTTP fetch requires a populated request origin');
+        // SPEC_CLASH(corp-clientless-policy): Fetch passes a nullable client to a settings-only check.
+        // Clientless requests retain policy state; a missing reporting owner does not bypass CORP.
+        const policyContainer = request.client?.policyContainer ?? request.policyContainer;
+        if (policyContainer === undefined) throw new InternalError('HTTP fetch requires populated request policies');
+        if (internal.isBlockedByCORP(
+          request.origin, policyContainer.embedderPolicy, request.destination, false, request.client,
+        )) {
+          return FetchResponse.networkError();
+        }
+      }
+      if (!isRedirectStatus(internal.status)) return response;
+      if (request.isNavigation) {
+        request.navigationTimingAllowValuesList.push(internal.headerList.getDecodeAndSplit('Timing-Allow-Origin') ?? []);
+      }
+      // Slice 9 may reset an HTTP/2 upload stream here for a non-303 redirect.
+      switch (request.redirectMode) {
+        case 'error': return FetchResponse.networkError();
+        case 'manual':
+          if (request.mode !== 'navigate') return internal.filter('opaqueredirect');
+          this.controller.nextManualRedirectSteps = () => {
+            this.httpRedirectFetch(response).observe(
+              // Invalid redirect targets finish here; a valid navigation restarts nonrecursive main fetch.
+              (result) => {
+                if (result !== undefined) queueFetchTask(() => this.#processResponse(result), this.env.exec.global, this.env);
+              },
+              (error) => queueFetchTask(() => { throw error; }, this.env.exec.global, this.env),
+            );
+          };
+          return response;
+        case 'follow':
+          userAgent.webDriverBiDiResponseCompleted(request, response);
+          return this.httpRedirectFetch(response).then((result) => {
+            if (result === undefined) throw new InternalError('An automatic redirect must return a response');
+            return result;
+          });
+      }
+    });
+  }
+
+  /** Follow an HTTP redirect, or restart delivery for a manually continued navigation. */
+  // https://fetch.spec.whatwg.org/#concept-http-redirect-fetch
+  // Undefined denotes a manual navigation whose nonrecursive main fetch now owns delivery.
+  httpRedirectFetch(response: FetchResponse): PromiseValue<FetchResponse | undefined> {
+    const { request, timingInfo, env } = this;
+    const { userAgent } = request;
+    return userAgent.hostPromises.try(() => {
+      const internal = isFilteredResponse(response) ? response.internalResponse : response;
+      const location = internal.getLocationURL(request.currentURL.fragment, userAgent);
+      if (location === undefined) return response;
+      if (location === null || !isHTTPScheme(location.scheme) || request.redirectCount === 20) {
+        return FetchResponse.networkError();
+      }
+      request.redirectCount++;
+      const hasCredentials = location.username !== '' || location.password !== '';
+      if (request.origin === undefined) throw new InternalError('HTTP redirect requires a populated request origin');
+      if (hasCredentials && ((request.mode === 'cors' && !areSameOrigin(request.origin, obtainURLOrigin(location))) ||
+        request.responseTainting === 'cors')) {
+        return FetchResponse.networkError();
+      }
+      if (request.body !== null && !(request.body instanceof FetchBody)) {
+        throw new InternalError('HTTP redirect requires an extracted request body');
+      }
+      if (internal.status !== 303 && request.body?.source === null) return FetchResponse.networkError();
+      if (((internal.status === 301 || internal.status === 302) && request.method === 'POST') ||
+        (internal.status === 303 && request.method !== 'GET' && request.method !== 'HEAD')) {
+        request.method = 'GET';
+        request.body = null;
+        request.headerList.list = request.headerList.list.filter(([name]) => !isRequestBodyHeaderName(name));
+      }
+      if (!areSameOrigin(obtainURLOrigin(request.currentURL), obtainURLOrigin(location))) {
+        request.headerList.list = request.headerList.list.filter(([name]) => !isCORSNonWildcardRequestHeaderName(name));
+      }
+      const follow = () => {
+        const now = coarsenTime(userAgent.unsafeSharedCurrentTime(), this.crossOriginIsolatedCapability);
+        timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = now;
+        if (timingInfo.redirectStartTime === 0) timingInfo.redirectStartTime = timingInfo.startTime;
+        request.urlList.push(location);
+        userAgent.setRequestReferrerPolicyOnRedirect(request, internal);
+        if (request.redirectMode === 'manual') {
+          if (request.mode !== 'navigate') throw new InternalError('Manual redirect continuation requires a navigation');
+          this.mainFetch();
+          return undefined;
+        }
+        return this.mainFetch(true);
+      };
+      if (request.body === null) return follow();
+      const source = request.body.source;
+      if (source === null) throw new InternalError('Redirect body replay requires a retained source');
+      return this.#runBodySteps(() => {
+        request.body = FetchBody.fromSource(source, env);
+      }).then(follow);
+    });
+  }
+
+  /** Obtain a response through HTTP caching and network transport. */
+  // https://fetch.spec.whatwg.org/#concept-http-network-or-cache-fetch
+  httpNetworkOrCacheFetch(_isAuthenticationFetch = false, _isNewConnectionFetch = false): PromiseValue<FetchResponse> {
+    // PROVISIONAL(Fetch 9): implement cache selection, network fetch, and authentication.
+    return this.request.userAgent.hostPromises.reject(new InternalError('HTTP-network-or-cache fetch is not implemented'));
+  }
+
+  /** Perform a preflight request and populate the browser's CORS permission cache. */
+  // https://fetch.spec.whatwg.org/#cors-preflight-fetch-0
+  corsPreflightFetch(): PromiseValue<FetchResponse> {
+    // PROVISIONAL(Fetch 9): implement the preflight transaction and permission validation.
+    return this.request.userAgent.hostPromises.reject(new InternalError('CORS-preflight fetch is not implemented'));
+  }
+
+  #fetchFromServiceWorker(): PromiseValue<FetchResponse | null> {
+    const { request, env, timingInfo, controller } = this;
+    const { userAgent } = request;
+    const prepare = () => {
+      const copy = request.clone();
+      if (copy.body !== null) {
+        if (!(copy.body instanceof FetchBody)) throw new InternalError('HTTP fetch requires an extracted request body');
+        const transform = new TransformStreamImpl(null, {}, {}, env);
+        transform.setUp((chunk) => {
+          if (this.canceled) return;
+          if (typeof chunk !== 'object' || chunk === null || getBufferTypeName(chunk) !== 'Uint8Array') {
+            controller.terminate();
+          } else {
+            transform.enqueue(chunk);
+          }
+        });
+        copy.body.stream = copy.body.stream.pipeThroughTransform(transform);
+      }
+      return copy;
+    };
+    const prepared = request.body === null ? userAgent.hostPromises.try(prepare) : this.#runBodySteps(prepare);
+    return prepared.then((copy) => {
+      const startTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), this.crossOriginIsolatedCapability);
+      return userAgent.handleFetch(copy, controller, this.crossOriginIsolatedCapability).then(
+        (result: FetchResponse | ServiceWorkerTimingInfo | null) => {
+          if (!(result instanceof FetchResponse)) {
+            if (result !== null) timingInfo.serviceWorkerTimingInfo = result;
+            return null;
+          }
+          timingInfo.finalServiceWorkerStartTime = startTime;
+          timingInfo.serviceWorkerTimingInfo = result.serviceWorkerTimingInfo;
+          const validate = () => {
+            userAgent.webDriverBiDiResponseStarted(request, result);
+            if (result.type === 'error' ||
+              (request.mode === 'same-origin' && result.type === 'cors') ||
+              (request.mode !== 'no-cors' && result.type === 'opaque') ||
+              (request.redirectMode !== 'manual' && result.type === 'opaqueredirect') ||
+              (request.redirectMode !== 'follow' && result.urlList.length > 1)) {
+              return FetchResponse.networkError();
+            }
+            return result;
+          };
+          if (request.body === null) return validate();
+          return this.#runBodySteps(() => {
+            if (!(request.body instanceof FetchBody)) throw new InternalError('HTTP fetch requires an extracted request body');
+            // Cancellation does not wait for the source's cancellation promise.
+            request.body.stream.cancelInternal(undefined).observe(() => {}, () => {});
+            return validate();
+          });
+        },
+      );
+    });
+  }
+
+  #fetchFromNetwork(makeCORSPreflight: boolean): PromiseValue<FetchResponse> {
+    const { request } = this;
+    const { hostPromises, corsPreflightCache } = request.userAgent;
+    const needsPreflight = makeCORSPreflight &&
+      ((!corsPreflightCache.matchesMethod(request.method, request) &&
+        (!isCORSSafelistedMethod(request.method) || request.useCORSPreflight)) ||
+        request.headerList.getCORSUnsafeRequestHeaderNames().some((name) => !corsPreflightCache.matchesHeaderName(name, request)));
+    const preflight = needsPreflight ? this.corsPreflightFetch() : hostPromises.try(() => null);
+    return preflight.then((preflightResponse: FetchResponse | null) => {
+      if (preflightResponse?.type === 'error') return preflightResponse;
+      if (request.redirectMode === 'follow') request.allowServiceWorkerInterception = false;
+      return this.httpNetworkOrCacheFetch().then((response: FetchResponse) => {
+        if (request.responseTainting === 'cors' && response.isBlockedByCORS(request)) return FetchResponse.networkError();
+        if (!response.isTimingAllowed(request)) request.timingAllowFailed = true;
+        return response;
+      });
+    });
+  }
+
+  // Stream construction, teeing, cancellation, and replay enter the body's task/checkpoint owner.
+  #runBodySteps<T>(steps: () => T): PromiseValue<T> {
+    const result = this.request.userAgent.hostPromises.withResolvers<T>();
+    queueFetchTask(() => {
+      try { result.resolve(steps()); }
+      catch (error) { result.reject(error); }
+    }, this.env.exec.global, this.env);
+    return result.promise;
   }
 
   #dispatch(): FetchResponse | PromiseValue<FetchResponse> {

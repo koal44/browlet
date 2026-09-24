@@ -114,7 +114,6 @@ describe('multipart BodyInit extraction', () => {
     form.append(toScalarValueString('name'), toScalarValueString('Eric'));
     form.append(toScalarValueString('file'), file);
     const { body, type } = FetchBody.extract(form, false, fixture.env);
-    expect(body.source).toBe(form);
     expect(read).not.toHaveBeenCalled();
     const boundary = type!.slice('multipart/form-data; boundary='.length);
     const expected = BlobData.concatenate([

@@ -16,7 +16,7 @@ export { HTTPCachePartitions } from './http/cache/partitions';
 export { CORSPreflightCache } from './http/cors-preflight-cache';
 export type {
   FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
-  FetchInsecureRequestsPolicy,
+  FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './environment';
 export { fetchEnvironment } from './environment';
@@ -26,7 +26,7 @@ export {
   type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
 } from './request';
 export { responseIDL, FetchResponse, type CacheUsage } from './response';
-export type { FetchTimingInfo, ResponseBodyInfo } from './timing';
+export type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
   type FetchIntegrityPolicy, type IntegrityViolationReportBody,

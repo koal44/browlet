@@ -21,6 +21,11 @@ Slice 8A declares a UserAgent-owned `CORSPreflightCache` with provisional
 `clearEntries()` for the main-fetch failure path. It cannot store entries yet;
 lookup, insertion, expiration, credential matching, and removal belong together
 in Slice 9's CORS preflight work.
+Slice 8D now calls those lookups, preflight/network fetch, and CORS/TAO checks
+from its HTTP response-selection algorithm. Lookup provisionally returns a miss
+while the cache has no entries. Preflight/network fetch reject with an explicit
+unimplemented InternalError, and CORS/TAO policy stubs throw likewise. Slice 9
+replaces those stubs; the parent roadmap lists their owners and remaining work.
 
 ## Sources
 

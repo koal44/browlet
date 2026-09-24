@@ -298,7 +298,7 @@ describe('Reporting policy integration and user control', () => {
     observer.observe();
     const response = new FetchResponse();
     response.urlList.push(parseURL('https://user:secret@resource.test/image.png#fragment').url!);
-    expect(response.isBlockedByCORP(env.origin, env, 'image')).toBe(true);
+    expect(response.isBlockedByCORP(env.origin, env.policyContainer.embedderPolicy, 'image', false, env)).toBe(true);
     const reports = observer.takeRecords();
     expect(reports.map((report) => report.body!.toJSON())).toEqual([
       { type: 'corp', blockedURL: 'https://resource.test/image.png', destination: 'image', disposition: 'reporting' },

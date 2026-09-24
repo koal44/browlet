@@ -19,13 +19,16 @@ import {
 } from './headers';
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
-  getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment,
+  getFetchEnvironment, type FetchEmbedderPolicy, type FetchEmbedderPolicyValue,
+  type FetchEnvironment, type FetchUserAgent,
 } from './environment';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import { parseAndStoreCookies } from './policy/cookies';
+import { isBlockedByCORS } from './policy/cors';
 import { isBlockedByCORP, isBlockedByCORPInternal, queueCORPViolationReport } from './policy/embedder-policy';
 import { isMixedDownload, isResponseBlockedByMixedContent } from './policy/mixed-content';
+import { isTimingAllowed } from './policy/timing';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
 
@@ -175,7 +178,7 @@ export class FetchResponse {
    * https://fetch.spec.whatwg.org/#concept-response-location-url
    * Undefined means absent; null means extraction or URL parsing failed.
    */
-  getLocationURL(requestFragment: string | null, env: FetchEnvironment): URLRecord | undefined | null {
+  getLocationURL(requestFragment: string | null, env: FetchEnvironment | FetchUserAgent): URLRecord | undefined | null {
     if (!isRedirectStatus(this.status)) return undefined;
     const values = this.headerList.extractValues('Location', (value) => [value], false);
     if (values === undefined || values === null) return values;
@@ -211,12 +214,13 @@ export class FetchResponse {
     return isMixedDownload(this, sourceURL, env);
   }
 
-  /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
+  /** Whether CORP blocks this response; report embedder-policy violations when a reporting environment exists. */
   // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
   isBlockedByCORP(
-    origin: Origin, env: FetchEnvironment, destination: string, forNavigation = false,
+    origin: Origin, policy: FetchEmbedderPolicy, destination: string, forNavigation = false,
+    env: FetchEnvironment | null = null,
   ): boolean {
-    return isBlockedByCORP(this, origin, env, destination, forNavigation);
+    return isBlockedByCORP(this, origin, policy, destination, forNavigation, env);
   }
 
   /** Whether CORP blocks this response under one embedder policy, without reporting violations. */
@@ -230,9 +234,21 @@ export class FetchResponse {
   /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
   // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
   queueCORPViolationReport(
-    env: FetchEnvironment, destination: string, reportOnly: boolean,
+    policy: FetchEmbedderPolicy, destination: string, reportOnly: boolean, env: FetchEnvironment,
   ): void {
-    queueCORPViolationReport(this, env, destination, reportOnly);
+    queueCORPViolationReport(this, policy, destination, reportOnly, env);
+  }
+
+  /** Whether CORS blocks access to this response for the request's origin and credentials. */
+  // https://fetch.spec.whatwg.org/#concept-cors-check
+  isBlockedByCORS(request: FetchRequest): boolean {
+    return isBlockedByCORS(this, request);
+  }
+
+  /** Whether detailed timing may be exposed for this response and request. */
+  // https://fetch.spec.whatwg.org/#concept-tao-check
+  isTimingAllowed(request: FetchRequest): boolean {
+    return isTimingAllowed(this, request);
   }
 }
 

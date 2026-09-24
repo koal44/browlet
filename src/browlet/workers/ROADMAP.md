@@ -11,6 +11,11 @@ structured-clone implementation.
 - `service-worker-global-scope.ts` implements only the DOM legacy-listener
   warning hook needed by current event-listener behavior. Full service workers
   are owned by the Service Workers specification, not HTML §10.
+- `UserAgent.handleFetch()` is the provisional Fetch interception entry. With
+  no registrations or active workers, it returns a host-owned Promise of null
+  so Fetch continues to the network. Replace it with Service Workers' Handle
+  Fetch algorithm when registration, worker execution, and FetchEvent delivery
+  exist; retain host-owned completion independently of a page's task queue.
 - `scripting/agents.ts` reserves dedicated- and shared-worker agent types with
   the specified true `[[CanBlock]]` value. It does not yet obtain those agents
   or run workers.

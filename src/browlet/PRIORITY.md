@@ -254,9 +254,13 @@ Current implementation sequence:
    Slice 8 retains five subdivisions, A–E. 8A entry/main-fetch and 8B override
    dispatch are implemented, including HTML prompt targets and policy copying.
    The selected [preflight detour](../fetch/PREFLIGHT.md#work-order) is complete;
-   8C Blob fetching and 8E data URLs are complete, including the reviewed
-   internal error for ordinary Blob access without a partition context.
-   Next is 8D HTTP response selection and redirect handling.
+   8C is complete, including the reviewed internal error for missing Blob access
+   context. 8D HTTP/redirect consumers are complete with provisional Service
+   Worker, BiDi, and Slice 9 operations. CORP now accepts retained policy state
+   without a reporting client; multipart redirects retain the encoded upload.
+   8E data URL processing is complete, including MIME/Base64 handling and
+   end-to-end response delivery. Slice 8 is complete at its consumer boundaries;
+   next is Slice 9's HTTP transport, CORS, and public `fetch()` work.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery

@@ -403,8 +403,13 @@ Reporting C implements serialization, request preparation, response handling,
 retirement, and destruction handoff. UserAgent supplies delivery scheduling and
 Promise-returning attempts. Slice 8A replaces Fetch's provisional no-op with an
 entry/main-fetch implementation with provisional owner hooks. Slice 8B supplies
-the UserAgent response override. 8C supplies Blob dispatch, responses, and ranges,
-with clientless access and suffix-range handling reviewed. 8E supplies data URL processing.
+the UserAgent response override. 8C completes local scheme dispatch and Blob
+responses/ranges, including the reviewed internal error for missing Blob access
+context and accepted suffix-range handling. 8D completes HTTP/redirect consumers;
+CORP uses retained request policies when the client is null, and multipart
+redirects replay the captured encoded body. Its provisional dependencies are
+listed in the Fetch roadmap. 8E completes data URL processing through the
+existing URL, MIME, and Infra algorithms and the ordinary response/body path.
 Clientless report uploads
 use the UserAgent's lazy sandbox environment, with automatic task and microtask
 processing independent of the generating Document's lifetime.
@@ -423,8 +428,9 @@ and retains `BlobImpl` entries behind a provisional Blob-only declaration.
 MediaSource support is deferred to the [media roadmap](../browlet/media/ROADMAP.md),
 and worker cleanup waits for its lifecycle. Neither blocks the Blob URL preflight.
 The independent policy work below is complete. Its remaining consumer
-integration gates stay with Fetch and HTML; continue with 8D HTTP response selection and redirects.
-Network cookie processing and cache transactions remain in Slice 9.
+integration gates stay with Fetch and HTML. Slice 8A–8E is complete at its
+consumer boundaries; Slice 9's HTTP transport, CORS, and public fetch work is
+next. Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
 

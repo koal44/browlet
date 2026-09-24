@@ -1,11 +1,12 @@
 import type { FetchGroup } from './group';
+import type { FetchController } from './controller';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { CORSPreflightCache } from './http/cors-preflight-cache';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
-import type { FetchTimingInfo, ResponseBodyInfo } from './timing';
+import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 import type { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { JSEnvironment } from '../js-engine/index';
@@ -14,7 +15,7 @@ import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
-import type { Promises } from '../infra/promises';
+import type { Promises, PromiseValue } from '../infra/promises';
 
 /** https://fetch.spec.whatwg.org/#is-offline */
 export function isOffline(env: FetchEnvironment): boolean {
@@ -91,16 +92,7 @@ export type FetchPolicyContainer = {
   /** CSP checks, absent until the resource's origin and policy list have been established. */
   cspList?: FetchCSPList;
   /** Cross-origin embedder policy applied by the client. */
-  embedderPolicy: {
-    /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
-    value: FetchEmbedderPolicyValue;
-    /** Endpoint name for violations of the enforced policy. */
-    reportingEndpoint: string;
-    /** COEP mode checked for reporting without blocking responses. */
-    reportOnlyValue: FetchEmbedderPolicyValue;
-    /** Endpoint name for violations of the report-only policy. */
-    reportOnlyReportingEndpoint: string;
-  };
+  embedderPolicy: FetchEmbedderPolicy;
   /** Default referrer disclosure policy inherited by requests. */
   referrerPolicy: ReferrerPolicy;
   /** Enforced integrity requirements for outgoing requests. */
@@ -109,6 +101,19 @@ export type FetchPolicyContainer = {
   reportOnlyIntegrityPolicy: FetchIntegrityPolicy;
   /** Copy the HTML-owned policy state for an independently populated request. */
   clone(): FetchPolicyContainer;
+};
+
+/** Embedder policy retained independently of the environment that receives its reports. */
+// https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy
+export type FetchEmbedderPolicy = {
+  /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
+  value: FetchEmbedderPolicyValue;
+  /** Endpoint name for violations of the enforced policy. */
+  reportingEndpoint: string;
+  /** COEP mode checked for reporting without blocking responses. */
+  reportOnlyValue: FetchEmbedderPolicyValue;
+  /** Endpoint name for violations of the report-only policy. */
+  reportOnlyReportingEndpoint: string;
 };
 
 /** CSP-owned behavior used by Fetch without importing HTML's policy implementation. */
@@ -147,8 +152,14 @@ export interface FetchUserAgent extends StorageUserAgent {
   unsafeSharedCurrentTime(): number;
   /** Apply Referrer Policy to the request's resolved policy and selected source. */
   determineRequestReferrer(request: FetchRequest): URLRecord | null;
+  /** Apply a redirect response's Referrer-Policy header before the next main-fetch pass. */
+  setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void;
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
   potentiallyOverrideResponse(request: FetchRequest, env: JSEnvironment): FetchResponse | null;
+  /** Offer a request to Service Workers; null or timing-only results continue to the network. */
+  handleFetch(
+    request: FetchRequest, controller: FetchController, useHighResPerformanceTimers: boolean,
+  ): PromiseValue<FetchResponse | ServiceWorkerTimingInfo | null>;
   /** Select the browser's scheduling state from the request's priority and resource hints. */
   determineFetchPriority(request: FetchRequest): RequestInternalPriority;
   /** Whether the browser supports this MIME type for Resource Timing's content-type exposure. */
@@ -169,6 +180,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   webDriverBiDiCloneNetworkRequestBody(request: FetchRequest): void;
   /** Notify automation of a failed request. */
   webDriverBiDiFetchError(request: FetchRequest): void;
+  /** Notify automation that an intercepted or network response has started. */
+  webDriverBiDiResponseStarted(request: FetchRequest, response: FetchResponse): void;
   /** Notify automation that the response has reached Fetch's completion hook. */
   webDriverBiDiResponseCompleted(request: FetchRequest, response: FetchResponse): void;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */

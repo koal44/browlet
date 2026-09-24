@@ -7,14 +7,14 @@ import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { hostPromises, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
 import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
-import { determineRequestReferrer } from './browsing/policy/referrer-policy';
+import { determineRequestReferrer, setRequestReferrerPolicyOnRedirect } from './browsing/policy/referrer-policy';
 import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
 import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
 import {
   ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
-  type FetchResponse, type FetchUserAgent, type RequestInternalPriority,
+  type FetchController, type FetchResponse, type FetchUserAgent, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
@@ -140,11 +140,26 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return determineRequestReferrer(request);
   }
 
+  /** Update Fetch's referrer policy using the browser-owned header parser. */
+  setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void {
+    setRequestReferrerPolicyOnRedirect(request, response);
+  }
+
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
   // https://fetch.spec.whatwg.org/#potentially-override-response-for-a-request
   potentiallyOverrideResponse(_request: FetchRequest, _env: JSEnvironment): FetchResponse | null {
     // Fetch's default implementation lets the request proceed unchanged.
     return null;
+  }
+
+  /** Offer a request to a matching Service Worker, retaining completion on the browser's host queue. */
+  // https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm
+  handleFetch(
+    _request: FetchRequest, _controller: FetchController, _useHighResPerformanceTimers: boolean,
+  ): PromiseValue<FetchResponse | ServiceWorkerTimingInfo | null> {
+    // PROVISIONAL(Service Workers): no registrations or active workers exist yet.
+    // Handle Fetch returns null when no worker handles the request.
+    return this.hostPromises.try(() => null);
   }
 
   /** Select internal network scheduling state for a request. */
@@ -246,6 +261,12 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Notify automation of a network fetch error. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-fetch-error
   webDriverBiDiFetchError(_request: FetchRequest): void {
+    // PROVISIONAL: no BiDi sessions receive network events.
+  }
+
+  /** Notify automation that Fetch has received a response. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-response-started
+  webDriverBiDiResponseStarted(_request: FetchRequest, _response: FetchResponse): void {
     // PROVISIONAL: no BiDi sessions receive network events.
   }
 

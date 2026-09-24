@@ -1,6 +1,6 @@
 import { InternalError } from '../../infra/internal-error';
 import { areSameOrigin, areSchemelesslySameSite, obtainURLOrigin, type Origin } from '../../url/index';
-import type { FetchEmbedderPolicyValue, FetchEnvironment } from '../environment';
+import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from '../environment';
 import type { FetchRequest } from '../request';
 import type { FetchResponse } from '../response';
 
@@ -14,22 +14,22 @@ export function crossOriginEmbedderPolicyAllowsCredentials(request: FetchRequest
     request.redirectTaint === 'same-origin';
 }
 
-/** Whether CORP blocks the response, reporting violations of the client's embedder policies. */
+/** Whether CORP blocks the response; report embedder-policy violations when a reporting environment exists. */
 // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check
 export function isBlockedByCORP(
-  response: FetchResponse, origin: Origin, env: FetchEnvironment, destination: string, forNavigation: boolean,
+  response: FetchResponse, origin: Origin, policy: FetchEmbedderPolicy,
+  destination: string, forNavigation: boolean, env: FetchEnvironment | null,
 ): boolean {
-  const policy = env.policyContainer.embedderPolicy;
   if (isBlockedByCORPInternal(response, origin, 'unsafe-none', forNavigation)) {
     return true;
   }
-  if (isBlockedByCORPInternal(response, origin, policy.reportOnlyValue, forNavigation)) {
-    queueCORPViolationReport(response, env, destination, true);
+  if (env !== null && isBlockedByCORPInternal(response, origin, policy.reportOnlyValue, forNavigation)) {
+    queueCORPViolationReport(response, policy, destination, true, env);
   }
   if (!isBlockedByCORPInternal(response, origin, policy.value, forNavigation)) {
     return false;
   }
-  queueCORPViolationReport(response, env, destination, false);
+  if (env !== null) queueCORPViolationReport(response, policy, destination, false, env);
   return true;
 }
 
@@ -57,9 +57,8 @@ export function isBlockedByCORPInternal(
 /** Queue a COEP violation with its endpoint and sanitized original response URL. */
 // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
 export function queueCORPViolationReport(
-  response: FetchResponse, env: FetchEnvironment, destination: string, reportOnly: boolean,
+  response: FetchResponse, policy: FetchEmbedderPolicy, destination: string, reportOnly: boolean, env: FetchEnvironment,
 ): void {
-  const policy = env.policyContainer.embedderPolicy;
   const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
   env.queueReport('coep', endpoint, {
     type: 'corp', blockedURL: response.serializeURLForReporting(), destination,

@@ -25,8 +25,8 @@ import { InternalError } from '../infra/internal-error';
 export class FetchBody {
   /** Stream supplying the body bytes; cloning replaces it with one branch of a tee. */
   stream: ReadableStreamImpl;
-  /** Retained input for replaying the body, or null when only the stream is available. */
-  source: Uint8Array | BlobImpl | FormDataImpl | null = null;
+  /** Retained replay source, including encoded multipart data; null for a stream-only body. */
+  source: Uint8Array | BlobImpl | BlobData | null = null;
   /** Total body length in bytes, or null when unknown; this is not a count of remaining bytes. */
   length: number | null = null;
   /** Owning environment shared by this body and its clones. */
@@ -54,6 +54,18 @@ export class FetchBody {
     return body;
   }
 
+  /** Create a fresh stream over a retained replay source without repeating body encoding. */
+  static fromSource(source: NonNullable<FetchBody['source']>, env: JSEnvironment): FetchBody {
+    if (source instanceof BlobImpl || source instanceof BlobData) {
+      const data = source instanceof BlobImpl ? source.data : source;
+      const body = new FetchBody(data.stream(env), env);
+      body.source = source;
+      body.length = data.size;
+      return body;
+    }
+    return FetchBody.fromBytes(source, env);
+  }
+
   /** Extract a converted BodyInit value, retaining its replay source and inferred Content-Type. */
   // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
   // Internal byte sequences use fromBytes(); a BodyInit BufferSource must be copied.
@@ -65,17 +77,14 @@ export class FetchBody {
     }
     if (object instanceof BlobImpl) {
       // The new body stream belongs to Fetch's environment, not the Blob creator.
-      const body = new FetchBody(object.data.stream(env), env);
-      body.source = object;
-      body.length = object.size;
-      return { body, type: object.type || null };
+      return { body: FetchBody.fromSource(object, env), type: object.type || null };
     }
     if (object instanceof FormDataImpl) {
       const { boundary, data } = encodeMultipartFormData(object.getEntryList(), 'UTF-8');
-      const body = new FetchBody(data.stream(env), env);
-      body.source = object;
-      body.length = data.size;
-      return { body, type: `multipart/form-data; boundary=${boundary}` };
+      // SPEC_CLASH(multipart-redirect-replay): the draft retains live FormData; browsers retain the encoded upload.
+      // Retain the existing data so redirects preserve the boundary and captured entries.
+      // File segments stay shared; replay creates a stream without re-encoding or flattening them.
+      return { body: FetchBody.fromSource(data, env), type: `multipart/form-data; boundary=${boundary}` };
     }
     if (object instanceof URLSearchParamsImpl) {
       return {
