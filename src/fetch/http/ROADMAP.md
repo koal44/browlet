@@ -9,8 +9,10 @@ Reusable syntax, dates, and RFC algorithms belong to [HTTP](../../http/ROADMAP.m
 **Status:** methods, ranges, and status classifications support parent Slice 2.
 Slice 5 adds authentication records, IP/localhost resolution, connection reuse,
 network partition derivation, cache partition identities, and port/MIME blocking.
-Header lists and MIME extraction live in `../headers.ts`. New connections, cache
-response storage, HTTP transactions, and the transport adapter remain planned.
+Header lists and MIME extraction live in `../headers.ts`. Cache response storage
+and complete HTTP transactions remain planned. Slice 9A adds real HTTP/HTTPS
+connections through the UserAgent's `HTTPTransport`; the earlier ConnectionPool
+records are not yet populated from those live connections.
 Slice 7 adds cookie/Origin integration, CORS token-list syntax, Content-Length,
 legacy encoding extraction, and nosniff blocking. FetchResponse's CORP methods
 delegate checks and violation submission to
@@ -26,6 +28,12 @@ from its HTTP response-selection algorithm. Lookup provisionally returns a miss
 while the cache has no entries. Preflight/network fetch reject with an explicit
 unimplemented InternalError, and CORS/TAO policy stubs throw likewise. Slice 9
 replaces those stubs; the parent roadmap lists their owners and remaining work.
+Slice 9A implements `params.httpNetworkFetch()` separately: available-byte uploads,
+bounded response buffering, task-owned Stream delivery, and cancellation over a
+fake transport or the Node Undici adapter. It does not yet connect to the
+network-or-cache stub. Slice 9B supplies that integration, streamed upload demand,
+per-response decoding, header processing, and timing. See the
+[five subdivisions](../ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
 
 ## Sources
 
@@ -53,6 +61,7 @@ belongs to the transport, not another parser in this folder.
 | Cookies | §3.1 and request/response processing | Use the [cookie subsystem](../../http/cookies/ROADMAP.md); Fetch computes its browser inputs and credentials decisions |
 | Browser policy | Main Fetch and redirects | Call the [policy owner](../../browlet/browsing/policy/ROADMAP.md); do not reimplement its language or infer an HTML environment from Node globals |
 | Cache transactions | §4.6 | Follow the [cache roadmap](cache/ROADMAP.md) |
+| HTTP host transport | Parent Slice 9A; implemented | Fetch owns buffering and delivery tasks; Browlet's Node adapter owns sockets, TLS, wire framing, and function-based pause/resume/abort |
 | HTTP-network processing | Parent Slice 9 | Integrate redirects, authentication, cache, CORS preflight/cache, filtering, cancellation, and transport without a second request pipeline |
 
 ## Fetch Metadata

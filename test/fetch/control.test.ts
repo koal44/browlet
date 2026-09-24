@@ -88,6 +88,29 @@ describe('Fetch §2 controllers', () => {
     expect(controller.serializedAbortReason).toEqual({ value: 'second' });
   });
 
+  it('cancels active operations once, after serializing the abort reason', () => {
+    const { controller, abort } = createControllerFixture(createEnvironment());
+    const cancel = vi.fn(() => {
+      expect(controller.state).toBe('aborted');
+      expect(controller.serializedAbortReason).not.toBeNull();
+    });
+    controller.addCancellationSteps(cancel);
+    abort('stop');
+    controller.terminate();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('removes completed operations and immediately cancels late registrations', () => {
+    const controller = new FetchController();
+    const completed = vi.fn();
+    controller.addCancellationSteps(completed)();
+    controller.terminate();
+    expect(completed).not.toHaveBeenCalled();
+    const late = vi.fn();
+    controller.addCancellationSteps(late);
+    expect(late).toHaveBeenCalledOnce();
+  });
+
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
     const { abort } = createControllerFixture({ exec: { ...createEnvironment().exec, serialize, deserialize: vi.fn() } });

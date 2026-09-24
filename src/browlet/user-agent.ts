@@ -12,9 +12,11 @@ import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
 import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
+import { NodeHTTPTransport } from './loader/node-transport';
 import {
   ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
-  type FetchController, type FetchResponse, type FetchUserAgent, type RequestInternalPriority, type ServiceWorkerTimingInfo,
+  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
+  type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
@@ -47,6 +49,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   defaultUserAgentValue = 'Mozilla/5.0 (compatible; Browlet)';
   /** Configured language preference; null leaves Accept-Language absent unless supplied or emulated. */
   defaultAcceptLanguage: string | null = null;
+  /** Wire connections outlive individual documents and are closed by their browser owner. */
+  httpTransport: HTTPTransport = new NodeHTTPTransport();
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
   /** CORS permissions are owned independently of ordinary HTTP cache entries. */

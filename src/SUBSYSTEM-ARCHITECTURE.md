@@ -643,6 +643,14 @@ host primitives underneath.
 Likewise, do not promote an immutable host configuration value or an operation
 already supplied by ECMAScript into a Host Port merely to make it injectable.
 
+Fetch's `HTTPTransport` is a concrete example. UserAgent composes a Node Undici
+adapter owning sockets, TLS verification, and connection reuse. Fetch owns the
+bounded response byte buffer and schedules stream creation/delivery on the
+execution owner's networking task source. Native callbacks retain bytes and
+update neutral records; they do not enter page Streams or allocate page objects.
+Pause/resume/abort functions cross this boundary without exposing Undici objects.
+Closing the transport belongs to its UserAgent lifetime, not an individual Window.
+
 ### Composition Root
 
 The Composition Root is the logical role allowed to know the complete concrete

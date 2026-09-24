@@ -16,6 +16,15 @@ export class FetchController {
   serializedAbortReason: object | null = null;
   /** Continuation for a pending manual redirect, or null when none is installed. */
   nextManualRedirectSteps: (() => void) | null = null;
+  /** Active operations watching the specification's "abort when canceled" condition. */
+  #cancellationSteps = new Set<() => void>();
+
+  /** Register active work; return its removal steps for normal completion. */
+  addCancellationSteps(steps: () => void): () => void {
+    if (this.state !== 'ongoing') steps();
+    else this.#cancellationSteps.add(steps);
+    return () => { this.#cancellationSteps.delete(steps); };
+  }
 
   // The selected global's environment supplies its time origin and Resource Timing owner.
   reportTiming(env: FetchEnvironment): void {
@@ -52,10 +61,18 @@ export class FetchController {
       serializedError = env.exec.serialize(fallbackError);
     }
     this.serializedAbortReason = serializedError;
+    this.#cancelOperations();
   }
 
   terminate(): void {
     this.state = 'terminated';
+    this.#cancelOperations();
+  }
+
+  #cancelOperations(): void {
+    const steps = [...this.#cancellationSteps];
+    this.#cancellationSteps.clear();
+    for (const step of steps) step();
   }
 }
 

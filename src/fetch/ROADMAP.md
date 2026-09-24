@@ -8,7 +8,7 @@
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **Next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch).
+- **9A complete; 9B next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); transport and download flow are implemented, HTTP transaction integration follows.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -1058,27 +1058,45 @@ binding remain in Slice 9; the later-owner hooks listed above remain provisional
 **Specification:** Fetch §§4.6–4.11, §§5.6–5.7, and “Using fetch in other
 standards”.
 
-Implement:
+Keep five subdivisions, with the first bounded to proving the transport:
 
-1. HTTP-network-or-cache fetch and HTTP-network fetch from §§4.6–4.7 over an
-   injected streaming transport. First use a deterministic fake; then add the
-   Undici dispatcher adapter with redirects and public Fetch objects disabled.
-2. CORS-preflight fetch, its cache records, CORS check, and TAO check from
-   §§4.8–4.11.
-3. Function-based cancellation and streamed backpressure between the
-   transport, Fetch controller, and Browlet Streams.
-4. The public `fetch()` operation from §5.6, including local-abort timing,
-   response filtering, realm-correct promises, and delivery on the target
-   environment's responsible event loop.
-5. The §5.7 garbage-collection requirements that are observably testable on
-   Node, with nondeterministic collection limitations documented rather than
-   hidden in timing-sensitive tests.
-6. Request setup, invocation, response callbacks, and ongoing-fetch control
-   from “Using fetch in other standards” for Browlet's loader.
+| Slice | Scope | Status |
+| --- | --- | --- |
+| **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented; integration into §4.6 remains gated on 9B |
+| **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Next |
+| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Planned |
+| **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Planned |
+| **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
 
-Add a direct Undici runtime dependency only with this slice. Browlet's
-supported Node floor is already 22.19 or newer, but the adapter still requires
-version-specific conformance and cancellation/backpressure tests.
+**9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
+UserAgent-owned host contract. [`node-transport.ts`](../browlet/loader/node-transport.ts)
+uses Undici 8.10's dispatcher, preserving ordered duplicate response fields,
+strict certificate/hostname verification, and actual TLS verification evidence.
+Undici is a direct Browlet runtime dependency and a matching workspace development
+dependency. Its Node floor matches Browlet's 22.19-or-newer requirement.
+
+[`http/network.ts`](http/network.ts) implements the wire exchange behind
+`FetchParams.httpNetworkFetch()`. A deterministic transport tests byte delivery,
+BYOB reads, errors, and cancellation; local HTTP/HTTPS servers exercise the
+adapter and real response consumption through `browlet.evaluate()`. Page tests
+use the ordinary running HTML event loop, without manual checkpoints.
+
+The network buffer pauses at 64 KiB and resumes below 32 KiB; one received chunk
+can overshoot the upper bound. It retains chunks/offsets and queues at most one
+delivery task, allocating page-visible bytes through the response's execution
+owner. Native callbacks do not mutate page Streams. Controller cancellation stops
+active and queued requests, including before Undici assigns a socket, and releases
+their listeners. Adapter shutdown aborts outstanding exchanges and closes clients.
+
+This first adapter uses HTTP/1.1 and one Undici Client per network partition,
+origin, and credentials mode. Undici owns the live sockets; the earlier Fetch
+ConnectionPool remains record-only. 9B must connect connection observations to
+those records, address per-origin concurrency and HTTP/2 stream cancellation,
+and implement timing, informational responses, and full request-body consumption.
+Available-byte uploads currently use the retained source directly. Streaming
+uploads and Blob sources remain explicit unimplemented paths.
+`httpNetworkOrCacheFetch()` still rejects until 9B supplies its HTTP processing;
+9A does not bypass it to expose incomplete public HTTP fetch.
 
 `FetchRequest.appendUserAgentHeader()` already implements the User-Agent
 insertion step, preserving an existing header and using the owning UserAgent's

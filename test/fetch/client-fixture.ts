@@ -43,6 +43,10 @@ export function createClientEnvironment(url = 'https://example.test/'): FetchEnv
 export function createFetchUserAgent(): FetchUserAgent {
   return {
     hostPromises,
+    httpTransport: {
+      dispatch() { throw new Error('This fixture has no network transport'); },
+      async close() {},
+    },
     runInParallel,
     unsafeSharedCurrentTime: () => performance.now(),
     determineRequestReferrer: () => null,

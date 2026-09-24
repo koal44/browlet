@@ -3,6 +3,7 @@ import type { FetchController } from './controller';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { CORSPreflightCache } from './http/cors-preflight-cache';
+import type { HTTPTransport } from './http/transport';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
@@ -144,6 +145,8 @@ export interface FetchEnvironmentRecord extends StorageEnvironment {
 }
 
 export interface FetchUserAgent extends StorageUserAgent {
+  /** Browser-owned wire transport, shared across environments and isolated by network partition. */
+  httpTransport: HTTPTransport;
   /** Browser-owned continuations, independent of any client's realm or lifetime. */
   hostPromises: Promises;
   /** Schedule background processing without entering an HTML global task. */

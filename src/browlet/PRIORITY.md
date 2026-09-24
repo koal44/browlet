@@ -260,7 +260,11 @@ Current implementation sequence:
    without a reporting client; multipart redirects retain the encoded upload.
    8E data URL processing is complete, including MIME/Base64 handling and
    end-to-end response delivery. Slice 8 is complete at its consumer boundaries;
-   next is Slice 9's HTTP transport, CORS, and public `fetch()` work.
+   Slice 9A now supplies the Undici HTTP/HTTPS adapter, available-byte uploads,
+   bounded streamed downloads, and active/queued cancellation. Next is 9B's HTTP
+   processing and streamed uploads/decoding, then 9C cache, 9D CORS/TAO, and 9E
+   public `fetch()` and consumer integration. The network-or-cache entry stays
+   provisional until 9B can connect transport at its prescribed HTTP stages.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery

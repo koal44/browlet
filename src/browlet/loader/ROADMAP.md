@@ -9,7 +9,7 @@ response, header, body, cancellation, and fetch-algorithm semantics. This
 directory supplies HTML settings, policy, task, navigation, and element inputs;
 it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 
-| Planned source | Contract | Specification |
+| Source / planned source | Contract | Specification |
 | --- | --- | --- |
 | `document-loader.ts` | Navigation response consumption, replayable response bytes for parser encoding restart, and Document load coordination | HTML §§7.4–7.5 and 13.2.3 |
 | `document-handlers.ts` | Select and populate HTML, XML, text, multipart, media, and content-handler Documents from response MIME/type state | HTML §§7.5.2–7.5.7 |
@@ -22,7 +22,12 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
-| `node-transport.ts` | Adapt a supported Node HTTP/Undici dispatcher to Fetch's transport contract without delegating redirects or browser policy | Fetch network fetch |
+| `node-transport.ts` | Implemented in Fetch 9A: UserAgent-owned Undici HTTP/1.1 adapter, TLS verification, partitioned connections, byte uploads, pause/resume, abort, and shutdown | Fetch network fetch |
+
+The transport is callable through Fetch's preliminary `httpNetworkFetch()`
+operation and covered by loopback HTTP/HTTPS tests. Fetch 9B supplies the remaining
+HTTP processing before connecting it to network-or-cache fetch. Public Fetch and
+loader consumers remain later work; the source-text route below is unchanged.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves

@@ -12,6 +12,8 @@ export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
+export type { HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl } from './http/transport';
+export { networkPartitionKeysEqual, type NetworkPartitionKey } from './http/network-partition';
 export { HTTPCachePartitions } from './http/cache/partitions';
 export { CORSPreflightCache } from './http/cors-preflight-cache';
 export type {
@@ -20,7 +22,7 @@ export type {
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './environment';
 export { fetchEnvironment } from './environment';
-export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
+export { getEnvironmentDefaultUserAgent, isHeaderValue, FetchHeaders } from './headers';
 export {
   requestIDL, FetchRequest, isScriptLikeDestination,
   type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,

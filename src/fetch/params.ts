@@ -15,6 +15,7 @@ import {
 } from './headers';
 import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff } from './http/blocking';
 import { isCORSSafelistedMethod } from './http/methods';
+import { httpNetworkFetch } from './http/network';
 import { isNullBodyStatus, isRangeStatus, isRedirectStatus } from './http/statuses';
 import { bytesMatchIntegrityMetadata } from './integrity';
 import type { FetchRequest } from './request';
@@ -267,6 +268,12 @@ export class FetchParams {
   httpNetworkOrCacheFetch(_isAuthenticationFetch = false, _isNewConnectionFetch = false): PromiseValue<FetchResponse> {
     // PROVISIONAL(Fetch 9): implement cache selection, network fetch, and authentication.
     return this.request.userAgent.hostPromises.reject(new InternalError('HTTP-network-or-cache fetch is not implemented'));
+  }
+
+  /** Perform the HTTP transport exchange; network-or-cache integration follows in Fetch 9B. */
+  // https://fetch.spec.whatwg.org/#concept-http-network-fetch
+  httpNetworkFetch(includeCredentials = false, forceNewConnection = false): PromiseValue<FetchResponse> {
+    return httpNetworkFetch(this, includeCredentials, forceNewConnection);
   }
 
   /** Perform a preflight request and populate the browser's CORS permission cache. */
