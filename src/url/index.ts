@@ -1,7 +1,7 @@
 export { URLSearchParamsImpl, urlIDLDefinitions } from './api';
 export { originIDL } from './origin-api';
 export {
-  copyURL, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,
+  copyURL, getDefaultPort, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,
   type BlobURLEntry, type URLUserAgent, type URLParseResult, type URLPath, type URLRecord,
 } from './url';
 export {
@@ -10,7 +10,7 @@ export {
   type Origin, type Site, type TupleOrigin,
 } from './origin';
 export {
-  hostsEqual, obtainPublicSuffix, parseHost, type Domain, type Host, type IPAddress,
+  hostsEqual, obtainPublicSuffix, parseHost, serializeHost, type Domain, type Host, type IPAddress,
 } from './host';
 export { parseFormUrlEncoded } from './form-url-encoded';
-export { percentEncodeByte } from './percent-encoding';
+export { percentDecodeString, percentEncodeByte } from './percent-encoding';

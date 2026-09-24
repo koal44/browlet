@@ -13,7 +13,8 @@ import { EventImpl } from '../../../../src/browlet/dom/events/event';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
-import { parseURL, type URLRecord } from '../../../../src/url/url';
+import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../src/url/url';
+import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
 
 describe('Document', () => {
   it('uses the DOM document defaults', () => {
@@ -33,7 +34,7 @@ describe('Document', () => {
     expect(document.allowDeclarativeShadowRoots).toBe(false);
     expect(document.moduleMap).toEqual({ entries: [] });
     expect(document.policyContainer).toMatchObject({
-      cspList: [],
+      cspList: undefined,
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
     expect(document.permissionsPolicy).toEqual({});
@@ -46,6 +47,25 @@ describe('Document', () => {
     expect(document.loadTimingInfo.navigationStartTime)
       .toBe(0);
     expect(document.isInitialAboutBlank).toBe(false);
+  });
+
+  it('initializes an empty CSP list once the document origin is known', () => {
+    const document = new DocumentImpl();
+    document.origin = obtainURLOrigin(documentURL('https://example.test/'));
+    document.initializeCSP();
+    expect(document.policyContainer.cspList).toEqual(new CSPList(document.origin));
+    expect(document.policyContainer.cspList!.selfOrigin).toBe(document.origin);
+  });
+
+  it('preserves an inherited CSP list and its origin during document initialization', () => {
+    const document = new DocumentImpl();
+    const origin = obtainURLOrigin(documentURL('https://creator.test/'));
+    const inherited = new CSPList(origin);
+    document.policyContainer.cspList = inherited;
+    document.initializeCSP();
+    expect(document.policyContainer.cspList).toBe(inherited);
+    expect(inherited.selfOrigin).toBe(origin);
+    expect(document.origin).not.toEqual(origin);
   });
 
   it('always has a base URI', () => {

@@ -2,15 +2,14 @@ import {
   createEmbedderPolicy, type EmbedderPolicy,
 } from './coep';
 import { IntegrityPolicy } from './integrity-policy';
+import type { CSPList } from './csp/list';
 import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Policies associated with a document, worker, or worklet. */
 // https://html.spec.whatwg.org/multipage/browsers.html#policy-container
 export class PolicyContainer implements FetchPolicyContainer {
-  // PROVISIONAL: CSP still needs its concrete value model.
-  /** Content Security Policies applied to this owner. */
-  cspList: object[] = [];
+  /** Content Security Policies; absent until the resource's origin is established. */
+  cspList: CSPList | undefined = undefined;
   /** Enforced and report-only cross-origin embedder policy. */
   embedderPolicy: EmbedderPolicy = createEmbedderPolicy();
   /** Default referrer disclosure policy for requests initiated by this owner. */
@@ -33,9 +32,8 @@ export class PolicyContainer implements FetchPolicyContainer {
   /** Copy the implemented policy state independently of its current owner. */
   // https://html.spec.whatwg.org/multipage/browsers.html#clone-a-policy-container
   clone(): PolicyContainer {
-    // PROVISIONAL: CSP's policy model must supply copying before populated lists can be cloned.
-    if (this.cspList.length !== 0) throw new InternalError('Content Security Policy copying is not implemented');
     const clone = new PolicyContainer();
+    clone.cspList = this.cspList?.clone();
     clone.embedderPolicy = { ...this.embedderPolicy };
     clone.referrerPolicy = this.referrerPolicy;
     clone.integrityPolicy = this.integrityPolicy.clone();

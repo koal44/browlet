@@ -122,7 +122,6 @@ export class Browlet {
     const navigationParams = NavigationParams.fromSource(
       this.#traversable,
       documentURLRecord,
-      source,
     );
     const historyHandling = resolveNavigationHistoryBehavior(
       this.#traversable,
@@ -136,7 +135,7 @@ export class Browlet {
     );
     const realm = getRelevantRealm(document);
     const env = document.env;
-    const historyEntry = navigationParams.createHistoryEntry(document);
+    const historyEntry = navigationParams.createHistoryEntry(document, source);
     finalizeCrossDocumentNavigation(
       this.#traversable,
       historyHandling,

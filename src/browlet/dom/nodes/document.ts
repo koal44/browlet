@@ -13,9 +13,11 @@ import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
-import type { NavigationParams, NavigationRequest } from '../../browsing/navigation/navigation';
+import type { NavigationParams } from '../../browsing/navigation/navigation';
 import type { Environment } from '../../scripting/environment';
 import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
+import { CSPList } from '../../browsing/policy/csp/list';
+import type { FetchRequest } from '../../../fetch/index';
 import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
 import type { Realm } from '../../scripting/realm';
@@ -170,6 +172,8 @@ export class DocumentImpl extends NodeImpl {
   moduleMap: ModuleMap = { entries: [] };
   /** Policies inherited or supplied when the document was created. */
   policyContainer: PolicyContainer = createPolicyContainer();
+  /** HTTP status of the resource that created this Document; zero when there was no response. */
+  httpStatus = 0;
   /** Permissions policy controlling features in this document. */
   permissionsPolicy: PermissionsPolicy = createPermissionsPolicy();
   /** Cross-origin opener policy selected for this document. */
@@ -596,15 +600,17 @@ export class DocumentImpl extends NodeImpl {
 
   /** Initialize the document's delivered Content Security Policies. */
   initializeCSP(): void {
-    // PROVISIONAL: run CSP initialization when response parsing and CSP lists exist.
-    // An enforced upgrade-insecure-requests directive enables
-    // this.env.insecureRequestsPolicy.enableFor(this.url).
-    // Report-only directives must leave that policy unchanged.
+    // An inherited list already carries its creator's origin. An empty new
+    // list also needs an origin before later meta policies can be added.
+    this.policyContainer.cspList ??= new CSPList(this.origin);
+    this.policyContainer.cspList.initializeDocument(this);
   }
 
   /** Record the referrer selected by the request that created this document. */
-  initializeReferrer(request: NavigationRequest | null): void {
-    if (request !== null) this.referrer = request.referrer === null ? '' : serializeURL(request.referrer);
+  initializeReferrer(request: FetchRequest | null): void {
+    if (request === null) return;
+    if (request.referrer === undefined) throw new InternalError('Navigation request referrer has not been resolved');
+    this.referrer = request.referrer === null ? '' : serializeURL(request.referrer);
   }
 
   /** Reset document-loading milestones around the selected navigation start. */
@@ -618,20 +624,23 @@ export class DocumentImpl extends NodeImpl {
   /** Create this document's navigation performance entry from the response timing. */
   createNavigationTimingEntry(navigationParams: NavigationParams): void {
     if (navigationParams.fetchController !== null) {
-      throw new InternalError('Fetch timing extraction is not implemented');
+      throw new InternalError('PerformanceNavigationTiming creation is not implemented');
     }
     // PROVISIONAL: create PerformanceNavigationTiming when its implementation exists.
   }
 
   /** Apply response integrations that require the newly created document. */
   processResponseIntegrations(navigationParams: NavigationParams): void {
-    if (navigationParams.getResponseHeader('Refresh') !== null) {
+    const response = navigationParams.response;
+    this.httpStatus = response.status;
+    this.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
+    if (response.headerList.get('Refresh') !== null) {
       throw new InternalError('Refresh response processing is not implemented');
     }
-    if (navigationParams.getResponseHeader('Link') !== null) {
+    if (response.headerList.get('Link') !== null) {
       throw new InternalError('Link response processing is not implemented');
     }
-    if (navigationParams.getResponseHeader('Speculation-Rules') !== null) {
+    if (response.headerList.get('Speculation-Rules') !== null) {
       throw new InternalError('Speculation-Rules response processing is not implemented');
     }
     navigationParams.commitEarlyHints?.(this);

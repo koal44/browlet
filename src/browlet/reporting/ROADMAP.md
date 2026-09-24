@@ -32,6 +32,13 @@ the live associated Document URL, independently of its base/referrer URL.
 Future Worker settings must implement that operation for their own URL.
 No private policy report queue has been introduced.
 
+CSP now submits `csp-violation` reports with a concrete, JSON-serializable
+`CSPViolationReportBodyImpl`. Environment retains that body directly for observers;
+delivery still copies plain data and drops the observer body. `csp-hash` now queues
+sanitized data with a completed digest or an empty hash for opaque responses;
+it is not observer-visible. The [CSP roadmap](../browsing/policy/csp/ROADMAP.md)
+owns its body reading and the real-response loader test that reaches endpoint initialization.
+
 ## Sources and dependencies
 
 Local source: `w3c-reporting/index.bs` under the
@@ -73,11 +80,11 @@ URLs, combined headers and duplicate names, ignored parameters, invalid fields
 and URLs, origin trust, replacement, and per-global isolation. The lists exist;
 this slice does not submit or deliver reports.
 
-**Consumer gate:** HTML's navigation/worker loader must call initialization with
-the actual Fetch response. Navigation still uses its provisional
-`NavigationResponse`; do not manufacture a Fetch response merely to adapt that
-placeholder. Worker globals are also future work. The explicit initialization
-method is tested through real Window ownership meanwhile.
+**Consumer gate:** Document creation now initializes endpoints from its actual
+Fetch response, covered by CSP's document-initialization regression. Automatic
+network navigation awaits the Fetch-backed HTML loader; the synchronous source
+route carries no Reporting-Endpoints header. Worker globals are also future
+work. Explicit initialization is tested through real Window ownership.
 
 ### B. Generation, observers, and user controls
 
@@ -90,7 +97,7 @@ Report queues and observer buffers are distinct.
 
 **Implemented boundary:** `ReportImpl` owns the observer-visible type, URL, and
 nullable `ReportBodyImpl`, along with `data: unknown` and delivery bookkeeping.
-Environment constructs the concrete body once, and observers and buffered replay
+Environment constructs or accepts the concrete body once, and observers and buffered replay
 share the report rather than creating separate observer representations.
 `IntegrityViolationReportBodyImpl` snapshots the producer's
 four fields. `COEPViolationReportBodyImpl` snapshots CORP's type, blocked URL,
@@ -127,7 +134,7 @@ covers that data and the shared identification source described below.
 The global-scope mixin owns the registration set and generation-ordered buffer,
 limited to 100 reports per type. HTML tasks deliver callbacks through the
 converted Web IDL callback, including callback-realm array allocation, receiver
-projection, and exception reporting. COEP and integrity violations are the
+projection, and exception reporting. COEP, integrity, and CSP violations, plus test reports, are the
 currently implemented observable types; unknown types remain queued for delivery
 but are not exposed locally.
 

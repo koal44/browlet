@@ -82,8 +82,9 @@ When an algorithm reaches a missing external dependency:
 | Public `fetch()` binding (planned) | Realm-correct orchestration and abort handling | §5.6 |
 
 Policy modules operate on the existing Fetch records and browser contracts.
-They retain no separate request/response state. SRI metadata and byte verification
-remain in `integrity.ts`.
+They retain no separate request/response state. CSP's language, matching, and
+list behavior stay with [Browlet's CSP implementation](../browlet/browsing/policy/csp/ROADMAP.md)
+behind `FetchCSPList`; SRI metadata and byte verification remain in `integrity.ts`.
 
 ## Dependency ledger
 
@@ -773,10 +774,13 @@ its current Document's origin is not used for this check. The specification's
 old environment-object wording remains an upstream issue to resolve.
 
 Policy cloning covers implemented COEP/referrer state, both Integrity Policies,
-and independent default containers. Populated CSP lists explicitly reject
-cloning until the CSP owner supplies copying.
-That model must include CSP's list-level `self-origin`, not just replace
-`object[]` with typed policy entries; see the [CSP roadmap](../browlet/browsing/policy/csp/ROADMAP.md).
+populated CSP lists, and independent default containers. CSP copying preserves
+the list-level `self-origin` while independently copying directive data; tests
+exercise that behavior through client population. A default container can have
+no CSP list; every constructed list requires its origin. CSP parsing, source
+matching, Window violations, and hash reporting are implemented through
+[CSP slice C](../browlet/browsing/policy/csp/ROADMAP.md). The independent preflight
+detour is complete; resume the Fetch entry algorithm and main-fetch processing here.
 Both Integrity Policies now copy independently, following Gecko despite HTML's
 report-only omission. Remaining policy models and delivery belong to their
 policy owners, rather than requiring new Fetch wiring.
@@ -797,6 +801,15 @@ navigation preference header. The [policy roadmap](../browlet/browsing/policy/RO
 records the reviewed browser/spec choices and consumer inputs. Fill
 the internal response URL list before its mixed-content check. Preserve this
 ordering on redirect re-entry. A failed HTTPS upgrade never retries HTTP.
+
+CSP provides `request.reportCSPViolations()` for the pre-upgrade monitored pass,
+`request.isBlockedByCSP()` for post-upgrade enforcement, and
+`response.isBlockedByCSP(request)` for the received internal response. The last
+pass checks both dispositions and the response's URL. Run it after filling the
+response URL list. These use the request's cloned policy container and its
+retained self origin, without importing the browser's CSP implementation.
+CSP's Window event and report-generation dependencies are implemented; actual
+network report delivery will use the Fetch entry and transport algorithms.
 
 HSTS's independent algorithms are implemented. Main fetch must call
 `request.upgradeForHSTS()` after referrer selection and before dispatch, including

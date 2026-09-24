@@ -17,7 +17,7 @@ export function createAndInitializeDocument(
   const browsingContext = navigationParams.obtainBrowsingContext();
   const permissionsPolicy = navigationParams.createPermissionsPolicy();
   const creationURL = navigationParams.request?.currentURL ??
-    navigationParams.response.url;
+    navigationParams.url;
   const activeDocument = browsingContext.activeDocument;
 
   let window: WindowImpl;
@@ -62,8 +62,8 @@ export function createAndInitializeDocument(
   document.permissionsPolicy = permissionsPolicy;
   document.setActiveSandboxingFlagSet(navigationParams.finalSandboxingFlagSet);
   document.openerPolicy = navigationParams.openerPolicy;
-  document.initializeLoadTimingInfo(navigationParams.response.timingInfo.startTime);
-  document.wasCreatedViaCrossOriginRedirects = navigationParams.response.hasCrossOriginRedirects;
+  document.initializeLoadTimingInfo(navigationParams.startTime);
+  document.wasCreatedViaCrossOriginRedirects = navigationParams.response.redirectTaint !== 'same-origin';
   document.duringLoadingNavigationID = navigationParams.id;
   document.url = creationURL;
   document.currentDocumentReadiness = 'loading';

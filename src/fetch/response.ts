@@ -196,6 +196,13 @@ export class FetchResponse {
     return isResponseBlockedByMixedContent(this, request);
   }
 
+  /** Check the received URL against the request's CSP, including report-only policies. */
+  // https://w3c.github.io/webappsec-csp/#should-block-response
+  isBlockedByCSP(request: FetchRequest): boolean {
+    if (request.policyContainer === undefined) throw new InternalError('Fetch request policy container has not been resolved');
+    return request.policyContainer.cspList?.isResponseBlocked(this, request) ?? false;
+  }
+
   /** Whether a trustworthy source URL initiated a download with any untrustworthy response hop. */
   // https://w3c.github.io/webappsec-mixed-content/#html
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-as-a-download

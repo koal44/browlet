@@ -185,6 +185,7 @@ export function createNewBrowsingContextAndDocument(
 
   window.setAssociatedDocument(document);
   document.initializeInsecureRequestsPolicy();
+  document.initializeCSP();
   document.readyForPostLoadTasks = true;
   populateWithHTMLHeadBody(document);
   makeActive(document);

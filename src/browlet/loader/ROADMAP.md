@@ -34,6 +34,22 @@ prerequisites. Inline `<style>` processing reaches Stylelet without a Fetch.
 request/response and resource-load lifecycles. `html/parser/` consumes loaded
 bytes and may discover resources, but must not become the loader.
 
+`NavigationParams` now retains the actual `FetchRequest`, `FetchResponse`, and
+`FetchController`. Response CSP and sandbox restrictions are selected before
+origin/Window creation; the created Document receives the protected response
+status, redirect taint, resolved referrer, and Reporting endpoints. The CSP
+initialization and document-lifecycle tests cover these inputs.
+`SPEC_CLASH(html-navigation-response-timing)` records HTML's stale reference to
+response timing: Fetch owns full timing on the controller, so navigation reads
+its start time there. Creating PerformanceNavigationTiming remains gated by the
+[performance roadmap](../performance/ROADMAP.md#fetch-and-navigation-integration).
+
+The synchronous source route creates only Fetch response metadata. Its text
+still goes directly to the parser and explicitly into the history source slot;
+a streamed network response body must not be stored in that slot. Full body
+consumption remains loader work. Full policy-container selection must also
+preserve history/local-URL inheritance and deliver the other response policies.
+
 For HTML, the loader retains response metadata and enough replayable bytes for
 the parser's encoding component to sniff, decode, and request the specified
 navigation restart without repeating the network request. It then feeds

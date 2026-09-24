@@ -284,9 +284,15 @@ Current implementation sequence:
    Mixed Content/upgrading's independent algorithms are complete: policy state,
    request upgrades, navigation preference headers, and request/response/download
    checks. Fetch/HTML consumer wiring remains at the recorded integration gates.
-   CSP is the last independent preflight task. Network report delivery remains gated on
-   Fetch. CSP copying and policy delivery
-   remain with their policy owners.
+   CSP is the last independent preflight task. Slice A supplies policy parsing
+   and copying, including the inherited self origin. B's matching and Fetch
+   entry methods are implemented. C supplies Window violations/events, typed
+   reporting, base-uri checks, sandbox parsing, and upgrade-policy initialization.
+   Document creation now consumes concrete Fetch records; console output uses
+   an approved provisional environment method. Hash reporting preserves the
+   response body and guards cross-origin disclosure. These bounded CSP slices
+   complete the independent preflight work; network report delivery remains gated on Fetch.
+   CSP policy delivery remains with its policy owner.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's
    infrastructure is implemented with its network/storage effects deferred.

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
 import type { FetchBody } from '../../src/fetch/body';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
@@ -368,6 +369,33 @@ describe('Fetch client population with HTML settings', () => {
     expect(request.policyContainer).toMatchObject(expected);
   });
 
+  it('copies parsed CSP policies and their inherited self origin from the actual Window settings', () => {
+    const window = createWindow();
+    const env = getRelevantRealm(window).env;
+    const response = new FetchResponse();
+    response.urlList = [parseURL('https://creator.test/document').url!];
+    response.headerList.append('Content-Security-Policy', "default-src 'self'");
+    response.headerList.append('Content-Security-Policy-Report-Only', "img-src 'none'");
+    env.policyContainer.cspList = CSPList.parse(response);
+    const request = implementation(window, new window.Request(url)).getRequest();
+    request.populateFromClient();
+    const expected = {
+      cspList: {
+        selfOrigin: env.policyContainer.cspList.selfOrigin,
+        policies: [
+          { source: 'header', disposition: 'enforce', directives: new Map([['default-src', ["'self'"]]]) },
+          { source: 'header', disposition: 'report', directives: new Map([['img-src', ["'none'"]]]) },
+        ],
+      },
+    };
+    expect(expected.cspList.selfOrigin).not.toEqual(env.origin);
+    expect(request.policyContainer).toMatchObject(expected);
+    env.policyContainer.cspList.policies[0]!.directives.get('default-src')!.push('*');
+    env.policyContainer.cspList.policies[1]!.directives.clear();
+    env.policyContainer.cspList.policies.length = 0;
+    expect(request.policyContainer).toMatchObject(expected);
+  });
+
   it('checks populated integrity policies and submits typed reports using the actual Window Document URL', async () => {
     const browlet = new Browlet({ route: () => '<base href="https://resource.test/assets/">' });
     await browlet.navigate('https://document.test/page#fragment');
@@ -415,7 +443,7 @@ describe('Fetch client population with HTML settings', () => {
     request.origin = env.origin;
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBeNull();
-    expect(request.policyContainer).toEqual(env.policyContainer);
+    expect(request.policyContainer).toEqual(env.userAgent.createPolicyContainer());
     expect(request.policyContainer).not.toBe(env.policyContainer);
   });
 });

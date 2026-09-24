@@ -372,7 +372,8 @@ integration deferrals below. The bounded test-reliability/performance review
 is complete, and [Slice 8A](ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes)
 has connected client population to HTML prompt-target selection and policy
 container cloning/default creation. The Request constructor uses the accepted
-provisional source-origin copy check; populated CSP copying remains pending.
+provisional source-origin copy check; populated CSP copying now preserves its
+list-level self origin and independently copies policy/directive data.
 Concrete Integrity Policy state and independent copying belong to the HTML
 policy owner; FetchRequest owns the request check. 7a's cookie header
 algorithms and Window ancestry inputs are complete. 7b's Origin headers and
@@ -422,9 +423,16 @@ now supply blocking, download checks, policy state, both URL-upgrade algorithms,
 and the navigation preference header. Their Fetch/HTML consumer gates remain
 with the owning roadmaps.
 
-The remaining independent preflight task is
+The final independent preflight task,
 [CSP](../browlet/browsing/policy/csp/ROADMAP.md), including delivery of its
-inputs to the preceding policy algorithms.
+inputs to the preceding policy algorithms, is complete within its bounded scope.
+A/B and C's independent Window violations, events, reporting, sandbox/base-uri
+checks, and initialization are
+implemented. Document creation consumes the real Fetch records, and developer
+warnings reach an approved provisional environment method. Hash reporting reads
+a separate body branch, sanitizes URLs, and guards opaque-response disclosure.
+Full body loading remains HTML loader work, and actual console output remains
+Console work.
 
 [Reporting](../browlet/reporting/ROADMAP.md)'s network delivery completes when
 Fetch can execute its requests; it is not a prerequisite for resuming Fetch 8A.

@@ -16,14 +16,14 @@ export { HTTPCachePartitions } from './http/cache/partitions';
 export type {
   FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
   FetchInsecureRequestsPolicy,
-  FetchPolicyContainer, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
+  FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './infrastructure';
 export { fetchEnvironment } from './infrastructure';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
-export { requestIDL, FetchRequest } from './request';
-export { responseIDL, type FetchResponse } from './response';
+export { requestIDL, FetchRequest, isScriptLikeDestination } from './request';
+export { responseIDL, FetchResponse } from './response';
 export {
-  parseIntegrityMetadata, type IntegrityMetadata, type IntegrityAlgorithm,
+  parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
   type FetchIntegrityPolicy, type IntegrityViolationReportBody,
 } from './integrity';
 export { isLocalScheme } from './url';

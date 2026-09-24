@@ -19,7 +19,7 @@ import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { RealmExecution } from '../../js-engine/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
-import { ReportImpl } from '../reporting/report';
+import { ReportImpl, ReportBodyImpl } from '../reporting/report';
 import { TestReportBodyImpl } from '../reporting/test-report';
 import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
 import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
@@ -133,6 +133,14 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   /** Existing state shared by all consumers of this environment's global scope. */
   abstract getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin;
 
+  /** Report an internal browser warning attributed to this document or worker. */
+  // https://console.spec.whatwg.org/#report-a-warning-to-the-console
+  reportConsoleWarning(_description: string): void {
+    // PROVISIONAL: Console's internal Printer and developer-console output are
+    // not implemented. Preserve this environment as the message's owner when
+    // connecting that output; do not call the author's overridable console API.
+  }
+
   /** Create a report and its observer body, capturing this environment's current identification value. */
   // https://w3c.github.io/reporting/#queue-report
   generateReport(data: unknown, type: string, destination: string): ReportImpl {
@@ -141,7 +149,9 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
       data, type, destination, stripURLForReporting(this.creationURL),
       obtainURLOrigin(this.creationURL), getEnvironmentDefaultUserAgent(this),
     );
-    if (data !== null) {
+    if (data instanceof ReportBodyImpl) {
+      report.body = data;
+    } else if (data !== null) {
       switch (type) {
         case 'test':
           report.body = new TestReportBodyImpl((data as { message: string; }).message);
@@ -159,7 +169,7 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
 
   /** Submit a report to this environment's actual global scope. */
   // https://w3c.github.io/reporting/#generate-report
-  queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void {
+  queueReport(type: string, endpoint: string, body: unknown): void {
     this.getWindowOrWorkerGlobalScopeMixin().queueReport(type, endpoint, body);
   }
 }

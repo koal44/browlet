@@ -235,6 +235,20 @@ export class FetchRequest {
     return isRequestBlockedByMixedContent(this);
   }
 
+  /** Report monitored CSP violations before insecure-request and mixed-content upgrades. */
+  // https://w3c.github.io/webappsec-csp/#report-for-request
+  reportCSPViolations(): void {
+    if (this.policyContainer === undefined) throw new InternalError('Fetch request policy container has not been resolved');
+    this.policyContainer.cspList?.reportRequestViolations(this);
+  }
+
+  /** Enforce the populated request's CSP after URL upgrades. */
+  // https://w3c.github.io/webappsec-csp/#should-block-request
+  isBlockedByCSP(): boolean {
+    if (this.policyContainer === undefined) throw new InternalError('Fetch request policy container has not been resolved');
+    return this.policyContainer.cspList?.isRequestBlocked(this) ?? false;
+  }
+
   /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */
   addRangeHeader(first: number | bigint, last?: number | bigint): void {
     if (last !== undefined && first > last) throw new InternalError('Range start exceeds its end');

@@ -8,8 +8,9 @@ import {
 import type { SandboxingFlagSet } from '../policy/sandbox';
 import type { BrowsingContext } from '../browsing-context';
 import { createPermissionsPolicy, type PermissionsPolicy } from '../policy/permissions';
-import type { ReferrerPolicy } from '../../../fetch/index';
-import { areSameOrigin, type Origin, obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/index';
+import { FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
+import { areSameOrigin, createOpaqueOrigin, type Origin, obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/index';
+import { CSPList } from '../policy/csp/list';
 import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
 import type { EnvironmentRecord } from '../../scripting/environment';
 import {
@@ -35,9 +36,9 @@ export class NavigationParams {
   /** Destination navigable that will present the response's document. */
   navigable: Navigable;
   /** Fetch request that produced the response, or null for Browlet's local route. */
-  request: NavigationRequest | null = null;
+  request: FetchRequest | null = null;
   /** Response selected for document creation. */
-  response: NavigationResponse;
+  response: FetchResponse;
   /** Fetch controller supplying navigation timing, when available. */
   fetchController: FetchController | null = null;
   /** Commit work retained from early hints after creating the document. */
@@ -62,26 +63,51 @@ export class NavigationParams {
   aboutBaseURL: URLRecord | null = null;
   /** User involvement passed to history finalization. */
   userInvolvement: UserNavigationInvolvement = 'browser UI';
+  /** Start of a supplied-response navigation, used when no Fetch controller exists. */
+  #startTime: DOMHighResTimeStamp;
 
-  constructor(navigable: Navigable, response: NavigationResponse) {
+  constructor(navigable: Navigable, response: FetchResponse) {
     this.navigable = navigable;
     this.response = response;
-    this.origin = obtainURLOrigin(response.url);
-    this.finalSandboxingFlagSet = new Set(this.obtainBrowsingContext().popupSandboxingFlagSet);
+    this.origin = obtainURLOrigin(this.url);
+    const context = this.obtainBrowsingContext();
+    this.finalSandboxingFlagSet = new Set(context.popupSandboxingFlagSet);
+    const env = getRelevantRealm(context.activeWindow).env;
+    this.#startTime = coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds;
   }
 
-  /** Prepare navigation from a response supplied by Browlet's local route. */
-  static fromSource(navigable: Navigable, url: URLRecord, body: string): NavigationParams {
-    const window = navigable.activeWindow;
-    if (window === null) throw new InternalError('Navigation requires an active Window');
-    const env = getRelevantRealm(window).env;
-    return new NavigationParams(navigable, {
-      url, body, headers: new Map(),
-      timingInfo: {
-        startTime: coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
-      },
-      hasCrossOriginRedirects: false,
-    });
+  /** Final response URL, required when a response is selected for navigation. */
+  get url(): URLRecord {
+    const url = this.response.url;
+    if (url === null) throw new InternalError('Navigation requires a response URL');
+    return url;
+  }
+
+  /** Fetch start time, or the start of Browlet's supplied-response navigation. */
+  get startTime(): DOMHighResTimeStamp {
+    // SPEC_CLASH(html-navigation-response-timing): HTML still reads response.timingInfo;
+    // Fetch retains full timing on its controller. Use that existing owner.
+    return this.fetchController?.extractFullTimingInfo().startTime ?? this.#startTime;
+  }
+
+  /** Prepare response-delivered CSP and sandbox restrictions before selecting the document's realm. */
+  static fromResponse(navigable: Navigable, response: FetchResponse): NavigationParams {
+    const params = new NavigationParams(navigable, response);
+    params.policyContainer.cspList = CSPList.parse(response);
+    for (const flag of params.policyContainer.cspList.getSandboxingFlags()) params.finalSandboxingFlagSet.add(flag);
+    if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
+    // Full navigation policy-container selection (history/local URL inheritance,
+    // COEP, referrer, and integrity delivery) remains with the Fetch-backed loader.
+    return params;
+  }
+
+  /** Prepare the response metadata for Browlet's synchronous source route. */
+  static fromSource(navigable: Navigable, url: URLRecord): NavigationParams {
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    // The local route supplies text directly to the parser and session history;
+    // it does not create a Fetch body stream in the departing document's realm.
+    return NavigationParams.fromResponse(navigable, response);
   }
 
   /** Select the browsing context in which this response will create a document. */
@@ -96,7 +122,7 @@ export class NavigationParams {
 
   /** Combine response and container permissions for the destination document. */
   createPermissionsPolicy(): PermissionsPolicy {
-    if (this.getResponseHeader('Permissions-Policy') !== null) {
+    if (this.response.headerList.get('Permissions-Policy') !== null) {
       throw new InternalError('Permissions-Policy response parsing is not implemented');
     }
     if (!(this.navigable instanceof TopLevelTraversable)) {
@@ -107,51 +133,25 @@ export class NavigationParams {
 
   /** Whether the response requests an origin-keyed agent cluster. */
   requestsOriginAgentCluster(): boolean {
-    if (this.getResponseHeader('Origin-Agent-Cluster') !== null) {
+    if (this.response.headerList.get('Origin-Agent-Cluster') !== null) {
       throw new InternalError('Origin-Agent-Cluster header parsing is not implemented');
     }
     return false;
   }
 
   /** Retain the new document and the navigation data needed to restore it. */
-  createHistoryEntry(document: DocumentImpl): SessionHistoryEntry {
+  createHistoryEntry(document: DocumentImpl, source: string | null = null): SessionHistoryEntry {
     const activeState = this.navigable.activeSessionHistoryEntry.documentState;
     const documentState = createDocumentState(document);
     documentState.initiatorOrigin = null;
     documentState.origin = this.origin;
     documentState.aboutBaseURL = this.aboutBaseURL;
-    documentState.resource = this.response.body;
+    documentState.resource = source;
     documentState.everPopulated = true;
     documentState.navigableTargetName = activeState.navigableTargetName;
     return createSessionHistoryEntry(documentState);
   }
-
-  /** Read a field from the provisional local-route response. */
-  getResponseHeader(name: string): string | null {
-    // PROVISIONAL: use FetchHeaders when navigation consumes FetchResponse.
-    const lowerName = name.toLowerCase();
-    for (const [headerName, value] of this.response.headers) {
-      if (headerName.toLowerCase() === lowerName) return value;
-    }
-    return null;
-  }
 }
-
-export type NavigationRequest = {
-  currentURL: URLRecord;
-  referrer: URLRecord | null;
-};
-
-// Fetch owns the controller's concrete state and timing extraction behavior.
-export type FetchController = object;
-
-export type NavigationResponse = {
-  url: URLRecord;
-  body: string;
-  headers: ReadonlyMap<string, string>;
-  timingInfo: { startTime: DOMHighResTimeStamp; };
-  hasCrossOriginRedirects: boolean;
-};
 
 export type OpenerPolicyEnforcementResult = {
   needsBrowsingContextGroupSwitch: boolean;

@@ -105,6 +105,12 @@ machinery but remain owned by `html/collections/`.
 
 ## Behavioral coverage
 
+`test/browlet/dom/nodes/node.test.ts` retains an approved TODO regression for
+the missing projected `Node.textContent` getter. Navigation testing observed
+undefined for a parsed paragraph's text; its own parser check uses the existing
+`Text.data` contract. Complete text content's node-specific getter and mutation
+behavior with the Node interface work above.
+
 Review existing direct-implementation tests before refactoring. In particular,
 tests must not preserve structurally invalid conveniences such as appending a
 `Text` child to a `Document`. Establish public Browlet coverage for:

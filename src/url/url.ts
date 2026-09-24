@@ -661,9 +661,11 @@ export function serializeURL(
 
 /** Remove credentials and fragments from HTTP(S) URLs; disclose only the scheme for other URLs. */
 // https://w3c.github.io/reporting/#strip-url-for-use-in-reports-heading
+// https://w3c.github.io/webappsec-csp/#strip-url-for-use-in-reports
 export function stripURLForReporting(url: URLRecord): string {
   if (url.scheme !== 'http' && url.scheme !== 'https') return url.scheme;
-  // Preserve the source and omit the fragment entirely; the draft's empty string would leave '#'.
+  // SPEC_CLASH(report-url-stripping): Preserve the source and omit the fragment;
+  // both drafts mutate the URL and set an empty fragment, which would leave '#'.
   return serializeURL({ ...url, username: '', password: '', fragment: null });
 }
 
@@ -952,7 +954,8 @@ function createURL(): URLRecord {
   };
 }
 
-function getDefaultPort(scheme: string): number | null {
+/** Default port for a URL scheme, or null when the scheme has none. */
+export function getDefaultPort(scheme: string): number | null {
   return specialSchemes.get(scheme) ?? null;
 }
 

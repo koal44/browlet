@@ -99,9 +99,9 @@ export type ReportingObserverCallback = (
   this: ReportingObserverImpl, reports: ReportImpl[], observer: ReportingObserverImpl,
 ) => void;
 
-// HTML defines coep as observable; SRI exposes integrity violations and Reporting exposes test reports.
+// HTML, SRI, and CSP expose their violation reports; Reporting exposes test reports.
 // Other report types remain invisible until their definitions and body interfaces are integrated.
-const visibleReportTypes = new Set(['coep', 'integrity-violation', 'test']);
+const visibleReportTypes = new Set(['coep', 'integrity-violation', 'csp-violation', 'test']);
 
 // -- Web IDL ------------------------------------------------------------
 

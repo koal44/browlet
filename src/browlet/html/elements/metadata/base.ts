@@ -48,8 +48,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     const fallback = document.getFallbackBaseURL();
     const { env } = document;
     const url = env.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
-    // TODO: apply CSP's "Is base allowed for Document?" check when CSP is implemented.
-    this.frozenBaseURL = url === null || url.scheme === 'data' || url.scheme === 'javascript'
+    this.frozenBaseURL = url === null || url.scheme === 'data' || url.scheme === 'javascript' ||
+      document.policyContainer.cspList?.isBaseBlocked(url, document)
       ? fallback : url;
     // Base-change consumers (hyperlink state and speculation rules) await their subsystems.
   }

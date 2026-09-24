@@ -354,6 +354,13 @@ export class EventImpl {
     this.#type = type;
   }
 
+  /** Set dispatch flags during internal event creation, retaining its trusted status. */
+  setFlags(init: EventInit): void {
+    this.#bubbles = init.bubbles ?? false;
+    this.#cancelable = init.cancelable ?? false;
+    this.#composed = init.composed ?? false;
+  }
+
   finishDispatch(clearTargets: boolean): void {
     this.#eventPhase = EventImpl.NONE;
     this.#currentTarget = null;

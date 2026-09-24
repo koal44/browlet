@@ -9,10 +9,10 @@ languages and enforcement algorithms are tracked below.
 | `scripting/agents.ts` plus loader response processing | `Origin-Agent-Cluster` parsing, historical key selection, and agent-cluster-key consequences | HTML §7.1.2 |
 | `coop.ts` | Response parsing, enforcement result, browsing-context group switching, reporting | HTML §7.1.3 |
 | `coep.ts` | Response processing, inheritance, enforcement, reporting | HTML §7.1.4 |
-| `sandbox.ts` | Parsing sandbox tokens, determining flags, propagation and navigation checks | HTML §7.1.5 |
+| `sandbox.ts` plus navigation/iframe integration | Token parsing and combining CSP restrictions exist; remaining container flag propagation and navigation checks need their consumers | HTML §7.1.5 |
 | iframe element plus Document ancestry | iframe referrer-policy inheritance and ancestor-origin list construction | HTML §7.1.6 |
 | `permissions.ts` | HTML's policy-controlled feature definitions/default allowlists plus declared, inherited, and container policy checks | HTML §2.2; Permissions Policy; HTML Document, browsing-context, and lifecycle integration |
-| `container.ts` | Complete CSP copying and determine policy container; response policy association | HTML §7.1.7 |
+| `container.ts` | Determine policy container; response policy association | HTML §7.1.7 |
 
 Policy data travels with environments, Documents, history entries, responses,
 and navigations. Keep one typed value model here and apply each specification's
@@ -22,8 +22,15 @@ subsystem.
 `PolicyContainer` now owns `clone()`. Fetch's client population calls it through
 the same HTML object; clientless requests obtain a fresh default container from
 their UserAgent. COEP fields and referrer policy copy independently, and each
-new container has independent default policy storage. Populated CSP lists
-explicitly reject cloning until CSP supplies its concrete records and copying.
+new container has independent default policy storage. CSP lists now copy
+populated policy/directive data while preserving the origin used by inherited
+`'self'` checks. Containers without an associated origin have no CSP list yet;
+every constructed list requires that origin. Source matching, Window violation
+delivery, base-uri enforcement, sandbox parsing, and upgrade-policy initialization
+exist. Concrete Fetch navigation inputs are connected, console output has an
+approved provisional environment method, and hash reporting preserves the body
+and guards cross-origin disclosure. The bounded Fetch-preflight slices are
+complete; later consumers remain in the [CSP roadmap](csp/ROADMAP.md#dependency-review-and-later-consumers).
 Integrity Policy has typed source, destination, and endpoint lists. Both
 enforced and report-only policies copy independently, following Gecko's
 behavior; HTML's clone algorithm omits its report-only member.

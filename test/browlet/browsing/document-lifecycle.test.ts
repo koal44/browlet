@@ -8,6 +8,8 @@ import {
   getBindingContext, getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
+import { createAndInitializeDocument } from '../../../src/browlet/browsing/document-lifecycle';
+import { NavigationParams } from '../../../src/browlet/browsing/navigation/navigation';
 import { Realm, WindowRealm } from '../../../src/browlet/scripting/realm';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
@@ -29,7 +31,14 @@ import {
 } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import { isText } from '../../../src/browlet/dom/nodes/node';
 import { InternalError } from '../../../src/infra/internal-error';
+import { FetchBody } from '../../../src/fetch/body';
+import { FetchController } from '../../../src/fetch/controller';
+import { FetchRequest } from '../../../src/fetch/request';
+import { FetchResponse } from '../../../src/fetch/response';
+import { FetchTimingInfo } from '../../../src/fetch/timing';
+import { ReadableStreamImpl } from '../../../src/streams/readable-stream';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import {
   obtainURLOrigin, parseURL, serializeURL, type URLRecord,
@@ -418,6 +427,61 @@ describe('environment settings objects', () => {
   });
 });
 
+describe('navigation response inputs', () => {
+  it.each(['same-origin', 'same-site', 'cross-site'] as const)(
+    'uses a Fetch request and a response with %s redirect taint', (redirectTaint) => {
+      const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+      const env = getRelevantRealm(traversable.activeWindow!).env;
+      const url = requireURL('https://example.test/page');
+      const request = new FetchRequest(url, env, env.userAgent);
+      request.referrer = requireURL('https://referrer.test/');
+      const response = new FetchResponse();
+      response.urlList.push(url);
+      response.redirectTaint = redirectTaint;
+      const params = NavigationParams.fromResponse(traversable, response);
+      params.request = request;
+
+      const document = createAndInitializeDocument('html', 'text/html', params);
+
+      expect(document.url).toBe(request.currentURL);
+      expect(document.url).toEqual(url);
+      expect(document.referrer).toBe('https://referrer.test/');
+      expect(document.wasCreatedViaCrossOriginRedirects).toBe(redirectTaint !== 'same-origin');
+      expect(document.loadTimingInfo.navigationStartTime).toBe(params.startTime);
+    },
+  );
+
+  it('takes navigation start from the Fetch controller, where Fetch retains full timing', () => {
+    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const response = new FetchResponse();
+    response.urlList.push(requireURL('https://example.test/page'));
+    const params = NavigationParams.fromResponse(traversable, response);
+    const controller = new FetchController();
+    const timing = new FetchTimingInfo();
+    timing.startTime = 42;
+    controller.fullTimingInfo = timing;
+    params.fetchController = controller;
+
+    expect(params.startTime).toBe(42);
+  });
+
+  it('keeps a network body out of the session history source-text slot', () => {
+    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const env = getRelevantRealm(traversable.activeWindow!).env;
+    const response = new FetchResponse();
+    response.urlList.push(requireURL('https://example.test/page'));
+    const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
+    response.body = new FetchBody(stream, env);
+    const params = NavigationParams.fromResponse(traversable, response);
+    const document = createAndInitializeDocument('html', 'text/html', params);
+
+    expect(params.createHistoryEntry(document).documentState.resource).toBeNull();
+    expect(response.body.stream).toBe(stream);
+    expect(stream.disturbed).toBe(false);
+    expect(stream.locked).toBe(false);
+  });
+});
+
 describe('navigation lifecycle', () => {
   itPassesWith('explicitQueues')('preserves native Window identity and immutability across navigation', async () => {
     const browlet = new Browlet({ route: () => '' });
@@ -503,6 +567,20 @@ describe('navigation lifecycle', () => {
     expect(documentImpl.isFullyActive()).toBe(true);
   });
 
+  it('retains local source text for history while parsing it directly', async () => {
+    const source = '<p>Local page</p>';
+    const browlet = new Browlet({ route: () => source });
+
+    await browlet.navigate('https://example.test/');
+
+    const document = unwrap<DocumentImpl>(browlet.document);
+    const entry = document.getNodeNavigable()!.activeSessionHistoryEntry;
+    expect(entry.documentState.resource).toBe(source);
+    const text = document.body!.firstChild!.firstChild;
+    expect(isText(text)).toBe(true);
+    if (!isText(text)) throw new Error('Expected the paragraph text');
+    expect(text.data).toBe('Local page');
+  });
 });
 
 function requireURL(input: string): URLRecord {

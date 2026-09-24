@@ -221,7 +221,8 @@ not implicitly select the allocation owner.
 
 Reporting's `ReportImpl` owns producer data, delivery bookkeeping, and the
 observer-visible attributes. Environment constructs its typed `ReportBodyImpl`
-once; observers and buffered replay share the same report and body identities.
+once, or accepts a concrete JSON-serializable body from a browser-owned producer
+such as CSP; observers and buffered replay share the same report and body identities.
 A base-typed attribute preserves the concrete platform interface through ordinary
 projection; default Web IDL `toJSON` operations expose only declared attributes.
 Internal metadata and the original producer data are not exposed by that projection.

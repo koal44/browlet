@@ -14,6 +14,11 @@ import { locationIDL } from './browsing/window/location';
 import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
 import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
 import { coepViolationReportBodyIDL } from './browsing/policy/coep';
+import { cspViolationReportBodyIDL } from './browsing/policy/csp/violation';
+import {
+  securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  securityPolicyViolationEventDispositionIDL,
+} from './browsing/policy/csp/violation-event';
 import { reportIDL, reportBodyIDL } from './reporting/report';
 import { testReportBodyIDL } from './reporting/test-report';
 import {
@@ -289,6 +294,8 @@ const browletDefinitions = [
   referrerPolicyIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL,
+  cspViolationReportBodyIDL,
+  securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
   reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
   domHighResTimeStampIDL,
   epochTimeStampIDL,

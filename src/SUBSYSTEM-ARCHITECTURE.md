@@ -446,7 +446,7 @@ fixed `isSecureContext` flag: an HTTPS child of an HTTP parent still restricts
 its own subresources. Request and Response own the blocking predicates;
 Environment owns browser ancestry. `InsecureRequestsPolicy` groups the upgrade
 flag and host/port targets for Environment and BrowsingContext, with explicit
-inheritance during Document creation. CSP will enable that same policy value;
+inheritance during Document creation. CSP initialization enables that same policy value;
 it does not require another environment object or a realm-execution facility.
 
 The existing `WindowOrWorkerGlobalScopeMixin` owns Reporting endpoint and report
@@ -483,7 +483,10 @@ settles that result yet. Periodic collection and retirement remain consumer work
 active-document destruction scaffold does not settle inactive history disposal.
 `ReportImpl` and derived `ReportBodyImpl` classes are composed in Browlet.
 Fetch supplies plain report data; `Environment.generateReport()` captures its
-environment metadata and constructs the concrete body. Web IDL preserves the
+environment metadata and constructs the concrete body. Browser-owned CSP
+supplies its concrete, JSON-serializable `ReportBodyImpl` directly; generation
+retains it without reconstructing a duplicate record. Delivery copies still
+contain only JSON data, never the observer body or its binding identity. Web IDL preserves the
 derived interface during projection and provides default JSON conversion;
 `ReportImpl.serialize()` produces the outbound representation independently.
 Its stateless URL sanitization algorithm lives in URL, retaining its Reporting
@@ -721,13 +724,29 @@ checks, and URL upgrades. Request and Response retain small delegating methods;
 the modules work directly with their records and existing browser contracts.
 Policy modules import those records as types and call their own helpers directly,
 without a policy manager or a runtime dependency on Browlet.
-Integrity Policy owns concrete, independently copied policy lists. `FetchRequest`
-checks its attached policies in `isBlockedByIntegrityPolicy()` and submits reports
-through its client's Reporting seam. CSP's model and copying remain
-unfinished; cloning currently rejects populated CSP lists.
+Integrity Policy owns concrete, independently copied policy lists. The request's
+`isBlockedByIntegrityPolicy()` delegates to Fetch's policy module, which submits
+reports through its client's Reporting seam. CSP lists copy their policies independently
+while retaining the origin for inherited `'self'` checks. A default container
+has no CSP list until the resource origin is known; every constructed list has
+a required origin. Response parsing and Document initialization establish it.
+Fetch uses the optional `FetchCSPList` contract for request reporting and
+request/response blocking. Source matching and directive selection stay with
+Browlet's CSP model. CSP violations retain the protected Document and original
+resource URL for deferred DOM events, then use shared Reporting or legacy Fetch
+uploads. Document creation consumes actual Fetch request/response records and
+retains the protected resource's HTTP status; navigation timing belongs to the
+Fetch controller. Sandbox restrictions are combined before origin/Window
+selection, while document initialization enables the existing upgrade policy.
+Internal developer warnings enter through their owning environment's provisional
+`reportConsoleWarning()` method. Console's internal Printer must preserve that
+document/worker identity when a shared output sink is added; author console
+properties are not that sink. CSP hash reporting reads a separate body branch,
+queues completion on the client's HTML loop, and captures sanitized attribution.
+Request tainting protects opaque internal responses from hash disclosure. These
+reports use ordinary Reporting data but remain invisible to ReportingObservers.
 Fetch's embedder-policy module owns the COEP credentials decision, which needs
-the request's
-mode, origin, and redirect history as well as that policy value.
+the request's mode, origin, and redirect history as well as that policy value.
 
 An undefined request origin, policy container, or referrer represents Fetch's
 deferred client value. A null referrer explicitly suppresses disclosure. These
@@ -1073,7 +1092,7 @@ Use these role names consistently:
 - `FooContext` only for cohesive contextual state whose members share an
   identity and lifecycle.
 
-## Accommodations, limitations, and deviations
+## Accommodations, limitations, and specification conflicts
 
 These labels answer different questions and must not be used interchangeably:
 
@@ -1082,6 +1101,7 @@ These labels answer different questions and must not be used interchangeably:
 | **Accommodation** | Which implementation structure exists because the runtime or embedder does not expose a required primitive? | A searchable code marker and an entry in the owning architecture or limitations note |
 | **Limitation** | Which observable requirement can Browlet not currently provide? | The owning `LIMITATIONS.md` or roadmap plus a focused expected-failure test when practical |
 | **Deviation** | Where does Browlet deliberately behave differently from the governing specification? | The owning architecture or roadmap with the rationale, relevant interoperability evidence, and a regression test |
+| **Specification clash** | Where do specification passages or browser implementations disagree, and which behavior did Browlet choose? | A searchable `SPEC_CLASH(identifier)` code marker, evidence and the chosen rule in the owning roadmap or issue notes, and focused tests |
 
 An accommodation can preserve all observable behavior, or it can cause a
 limitation. It is not automatically a deviation. A Host Port or
@@ -1100,24 +1120,39 @@ identifier:
 
 One identifier can mark several affected sites. Do not mark every caller, and
 do not mark specification-required state merely because it borders an
-accommodation. Use the parallel `DEVIATION(identifier)` marker when a code path
-deliberately implements behavior other than the specification's requirement;
-a browser's divergence is evidence, not a Browlet deviation when Browlet still
-follows the specification. Limitations remain primarily documentation and
-expected-failure records because a missing operation may have no code boundary
-to mark. Search the complete source tree with:
+accommodation. Use `SPEC_CLASH(identifier)` for a known disagreement regardless
+of which side Browlet follows. State the competing rules and Browlet's choice
+near the affected branch; link the detailed evidence from its owning roadmap.
+Keep the marker after review until the conflict is resolved. For example:
 
-```powershell
-rg -n "(ACCOMMODATION|DEVIATION)\(" src
+```ts
+// SPEC_CLASH(csp-path-segments): Split before decoding, as the draft and
+// WebKit do; Chromium decodes whole paths, equating encoded and literal slashes.
 ```
 
-The owning Markdown entry must identify the intended specification behavior,
-the unavailable primitive, Browlet's substitute, observable consequences,
-affected code and tests, and the condition for replacement. Its replacement
+Reserve `DEVIATION(identifier)` for an intentional departure that does not
+already have a specification-clash record; do not double-label the same choice.
+Neither label replaces `SPEC_MISMATCH`, the temporary flag for an unreviewed
+callable shape or representation. Limitations remain primarily documentation
+and expected-failure records because a missing operation may have no code
+boundary to mark. Search the complete source tree with:
+
+```powershell
+rg -n "(ACCOMMODATION|DEVIATION|SPEC_CLASH)\(" src
+```
+
+An accommodation's owning Markdown entry must identify the intended
+specification behavior, the unavailable primitive, Browlet's substitute,
+observable consequences, affected code and tests, and the condition for replacement. Its replacement
 notes must say which implementation pieces are deleted or reevaluated so the
 substitute does not survive after its cause disappears. If the accommodation
 also creates an observable limitation or deliberate deviation, cross-reference
 that separate record rather than weakening the distinction.
+
+A specification-clash entry records the competing requirements or observed
+implementations, the selected behavior and its consequences, affected code and
+tests, and what would justify reconsidering it. The label does not presume that
+the specification is wrong, that browsers agree, or that the choice is unfinished.
 
 ## Testing consequences
 

@@ -2,6 +2,8 @@ import type { FetchGroup } from './group';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { FetchIntegrityPolicy } from './integrity';
+import type { FetchRequest } from './request';
+import type { FetchResponse } from './response';
 import type { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { JSEnvironment } from '../js-engine/index';
@@ -62,6 +64,8 @@ export interface FetchInsecureRequestsPolicy {
 
 /** HTML's policy container, exposing the policies currently consumed by Fetch. */
 export type FetchPolicyContainer = {
+  /** CSP checks, absent until the resource's origin and policy list have been established. */
+  cspList?: FetchCSPList;
   /** Cross-origin embedder policy applied by the client. */
   embedderPolicy: {
     /** Enforced COEP mode, including credentialless restrictions on no-cors requests. */
@@ -82,6 +86,16 @@ export type FetchPolicyContainer = {
   /** Copy the HTML-owned policy state for an independently populated request. */
   clone(): FetchPolicyContainer;
 };
+
+/** CSP-owned behavior used by Fetch without importing HTML's policy implementation. */
+export interface FetchCSPList {
+  /** Report request violations of monitored policies before URL upgrades. */
+  reportRequestViolations(request: FetchRequest): void;
+  /** Enforce request policies after URL upgrades, reporting every violation. */
+  isRequestBlocked(request: FetchRequest): boolean;
+  /** Check the received response against enforced and monitored policies. */
+  isResponseBlocked(response: FetchResponse, request: FetchRequest): boolean;
+}
 
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy-value
 export type FetchEmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { createPolicyContainer } from '../../../../src/browlet/browsing/policy/container';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { IntegrityPolicy } from '../../../../src/browlet/browsing/policy/integrity-policy';
+import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
+import { ContentSecurityPolicy } from '../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchResponse } from '../../../../src/fetch/response';
+import { createOpaqueOrigin } from '../../../../src/url/origin';
 
 describe('Policy containers', () => {
   it('creates independent default policy state', () => {
@@ -10,7 +13,7 @@ describe('Policy containers', () => {
     const second = new UserAgent().createPolicyContainer();
     expect(first).toEqual(second);
     expect(first).not.toBe(second);
-    expect(first.cspList).not.toBe(second.cspList);
+    expect(first.cspList).toBeUndefined();
     expect(first.embedderPolicy).not.toBe(second.embedderPolicy);
     expect(first.integrityPolicy).not.toBe(second.integrityPolicy);
     expect(first.reportOnlyIntegrityPolicy).not.toBe(second.reportOnlyIntegrityPolicy);
@@ -68,7 +71,7 @@ describe('Policy containers', () => {
     const copy = original.clone();
     expect(copy).toEqual(original);
     expect(copy.embedderPolicy).not.toBe(original.embedderPolicy);
-    expect(copy.cspList).not.toBe(original.cspList);
+    expect(copy.cspList).toBeUndefined();
     expect(copy.integrityPolicy).not.toBe(original.integrityPolicy);
     expect(copy.reportOnlyIntegrityPolicy).not.toBe(original.reportOnlyIntegrityPolicy);
     original.embedderPolicy.reportingEndpoint = 'changed';
@@ -77,6 +80,26 @@ describe('Policy containers', () => {
     expect(copy.referrerPolicy).toBe('no-referrer');
     copy.embedderPolicy.value = 'unsafe-none';
     expect(original.embedderPolicy.value).toBe('require-corp');
+  });
+
+  it('copies populated CSP directives and preserves their self origin', () => {
+    const original = createPolicyContainer();
+    const origin = createOpaqueOrigin();
+    original.cspList = new CSPList(origin);
+    original.cspList.policies.push(
+      ContentSecurityPolicy.parse("default-src 'self'", 'header', 'enforce'),
+      ContentSecurityPolicy.parse("img-src 'none'", 'header', 'report'),
+    );
+    const copy = original.clone();
+    expect(copy.cspList).toEqual(original.cspList);
+    expect(copy.cspList!.selfOrigin).toBe(origin);
+    expect(copy.cspList!.policies).not.toBe(original.cspList.policies);
+    copy.cspList!.policies[0]!.directives.get('default-src')!.push('https://cdn.test');
+    copy.cspList!.policies[1]!.directives.clear();
+    copy.cspList!.policies.pop();
+    expect(original.cspList.policies.map((policy) => [...policy.directives])).toEqual([
+      [['default-src', ["'self'"]]], [['img-src', ["'none'"]]],
+    ]);
   });
 
   it.each(['integrityPolicy', 'reportOnlyIntegrityPolicy'] as const)('copies populated %s independently', (field) => {
