@@ -12,9 +12,11 @@ network partition derivation, cache partition identities, and port/MIME blocking
 Header lists and MIME extraction live in `../headers.ts`. New connections, cache
 response storage, HTTP transactions, and the transport adapter remain planned.
 Slice 7 adds cookie/Origin integration, CORS token-list syntax, Content-Length,
-legacy encoding extraction, and nosniff blocking. CORP checks and violation
-submission are on FetchResponse; report generation remains behind the
-settings object's provisional Reporting hook.
+legacy encoding extraction, and nosniff blocking. FetchResponse's CORP methods
+delegate checks and violation submission to
+[`policy/embedder-policy.ts`](../policy/embedder-policy.ts); report generation
+uses the settings object's Reporting hook. Cookie and Origin-header methods
+likewise delegate to Fetch's `policy/` modules.
 
 ## Sources
 

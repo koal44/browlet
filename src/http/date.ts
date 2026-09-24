@@ -1,10 +1,12 @@
+import { surroundingTabOrSpacePattern } from '../infra/patterns';
+
 /**
  * RFC 9110 §5.6.7 — parse an HTTP-date as UTC epoch milliseconds.
  * Accepts the three HTTP formats, case-insensitively as RFC 9111 §4.2
  * recommends for caches. `now` supplies the reference for two-digit years.
  */
 export function parseHTTPDate(input: string, now: number): number | null {
-  const value = input.replace(surroundingWhitespacePattern, '');
+  const value = input.replace(surroundingTabOrSpacePattern, '');
   let match: string[] | null = imfFixdatePattern.exec(value);
   let obsolete = false;
   if (!match) {
@@ -54,7 +56,6 @@ const shortWeekdays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const longWeekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
-const surroundingWhitespacePattern = /^[ \t]+|[ \t]+$/g;
 const imfFixdatePattern = /^([a-z]{3}), ([0-9]{2}) ([a-z]{3}) ([0-9]{4}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i;
 const rfc850DatePattern = /^([a-z]+), ([0-9]{2})-([a-z]{3})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}) GMT$/i;
 const asctimeDatePattern = /^([a-z]{3}) ([a-z]{3}) ([ 0-9][0-9]) ([0-9]{2}):([0-9]{2}):([0-9]{2}) ([0-9]{4})$/i;

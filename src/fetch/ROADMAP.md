@@ -71,6 +71,7 @@ When an algorithm reaches a missing external dependency:
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
 | `response.ts` | Response records, filtered responses, cloning, network errors, and the `Response` implementation | §§2.2.6 and 5.5 |
+| `policy/` | Cookie rules, Origin-header disclosure, COEP/CORP, Integrity Policy checks, mixed content, and request upgrades; Request/Response methods delegate here | §§3.1, 3.7, 4.1, and contributing policy specifications |
 | [`http/`](http/ROADMAP.md) | Fetch-specific HTTP rules and transactions; its [cache plan](http/cache/ROADMAP.md) owns storage/validation over Fetch records | §§2.2–2.10, 3, and 4.4–4.11 |
 | [`multipart/`](multipart/ROADMAP.md) | FormData byte encoding/parsing used by Body | §§5.2–5.3 |
 | `integrity.ts` | SRI metadata and byte verification; see [the scoped plan below](#subresource-integrity) | §4.1 and SRI |
@@ -79,6 +80,10 @@ When an algorithm reaches a missing external dependency:
 | `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
 | Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, declaration signatures, and staged Browlet installation during Slice 6 | §§5.1–5.5 |
 | Public `fetch()` binding (planned) | Realm-correct orchestration and abort handling | §5.6 |
+
+Policy modules operate on the existing Fetch records and browser contracts.
+They retain no separate request/response state. SRI metadata and byte verification
+remain in `integrity.ts`.
 
 ## Dependency ledger
 

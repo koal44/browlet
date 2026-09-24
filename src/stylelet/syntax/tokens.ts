@@ -1,5 +1,6 @@
 import { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
+import { surroundingASCIIWhitespacePattern } from '../../infra/patterns';
 
 export enum TokenKind {
   Ident = 1,
@@ -375,7 +376,7 @@ function getEncoding(label?: string): string | null {
   if (label === undefined) return null;
 
   const normalized = label
-    .replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '')
+    .replace(surroundingASCIIWhitespacePattern, '')
     .toLowerCase();
 
   if (ReplacementEncodingLabels.has(normalized)) return 'replacement';

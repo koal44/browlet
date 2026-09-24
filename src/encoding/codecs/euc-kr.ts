@@ -2,6 +2,7 @@ import { Buffer, isAscii } from 'node:buffer';
 import { codeUnitsToString } from '../../js-engine/index';
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
+import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §13.1.1 — EUC-KR decoder, including the Windows-949 repertoire. */
 export class EUCKRDecoder {
@@ -76,7 +77,7 @@ export class EUCKREncoder {
         output.push(endOfQueue);
         return 'finished';
       }
-      if (!nonASCII.test(chunk)) {
+      if (!nonASCIIPattern.test(chunk)) {
         output.push(Buffer.from(chunk, 'latin1'));
         continue;
       }
@@ -112,5 +113,3 @@ export class EUCKREncoder {
     }
   }
 }
-
-const nonASCII = /[\u0080-\uffff]/;

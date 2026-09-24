@@ -5,10 +5,7 @@ import type { PromiseValue } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
-import {
-  areSameOrigin, areSchemelesslySameSite, copyURL, obtainURLOrigin, serializeURL,
-  type Origin, type URLRecord,
-} from '../url/index';
+import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
@@ -26,6 +23,9 @@ import {
 } from './infrastructure';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
+import { parseAndStoreCookies } from './policy/cookies';
+import { isBlockedByCORP, isBlockedByCORPInternal, queueCORPViolationReport } from './policy/embedder-policy';
+import { isMixedDownload, isResponseBlockedByMixedContent } from './policy/mixed-content';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
 
@@ -187,41 +187,21 @@ export class FetchResponse {
   /** Processes each Set-Cookie field independently using the request's URL and cookie policy. */
   // https://fetch.spec.whatwg.org/#parse-and-store-response-set-cookie-headers
   parseAndStoreCookies(request: FetchRequest): void {
-    const { userAgent } = request;
-    if (!userAgent.cookiesEnabled) return;
-    const { scheme, host, path } = request.currentURL;
-    if (host === null || host.kind === 'empty' || host.kind === 'opaque' || typeof path === 'string') return;
-    // Browsers accept Strict/Lax cookies on top-level navigation responses even
-    // when those cookies could not have been sent on the initiating request.
-    const sameSiteStrictOrLaxAllowed = request.destination === 'document' || request.isSameSiteForCookies;
-    for (const [name, value] of this.headerList) {
-      if (name.toLowerCase() !== 'set-cookie') continue;
-      userAgent.cookieStore.parseAndStoreCookie(value, scheme === 'https', host, path, true, false, sameSiteStrictOrLaxAllowed);
-      userAgent.cookieStore.garbageCollectCookies(host);
-    }
+    parseAndStoreCookies(this, request);
   }
 
   /** Whether this internal response would expose mixed content to the request's client. */
   // https://w3c.github.io/webappsec-mixed-content/#should-block-response
   isBlockedByMixedContent(request: FetchRequest): boolean {
-    if (request.client === null || request.destination === 'document' ||
-      !request.client.prohibitsMixedSecurityContexts()) return false;
-    // Main Fetch fills an empty URL list before running its response checks.
-    const url = this.url;
-    if (url === null) throw new InternalError('Mixed-content response checking requires a response URL');
-    return !request.userAgent.isURLPotentiallyTrustworthy(url);
+    return isResponseBlockedByMixedContent(this, request);
   }
 
   /** Whether a trustworthy source URL initiated a download with any untrustworthy response hop. */
-  // Extracts the shared rejection condition added to HTML's attachment-response
-  // navigation branch and hyperlink-download path. Their callers check this
-  // before "handle as a download"; this predicate does not perform the download.
   // https://w3c.github.io/webappsec-mixed-content/#html
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-as-a-download
   // https://html.spec.whatwg.org/multipage/links.html#downloading-hyperlinks
   isMixedDownload(sourceURL: URLRecord, env: FetchEnvironment): boolean {
-    return env.userAgent.isURLPotentiallyTrustworthy(sourceURL) &&
-      this.urlList.some((url) => !env.userAgent.isURLPotentiallyTrustworthy(url));
+    return isMixedDownload(this, sourceURL, env);
   }
 
   /** Whether CORP blocks this response, reporting violations of the client's embedder policies. */
@@ -229,18 +209,7 @@ export class FetchResponse {
   isBlockedByCORP(
     origin: Origin, env: FetchEnvironment, destination: string, forNavigation = false,
   ): boolean {
-    const policy = env.policyContainer.embedderPolicy;
-    if (this.isBlockedByCORPInternal(origin, 'unsafe-none', forNavigation)) {
-      return true;
-    }
-    if (this.isBlockedByCORPInternal(origin, policy.reportOnlyValue, forNavigation)) {
-      this.queueCORPViolationReport(env, destination, true);
-    }
-    if (!this.isBlockedByCORPInternal(origin, policy.value, forNavigation)) {
-      return false;
-    }
-    this.queueCORPViolationReport(env, destination, false);
-    return true;
+    return isBlockedByCORP(this, origin, env, destination, forNavigation);
   }
 
   /** Whether CORP blocks this response under one embedder policy, without reporting violations. */
@@ -248,20 +217,7 @@ export class FetchResponse {
   isBlockedByCORPInternal(
     origin: Origin, embedderPolicyValue: FetchEmbedderPolicyValue, forNavigation: boolean,
   ): boolean {
-    if (forNavigation && embedderPolicyValue === 'unsafe-none') return false;
-    let policy = this.headerList.get('Cross-Origin-Resource-Policy');
-    if (policy !== 'same-origin' && policy !== 'same-site' && policy !== 'cross-origin') policy = null;
-    if (policy === null && (embedderPolicyValue === 'require-corp' ||
-      (embedderPolicyValue === 'credentialless' && (this.requestIncludesCredentials || forNavigation)))) {
-      policy = 'same-origin';
-    }
-    if (policy === null || policy === 'cross-origin') return false;
-    const url = this.url;
-    if (url === null) throw new InternalError('CORP origin comparison requires a response URL');
-    const responseOrigin = obtainURLOrigin(url);
-    if (policy === 'same-origin') return !areSameOrigin(origin, responseOrigin);
-    return origin.kind !== 'tuple' || !areSchemelesslySameSite(origin, responseOrigin) ||
-      (origin.scheme !== 'https' && url.scheme === 'https');
+    return isBlockedByCORPInternal(this, origin, embedderPolicyValue, forNavigation);
   }
 
   /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
@@ -269,12 +225,7 @@ export class FetchResponse {
   queueCORPViolationReport(
     env: FetchEnvironment, destination: string, reportOnly: boolean,
   ): void {
-    const policy = env.policyContainer.embedderPolicy;
-    const endpoint = reportOnly ? policy.reportOnlyReportingEndpoint : policy.reportingEndpoint;
-    env.queueReport('coep', endpoint, {
-      type: 'corp', blockedURL: this.serializeURLForReporting(), destination,
-      disposition: reportOnly ? 'reporting' : 'enforce',
-    });
+    queueCORPViolationReport(this, env, destination, reportOnly);
   }
 }
 

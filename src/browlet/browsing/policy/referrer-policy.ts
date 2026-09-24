@@ -1,6 +1,7 @@
 import { isLocalScheme, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
+import { surroundingTabOrSpacePattern } from '../../../infra/patterns';
 import { areSameOrigin, copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../../../url/index';
 import { defineEnumeration } from '../../../web-idl/index';
 
@@ -92,7 +93,6 @@ export function stripURLForReferrer(url: URLRecord, originOnly = false): URLReco
   return referrer;
 }
 
-const surroundingHTTPWhitespace = /^[\t ]+|[\t ]+$/g;
 const invalidReferrerPolicyToken = /[^A-Za-z-]/;
 
 // https://w3c.github.io/webappsec-referrer-policy/#referrer-policy-header
@@ -100,7 +100,7 @@ const invalidReferrerPolicyToken = /[^A-Za-z-]/;
 function parseReferrerPolicyTokens(value: string): string[] | null {
   const tokens = value.split(',');
   for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i]!.replace(surroundingHTTPWhitespace, '');
+    const token = tokens[i]!.replace(surroundingTabOrSpacePattern, '');
     if (invalidReferrerPolicyToken.test(token)) return null;
     // ABNF literals are ASCII case-insensitive. Empty list members are ignored by the caller.
     tokens[i] = asciiLower(token);

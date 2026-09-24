@@ -2,6 +2,7 @@ import { parseHTTPDate } from '../date';
 import {
   getDeltaSecondsDirective, parseCacheControl, parseDeltaSeconds, type CacheDirective,
 } from './fields';
+import { surroundingTabOrSpacePattern } from '../../infra/patterns';
 
 /**
  * RFC 9111 §4.2 and RFC 5861 §§3–4, for a private browser cache.
@@ -20,7 +21,7 @@ export function calculateCacheFreshness(
   const directives = parsedDirectives ?? [];
   const date = parseHTTPDate(fields.date ?? '', responseTime) ?? responseTime;
   // RFC 9111 §5.1: use only the first Age member, and ignore invalid values.
-  const ageField = (fields.age ?? '').split(',', 1)[0]!.replace(surroundingWhitespacePattern, '');
+  const ageField = (fields.age ?? '').split(',', 1)[0]!.replace(surroundingTabOrSpacePattern, '');
   const age = parseDeltaSeconds(ageField) ?? 0;
   const apparentAge = Math.max(0, (responseTime - date) / 1000);
   const responseDelay = (responseTime - requestTime) / 1000;
@@ -104,5 +105,3 @@ function getFreshnessLifetime(
   const lastModified = parseHTTPDate(fields.lastModified ?? '', responseTime);
   return lastModified === null ? 0 : Math.max(0, (date - lastModified) / 10_000);
 }
-
-const surroundingWhitespacePattern = /^[ \t]+|[ \t]+$/g;

@@ -2,6 +2,7 @@ import { Buffer, isAscii } from 'node:buffer';
 import { codeUnitsToString } from '../../js-engine/index';
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
+import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §§10.1.1, 10.2.1 — GBK and gb18030 share this decoder. */
 export class GB18030Decoder {
@@ -130,7 +131,7 @@ export class GB18030Encoder {
         output.push(endOfQueue);
         return 'finished';
       }
-      if (!nonASCII.test(chunk)) {
+      if (!nonASCIIPattern.test(chunk)) {
         output.push(Buffer.from(chunk, 'latin1'));
         continue;
       }
@@ -194,5 +195,3 @@ const compatibilityBytes = new Map([
   [0xe82b, 0xfe66], [0xe82c, 0xfe67], [0xe832, 0xfe6d], [0xe843, 0xfe7e],
   [0xe854, 0xfe90], [0xe864, 0xfea0],
 ]);
-
-const nonASCII = /[\u0080-\uffff]/;

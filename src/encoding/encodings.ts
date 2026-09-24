@@ -35,6 +35,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import { asciiLower } from '../infra/ascii';
 import { RangeError } from '../infra/exceptions';
 import type { PromiseValue } from '../infra/promises';
+import { surroundingASCIIWhitespacePattern } from '../infra/patterns';
 import type { JSEnvironment } from '../js-engine/index';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 import { GB18030Decoder, GB18030Encoder } from './codecs/gb18030';
@@ -68,7 +69,7 @@ export type OutputEncoding = Exclude<Encoding, 'replacement' | 'UTF-16BE' | 'UTF
 
 /** Encoding Standard §4.2 — Get an encoding. */
 export function getEncoding(label: string): Encoding | null {
-  const normalized = asciiLower(label.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ''));
+  const normalized = asciiLower(label.replace(surroundingASCIIWhitespacePattern, ''));
   switch (normalized) {
     case 'unicode-1-1-utf-8': case 'unicode11utf8': case 'unicode20utf8':
     case 'utf-8': case 'utf8': case 'x-unicode20utf8':

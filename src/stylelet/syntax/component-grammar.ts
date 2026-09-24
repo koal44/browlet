@@ -110,7 +110,7 @@ function consumeSequenceOf<const P extends AnyMultiplier[], R>(
         }
 
         if (c.pos() === slotStart && hasMultiplierValue(result)) {
-          return c.error('Sequence consumer produced a value without consuming input');
+          throw new InternalError('Sequence consumer produced a value without consuming input');
         }
 
         values.push(result);
@@ -167,7 +167,7 @@ export function oneOf<const P extends AnyMultiplier[], R>(
         const value = result as AlternativeValue<P>;
 
         if (c.pos() === componentStart && hasMultiplierValue(value)) {
-          return c.error('Alternative consumer produced a value without consuming input');
+          throw new InternalError('Alternative consumer produced a value without consuming input');
         }
 
         const projection = project(value, c.context);
@@ -628,7 +628,7 @@ function consumePlainMultiplier<T, Output extends T[]>(
 
     if (c.pos() === itemStart) {
       c.context = outerContext;
-      return c.error('Repeated consumer matched without consuming input');
+      throw new InternalError('Repeated consumer matched without consuming input');
     }
 
     values.push(result);
@@ -674,7 +674,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
 
     if (c.pos() === itemStart) {
       c.context = outerContext;
-      return c.error('Comma repeat matched without consuming input');
+      throw new InternalError('Comma repeat matched without consuming input');
     }
 
     c.context = multiplier.contextAfter === undefined
@@ -748,7 +748,7 @@ function consumeEmpty<T, Output extends T[]>(
   }
 
   if (hasMultiplierValue(result)) {
-    return c.error('Consumer produced a value without consuming input');
+    throw new InternalError('Consumer produced a value without consuming input');
   }
 
   return result;
@@ -793,7 +793,7 @@ function consumeUnordered<const P extends AnyMultiplier[]>(
 
       if (c.pos() === start && hasMultiplierValue(value)) {
         c.context = outerContext;
-        return c.error('Unordered consumer produced a value without consuming input');
+        throw new InternalError('Unordered consumer produced a value without consuming input');
       }
 
       c.context = outerContext;

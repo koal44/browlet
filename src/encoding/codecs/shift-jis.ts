@@ -2,6 +2,7 @@ import { Buffer, isAscii } from 'node:buffer';
 import { codeUnitsToString } from '../../js-engine/index';
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
+import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §12.3.1 — Shift_JIS decoder, including Windows private-use mappings. */
 export class ShiftJISDecoder {
@@ -80,7 +81,7 @@ export class ShiftJISEncoder {
         output.push(endOfQueue);
         return 'finished';
       }
-      if (!nonASCII.test(chunk)) {
+      if (!nonASCIIPattern.test(chunk)) {
         output.push(Buffer.from(chunk, 'latin1'));
         continue;
       }
@@ -124,5 +125,3 @@ export class ShiftJISEncoder {
     }
   }
 }
-
-const nonASCII = /[\u0080-\uffff]/;

@@ -1,6 +1,7 @@
 import type { FetchResponse } from '../../../fetch/index';
 import { isHTTPToken, isHTTPTabOrSpace } from '../../../http/index';
 import { TextCursor } from '../../../infra/text-cursor';
+import { nonASCIIDigitPattern } from '../../../infra/patterns';
 import type { Host } from '../../../url/index';
 
 /** Transport-security policies remembered across this user agent's documents. */
@@ -140,7 +141,7 @@ export class HSTSPolicy {
       if (!cursor.eof() && !cursor.match(';')) return null;
 
       if (name === 'max-age') {
-        if (value === undefined || value === '' || nonDigitPattern.test(value)) return null;
+        if (value === undefined || value === '' || nonASCIIDigitPattern.test(value)) return null;
         maxAge = BigInt(value);
       } else if (name === 'includesubdomains') {
         if (value !== undefined) return null;
@@ -159,5 +160,3 @@ export type HSTSHost = {
   /** Whether matching may extend beyond this exact host to its subdomains. */
   includeSubDomains: boolean;
 };
-
-const nonDigitPattern = /[^0-9]/;

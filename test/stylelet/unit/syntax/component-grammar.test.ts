@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { InternalError } from '../../../../src/infra/internal-error';
 import {
   TokenCursor, type TryConsumer,
   type TryConsumerResult,
@@ -560,7 +561,7 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // empty+
-    expect(() => plus(consumeEmpty)(c)).toThrow('Repeated consumer matched without consuming input');
+    expect(() => plus(consumeEmpty)(c)).toThrow(InternalError);
   });
 
   it('parses exact repetitions', () => {
@@ -667,7 +668,7 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // empty#
-    expect(() => commaRepeat(consumeEmpty)(c)).toThrow('Comma repeat matched without consuming input');
+    expect(() => commaRepeat(consumeEmpty)(c)).toThrow(InternalError);
   });
 
   it('matches zero or more components in order: A? B? C?', () => {

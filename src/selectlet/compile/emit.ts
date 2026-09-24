@@ -5,6 +5,7 @@ import type { NthArgs } from '../parser/nth';
 import { asciiLower } from '../../infra/ascii';
 import { cssIdentUnescape } from '../parser/escape';
 import { assertNever } from '../../infra/util';
+import { asciiWhitespacePattern } from '../../infra/patterns';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -73,7 +74,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
       case '|=': pattern = '|'; cost = 4; break;
       case '*=': pattern = '*'; cost = 4; break;
       case '~=':
-        if (/[\t\n\f\r ]/.test(attrVal)) {
+        if (asciiWhitespacePattern.test(attrVal)) {
           // [attr~="a b"] is syntactically valid but can never match one whitespace-separated token.
           return { buildElement: () => FALSE_PREDICATE, cost: 0, debug: { kind: 'attr', attr } };
         }

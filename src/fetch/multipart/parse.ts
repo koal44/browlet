@@ -5,6 +5,7 @@ import { FileImpl } from '../../file/index';
 import { toScalarValueString } from '../../infra/index';
 import type { MIMEType } from '../../mime/index';
 import { TextCursor } from '../../infra/text-cursor';
+import { surroundingTabOrSpacePattern } from '../../infra/patterns';
 import type { FormDataEntry } from '../../xhr/index';
 
 /*
@@ -82,7 +83,7 @@ function parsePartHeaders(input: string) {
     if (colon === -1 || !headerNamePattern.test(name) || lineBreakPattern.test(line)) {
       throw new TypeError('Invalid multipart header');
     }
-    const value = line.slice(colon + 1).replace(headerEdgeWhitespacePattern, '');
+    const value = line.slice(colon + 1).replace(surroundingTabOrSpacePattern, '');
     switch (name.toLowerCase()) {
       case 'content-disposition':
         if (disposition !== undefined) throw new TypeError('Duplicate Content-Disposition');
@@ -179,4 +180,3 @@ const boundaryPattern = /^[0-9A-Za-z'()+_,\-./:=? ]{0,69}[0-9A-Za-z'()+_,\-./:=?
 const headerFoldingPattern = /\r\n(?=[ \t])/g;
 const headerNamePattern = /^[\x21-\x39\x3b-\x7e]+$/;
 const lineBreakPattern = /[\r\n]/;
-const headerEdgeWhitespacePattern = /^[ \t]+|[ \t]+$/g;

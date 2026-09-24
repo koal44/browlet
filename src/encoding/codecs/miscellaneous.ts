@@ -1,6 +1,7 @@
 import { Buffer, isAscii } from 'node:buffer';
 import { codeUnitsToString } from '../../js-engine/index';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
+import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §14.1 — One error on nonempty input, then finish after the next item. */
 export class ReplacementDecoder {
@@ -52,7 +53,7 @@ export class XUserDefinedCodec {
         output.push(endOfQueue);
         return 'finished';
       }
-      if (!nonASCII.test(chunk)) {
+      if (!nonASCIIPattern.test(chunk)) {
         output.push(Buffer.from(chunk, 'latin1'));
         continue;
       }
@@ -85,5 +86,3 @@ export class XUserDefinedCodec {
     }
   }
 }
-
-const nonASCII = /[\u0080-\uffff]/;

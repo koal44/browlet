@@ -3,6 +3,7 @@ import { type Encoding, encode } from '../../encoding/index';
 import { BlobData } from '../../file/index';
 import { percentEncodeByte } from '../../url/index';
 import type { FormDataEntry } from '../../xhr/index';
+import { lineEndingPattern } from '../../infra/patterns';
 
 /*
  * HTML §4.10.22.8, multipart/form-data encoding algorithm.
@@ -50,5 +51,4 @@ function escapeName(value: string, encoding: Encoding): string {
     (char) => percentEncodeByte(char.charCodeAt(0)));
 }
 
-const lineEndingPattern = /\r\n|\r|\n/g;
 const nameEscapePattern = /[\r\n"]/g;

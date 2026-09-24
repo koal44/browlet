@@ -3,13 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../src/browlet/browlet';
-import { unwrap } from '../../src/browlet/bindings';
+import { getRelevantRealm, unwrap } from '../../src/browlet/bindings';
 import { fireEvent } from '../../src/browlet/dom/events/event-target';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../src/infra/index';
 import { isHtmlLink } from '../../src/infra/selector-dom';
+import { InternalError } from '../../src/infra/internal-error';
 import { serializeOrigin } from '../../src/url/origin';
 
 describe('Browlet', () => {
@@ -67,6 +68,20 @@ describe('Browlet', () => {
     expect(documentImpl.internalAncestorOriginObjectsList)
       .toEqual([]);
     expect(documentImpl.ancestorOriginsList).toEqual([]);
+  });
+
+  it('distinguishes invalid navigation input from an internal URL parser failure', async () => {
+    const browlet = new Browlet({ route: () => '' });
+
+    await expect(browlet.navigate('not a URL')).rejects.toThrow(TypeError);
+
+    const parseURL = vi.spyOn(getRelevantRealm(browlet.window).env, 'parseURL')
+      .mockReturnValueOnce({ url: null, validationErrors: [] });
+    try {
+      await expect(browlet.navigate('https://example.test/')).rejects.toThrow(InternalError);
+    } finally {
+      parseURL.mockRestore();
+    }
   });
 
   it('installs realm-specific DOM constructors on the window', () => {

@@ -3,6 +3,7 @@ import type {
   BuildElementPredicate,
 } from '../parser/parser';
 import { asciiLower } from '../../infra/ascii';
+import { asciiWhitespacePattern } from '../../infra/patterns';
 import { cssIdentUnescape } from '../parser/escape';
 import { checkClass, checkId, checkTag } from './runtime';
 
@@ -19,7 +20,7 @@ export function emitIdTest(id: IdSelector): CandidateTest {
 export function emitClassTest(cls: ClassSelector): CandidateTest {
   const value = cssIdentUnescape(cls.raw);
 
-  if (/[\t\n\f\r ]/.test(value)) {
+  if (asciiWhitespacePattern.test(value)) {
     return { buildElement: () => FALSE_PREDICATE, cost: 0 };
   }
 

@@ -6,6 +6,7 @@ import type { Encoding } from '../encodings';
 import type { EncodingIndex } from '../indexes';
 import { singleByteIndexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
+import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding Standard §9 — Stateless single-byte handlers, processed in chunks. */
 export class SingleByteCodec {
@@ -73,7 +74,7 @@ export class SingleByteCodec {
         output.push(endOfQueue);
         return 'finished';
       }
-      if (!nonASCII.test(chunk)) {
+      if (!nonASCIIPattern.test(chunk)) {
         output.push(Buffer.from(chunk, 'latin1'));
         continue;
       }
@@ -150,5 +151,4 @@ export function getSingleByteCodec(encoding: Encoding): SingleByteCodec | null {
   return codec;
 }
 
-const nonASCII = /[\u0080-\uffff]/;
 const codecs = new Map<EncodingIndex, SingleByteCodec>();

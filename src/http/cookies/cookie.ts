@@ -1,4 +1,5 @@
 import { asciiLower } from '../../infra/ascii';
+import { surroundingTabOrSpacePattern } from '../../infra/patterns';
 import {
   hostsEqual, obtainPublicSuffix, parseHost, type Domain, type IPAddress, type URLPath,
 } from '../../url/index';
@@ -129,8 +130,8 @@ export class HTTPCookie {
     const parts = input.split(';');
     const nameValueInput = parts[0]!;
     const equals = nameValueInput.indexOf('=');
-    const name = (equals === -1 ? '' : nameValueInput.slice(0, equals)).replace(surroundingWhitespacePattern, '');
-    const value = nameValueInput.slice(equals + 1).replace(surroundingWhitespacePattern, '');
+    const name = (equals === -1 ? '' : nameValueInput.slice(0, equals)).replace(surroundingTabOrSpacePattern, '');
+    const value = nameValueInput.slice(equals + 1).replace(surroundingTabOrSpacePattern, '');
     if (name.length + value.length === 0 || name.length + value.length > 4096) return null;
 
     const cookie = new HTTPCookie(name, value, HTTPCookie.getDefaultPath(path));
@@ -141,8 +142,8 @@ export class HTTPCookie {
       const attribute = parts[i]!;
       const equals = attribute.indexOf('=');
       const name = equals === -1 ? attribute : attribute.slice(0, equals);
-      const attributeName = asciiLower(name.replace(surroundingWhitespacePattern, ''));
-      const attributeValue = (equals === -1 ? '' : attribute.slice(equals + 1)).replace(surroundingWhitespacePattern, '');
+      const attributeName = asciiLower(name.replace(surroundingTabOrSpacePattern, ''));
+      const attributeValue = (equals === -1 ? '' : attribute.slice(equals + 1)).replace(surroundingTabOrSpacePattern, '');
       if (attributeValue.length > 1024) continue;
 
       switch (attributeName) {
@@ -219,6 +220,5 @@ export type StoredHTTPCookie = HTTPCookie & { host: CookieHost; };
 
 // eslint-disable-next-line no-control-regex -- Cookies reject control bytes other than HTAB.
 const invalidCookieBytePattern = /[\x00-\x08\x0a-\x1f\x7f]/;
-const surroundingWhitespacePattern = /^[\t ]+|[\t ]+$/g;
 const maxAgePattern = /^-?[0-9]+$/;
 const nonASCIIBytePattern = /[\x80-\xff]/;

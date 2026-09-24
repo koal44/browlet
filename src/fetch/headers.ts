@@ -7,6 +7,7 @@ import {
   type StructuredField,
 } from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
+import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,
@@ -153,7 +154,7 @@ export class FetchHeaders {
     if (values === null) return undefined;
     const candidate = values[0]!;
     if (values.some((value) => value !== candidate)) return null;
-    if (candidate === '' || nonDigitPattern.test(candidate)) return undefined;
+    if (candidate === '' || nonASCIIDigitPattern.test(candidate)) return undefined;
     return BigInt(candidate);
   }
 
@@ -369,7 +370,7 @@ export function getDecodeAndSplitHeaderValue(value: string): string[] {
       temporaryValue += collectHTTPQuotedString(position);
       if (!position.eof()) continue;
     }
-    values.push(temporaryValue.replace(surroundingHTTPWhitespace, ''));
+    values.push(temporaryValue.replace(surroundingTabOrSpacePattern, ''));
     temporaryValue = '';
     if (position.eof()) return values;
     position.advance();
@@ -381,7 +382,7 @@ export function getDecodeAndSplitHeaderValue(value: string): string[] {
 export function parseCORSTokenList(value: string): string[] | null {
   const tokens: string[] = [];
   for (const member of value.split(',')) {
-    const token = member.replace(surroundingHTTPWhitespace, '');
+    const token = member.replace(surroundingTabOrSpacePattern, '');
     if (token === '') continue;
     if (!isHTTPToken(token)) return null;
     tokens.push(token);
@@ -493,9 +494,6 @@ export function getEnvironmentDefaultUserAgent(env: FetchEnvironment): string {
 }
 
 export const documentAcceptHeaderValue = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
-
-const nonDigitPattern = /[^0-9]/;
-const surroundingHTTPWhitespace = /^[ \t]+|[ \t]+$/g;
 
 const corsSafelistedResponseHeaderNames = new Set([
   'cache-control', 'content-language', 'content-length', 'content-type', 'expires', 'last-modified', 'pragma',

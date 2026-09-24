@@ -1,4 +1,5 @@
 import { forgivingBase64Decode } from '../infra/base64';
+import { asciiWhitespaceRunPattern } from '../infra/patterns';
 import { computeHash } from '../js-engine/index';
 
 /** Check the bytes against any digest using the strongest supported algorithm. */
@@ -19,7 +20,7 @@ export function bytesMatchIntegrityMetadata(bytes: Uint8Array, metadataList: str
 // https://w3c.github.io/webappsec-subresource-integrity/#parse-metadata-section
 export function parseIntegrityMetadata(metadata: string): IntegrityMetadata[] {
   const result: IntegrityMetadata[] = [];
-  for (const expression of metadata.split(asciiWhitespacePattern)) {
+  for (const expression of metadata.split(asciiWhitespaceRunPattern)) {
     const match = integrityMetadataPattern.exec(expression);
     if (match === null) continue;
     const name = match[1]!.toLowerCase();
@@ -89,6 +90,5 @@ export type IntegrityAlgorithm = typeof integrityAlgorithms[number];
 // The attribute grammar supplies expression validity; browsers split on ASCII whitespace.
 // https://w3c.github.io/webappsec-subresource-integrity/#the-integrity-attribute
 const integrityMetadataPattern = /^([a-z0-9]+)-([a-z0-9+/_-]+={0,2})(?:\?[\x21-\x7e]*)?$/i;
-const asciiWhitespacePattern = /[\t\n\f\r ]+/;
 const base64URLCharacters = /[-_]/g;
 function toBase64Character(character: string): string { return character === '-' ? '+' : '/'; }

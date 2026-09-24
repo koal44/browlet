@@ -19,6 +19,7 @@ import {
   type CandidateElementPredicate, type CompiledMatcher,
 } from './candidate';
 import { InternalError } from '../../infra/internal-error';
+import { asciiWhitespacePattern } from '../../infra/patterns';
 
 type NthArgs = { step: number; offset: number; };
 
@@ -62,7 +63,7 @@ function emitClassTest(
   selector: ClassSelector,
   context: StyleletContext,
 ): CompiledMatcher {
-  if (/[\t\n\f\r ]/.test(selector.name)) {
+  if (asciiWhitespacePattern.test(selector.name)) {
     return FALSE_MATCHER;
   }
 
@@ -252,7 +253,7 @@ function emitAttributeTest(
       case '|=': pattern = '|'; cost = 4; break;
       case '*=': pattern = '*'; cost = 4; break;
       case '~=':
-        if (/[\t\n\f\r ]/.test(attrVal)) {
+        if (asciiWhitespacePattern.test(attrVal)) {
           // [attr~="a b"] is syntactically valid but can never match one whitespace-separated token.
           return FALSE_MATCHER;
         }

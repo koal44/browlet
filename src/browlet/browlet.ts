@@ -220,7 +220,6 @@ function getTextContent(element: ElementImpl): string {
 
 function requireURLRecord(input: string, env: Environment) {
   const record = env.parseURL(input).url;
-  // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
-  if (record === null) throw new Error(`Could not parse ${input}`);
+  if (record === null) throw new InternalError(`Could not parse validated navigation URL ${input}`);
   return record;
 }

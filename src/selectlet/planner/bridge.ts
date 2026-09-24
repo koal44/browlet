@@ -8,6 +8,7 @@ import { precedesByDocPosition } from '../collections';
 import { type LookupMode } from '../constants';
 import type { QueryContext } from '../selectlet';
 import type { Snapshot } from '../snapshot';
+import { asciiWhitespacePattern } from '../../infra/patterns';
 
 export type BridgeMove = {
   from: number;
@@ -210,7 +211,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
   if (compound.classes?.length) {
     const classes = compound.classes.map((c) => cssIdentUnescape(c.raw));
 
-    if (classes.some((c) => /[\t\n\f\r ]/.test(c))) {
+    if (classes.some((c) => asciiWhitespacePattern.test(c))) {
       return {
         strategy: 'class',
         lookupQuery: classes[0] ?? '',

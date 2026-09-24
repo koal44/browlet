@@ -1,5 +1,6 @@
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 import type { PromiseValue } from '../infra/promises';
+import { lineEndingPattern } from '../infra/patterns';
 import { type JSEnvironment, getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
@@ -195,8 +196,6 @@ export function convertLineEndingsToNative(
 ): string {
   return value.replace(lineEndingPattern, env.exec.nativeLineEnding);
 }
-
-const lineEndingPattern = /\r\n|\r|\n/g;
 
 function normalizeSlicePosition(
   value: number | undefined,

@@ -1,12 +1,12 @@
 import type { BlobImpl } from '../file/index';
-import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
+import type { CookieSameSiteMode } from '../http/index';
 import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode } from '../js-engine/index';
 import type { PromiseValue } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
-  obtainPublicSuffix, serializeURL, stripURLForReporting, type URLRecord,
+  serializeURL, type URLRecord,
 } from '../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
@@ -25,8 +25,13 @@ import {
 } from './infrastructure';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
-import { parseIntegrityMetadata, type IntegrityViolationReportBody } from './integrity';
-import { isLocalScheme } from './url';
+import { appendCookieHeader, determineSameSiteMode, isSameSiteForCookies } from './policy/cookies';
+import { crossOriginEmbedderPolicyAllowsCredentials } from './policy/embedder-policy';
+import { upgradeForHSTS } from './policy/hsts';
+import { isBlockedByIntegrityPolicy } from './policy/integrity-policy';
+import { isRequestBlockedByMixedContent, upgradeMixedContent } from './policy/mixed-content';
+import { appendOriginHeader } from './policy/origin';
+import { upgradeInsecureRequest } from './policy/upgrade-insecure-requests';
 import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2.2.5. URL, client, and user agent are required inputs; the other fields have defaults. */
@@ -209,61 +214,25 @@ export class FetchRequest {
   /** Advertise navigation upgrade support and apply the client's enforced upgrade policy. */
   // https://w3c.github.io/webappsec-upgrade-insecure-requests/#upgrade-request
   upgradeInsecureRequest(): void {
-    // Sending this on every navigation is permitted, including to preloadable
-    // HSTS hosts. Set rather than append so redirect re-entry keeps one value.
-    if (this.isNavigation) this.headerList.set('Upgrade-Insecure-Requests', '1');
-    const client = this.client;
-    if (client === null || !client.insecureRequestsPolicy.upgrade) return;
-    const url = this.currentURL;
-    // Follow Chromium's trustworthy-URL exemption. Gecko also leaves loopback
-    // HTTP services alone, even under an explicit upgrade policy.
-    if (url.scheme !== 'http' || this.userAgent.isURLPotentiallyTrustworthy(url)) return;
-    if (this.destination === 'document' && !this.isFormSubmission &&
-      !client.insecureRequestsPolicy.shouldUpgradeNavigation(url)) return;
-
-    // Apply upgrades to the current redirect target, preserving earlier hops.
-    url.scheme = 'https';
-    if (url.port === 443) url.port = null;
+    upgradeInsecureRequest(this);
   }
 
   /** Upgrade eligible mixed images, audio, and video before mixed-content blocking. */
   // https://w3c.github.io/webappsec-mixed-content/#upgrade-algorithm
   upgradeMixedContent(): void {
-    const url = this.currentURL;
-    if (url.scheme !== 'http' || this.userAgent.isURLPotentiallyTrustworthy(url) ||
-      url.host?.kind === 'ipv4' || url.host?.kind === 'ipv6' ||
-      this.client === null || !this.client.prohibitsMixedSecurityContexts()) return;
-    if (this.destination !== 'image' && this.destination !== 'audio' && this.destination !== 'video') return;
-    if (this.destination === 'image' && this.initiator === 'imageset') return;
-    // The algorithm has no CORS-mode exclusion; normal CORS checks still apply.
-    url.scheme = 'https';
-    if (url.port === 443) url.port = null;
+    upgradeMixedContent(this);
   }
 
   /** Upgrade the current HTTP URL when this user agent's HSTS policy requires HTTPS. */
   // https://www.rfc-editor.org/rfc/rfc6797.html#section-8.3
-  // HSTS branch of https://fetch.spec.whatwg.org/#concept-main-fetch, after referrer selection.
   upgradeForHSTS(): void {
-    const url = this.currentURL;
-    if (url.scheme !== 'http' || url.host?.kind !== 'domain') return;
-    const suffix = obtainPublicSuffix(url.host)?.value;
-    if (suffix === 'localhost' || suffix === 'localhost.') return;
-    if (!this.userAgent.hstsStore.requiresHTTPS(url.host)) return;
-
-    url.scheme = 'https';
-    // URL parsing already represents HTTP's port 80 as null. Keep HTTPS's
-    // default port canonical too; every other explicit port remains unchanged.
-    if (url.port === 443) url.port = null;
+    upgradeForHSTS(this);
   }
 
   /** Whether fetching this request would expose mixed content to its client. */
   // https://w3c.github.io/webappsec-mixed-content/#should-block-fetch
   isBlockedByMixedContent(): boolean {
-    // HTML uses document for top-level navigation and the container's local name
-    // for nested navigation. A browser-initiated request has no client to protect.
-    return this.client !== null && this.destination !== 'document' &&
-      this.client.prohibitsMixedSecurityContexts() &&
-      !this.userAgent.isURLPotentiallyTrustworthy(this.currentURL);
+    return isRequestBlockedByMixedContent(this);
   }
 
   /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */
@@ -275,45 +244,13 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
   crossOriginEmbedderPolicyAllowsCredentials(): boolean {
-    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
-    if (this.mode !== 'no-cors' || this.client === null) return true;
-    if (this.client.policyContainer.embedderPolicy.value !== 'credentialless') return true;
-    return areSameOrigin(this.origin, obtainURLOrigin(this.currentURL)) &&
-      this.redirectTaint === 'same-origin';
+    return crossOriginEmbedderPolicyAllowsCredentials(this);
   }
 
   /** Whether the populated request's integrity policies block it, reporting violations of either policy. */
   // https://w3c.github.io/webappsec-subresource-integrity/#should-request-be-blocked-by-integrity-policy-section
   isBlockedByIntegrityPolicy(): boolean {
-    if (this.policyContainer === undefined) throw new InternalError('Fetch request policy container has not been resolved');
-    const metadata = parseIntegrityMetadata(this.integrityMetadata);
-    if (metadata.length !== 0 && (this.mode === 'cors' || this.mode === 'same-origin')) return false;
-    if (isLocalScheme(this.url.scheme)) return false;
-    const { destination, client } = this;
-    if (destination !== 'script' && destination !== 'style') return false;
-    const policy = this.policyContainer.integrityPolicy;
-    const reportPolicy = this.policyContainer.reportOnlyIntegrityPolicy;
-    const block = policy.sources.includes('inline') && policy.blockedDestinations.includes(destination);
-    const reportBlock = reportPolicy.sources.includes('inline') && reportPolicy.blockedDestinations.includes(destination);
-    if (!block && !reportBlock) return false;
-    if (client === null) return false;
-    const source = client.getReportingSource();
-    if (source === null) return false;
-
-    // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
-    const body: IntegrityViolationReportBody = {
-      documentURL: stripURLForReporting(source), blockedURL: stripURLForReporting(this.url),
-      destination, reportOnly: false,
-    };
-    if (block) {
-      for (const endpoint of policy.endpoints) client.queueReport('integrity-violation', endpoint, { ...body });
-    }
-    if (reportBlock) {
-      for (const endpoint of reportPolicy.endpoints) {
-        client.queueReport('integrity-violation', endpoint, { ...body, reportOnly: true });
-      }
-    }
-    return block;
+    return isBlockedByIntegrityPolicy(this);
   }
 
   /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */
@@ -335,70 +272,24 @@ export class FetchRequest {
   /** Appends the cookies selected for this request from the owning user agent's store. */
   // https://fetch.spec.whatwg.org/#append-a-request-cookie-header
   appendCookieHeader(): void {
-    if (!this.userAgent.cookiesEnabled) return;
-    const { scheme, host, path } = this.currentURL;
-    if (host === null || host.kind === 'empty' || host.kind === 'opaque') return;
-    const cookies = this.userAgent.cookieStore.retrieveCookies(
-      scheme === 'https', host, path, true, this.determineSameSiteMode(), laxAllowingUnsafeMaxAge,
-    );
-    if (cookies.length !== 0) this.headerList.append('Cookie', HTTPCookie.serialize(cookies));
+    appendCookieHeader(this);
   }
 
   /** Selects sending restrictions, including Lax-by-default for unspecified SameSite. */
   // https://fetch.spec.whatwg.org/#determine-the-same-site-mode
-  // Follow browser classification: same-site navigations allow Strict; only top-level
-  // cross-site navigations receive Lax/temporarily unset cookies. Response storage differs.
   determineSameSiteMode(): CookieSameSiteMode {
-    if (this.isSameSiteForCookies) return 'strict-or-less';
-    if (this.destination !== 'document') return 'none';
-    return safeMethods.has(this.method) ? 'lax-or-less' : 'unset-or-less';
+    return determineSameSiteMode(this);
   }
 
   /** Whether the initiator and client ancestry are same-site with the current URL. */
-  // Chromium's default does not taint this decision with earlier redirect hops.
-  // Fetch's redirectTaint still serves its separate origin/credentials algorithms.
   get isSameSiteForCookies(): boolean {
-    let initiator: Origin | null;
-    if (this.destination === 'document') {
-      // No initiator denotes browser-initiated navigation, not a clientless subresource.
-      initiator = this.topLevelNavigationInitiatorOrigin;
-    } else {
-      if (this.client === null || this.client.hasCrossSiteAncestor) return false;
-      initiator = this.client.origin;
-    }
-    const targetOrigin = obtainURLOrigin(this.currentURL);
-    return initiator === null || areSameSite(initiator, targetOrigin);
+    return isSameSiteForCookies(this);
   }
 
   /** Appends the request origin, applying redirect taint and non-CORS disclosure policy. */
   // https://fetch.spec.whatwg.org/#append-a-request-origin-header
   appendOriginHeader(): void {
-    if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
-    let serializedOrigin = this.serializeOrigin();
-    if (this.responseTainting === 'cors' || this.mode === 'websocket' || this.mode === 'webtransport') {
-      this.headerList.append('Origin', serializedOrigin);
-      return;
-    }
-    if (this.method === 'GET' || this.method === 'HEAD') return;
-
-    if (this.mode !== 'cors') {
-      switch (this.referrerPolicy) {
-        case 'no-referrer':
-          serializedOrigin = 'null';
-          break;
-        case 'no-referrer-when-downgrade':
-        case 'strict-origin':
-        case 'strict-origin-when-cross-origin':
-          if (this.origin.kind === 'tuple' && this.origin.scheme === 'https' && this.currentURL.scheme !== 'https') {
-            serializedOrigin = 'null';
-          }
-          break;
-        case 'same-origin':
-          if (!areSameOrigin(this.origin, obtainURLOrigin(this.currentURL))) serializedOrigin = 'null';
-          break;
-      }
-    }
-    this.headerList.append('Origin', serializedOrigin);
+    appendOriginHeader(this);
   }
 
   /** Resolve the client-derived request fields once, before starting the fetch. */
@@ -500,9 +391,6 @@ const nonSubresourceDestinations = new Set<Destination>([
   'document', 'embed', 'frame', 'iframe', 'object', 'report', 'serviceworker', 'sharedworker', 'worker',
 ]);
 const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame', 'iframe', 'object']);
-const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
-// Chromium's Lax-allowing-unsafe compatibility window for recently created default cookies.
-const laxAllowingUnsafeMaxAge = 2 * 60 * 1000;
 
 /*
  * typedef (Request or USVString) RequestInfo;

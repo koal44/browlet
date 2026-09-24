@@ -715,11 +715,18 @@ the embedder-policy value, typed referrer policy, integrity policy fields, and
 an HTML-owned `clone()` without importing Browlet. HTML's `PolicyContainer`
 class implements that structural type. Client population clones it once into the request; the
 UserAgent supplies fresh default containers for requests without a client.
+Fetch's `policy/` modules own its cookie rules, Origin-header disclosure,
+COEP/CORP decisions and reporting, Integrity Policy checks, mixed-content
+checks, and URL upgrades. Request and Response retain small delegating methods;
+the modules work directly with their records and existing browser contracts.
+Policy modules import those records as types and call their own helpers directly,
+without a policy manager or a runtime dependency on Browlet.
 Integrity Policy owns concrete, independently copied policy lists. `FetchRequest`
 checks its attached policies in `isBlockedByIntegrityPolicy()` and submits reports
 through its client's Reporting seam. CSP's model and copying remain
 unfinished; cloning currently rejects populated CSP lists.
-`FetchRequest` owns the COEP credentials decision, which needs the request's
+Fetch's embedder-policy module owns the COEP credentials decision, which needs
+the request's
 mode, origin, and redirect history as well as that policy value.
 
 An undefined request origin, policy container, or referrer represents Fetch's
