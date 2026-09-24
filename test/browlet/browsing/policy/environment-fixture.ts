@@ -9,11 +9,13 @@ import { UserAgent } from '../../../../src/browlet/user-agent';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 
 /** Compose real Window and navigable state while iframe construction is unfinished. */
-export function createPolicyEnvironment(url: string, parent?: WindowEnvironment): WindowEnvironment {
+export function createPolicyEnvironment(
+  url: string, parent?: WindowEnvironment, userAgent = parent?.userAgent ?? new UserAgent(),
+): WindowEnvironment {
   const creationURL = parseURL(url).url!;
   const origin = obtainURLOrigin(creationURL);
   const env = createWindowEnvironment({
-    agent: new WindowAgent(), userAgent: parent?.userAgent ?? new UserAgent(), creationURL, origin,
+    agent: new WindowAgent(), userAgent, creationURL, origin,
     parent: parent?.window ?? null,
     topLevelCreationURL: parent?.topLevelCreationURL ?? creationURL,
     topLevelOrigin: parent?.topLevelOrigin ?? origin,

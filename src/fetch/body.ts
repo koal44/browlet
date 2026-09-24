@@ -64,7 +64,8 @@ export class FetchBody {
       return { body: new FetchBody(object, env), type: null };
     }
     if (object instanceof BlobImpl) {
-      const body = new FetchBody(object.stream(), env);
+      // The new body stream belongs to Fetch's environment, not the Blob creator.
+      const body = new FetchBody(object.data.stream(env), env);
       body.source = object;
       body.length = object.size;
       return { body, type: object.type || null };

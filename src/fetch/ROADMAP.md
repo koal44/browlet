@@ -7,7 +7,7 @@
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
-- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A entry/main-fetch and 8B override dispatch are implemented. Scheme fetch is next in 8C.
+- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A–8C and 8E are complete. HTTP fetch and redirect handling in 8D are next.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -764,8 +764,8 @@ with real settings and traversables, including a cross-origin child Window.
 `FetchParams.mainFetch()` supplies policy ordering, response selection/filtering,
 SRI verification, and handover, including body-end and consumption callbacks.
 It replaces the entry no-op; policy-blocked, preload, and overridden-response
-paths can complete. Ordinary scheme/HTTP dispatch waits for 8C/8D.
-Tests control the provisional owner operations and later scheme/HTTP stages,
+paths can complete. 8C adds ordinary local-scheme responses; HTTP processing waits for 8D.
+Tests control the provisional owner operations and later HTTP stages,
 while using real Window environments, policies, streams, bindings, and running
 HTML event loops. They do not demonstrate actual network delivery.
 
@@ -862,14 +862,15 @@ construction. The sibling DNS HTTPS-record upgrade condition still depends on
 DNS/transport support; the HSTS method does not stand in for that condition.
 
 The Blob URL preflight now supplies URL parsing, captured entry retention,
-and `FetchUserAgent.obtainBlobObject()` for authorized acquisition. In 8C,
-consume `request.currentURL.blobURLEntry` instead of resolving the URL again;
+and `FetchUserAgent.obtainBlobObject()` for authorized acquisition. 8C now
+consumes `request.currentURL.blobURLEntry` instead of resolving the URL again;
 revocation must not invalidate an entry already captured by Request parsing.
-Select the reserved/client environment or the specified top-level exemption
-at scheme fetch, then construct the response, headers, and range body.
+Scheme fetch selects the reserved/client environment or the specified top-level
+exemption, then constructs the response, headers, and range body. The unresolved
+clientless access case is recorded below.
 
-`about:` and `file:` branches remain explicit until their dependencies exist. `file:` behavior is an
-embedder policy, not permission to expose arbitrary Node filesystem access.
+Scheme fetch implements `about:blank` and uses Fetch's permitted network-error
+result for `file:`. File-scheme support remains an embedder policy.
 
 ### 8B — Override fetch
 
@@ -886,15 +887,9 @@ or WebDriver BiDi interception at their own prescribed stages.
 The result uses `PromiseValue<FetchResponse>` to carry downstream completion.
 Its continuations use UserAgent's host Promise destination; main fetch still
 enters the body owner's networking task before processing the result. The
-Promise return shape is marked for review, as with recursive main fetch.
-`schemeFetch()` and `httpFetch()` are explicit provisional methods for 8C and
-8D, rejecting with InternalError rather than claiming to have fetched anything.
-
-`SPEC_CLASH(override-fetch-dispatch-labels)` records the draft's inconsistent
-switch labels: its argument and callers use `scheme-fetch` and `http-fetch`,
-while the switch says `scheme fetch` and `HTTP fetch`. Browlet uses the declared
-argument tokens. Confirmed in both the local source and the published draft on
-2026-09-23; details are in `scratch/SPEC-ISSUES.md`.
+Promise return shape is accepted, including recursive main fetch and downstream
+scheme/HTTP fetch. Internal dispatch labels use `scheme-fetch` and `http-fetch`;
+their spelling has no protocol or author-visible effect.
 
 Coverage in `test/browlet/fetch-override.test.ts` checks default fallthrough,
 scheme/HTTP selection, preflight forwarding, supplied responses/network errors,
@@ -902,9 +897,80 @@ UserAgent isolation, failure propagation, and main-fetch filtering, blocking,
 and body consumption. Existing orchestration and Reporting handoff tests now
 exercise real override fetch while controlling only the later scheme/HTTP work.
 
-**Exit proof:** an injected test host can perform a `data:` fetch and exercise
-redirect/main-fetch control flow with deterministic response callbacks and no
-real network.
+### 8C — Scheme fetch
+
+**Complete:** `FetchParams.schemeFetch()`
+checks cancellation, dispatches the current URL, constructs `about:blank`'s
+empty HTML body, delegates Blob handling to `schemes/blob.ts`, and dispatches
+HTTP(S) directly to HTTP fetch. Other about URLs, file URLs, and unsupported
+schemes return network errors. 8D supplies the HTTP-fetch consumer algorithm;
+8E supplies `schemes/data.ts`'s processor and completes the data branch's
+MIME/header/body integration.
+
+Blob handling enforces GET, uses the captured registration without another
+lookup, selects the reserved environment before the client, and honors the
+top-level navigation and exact-creation-URL self-fetch exemptions. HTML supplies
+`env.isTopLevelWindow` from the Window's actual navigable. A missing navigable
+or a nested navigable does not qualify. Full responses and single ranges retain
+Blob data; decimal range calculations stay in BigInt until bounded slicing.
+
+Reviewed access contract and range choice:
+
+- **`SPEC_CLASH(blob-clientless-access-context)`:** determining the environment
+  can return null, but File API requires an environment or explicit exemption.
+  Eric approved an `InternalError` for ordinary Blob access without either.
+  The nullable Fetch type remains correct; a future browser-owned Blob consumer
+  must supply authorization explicitly. Chromium binds storage keys to its
+  Blob service, Gecko retains security principals independently of a client,
+  and WebKit distinguishes DOM loads from embedding API loads. Do not substitute
+  the creator's environment or the execution sandbox. Clientless top-level
+  navigation retains its exemption, and reserved environments remain usable.
+  Unlike CORP's retained policy, the request has no retained storage-partition
+  context. Its origin alone is not an authorization input to File API's check.
+  The regression first failed with a null dereference; all 50 scheme tests pass.
+- **`SPEC_CLASH(blob-suffix-range-bounds)`:** the draft subtracts an oversized
+  suffix from the full length, producing a negative range start; zero suffixes
+  and empty resources can also produce inverted bounds. Chromium/WebKit clamp
+  oversized suffixes to the whole resource; Gecko's checked range rejects them.
+  The accepted behavior clamps oversized suffixes to the whole Blob and rejects
+  zero-length suffixes and ranges on empty Blobs. Source evidence is in
+  `scratch/SPEC-ISSUES.md`.
+
+The focused BodyInit regression first demonstrated that Blob extraction created
+its stream on the Blob creator's environment. Extraction now streams the same
+retained data on the supplied Fetch environment. An integration regression
+destroys the creator Document on its HTML task, confirms registration cleanup,
+then reads an already-captured entry through the browser sandbox. Ordinary
+Window Fetch also filters and consumes Blob ranges through its automatic loop.
+
+Coverage in `test/browlet/fetch-schemes.test.ts` includes local scheme responses,
+cancellation, current-URL dispatch, HTTP delegation, revocation, partitions,
+reserved clients, top-level exemptions, range syntax/bytes/headers, and lifetime.
+
+### 8E — Data URLs
+
+**Complete:** `processDataURL()` implements [Fetch §6](https://fetch.spec.whatwg.org/#data-urls),
+which supplies the normative processing rules in place of RFC 2397. It serializes
+the URL without its fragment, splits at the first comma, percent-decodes the
+payload once, recognizes a trailing case-insensitive `;base64` marker, and uses
+Infra's forgiving Base64 decoder. The existing MIME parser handles parameters,
+the omitted-type shorthand, and the `text/plain;charset=US-ASCII` fallback.
+Queries remain part of the payload; charset metadata does not transcode bytes.
+
+The dependency scan found all required URL, MIME, byte, and Base64 algorithms
+already implemented. The existing scheme-fetch branch now returns a readable
+200 response or a network error through the normal body/task machinery, with
+no new environment contracts or transport dependency.
+
+`test/fetch/schemes/data.test.ts` has 69 cases, including representative WPT
+`fetch/data-urls/resources/data-urls.json` cases. Browser integration adds 14
+cases for response construction, malformed input, basic filtering in all three
+ordinary request modes, HEAD body removal, clientless navigation, SRI, and
+completion through the automatic Window event loop.
+
+**Local-scheme exit proof:** Blob and data URLs complete through Fetch entry,
+scheme dispatch, response filtering, and callbacks without network transport.
+HTTP response selection and redirect handling remain the next Slice 8D work.
 
 ## Slice 9 — HTTP transport, CORS, and public fetch
 

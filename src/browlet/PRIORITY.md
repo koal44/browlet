@@ -254,7 +254,9 @@ Current implementation sequence:
    Slice 8 retains five subdivisions, A–E. 8A entry/main-fetch and 8B override
    dispatch are implemented, including HTML prompt targets and policy copying.
    The selected [preflight detour](../fetch/PREFLIGHT.md#work-order) is complete;
-   continue with 8C scheme fetch, then 8D HTTP/redirects and 8E data URLs.
+   8C Blob fetching and 8E data URLs are complete, including the reviewed
+   internal error for ordinary Blob access without a partition context.
+   Next is 8D HTTP response selection and redirect handling.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery

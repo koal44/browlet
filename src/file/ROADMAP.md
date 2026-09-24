@@ -17,8 +17,9 @@ preserves owner-controlled mutation, indexed access, and graph identity.
 FileReader is implemented through §6.4 except for shared global teardown.
 Slice 4, the Blob URL work in §§8.2–8.4, is implemented for Blobs through the
 A–C preflight plan below: storage keys, the browser-owned store, URL parsing,
-Document cleanup, and the public URL methods. Actual Fetch dispatch remains
-in Fetch 8C; MediaSource and worker lifecycle remain deferred. §6.5
+Document cleanup, and the public URL methods. Fetch 8C implements Blob dispatch,
+responses, and ranges, with the clientless-access precondition reviewed. MediaSource
+and worker lifecycle remain deferred. §6.5
 `FileReaderSync` waits for real workers.
 
 Blob's `text()`, `bytes()`, and `arrayBuffer()` share a runtime-owned Promise
@@ -157,7 +158,7 @@ and deserialization steps without duplicating Blob state.
 | URL records, parsing, origins, and serialization | §8 | Implemented in `src/url`; B supplies store resolution, but parsing still leaves the entry null | In C, add an explicit resolver seam so a host parse can attach the User Agent's entry without making URL depend on File. Remove the provisional private entry shape rather than adding a second parser |
 | Environment settings and origins | §§8.2–8.4 | Window settings and origins exist; worker settings are incomplete | Blob URL entries retain the creating settings object through a Browlet-owned store. URL generation uses its origin, including implementation-defined serialization for opaque origins |
 | Storage keys for non-storage purposes | §8.3.2 | Slice A implements acquisition and comparison in `src/storage` | Consume Storage-owned keys, preserving opaque-origin identity and the distinction from storage-disabled policy. Do not substitute a local origin check |
-| Fetch `blob:` scheme handling | §8.3 | Request/Response/body primitives exist; scheme dispatch remains in Fetch 8C | File API owns store resolution and authorization; Fetch owns the response, range/header behavior, network errors, and body stream |
+| Fetch `blob:` scheme handling | §8.3 | Fetch 8C supplies dispatch, responses, ranges, and the reviewed clientless-access precondition | File API owns store resolution and authorization; Fetch owns the response, range/header behavior, network errors, and body stream |
 | Document and worker cleanup | §8.3.3 | Document unloading cleanup calls the real `UserAgent.blobURLStore.removeForEnvironment()`, with destruction coverage; worker lifecycle is incomplete | Remove registrations by creating-environment identity. Never rely on platform-object garbage collection to revoke URLs; connect worker cleanup when its lifecycle exists |
 | MediaSource | §8 and the partial `URL` interface | Deferred to the [media roadmap](../browlet/media/ROADMAP.md); not a Blob URL prerequisite | Entries remain typed as `BlobImpl`; C exposes a provisional Blob-only `createObjectURL()` declaration. Extend both with the real MediaSource implementation when available |
 | Worker globals | §§3–6 and 8 | Worker execution/lifecycle is roadmapped but incomplete | Preserve exposure metadata. Blob/File core remains usable in Window; FileReaderSync and executable worker installation wait for real worker globals |
@@ -305,8 +306,9 @@ The Fetch preflight detour uses three subdivisions:
   specifies. File's partial URL declaration supplies `createObjectURL()` and
   partition-checked `revokeObjectURL()` using the static method's environment.
   Fetch's UserAgent contract supplies authorized acquisition from the captured
-  entry, without resolving again after revocation. Its actual `blob:` response,
-  range handling, and dispatch remain in Fetch 8C.
+  entry, without resolving again after revocation. Fetch 8C now supplies the
+  `blob:` response, range handling, and dispatch; the Fetch roadmap records the
+  reviewed clientless-access contract and accepted suffix-range choice.
 
 A–C's Blob branch, UserAgent composition, and Document cleanup are implemented.
 Worker lifecycle remains deferred to Workers. Document cleanup uses the existing

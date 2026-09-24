@@ -88,6 +88,11 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
     return false;
   }
 
+  /** Only a Window with a top-level navigable can fetch its own Blob URL across partitions. */
+  get isTopLevelWindow(): boolean {
+    return false;
+  }
+
   /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
   relativeHighResolutionTime(time: number): number {
     return this.timing.relativeHighResolutionTime(new UnsafeMoment(monotonicClock, time)).milliseconds;
@@ -219,6 +224,10 @@ export class WindowEnvironment extends Environment {
 
   override get isWindow(): boolean {
     return true;
+  }
+
+  override get isTopLevelWindow(): boolean {
+    return this.window.getAssociatedDocument().getNodeNavigable()?.parent === null;
   }
 
   override consumePreloadedResource(

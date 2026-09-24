@@ -67,6 +67,16 @@ describe('BodyInit extraction', () => {
     expect(utf8Decode(await readBodyBytes(extracted.body))).toBe('hello');
   });
 
+  it('creates a Blob body stream on the extracting environment instead of the Blob creator', async () => {
+    const creator = createFetchFixture();
+    const consumer = createFetchFixture();
+    const blob = creator.context.construct(BlobImpl, ['retained bytes']);
+    const { body } = FetchBody.extract(blob, false, consumer.env);
+    expect(body.stream.env === consumer.env).toBe(true);
+    expect(body.source).toBe(blob);
+    expect(utf8Decode(await readBodyBytes(body))).toBe('retained bytes');
+  });
+
   it('retains an undisturbed stream without a replay source, length, or inferred type', async () => {
     const fixture = createFetchFixture();
     const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, fixture.env);

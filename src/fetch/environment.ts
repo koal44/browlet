@@ -26,6 +26,8 @@ export function isOffline(env: FetchEnvironment): boolean {
 export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
   /** Whether this environment belongs to a Window, which can consume Document preloads. */
   isWindow: boolean;
+  /** Whether the client's Window has a navigable whose parent is null. */
+  isTopLevelWindow: boolean;
   /** Whether secure-context-only response timing headers can be retained. */
   isSecureContext: boolean;
   /** Timing precision allowed for this client's fetches. */

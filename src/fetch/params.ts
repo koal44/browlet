@@ -4,7 +4,7 @@ import { InternalError } from '../infra/internal-error';
 import type { PromiseValue } from '../infra/promises';
 import { surroundingTabOrSpacePattern } from '../infra/patterns';
 import { isHTTPToken } from '../http/index';
-import { minimizeSupportedMIMEType } from '../mime/index';
+import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
 import { TransformStreamImpl } from '../streams/index';
 import { areSameOrigin, obtainURLOrigin } from '../url/index';
 import { FetchBody } from './body';
@@ -16,6 +16,8 @@ import { isNullBodyStatus, isRangeStatus } from './http/statuses';
 import { bytesMatchIntegrityMetadata } from './integrity';
 import type { FetchRequest } from './request';
 import { FetchResponse, isFilteredResponse } from './response';
+import { fetchBlob } from './schemes/blob';
+import { processDataURL } from './schemes/data';
 import { queueFetchTask } from './tasks';
 import type { FetchTimingInfo } from './timing';
 import { isHTTPScheme, isLocalURL } from './url';
@@ -68,7 +70,6 @@ export class FetchParams {
   /** Apply main-fetch policy, dispatch, and hand over the resulting response. */
   // https://fetch.spec.whatwg.org/#concept-main-fetch
   // Recursive dispatch waits for a response using the browser's internal Promise destination.
-  // SPEC_MISMATCH: main fetch(fetchParams, recursive = false) -> response or void
   mainFetch(recursive?: false): void;
   mainFetch(recursive: true): PromiseValue<FetchResponse>;
   mainFetch(recursive = false): PromiseValue<FetchResponse> | void {
@@ -105,15 +106,12 @@ export class FetchParams {
   /** Select an overridden response or dispatch to scheme/HTTP fetch. */
   // https://fetch.spec.whatwg.org/#concept-override-fetch
   // The internal Promise carries the response produced by downstream dispatch.
-  // SPEC_MISMATCH: override fetch(type, fetchParams, makeCORSPreflight = false) -> response
   overrideFetch(type: 'scheme-fetch' | 'http-fetch', makeCORSPreflight = false): PromiseValue<FetchResponse> {
     const { request, env } = this;
     return request.userAgent.hostPromises.try(() => {
       const response = request.userAgent.potentiallyOverrideResponse(request, env);
       if (response !== null) return response;
 
-      // SPEC_CLASH(override-fetch-dispatch-labels): use the declared argument tokens;
-      // the draft's switch instead spells these "scheme fetch" and "HTTP fetch".
       switch (type) {
         case 'scheme-fetch': return this.schemeFetch();
         case 'http-fetch': return this.httpFetch(makeCORSPreflight);
@@ -123,15 +121,39 @@ export class FetchParams {
 
   /** Obtain a response from the request's current URL scheme. */
   // https://fetch.spec.whatwg.org/#concept-scheme-fetch
-  // SPEC_MISMATCH: scheme fetch(fetchParams) -> response
   schemeFetch(): PromiseValue<FetchResponse> {
-    // PROVISIONAL(Fetch 8C): dispatch by scheme using this request and execution owner.
-    return this.request.userAgent.hostPromises.reject(new InternalError('Scheme fetch is not implemented'));
+    return this.request.userAgent.hostPromises.try(() => {
+      if (this.canceled) return FetchResponse.appropriateNetworkError(this);
+      const url = this.request.currentURL;
+      switch (url.scheme) {
+        case 'about': {
+          if (url.path !== 'blank') break;
+          const response = new FetchResponse();
+          response.statusMessage = 'OK';
+          response.headerList.append('Content-Type', 'text/html;charset=utf-8');
+          response.body = FetchBody.fromBytes(new Uint8Array(), this.env);
+          return response;
+        }
+        case 'blob': return fetchBlob(this);
+        case 'data': {
+          const data = processDataURL(url);
+          if (data === null) return FetchResponse.networkError();
+          const response = new FetchResponse();
+          response.statusMessage = 'OK';
+          response.headerList.append('Content-Type', serializeMIMEType(data.mimeType));
+          response.body = FetchBody.fromBytes(data.body, this.env);
+          return response;
+        }
+        // Fetch leaves file: implementation-defined and permits a network error.
+        case 'file': break;
+        case 'http': case 'https': return this.httpFetch();
+      }
+      return FetchResponse.networkError();
+    });
   }
 
   /** Obtain an HTTP response, performing a CORS preflight when requested. */
   // https://fetch.spec.whatwg.org/#concept-http-fetch
-  // SPEC_MISMATCH: HTTP fetch(fetchParams, makeCORSPreflight = false) -> response
   httpFetch(_makeCORSPreflight = false): PromiseValue<FetchResponse> {
     // PROVISIONAL(Fetch 8D): HTTP policy and redirects delegate transport to Slice 9.
     return this.request.userAgent.hostPromises.reject(new InternalError('HTTP fetch is not implemented'));

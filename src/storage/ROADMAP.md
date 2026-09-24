@@ -53,8 +53,8 @@ to reproduce those additional browser privacy partitions.
 versus creation-URL selection, and the two acquisition operations have focused
 tests, including real Window settings and pre-realm environment records.
 The File-owned tests in B–C exercise those keys at the Blob URL boundary.
-The Blob preflight is complete; response construction and dispatch still belong
-to Fetch 8C.
+The Blob preflight is complete; Fetch 8C now supplies response construction and
+dispatch, with the reviewed clientless-access precondition recorded in its roadmap.
 
 ## Later substrate slices
 

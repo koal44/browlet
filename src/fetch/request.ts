@@ -269,8 +269,14 @@ export class FetchRequest {
 
   /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */
   determineNetworkPartitionKey(): NetworkPartitionKey | null {
-    const env = this.reservedClient ?? this.client;
+    const env = this.determineEnvironment();
     return env === null ? null : determineNetworkPartitionKey(env);
+  }
+
+  /** Select the reserved environment before the client; browser-owned requests can have neither. */
+  // https://fetch.spec.whatwg.org/#request-determine-the-environment
+  determineEnvironment(): FetchEnvironmentRecord | null {
+    return this.reservedClient ?? this.client;
   }
 
   /** Supply the client's identification value only when the request has no User-Agent header. */

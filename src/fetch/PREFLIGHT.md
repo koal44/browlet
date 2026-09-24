@@ -403,7 +403,8 @@ Reporting C implements serialization, request preparation, response handling,
 retirement, and destruction handoff. UserAgent supplies delivery scheduling and
 Promise-returning attempts. Slice 8A replaces Fetch's provisional no-op with an
 entry/main-fetch implementation with provisional owner hooks. Slice 8B supplies
-the UserAgent response override and dispatches to the upcoming scheme/HTTP work.
+the UserAgent response override. 8C supplies Blob dispatch, responses, and ranges,
+with clientless access and suffix-range handling reviewed. 8E supplies data URL processing.
 Clientless report uploads
 use the UserAgent's lazy sandbox environment, with automatic task and microtask
 processing independent of the generating Document's lifetime.
@@ -414,13 +415,15 @@ Main fetch now invokes upgrading in 8A; verified response learning and mandatory
 TLS failure handling belong to Slice 9. Storage keys/Blob URLs A–C are
 implemented for Blobs: keys, store authorization, UserAgent ownership,
 Document cleanup, browser URL parsing, and public object URL methods.
-Fetch can acquire captured entries after revocation; response/range handling
-and scheme dispatch remain in 8C. The store lives in Browlet's File integration
+Fetch 8C can serve captured entries after revocation, including after the creator
+Document is destroyed, with body execution on the fetching environment. Its
+reviewed clientless Blob access precondition is in the Fetch roadmap.
+The store lives in Browlet's File integration
 and retains `BlobImpl` entries behind a provisional Blob-only declaration.
 MediaSource support is deferred to the [media roadmap](../browlet/media/ROADMAP.md),
 and worker cleanup waits for its lifecycle. Neither blocks the Blob URL preflight.
 The independent policy work below is complete. Its remaining consumer
-integration gates stay with Fetch and HTML; scheme fetch is next in 8C.
+integration gates stay with Fetch and HTML; continue with 8D HTTP response selection and redirects.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.
