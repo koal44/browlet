@@ -3,6 +3,8 @@ import type { TraversableNavigable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
 import {
   FetchGroup, getEnvironmentDefaultUserAgent, type FetchEnvironment, type IntegrityViolationReportBody,
+  type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
+  type RequestCredentials, type ResponseBodyInfo,
 } from '../../fetch/index';
 import type { StorageEnvironment } from '../../storage/index';
 import type { EventLoop } from './event-loop';
@@ -14,7 +16,7 @@ import type { WindowImpl } from '../browsing/window/window';
 import {
   areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
 } from '../../url/index';
-import { Moment, monotonicClock } from '../performance/clock';
+import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { RealmExecution } from '../../js-engine/index';
@@ -79,6 +81,35 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
   get isSecureContext(): boolean {
     return this.#isSecureContext;
+  }
+
+  /** Window environments can consume their Document's preload map. */
+  get isWindow(): boolean {
+    return false;
+  }
+
+  /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
+  relativeHighResolutionTime(time: number): number {
+    return this.timing.relativeHighResolutionTime(new UnsafeMoment(monotonicClock, time)).milliseconds;
+  }
+
+  /** Create and queue a resource entry on this environment's Performance Timeline. */
+  // https://w3c.github.io/resource-timing/#mark-resource-timing
+  markResourceTiming(
+    _timingInfo: FetchTimingInfo, _requestedURL: URLRecord, _initiatorType: string,
+    _cacheUsage: CacheUsage | undefined, _bodyInfo: ResponseBodyInfo, _responseStatus: number,
+  ): void {
+    // PROVISIONAL: Resource Timing entries need the Performance Timeline buffer
+    // and observer machinery. The performance roadmap owns that integration.
+  }
+
+  /** Select a Document preload; environments without a Document cannot consume one. */
+  // https://html.spec.whatwg.org/multipage/links.html#consume-a-preloaded-resource
+  consumePreloadedResource(
+    _url: URLRecord, _destination: Destination, _mode: FetchMode, _credentialsMode: RequestCredentials,
+    _integrityMetadata: string, _onResponseAvailable: (response: FetchResponse) => void,
+  ): boolean {
+    return false;
   }
 
   /** Whether HTML has completed setup for script execution. */
@@ -184,6 +215,19 @@ export class WindowEnvironment extends Environment {
   /** Window implementation whose current Document supplies browser state. */
   get window(): WindowImpl {
     return this.realm.windowImplementation;
+  }
+
+  override get isWindow(): boolean {
+    return true;
+  }
+
+  override consumePreloadedResource(
+    _url: URLRecord, _destination: Destination, _mode: FetchMode, _credentialsMode: RequestCredentials,
+    _integrityMetadata: string, _onResponseAvailable: (response: FetchResponse) => void,
+  ): boolean {
+    // PROVISIONAL(HTML preload): no Document preload map is populated yet.
+    // Match its keys and integrity metadata, then arrange response notification when implemented.
+    return false;
   }
 
   get apiBaseURL(): URLRecord {

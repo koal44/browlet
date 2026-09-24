@@ -1,6 +1,6 @@
 import { InternalError } from '../../infra/internal-error';
 import { areSameOrigin, areSchemelesslySameSite, obtainURLOrigin, type Origin } from '../../url/index';
-import type { FetchEmbedderPolicyValue, FetchEnvironment } from '../infrastructure';
+import type { FetchEmbedderPolicyValue, FetchEnvironment } from '../environment';
 import type { FetchRequest } from '../request';
 import type { FetchResponse } from '../response';
 

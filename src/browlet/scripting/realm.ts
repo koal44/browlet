@@ -100,14 +100,14 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
     return realm instanceof Realm ? realm : undefined;
   }
 
-  /** Attached HTML environment, or undefined before attachment. */
+  /** Attached HTML settings object; internal sandbox realms have none. */
   get hostDefined(): Environment | undefined {
     return this.#hostDefined;
   }
 
   // TODO: Revisit merging env and hostDefined when additional realm
   // lifecycles clarify which callers still need an optional environment.
-  /** Attached browser environment; throws before environment construction. */
+  /** Required browser environment; throws if no HTML settings object is attached. */
   get env(): Environment {
     if (this.#hostDefined === undefined) throw new InternalError('Realm has no environment');
     return this.#hostDefined;

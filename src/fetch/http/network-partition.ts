@@ -1,5 +1,5 @@
 import { obtainSite, sitesAreSameSite, type Site, obtainURLOrigin } from '../../url/index';
-import type { FetchEnvironmentRecord } from '../infrastructure';
+import type { FetchEnvironmentRecord } from '../environment';
 import { InternalError } from '../../infra/internal-error';
 
 /** https://fetch.spec.whatwg.org/#determine-the-network-partition-key */

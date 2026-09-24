@@ -13,15 +13,20 @@ export { fetch, type FetchOptions } from './fetch';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
 export { HTTPCachePartitions } from './http/cache/partitions';
+export { CORSPreflightCache } from './http/cors-preflight-cache';
 export type {
   FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
   FetchInsecureRequestsPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
-} from './infrastructure';
-export { fetchEnvironment } from './infrastructure';
+} from './environment';
+export { fetchEnvironment } from './environment';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, type FetchHeaders } from './headers';
-export { requestIDL, FetchRequest, isScriptLikeDestination } from './request';
-export { responseIDL, FetchResponse } from './response';
+export {
+  requestIDL, FetchRequest, isScriptLikeDestination,
+  type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
+} from './request';
+export { responseIDL, FetchResponse, type CacheUsage } from './response';
+export type { FetchTimingInfo, ResponseBodyInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
   type FetchIntegrityPolicy, type IntegrityViolationReportBody,

@@ -65,6 +65,13 @@ export class WindowAgent extends Agent {
   }
 }
 
+/** Execution for browser-owned work whose lifetime is independent of any page. */
+export class SandboxAgent extends Agent {
+  constructor(eventLoopOptions: EventLoopOptions) {
+    super(false, eventLoopOptions);
+  }
+}
+
 // Contains a single DedicatedWorkerGlobalScope once its realm is created.
 export class DedicatedWorkerAgent extends Agent {
   globalScope: unknown = undefined;

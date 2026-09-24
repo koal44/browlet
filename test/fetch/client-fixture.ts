@@ -1,17 +1,25 @@
 import { FetchGroup } from '../../src/fetch/group';
 import { ConnectionPool } from '../../src/fetch/http/connections';
 import { HTTPCachePartitions } from '../../src/fetch/http/cache/partitions';
+import { CORSPreflightCache } from '../../src/fetch/http/cors-preflight-cache';
 import type {
   FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
-} from '../../src/fetch/infrastructure';
+} from '../../src/fetch/environment';
 import { CookieStore } from '../../src/http/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createEnvironment } from '../js-engine/execution-fixture';
+import { hostPromises, runInParallel } from '../../src/browlet/integration/scripting';
 
 export function createClientEnvironment(url = 'https://example.test/'): FetchEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   return {
     ...createEnvironment(),
+    isWindow: false,
+    isSecureContext: true,
+    crossOriginIsolatedCapability: false,
+    relativeHighResolutionTime: (time) => time,
+    markResourceTiming() {},
+    consumePreloadedResource: () => false,
     parseURL(input, base, encoding) { return this.userAgent.parseURL(input, base, encoding); },
     apiBaseURL: topLevelCreationURL,
     creationURL: topLevelCreationURL,
@@ -33,12 +41,25 @@ export function createClientEnvironment(url = 'https://example.test/'): FetchEnv
 
 export function createFetchUserAgent(): FetchUserAgent {
   return {
+    hostPromises,
+    runInParallel,
+    unsafeSharedCurrentTime: () => performance.now(),
+    determineRequestReferrer: () => null,
+    potentiallyOverrideResponse: () => null,
+    determineFetchPriority: () => ({ update() {} }),
+    supportsMIMEType: () => false,
     defaultUserAgentValue: 'Browlet',
+    defaultAcceptLanguage: null,
     assumeNoInternetConnectivity: false,
     webDriverBiDiNetworkIsOffline: () => false,
     webDriverBiDiEmulatedUserAgent: () => null,
+    webDriverBiDiEmulatedLanguage: () => null,
+    webDriverBiDiCloneNetworkRequestBody() {},
+    webDriverBiDiFetchError() {},
+    webDriverBiDiResponseCompleted() {},
     connectionPool: new ConnectionPool(),
     httpCachePartitions: new HTTPCachePartitions(),
+    corsPreflightCache: new CORSPreflightCache(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
     storageEnabled: true,

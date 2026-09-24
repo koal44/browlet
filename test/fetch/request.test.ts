@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FetchEnvironment } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import {
   isScriptLikeDestination, translatePotentialDestination, type Destination,
   type PotentialDestination, type FetchRequest,

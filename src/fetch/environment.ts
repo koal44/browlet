@@ -1,16 +1,20 @@
 import type { FetchGroup } from './group';
 import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
+import type { CORSPreflightCache } from './http/cors-preflight-cache';
 import type { FetchIntegrityPolicy } from './integrity';
-import type { FetchRequest } from './request';
-import type { FetchResponse } from './response';
+import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
+import type { CacheUsage, FetchResponse } from './response';
+import type { FetchTimingInfo, ResponseBodyInfo } from './timing';
 import type { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { JSEnvironment } from '../js-engine/index';
+import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
+import type { Promises } from '../infra/promises';
 
 /** https://fetch.spec.whatwg.org/#is-offline */
 export function isOffline(env: FetchEnvironment): boolean {
@@ -20,6 +24,24 @@ export function isOffline(env: FetchEnvironment): boolean {
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
 export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
+  /** Whether this environment belongs to a Window, which can consume Document preloads. */
+  isWindow: boolean;
+  /** Whether secure-context-only response timing headers can be retained. */
+  isSecureContext: boolean;
+  /** Timing precision allowed for this client's fetches. */
+  crossOriginIsolatedCapability: boolean;
+  /** Coarsen a shared monotonic timestamp and express it relative to this environment's origin. */
+  relativeHighResolutionTime(time: number): number;
+  /** Record this environment's resource entry after Fetch applies timing-exposure checks. */
+  markResourceTiming(
+    timingInfo: FetchTimingInfo, requestedURL: URLRecord, initiatorType: string,
+    cacheUsage: CacheUsage | undefined, bodyInfo: ResponseBodyInfo, responseStatus: number,
+  ): void;
+  /** Consume a matching Document preload; notify when available, or return false for a miss. */
+  consumePreloadedResource(
+    url: URLRecord, destination: Destination, mode: FetchMode, credentialsMode: RequestCredentials,
+    integrityMetadata: string, onResponseAvailable: (response: FetchResponse) => void,
+  ): boolean;
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
   /** Parse a URL using this environment's browser and Blob URL store. */
@@ -115,18 +137,44 @@ export interface FetchEnvironmentRecord extends StorageEnvironment {
 }
 
 export interface FetchUserAgent extends StorageUserAgent {
+  /** Browser-owned continuations, independent of any client's realm or lifetime. */
+  hostPromises: Promises;
+  /** Schedule background processing without entering an HTML global task. */
+  runInParallel(this: void, steps: () => void): void;
+  /** Read the browser's shared monotonic clock in milliseconds. */
+  unsafeSharedCurrentTime(): number;
+  /** Apply Referrer Policy to the request's resolved policy and selected source. */
+  determineRequestReferrer(request: FetchRequest): URLRecord | null;
+  /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
+  potentiallyOverrideResponse(request: FetchRequest, env: JSEnvironment): FetchResponse | null;
+  /** Select the browser's scheduling state from the request's priority and resource hints. */
+  determineFetchPriority(request: FetchRequest): RequestInternalPriority;
+  /** Whether the browser supports this MIME type for Resource Timing's content-type exposure. */
+  supportsMIMEType(type: MIMEType): boolean;
   /** Default identification header value before an environment-specific override. */
   defaultUserAgentValue: string;
+  /** Configured Accept-Language value, or null when no language preference is configured. */
+  defaultAcceptLanguage: string | null;
   /** Browser-wide assumption of no internet access, separate from per-client emulation. */
   assumeNoInternetConnectivity: boolean;
   /** Whether WebDriver BiDi emulates an offline network for the given environment. */
   webDriverBiDiNetworkIsOffline(env: FetchEnvironment): boolean;
   /** Identification override for the given environment, or null when BiDi supplies none. */
   webDriverBiDiEmulatedUserAgent(env: FetchEnvironment): string | null;
+  /** Language override for the given environment, or null when BiDi supplies none. */
+  webDriverBiDiEmulatedLanguage(env: FetchEnvironment): string | null;
+  /** Retain the outgoing body for automation when an active session requests it. */
+  webDriverBiDiCloneNetworkRequestBody(request: FetchRequest): void;
+  /** Notify automation of a failed request. */
+  webDriverBiDiFetchError(request: FetchRequest): void;
+  /** Notify automation that the response has reached Fetch's completion hook. */
+  webDriverBiDiResponseCompleted(request: FetchRequest, response: FetchResponse): void;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */
   connectionPool: ConnectionPool;
   /** Shared logical HTTP caches, separated by network partition key. */
   httpCachePartitions: HTTPCachePartitions;
+  /** Cached CORS permissions, including invalidation after a failed preflight fetch. */
+  corsPreflightCache: CORSPreflightCache;
   /** Cookie state shared by requests belonging to this user agent. */
   cookieStore: CookieStore;
   /** Enables sending and accepting cookies without deleting the store when disabled. */

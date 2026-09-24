@@ -13,9 +13,11 @@ implemented. Destruction cleanup still needs HTML's unfinished Document lifecycl
 worker integration needs worker globals. Slice C's serialization, handoff,
 request preparation, response handling, retirement, and test-report generator
 are implemented. UserAgent schedules browser-owned delivery work and returns
-internal Promises for attempt results. Fetch's entry is an explicitly approved
-provisional no-op until Slice 8A; no network delivery or response completion
-occurs yet. URL owns the stateless stripping helper.
+internal Promises for attempt results. Fetch 8A supplies entry/main-fetch processing
+with provisional owner hooks. `UserAgent.attemptReportDelivery()`
+uses the UserAgent's lazy sandbox environment for its clientless body streams,
+independently of the generating Window. Later Fetch dispatch/transport
+still gates actual delivery. URL owns the stateless stripping helper.
 
 Fetch 7c has reached the first concrete consumer: COEP's CORP violation reports.
 FetchResponse implements the policy checks and submits violations through
@@ -208,6 +210,45 @@ response and settles that Promise; the caller resets consecutive failures after
 success, increments them on failure, or removes the selected endpoint from its
 original configuration list. Attempted reports are released; the draft leaves
 retries unresolved.
+
+**Execution-owner review (2026-09-23):** Fetch now extracts upload bytes into a
+realm-owned `FetchBody` and processes response streams on that owner's task
+queue. Selecting a parallel callback queue does not provide that body owner.
+`UserAgent.attemptReportDelivery()` supplies `this.sandbox`, whose lifetime
+belongs to the UserAgent rather than the generating Window.
+
+- Chromium's [`ReportingUploaderImpl`](https://github.com/chromium/chromium/blob/main/net/reporting/reporting_uploader.cc)
+  retains a `URLRequestContext` and per-upload origin, isolation information,
+  owned byte reader, request, and completion callback. It sends through the
+  network stack without a page JavaScript realm and does not consume the response body.
+- Gecko's local `dom/reporting/ReportDeliver.cpp`, `SendReports()`, creates a
+  sandbox global under the retained report principal, builds a native byte
+  stream and Request, then calls `FetchRequest()` with that new global. Its
+  singleton delivery service retains copied report data and cookie-jar settings,
+  not the old Window as the upload's execution owner.
+- WebKit's local `Source/WebCore/loader/PingLoader.cpp`, `sendViolationReport()`
+  and `startPingLoad()`, sends FormData through a ResourceRequest with
+  `keepAlive = true`. The loader owns continuation of that request; this path
+  does not require Promise reactions in the generating page. It still retains
+  frame references for loader/instrumentation work, so this is not a claim that
+  every reference to the frame is dropped immediately.
+
+**Adopted sandbox ownership:** UserAgent creates and retains one `JSEnvironment`
+lazily; Browlet continues to compose that UserAgent. `createSandboxEnvironment()`
+registers a real Realm in the main binding world, with a dedicated `SandboxAgent`
+and an automatically running event loop. It reuses execution, allocation, and
+Streams machinery without creating a Window, Document, or HTML settings object.
+No author-facing interfaces are installed on this internal global. Uploads
+retain their original request origin and applicable network state; the sandbox
+supplies execution, not a new initiating client or security identity.
+
+`test/browlet/reporting/fetch-delivery.test.ts` exercises the real Fetch entry,
+body extraction/reading, policy checks, override fetch, and response handover. Only later network
+dispatch is controlled. It covers Document destruction both before dispatch and
+while awaiting the response, using automatic scheduling on stock Node and the
+compatibility addon's managed queues. No retired Window or manual checkpoint is
+needed. Slice 9 still owns native network transport and must not grow a separate
+Reporting-only Fetch bypass.
 
 The selected endpoint and its configuration list have distinct roles. Tasks
 retain both so they can remove that endpoint without affecting another global's

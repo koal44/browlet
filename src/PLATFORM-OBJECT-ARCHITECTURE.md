@@ -286,6 +286,12 @@ Capability values live on the world's assembled interface definitions. Realm
 bindings share those values; other worlds can configure the same raw declarations
 independently.
 
+Browlet's UserAgent-owned sandbox registers in the same main binding world.
+Registration supplies its execution environment without installing platform
+interfaces on the global or constructing a Window. The internal Realm and Agent
+own allocations and task delivery; no HTML settings object is needed for these
+browser-owned operations.
+
 `DefinitionAssembly` also owns the implementation-class-to-interface index,
 built from the declarations once per world. Each `RealmBinding` owns a
 `DefinitionBinding` for each definition it uses. That record holds the

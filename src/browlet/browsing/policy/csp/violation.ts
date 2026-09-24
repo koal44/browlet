@@ -133,7 +133,7 @@ export class CSPViolation {
       request.headerList.append('Content-Type', 'application/csp-report');
       request.body = this.serialize();
       request.redirectMode = 'error';
-      fetch(request);
+      fetch(request, {}, env);
     }
   }
 }

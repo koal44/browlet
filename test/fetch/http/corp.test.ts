@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FetchEmbedderPolicyValue } from '../../../src/fetch/infrastructure';
+import type { FetchEmbedderPolicyValue } from '../../../src/fetch/environment';
 import { FetchResponse } from '../../../src/fetch/response';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';

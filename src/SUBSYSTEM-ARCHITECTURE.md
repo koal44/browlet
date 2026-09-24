@@ -394,8 +394,8 @@ remains an operation argument. Borrowing another realm's method does not change
 the receiver's execution owner.
 
 Fetch's Body mixin selects `exec.global` for consumption task delivery.
-The global identifies the Window; the networking task source selects a task
-category within its event loop. Body reading can also receive another global
+The global identifies the owning Realm; the networking task source selects a
+task category within its event loop. Body reading can also receive another global
 or a parallel queue explicitly. FormData implements HTML's create-an-entry
 algorithm alongside its entry list; string and Blob/File normalization need
 only its environment's `exec`. Fetch constructs FormData directly, without an
@@ -478,8 +478,27 @@ result; its caller owns endpoint bookkeeping. Integration composes `hostPromises
 from Infra's Promise machinery and Node's host queue for this browser-owned work.
 These continuations have no HTML realm and do not replace page Promise routing.
 Fetch response processing selects a parallel queue, independent of the retiring
-Window. Fetch's entry is currently an approved provisional no-op, so no response
-settles that result yet. Periodic collection and retirement remain consumer work. The current
+Window. UserAgent lazily creates a sandbox `JSEnvironment` for browser-owned
+body streams. `createSandboxEnvironment()` composes a real Realm, its own
+`SandboxAgent` with an automatically running event loop, and execution facilities
+from the main binding world. This environment has no Window, Document, or HTML
+settings object; its global does not expose author-facing platform interfaces.
+The request retains its original origin and clientless state. The
+[Reporting roadmap](browlet/reporting/ROADMAP.md#c-delivery-serialization-and-retirement)
+compares Gecko's separate sandbox with Chromium/WebKit's native network paths.
+Fetch's `environment.ts` owns the consumer contracts for browser environments
+and UserAgent facilities. Override fetch calls the request owner's
+`potentiallyOverrideResponse(request, env)` method; its specified default returns
+null. The environment supplies execution if a browser policy constructs a body.
+A supplied response follows normal main-fetch processing; null dispatches the
+same FetchParams to scheme or HTTP fetch. This does not replace Service Worker
+or BiDi interception and does not install a process-wide callback.
+Main-fetch background waits use `hostPromises`, then
+enter the supplied owner's networking task before realm-owned stream work.
+Both pre-dispatch and in-flight Document destruction are covered through Fetch
+without manual checkpoints. Later dispatch and transport still gate actual
+network report delivery.
+Periodic collection and retirement remain consumer work. The current
 active-document destruction scaffold does not settle inactive history disposal.
 `ReportImpl` and derived `ReportBodyImpl` classes are composed in Browlet.
 Fetch supplies plain report data; `Environment.generateReport()` captures its

@@ -183,7 +183,8 @@ describe('Fetch params', () => {
   it('retains request/timing references and derives cancellation from the controller', () => {
     const request = createFetchRequest();
     const timing = new FetchTimingInfo();
-    const params = new FetchParams(request, timing);
+    const env = createEnvironment();
+    const params = new FetchParams(request, timing, env);
     expect(params).toMatchObject({
       processRequestBodyChunkLength: null, processRequestEndOfBody: null,
       processEarlyHintsResponse: null, processResponse: null, processResponseEndOfBody: null,
@@ -192,7 +193,8 @@ describe('Fetch params', () => {
     });
     expect(params.request).toBe(request);
     expect(params.timingInfo).toBe(timing);
-    expect(params.controller).not.toBe(new FetchParams(request, timing).controller);
+    expect(params.env).toBe(env);
+    expect(params.controller).not.toBe(new FetchParams(request, timing, env).controller);
     expect(params.canceled).toBe(false);
     expect(params.aborted).toBe(false);
     params.controller.terminate();

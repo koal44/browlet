@@ -1,6 +1,6 @@
 import { isHTTPTabOrSpace } from '../../http/index';
 import { TextCursor } from '../../infra/text-cursor';
-import { serializeInteger } from '../infrastructure';
+import { serializeInteger } from '../environment';
 
 /** Fetch §2.2.2 — build a content range from integer offsets and length. */
 export function buildContentRange(

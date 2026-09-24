@@ -1,6 +1,6 @@
 import { createEnvironment } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
-import type { FetchEnvironment } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import {
   FetchBody, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
 } from '../../src/fetch/body';

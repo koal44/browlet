@@ -8,6 +8,7 @@ import { CSPViolation, CSPViolationReportBodyImpl } from '../../../../../src/bro
 import { ReportImpl } from '../../../../../src/browlet/reporting/report';
 import * as fetchModule from '../../../../../src/fetch/index';
 import { FetchRequest } from '../../../../../src/fetch/request';
+import { FetchController } from '../../../../../src/fetch/controller';
 import { parseURL, serializeURL } from '../../../../../src/url/url';
 import { createCSPWindow } from './fixture';
 
@@ -115,7 +116,7 @@ describe('CSP violation delivery', () => {
   });
 
   it('prepares legacy Fetch requests and ignores malformed endpoints', () => {
-    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => {});
+    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => new FetchController());
     const { env, request, runTask } = createCSPWindow("img-src 'none'; report-uri /reports http://[bad https://other.test/reports");
     request.isBlockedByCSP();
     runTask();
@@ -136,7 +137,7 @@ describe('CSP violation delivery', () => {
   });
 
   it('lets report-to suppress report-uri even when the named endpoint is unconfigured', () => {
-    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => {});
+    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => new FetchController());
     const { request, runTask, scope } = createCSPWindow("img-src 'none'; report-uri /old; report-to new");
     request.isBlockedByCSP();
     runTask();
@@ -145,7 +146,7 @@ describe('CSP violation delivery', () => {
   });
 
   it.each(['report-uri /old', 'report-to new'])('keeps the event when outbound reporting is disabled: %s', (directive) => {
-    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => {});
+    const fetch = vi.spyOn(fetchModule, 'fetch').mockImplementation(() => new FetchController());
     const { env, window, request, runTask, scope } = createCSPWindow(`img-src 'none'; ${directive}`);
     env.userAgent.reportDeliveryEnabled = false;
     const event = vi.fn();

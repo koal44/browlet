@@ -251,9 +251,10 @@ Current implementation sequence:
    the [Reporting roadmap](reporting/ROADMAP.md) retains destruction integration
    and later Fetch-based delivery.
    Slice 7 and the bounded test-reliability/performance review are complete.
-   Slice 8 retains five subdivisions, A–E. 8A client population now selects HTML
-   prompt targets and copies implemented policy state. Continue entry/main-fetch
-   orchestration after the selected [preflight detour](../fetch/PREFLIGHT.md#work-order).
+   Slice 8 retains five subdivisions, A–E. 8A entry/main-fetch and 8B override
+   dispatch are implemented, including HTML prompt targets and policy copying.
+   The selected [preflight detour](../fetch/PREFLIGHT.md#work-order) is complete;
+   continue with 8C scheme fetch, then 8D HTTP/redirects and 8E data URLs.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery
@@ -267,11 +268,13 @@ Current implementation sequence:
    [HTML lifecycle slice](browsing/ROADMAP.md#planned-slice-history-ownership-and-document-disposal).
    Reporting C's independent serialization, request preparation, retirement,
    and destruction handoff are implemented. UserAgent owns delivery scheduling
-   and Promise-returning attempts; Fetch's entry is a provisional no-op pending
-   Slice 8A. HSTS A–B supply header parsing, UserAgent-owned remembered hosts,
+   and Promise-returning attempts. Fetch 8A supplies entry/main-fetch orchestration;
+   small owner hooks are provisional. Clientless uploads use a lazy UserAgent-owned
+   sandbox with a real Realm and running Agent, independent of page destruction.
+   HSTS A–B supply header parsing, UserAgent-owned remembered hosts,
    inherited host matching, and Fetch's callable URL-upgrade step. Duplicate
    directives invalidate the whole header, including unknown extensions.
-   Main-fetch invocation remains in 8A; secure-response learning and mandatory
+   Main-fetch invocation is present in 8A; secure-response learning and mandatory
    TLS failure handling remain in Slice 9. Storage keys/Blob URLs A–C are
    complete for Blobs: keys, store authorization, UserAgent ownership, Document
    cleanup, browser URL parsing, and public object URL methods under the

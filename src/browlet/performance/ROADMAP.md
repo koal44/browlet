@@ -91,6 +91,10 @@ Read these sources, with paths relative to the preflight's local reference root:
 2. Connect Fetch's timing/body information and `mark resource timing` to
    Resource Timing. Preserve time-origin conversion, timing-allow filtering,
    redirect/cache information, protocol data, and encoded/decoded sizes.
+   Fetch 8A now calls `Environment.markResourceTiming()`; it is explicitly
+   provisional until this entry/buffer machinery exists. The environment's
+   `relativeHighResolutionTime()` already uses the real High Resolution Time
+   implementation. Replace the recording no-op when implementing this step.
 3. Implement Server-Timing parsing and its resource-entry projection when
    exposing those metrics. Keeping raw header bytes in Fetch is only an input.
 4. Connect Navigation Timing to actual loader/navigation/unload records when

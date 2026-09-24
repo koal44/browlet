@@ -7,7 +7,7 @@
 - **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
-- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A client population is connected for the implemented HTML policy state.
+- **In progress:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes); 8A entry/main-fetch and 8B override dispatch are implemented. Scheme fetch is next in 8C.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -65,7 +65,7 @@ When an algorithm reaches a missing external dependency:
 | Planned area | Contract | Fetch sections |
 | --- | --- | --- |
 | Cross-specification capabilities at their consumers | HTML serialization/task delivery, client state, clocks, policy, and storage supplied explicitly without a Browlet dependency; no combined host service bag | §2, 4, and “Using fetch in other standards” |
-| `controller.ts`, `timing.ts`, `tasks.ts`, `infrastructure.ts`, `url.ts` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, integer serialization, and URL classifications | Opening §2 and §2.1 |
+| `controller.ts`, `timing.ts`, `tasks.ts`, `environment.ts`, `url.ts` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, integer serialization, and URL classifications | Opening §2 and §2.1 |
 | `params.ts` | Fetch bookkeeping over the real request/response records and the controller | §2, “Infrastructure” |
 | `headers.ts` | Header lists, parsing, normalization, extraction, guards, and forbidden/safelisted names | §§2.2.2, 3.3–3.8, and 5.1 |
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
@@ -151,7 +151,7 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
 | §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `infrastructure.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent`, which provides the scoped BiDi query; decimal serialization precedes §2.1 |
+| §2 is offline and serialize an integer | `environment.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent`, which provides the scoped BiDi query; decimal serialization precedes §2.1 |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
@@ -755,17 +755,19 @@ Implement in order:
 - **8E — Data URLs.** §6's processor, then close the `data:` branch left in
   scheme fetch. Use the MIME parser and project-owned byte/base64 operations.
 
-**8A started, not complete:** `FetchRequest.populateFromClient()` preserves
+**8A complete, with the recorded later-subsystem hooks provisional:** `FetchRequest.populateFromClient()` preserves
 supplied fields and resolves deferred fields once. HTML settings select the real
 traversable; HTML's policy container owns cloning, and the UserAgent supplies
 default containers for clientless requests. Integration tests cover these paths
 with real settings and traversables, including a cross-origin child Window.
-The Fetch entry algorithm and main-fetch processing have not been implemented;
-client population is their first completed dependency, not the whole of 8A.
-`fetch.ts` exposes an approved provisional entry for Reporting's delivery caller.
-It returns void and does nothing: no dispatch, processing callbacks, or controller.
-Replace it with the real entry algorithm here; a pending Reporting delivery
-Promise is not evidence that any network request has been sent.
+`fetch.ts` now contains the entry algorithm and returns its controller.
+`FetchParams.mainFetch()` supplies policy ordering, response selection/filtering,
+SRI verification, and handover, including body-end and consumption callbacks.
+It replaces the entry no-op; policy-blocked, preload, and overridden-response
+paths can complete. Ordinary scheme/HTTP dispatch waits for 8C/8D.
+Tests control the provisional owner operations and later scheme/HTTP stages,
+while using real Window environments, policies, streams, bindings, and running
+HTML event loops. They do not demonstrate actual network delivery.
 
 The accepted provisional Request-constructor rule preserves a selected target
 only when the source request's resolved origin matches the new environment.
@@ -780,17 +782,58 @@ exercise that behavior through client population. A default container can have
 no CSP list; every constructed list requires its origin. CSP parsing, source
 matching, Window violations, and hash reporting are implemented through
 [CSP slice C](../browlet/browsing/policy/csp/ROADMAP.md). The independent preflight
-detour is complete; resume the Fetch entry algorithm and main-fetch processing here.
+detour and entry/main-fetch integration are complete.
 Both Integrity Policies now copy independently, following Gecko despite HTML's
 report-only omission. Remaining policy models and delivery belong to their
 policy owners, rather than requiring new Fetch wiring.
 
-After client population, 8A reaches HTML preload consumption, shared-clock
-access, language/priority selection, and BiDi hooks. Main fetch then reaches
-CSP, Mixed Content, HSTS/HTTPS DNS upgrading, SRI byte verification, CORS
-preflight-cache invalidation, and Resource Timing. Preserve the planned owner
-boundaries and pause at unresolved dependencies; a test host's policy decisions
-do not constitute Browlet policy enforcement.
+### 8A dependency review
+
+The shared clock, time-origin conversion, Referrer Policy, and preflight policy
+algorithms are connected. Background continuations use the UserAgent's existing
+`hostPromises` and background scheduler. Before touching realm-owned Streams,
+main fetch queues a networking task to the supplied execution owner. Processing
+callbacks still select their prescribed global or parallel queue. Compatibility
+addon tests exercise this without test-side microtask checkpoints.
+
+The following owner operations are provisional. Each stub identifies its
+missing subsystem:
+
+| Consumer | Intended owner operation | Work still required |
+| --- | --- | --- |
+| [Fetch entry](fetch.ts) | `client.consumePreloadedResource(...)` | Returns a miss until HTML has a Document preload map, request-key matching, integrity checks, and deferred response notification. |
+| [Fetch entry](fetch.ts) | UserAgent's BiDi body/language hooks, `defaultAcceptLanguage`, `determineFetchPriority(request)` | BiDi hooks are inert without sessions. Configured language is used, with no header when null. Priority returns an inert update handle until Slice 9 has a transport scheduler; no numeric priority or locale is invented. |
+| [Main fetch](params.ts) | `userAgent.corsPreflightCache.clearEntries(request)` | Empty cache with no insertion yet. Slice 9 supplies lookup, storage, expiration, credentials matching, and invalidation after a failed preflight fetch. |
+| [Response handover](params.ts) | UserAgent's BiDi fetch-error/response-completed hooks | No-ops until network instrumentation has sessions to notify. |
+| [Timing handover](params.ts) | `userAgent.supportsMIMEType(type)`, `env.markResourceTiming(...)` | Support defaults false outside MIME Sniffing's independently minimized types. Recording is a no-op pending the [Performance Timeline/Resource Timing foundation](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration). |
+
+`FetchParams` retains the explicit `JSEnvironment` used for body allocation;
+this is separate from the nullable initiating client and callback destination.
+Clientless Reporting uploads use `UserAgent.sandbox`, a lazily created execution
+environment with its own Realm and running Agent. It needs neither a Window nor
+an HTML settings object. Requests retain their original origin and null client.
+
+The [Reporting execution-owner review](../browlet/reporting/ROADMAP.md#c-delivery-serialization-and-retirement)
+compares Gecko's sandbox with Chromium/WebKit's native upload paths. Browlet's
+sandbox reuses existing Streams and the main binding world. Integration tests
+destroy the generating Document before dispatch and while waiting for a response,
+then complete delivery through the real Fetch entry and handover without manual
+checkpoints. Only the later network-dispatch stage is controlled.
+
+Validation: focused Fetch/Reporting/CSP/scripting coverage passes 1,326 tests on
+custom Node with the compatibility addon, plus two existing expected failures.
+The 64 sandbox, Reporting delivery, and Fetch orchestration tests also pass on
+stock Node 26.8.1.
+
+A pending preload is an internal Promise rather than a string requiring polling;
+that representation remains marked for review. The accepted `reportTiming()`
+shape takes the selected global's environment for its time origin and timing
+owner. Main-fetch's Promise represents internal waiting, not the public Fetch API.
+
+HTTPS DNS-record upgrades remain at connection establishment in Slice 9, as
+Fetch expressly permits. Transport must also disregard later body enqueues after
+main fetch removes a HEAD/CONNECT/null-status body. HSTS and request policies are
+already invoked at their prescribed main-fetch stages.
 
 Mixed Content's independent request/response blocking checks are available on
 `FetchRequest` and `FetchResponse`, using the client's browser-owned ancestor
@@ -811,9 +854,9 @@ retained self origin, without importing the browser's CSP implementation.
 CSP's Window event and report-generation dependencies are implemented; actual
 network report delivery will use the Fetch entry and transport algorithms.
 
-HSTS's independent algorithms are implemented. Main fetch must call
+HSTS's independent algorithms are implemented. Main fetch calls
 `request.upgradeForHSTS()` after referrer selection and before dispatch, including
-on redirect re-entry. It uses the request's UserAgent store and exempts localhost
+on recursive redirect re-entry when 8D supplies that caller. It uses the request's UserAgent store and exempts localhost
 and its subdomains as required by Fetch. Do not move this step into Request
 construction. The sibling DNS HTTPS-record upgrade condition still depends on
 DNS/transport support; the HSTS method does not stand in for that condition.
@@ -827,6 +870,37 @@ at scheme fetch, then construct the response, headers, and range body.
 
 `about:` and `file:` branches remain explicit until their dependencies exist. `file:` behavior is an
 embedder policy, not permission to expose arbitrary Node filesystem access.
+
+### 8B — Override fetch
+
+**Complete:** `FetchParams.overrideFetch(type, makeCORSPreflight)` consults the
+request's own `UserAgent.potentiallyOverrideResponse(request, env)` before
+dispatch. The UserAgent implements Fetch's specified default, returning null.
+An implementation can supply a concrete response, including a network error;
+otherwise the same FetchParams continues into `schemeFetch()` or
+`httpFetch(makeCORSPreflight)`. The environment supplies body execution for an
+override without inventing a client for browser-owned requests. There is no
+process-wide override callback, and this hook does not replace Service Worker
+or WebDriver BiDi interception at their own prescribed stages.
+
+The result uses `PromiseValue<FetchResponse>` to carry downstream completion.
+Its continuations use UserAgent's host Promise destination; main fetch still
+enters the body owner's networking task before processing the result. The
+Promise return shape is marked for review, as with recursive main fetch.
+`schemeFetch()` and `httpFetch()` are explicit provisional methods for 8C and
+8D, rejecting with InternalError rather than claiming to have fetched anything.
+
+`SPEC_CLASH(override-fetch-dispatch-labels)` records the draft's inconsistent
+switch labels: its argument and callers use `scheme-fetch` and `http-fetch`,
+while the switch says `scheme fetch` and `HTTP fetch`. Browlet uses the declared
+argument tokens. Confirmed in both the local source and the published draft on
+2026-09-23; details are in `scratch/SPEC-ISSUES.md`.
+
+Coverage in `test/browlet/fetch-override.test.ts` checks default fallthrough,
+scheme/HTTP selection, preflight forwarding, supplied responses/network errors,
+UserAgent isolation, failure propagation, and main-fetch filtering, blocking,
+and body consumption. Existing orchestration and Reporting handoff tests now
+exercise real override fetch while controlling only the later scheme/HTTP work.
 
 **Exit proof:** an injected test host can perform a `data:` fetch and exercise
 redirect/main-fetch control flow with deterministic response callbacks and no

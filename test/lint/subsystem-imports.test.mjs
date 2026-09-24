@@ -27,7 +27,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { configure } from '../../scripts/configure';" },
     {
       filename: fileURLToPath(new URL('../../src/fetch/example.ts', import.meta.url)),
-      options, code: "import { isOffline } from './infrastructure';",
+      options, code: "import { isOffline } from './environment';",
     },
     {
       filename: fileURLToPath(new URL('../fetch/example.ts', import.meta.url)),
@@ -39,7 +39,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
     {
-      filename, options, code: "import type { FetchPolicyContainer } from '../fetch/infrastructure';",
+      filename, options, code: "import type { FetchPolicyContainer } from '../fetch/environment';",
       errors: [{ messageId: 'entryPoint' }],
     },
     { filename, options, code: "export { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
@@ -53,7 +53,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { FetchRequest } from '../fetch/../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
     {
       filename: fileURLToPath(new URL('../../src/browlet/browsing/policy/example.ts', import.meta.url)),
-      options, code: "import type { FetchPolicyContainer } from '../../../fetch/infrastructure';",
+      options, code: "import type { FetchPolicyContainer } from '../../../fetch/environment';",
       errors: [{ messageId: 'entryPoint' }],
     },
   ],

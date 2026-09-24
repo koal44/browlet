@@ -4,7 +4,7 @@ import { createPolicyContainer } from '../../src/browlet/browsing/policy/contain
 import { UserAgent } from '../../src/browlet/user-agent';
 import { FetchController } from '../../src/fetch/controller';
 import { FetchGroup } from '../../src/fetch/group';
-import { isOffline } from '../../src/fetch/infrastructure';
+import { isOffline } from '../../src/fetch/environment';
 import { FetchRequest } from '../../src/fetch/request';
 import { parseURL } from '../../src/url/url';
 import { createFetchWindow, createIsolatedFetchRealm } from './fetch-fixture';

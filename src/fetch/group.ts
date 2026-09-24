@@ -10,7 +10,7 @@ export class FetchGroup {
   deferredFetchRecords: DeferredFetchRecord[] = [];
 
   /** Cancel document-owned fetch work, reporting whether any work was discarded. */
-  // PROVISIONAL: Fetch orchestration does not yet start or register requests.
+  // PROVISIONAL: entry now registers controllers, but cancellation of ongoing work is not connected.
   // Implement task/data cancellation and its keepalive/deferred-fetch rules there.
   // terminate() is not a substitute: it only changes controller state.
   cancel(): boolean {

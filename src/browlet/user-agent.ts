@@ -1,19 +1,25 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
+import { createSandboxEnvironment } from './bindings';
 import type { Navigable, TopLevelTraversable } from './browsing/navigable';
 import type { Environment } from './scripting/environment';
 import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
 import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { hostPromises, requestNodeEventLoopTurn } from './integration/scripting';
+import { hostPromises, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
+import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
+import { determineRequestReferrer } from './browsing/policy/referrer-policy';
 import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
 import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
 import {
-  ConnectionPool, HTTPCachePartitions, fetch, FetchRequest, isOkStatus, type FetchUserAgent,
+  ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
+  type FetchResponse, type FetchUserAgent, type RequestInternalPriority,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
+import type { MIMEType } from '../mime/index';
+import type { JSEnvironment } from '../js-engine/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
@@ -31,12 +37,20 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   eventLoopOptions: EventLoopOptions | null;
+  /** Background Fetch continuations outlive their initiating environments. */
+  hostPromises = hostPromises;
+  /** Background steps remain distinct from task delivery to a global. */
+  runInParallel = runInParallel;
 
   /** Default identification header value, shared by this user agent's environments. */
   // https://fetch.spec.whatwg.org/#default-user-agent-value
   defaultUserAgentValue = 'Mozilla/5.0 (compatible; Browlet)';
+  /** Configured language preference; null leaves Accept-Language absent unless supplied or emulated. */
+  defaultAcceptLanguage: string | null = null;
   connectionPool = new ConnectionPool();
   httpCachePartitions = new HTTPCachePartitions();
+  /** CORS permissions are owned independently of ordinary HTTP cache entries. */
+  corsPreflightCache = new CORSPreflightCache();
   cookieStore = new CookieStore();
   /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
   hstsStore = new HSTSStore();
@@ -59,9 +73,15 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   authenticatedSchemes = new Set<string>();
   /** https://w3c.github.io/webappsec-secure-contexts/#development-environments */
   trustworthyOrigins: TupleOrigin[] = [];
+  #sandbox: JSEnvironment | undefined;
 
   constructor(eventLoopOptions: EventLoopOptions | null = null) {
     this.eventLoopOptions = eventLoopOptions;
+  }
+
+  /** Lazily allocated execution shared by this user agent's work that can outlive pages. */
+  get sandbox(): JSEnvironment {
+    return this.#sandbox ??= createSandboxEnvironment(this.eventLoopOptions ?? undefined);
   }
 
   createBrowsingContextGroup(): BrowsingContextGroup {
@@ -110,6 +130,37 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return createPolicyContainer();
   }
 
+  /** Shared Fetch timestamps use the same clock as HTML and High Resolution Time. */
+  unsafeSharedCurrentTime(): number {
+    return unsafeSharedCurrentTime().milliseconds;
+  }
+
+  /** Apply the browser-owned Referrer Policy algorithm for Fetch. */
+  determineRequestReferrer(request: FetchRequest): URLRecord | null {
+    return determineRequestReferrer(request);
+  }
+
+  /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
+  // https://fetch.spec.whatwg.org/#potentially-override-response-for-a-request
+  potentiallyOverrideResponse(_request: FetchRequest, _env: JSEnvironment): FetchResponse | null {
+    // Fetch's default implementation lets the request proceed unchanged.
+    return null;
+  }
+
+  /** Select internal network scheduling state for a request. */
+  determineFetchPriority(_request: FetchRequest): RequestInternalPriority {
+    // PROVISIONAL(Fetch 9): no transport scheduler exists. Select and update
+    // priority using the request's hint, initiator, destination, and render-blocking state there.
+    return { update() {} };
+  }
+
+  /** Whether a MIME type can be exposed as supported in Resource Timing. */
+  supportsMIMEType(_type: MIMEType): boolean {
+    // PROVISIONAL: no browser-wide support policy exists yet. MIME Sniffing still
+    // minimizes JavaScript, JSON, SVG, and XML independently; other types remain unexposed.
+    return false;
+  }
+
   /** Run browser-owned reporting work on a later host turn, yielding to runnable page tasks. */
   queueReportingTask(steps: () => void): void {
     requestNodeEventLoopTurn(() => {
@@ -152,6 +203,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     for (const report of reports) report.attempts++;
     const result = hostPromises.withResolvers<ReportDeliveryResult>();
     // This clientless request has no Window to receive response callbacks.
+    // The sandbox owns stream execution; the request retains the report's
+    // original origin and remains clientless.
     fetch(request, {
       processResponse: (response) => {
         if (isOkStatus(response.status)) result.resolve('success');
@@ -159,7 +212,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
         else result.resolve('failure');
       },
       useParallelQueue: true,
-    });
+    }, this.sandbox);
     return result.promise;
   }
 
@@ -175,6 +228,31 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   webDriverBiDiEmulatedUserAgent(_env: Environment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped emulation when implemented.
     return null;
+  }
+
+  /** Language override selected for the given environment, or null when absent. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-language
+  webDriverBiDiEmulatedLanguage(_env: Environment): string | null {
+    // PROVISIONAL: no BiDi sessions; select scoped language emulation when implemented.
+    return null;
+  }
+
+  /** Retain an outgoing body if automation requests its contents. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-clone-network-request-body
+  webDriverBiDiCloneNetworkRequestBody(_request: FetchRequest): void {
+    // PROVISIONAL: no BiDi sessions request network body collection.
+  }
+
+  /** Notify automation of a network fetch error. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-fetch-error
+  webDriverBiDiFetchError(_request: FetchRequest): void {
+    // PROVISIONAL: no BiDi sessions receive network events.
+  }
+
+  /** Notify automation that Fetch has completed a response. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-response-completed
+  webDriverBiDiResponseCompleted(_request: FetchRequest, _response: FetchResponse): void {
+    // PROVISIONAL: no BiDi sessions receive network events.
   }
 
   /** Notify automation that an identified navigation was canceled. */

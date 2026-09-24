@@ -257,7 +257,7 @@ Existing stubs and planned features remain with their implementation roadmaps.
 
 | Slice | Bounded source scope | Specification comparison |
 | --- | --- | --- |
-| 1 — Fetch control and bodies — marked | `controller.ts`, `tasks.ts`, `infrastructure.ts`, `params.ts`, `timing.ts`, `url.ts`, `body.ts`, `multipart/`, and `src/infra/parallel-queue.ts`; include constructor-supplied scheduling and the remaining extracted-helper signatures | Fetch §2 preamble, §2.1, §2.2.4, and implemented §5.2–§5.3 paths; HTML parallel queues and multipart encoding |
+| 1 — Fetch control and bodies — marked | `controller.ts`, `tasks.ts`, `environment.ts`, `params.ts`, `timing.ts`, `url.ts`, `body.ts`, `multipart/`, and `src/infra/parallel-queue.ts`; include constructor-supplied scheduling and the remaining extracted-helper signatures | Fetch §2 preamble, §2.1, §2.2.4, and implemented §5.2–§5.3 paths; HTML parallel queues and multipart encoding |
 | 2 — Fetch HTTP adapters — marked | `headers.ts`, `http/methods.ts`, `http/ranges.ts`, `http/statuses.ts`, and implemented operations in `request.ts`/`response.ts` | Fetch §§2.2.1–2.2.3 and implemented §§2.2.5–2.2.7; compare present API declarations with §5 without treating stubs as implemented |
 | 3 — Blob, File, and FileList — marked | `src/file/blob.ts`, `file.ts`, `file-list.ts`; inspect `blob-data.ts`/`integration.ts` only where they explain a signature | File API §§2–5 and referenced stream/byte operations; distinguish internal construction from author-facing Web IDL |
 | 4 — File reading and serialization — marked | `src/file/package-data.ts` and `src/browlet/integration/file/`, including FileReader and registered serialization steps | File API §§6–7 and Blob/File/FileList serialization; follow immediate HTML/Streams dependencies without auditing those whole subsystems |
@@ -369,9 +369,10 @@ including Request/Response construction, Referrer Policy's declaration,
 dependent AbortSignals, and HTML's document-base-URL dependency.
 [Fetch Slice 7](ROADMAP.md#slice-7--http-extensions) is complete with the
 integration deferrals below. The bounded test-reliability/performance review
-is complete, and [Slice 8A](ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes)
-has connected client population to HTML prompt-target selection and policy
-container cloning/default creation. The Request constructor uses the accepted
+is complete. [Slices 8A and 8B](ROADMAP.md#slice-8--fetch-orchestration-and-local-schemes)
+implement entry/main-fetch processing and override dispatch, including HTML
+prompt-target selection and policy container cloning/default creation.
+The Request constructor uses the accepted
 provisional source-origin copy check; populated CSP copying now preserves its
 list-level self origin and independently copies policy/directive data.
 Concrete Integrity Policy state and independent copying belong to the HTML
@@ -390,8 +391,9 @@ not a requirement to finish all browser policy before proceeding.
 Fetch Metadata's single algorithm slice is complete. SRI/Integrity Policy is
 divided into [three slices](ROADMAP.md#subresource-integrity): metadata/digests,
 policy parsing/copying, and policy checks/reporting. All three algorithm slices
-are complete. Main Fetch still needs to invoke the request policy check and
-verify consumed response bytes. Actual report delivery remains with Reporting,
+are complete. Slice 8A invokes the request policy check and verifies consumed
+response bytes; its provisional owner APIs are listed in the Fetch roadmap.
+Actual report delivery remains with Reporting,
 and automatic response-policy delivery remains with HTML's loader.
 Reporting A implements records, endpoint parsing, and explicit global
 initialization. HTML's loader still needs to provide actual Fetch responses.
@@ -399,11 +401,16 @@ Reporting B supplies Window generation, queues, observers, and outbound opt-out;
 HTML destruction and worker lifecycle remain explicit consumer gates.
 Reporting C implements serialization, request preparation, response handling,
 retirement, and destruction handoff. UserAgent supplies delivery scheduling and
-Promise-returning attempts; Fetch's entry is a provisional no-op pending Slice 8A.
+Promise-returning attempts. Slice 8A replaces Fetch's provisional no-op with an
+entry/main-fetch implementation with provisional owner hooks. Slice 8B supplies
+the UserAgent response override and dispatches to the upcoming scheme/HTTP work.
+Clientless report uploads
+use the UserAgent's lazy sandbox environment, with automatic task and microtask
+processing independent of the generating Document's lifetime.
 HSTS A–B implement header parsing, UserAgent-owned remembered hosts, inherited
 host matching, and `FetchRequest.upgradeForHSTS()`. The approved parser rejects
 the complete header when any directive repeats, including unknown extensions.
-Main fetch must invoke upgrading in 8A; verified response learning and mandatory
+Main fetch now invokes upgrading in 8A; verified response learning and mandatory
 TLS failure handling belong to Slice 9. Storage keys/Blob URLs A–C are
 implemented for Blobs: keys, store authorization, UserAgent ownership,
 Document cleanup, browser URL parsing, and public object URL methods.
@@ -412,8 +419,8 @@ and scheme dispatch remain in 8C. The store lives in Browlet's File integration
 and retains `BlobImpl` entries behind a provisional Blob-only declaration.
 MediaSource support is deferred to the [media roadmap](../browlet/media/ROADMAP.md),
 and worker cleanup waits for its lifecycle. Neither blocks the Blob URL preflight.
-Continue with the independent policy work below before returning
-to Fetch 8A. Their consumer integration gates remain with Fetch and HTML.
+The independent policy work below is complete. Its remaining consumer
+integration gates stay with Fetch and HTML; scheme fetch is next in 8C.
 Network cookie processing and cache transactions remain in Slice 9.
 Complete the consumer integration gates in each owning roadmap with real Fetch inputs;
 do not construct parallel Request/Response models to avoid those dependencies.

@@ -14,7 +14,7 @@ import {
 } from '../web-idl/index';
 import { isForbiddenMethod } from './http/methods';
 import { parseSingleRangeHeaderValue } from './http/ranges';
-import type { FetchEnvironment } from './infrastructure';
+import type { FetchEnvironment } from './environment';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
 // https://fetch.spec.whatwg.org/#concept-header-list

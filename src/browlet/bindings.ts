@@ -1,7 +1,7 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon, type JSEnvironment } from '../js-engine/index';
+import { addon, createMicrotaskQueue, type JSEnvironment } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -41,11 +41,14 @@ import { fetchCapabilities } from './integration/fetch';
 import { fileReaderIDL } from './integration/file/file-reader';
 import { objectURLIDL } from './integration/file/object-url';
 import { createExecution } from './integration/execution';
+import { requestNodeEventLoopTurn } from './integration/scripting';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
-import type { WindowAgent } from './scripting/agents';
+import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
+import { SandboxAgent, type WindowAgent } from './scripting/agents';
+import type { EventLoopOptions } from './scripting/event-loop';
 import { WindowEnvironment, createEnvironmentRecord, type EnvironmentRecord } from './scripting/environment';
 import type { UserAgent } from './user-agent';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
@@ -70,6 +73,18 @@ export function createWindowEnvironment(
   initialization: WindowEnvironmentInit,
 ): WindowEnvironment {
   return browletBindings.createWindowEnvironment(initialization);
+}
+
+/** Create browser-owned execution without a Window, Document, or HTML settings object. */
+export function createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
+  createMicrotaskQueue,
+  requestEventLoopTurn: requestNodeEventLoopTurn,
+  unsafeSharedCurrentTime,
+}): JSEnvironment {
+  const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
+  // Reuse the main binding world for internal allocations without installing
+  // author-facing interfaces on the sandbox's global.
+  return browletBindings.register(realm).getEnvironment();
 }
 
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {

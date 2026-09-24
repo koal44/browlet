@@ -7,6 +7,7 @@ import { parseURL, serializeURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment } from './client-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 
 describe('Fetch response reporting URLs', () => {
   it('reports the first URL without credentials or fragment, preserving the response URLs', () => {
@@ -42,7 +43,7 @@ describe('Fetch network errors', () => {
   });
 
   it.each(['aborted', 'terminated'] as const)('chooses the appropriate network error for %s Fetch params', (state) => {
-    const params = new FetchParams(createFetchRequest(), new FetchTimingInfo());
+    const params = new FetchParams(createFetchRequest(), new FetchTimingInfo(), createEnvironment());
     params.controller.state = state;
     expect(FetchResponse.appropriateNetworkError(params)).toMatchObject({
       type: 'error', status: 0, aborted: state === 'aborted',
@@ -50,7 +51,7 @@ describe('Fetch network errors', () => {
   });
 
   it('requires canceled Fetch params', () => {
-    const params = new FetchParams(createFetchRequest(), new FetchTimingInfo());
+    const params = new FetchParams(createFetchRequest(), new FetchTimingInfo(), createEnvironment());
     expect(() => FetchResponse.appropriateNetworkError(params)).toThrow('Fetch params are not canceled');
   });
 });

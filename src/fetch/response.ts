@@ -20,7 +20,7 @@ import {
 import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
   getFetchEnvironment, type FetchEmbedderPolicyValue, type FetchEnvironment,
-} from './infrastructure';
+} from './environment';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import { parseAndStoreCookies } from './policy/cookies';
@@ -247,8 +247,9 @@ export type FilteredFetchResponse = FetchResponse & {
   readonly internalResponse: FetchResponse;
 };
 
-function isFilteredResponse(response: FetchResponse): response is FilteredFetchResponse {
-  return 'internalResponse' in response;
+export function isFilteredResponse(response: FetchResponse): response is FilteredFetchResponse {
+  return response.type === 'basic' || response.type === 'cors' ||
+    response.type === 'opaque' || response.type === 'opaqueredirect';
 }
 
 /*

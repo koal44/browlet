@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { FetchController } from '../../src/fetch/controller';
-import { isOffline, serializeInteger } from '../../src/fetch/infrastructure';
+import { isOffline, serializeInteger } from '../../src/fetch/environment';
 import { queueFetchTask } from '../../src/fetch/tasks';
 import {
   ConnectionTimingInfo, FetchTimingInfo, ResponseBodyInfo,
@@ -26,26 +26,26 @@ describe('Fetch §2 controllers', () => {
     });
   });
 
-  it('reports timing to the supplied global and exposes the retained full record', () => {
+  it('reports timing to the supplied environment and exposes the retained full record', () => {
     const controller = new FetchController();
-    const global = {};
+    const env = createClientEnvironment();
     const timing = new FetchTimingInfo();
     timing.startTime = 42;
     controller.fullTimingInfo = timing;
     controller.reportTimingSteps = vi.fn();
     controller.nextManualRedirectSteps = vi.fn();
 
-    controller.reportTiming(global);
+    controller.reportTiming(env);
     controller.processNextManualRedirect();
 
-    expect(controller.reportTimingSteps).toHaveBeenCalledExactlyOnceWith(global);
+    expect(controller.reportTimingSteps).toHaveBeenCalledExactlyOnceWith(env);
     expect(controller.nextManualRedirectSteps).toHaveBeenCalledExactlyOnceWith();
     expect(controller.extractFullTimingInfo()).toBe(timing);
   });
 
   it('requires the steps and full timing info prescribed by the algorithms', () => {
     const controller = new FetchController();
-    expect(() => controller.reportTiming({})).toThrow('timing steps are not set');
+    expect(() => controller.reportTiming(createClientEnvironment())).toThrow('timing steps are not set');
     expect(() => controller.processNextManualRedirect()).toThrow('redirect steps are not set');
     expect(() => controller.extractFullTimingInfo()).toThrow('full timing info is not set');
   });

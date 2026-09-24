@@ -17,6 +17,10 @@ delegate checks and violation submission to
 [`policy/embedder-policy.ts`](../policy/embedder-policy.ts); report generation
 uses the settings object's Reporting hook. Cookie and Origin-header methods
 likewise delegate to Fetch's `policy/` modules.
+Slice 8A declares a UserAgent-owned `CORSPreflightCache` with provisional
+`clearEntries()` for the main-fetch failure path. It cannot store entries yet;
+lookup, insertion, expiration, credential matching, and removal belong together
+in Slice 9's CORS preflight work.
 
 ## Sources
 

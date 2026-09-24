@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
-import type { FetchEnvironment } from '../../src/fetch/infrastructure';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import { FetchRequest, type Destination, type FetchMode } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { parseURL, serializeURL } from '../../src/url/url';

@@ -22,7 +22,7 @@ import {
   getFetchEnvironment, serializeInteger,
   type FetchEnvironment, type FetchEnvironmentRecord, type FetchUserAgent,
   type FetchPolicyContainer, type FetchPromptTarget, type ReferrerPolicy,
-} from './infrastructure';
+} from './environment';
 import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
 import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
 import { appendCookieHeader, determineSameSiteMode, isSameSiteForCookies } from './policy/cookies';

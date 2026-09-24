@@ -1,6 +1,7 @@
 import type { JSEnvironment } from '../js-engine/index';
 import { createDOMException } from '../web-idl/index';
 import type { FetchTimingInfo } from './timing';
+import type { FetchEnvironment } from './environment';
 import { InternalError } from '../infra/internal-error';
 
 /** Fetch §2, fetch controller and its operations. */
@@ -9,17 +10,18 @@ export class FetchController {
   state: 'ongoing' | 'terminated' | 'aborted' = 'ongoing';
   /** Full timing data retained for extraction, or null before it is supplied. */
   fullTimingInfo: FetchTimingInfo | null = null;
-  /** Reporting callback for a selected global, or null before reporting is configured. */
-  reportTimingSteps: ((global: object) => void) | null = null;
+  /** Reporting callback for a selected environment, or null before reporting is configured. */
+  reportTimingSteps: ((env: FetchEnvironment) => void) | null = null;
   /** Structured-serialized abort reason, or null before an abort reason is recorded. */
   serializedAbortReason: object | null = null;
   /** Continuation for a pending manual redirect, or null when none is installed. */
   nextManualRedirectSteps: (() => void) | null = null;
 
-  reportTiming(global: object): void {
+  // The selected global's environment supplies its time origin and Resource Timing owner.
+  reportTiming(env: FetchEnvironment): void {
     const steps = this.reportTimingSteps;
     if (steps === null) throw new InternalError('Fetch timing steps are not set');
-    steps(global);
+    steps(env);
   }
 
   processNextManualRedirect(): void {

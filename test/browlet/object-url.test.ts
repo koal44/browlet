@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { UserAgent } from '../../src/browlet/user-agent';
 import { createNewBrowsingContextAndDocument } from '../../src/browlet/browsing/browsing-context';
-import type { FetchUserAgent } from '../../src/fetch/infrastructure';
+import type { FetchUserAgent } from '../../src/fetch/environment';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { BlobImpl } from '../../src/file/blob';

@@ -1,6 +1,6 @@
 import { InternalError } from '../../infra/internal-error';
 import type { URLRecord } from '../../url/index';
-import type { FetchEnvironment } from '../infrastructure';
+import type { FetchEnvironment } from '../environment';
 import type { FetchRequest } from '../request';
 import type { FetchResponse } from '../response';
 

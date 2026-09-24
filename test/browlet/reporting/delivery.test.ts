@@ -10,6 +10,7 @@ import { ReportImpl } from '../../../src/browlet/reporting/report';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import * as Fetch from '../../../src/fetch/fetch';
 import { FetchRequest } from '../../../src/fetch/request';
+import { FetchController } from '../../../src/fetch/controller';
 import { FetchResponse } from '../../../src/fetch/response';
 import { createOpaqueOrigin, serializeOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
@@ -17,7 +18,7 @@ import { isStampedImplInstance } from '../../../src/web-idl/index';
 import { PromiseValue } from '../../../src/infra/promises';
 
 // Control network responses while exercising the actual browser-owned scheduler.
-const fetchRequest = vi.spyOn(Fetch, 'fetch').mockImplementation(() => {});
+const fetchRequest = vi.spyOn(Fetch, 'fetch').mockImplementation(() => new FetchController());
 beforeEach(() => { fetchRequest.mockClear(); });
 afterAll(() => { fetchRequest.mockRestore(); });
 
