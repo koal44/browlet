@@ -15,10 +15,17 @@ Cross-subsystem design decisions are recorded in the
 ## Development
 
 ```sh
+node scripts/vendor.ts undici
 npm install
 npm run build
 npm run test:unit
 ```
+
+Undici is temporarily pinned and patched through [vendor-lock.json](vendor-lock.json)
+to preserve HTTP/2 response fields while [upstream #5898](https://github.com/nodejs/undici/issues/5898)
+is unresolved. Prepare it before installing dependencies; the vendor command needs
+only Node, npm, and Git. Source, tests, and builds use that same local package. See
+[vendor/README.md](vendor/README.md) for verification and removal of the patch.
 
 `npm run clean` removes the root `dist/` and `test-results/` folders.
 

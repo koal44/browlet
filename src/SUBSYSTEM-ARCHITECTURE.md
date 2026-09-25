@@ -644,12 +644,21 @@ Likewise, do not promote an immutable host configuration value or an operation
 already supplied by ECMAScript into a Host Port merely to make it injectable.
 
 Fetch's `HTTPTransport` is a concrete example. UserAgent composes a Node Undici
-adapter owning sockets, TLS verification, and connection reuse. Fetch owns the
+adapter owning sockets, TLS verification, and connection reuse. The adapter
+negotiates HTTP/2 and lets Undici multiplex its session while preserving original
+field boundaries. Fetch owns protocol-independent transaction rules and the
 bounded response byte buffer and schedules stream creation/delivery on the
 execution owner's networking task source. Native callbacks retain bytes and
 update neutral records; they do not enter page Streams or allocate page objects.
 Pause/resume/abort functions cross this boundary without exposing Undici objects.
 Closing the transport belongs to its UserAgent lifetime, not an individual Window.
+An upload source returns one neutral byte chunk per native write demand by
+queuing a read on that body's HTML owner. Native async iteration exists only
+inside the Node adapter. UserAgent also supplies a per-response content decoder;
+native transforms retain codec state, while Fetch controls coding selection,
+byte accounting, backpressure, and page-owned stream failure. Releasing an
+unused redirect/retry response stops its exchange without canceling the shared
+Fetch controller.
 
 ### Composition Root
 

@@ -16,6 +16,7 @@ import {
 import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff } from './http/blocking';
 import { isCORSSafelistedMethod } from './http/methods';
 import { httpNetworkFetch } from './http/network';
+import { httpNetworkOrCacheFetch } from './http/transaction';
 import { isNullBodyStatus, isRangeStatus, isRedirectStatus } from './http/statuses';
 import { bytesMatchIntegrityMetadata } from './integrity';
 import type { FetchRequest } from './request';
@@ -166,28 +167,30 @@ export class FetchParams {
       return response ?? this.#fetchFromNetwork(makeCORSPreflight);
     }).then((response) => {
       if (response.type === 'error') return response;
-      const internal = isFilteredResponse(response) ? response.internalResponse : response;
+      const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
       if (request.responseTainting === 'opaque' || response.type === 'opaque') {
         if (request.origin === undefined) throw new InternalError('HTTP fetch requires a populated request origin');
         // SPEC_CLASH(corp-clientless-policy): Fetch passes a nullable client to a settings-only check.
         // Clientless requests retain policy state; a missing reporting owner does not bypass CORP.
         const policyContainer = request.client?.policyContainer ?? request.policyContainer;
         if (policyContainer === undefined) throw new InternalError('HTTP fetch requires populated request policies');
-        if (internal.isBlockedByCORP(
+        if (internalResponse.isBlockedByCORP(
           request.origin, policyContainer.embedderPolicy, request.destination, false, request.client,
         )) {
+          internalResponse.discardBody?.();
           return FetchResponse.networkError();
         }
       }
-      if (!isRedirectStatus(internal.status)) return response;
+      if (!isRedirectStatus(internalResponse.status)) return response;
       if (request.isNavigation) {
-        request.navigationTimingAllowValuesList.push(internal.headerList.getDecodeAndSplit('Timing-Allow-Origin') ?? []);
+        request.navigationTimingAllowValuesList.push(internalResponse.headerList.getDecodeAndSplit('Timing-Allow-Origin') ?? []);
       }
-      // Slice 9 may reset an HTTP/2 upload stream here for a non-303 redirect.
       switch (request.redirectMode) {
-        case 'error': return FetchResponse.networkError();
+        case 'error':
+          internalResponse.discardBody?.();
+          return FetchResponse.networkError();
         case 'manual':
-          if (request.mode !== 'navigate') return internal.filter('opaqueredirect');
+          if (request.mode !== 'navigate') return internalResponse.filter('opaqueredirect');
           this.controller.nextManualRedirectSteps = () => {
             this.httpRedirectFetch(response).observe(
               // Invalid redirect targets finish here; a valid navigation restarts nonrecursive main fetch.
@@ -215,9 +218,12 @@ export class FetchParams {
     const { request, timingInfo, env } = this;
     const { userAgent } = request;
     return userAgent.hostPromises.try(() => {
-      const internal = isFilteredResponse(response) ? response.internalResponse : response;
-      const location = internal.getLocationURL(request.currentURL.fragment, userAgent);
+      const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+      const location = internalResponse.getLocationURL(request.currentURL.fragment, userAgent);
       if (location === undefined) return response;
+      // Following or rejecting Location makes this exchange's body unnecessary.
+      // Release it without canceling the controller that owns the whole redirect chain.
+      internalResponse.discardBody?.();
       if (location === null || !isHTTPScheme(location.scheme) || request.redirectCount === 20) {
         return FetchResponse.networkError();
       }
@@ -231,9 +237,9 @@ export class FetchParams {
       if (request.body !== null && !(request.body instanceof FetchBody)) {
         throw new InternalError('HTTP redirect requires an extracted request body');
       }
-      if (internal.status !== 303 && request.body?.source === null) return FetchResponse.networkError();
-      if (((internal.status === 301 || internal.status === 302) && request.method === 'POST') ||
-        (internal.status === 303 && request.method !== 'GET' && request.method !== 'HEAD')) {
+      if (internalResponse.status !== 303 && request.body?.source === null) return FetchResponse.networkError();
+      if (((internalResponse.status === 301 || internalResponse.status === 302) && request.method === 'POST') ||
+        (internalResponse.status === 303 && request.method !== 'GET' && request.method !== 'HEAD')) {
         request.method = 'GET';
         request.body = null;
         request.headerList.list = request.headerList.list.filter(([name]) => !isRequestBodyHeaderName(name));
@@ -246,7 +252,7 @@ export class FetchParams {
         timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = now;
         if (timingInfo.redirectStartTime === 0) timingInfo.redirectStartTime = timingInfo.startTime;
         request.urlList.push(location);
-        userAgent.setRequestReferrerPolicyOnRedirect(request, internal);
+        userAgent.setRequestReferrerPolicyOnRedirect(request, internalResponse);
         if (request.redirectMode === 'manual') {
           if (request.mode !== 'navigate') throw new InternalError('Manual redirect continuation requires a navigation');
           this.mainFetch();
@@ -265,12 +271,11 @@ export class FetchParams {
 
   /** Obtain a response through HTTP caching and network transport. */
   // https://fetch.spec.whatwg.org/#concept-http-network-or-cache-fetch
-  httpNetworkOrCacheFetch(_isAuthenticationFetch = false, _isNewConnectionFetch = false): PromiseValue<FetchResponse> {
-    // PROVISIONAL(Fetch 9): implement cache selection, network fetch, and authentication.
-    return this.request.userAgent.hostPromises.reject(new InternalError('HTTP-network-or-cache fetch is not implemented'));
+  httpNetworkOrCacheFetch(isAuthenticationFetch = false, isNewConnectionFetch = false): PromiseValue<FetchResponse> {
+    return httpNetworkOrCacheFetch(this, isAuthenticationFetch, isNewConnectionFetch);
   }
 
-  /** Perform the HTTP transport exchange; network-or-cache integration follows in Fetch 9B. */
+  /** Perform one HTTP transport exchange with streamed bodies, decoding, and response processing. */
   // https://fetch.spec.whatwg.org/#concept-http-network-fetch
   httpNetworkFetch(includeCredentials = false, forceNewConnection = false): PromiseValue<FetchResponse> {
     return httpNetworkFetch(this, includeCredentials, forceNewConnection);
@@ -349,7 +354,10 @@ export class FetchParams {
       if (preflightResponse?.type === 'error') return preflightResponse;
       if (request.redirectMode === 'follow') request.allowServiceWorkerInterception = false;
       return this.httpNetworkOrCacheFetch().then((response: FetchResponse) => {
-        if (request.responseTainting === 'cors' && response.isBlockedByCORS(request)) return FetchResponse.networkError();
+        if (request.responseTainting === 'cors' && response.isBlockedByCORS(request)) {
+          response.discardBody?.();
+          return FetchResponse.networkError();
+        }
         if (!response.isTimingAllowed(request)) request.timingAllowFailed = true;
         return response;
       });
@@ -409,28 +417,30 @@ export class FetchParams {
       }
       response = response.filter(request.responseTainting);
     }
-    let internal = isFilteredResponse(response) ? response.internalResponse : response;
-    if (internal.urlList.length === 0) internal.urlList = [...request.urlList];
-    internal.redirectTaint = request.redirectTaint;
+    let internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+    if (internalResponse.urlList.length === 0) internalResponse.urlList = [...request.urlList];
+    internalResponse.redirectTaint = request.redirectTaint;
     if (request.isNavigation) {
-      internal.navigationTimingAllowValuesList = request.navigationTimingAllowValuesList.map((values) => [...values]);
+      internalResponse.navigationTimingAllowValuesList = request.navigationTimingAllowValuesList.map((values) => [...values]);
     }
-    if (!request.timingAllowFailed) internal.timingAllowPassed = true;
-    if (response.type !== 'error' && (internal.isBlockedByMixedContent(request) || internal.isBlockedByCSP(request) ||
-      shouldBlockDueToMIMEType(internal, request) === 'blocked' || shouldBlockDueToNosniff(internal, request) === 'blocked')) {
-      response = internal = FetchResponse.networkError();
+    if (!request.timingAllowFailed) internalResponse.timingAllowPassed = true;
+    if (response.type !== 'error' && (internalResponse.isBlockedByMixedContent(request) || internalResponse.isBlockedByCSP(request) ||
+      shouldBlockDueToMIMEType(internalResponse, request) === 'blocked' || shouldBlockDueToNosniff(internalResponse, request) === 'blocked')) {
+      internalResponse.discardBody?.();
+      response = internalResponse = FetchResponse.networkError();
     }
-    if (response.type === 'opaque' && isRangeStatus(internal.status) && internal.rangeRequested &&
+    if (response.type === 'opaque' && isRangeStatus(internalResponse.status) && internalResponse.rangeRequested &&
       !request.headerList.has('Range')) {
-      response = internal = FetchResponse.networkError();
+      internalResponse.discardBody?.();
+      response = internalResponse = FetchResponse.networkError();
     }
     if (response.type !== 'error' && (request.method === 'HEAD' || request.method === 'CONNECT' ||
-      isNullBodyStatus(internal.status))) {
-      // Detach the body rather than canceling its stream; transport must disregard later enqueues.
-      internal.body = null;
+      isNullBodyStatus(internalResponse.status))) {
+      internalResponse.discardBody?.();
+      internalResponse.body = null;
     }
     if (request.integrityMetadata !== '') {
-      const fail = () => this.handoverResponse(FetchResponse.networkError());
+      const fail = () => { internalResponse.discardBody?.(); this.handoverResponse(FetchResponse.networkError()); };
       if (response.body === null) { fail(); return; }
       response.body.fullyRead((bytes) => {
         if (!bytesMatchIntegrityMetadata(bytes, request.integrityMetadata)) { fail(); return; }
@@ -446,9 +456,9 @@ export class FetchParams {
   // https://fetch.spec.whatwg.org/#fetch-finale
   handoverResponse(response: FetchResponse): void {
     const { request, timingInfo, env } = this;
-    const internal = isFilteredResponse(response) ? response.internalResponse : response;
+    const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
     if (response.type !== 'error' && request.client?.isSecureContext) {
-      timingInfo.serverTimingHeaders = internal.headerList.getDecodeAndSplit('Server-Timing') ?? [];
+      timingInfo.serverTimingHeaders = internalResponse.headerList.getDecodeAndSplit('Server-Timing') ?? [];
     }
     if (request.destination === 'document') this.controller.fullTimingInfo = timingInfo;
     const endOfBody = () => this.#endResponseBody(response);
@@ -459,19 +469,19 @@ export class FetchParams {
     if (response.type === 'error') request.userAgent.webDriverBiDiFetchError(request);
     else request.userAgent.webDriverBiDiResponseCompleted(request, response);
 
-    if (internal.body === null) {
+    if (internalResponse.body === null) {
       endOfBody();
     } else {
       const transform = new TransformStreamImpl(null, {}, {}, env);
       transform.setUp((chunk) => transform.enqueue(chunk), endOfBody);
-      internal.body.stream = internal.body.stream.pipeThroughTransform(transform);
+      internalResponse.body.stream = internalResponse.body.stream.pipeThroughTransform(transform);
     }
     if (this.processResponseConsumeBody !== null) {
       const consume = this.processResponseConsumeBody;
-      if (internal.body === null) {
+      if (internalResponse.body === null) {
         this.#queueTask(() => consume(response, null));
       } else {
-        internal.body.fullyRead(
+        internalResponse.body.fullyRead(
           (bytes) => consume(response, bytes), () => consume(response, 'failure'), this.taskDestination,
         );
       }

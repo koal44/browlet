@@ -12,7 +12,11 @@ export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
-export type { HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl } from './http/transport';
+export type { HTTPAuthentication } from './http/authentication';
+export type {
+  HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl, HTTPConnection, HTTPUploadSource,
+} from './http/transport';
+export type { HTTPContentDecoder, HTTPContentDecoderListener } from './http/content-decoder';
 export { networkPartitionKeysEqual, type NetworkPartitionKey } from './http/network-partition';
 export { HTTPCachePartitions } from './http/cache/partitions';
 export { CORSPreflightCache } from './http/cors-preflight-cache';
@@ -28,7 +32,7 @@ export {
   type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
 } from './request';
 export { responseIDL, FetchResponse, type CacheUsage } from './response';
-export type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
+export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
   type FetchIntegrityPolicy, type IntegrityViolationReportBody,

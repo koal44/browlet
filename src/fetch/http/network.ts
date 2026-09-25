@@ -1,30 +1,40 @@
-import { BlobData, BlobImpl } from '../../file/index';
+import { isHTTPToken } from '../../http/index';
+import { getBufferSourceCopy, getBufferTypeName } from '../../js-engine/index';
 import { TypeError } from '../../infra/exceptions';
 import { InternalError } from '../../infra/internal-error';
 import type { PromiseValue, PromiseValueCapability } from '../../infra/promises';
-import { ReadableStreamImpl } from '../../streams/index';
+import { ReadableStreamImpl, type ReadableStreamDefaultReaderImpl } from '../../streams/index';
+import { isDOMException } from '../../web-idl/index';
+import { coarsenTime } from '../../infra/time';
 import { FetchBody } from '../body';
 import { deserializeAbortReason } from '../controller';
+import { isOffline } from '../environment';
 import type { FetchParams } from '../params';
 import { FetchResponse } from '../response';
 import { queueFetchTask } from '../tasks';
-import type { HTTPTransportControl } from './transport';
+import type { HTTPTransportControl, HTTPUploadSource } from './transport';
+import type { HTTPContentDecoder } from './content-decoder';
+import { isNullBodyStatus } from './statuses';
 
 /** HTTP-network fetch's wire exchange and demand-driven response body (Fetch §4.7). */
-// PROVISIONAL(Fetch 9B): connection timing, request-body consumption/progress, upload streams,
-// decoding, informational responses, and HTTP processing precede network-or-cache integration.
 export function httpNetworkFetch(
   params: FetchParams, includeCredentials = false, forceNewConnection = false,
 ): PromiseValue<FetchResponse> {
-  const { request, env, controller } = params;
+  const { request, env, controller, timingInfo } = params;
   const result = request.userAgent.hostPromises.withResolvers<FetchResponse>();
   if (params.canceled) {
     result.resolve(FetchResponse.appropriateNetworkError(params));
     return result.promise;
   }
-  const source = request.body instanceof FetchBody ? request.body.source : null;
-  if (source instanceof BlobImpl || source instanceof BlobData || (request.body !== null && source === null)) {
-    throw new InternalError('Streaming HTTP uploads require Fetch 9B');
+  if (request.userAgent.assumeNoInternetConnectivity || (request.client !== null && isOffline(request.client))) {
+    result.resolve(FetchResponse.networkError());
+    return result.promise;
+  }
+  if (request.body !== null && !(request.body instanceof FetchBody)) {
+    throw new InternalError('HTTP network fetch requires an extracted request body');
+  }
+  if (request.mode === 'websocket' || request.mode === 'webtransport') {
+    throw new InternalError('WebSocket and WebTransport connection establishment is not implemented');
   }
 
   // Stream creation and all subsequent stream mutations belong to this execution owner.
@@ -37,9 +47,34 @@ export function httpNetworkFetch(
     response.urlList = [...request.urlList];
     response.requestIncludesCredentials = includeCredentials;
     let removeCancellation = () => {};
-    const body = new NetworkBody(params, () => removeCancellation());
+    let discarded = false;
+    let decoder: HTTPContentDecoder | undefined;
+    let control: HTTPTransportControl | undefined;
+    let decoderBlocked = false;
+    let outputPaused = false;
+    let transmitted = 0;
+    let uploadEnded = false;
+    const upload = request.body instanceof FetchBody ? new NetworkUpload(request.body, params) : null;
+    const body = new NetworkBody(params, () => {
+      removeCancellation();
+      response.discardBody = null;
+    });
     response.body = new FetchBody(body.stream, env);
+    body.setControl({
+      pause() { outputPaused = true; decoder?.pause(); control?.pause(); },
+      resume() {
+        outputPaused = false;
+        decoder?.resume();
+        if (!decoderBlocked) control?.resume();
+      },
+      abort() { decoder?.abort(); upload?.cancel(); control?.abort(); },
+    });
+    response.discardBody = () => {
+      discarded = true;
+      body.fail(() => new TypeError('Unused HTTP response body was discarded'));
+    };
     const cancel = () => {
+      response.aborted = params.aborted;
       body.fail(() => params.aborted
         ? deserializeAbortReason(controller.serializedAbortReason, env)
         : new TypeError('Network request was terminated'));
@@ -47,41 +82,200 @@ export function httpNetworkFetch(
     };
     removeCancellation = controller.addCancellationSteps(cancel);
     try {
-      body.setControl(request.userAgent.httpTransport.dispatch({
+      control = request.userAgent.httpTransport.dispatch({
         url: request.currentURL,
         method: request.method,
         headers: request.headerList,
-        body: source,
+        body: upload,
         partitionKey: request.determineNetworkPartitionKey(),
         includeCredentials,
         forceNewConnection,
       }, {
-        onHeaders(status, statusMessage, headers, _hasValidTLS) {
-          if (params.canceled || status < 200) return;
+        onConnection(connection) {
+          timingInfo.finalConnectionTimingInfo = connection.timingInfo.clampAndCoarsen(
+            timingInfo.postRedirectStartTime, params.crossOriginIsolatedCapability,
+          );
+          if (connection.protocol === 'http/1.1' && request.body instanceof FetchBody && request.body.source === null) {
+            return false;
+          }
+          timingInfo.finalNetworkRequestStartTime = now();
+          return !params.canceled;
+        },
+        onRequestBodyChunkLength(length) {
+          transmitted += length;
+          queueCallback(() => params.processRequestBodyChunkLength?.(length));
+          // The peer can finish a known-length response before Undici observes upload EOF.
+          if (request.body instanceof FetchBody && transmitted === request.body.length) endUpload();
+        },
+        onRequestEnd: endUpload,
+        onResponseStarted() { timingInfo.finalNetworkResponseStartTime = now(); },
+        onHeaders(status, statusMessage, headers, hasValidTLS) {
+          if (params.canceled || discarded) return;
+          if (status < 200) {
+            if (timingInfo.firstInterimNetworkResponseStartTime === 0) {
+              timingInfo.firstInterimNetworkResponseStartTime = timingInfo.finalNetworkResponseStartTime;
+            }
+            const interim = new FetchResponse();
+            interim.status = status;
+            interim.headerList = headers;
+            request.userAgent.webDriverBiDiResponseStarted(request, interim);
+            if (status === 103 && params.processEarlyHintsResponse !== null) {
+              queueCallback(() => params.processEarlyHintsResponse?.(interim));
+            }
+            return;
+          }
           response.status = status;
           response.statusMessage = statusMessage;
           response.headerList = headers;
-          // TODO(Fetch 9B): process HSTS here using _hasValidTLS, before redirect handling.
+          request.userAgent.webDriverBiDiResponseStarted(request, response);
+          request.userAgent.hstsStore.processResponse(response, hasValidTLS);
+          if (includeCredentials) response.parseAndStoreCookies(request);
+          request.userAgent.webDriverBiDiCloneNetworkResponseBody(request, response);
+          if (request.method !== 'HEAD' && !isNullBodyStatus(status)) {
+            const codings = headers.getDecodeAndSplit('Content-Encoding')?.filter((coding) => coding !== '');
+            if (codings?.length && codings.every(isHTTPToken)) {
+              // RFC 9110 §8.4.1.3 treats x-gzip as gzip. Keep the received name
+              // in response metadata and use the canonical name for decoding.
+              const normalized = codings.map((coding) => {
+                const name = coding.toLowerCase();
+                return name === 'x-gzip' ? 'gzip' : name;
+              });
+              const supported = normalized.every((coding) => request.userAgent.supportedContentCodings.has(coding));
+              response.bodyInfo.contentEncoding = normalized.length > 1 ? 'multiple' : supported ? codings[0]!.toLowerCase() : '@unknown';
+              if (supported) {
+                decoder = request.userAgent.createContentDecoder(normalized, {
+                  onData: receiveDecoded,
+                  onEnd() { body.end(); },
+                  onError() { if (!discarded && !params.canceled) controller.terminate(); },
+                  onDrain() {
+                    decoderBlocked = false;
+                    if (!outputPaused && !params.canceled && !discarded) control?.resume();
+                  },
+                });
+              }
+            }
+          }
           result.resolve(response);
         },
         onData(bytes) {
-          if (params.canceled) return;
+          if (params.canceled || discarded) return;
           response.bodyInfo.encodedSize += bytes.byteLength;
-          body.receive(bytes);
+          if (decoder) {
+            if (!decoder.write(bytes)) { decoderBlocked = true; control?.pause(); }
+          } else {
+            receiveDecoded(bytes);
+          }
         },
-        onEnd() { body.end(); },
+        onEnd() { upload?.cancel(); if (decoder) decoder.end(); else body.end(); },
         onError() {
           // Native transport errors do not become page-owned exception objects.
-          if (!params.canceled) controller.terminate();
+          if (!params.canceled && !discarded) controller.terminate();
         },
-      }));
+      });
+      synchronizeControl();
     } catch (error) {
       removeCancellation();
       body.fail(() => new TypeError('Network request failed'));
       result.reject(error);
     }
+
+    function receiveDecoded(bytes: Uint8Array): void {
+      if (params.canceled || discarded) return;
+      response.bodyInfo.decodedSize += bytes.byteLength;
+      body.receive(bytes);
+    }
+    // dispatch() may synchronously deliver callbacks before returning its control.
+    function synchronizeControl(): void {
+      if (params.canceled || discarded) control!.abort();
+      else if (decoderBlocked || outputPaused) control!.pause();
+    }
+    function now(): number {
+      return coarsenTime(request.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
+    }
+    function queueCallback(steps: () => void): void {
+      queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.exec.global, env);
+    }
+    function endUpload(): void {
+      if (uploadEnded) return;
+      uploadEnded = true;
+      queueCallback(() => params.processRequestEndOfBody?.());
+    }
   }, env.exec.global, env);
   return result.promise;
+}
+
+/** Reads exactly one body chunk for each transport demand, always on the owning HTML loop. */
+class NetworkUpload implements HTTPUploadSource {
+  #body: FetchBody;
+  #params: FetchParams;
+  #reader: ReadableStreamDefaultReaderImpl | undefined;
+  #finished = false;
+  #pending: PromiseValueCapability<Uint8Array | null> | undefined;
+
+  constructor(body: FetchBody, params: FetchParams) {
+    this.#body = body;
+    this.#params = params;
+  }
+
+  read(): PromiseValue<Uint8Array | null> {
+    if (this.#pending) throw new InternalError('HTTP transport requested concurrent upload reads');
+    const { env, request } = this.#params;
+    const result = request.userAgent.hostPromises.withResolvers<Uint8Array | null>();
+    this.#pending = result;
+    queueFetchTask(() => {
+      if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
+      try {
+        if (!this.#reader) {
+          this.#reader = this.#body.stream.getDefaultReader();
+          this.#reader.closed.observe(() => {}, () => {});
+        }
+        this.#reader.readChunk({
+          chunkSteps: (chunk) => {
+            try {
+              if (typeof chunk !== 'object' || chunk === null || getBufferTypeName(chunk) !== 'Uint8Array') {
+                throw new TypeError('Request body stream produced a non-Uint8Array chunk');
+              }
+              this.#settle(getBufferSourceCopy(chunk));
+            } catch (error) { this.#fail(error); }
+          },
+          closeSteps: () => {
+            this.#finished = true;
+            this.#reader!.release();
+            this.#settle(null);
+          },
+          errorSteps: (error) => this.#fail(error),
+        });
+      } catch (error) { this.#fail(error); }
+    }, env.exec.global, env);
+    return result.promise;
+  }
+
+  cancel(): void {
+    if (this.#finished) return;
+    this.#finished = true;
+    this.#settle(null);
+    const { env } = this.#params;
+    queueFetchTask(() => {
+      const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
+      pending.observe(() => {}, () => {});
+      this.#reader?.release();
+    }, env.exec.global, env);
+  }
+
+  #settle(bytes: Uint8Array | null): void {
+    const pending = this.#pending;
+    this.#pending = undefined;
+    pending?.resolve(bytes);
+  }
+
+  #fail(error: unknown): void {
+    const { controller, env } = this.#params;
+    if (!this.#params.canceled) {
+      if (isDOMException(error, 'AbortError')) controller.abort(env);
+      else controller.terminate();
+    }
+    this.cancel();
+  }
 }
 
 /** Fetch's network byte buffer, retaining chunks until the response stream pulls them. */

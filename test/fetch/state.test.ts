@@ -60,7 +60,7 @@ describe('Fetch request and response state', () => {
     const response = new FetchResponse();
     expect(response).toEqual({
       type: 'default', aborted: false, urlList: [], status: 200, statusMessage: '', headerList: new FetchHeaders(),
-      body: null, cacheUsage: undefined, corsExposedHeaderNameList: [], rangeRequested: false,
+      body: null, discardBody: null, cacheUsage: undefined, corsExposedHeaderNameList: [], rangeRequested: false,
       requestIncludesCredentials: true, timingAllowPassed: false, navigationTimingAllowValuesList: [],
       bodyInfo: new ResponseBodyInfo(), serviceWorkerTimingInfo: null, redirectTaint: 'same-origin',
     });

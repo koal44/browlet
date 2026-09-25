@@ -4,6 +4,8 @@ import type { ConnectionPool } from './http/connections';
 import type { HTTPCachePartitions } from './http/cache/partitions';
 import type { CORSPreflightCache } from './http/cors-preflight-cache';
 import type { HTTPTransport } from './http/transport';
+import type { HTTPAuthentication } from './http/authentication';
+import type { HTTPContentDecoder, HTTPContentDecoderListener } from './http/content-decoder';
 import type { FetchIntegrityPolicy } from './integrity';
 import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
@@ -147,6 +149,10 @@ export interface FetchEnvironmentRecord extends StorageEnvironment {
 export interface FetchUserAgent extends StorageUserAgent {
   /** Browser-owned wire transport, shared across environments and isolated by network partition. */
   httpTransport: HTTPTransport;
+  /** Supported HTTP codings, in the order advertised by Accept-Encoding. */
+  supportedContentCodings: Set<string>;
+  /** Create one decoder per response; codings are applied in reverse order. */
+  createContentDecoder(codings: string[], listener: HTTPContentDecoderListener): HTTPContentDecoder;
   /** Browser-owned continuations, independent of any client's realm or lifetime. */
   hostPromises: Promises;
   /** Schedule background processing without entering an HTML global task. */
@@ -181,6 +187,10 @@ export interface FetchUserAgent extends StorageUserAgent {
   webDriverBiDiEmulatedLanguage(env: FetchEnvironment): string | null;
   /** Retain the outgoing body for automation when an active session requests it. */
   webDriverBiDiCloneNetworkRequestBody(request: FetchRequest): void;
+  /** Notify automation immediately before an HTTP request is sent. */
+  webDriverBiDiBeforeRequestSent(request: FetchRequest): void;
+  /** Retain an incoming body when an active automation session requires it. */
+  webDriverBiDiCloneNetworkResponseBody(request: FetchRequest, response: FetchResponse): void;
   /** Notify automation of a failed request. */
   webDriverBiDiFetchError(request: FetchRequest): void;
   /** Notify automation that an intercepted or network response has started. */
@@ -189,6 +199,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   webDriverBiDiResponseCompleted(request: FetchRequest, response: FetchResponse): void;
   /** Shared reusable connections, isolated by network partition, origin, and credentials. */
   connectionPool: ConnectionPool;
+  /** Browser-owned HTTP credentials and challenge handling, independent of a client's lifetime. */
+  httpAuthentication: HTTPAuthentication;
   /** Shared logical HTTP caches, separated by network partition key. */
   httpCachePartitions: HTTPCachePartitions;
   /** Cached CORS permissions, including invalidation after a failed preflight fetch. */
@@ -201,6 +213,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   hstsStore: {
     /** Whether a URL host has an unexpired exact or inherited HTTPS requirement. */
     requiresHTTPS(host: Host | null): boolean;
+    /** Learn HSTS only from an authenticated transport response. */
+    processResponse(response: FetchResponse, hasValidTLS: boolean): void;
   };
   /** Applies this user agent's trust policy to a URL, including loopback and configured origins. */
   isURLPotentiallyTrustworthy(url: URLRecord): boolean;

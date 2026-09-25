@@ -26,7 +26,7 @@
     "build:node": "node scripts/build-node.mjs",
     "lint": "node --run typecheck && eslint src test scripts packages node-compat",
     "typecheck": "tsc -b",
-    "install:vendor": "node scripts/build.mjs selectlet && tsx scripts/vendor.ts",
+    "install:vendor": "node scripts/vendor.ts",
     "install:wpt": "tsx scripts/install-wpt.ts",
     "test:types": "tsc -b test/web-idl/contracts",
     "test:unit": "node --run test:types && node scripts/with-node.mjs vitest run --project=unit",
@@ -58,7 +58,7 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
-    "undici": "^8.10.0",
+    "undici": "file:vendor/undici-8.11.2.tgz",
     "vitest": "^4.1.7"
   }
 }

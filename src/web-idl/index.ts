@@ -6,7 +6,7 @@ import type { WebIDLRealmHost } from './realm-host';
 export * from './core/index';
 
 export {
-  DOMExceptionImpl, QuotaExceededErrorImpl, domExceptionIDL,
+  DOMExceptionImpl, QuotaExceededErrorImpl, domExceptionIDL, isDOMException,
   quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
 export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
@@ -28,7 +28,6 @@ export {
 
 // Project typing: the full Web IDL entry supplies contextual callback types for declarations.
 declare module './core/types' {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface DeclarationCallbacks<Realm> {
     'argument-resolve': BindingCallback<Realm, void, [], unknown>;
     'allocate-platform-object': BindingCallback<Realm, undefined, [prototype: object], object>;

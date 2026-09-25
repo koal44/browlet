@@ -1,4 +1,12 @@
 {
+  "undici": {
+    "type": "git",
+    "repo": "https://github.com/nodejs/undici.git",
+    "rev": "328ab8435079ca6edc1236a29e45a46915456502",
+    "dir": "vendor/undici",
+    "patch": "vendor/_patches/undici.patch",
+    "active": true
+  },
   "jsdom": {
     "type": "git",
     "repo": "https://github.com/jsdom/jsdom.git",

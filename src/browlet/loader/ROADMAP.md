@@ -22,12 +22,17 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
-| `node-transport.ts` | Implemented in Fetch 9A: UserAgent-owned Undici HTTP/1.1 adapter, TLS verification, partitioned connections, byte uploads, pause/resume, abort, and shutdown | Fetch network fetch |
+| `node-transport.ts` | Fetch 9A–B: UserAgent-owned Undici HTTP/1.1 and HTTP/2 adapter, TLS verification, partitioned connection sets/timing, multiplexing, demand-driven uploads, pause/resume, abort, and shutdown | Fetch network fetch |
+| `node-decoder.ts` | Per-response streaming gzip/deflate/Brotli codecs and bounded native transform queues | Fetch content codings |
 
-The transport is callable through Fetch's preliminary `httpNetworkFetch()`
-operation and covered by loopback HTTP/HTTPS tests. Fetch 9B supplies the remaining
-HTTP processing before connecting it to network-or-cache fetch. Public Fetch and
-loader consumers remain later work; the source-text route below is unchanged.
+The transport is callable through Fetch's `httpNetworkFetch()` and is connected
+to the 9B transaction algorithms. Loopback HTTP/HTTPS tests exercise headers,
+upload/download flow, decoding, and cancellation through the actual HTML loop.
+HTTP/2 uses the temporary [vendor patch](../../../vendor/README.md) to preserve
+original response fields. The provisional authentication owner is tracked in
+the [Fetch 9B review](../../fetch/ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
+Public Fetch and loader consumers remain later work; the source-text route
+below is unchanged.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves

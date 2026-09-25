@@ -64,6 +64,73 @@ describe('Node HTTP transport', () => {
     expect(paths).toEqual(['/']);
   });
 
+  it('accepts an unsolicited 100 Continue before the final response', async () => {
+    const server = createServer((_request, response) => { response.writeContinue(); response.end('done'); });
+    servers.push(server);
+    const result = await exchange(makeTransport(), wireRequest(await listen(server)));
+    expect(result.status).toBe(200);
+    expect(result.body.toString()).toBe('done');
+  });
+
+  it('separates informational responses, an unknown final status, and trailers', async () => {
+    const server = createServer((_request, response) => {
+      response.writeProcessing();
+      response.writeEarlyHints({ link: '</asset>; rel=preload' });
+      response.writeHead(299, 'Local success', { 'X-Phase': 'final', Trailer: 'X-Phase' });
+      response.write('done');
+      response.addTrailers({ 'X-Phase': 'trailer' });
+      response.end();
+    });
+    servers.push(server);
+    const responses: { status: number; message: string; headers: FetchHeaders; }[] = [];
+    const chunks: Uint8Array[] = [];
+    const request = wireRequest(await listen(server));
+    await new Promise<void>((resolve, reject) => makeTransport().dispatch(request, {
+      onHeaders(status, message, headers) { responses.push({ status, message, headers }); },
+      onData(bytes) { chunks.push(bytes); }, onEnd: resolve, onError: reject,
+    }));
+    expect(responses.map(({ status }) => status)).toEqual([102, 103, 299]);
+    expect(responses[1]!.headers.get('Link')).toBe('</asset>; rel=preload');
+    expect(responses[2]!.message).toBe('Local success');
+    expect(responses[2]!.headers.get('Link')).toBeNull();
+    expect(responses[2]!.headers.get('X-Phase')).toBe('final');
+    expect(Buffer.concat(chunks).toString()).toBe('done');
+  });
+
+  it.each([408, 413, 503])('returns %i and Retry-After without replaying the request', async (status) => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests++;
+      response.writeHead(status, { 'Retry-After': '120' });
+      response.end('later');
+    });
+    servers.push(server);
+    const result = await exchange(makeTransport(), wireRequest(await listen(server)));
+    expect(result.status).toBe(status);
+    expect(result.headers.get('Retry-After')).toBe('120');
+    expect(result.body.toString()).toBe('later');
+    expect(requests).toBe(1);
+  });
+
+  it('fails an unsolicited protocol upgrade', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(101, { Connection: 'Upgrade', Upgrade: 'websocket' });
+      response.end();
+    });
+    servers.push(server);
+    await expect(exchange(makeTransport(), wireRequest(await listen(server))))
+      .rejects.toMatchObject({ code: 'UND_ERR_SOCKET' });
+  });
+
+  it('reports a connection failure without replaying an already sent request', async () => {
+    let requests = 0;
+    const server = createServer((request) => { requests++; request.socket.destroy(); });
+    servers.push(server);
+    await expect(exchange(makeTransport(), wireRequest(await listen(server))))
+      .rejects.toMatchObject({ code: 'UND_ERR_SOCKET' });
+    expect(requests).toBe(1);
+  });
+
   it('reuses value-equal partitions and separates different partitions, credentials, and forced connections', async () => {
     const ports: number[] = [];
     const server = createServer((request, response) => { ports.push(request.socket.remotePort!); response.end('ok'); });
@@ -123,12 +190,15 @@ describe('Node HTTP transport', () => {
     servers.push(server);
     const origin = await listen(server);
     const transport = makeTransport();
-    const firstStarted = Promise.withResolvers<void>();
-    const firstFailed = Promise.withResolvers<unknown>();
-    const first = transport.dispatch(wireRequest(origin + '/first'), {
-      onHeaders: () => firstStarted.resolve(), onData() {}, onEnd() {}, onError: firstFailed.resolve,
+    const active = Array.from({ length: 6 }, (_, index) => {
+      const started = Promise.withResolvers<void>();
+      const failed = Promise.withResolvers<unknown>();
+      const control = transport.dispatch(wireRequest(origin + `/active-${index}`), {
+        onHeaders: () => started.resolve(), onData() {}, onEnd() {}, onError: failed.resolve,
+      });
+      return { started: started.promise, failed: failed.promise, control };
     });
-    await firstStarted.promise;
+    await Promise.all(active.map((entry) => entry.started));
     const secondFailed = Promise.withResolvers<unknown>();
     const canceled = vi.fn(secondFailed.resolve);
     const second = transport.dispatch(wireRequest(origin + '/second'), {
@@ -137,12 +207,14 @@ describe('Node HTTP transport', () => {
     second.abort();
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(canceled).toHaveBeenCalledOnce();
-    first.abort();
-    expect(await firstFailed.promise).toMatchObject({ code: 'UND_ERR_ABORTED' });
+    for (const entry of active) entry.control.abort();
+    for (const entry of active) expect(await entry.failed).toMatchObject({ code: 'UND_ERR_ABORTED' });
     expect(await secondFailed.promise).toMatchObject({ code: 'UND_ERR_ABORTED' });
     await exchange(transport, wireRequest(origin + '/third'));
     expect(canceled).toHaveBeenCalledOnce();
-    expect(paths).toEqual(['/first', '/third']);
+    expect(paths).not.toContain('/second');
+    expect(paths).toHaveLength(7);
+    expect(paths.at(-1)).toBe('/third');
   });
 });
 

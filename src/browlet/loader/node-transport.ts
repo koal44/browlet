@@ -1,11 +1,15 @@
 import { TLSSocket, type ConnectionOptions } from 'node:tls';
+import { isIP, type Socket } from 'node:net';
 import { Client, buildConnector, errors, type Dispatcher } from 'undici';
 import {
-  FetchHeaders, networkPartitionKeysEqual, type HTTPTransport, type HTTPTransportControl,
-  type HTTPTransportListener, type HTTPTransportRequest, type NetworkPartitionKey,
+  ConnectionPool, ConnectionTimingInfo, FetchHeaders, networkPartitionKeysEqual,
+  type HTTPConnection, type HTTPTransport, type HTTPTransportControl,
+  type HTTPTransportListener, type HTTPTransportRequest, type HTTPUploadSource, type NetworkPartitionKey,
 } from '../../fetch/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../url/index';
 import { InternalError } from '../../infra/internal-error';
+import { utf8Encode } from '../../encoding/index';
+import { unsafeSharedCurrentTime } from '../performance/high-resolution-time';
 
 /** Node HTTP I/O owned by one UserAgent; Fetch keeps all browser processing. */
 export class NodeHTTPTransport implements HTTPTransport {
@@ -15,10 +19,12 @@ export class NodeHTTPTransport implements HTTPTransport {
   #clients = new Set<Client>();
   /** Optional host trust roots; certificate and hostname verification always remain enabled. */
   #ca: ConnectionOptions['ca'];
+  #pool: ConnectionPool;
   #closed = false;
 
-  constructor(ca?: ConnectionOptions['ca']) {
+  constructor(ca?: ConnectionOptions['ca'], pool = new ConnectionPool()) {
     this.#ca = ca;
+    this.#pool = pool;
   }
 
   dispatch(request: HTTPTransportRequest, listener: HTTPTransportListener): HTTPTransportControl {
@@ -27,10 +33,12 @@ export class NodeHTTPTransport implements HTTPTransport {
       throw new InternalError('HTTP transport requires an HTTP(S) URL');
     }
     const connection = this.#obtainClient(request);
+    connection.active++;
     let controller: Dispatcher.DispatchController | undefined;
     let paused = false;
     let aborted = false;
     let finished = false;
+    let responseStarted = false;
     let receiver: HTTPTransportListener | undefined = listener;
     const control: HTTPTransportControl = {
       pause() { paused = true; controller?.pause(); },
@@ -47,6 +55,7 @@ export class NodeHTTPTransport implements HTTPTransport {
     const fail = (error: unknown) => {
       if (finished) return;
       finished = true;
+      connection.active--;
       const target = receiver;
       receiver = undefined;
       target?.onError(error);
@@ -57,21 +66,37 @@ export class NodeHTTPTransport implements HTTPTransport {
         path: serializeURLPath(request.url) + (request.url.query === null ? '' : `?${request.url.query}`),
         method: request.method,
         headers: request.headers,
-        body: request.body,
-        // Fetch chooses retry policy; this adapter performs one exchange.
+        body: request.body === null || request.body instanceof Uint8Array
+          ? request.body : upload(request.body),
+        // Disable HTTP/1 pipelined replay. HTTP/2 can still retry a replayable
+        // request that the peer explicitly refused before processing (RFC 9113 §8.7).
         idempotent: false,
       }, {
         onRequestStart(value) {
           controller = value;
-          if (aborted) value.abort(new errors.RequestAbortedError());
-          else if (paused) value.pause();
+          if (aborted) {
+            value.abort(new errors.RequestAbortedError());
+          } else {
+            const info = connection.connection;
+            if (!info) {
+              throw new InternalError('HTTP request started without an established connection');
+            }
+            if (receiver?.onConnection?.(info) === false) control.abort();
+            else if (paused) value.pause();
+          }
         },
+        onBodySent(bytes) { receiver?.onRequestBodyChunkLength?.(bytes.byteLength); },
+        onRequestSent() { receiver?.onRequestEnd?.(); },
+        onResponseStarted() { responseStarted = true; receiver?.onResponseStarted?.(); },
         onResponseStart(value, status, _headers, statusMessage) {
           if (finished) return;
+          // Undici omits the start callback for HTTP/2 informational responses.
+          // Node delivers decoded headers here, so this approximates first-byte
+          // timing; Undici's final HTTP/2 response uses the same observation point.
+          if (!responseStarted) receiver?.onResponseStarted?.();
+          responseStarted = false;
           const raw = value.rawHeaders;
-          // This first adapter uses HTTP/1.1, whose dispatcher supplies ordered pairs.
-          // TODO(Fetch 9B): add HTTP/2 with per-stream cancellation and connection observations.
-          if (!Array.isArray(raw)) throw new InternalError('HTTP/1.1 response has no raw header list');
+          if (!Array.isArray(raw)) throw new InternalError('HTTP response has no uncombined raw header list');
           const headers = new FetchHeaders();
           for (let index = 0; index < raw.length; index += 2) {
             const name = raw[index]!;
@@ -81,12 +106,13 @@ export class NodeHTTPTransport implements HTTPTransport {
               typeof fieldValue === 'string' ? fieldValue : fieldValue.toString('latin1'),
             ]);
           }
-          receiver?.onHeaders(status, statusMessage ?? '', headers, connection.hasValidTLS);
+          receiver?.onHeaders(status, statusMessage ?? '', headers, connection.connection!.hasValidTLS);
         },
         onResponseData(_controller, bytes) { receiver?.onData(bytes); },
         onResponseEnd() {
           if (finished) return;
           finished = true;
+          connection.active--;
           const target = receiver;
           receiver = undefined;
           target?.onEnd();
@@ -118,29 +144,59 @@ export class NodeHTTPTransport implements HTTPTransport {
     }
     const origin = serializeOrigin(obtainURLOrigin(request.url));
     const clientKey = `${origin}\0${request.includeCredentials}`;
-    const previous = partition.clients.get(clientKey);
-    if (previous && !request.forceNewConnection) return previous;
+    const previous = partition.clients.get(clientKey) ?? [];
+    if (!request.forceNewConnection) {
+      // Undici multiplexes h2 and queues excess streams against the peer's limit.
+      const available = previous.find((entry) => entry.connection?.protocol === 'h2' || entry.active === 0);
+      if (available) return available;
+      if (previous.length >= maxConnectionsPerOrigin) {
+        return previous.reduce((selected, entry) => entry.active < selected.active ? entry : selected);
+      }
+    }
 
-    const connect = buildConnector({ ca: this.#ca, rejectUnauthorized: true, allowH2: false });
+    const connect = buildConnector({ ca: this.#ca, rejectUnauthorized: true, allowH2: true, preferH2: true });
+    const pool = this.#pool;
     const entry: TransportClient = {
-      hasValidTLS: false,
+      active: 0,
+      connection: undefined,
       client: new Client(origin, {
-        allowH2: false,
+        allowH2: true,
         connect(options, callback) {
-          entry.hasValidTLS = false;
-          connect(options, (error, socket) => {
+          const timingInfo = new ConnectionTimingInfo();
+          timingInfo.connectionStartTime = unsafeSharedCurrentTime().milliseconds;
+          if (isIP(options.hostname) === 0) timingInfo.domainLookupStartTime = timingInfo.connectionStartTime;
+          // Undici's connector returns its Socket; its declaration incorrectly says void.
+          const socket = connect(options, (error, socket) => {
             if (error) { callback(error, null); return; }
-            entry.hasValidTLS = socket instanceof TLSSocket && socket.authorized;
+            timingInfo.connectionEndTime = unsafeSharedCurrentTime().milliseconds;
+            const protocol = socket instanceof TLSSocket && socket.alpnProtocol === 'h2' ? 'h2' : 'http/1.1';
+            const connection: HTTPConnection = {
+              key, origin: obtainURLOrigin(request.url), credentials: request.includeCredentials,
+              timingInfo, supportsUnreliable: false, protocol,
+              hasValidTLS: socket instanceof TLSSocket && socket.authorized,
+            };
+            timingInfo.alpnNegotiatedProtocol = utf8Encode(
+              socket instanceof TLSSocket ? socket.alpnProtocol || 'http/1.1' : 'http/1.1',
+            );
+            entry.connection = connection;
+            pool.connections.add(connection);
+            socket.once('close', () => { pool.connections.delete(connection); });
             callback(null, socket);
+          }) as unknown as Socket;
+          socket.once('lookup', () => {
+            timingInfo.domainLookupEndTime = timingInfo.connectionStartTime = unsafeSharedCurrentTime().milliseconds;
           });
+          if (options.protocol === 'https:') {
+            socket.once('connect', () => { timingInfo.secureConnectionStartTime = unsafeSharedCurrentTime().milliseconds; });
+          }
         },
       }),
     };
-    partition.clients.set(clientKey, entry);
+    partition.clients.set(clientKey, request.forceNewConnection ? [entry] : [...previous, entry]);
     this.#clients.add(entry.client);
-    if (previous) {
+    if (request.forceNewConnection) {
       // Existing exchanges finish on their connection; subsequent ones use the fresh client.
-      void previous.client.close(() => { this.#clients.delete(previous.client); });
+      for (const old of previous) void old.client.close(() => { this.#clients.delete(old.client); });
     }
     return entry;
   }
@@ -148,10 +204,28 @@ export class NodeHTTPTransport implements HTTPTransport {
 
 type TransportPartition = {
   key: NetworkPartitionKey | null;
-  clients: Map<string, TransportClient>;
+  clients: Map<string, TransportClient[]>;
 };
 
 type TransportClient = {
   client: Client;
-  hasValidTLS: boolean;
+  active: number;
+  connection: HTTPConnection | undefined;
 };
+
+/** Native I/O awaits a neutral chunk; the source queues each read on its own HTML owner. */
+// eslint-disable-next-line no-restricted-syntax -- This adapter feeds a Node stream; each source read enters its HTML owner separately.
+async function* upload(source: HTTPUploadSource): AsyncGenerator<Uint8Array> {
+  try {
+    while (true) {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Native transport boundary; no page Promise or Stream escapes.
+      const bytes = await new Promise<Uint8Array | null>((resolve, reject) => source.read().observe(resolve, reject));
+      if (bytes === null) return;
+      yield bytes;
+    }
+  } finally {
+    source.cancel();
+  }
+}
+
+const maxConnectionsPerOrigin = 6;

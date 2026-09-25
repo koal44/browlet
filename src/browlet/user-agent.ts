@@ -13,9 +13,10 @@ import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
 import { NodeHTTPTransport } from './loader/node-transport';
+import { createContentDecoder, supportedContentCodings } from './loader/node-decoder';
 import {
   ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
-  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
+  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPAuthentication, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
@@ -50,8 +51,21 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Configured language preference; null leaves Accept-Language absent unless supplied or emulated. */
   defaultAcceptLanguage: string | null = null;
   /** Wire connections outlive individual documents and are closed by their browser owner. */
-  httpTransport: HTTPTransport = new NodeHTTPTransport();
   connectionPool = new ConnectionPool();
+  httpTransport: HTTPTransport = new NodeHTTPTransport(undefined, this.connectionPool);
+  /** Credentials and authentication challenges shared by this user agent's HTTP requests. */
+  // PROVISIONAL(HTTP authentication): no credentials are supplied or stored, and
+  // prompting declines. RFC 9110/7617 parsing, protection spaces, and Basic follow
+  // the HTTP roadmap; this placeholder does not implement an authentication scheme.
+  httpAuthentication: HTTPAuthentication = {
+    getAuthorization: () => null,
+    applyProxyAuthentication() {},
+    prompt: () => this.hostPromises.resolve(false),
+    store() {},
+  };
+  /** Native HTTP codecs, instantiated separately for each response. */
+  supportedContentCodings = new Set(supportedContentCodings);
+  createContentDecoder = createContentDecoder;
   httpCachePartitions = new HTTPCachePartitions();
   /** CORS permissions are owned independently of ordinary HTTP cache entries. */
   corsPreflightCache = new CORSPreflightCache();
@@ -261,6 +275,14 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   webDriverBiDiCloneNetworkRequestBody(_request: FetchRequest): void {
     // PROVISIONAL: no BiDi sessions request network body collection.
   }
+
+  /** WebDriver BiDi's HTTP request notification. */
+  // PROVISIONAL: no active BiDi network sessions are implemented yet.
+  webDriverBiDiBeforeRequestSent(_request: FetchRequest): void {}
+
+  /** WebDriver BiDi's optional incoming-body retention. */
+  // PROVISIONAL: no active BiDi network sessions are implemented yet.
+  webDriverBiDiCloneNetworkResponseBody(_request: FetchRequest, _response: FetchResponse): void {}
 
   /** Notify automation of a network fetch error. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-fetch-error

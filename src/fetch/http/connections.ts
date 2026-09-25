@@ -22,7 +22,7 @@ export class ConnectionPool {
       if (webTransportHashes.length !== 0) throw new InternalError('Certificate hashes require a new connection');
       const origin = obtainURLOrigin(url);
       for (const connection of this.connections) {
-        if (networkPartitionKeysEqual(connection.key, key) && areSameOrigin(connection.origin, origin) &&
+        if (connection.key !== null && networkPartitionKeysEqual(connection.key, key) && areSameOrigin(connection.origin, origin) &&
           connection.credentials === credentials && (!requireUnreliable || connection.supportsUnreliable)) {
           return connection;
         }
@@ -36,8 +36,8 @@ export class ConnectionPool {
 
 /** https://fetch.spec.whatwg.org/#concept-connection */
 export type Connection = {
-  /** Network partition permitted to reuse this connection. */
-  key: NetworkPartitionKey;
+  /** Network partition permitted to reuse this connection; null for browser work without a client partition. */
+  key: NetworkPartitionKey | null;
   /** Origin served by this connection. */
   origin: Origin;
   /** Whether the connection permits credentials, including TLS client certificates. */

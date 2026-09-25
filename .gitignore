@@ -10,5 +10,6 @@ dist/
 
 /vendor/jsdom/
 /vendor/*/
+/vendor/*.tgz
 !/vendor/_patches/
 !/vendor/_patches/**

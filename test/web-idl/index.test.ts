@@ -13,6 +13,7 @@ describe('Web IDL package surface', () => {
       'defineCapability',
       'domExceptionIDL',
       'endOfIteration',
+      'isDOMException',
       'isStampedImplInstance',
       'isStampedPlatformObject',
       'quotaExceededErrorIDL',

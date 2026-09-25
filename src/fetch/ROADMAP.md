@@ -8,7 +8,7 @@
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **9A complete; 9B next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); transport and download flow are implemented, HTTP transaction integration follows.
+- **9B in review:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); HTTP/1.1 and HTTP/2 transactions, streaming, and decoding are connected. Authentication remains provisional.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -968,7 +968,7 @@ The future-owner calls now have explicit provisional implementations:
 | `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
 | `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | Return false while the cache cannot store entries. Slice 9 supplies §4.9 permissions, including partition, origin, credentials, and expiry. |
-| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Reject with an explicit unimplemented InternalError. Slice 9 supplies §§4.6 and 4.8, including transport, caching, and cancellation. |
+| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions; its authentication owner remains unresolved, and 9C supplies cache transactions. |
 | `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | Delegate to provisional Fetch policy functions that throw an unimplemented InternalError. Slice 9 supplies §§4.10–4.11. |
 
 **`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
@@ -1062,18 +1062,19 @@ Keep five subdivisions, with the first bounded to proving the transport:
 
 | Slice | Scope | Status |
 | --- | --- | --- |
-| **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented; integration into §4.6 remains gated on 9B |
-| **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Next |
+| **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented |
+| **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | In review; HTTP/2 is connected, authentication remains provisional |
 | **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Planned |
 | **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Planned |
 | **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
 
 **9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
 UserAgent-owned host contract. [`node-transport.ts`](../browlet/loader/node-transport.ts)
-uses Undici 8.10's dispatcher, preserving ordered duplicate response fields,
+uses Undici's dispatcher, preserving ordered duplicate response fields,
 strict certificate/hostname verification, and actual TLS verification evidence.
 Undici is a direct Browlet runtime dependency and a matching workspace development
-dependency. Its Node floor matches Browlet's 22.19-or-newer requirement.
+dependency. Its Node floor matches Browlet's 22.19-or-newer requirement. The
+temporary [vendor pin and patch](../../vendor/README.md) preserve HTTP/2 fields.
 
 [`http/network.ts`](http/network.ts) implements the wire exchange behind
 `FetchParams.httpNetworkFetch()`. A deterministic transport tests byte delivery,
@@ -1088,15 +1089,98 @@ owner. Native callbacks do not mutate page Streams. Controller cancellation stop
 active and queued requests, including before Undici assigns a socket, and releases
 their listeners. Adapter shutdown aborts outstanding exchanges and closes clients.
 
-This first adapter uses HTTP/1.1 and one Undici Client per network partition,
-origin, and credentials mode. Undici owns the live sockets; the earlier Fetch
-ConnectionPool remains record-only. 9B must connect connection observations to
-those records, address per-origin concurrency and HTTP/2 stream cancellation,
-and implement timing, informational responses, and full request-body consumption.
-Available-byte uploads currently use the retained source directly. Streaming
-uploads and Blob sources remain explicit unimplemented paths.
-`httpNetworkOrCacheFetch()` still rejects until 9B supplies its HTTP processing;
-9A does not bypass it to expose incomplete public HTTP fetch.
+**9B implementation:** [`http/transaction.ts`](http/transaction.ts) prepares a
+separate wire request, applies credentials/COEP, cookies, Origin, Fetch Metadata,
+User-Agent, Referer, cache-control, content-length, and content-coding fields,
+checks the keepalive budget, and handles authentication/retry control flow.
+Cache selection/storage remain explicitly assigned to 9C; CORS/TAO to 9D.
+
+Each attempt consumes one upload stream on its HTML owner. Retained sources
+(including Blob and encoded multipart data) are recreated only for a retry,
+avoiding an unread tee branch and preserving the original stream's used state.
+`FetchRequest.clone(body)` is an accepted internal arrangement: its extra body
+argument lets the transaction select that single stream; ordinary cloning still
+tees. A separate wire header list is used even for redirect-error requests,
+because a 421 can still require one fresh-connection retry. Discarding an unused
+response releases its exchange without aborting the entire redirect controller.
+
+**Cloning review (2026-09-24):** Fetch's ordinary request-clone algorithm clones
+the body by teeing its stream. The §4.6 note explicitly encourages avoiding that
+tee for a source-less body, because no replay can succeed. For replayable bodies,
+our transaction instead keeps the replay source and reconstructs a stream when
+needed; the unread spare tee branch would otherwise retain uploaded chunks.
+This is an internal strategy for preserving retry behavior, not a change to
+author-visible `Request.clone()`.
+
+Browser source supports that separation: Blink's
+`FetchRequestData::CloneExceptBody()` and `Clone()` distinguish metadata copying
+from public cloning, while FetchManager drains encoded FormData or an upload
+pipe; Gecko's FetchDriver passes the upload stream to the channel, whose redirect
+setup rewinds seekable uploads; WebKit's `FetchRequest::resourceRequest()` copies
+wire metadata and supplies encoded FormData separately from `cloneBody()`.
+The source files are `core/fetch/fetch_request_data.cc` and `fetch_manager.cc`
+under Blink; `dom/fetch/FetchDriver.cpp` and
+`netwerk/protocol/http/HttpBaseChannel.cpp` under Gecko; and
+`Modules/fetch/FetchRequest.cpp` under WebKit. The extra `clone(body)` argument
+was accepted on 2026-09-24 and its pending-review marker removed. This comparison
+does not establish an observable browser/spec conflict requiring `SPEC_CLASH`.
+
+The Node adapter permits up to six concurrent HTTP/1.1 connections per partition,
+origin, and credentials mode. Established HTTP/2 sessions multiplex requests,
+with Undici enforcing the peer's concurrent-stream limit. It records live
+connections and DNS/TCP/TLS/ALPN observations in the UserAgent's ConnectionPool.
+Upload reads follow native write
+demand; progress and Early Hints return through the Fetch task destination.
+Source-less author streams are rejected before transmission over HTTP/1.x, as
+§4.7 requires, and succeed over negotiated HTTP/2. The adapter passes its async
+upload iterator directly to Undici, avoiding an extra Node Readable and the
+HTTP/2 Node-stream path's incorrect upload-progress listener.
+
+The UserAgent supplies `HTTPContentDecoder` instances backed by bounded Node
+zlib transforms, one chain per response. Supported codings are gzip, zlib-wrapped
+deflate, and Brotli, applied in reverse header order. Unsupported lists remain
+untouched, malformed compressed data errors the page body, and zero-byte bodies
+do not invoke decoding. Backpressure pauses both decoded output and wire input;
+encoded and decoded byte counts remain distinct. The older complete-buffer
+`handleContentCodings()` helper is not used on network chunks.
+
+**Explicit review dependencies (2026-09-24):**
+
+- `userAgent.httpAuthentication` now has the requested provisional implementation:
+  no credentials, declined prompts, and no proxy/storage effects. TypeScript
+  compiles; authentication is not implemented. [`http/authentication.ts`](http/authentication.ts)
+  retains the provisional contract, while the
+  [HTTP completion plan](../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
+  owns four slices for RFC 9110/7617 and additional cache/client foundations.
+  Implement the authentication owner after this review and before claiming
+  credential reuse; controlled transaction tests do not prove Basic support.
+- HTTP/2 is enabled with Eric's approved temporary vendor arrangement. Undici
+  8.11.2 at `328ab8435079ca6edc1236a29e45a46915456502` is prepared with the tracked
+  [patch](../../vendor/_patches/undici.patch), then packed as the ordinary runtime
+  dependency. No install hook modifies `node_modules`. The patch preserves
+  original final/interim/trailer/CONNECT fields and corrects the declaration
+  of the already-supported iterable upload body. Parsed-header consumers keep
+  their existing behavior. [Undici #5898](https://github.com/nodejs/undici/issues/5898)
+  records the upstream issue; [vendor instructions](../../vendor/README.md)
+  describe preparation and eventual removal.
+  [Transport tests](../../test/browlet/loader/node-http2.test.ts) cover negotiation,
+  repeated fields, Early Hints, concurrent streams, pause/resume, stream resets,
+  queued cancellation, peer limits, and connection isolation.
+  [Fetch tests](../../test/browlet/fetch-http2.test.ts) cover decoding repeated
+  Content-Encoding, MIME recovery, first-field HSTS, duplicate Location rejection,
+  and source-less page uploads with progress. Eight dependency regressions cover
+  raw and parsed APIs. Historical probes and browser/spec evidence remain in
+  [`scratch/SPEC-ISSUES.md`](../../scratch/SPEC-ISSUES.md#undici-http2-raw-headers-lose-duplicate-field-boundaries).
+- `SPEC_CLASH(keepalive-current-request-accounting)` records the approved rule
+  that the current registered request counts once, not twice, against 64 KiB.
+  Details and browser source pointers are in `scratch/SPEC-ISSUES.md`.
+
+`fetch-transactions.test.ts`, `fetch-network.test.ts`, and
+`fetch-content-decoding.test.ts` exercise actual HTTP/HTTPS servers and page
+consumption, including fast-response upload completion, 421 replay, cookies,
+HSTS, Early Hints, decoded expansion, cancellation, and realm-owned errors.
+The transport tests also occupy all six connections before canceling a queued
+seventh request. Public Fetch and loader/Reporting integration remain 9E.
 
 `FetchRequest.appendUserAgentHeader()` already implements the User-Agent
 insertion step, preserving an existing header and using the owning UserAgent's

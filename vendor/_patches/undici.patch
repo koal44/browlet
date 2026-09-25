@@ -1,0 +1,509 @@
+diff --git a/lib/core/request.js b/lib/core/request.js
+index a66d931..39f6fcd 100644
+--- a/lib/core/request.js
++++ b/lib/core/request.js
+@@ -325,7 +325,7 @@ class Request {
+     return this[kHandler].onResponseStarted?.()
+   }
+ 
+-  onResponseStart (statusCode, headers, resume, statusText) {
++  onResponseStart (statusCode, headers, resume, statusText, rawHeaders = headers) {
+     assert(!this.aborted)
+     assert(!this.completed)
+ 
+@@ -336,7 +336,7 @@ class Request {
+     const controller = this[kController]
+     if (controller) {
+       controller[kResume] = resume
+-      controller.rawHeaders = headers
++      controller.rawHeaders = rawHeaders
+     }
+ 
+     const parsedHeaders = Array.isArray(headers) ? parseHeaders(headers) : headers
+@@ -373,8 +373,9 @@ class Request {
+    * @param {Buffer[]|string[]|import('../../types/header.d.ts').IncomingHttpHeaders} headers
+    * @param {import('node:stream').Duplex} socket
+    * @param {string} [statusText]
++   * @param {Buffer[]|string[]|import('../../types/header.d.ts').IncomingHttpHeaders} [rawHeaders]
+    */
+-  onRequestUpgrade (statusCode, headers, socket, statusText = '') {
++  onRequestUpgrade (statusCode, headers, socket, statusText = '', rawHeaders = headers) {
+     this.onFinally()
+ 
+     assert(!this.aborted)
+@@ -386,7 +387,7 @@ class Request {
+ 
+     const controller = this[kController]
+     if (controller) {
+-      controller.rawHeaders = headers
++      controller.rawHeaders = rawHeaders
+     }
+ 
+     const parsedHeaders = Array.isArray(headers) ? parseHeaders(headers) : headers
+@@ -403,7 +404,7 @@ class Request {
+     return result
+   }
+ 
+-  onResponseEnd (trailers) {
++  onResponseEnd (trailers, rawTrailers = trailers) {
+     this.onFinally()
+ 
+     assert(!this.aborted)
+@@ -416,7 +417,7 @@ class Request {
+ 
+     const controller = this[kController]
+     if (controller) {
+-      controller.rawTrailers = trailers
++      controller.rawTrailers = rawTrailers
+     }
+ 
+     const parsedTrailers = Array.isArray(trailers) ? parseHeaders(trailers) : trailers
+diff --git a/lib/dispatcher/client-h1.js b/lib/dispatcher/client-h1.js
+index 3cc2471..f560cde 100644
+--- a/lib/dispatcher/client-h1.js
++++ b/lib/dispatcher/client-h1.js
+@@ -638,11 +638,6 @@ class Parser {
+     assert(!this.upgrade)
+     assert(this.statusCode < 200)
+ 
+-    if (statusCode === 100) {
+-      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)))
+-      return -1
+-    }
+-
+     /* this can only happen if server is misbehaving */
+     if (upgrade && !request.upgrade) {
+       util.destroy(socket, new SocketError('bad upgrade', util.getSocketInfo(socket)))
+diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
+index 9588097..83ef8ca 100644
+--- a/lib/dispatcher/client-h2.js
++++ b/lib/dispatcher/client-h2.js
+@@ -815,7 +815,7 @@ function completeRequestStream () {
+   releaseRequestStream(this)
+ 
+   if (state.pendingEnd && !state.request.aborted && !state.request.completed) {
+-    state.request.onResponseEnd(state.trailers || {})
++    state.request.onResponseEnd(state.trailers || {}, state.rawTrailers || [])
+   } else if (!state.request.aborted && !state.request.completed) {
+     // The stream closed without a complete response and without reporting an
+     // error. finalizeRequest() below frees the queue slot either way, so
+@@ -933,7 +933,7 @@ function onUpgradeStreamTimeout () {
+   failUpgradeStream(state, new InformationalError(`HTTP/2: "stream timeout after ${state.headersTimeout}"`))
+ }
+ 
+-function onUpgradeResponse (headers, _flags) {
++function onUpgradeResponse (headers, _flags, rawHeaders) {
+   const stream = this
+   const state = stream[kRequestStreamState]
+   const { request } = state
+@@ -944,7 +944,7 @@ function onUpgradeResponse (headers, _flags) {
+   delete headers[HTTP2_HEADER_STATUS]
+ 
+   try {
+-    request.onRequestUpgrade(statusCode, headers, stream)
++    request.onRequestUpgrade(statusCode, headers, stream, '', getRawHeaders(rawHeaders))
+   } catch (err) {
+     state.abort(err)
+     return
+@@ -1055,6 +1055,7 @@ function writeH2 (client, request) {
+     bodySent: false,
+     pendingEnd: false,
+     trailers: null,
++    rawTrailers: null,
+     session,
+     stream: null
+   }
+@@ -1396,7 +1397,7 @@ function resumeResponseStream () {
+   stream.resume()
+ }
+ 
+-function onInterimResponse (headers) {
++function onInterimResponse (headers, _flags, rawHeaders) {
+   const stream = this
+   const state = stream[kRequestStreamState]
+ 
+@@ -1417,10 +1418,10 @@ function onInterimResponse (headers) {
+   const statusCode = headers[HTTP2_HEADER_STATUS]
+   delete headers[HTTP2_HEADER_STATUS]
+ 
+-  request.onResponseStart(Number(statusCode), headers, noop, '')
++  request.onResponseStart(Number(statusCode), headers, noop, '', getRawHeaders(rawHeaders))
+ }
+ 
+-function onResponse (headers) {
++function onResponse (headers, _flags, rawHeaders) {
+   const stream = this
+   const state = stream[kRequestStreamState]
+ 
+@@ -1470,7 +1471,7 @@ function onResponse (headers) {
+     return
+   }
+ 
+-  if (request.onResponseStart(statusCode, headers, resumeResponseStream.bind(stream), '') === false) {
++  if (request.onResponseStart(statusCode, headers, resumeResponseStream.bind(stream), '', getRawHeaders(rawHeaders)) === false) {
+     pauseResponseStream(stream, state)
+   }
+ 
+@@ -1608,7 +1609,7 @@ function onTimeout () {
+   state.abort(err)
+ }
+ 
+-function onTrailers (trailers) {
++function onTrailers (trailers, _flags, rawTrailers) {
+   const stream = this
+   const state = stream[kRequestStreamState]
+ 
+@@ -1627,6 +1628,20 @@ function onTrailers (trailers) {
+ 
+   // Store trailers for completeRequestStream to use when completing
+   state.trailers = trailers
++  state.rawTrailers = getRawHeaders(rawTrailers)
++}
++
++// Node supplies the original field pairs alongside its combined header object.
++// Keep that object for parsed-header consumers, and preserve duplicate fields
++// in the raw view. Pseudo-headers are protocol metadata, not response fields.
++function getRawHeaders (rawHeaders) {
++  const headers = []
++  for (let i = 0; i < rawHeaders.length; i += 2) {
++    if (rawHeaders[i][0] !== ':') {
++      headers.push(Buffer.from(rawHeaders[i], 'latin1'), Buffer.from(rawHeaders[i + 1], 'latin1'))
++    }
++  }
++  return headers
+ }
+ 
+ function writeBodyH2 () {
+diff --git a/test/http-100.js b/test/http-100.js
+index 96dd48d..5486383 100644
+--- a/test/http-100.js
++++ b/test/http-100.js
+@@ -2,7 +2,7 @@
+ 
+ const { tspl } = require('@matteo.collina/tspl')
+ const { test, after } = require('node:test')
+-const { Client, errors } = require('..')
++const { Client, errors, fetch } = require('..')
+ const { createServer } = require('node:http')
+ const net = require('node:net')
+ const { once } = require('node:events')
+@@ -74,30 +74,56 @@ test('error 103 body', async (t) => {
+   await t.completed
+ })
+ 
+-test('error 100 body', async (t) => {
+-  t = tspl(t, { plan: 2 })
+-
+-  const server = net.createServer({ joinDuplicateHeaders: true }, (socket) => {
+-    socket.write('HTTP/1.1 100 Early Hints\r\n')
+-    socket.write('\r\n')
++test('ignore unsolicited 100 Continue', async (t) => {
++  const server = createServer((req, res) => {
++    t.assert.strictEqual(req.headers.expect, undefined)
++    res.writeContinue()
++    res.writeContinue()
++    res.end('done')
+   })
+-  after(() => server.close())
++  t.after(() => server.close())
+   server.listen(0)
+-
+   await once(server, 'listening')
+-  const client = new Client(`http://localhost:${server.address().port}`)
+-  after(() => client.close())
+ 
+-  client.request({
+-    path: '/',
+-    method: 'GET'
+-  }, (err) => {
+-    t.strictEqual(err.message, 'bad response')
+-  })
+-  client.on('disconnect', () => {
+-    t.ok(true, 'pass')
++  const origin = 'http://localhost:' + server.address().port
++  const client = new Client(origin)
++  t.after(() => client.destroy())
++
++  const response = await fetch(origin, { dispatcher: client })
++  t.assert.strictEqual(response.status, 200)
++  t.assert.strictEqual(await response.text(), 'done')
++})
++
++test('ignore unsolicited 100 Continue in a pipeline', { timeout: 5000 }, async (t) => {
++  const pending = []
++  const sockets = new Set()
++  const server = createServer((req, res) => {
++    t.assert.strictEqual(req.headers.expect, undefined)
++    sockets.add(req.socket)
++    pending.push({ req, res })
++    if (pending.length === 2) {
++      // Both requests must arrive before either final response is sent.
++      for (const { req, res } of pending) {
++        res.writeContinue()
++        res.end(req.url)
++      }
++    }
+   })
+-  await t.completed
++  t.after(() => server.close())
++  server.listen(0)
++  await once(server, 'listening')
++
++  const client = new Client('http://localhost:' + server.address().port, { pipelining: 2 })
++  t.after(() => client.destroy())
++  const paths = ['/first', '/second']
++  const responses = await Promise.all(paths.map(async path => {
++    const response = await client.request({ path, method: 'GET', blocking: false })
++    return { status: response.statusCode, body: await response.body.text() }
++  }))
++
++  t.assert.deepStrictEqual(responses, paths.map(path => ({ status: 200, body: path })))
++  t.assert.strictEqual(pending.length, 2)
++  t.assert.strictEqual(sockets.size, 1)
+ })
+ 
+ test('error 101 upgrade', async (t) => {
+diff --git a/test/http2-body.js b/test/http2-body.js
+index 3e01468..610c397 100644
+--- a/test/http2-body.js
++++ b/test/http2-body.js
+@@ -217,11 +217,10 @@ test('Should handle h2 request with body (string or buffer) - dispatch', async t
+       onResponseError (_controller, err) {
+         t.ifError(err)
+       },
+-      onResponseStart (controller, statusCode) {
+-        const rawHeaders = controller.rawHeaders
++      onResponseStart (_controller, statusCode, headers) {
+         t.strictEqual(statusCode, 200)
+-        t.strictEqual(rawHeaders['content-type'], 'text/plain; charset=utf-8')
+-        t.strictEqual(rawHeaders['x-custom-h2'], 'foo')
++        t.strictEqual(headers['content-type'], 'text/plain; charset=utf-8')
++        t.strictEqual(headers['x-custom-h2'], 'foo')
+       },
+       onResponseData (_controller, chunk) {
+         response.push(chunk)
+diff --git a/test/http2-late-data.js b/test/http2-late-data.js
+index 21830d0..2d8176c 100644
+--- a/test/http2-late-data.js
++++ b/test/http2-late-data.js
+@@ -154,8 +154,8 @@ test('Should ignore late http2 data after request completion', async (t) => {
+ 
+   t.ok(context.write(request))
+ 
+-  stream.emit('response', { ':status': 200 })
+-  stream.emit('trailers', { 'x-trailer': 'hello' })
++  stream.emit('response', { ':status': 200 }, 0, [':status', '200'])
++  stream.emit('trailers', { 'x-trailer': 'hello' }, 0, ['x-trailer', 'hello'])
+ 
+   t.doesNotThrow(() => {
+     stream.emit('data', Buffer.from('late-data'))
+@@ -251,8 +251,8 @@ test('Should complete the response and release the stream on end without a close
+   t.ok(context.write(request))
+   t.equal(stream.listenerCount('trailers'), 1)
+ 
+-  stream.emit('response', { ':status': 200 })
+-  stream.emit('trailers', { 'x-trailer': 'hello' })
++  stream.emit('response', { ':status': 200 }, 0, [':status', '200'])
++  stream.emit('trailers', { 'x-trailer': 'hello' }, 0, ['x-trailer', 'hello'])
+   stream.emit('data', Buffer.from('body'))
+   stream.emit('end')
+   // Intentionally no stream.emit('close').
+@@ -339,7 +339,7 @@ test('Should complete only once when both end and a late close fire', async (t)
+ 
+   t.ok(context.write(request))
+ 
+-  stream.emit('response', { ':status': 200 })
++  stream.emit('response', { ':status': 200 }, 0, [':status', '200'])
+   stream.emit('end')
+   t.strictEqual(onCompleteCalls, 1)
+ 
+@@ -421,7 +421,7 @@ test('Should remove request-owned http2 stream listeners after completion', asyn
+   t.equal(stream.listenerCount('timeout'), 1)
+   t.equal(stream.listenerCount('trailers'), 1)
+ 
+-  stream.emit('response', { ':status': 200 })
++  stream.emit('response', { ':status': 200 }, 0, [':status', '200'])
+   stream.emit('end')
+ 
+   // When trailers are not expected, completion is deferred to
+diff --git a/test/http2-raw-headers.js b/test/http2-raw-headers.js
+new file mode 100644
+index 0000000..8764441
+--- /dev/null
++++ b/test/http2-raw-headers.js
+@@ -0,0 +1,162 @@
++'use strict'
++
++const assert = require('node:assert/strict')
++const { test } = require('node:test')
++const { once } = require('node:events')
++const { readFileSync } = require('node:fs')
++const { join } = require('node:path')
++const { createSecureServer } = require('node:http2')
++const { Client, Dispatcher1Wrapper } = require('..')
++
++const tls = {
++  key: readFileSync(join(__dirname, 'fixtures/key.pem')),
++  cert: readFileSync(join(__dirname, 'fixtures/cert.pem'))
++}
++
++for (const allowH2 of [false, true]) {
++  test(`raw dispatch headers preserve field boundaries (allowH2: ${allowH2})`, async t => {
++    const { client } = await setup(t, allowH2)
++    const responses = []
++    const result = await new Promise((resolve, reject) => {
++      client.dispatch({ path: '/', method: 'GET' }, {
++        onRequestStart () {},
++        onResponseStart (controller, statusCode, headers) {
++          responses.push({ statusCode, headers, raw: controller.rawHeaders })
++        },
++        onResponseData () {},
++        onResponseEnd (controller, trailers) {
++          resolve({ trailers, raw: controller.rawTrailers })
++        },
++        onResponseError (_controller, error) { reject(error) }
++      })
++    })
++
++    assert.deepEqual(responses.map(response => response.statusCode), [103, 200])
++    assert.deepEqual(values(responses[0].raw, 'x-info'), ['first', 'second'])
++    assert.deepEqual(values(responses[1].raw, 'strict-transport-security'), ['max-age=10', 'max-age=20'])
++    assert.deepEqual(values(responses[1].raw, 'x-literal-comma'), ['a, b'])
++    assert.deepEqual(values(responses[1].raw, 'set-cookie'), ['a=1', 'b=2'])
++    assert.deepEqual(values(result.raw, 'x-trailer'), ['first', 'second'])
++    assert.deepEqual(responses[1].headers['strict-transport-security'], allowH2 ? 'max-age=10, max-age=20' : ['max-age=10', 'max-age=20'])
++    assert.deepEqual(result.trailers['x-trailer'], allowH2 ? 'first, second' : ['first', 'second'])
++    assert.ok(responses.every(response => !response.raw.some((value, index) => index % 2 === 0 && value.toString()[0] === ':')))
++  })
++
++  test(`request raw headers preserve field boundaries (allowH2: ${allowH2})`, async t => {
++    const { client } = await setup(t, allowH2)
++    const response = await client.request({ path: '/', method: 'GET', responseHeaders: 'raw' })
++    await response.body.dump()
++
++    assert.deepEqual(values(response.headers, 'strict-transport-security'), ['max-age=10', 'max-age=20'])
++    assert.deepEqual(values(response.headers, 'x-literal-comma'), ['a, b'])
++  })
++
++  test(`legacy raw headers preserve field boundaries (allowH2: ${allowH2})`, async t => {
++    const { client } = await setup(t, allowH2)
++    const responses = []
++    const trailers = await new Promise((resolve, reject) => {
++      client.dispatch({ path: '/', method: 'GET' }, Dispatcher1Wrapper.wrapHandler({
++        onConnect () {},
++        onHeaders (statusCode, headers) {
++          responses.push({ statusCode, headers })
++          return true
++        },
++        onData () { return true },
++        onComplete: resolve,
++        onError: reject
++      }))
++    })
++
++    assert.deepEqual(responses.map(response => response.statusCode), [103, 200])
++    assert.deepEqual(values(responses[0].headers, 'x-info'), ['first', 'second'])
++    assert.deepEqual(values(responses[1].headers, 'strict-transport-security'), ['max-age=10', 'max-age=20'])
++    assert.deepEqual(values(responses[1].headers, 'x-test-header'), ['caf\u00e9'])
++    assert.deepEqual(values(trailers, 'x-trailer'), ['first', 'second'])
++    assert.ok(responses.every(response => response.headers.every(Buffer.isBuffer)))
++    assert.ok(trailers.every(Buffer.isBuffer))
++  })
++}
++
++for (const legacy of [false, true]) {
++  test(`HTTP/2 CONNECT raw headers preserve field boundaries (legacy: ${legacy})`, async t => {
++    const server = createSecureServer(tls)
++    server.on('stream', stream => {
++      stream.respond({ ':status': 200, 'x-tunnel': ['first', 'second'] })
++      stream.end()
++    })
++    const client = await createClient(t, server, true)
++    const headers = await new Promise((resolve, reject) => {
++      const complete = (statusCode, headers, socket) => {
++        assert.equal(statusCode, 200)
++        socket.on('error', reject)
++        socket.on('end', () => resolve(headers))
++        socket.resume()
++        socket.end()
++      }
++      const handler = legacy
++        ? Dispatcher1Wrapper.wrapHandler({
++          onConnect () {},
++          onUpgrade: complete,
++          onError: reject
++        })
++        : {
++            onRequestStart () {},
++            onRequestUpgrade (controller, statusCode, _headers, socket) {
++              complete(statusCode, controller.rawHeaders, socket)
++            },
++            onResponseError (_controller, error) { reject(error) }
++          }
++      client.dispatch({ path: '/', method: 'CONNECT' }, handler)
++    })
++
++    assert.deepEqual(values(headers, 'x-tunnel'), ['first', 'second'])
++    assert.ok(headers.every(Buffer.isBuffer))
++    assert.ok(!headers.some((value, index) => index % 2 === 0 && value.toString()[0] === ':'))
++  })
++}
++
++async function setup (t, allowH2) {
++  const server = createSecureServer({ ...tls, allowHTTP1: true })
++  server.on('request', (request, response) => {
++    assert.equal(request.httpVersion, allowH2 ? '2.0' : '1.1')
++    if (allowH2) {
++      response.stream.additionalHeaders({ ':status': 103, 'x-info': ['first', 'second'] })
++    } else {
++      // writeEarlyHints() stringifies arrays before sending them over HTTP/1.
++      response.socket.write('HTTP/1.1 103 Early Hints\r\nx-info: first\r\nx-info: second\r\n\r\n')
++    }
++    response.writeHead(200, {
++      'strict-transport-security': ['max-age=10', 'max-age=20'],
++      'x-literal-comma': 'a, b',
++      'x-test-header': 'caf\u00e9',
++      'set-cookie': ['a=1', 'b=2']
++    })
++    response.write('ok')
++    response.addTrailers({ 'x-trailer': ['first', 'second'] })
++    response.end()
++  })
++  const client = await createClient(t, server, allowH2)
++  return { client }
++}
++
++async function createClient (t, server, allowH2) {
++  await once(server.listen(0, '127.0.0.1'), 'listening')
++  const client = new Client(`https://127.0.0.1:${server.address().port}`, {
++    allowH2,
++    connect: { rejectUnauthorized: false }
++  })
++  t.after(async () => {
++    await client.destroy()
++    await new Promise(resolve => server.close(resolve))
++  })
++  return client
++}
++
++function values (headers, name) {
++  assert.ok(Array.isArray(headers), 'Raw headers must be an array of original field pairs')
++  const result = []
++  for (let index = 0; index < headers.length; index += 2) {
++    if (headers[index].toString('latin1') === name) result.push(headers[index + 1].toString('latin1'))
++  }
++  return result
++}
+diff --git a/types/dispatcher.d.ts b/types/dispatcher.d.ts
+index 1c2e335..0b9b1c4 100644
+--- a/types/dispatcher.d.ts
++++ b/types/dispatcher.d.ts
+@@ -102,7 +102,7 @@ declare namespace Dispatcher {
+     path: string;
+     method: HttpMethod;
+     /** Default: `null` */
+-    body?: string | Buffer | Uint8Array | Readable | null | FormData;
++    body?: string | Buffer | Uint8Array | Readable | Iterable<string | Uint8Array> | AsyncIterable<string | Uint8Array> | null | FormData;
+     /** Default: `null` */
+     headers?: UndiciHeaders;
+     /** Query string params to be embedded in the request URL. Default: `null` */

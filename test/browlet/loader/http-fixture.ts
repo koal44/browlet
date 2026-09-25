@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import type { Server } from 'node:net';
 
 /** Bind a loopback server to an available port; no outside network or fixed test port. */
 export async function listen(server: Server, scheme = 'http'): Promise<string> {
@@ -11,9 +11,9 @@ export async function listen(server: Server, scheme = 'http'): Promise<string> {
   return `${scheme}://127.0.0.1:${address.port}`;
 }
 
-export async function closeServer(server: Server): Promise<void> {
+export async function closeServer(server: Server & { closeAllConnections?: () => void; }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
-    server.closeAllConnections();
+    server.closeAllConnections?.();
   });
 }

@@ -1,14 +1,16 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
-import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm, project, unwrap } from '../../src/browlet/bindings';
 import { FetchBody } from '../../src/fetch/body';
 import { FetchHeaders } from '../../src/fetch/headers';
 import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { FetchTimingInfo } from '../../src/fetch/timing';
-import type { HTTPTransport, HTTPTransportListener, HTTPTransportRequest } from '../../src/fetch/http/transport';
+import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
+import type { ReadableStreamImpl } from '../../src/streams/readable-stream';
+import type { HTTPTransport, HTTPTransportListener, HTTPTransportRequest, HTTPUploadSource } from '../../src/fetch/http/transport';
 import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
 
@@ -77,7 +79,7 @@ describe('HTTP network response streams', () => {
     })).toEqual([1, 2, 3]);
   });
 
-  it('passes available upload bytes and duplicate request headers without flattening them', async () => {
+  it('reads the upload body on demand and passes duplicate request headers without flattening them', async () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     const env = getRelevantRealm(browlet.window).env;
     const transport = new ControlledTransport();
@@ -90,13 +92,48 @@ describe('HTTP network response streams', () => {
     request.body = FetchBody.fromBytes(bytes, env);
     const params = new FetchParams(request, new FetchTimingInfo(), env);
     await observe(params.httpNetworkFetch(true, true));
-    expect(transport.request).toMatchObject({ body: bytes, includeCredentials: true, forceNewConnection: true });
+    expect(transport.request).toMatchObject({ includeCredentials: true, forceNewConnection: true });
+    expect(request.body.stream.disturbed).toBe(false);
+    const upload = transport.request!.body as HTTPUploadSource;
+    expect(await observe(upload.read())).toEqual(bytes);
+    expect(request.body.stream.disturbed).toBe(true);
+    expect(await observe(upload.read())).toBeNull();
     expect(transport.request!.headers.list).toEqual([['X-Value', 'one'], ['X-Value', 'two']]);
     transport.listener!.onEnd();
   });
 });
 
 describe('HTTP network cancellation and failures', () => {
+  it('discards an exchange with a pending upload read without terminating the redirect controller', async () => {
+    const f = await fixture(false);
+    await f.browlet.evaluate(() => { Reflect.set(globalThis, 'uploadStream', new ReadableStream()); });
+    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    const response = await observe(f.params.httpNetworkFetch());
+    const pending = observe((f.transport.request!.body as HTTPUploadSource).read());
+    await f.browlet.evaluate(() => 0);
+    response.discardBody!();
+    expect(await pending).toBeNull();
+    await f.browlet.evaluate(() => 0);
+    expect(f.params.controller.state).toBe('ongoing');
+    expect(f.transport.abort).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])('classifies an upload failure by its DOMException brand (genuine: %s)', async (genuine) => {
+    const f = await fixture(false);
+    f.transport.headers = false;
+    await f.browlet.evaluate((real) => {
+      const failure = real ? new DOMException('stopped', 'AbortError') : { name: 'AbortError' };
+      Reflect.set(globalThis, 'uploadStream', new ReadableStream({ start(controller) { controller.error(failure); } }));
+    }, genuine);
+    f.params.request.method = 'POST';
+    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    const pending = observe(f.params.httpNetworkFetch());
+    await f.transport.dispatched.promise;
+    await observe((f.transport.request!.body as HTTPUploadSource).read());
+    expect(await pending).toMatchObject({ type: 'error', aborted: genuine });
+    expect(f.params.controller.state).toBe(genuine ? 'aborted' : 'terminated');
+  });
+
   it('does not dispatch an already aborted request', async () => {
     const f = await fixture(false);
     f.params.controller.abort('stop', f.env);
@@ -161,6 +198,29 @@ describe('HTTP network cancellation and failures', () => {
 });
 
 describe('HTTP network responses through the real transport and page', () => {
+  it('rejects a source-less upload on HTTP/1 before sending the request', async () => {
+    const seen = vi.fn();
+    const server = createServer((request, response) => { seen(request); response.end(); });
+    const origin = await listen(server);
+    const f = await fixture(false);
+    // Restore the real adapter for the protocol decision.
+    const transport = new NodeHTTPTransport();
+    f.env.userAgent.httpTransport = transport;
+    f.params.request.urlList = [f.env.parseURL(origin).url!];
+    f.params.request.method = 'POST';
+    await f.browlet.evaluate(() => {
+      Reflect.set(globalThis, 'uploadStream', new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); controller.close(); } }));
+    });
+    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    try {
+      expect((await observe(f.params.httpNetworkFetch())).type).toBe('error');
+      expect(seen).not.toHaveBeenCalled();
+    } finally {
+      await transport.close();
+      await closeServer(server);
+    }
+  });
+
   it('streams a real response into page-owned chunks through the automatic event loop', async () => {
     const server = createServer((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/octet-stream' });

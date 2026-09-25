@@ -54,6 +54,7 @@
     "parse5-parser-stream": "^8.0.0",
     "tldts": "^7.4.10",
     "tr46": "^6.0.0",
-    "undici": "^8.10.0"
-  }
+    "undici": "file:../../vendor/undici-8.11.2.tgz"
+  },
+  "bundleDependencies": ["undici"]
 }

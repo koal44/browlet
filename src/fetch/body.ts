@@ -175,9 +175,8 @@ export type BodyWithType = {
  * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
  * supported codecs, keyed by lowercase coding names; null represents failure.
  */
-// TODO: Fetch slice 9 obtains codecs from UserAgent-owned networking and gives
-// each response its own streaming decoder. Adapt this complete-buffer helper
-// before using it on network chunks; decoder state must survive between chunks.
+// Network fetch uses the UserAgent's per-response HTTPContentDecoder instead.
+// This complete-buffer algorithm must not be applied independently to wire chunks.
 // SPEC_MISMATCH: (codings, bytes) -> bytes or failure
 export function handleContentCodings(
   codings: string[],

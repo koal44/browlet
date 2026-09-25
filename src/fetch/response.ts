@@ -48,6 +48,8 @@ export class FetchResponse {
   headerList = new FetchHeaders();
   /** Response body stream and replay metadata, or null when no body is present. */
   body: FetchBody | null = null;
+  /** Release an unused network body without canceling the encompassing redirect/authentication fetch. */
+  discardBody: (() => void) | null = null;
   /** How the cache supplied this response; undefined when there is no cache classification. */
   cacheUsage: CacheUsage | undefined = undefined;
   /** Additional header names exposed by a CORS filtered response. */

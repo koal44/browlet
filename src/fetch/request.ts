@@ -195,8 +195,16 @@ export class FetchRequest {
     return isomorphicEncode(this.serializeOrigin());
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-request-clone */
-  clone(): FetchRequest {
+  /** Clone the request, optionally supplying the body chosen by an internal HTTP attempt. */
+  // https://fetch.spec.whatwg.org/#concept-request-clone
+  // HTTP fetch may supply a replay stream, avoiding a tee whose spare branch is never read.
+  clone(body?: FetchBody | Uint8Array | null): FetchRequest {
+    if (body === undefined) {
+      // Before body extraction, copy the bytes; an extracted body tees its stream.
+      if (this.body instanceof FetchBody) body = this.body.clone();
+      else if (this.body !== null) body = new Uint8Array(this.body);
+      else body = null;
+    }
     const request = new FetchRequest(this.url, this.client, this.userAgent);
     for (let i = 1; i < this.urlList.length; i++) request.urlList.push(copyURL(this.urlList[i]!));
     return Object.assign(request, this, {
@@ -206,8 +214,7 @@ export class FetchRequest {
       referrer: this.referrer && copyURL(this.referrer),
       webTransportHashList: this.webTransportHashList.map(({ algorithm, value }) => ({ algorithm, value: new Uint8Array(value) })),
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
-      // Before body extraction, a byte sequence is copied as a value; a body tees its stream.
-      body: this.body === null ? null : this.body instanceof FetchBody ? this.body.clone() : new Uint8Array(this.body),
+      body,
     });
   }
 

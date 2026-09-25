@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +121,19 @@ async function buildPackage(name) {
   await dtsBundle.close();
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  // npm pack loads each workspace as a package root and cannot see hoisted bundles.
+  const require = createRequire(path.join(rootDir, 'package.json'));
+  const modulesDir = path.join(packageDir, 'node_modules');
+  for (const dependency of manifest.bundleDependencies ?? []) {
+    const source = path.dirname(require.resolve(`${dependency}/package.json`));
+    const destination = path.resolve(modulesDir, dependency);
+    if (!destination.startsWith(modulesDir + path.sep)) {
+      throw new Error(`Bundled dependency must be inside ${modulesDir}: ${dependency}`);
+    }
+    fs.rmSync(destination, { recursive: true, force: true });
+    fs.cpSync(source, destination, { recursive: true });
+  }
 
   console.log(`built ${name} v${manifest.version}`);
 }

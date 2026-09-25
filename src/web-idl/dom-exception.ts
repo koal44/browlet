@@ -1,7 +1,9 @@
 import { RangeError } from '../infra/exceptions';
 import {
   DOMExceptionCodes, DOMExceptionNames,
+  DOMException as InternalDOMException,
 } from './core/dom-exception';
+import { getPlatformRecord } from './platform-object';
 import {
   arg, constant, ctor, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable,
@@ -78,6 +80,13 @@ export class DOMExceptionImpl {
     this.#message = message;
     this.#name = name;
   }
+}
+
+/** Recognize an exception without invoking an author-overridden name property. */
+export function isDOMException(value: unknown, name: string): boolean {
+  if (InternalDOMException.is(value)) return value.name === name;
+  const implementation = getPlatformRecord(value)?.implInst;
+  return implementation instanceof DOMExceptionImpl && implementation.name === name;
 }
 
 // -- Web IDL ------------------------------------------------------------

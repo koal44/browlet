@@ -485,6 +485,7 @@ dependencies. Prefer the listed editable source over generated snapshots.
 | RFC 9651 | `rfcs/rfc9651.txt` | Published RFC |
 | RFC 7578; supporting MIME rules | `rfcs/rfc7578.txt`, `rfcs/rfc2046.txt`, `rfcs/rfc2183.txt` | Published RFCs |
 | HTTP semantics/cache/stale extensions | `rfcs/rfc9110.txt`, `rfcs/rfc9111.txt`, `rfcs/rfc5861.txt` | Published RFCs |
+| [Basic authentication, RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) | No local copy yet | Official RFC reviewed online on 2026-09-24; [implementation plan](../http/ROADMAP.md#rfc-9110-and-7617-client-completion) |
 | HSTS | `rfcs/rfc6797.txt` | Published RFC |
 | HTTP/1.1 and extensible priorities | `rfcs/rfc9112.txt`, `rfcs/rfc9218.txt` | Published RFCs; supporting transport references |
 | [Structured-field test vectors](https://github.com/httpwg/structured-field-tests) | `httpwg-structured-field-tests/README.md` and JSON fixtures | New; `1e280c3` |

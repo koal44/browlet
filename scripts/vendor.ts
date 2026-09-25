@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 type GitSpec = {
@@ -19,7 +19,14 @@ const lock = JSON.parse(
   readFileSync(LOCK_PATH, 'utf8'),
 ) as VendorLock;
 
+// Runs with Node's built-in TypeScript support, including before npm install.
+const requested = process.argv.slice(2);
+for (const name of requested) {
+  if (!(name in lock)) throw new Error(`Unknown vendor '${name}'`);
+}
+
 for (const [name, spec] of Object.entries(lock)) {
+  if (requested.length > 0 && !requested.includes(name)) continue;
   if (!spec.active) {
     console.log(`--- [vendor] Skipping ${name} (active=false) ---`);
     continue;
@@ -27,7 +34,10 @@ for (const [name, spec] of Object.entries(lock)) {
 
   fetchGitSpec(name, spec);
 
-  if (name === 'jsdom') {
+  if (name === 'undici') {
+    // Install the runtime package, not a link that makes npm resolve upstream devDependencies.
+    sh('npm', ['pack', '--ignore-scripts', '--silent', '--pack-destination', resolve('vendor')], spec.dir);
+  } else if (name === 'jsdom') {
     prepareJsdomVendor(spec.dir);
   }
 }
@@ -60,10 +70,16 @@ function fetchGitSpec(name: string, spec: GitSpec): void {
 
   const { repo, rev, dir } = spec;
   const patch = spec.patch ? resolve(spec.patch) : undefined;
+  const target = resolve(dir);
+  if (!target.startsWith(resolve('vendor') + sep)) {
+    throw new Error(`Vendor checkout must be inside vendor/: ${target}`);
+  }
+  if (patch && !existsSync(patch)) throw new Error(`Missing vendor patch: ${patch}`);
 
   if (!existsSync(dir)) {
     mkdirSync(dirname(dir), { recursive: true });
-    sh('git', ['clone', '--quiet', repo, dir]);
+    // Keep packed files identical across Windows and Unix checkouts.
+    sh('git', ['-c', 'core.autocrlf=false', 'clone', '--quiet', repo, dir]);
     git(['config', 'core.filemode', 'false'], dir);
     console.log(`[vendor] cloned ${repo} -> ${dir}`);
   }
@@ -74,23 +90,21 @@ function fetchGitSpec(name: string, spec: GitSpec): void {
   }
 
   console.log(`[vendor] ${name}: reset to ${rev}`);
+  git(['config', 'core.autocrlf', 'false'], dir);
   git(['-c', 'advice.detachedHead=false', 'checkout', '--force', rev], dir);
   git(['reset', '--hard', rev], dir);
   git(['clean', '-ffd'], dir);
 
   if (patch) {
-    if (!existsSync(patch)) {
-      console.log(`[vendor] ${name}: no patch at ${patch}; skipping`);
-    } else {
-      console.log(`[vendor] ${name}: applying ${patch}`);
-      git(['apply', '--whitespace=fix', '--quiet', patch], dir);
-    }
+    console.log(`[vendor] ${name}: applying ${patch}`);
+    git(['apply', '--whitespace=error', '--quiet', patch], dir);
   }
 
   console.log(`[vendor] ${name} ready @ ${dir}`);
 }
 
 function prepareJsdomVendor(dir: string): void {
+  sh(process.execPath, ['scripts/build.mjs', 'selectlet']);
   console.log(`[vendor] jsdom: installing dependencies`);
   sh('npm', ['ci'], dir);
 
