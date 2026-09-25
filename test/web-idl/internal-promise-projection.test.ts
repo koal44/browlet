@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Promises, PromiseValue, PromiseValueCapability } from '../../src/infra/promises';
+import type { Promises, InternalPromise, InternalPromiseCapability } from '../../src/infra/promises';
 import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import {
@@ -7,7 +7,7 @@ import {
 } from '../../src/web-idl/core/index';
 import { TestRealm } from './test-realm';
 
-describe('PromiseValue result projection', () => {
+describe('InternalPromise result projection', () => {
   it.each(['fulfill', 'reject'] as const)('retains the receiver projection on %s', async (mode) => {
     const bindings = new BindingWorld([ownerIDL, childIDL]);
     const first = new TestRealm();
@@ -35,9 +35,9 @@ describe('PromiseValue result projection', () => {
 });
 
 class ResultOwnerImpl {
-  pending: PromiseValueCapability<ResultChildImpl>;
+  pending: InternalPromiseCapability<ResultChildImpl>;
   constructor(promises: Promises) { this.pending = promises.withResolvers<ResultChildImpl>(); }
-  get result(): PromiseValue<ResultChildImpl> { return this.pending.promise; }
+  get result(): InternalPromise<ResultChildImpl> { return this.pending.promise; }
 }
 
 class ResultChildImpl {

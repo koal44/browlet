@@ -2,7 +2,7 @@ import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
 import { bindAsyncContext, type JSEnvironment } from '../../../js-engine/index';
-import type { PromiseValue } from '../../../infra/promises';
+import type { InternalPromise } from '../../../infra/promises';
 import type { DocumentImpl } from '../../dom/nodes/document';
 import type { ElementImpl } from '../../dom/nodes/element';
 import type { EventLoop } from '../../scripting/event-loop';
@@ -39,7 +39,7 @@ export class BrowletParser {
     });
   }
 
-  parse(source: string): PromiseValue<void> {
+  parse(source: string): InternalPromise<void> {
     const complete = this.#env.exec.promises.withResolvers<void>();
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#stream, (error) => {
@@ -120,7 +120,7 @@ export class BrowletParser {
 export type ScriptHandler = (
   element: ElementImpl,
   write: DocumentWrite,
-) => void | PromiseValue<void>;
+) => void | InternalPromise<void>;
 
 export type DocumentWrite = (markup: string) => void;
 

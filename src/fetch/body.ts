@@ -4,7 +4,7 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import {
   type GlobalObject, type JSEnvironment, getBufferSourceCopy, getBufferTypeName,
 } from '../js-engine/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
@@ -243,12 +243,12 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-arraybuffer
   // The binding allocates the ArrayBuffer from these bytes in the receiver realm.
-  arrayBuffer(): PromiseValue<Uint8Array> {
+  arrayBuffer(): InternalPromise<Uint8Array> {
     return this.#consume((bytes) => bytes);
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-blob
-  blob(): PromiseValue<BlobImpl> {
+  blob(): InternalPromise<BlobImpl> {
     return this.#consume((bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       const data = BlobData.fromOwnedBytes(bytes);
@@ -257,12 +257,12 @@ export class BodyMixin {
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-bytes
-  bytes(): PromiseValue<Uint8Array> {
+  bytes(): InternalPromise<Uint8Array> {
     return this.#consume((bytes) => bytes);
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-formdata
-  formData(): PromiseValue<FormDataImpl> {
+  formData(): InternalPromise<FormDataImpl> {
     return this.#consume((bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       if (type?.type === 'multipart' && type.subtype === 'form-data') {
@@ -281,12 +281,12 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-json
   // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
-  json(): PromiseValue<unknown> {
+  json(): InternalPromise<unknown> {
     return this.#consume((bytes) => this.#env.exec.parseJSON(utf8Decode(bytes)));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-text
-  text(): PromiseValue<string> {
+  text(): InternalPromise<string> {
     return this.#consume(utf8Decode);
   }
 
@@ -317,7 +317,7 @@ export class BodyMixin {
   }
 
   // https://fetch.spec.whatwg.org/#concept-body-consume-body
-  #consume<Result>(convert: (bytes: Uint8Array<ArrayBuffer>) => Result): PromiseValue<Result> {
+  #consume<Result>(convert: (bytes: Uint8Array<ArrayBuffer>) => Result): InternalPromise<Result> {
     const { promises } = this.#env.exec;
     if (this.unusable) return promises.reject(new TypeError('Body is disturbed or locked'));
     const result = promises.withResolvers<Result>();

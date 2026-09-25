@@ -1,7 +1,7 @@
 import type {
   AbortControllerCapability, AbortSignalCapability, JSEnvironment,
 } from '../js-engine/index';
-import type { PromiseValue, PromiseValueCapability, Promises } from '../infra/promises';
+import type { InternalPromise, InternalPromiseCapability, Promises } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, nullable, op, promise,
@@ -68,9 +68,9 @@ export class WritableStreamImpl {
   /** Streams §5.5.1, CreateWritableStream. */
   static create(
     startAlgorithm: () => unknown,
-    writeAlgorithm: (chunk: unknown) => PromiseValue<unknown>,
-    closeAlgorithm: () => PromiseValue<unknown>,
-    abortAlgorithm: (reason: unknown) => PromiseValue<unknown>,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
+    closeAlgorithm: () => InternalPromise<unknown>,
+    abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
     env: JSEnvironment,
@@ -92,9 +92,9 @@ export class WritableStreamImpl {
   /** Streams §9.2.1, set up a WritableStream; also allocates the stream. */
   static createDefault(
     // Normalize synchronous completion to a promise; see whatwg/streams#1253.
-    writeAlgorithm: (chunk: unknown) => PromiseValue<unknown> | void,
-    closeAlgorithm: (() => PromiseValue<unknown> | void) | undefined,
-    abortAlgorithm: ((reason: unknown) => PromiseValue<unknown> | void) | undefined,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown> | void,
+    closeAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
+    abortAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
     env: JSEnvironment,
@@ -116,7 +116,7 @@ export class WritableStreamImpl {
   }
 
   /** Streams §5.2.4, abort(reason). */
-  abort(reason?: unknown): PromiseValue<void> {
+  abort(reason?: unknown): InternalPromise<void> {
     if (this.locked) {
       return this.env.exec.promises.reject(new TypeError(
         'Cannot abort a stream that already has a writer',
@@ -126,7 +126,7 @@ export class WritableStreamImpl {
   }
 
   /** Streams §5.2.4, close(). */
-  close(): PromiseValue<void> {
+  close(): InternalPromise<void> {
     if (this.locked) {
       return this.env.exec.promises.reject(new TypeError(
         'Cannot close a stream that already has a writer',
@@ -181,7 +181,7 @@ export class WritableStreamImpl {
   }
 
   /** Streams §5.5.2, WritableStreamAbort. */
-  abortInternal(reason: unknown): PromiseValue<void> {
+  abortInternal(reason: unknown): InternalPromise<void> {
     const { state } = this;
     if (this.#isFinished()) {
       return this.env.exec.promises.resolve(undefined);
@@ -205,7 +205,7 @@ export class WritableStreamImpl {
   }
 
   /** Streams §5.5.2, WritableStreamClose. */
-  closeInternal(): PromiseValue<void> {
+  closeInternal(): InternalPromise<void> {
     const { state } = this;
     if (state.state === 'closed' || state.state === 'errored') {
       return this.env.exec.promises.reject(new TypeError(
@@ -377,19 +377,19 @@ export class WritableStreamImpl {
 
 type WritableStreamState = {
   backpressure: boolean;
-  closeRequest?: PromiseValueCapability<void>;
+  closeRequest?: InternalPromiseCapability<void>;
   controller?: WritableStreamDefaultControllerImpl;
-  inFlightCloseRequest?: PromiseValueCapability<void>;
-  inFlightWriteRequest?: PromiseValueCapability<void>;
+  inFlightCloseRequest?: InternalPromiseCapability<void>;
+  inFlightWriteRequest?: InternalPromiseCapability<void>;
   pendingAbortRequest?: WritableStreamPendingAbortRequest;
   state: 'closed' | 'errored' | 'erroring' | 'writable';
   storedError?: unknown;
   writer?: WritableStreamDefaultWriterImpl;
-  writeRequests: PromiseValueCapability<void>[];
+  writeRequests: InternalPromiseCapability<void>[];
 };
 
 type WritableStreamPendingAbortRequest = {
-  promise: PromiseValueCapability<void>;
+  promise: InternalPromiseCapability<void>;
   reason: unknown;
   wasAlreadyErroring: boolean;
 };
@@ -404,14 +404,14 @@ type WritableStreamPendingAbortRequest = {
  * };
  */
 export type UnderlyingSink = {
-  abort?: (reason?: unknown) => PromiseValue<unknown> | void;
-  close?: () => PromiseValue<unknown> | void;
+  abort?: (reason?: unknown) => InternalPromise<unknown> | void;
+  close?: () => InternalPromise<unknown> | void;
   start?: (controller: WritableStreamDefaultControllerImpl) => unknown;
   type?: unknown;
   write?: (
     chunk: unknown,
     controller: WritableStreamDefaultControllerImpl,
-  ) => PromiseValue<unknown> | void;
+  ) => InternalPromise<unknown> | void;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -584,9 +584,9 @@ export class WritableStreamDefaultControllerImpl {
   setUp(
     stream: WritableStreamImpl,
     startAlgorithm: () => unknown,
-    writeAlgorithm: (chunk: unknown) => PromiseValue<unknown>,
-    closeAlgorithm: () => PromiseValue<unknown>,
-    abortAlgorithm: (reason: unknown) => PromiseValue<unknown>,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
+    closeAlgorithm: () => InternalPromise<unknown>,
+    abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
   ): void {
@@ -735,7 +735,7 @@ export class WritableStreamDefaultControllerImpl {
   }
 
   /** WritableStreamDefaultControllerAbortSteps. */
-  abortSteps(reason: unknown): PromiseValue<unknown> {
+  abortSteps(reason: unknown): InternalPromise<unknown> {
     const { state } = this;
     const promise = requireAlgorithm(state.abortAlgorithm, 'abort')(reason);
     this.clearAlgorithms();
@@ -751,14 +751,14 @@ export class WritableStreamDefaultControllerImpl {
 
 type WritableStreamDefaultControllerState = {
   queue: QueueWithSizes<unknown>;
-  abortAlgorithm?: (reason: unknown) => PromiseValue<unknown>;
+  abortAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
   abortController: AbortControllerCapability;
-  closeAlgorithm?: () => PromiseValue<unknown>;
+  closeAlgorithm?: () => InternalPromise<unknown>;
   started: boolean;
   strategyHighWaterMark: number;
   strategySizeAlgorithm?: QueuingStrategySize;
   stream: WritableStreamImpl;
-  writeAlgorithm?: (chunk: unknown) => PromiseValue<unknown>;
+  writeAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -808,7 +808,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.3.3, closed getter. */
-  get closed(): PromiseValue<void> {
+  get closed(): InternalPromise<void> {
     return this.state.closedPromise.promise;
   }
 
@@ -820,12 +820,12 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.3.3, ready getter. */
-  get ready(): PromiseValue<void> {
+  get ready(): InternalPromise<void> {
     return this.state.readyPromise.promise;
   }
 
   /** Streams §5.3.3, abort(reason). */
-  abort(reason?: unknown): PromiseValue<void> {
+  abort(reason?: unknown): InternalPromise<void> {
     if (!this.state.stream) {
       return this.state.promises.reject(defaultWriterLockException('abort'));
     }
@@ -833,7 +833,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.3.3, close(). */
-  close(): PromiseValue<void> {
+  close(): InternalPromise<void> {
     const stream = this.state.stream;
     if (!stream) {
       return this.state.promises.reject(defaultWriterLockException('close'));
@@ -852,7 +852,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.3.3, write(chunk). */
-  write(chunk?: unknown): PromiseValue<void> {
+  write(chunk?: unknown): InternalPromise<void> {
     if (!this.state.stream) {
       return this.state.promises.reject(defaultWriterLockException('write to'));
     }
@@ -898,17 +898,17 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.5.3, WritableStreamDefaultWriterAbort. */
-  abortInternal(reason: unknown): PromiseValue<void> {
+  abortInternal(reason: unknown): InternalPromise<void> {
     return this.stream.abortInternal(reason);
   }
 
   /** Streams §5.5.3, WritableStreamDefaultWriterClose. */
-  closeInternal(): PromiseValue<void> {
+  closeInternal(): InternalPromise<void> {
     return this.stream.closeInternal();
   }
 
   /** Streams §5.5.3, WritableStreamDefaultWriterCloseWithErrorPropagation. */
-  closeWithErrorPropagation(): PromiseValue<void> {
+  closeWithErrorPropagation(): InternalPromise<void> {
     const stream = this.stream;
     const { state: streamState } = stream;
     if (stream.closeQueuedOrInFlight ||
@@ -949,7 +949,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.5.3, WritableStreamDefaultWriterWrite. */
-  writeInternal(chunk: unknown): PromiseValue<void> {
+  writeInternal(chunk: unknown): InternalPromise<void> {
     const stream = this.stream;
     const { state: streamState } = stream;
     const controller = stream.controller;
@@ -998,8 +998,8 @@ export class WritableStreamDefaultWriterImpl {
 
 type WritableStreamDefaultWriterState = {
   promises: Promises;
-  closedPromise: PromiseValueCapability<void>;
-  readyPromise: PromiseValueCapability<void>;
+  closedPromise: InternalPromiseCapability<void>;
+  readyPromise: InternalPromiseCapability<void>;
   stream?: WritableStreamImpl;
 };
 

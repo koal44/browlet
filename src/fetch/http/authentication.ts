@@ -1,4 +1,4 @@
-import type { PromiseValue } from '../../infra/promises';
+import type { InternalPromise } from '../../infra/promises';
 import type { FetchRequest } from '../request';
 import type { FetchResponse } from '../response';
 
@@ -25,7 +25,7 @@ export interface HTTPAuthentication {
   /** Apply configured proxy credentials independently of the request's credentials mode. */
   applyProxyAuthentication(request: FetchRequest): void;
   /** Handle the challenge and update URL/proxy credentials; false means the prompt was declined. */
-  prompt(request: FetchRequest, response: FetchResponse): PromiseValue<boolean>;
+  prompt(request: FetchRequest, response: FetchResponse): InternalPromise<boolean>;
   /** Remember a successful authentication exchange in its challenge's protection space. */
   store(request: FetchRequest, response: FetchResponse): void;
 }

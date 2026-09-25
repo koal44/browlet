@@ -1,7 +1,7 @@
 import type { ParallelQueue } from '../infra/parallel-queue';
 import { getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import { surroundingTabOrSpacePattern } from '../infra/patterns';
 import { coarsenTime } from '../infra/time';
 import { isHTTPToken } from '../http/index';
@@ -54,7 +54,7 @@ export class FetchParams {
   /** Response selected from preload, its pending completion, or null when none is selected. */
   // A Promise represents the draft's "pending" state and wakes the waiting fetch without polling.
   // SPEC_MISMATCH: preloaded response candidate: null, "pending", or a response
-  preloadedResponseCandidate: FetchResponse | PromiseValue<FetchResponse> | null = null;
+  preloadedResponseCandidate: FetchResponse | InternalPromise<FetchResponse> | null = null;
   /** Execution owner for body streams, separate from the request's optional client. */
   env: JSEnvironment;
 
@@ -76,8 +76,8 @@ export class FetchParams {
   // https://fetch.spec.whatwg.org/#concept-main-fetch
   // Recursive dispatch waits for a response using the browser's internal Promise destination.
   mainFetch(recursive?: false): void;
-  mainFetch(recursive: true): PromiseValue<FetchResponse>;
-  mainFetch(recursive = false): PromiseValue<FetchResponse> | void {
+  mainFetch(recursive: true): InternalPromise<FetchResponse>;
+  mainFetch(recursive = false): InternalPromise<FetchResponse> | void {
     const { request } = this;
     const { userAgent } = request;
     let response: FetchResponse | null = null;
@@ -111,7 +111,7 @@ export class FetchParams {
   /** Select an overridden response or dispatch to scheme/HTTP fetch. */
   // https://fetch.spec.whatwg.org/#concept-override-fetch
   // The internal Promise carries the response produced by downstream dispatch.
-  overrideFetch(type: 'scheme-fetch' | 'http-fetch', makeCORSPreflight = false): PromiseValue<FetchResponse> {
+  overrideFetch(type: 'scheme-fetch' | 'http-fetch', makeCORSPreflight = false): InternalPromise<FetchResponse> {
     const { request, env } = this;
     return request.userAgent.hostPromises.try(() => {
       const response = request.userAgent.potentiallyOverrideResponse(request, env);
@@ -126,7 +126,7 @@ export class FetchParams {
 
   /** Obtain a response from the request's current URL scheme. */
   // https://fetch.spec.whatwg.org/#concept-scheme-fetch
-  schemeFetch(): PromiseValue<FetchResponse> {
+  schemeFetch(): InternalPromise<FetchResponse> {
     return this.request.userAgent.hostPromises.try(() => {
       if (this.canceled) return FetchResponse.appropriateNetworkError(this);
       const url = this.request.currentURL;
@@ -159,7 +159,7 @@ export class FetchParams {
 
   /** Obtain an HTTP response, performing a CORS preflight when requested. */
   // https://fetch.spec.whatwg.org/#concept-http-fetch
-  httpFetch(makeCORSPreflight = false): PromiseValue<FetchResponse> {
+  httpFetch(makeCORSPreflight = false): InternalPromise<FetchResponse> {
     const { request } = this;
     const { userAgent } = request;
     return userAgent.hostPromises.try(() => request.allowServiceWorkerInterception
@@ -214,7 +214,7 @@ export class FetchParams {
   /** Follow an HTTP redirect, or restart delivery for a manually continued navigation. */
   // https://fetch.spec.whatwg.org/#concept-http-redirect-fetch
   // Undefined denotes a manual navigation whose nonrecursive main fetch now owns delivery.
-  httpRedirectFetch(response: FetchResponse): PromiseValue<FetchResponse | undefined> {
+  httpRedirectFetch(response: FetchResponse): InternalPromise<FetchResponse | undefined> {
     const { request, timingInfo, env } = this;
     const { userAgent } = request;
     return userAgent.hostPromises.try(() => {
@@ -271,24 +271,24 @@ export class FetchParams {
 
   /** Obtain a response through HTTP caching and network transport. */
   // https://fetch.spec.whatwg.org/#concept-http-network-or-cache-fetch
-  httpNetworkOrCacheFetch(isAuthenticationFetch = false, isNewConnectionFetch = false): PromiseValue<FetchResponse> {
+  httpNetworkOrCacheFetch(isAuthenticationFetch = false, isNewConnectionFetch = false): InternalPromise<FetchResponse> {
     return httpNetworkOrCacheFetch(this, isAuthenticationFetch, isNewConnectionFetch);
   }
 
   /** Perform one HTTP transport exchange with streamed bodies, decoding, and response processing. */
   // https://fetch.spec.whatwg.org/#concept-http-network-fetch
-  httpNetworkFetch(includeCredentials = false, forceNewConnection = false): PromiseValue<FetchResponse> {
+  httpNetworkFetch(includeCredentials = false, forceNewConnection = false): InternalPromise<FetchResponse> {
     return httpNetworkFetch(this, includeCredentials, forceNewConnection);
   }
 
   /** Perform a preflight request and populate the browser's CORS permission cache. */
   // https://fetch.spec.whatwg.org/#cors-preflight-fetch-0
-  corsPreflightFetch(): PromiseValue<FetchResponse> {
+  corsPreflightFetch(): InternalPromise<FetchResponse> {
     // PROVISIONAL(Fetch 9): implement the preflight transaction and permission validation.
     return this.request.userAgent.hostPromises.reject(new InternalError('CORS-preflight fetch is not implemented'));
   }
 
-  #fetchFromServiceWorker(): PromiseValue<FetchResponse | null> {
+  #fetchFromServiceWorker(): InternalPromise<FetchResponse | null> {
     const { request, env, timingInfo, controller } = this;
     const { userAgent } = request;
     const prepare = () => {
@@ -342,7 +342,7 @@ export class FetchParams {
     });
   }
 
-  #fetchFromNetwork(makeCORSPreflight: boolean): PromiseValue<FetchResponse> {
+  #fetchFromNetwork(makeCORSPreflight: boolean): InternalPromise<FetchResponse> {
     const { request } = this;
     const { hostPromises, corsPreflightCache } = request.userAgent;
     const needsPreflight = makeCORSPreflight &&
@@ -365,7 +365,7 @@ export class FetchParams {
   }
 
   // Stream construction, teeing, cancellation, and replay enter the body's task/checkpoint owner.
-  #runBodySteps<T>(steps: () => T): PromiseValue<T> {
+  #runBodySteps<T>(steps: () => T): InternalPromise<T> {
     const result = this.request.userAgent.hostPromises.withResolvers<T>();
     queueFetchTask(() => {
       try { result.resolve(steps()); }
@@ -374,7 +374,7 @@ export class FetchParams {
     return result.promise;
   }
 
-  #dispatch(): FetchResponse | PromiseValue<FetchResponse> {
+  #dispatch(): FetchResponse | InternalPromise<FetchResponse> {
     if (this.preloadedResponseCandidate !== null) return this.preloadedResponseCandidate;
     const { request } = this;
     if (request.origin === undefined) throw new InternalError('Main fetch requires a populated request origin');

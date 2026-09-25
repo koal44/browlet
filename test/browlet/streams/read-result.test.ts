@@ -2,7 +2,7 @@ import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
-import type { PromiseValue } from '../../../src/infra/promises';
+import type { InternalPromise } from '../../../src/infra/promises';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
   ReadableStreamDefaultReaderImpl, readableStreamReadResultIDL,
@@ -123,14 +123,14 @@ class ReadConsumerImpl {
   received: ReadableStreamReadResult | undefined;
 
   consume(
-    result: PromiseValue<ReadableStreamReadResult>,
-  ): PromiseValue<ReadableStreamReadResult> {
+    result: InternalPromise<ReadableStreamReadResult>,
+  ): InternalPromise<ReadableStreamReadResult> {
     return result.then((value) => { this.received = value; return value; });
   }
 
   invoke(
-    callback: () => PromiseValue<ReadableStreamReadResult>,
-  ): PromiseValue<ReadableStreamReadResult> {
+    callback: () => InternalPromise<ReadableStreamReadResult>,
+  ): InternalPromise<ReadableStreamReadResult> {
     return this.consume(callback());
   }
 }

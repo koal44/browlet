@@ -1,5 +1,5 @@
 import { getMethod, isObject, type JSMethod } from '../js-engine/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
@@ -13,8 +13,8 @@ import { InternalError } from '../infra/internal-error';
 
 /** Converted iteration steps supplied to implementation algorithms. */
 export type AsyncSequenceValue<T> = {
-  next(): PromiseValue<T | typeof endOfIteration>;
-  return(reason: unknown): PromiseValue<unknown>;
+  next(): InternalPromise<T | typeof endOfIteration>;
+  return(reason: unknown): InternalPromise<unknown>;
 };
 
 // Project helper: retain the async-sequence record with its element type.

@@ -578,7 +578,7 @@ conversion paths; an `object` result preserves the supplied JavaScript value.
 
 Blob retains its environment at construction. Its `stream()` and private
 read operation use that owner; `text()`, `bytes()`, and `arrayBuffer()` share
-the read result through Infra's `PromiseValue<T>`. Backing `BlobData` remains
+the read result through Infra's `InternalPromise<T>`. Backing `BlobData` remains
 realm-neutral; `BlobData.stream(env)` selects the stream's owner per call.
 Slices retain the source environment, while deserialization creates
 an implementation with the destination environment before restoring its data.
@@ -620,7 +620,7 @@ stream reads; binding creates the realm-owned result and projects its members.
 `conversion.ts` owns `projectPromise` and its fulfillment conversion. Projection
 returns the author Promise directly. `PromiseProjectionStamper` in `promise-record.ts`
 privately attaches `PromiseProjectionRecord` entries to the source native
-Promise or `PromiseValue`. Each entry
+Promise or `InternalPromise`. Each entry
 retains an `IDLPromiseRecord`, its binding world, and the buffer-allocation policy;
 the IDL record supplies the realm, result type, and author Promise. Repeated
 projection retrieves the matching record without stamping the source again.
@@ -634,7 +634,7 @@ WeakMap, which could release its entries when the world became unreachable.
 conversion. Conversion does not depend on the promise algorithms.
 
 Declared Promise arguments and Promise-returning callback functions supply
-`PromiseValue<T>` results whose fulfillment has undergone the declared
+`InternalPromise<T>` results whose fulfillment has undergone the declared
 conversion. Their continuation destination belongs to the receiving
 implementation, including when its method was borrowed from another realm.
 Argument conversion still uses the operation function's realm. Web IDL's
@@ -676,7 +676,7 @@ share completion and call ordering across realms in that world. The method's
 realm supplies the returned Promise and iterator result object. The iterator
 record retains the collection's binding for projection of fresh interface values.
 
-The iterator's completion can be a `PromiseValue` or a native Promise. Binding
+The iterator's completion can be a `InternalPromise` or a native Promise. Binding
 observes it in the method's realm and converts the item before resolving the
 author's result Promise. It does not project the completion as `Promise<any>`:
 native resolution must not inspect an implementation instance's `then` property.
@@ -684,7 +684,7 @@ ReadableStream explicitly adopts author chunks through `Promises.resolve()` in
 its chunk-read steps; generic iterator binding does not supply that Streams rule.
 
 The fulfillment adapters use native Promise observation in the destination
-realm. A `PromiseValue` chain retains that destination. `Promises.import()`
+realm. A `InternalPromise` chain retains that destination. `Promises.import()`
 selects the consumer's destination when a result crosses between owners;
 adopting another internal result from a `.then()` callback does the same.
 Internal fulfillment values are not subjected to JavaScript thenable adoption.
@@ -973,7 +973,7 @@ and Stylelet must not import Browlet implementations merely to manufacture
 platform objects.
 
 Exporting CSSOM implementations is intentional. Their `replace()` results are
-internal `PromiseValue` objects; hosts adapt them when exposing a platform API.
+internal `InternalPromise` objects; hosts adapt them when exposing a platform API.
 Stylelet's execution capabilities supply exception creation. Browlet supplies neutral
 exception requests so the active binding still selects the observable exception
 realm, including for borrowed methods. Standalone Stylelet uses native exceptions.

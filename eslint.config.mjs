@@ -245,7 +245,7 @@ export default defineConfig(
       'no-restricted-syntax': ['error',
         {
           selector: ':function[async=true], AwaitExpression',
-          message: 'Native async/await schedules Node continuations; chain the supplied PromiseValue instead.',
+          message: 'Native async/await schedules Node continuations; chain the supplied InternalPromise instead.',
         },
         {
           selector: 'MemberExpression[object.name="globalThis"][property.name=/^(Promise|queueMicrotask)$/]',

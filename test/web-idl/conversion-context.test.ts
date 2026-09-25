@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
-import type { Promises, PromiseValue } from '../../src/infra/promises';
+import type { Promises, InternalPromise } from '../../src/infra/promises';
 import {
   arg, defineCallbackFunction, defineInterface, idlType, impl, onError, op,
   promise, reference, sequence,
@@ -102,12 +102,12 @@ class SourceImpl {
 
   send(callback: (values: ChildImpl[]) => void): void { callback([new ChildImpl()]); }
   invokeNumber(callback: () => number): number { return callback(); }
-  invokePromise(callback: () => PromiseValue<number>): PromiseValue<number> { return callback(); }
-  consume(value: PromiseValue<number>): PromiseValue<number> { return value; }
-  sendPromise(callback: (value: PromiseValue<ChildImpl[]>) => void): void {
+  invokePromise(callback: () => InternalPromise<number>): InternalPromise<number> { return callback(); }
+  consume(value: InternalPromise<number>): InternalPromise<number> { return value; }
+  sendPromise(callback: (value: InternalPromise<ChildImpl[]>) => void): void {
     callback(this.promises.try(() => [new ChildImpl()]));
   }
-  sendFailure(callback: (value: PromiseValue<ChildImpl[]>) => void): void {
+  sendFailure(callback: (value: InternalPromise<ChildImpl[]>) => void): void {
     callback(this.promises.reject(new InternalTypeError('implementation failure')));
   }
 }

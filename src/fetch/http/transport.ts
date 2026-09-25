@@ -2,7 +2,7 @@ import type { URLRecord } from '../../url/index';
 import type { FetchHeaders } from '../headers';
 import type { NetworkPartitionKey } from './network-partition';
 import type { Connection } from './connections';
-import type { PromiseValue } from '../../infra/promises';
+import type { InternalPromise } from '../../infra/promises';
 
 /** Host HTTP I/O. Fetch owns redirects, cookies, decoding, caching, and browser policy. */
 export interface HTTPTransport {
@@ -55,7 +55,7 @@ export interface HTTPTransportListener {
 /** A Fetch-owned upload; each read is requested by the transport's write demand. */
 export interface HTTPUploadSource {
   /** Obtain one byte chunk, or null at EOF, through the body's execution owner. */
-  read(): PromiseValue<Uint8Array | null>;
+  read(): InternalPromise<Uint8Array | null>;
   /** Stop reading when the exchange ends or is canceled. */
   cancel(): void;
 }

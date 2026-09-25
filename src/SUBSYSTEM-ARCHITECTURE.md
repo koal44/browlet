@@ -54,7 +54,7 @@ Infra has no dependency on those records.
 
 Binding's `PromiseProjectionStamper` attaches projection records to source
 promises without adding public properties. The records preserve author Promise
-identity per world, realm, result type, and allocation policy; Infra's `PromiseValue`
+identity per world, realm, result type, and allocation policy; Infra's `InternalPromise`
 continues to carry only implementation execution state in its own fields.
 
 ## The actors
@@ -146,7 +146,7 @@ allocation, adoption, and continuation placement. A realm owns one facility;
 Binding supplies it through the owning environment at construction or operation
 composition. Streams and Blobs retain that context and pass it to derived
 streams and slices. Returned
-`PromiseValue<T>` chains retain that destination, so `.then()` and `.observe()`
+`InternalPromise<T>` chains retain that destination, so `.then()` and `.observe()`
 need no scheduling argument. Result conversion and projection remain Binding
 work. Native backend I/O stays outside this implementation contract and hands
 completion back through an explicit task or Promise import.
@@ -175,7 +175,7 @@ Their shared Promise machinery is already defined in Infra.
 
 The HTML document parser receives its EventLoop and owning environment explicitly.
 Node stream completion only queues an HTML networking task; parser waits and
-load completion use `PromiseValue`. The public `Browlet.navigate()` bridges the
+load completion use `InternalPromise`. The public `Browlet.navigate()` bridges the
 finished internal operation to a native Promise for its Node caller. That
 outer Promise does not schedule the DOM lifecycle.
 
@@ -193,7 +193,7 @@ This is an asynchronous dependency, not a requirement on all stored values.
 retains a runtime for reading that storage, including when constructed by
 multipart parsing or FormData. Deserialization supplies the destination runtime
 without transferring the source object's runtime. A consumer that only chains an incoming
-`PromiseValue` also needs no separate stored dependency.
+`InternalPromise` also needs no separate stored dependency.
 
 The custom engine's job hooks follow the same division. JS Engine associates
 opaque native context references with its existing realm objects and adapts

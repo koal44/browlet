@@ -92,7 +92,7 @@ behavior as an approximation.
 Browser-owned Reporting delivery has no author callback or Document owner.
 `UserAgent.queueReportingTask()` runs on a later Node host turn, yielding while
 any of that UserAgent's started HTML loops has runnable work. It survives
-Document task removal. Delivery's internal `PromiseValue` continuations use
+Document task removal. Delivery's internal `InternalPromise` continuations use
 the host queue through integration's `hostPromises`; they neither enter an
 HTML realm nor require a Window checkpoint. ReportingObserver callbacks remain
 ordinary global tasks on their owning HTML event loop.

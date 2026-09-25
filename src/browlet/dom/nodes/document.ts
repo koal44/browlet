@@ -2,7 +2,7 @@ import {
   type TreeScope, defaultExecutionCaps as defaultStyleletExecutionCaps, Stylelet,
   type ExecutionCaps as StyleletExecutionCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
-import type { PromiseValue, PromiseValueCapability } from '../../../infra/promises';
+import type { InternalPromise, InternalPromiseCapability } from '../../../infra/promises';
 import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
@@ -222,7 +222,7 @@ export class DocumentImpl extends NodeImpl {
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
   #scriptBlockingStyleSheets = new Set<ElementImpl>();
-  #scriptBlockingStyleSheetsReady: PromiseValueCapability<void> | null = null;
+  #scriptBlockingStyleSheetsReady: InternalPromiseCapability<void> | null = null;
   #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
@@ -844,7 +844,7 @@ export class DocumentImpl extends NodeImpl {
     return this.#scriptBlockingStyleSheets.size > 0;
   }
 
-  waitForScriptBlockingStyleSheets(env: JSEnvironment): PromiseValue<void> {
+  waitForScriptBlockingStyleSheets(env: JSEnvironment): InternalPromise<void> {
     return env.exec.promises.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=

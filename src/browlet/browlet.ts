@@ -4,7 +4,7 @@ import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getRelevantRealm } from './bindings';
 import type { Environment } from './scripting/environment';
@@ -107,7 +107,7 @@ export class Browlet {
   }
 
   navigate(url: string | URL): Promise<WindowProxy> {
-    // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through PromiseValue before this host promise settles.
+    // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through InternalPromise before this host promise settles.
     return new Promise((resolve, reject) => {
       this.navigateDocument(url).observe(resolve, reject);
     });
@@ -115,7 +115,7 @@ export class Browlet {
 
   // -- Private ----------------------------------------------------------
 
-  private navigateDocument(url: string | URL): PromiseValue<WindowProxy> {
+  private navigateDocument(url: string | URL): InternalPromise<WindowProxy> {
     const documentURL = new URL(url);
     const source = this.getRouteSource(documentURL);
     const documentURLRecord = requireURLRecord(documentURL.href, getRelevantRealm(this.window).env);

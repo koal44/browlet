@@ -1,5 +1,5 @@
 import { Stamper } from '../infra/stamper';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { BindingWorld } from './binding-world';
 import type { WebIDLType } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';
@@ -104,7 +104,7 @@ export class PromiseProjectionStamper extends Stamper {
   }
 }
 
-export type PromiseSource = Promise<unknown> | PromiseValue<unknown>;
+export type PromiseSource = Promise<unknown> | InternalPromise<unknown>;
 
 type PromiseSettlement = (value?: unknown) => void;
 

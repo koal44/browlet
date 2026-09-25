@@ -11,11 +11,11 @@ export class Promises {
   }
 
   /** Settle an internal value without JavaScript thenable adoption. */
-  withResolvers<T>(): PromiseValueCapability<T> {
+  withResolvers<T>(): InternalPromiseCapability<T> {
     const { promise, resolve, reject } = NativePromise.withResolvers<Payload<T>>();
     let pending = true;
     return {
-      promise: new PromiseValue(promise, this),
+      promise: new InternalPromise(promise, this),
       get pending() { return pending; },
       resolve(value: T) {
         const payload = Object.create(null) as Payload<T>;
@@ -31,32 +31,32 @@ export class Promises {
   }
 
   /** JavaScript resolution where an algorithm explicitly adopts an author value. */
-  resolve(): PromiseValue<void>;
-  resolve<T>(value: PromiseValue<T>): PromiseValue<T>;
-  resolve<T>(value: T): PromiseValue<Awaited<T>>;
-  resolve<T>(value?: T): PromiseValue<Awaited<T> | undefined> {
-    if (value instanceof PromiseValue) return this.import(value);
+  resolve(): InternalPromise<void>;
+  resolve<T>(value: InternalPromise<T>): InternalPromise<T>;
+  resolve<T>(value: T): InternalPromise<Awaited<T>>;
+  resolve<T>(value?: T): InternalPromise<Awaited<T> | undefined> {
+    if (value instanceof InternalPromise) return this.import(value);
     const source = new this.#Promise<Awaited<T>>((resolve) => { resolve(value as Awaited<T>); });
     return this.import(source, (value) => value as Awaited<T>);
   }
 
-  reject(reason: unknown): PromiseValue<never> {
+  reject(reason: unknown): InternalPromise<never> {
     const result = this.withResolvers<never>();
     result.reject(reason);
     return result.promise;
   }
 
-  try<T>(steps: () => T | PromiseValue<T>): PromiseValue<T> {
+  try<T>(steps: () => T | InternalPromise<T>): InternalPromise<T> {
     try {
       const value = steps();
-      if (value instanceof PromiseValue) return this.import(value);
+      if (value instanceof InternalPromise) return this.import(value);
       const result = this.withResolvers<T>();
       result.resolve(value);
       return result.promise;
     } catch (error) { return this.reject(error); }
   }
 
-  all<T>(values: PromiseValue<T>[]): PromiseValue<T[]> {
+  all<T>(values: InternalPromise<T>[]): InternalPromise<T[]> {
     const result = this.withResolvers<T[]>();
     const items: T[] = [];
     let remaining = values.length;
@@ -71,10 +71,10 @@ export class Promises {
   }
 
   /** Import a native result; Binding supplies any declared fulfillment conversion. */
-  import<T>(source: PromiseValue<T>): PromiseValue<T>;
-  import<T>(source: Promise<unknown> | PromiseValue<unknown>, convert: (value: unknown) => T): PromiseValue<T>;
-  import(source: Promise<unknown> | PromiseValue<unknown>, convert?: (value: unknown) => unknown): PromiseValue<unknown> {
-    return PromiseValue.import(source, this, convert);
+  import<T>(source: InternalPromise<T>): InternalPromise<T>;
+  import<T>(source: Promise<unknown> | InternalPromise<unknown>, convert: (value: unknown) => T): InternalPromise<T>;
+  import(source: Promise<unknown> | InternalPromise<unknown>, convert?: (value: unknown) => unknown): InternalPromise<unknown> {
+    return InternalPromise.import(source, this, convert);
   }
 }
 
@@ -84,7 +84,7 @@ export type NativePromiseObserver = (
 ) => void;
 
 /** Internal chains retain their destination. Native async/await is not an internal consumer. */
-export class PromiseValue<T> {
+export class InternalPromise<T> {
   #backing: Promise<Payload<T>>;
   #promises: Promises;
 
@@ -95,14 +95,14 @@ export class PromiseValue<T> {
 
   /** Import settlement into a destination, unwrapping internal payloads. */
   static import<T>(
-    source: Promise<unknown> | PromiseValue<T>, promises: Promises,
+    source: Promise<unknown> | InternalPromise<T>, promises: Promises,
     convert?: (value: unknown) => unknown,
-  ): PromiseValue<unknown> {
-    if (source instanceof PromiseValue && source.#promises === promises && !convert) return source;
+  ): InternalPromise<unknown> {
+    if (source instanceof InternalPromise && source.#promises === promises && !convert) return source;
     const result = promises.withResolvers<unknown>();
-    promises.observeNative(source instanceof PromiseValue ? source.#backing : source, (value) => {
+    promises.observeNative(source instanceof InternalPromise ? source.#backing : source, (value) => {
       try {
-        const item = source instanceof PromiseValue ? (value as Payload<T>).value : value;
+        const item = source instanceof InternalPromise ? (value as Payload<T>).value : value;
         result.resolve(convert ? convert(item) : item);
       } catch (error) { result.reject(error); }
     }, result.reject);
@@ -111,14 +111,14 @@ export class PromiseValue<T> {
 
   /** Adopt internal Promise results while leaving ordinary payloads untouched. */
   then<F = T, R = never>(
-    fulfilled?: (value: T) => F | PromiseValue<F>,
-    rejected?: (reason: unknown) => R | PromiseValue<R>,
-  ): PromiseValue<F | R> {
+    fulfilled?: (value: T) => F | InternalPromise<F>,
+    rejected?: (reason: unknown) => R | InternalPromise<R>,
+  ): InternalPromise<F | R> {
     const result = this.#promises.withResolvers<F | R>();
-    const settle = (value: F | R | PromiseValue<F | R>): void => {
+    const settle = (value: F | R | InternalPromise<F | R>): void => {
       if (value === result.promise) {
         result.reject(new TypeError('Promise cannot resolve itself'));
-      } else if (value instanceof PromiseValue) {
+      } else if (value instanceof InternalPromise) {
         this.#promises.observeNative(value.#backing,
           (payload) => { result.resolve((payload as Payload<F | R>).value); }, result.reject);
       } else { result.resolve(value); }
@@ -134,7 +134,7 @@ export class PromiseValue<T> {
     return result.promise;
   }
 
-  catch<R>(rejected: (reason: unknown) => R | PromiseValue<R>): PromiseValue<T | R> {
+  catch<R>(rejected: (reason: unknown) => R | InternalPromise<R>): InternalPromise<T | R> {
     return this.then(undefined, rejected);
   }
 
@@ -146,8 +146,8 @@ export class PromiseValue<T> {
 
 type Payload<T> = { value: T; };
 
-export type PromiseValueCapability<T> = {
-  promise: PromiseValue<T>;
+export type InternalPromiseCapability<T> = {
+  promise: InternalPromise<T>;
   /** Settlement is synchronous: internal payloads never undergo thenable adoption. */
   readonly pending: boolean;
   resolve: (value: T) => void;

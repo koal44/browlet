@@ -1,7 +1,7 @@
 export { defaultExecutionCaps, Promises, Stylelet, StyleletContext } from './stylelet';
 export type {
   DocumentCaps, DOMExceptionName, ElementCaps, NativePromiseObserver,
-  PromiseValue, ExecutionCaps, StyleletOptions, TreeCaps,
+  InternalPromise, ExecutionCaps, StyleletOptions, TreeCaps,
 } from './stylelet';
 export { TreeScope } from './engine/tree-scope';
 export { CSSStyleSheetImpl } from './cssom/css-stylesheet';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PromiseValueCapability } from '../../src/infra/promises';
+import type { InternalPromiseCapability } from '../../src/infra/promises';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { endOfIteration } from '../../src/web-idl/async-sequence';
@@ -168,7 +168,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
 
   it.each([false, true])('serializes overlapping next and return calls (borrowed: %s)', async (borrowed) => {
     const { binding, declaration, definition } = createPairBinding();
-    const pending: PromiseValueCapability<unknown>[] = [];
+    const pending: InternalPromiseCapability<unknown>[] = [];
     const calls: string[] = [];
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(declaration).asyncIteratorSteps = {
       create: () => ({}),

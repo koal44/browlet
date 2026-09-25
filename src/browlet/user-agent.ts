@@ -29,7 +29,7 @@ import {
   type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { InternalError } from '../infra/internal-error';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -174,7 +174,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   // https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm
   handleFetch(
     _request: FetchRequest, _controller: FetchController, _useHighResPerformanceTimers: boolean,
-  ): PromiseValue<FetchResponse | ServiceWorkerTimingInfo | null> {
+  ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null> {
     // PROVISIONAL(Service Workers): no registrations or active workers exist yet.
     // Handle Fetch returns null when no worker handles the request.
     return this.hostPromises.try(() => null);
@@ -219,7 +219,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   // Its continuations belong to the browser, not the report's retiring Window.
   attemptReportDelivery(
     endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
-  ): PromiseValue<ReportDeliveryResult> {
+  ): InternalPromise<ReportDeliveryResult> {
     const request = new FetchRequest(endpoint.url, null, this);
     request.method = 'POST';
     request.origin = origin;

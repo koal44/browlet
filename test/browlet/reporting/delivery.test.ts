@@ -15,7 +15,7 @@ import { FetchResponse } from '../../../src/fetch/response';
 import { createOpaqueOrigin, serializeOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 import { isStampedImplInstance } from '../../../src/web-idl/index';
-import { PromiseValue } from '../../../src/infra/promises';
+import { InternalPromise } from '../../../src/infra/promises';
 
 // Control network responses while exercising the actual browser-owned scheduler.
 const fetchRequest = vi.spyOn(Fetch, 'fetch').mockImplementation(() => new FetchController());
@@ -238,7 +238,7 @@ describe('Reporting delivery results', () => {
     endpoint.failures = 3;
     const report = makeReport('https://source.test/');
     const result = userAgent.attemptReportDelivery(endpoint, report.origin, [report]);
-    expect(result).toBeInstanceOf(PromiseValue);
+    expect(result).toBeInstanceOf(InternalPromise);
     expect(report.attempts).toBe(1);
     const fulfilled = vi.fn();
     result.observe(fulfilled, (error) => { throw error; });

@@ -14,7 +14,7 @@ import {
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
-import type { Promises, PromiseValue } from '../../src/infra/promises';
+import type { Promises, InternalPromise } from '../../src/infra/promises';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import {
   createRejectedPromise, createResolvedPromise,
@@ -397,14 +397,14 @@ class OrdinaryPromiseOwnerImpl {
     return Promise.reject(reason);
   }
 
-  consume(value: PromiseValue<PromiseChildImpl>): PromiseValue<number> {
+  consume(value: InternalPromise<PromiseChildImpl>): InternalPromise<number> {
     return value.then((child) => {
       this.received = child;
       return child.value;
     });
   }
 
-  invoke(callback: () => PromiseValue<PromiseChildImpl>): PromiseValue<number> {
+  invoke(callback: () => InternalPromise<PromiseChildImpl>): InternalPromise<number> {
     return this.consume(callback());
   }
 }

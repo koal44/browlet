@@ -1,5 +1,5 @@
 import { createEnvironment } from '../../js-engine/execution-fixture';
-import type { PromiseValue } from '../../../src/infra/promises';
+import type { InternalPromise } from '../../../src/infra/promises';
 import { TestRealm } from '../../web-idl/test-realm';
 import {
   type QueuingStrategyRecord, TransformStreamImpl, type TransformerRecord,
@@ -28,7 +28,7 @@ export function createPromises() {
 }
 
 /** Observe an implementation result on the unit harness's queue. */
-export function observe<T>(result: PromiseValue<T>): Promise<T> {
+export function observe<T>(result: InternalPromise<T>): Promise<T> {
   const observed = Promise.withResolvers<T>();
   result.observe(observed.resolve, observed.reject);
   return observed.promise;

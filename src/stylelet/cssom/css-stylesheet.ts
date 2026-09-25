@@ -6,7 +6,7 @@ import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
 import type { StyleletContext } from '../context';
-import type { PromiseValue, ExecutionCaps } from '../stylelet';
+import type { InternalPromise, ExecutionCaps } from '../stylelet';
 import { CSSRuleListImpl } from './rule-list';
 import { CSSStyleRuleImpl } from './rules';
 import { StyleSheetImpl } from './stylesheet';
@@ -163,7 +163,7 @@ export class CSSStyleSheetImpl
     this.#rules.remove(index);
   }
 
-  replace(text: string): PromiseValue<CSSStyleSheetImpl> {
+  replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
       return this.exec.promises.reject(this.exec.createDOMException(
         'NotAllowedError',

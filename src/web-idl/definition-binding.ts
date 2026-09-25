@@ -1,5 +1,5 @@
 import type { JSFunction } from '../js-engine/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type {
   CallbackInterfaceDefinition, InterfaceDefinition, InterfaceMember, NamespaceDefinition,
 } from './core/declarations';
@@ -67,8 +67,8 @@ export type AttributeSteps = {
 
 export type AsyncIteratorSteps = {
   create(target: StampedImplInstance, argumentsList: unknown[]): object;
-  next(iterator: object): Promise<unknown> | PromiseValue<unknown>;
-  return?(iterator: object, value: unknown): Promise<unknown> | PromiseValue<unknown>;
+  next(iterator: object): Promise<unknown> | InternalPromise<unknown>;
+  return?(iterator: object, value: unknown): Promise<unknown> | InternalPromise<unknown>;
 };
 
 export type ConstructorSteps = (

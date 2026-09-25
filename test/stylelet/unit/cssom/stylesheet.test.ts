@@ -4,7 +4,7 @@ import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import {
-  defaultExecutionCaps, Stylelet, type PromiseValue,
+  defaultExecutionCaps, Stylelet, type InternalPromise,
 } from '../../../../src/stylelet/stylelet';
 import { createBrowletDocument } from '../../browlet-document';
 
@@ -201,6 +201,6 @@ function createStyleSheet(
   return new Stylelet(document).createStyleSheet(options);
 }
 
-function observe<T>(value: PromiseValue<T>): Promise<T> {
+function observe<T>(value: InternalPromise<T>): Promise<T> {
   return new Promise((resolve, reject) => { value.observe(resolve, reject); });
 }

@@ -1,5 +1,5 @@
 import { createEnvironment } from '../../js-engine/execution-fixture';
-import type { PromiseValue } from '../../../src/infra/promises';
+import type { InternalPromise } from '../../../src/infra/promises';
 import { endOfIteration } from '../../../src/web-idl/index';
 import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
@@ -802,7 +802,7 @@ describe('readable byte-stream implementation', () => {
 });
 
 function createReadableStream(
-  source: { cancel?(reason: unknown): PromiseValue<undefined>; } = {},
+  source: { cancel?(reason: unknown): InternalPromise<undefined>; } = {},
 ): {
   controller: ReadableStreamDefaultControllerImpl;
   stream: ReadableStreamImpl;

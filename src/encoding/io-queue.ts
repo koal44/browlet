@@ -1,4 +1,4 @@
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 
 /** Encoding Standard §3 — A persistent end marker, distinct from an empty open queue. */
@@ -100,7 +100,7 @@ export class IOQueue<T extends QueueChunk> {
   }
 
   /** Wait only at a chunk boundary, using the caller's execution owner. */
-  waitFor(count: number, env: JSEnvironment): PromiseValue<void> {
+  waitFor(count: number, env: JSEnvironment): InternalPromise<void> {
     if (this.#canRead(count)) return env.exec.promises.try(() => undefined);
     const result = env.exec.promises.withResolvers<void>();
     (this.#waiters ??= []).push({ count, resolve: () => { result.resolve(); } });
@@ -211,8 +211,8 @@ export function processQueue<T extends QueueChunk, Error>(
   input: IOQueue<T>,
   steps: () => QueueResult<Error>,
   env: JSEnvironment,
-): PromiseValue<Exclude<QueueResult<Error>, 'waiting'>> {
-  const run = (): Exclude<QueueResult<Error>, 'waiting'> | PromiseValue<Exclude<QueueResult<Error>, 'waiting'>> => {
+): InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> {
+  const run = (): Exclude<QueueResult<Error>, 'waiting'> | InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> => {
     const result = steps();
     return result === 'waiting' ? input.waitFor(1, env).then(run) : result;
   };

@@ -4,5 +4,5 @@ export {
 } from '../../src/stylelet/index';
 export type {
   DocumentCaps, DOMExceptionName, ElementCaps, NativePromiseObserver,
-  PromiseValue, ExecutionCaps, StyleletOptions, TreeCaps,
+  InternalPromise, ExecutionCaps, StyleletOptions, TreeCaps,
 } from '../../src/stylelet/index';

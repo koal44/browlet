@@ -18,7 +18,7 @@ import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr,
 } from '../../../src/web-idl/index';
-import type { Promises, PromiseValue } from '../../../src/infra/promises';
+import type { Promises, InternalPromise } from '../../../src/infra/promises';
 
 describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
@@ -213,14 +213,14 @@ class OwnershipProbeImpl {
   observe = () => {};
   constructor(
     public name: string,
-    public pending: PromiseValue<string>,
+    public pending: InternalPromise<string>,
     public trace: string[],
     public promises: Promises,
   ) {}
 
-  get result(): PromiseValue<string> { return this.read(); }
+  get result(): InternalPromise<string> { return this.read(); }
 
-  read(): PromiseValue<string> {
+  read(): InternalPromise<string> {
     return this.pending.then((value) => {
       this.observe();
       this.trace.push(`${this.name} continues`);
@@ -232,14 +232,14 @@ class OwnershipProbeImpl {
     });
   }
 
-  invoke(callback: () => PromiseValue<string>): PromiseValue<string> {
+  invoke(callback: () => InternalPromise<string>): InternalPromise<string> {
     return callback().then((value) => {
       this.trace.push(`${this.name} callback returned`);
       return `${this.name} ${value}`;
     });
   }
 
-  consume(value: PromiseValue<string>): PromiseValue<string> {
+  consume(value: InternalPromise<string>): InternalPromise<string> {
     return value.then((value) => `${this.name} ${value}`);
   }
 }
@@ -265,13 +265,13 @@ const operationIDL = defineInterface({
 });
 
 class InitializationProbeImpl {
-  #ready: PromiseValue<string>;
+  #ready: InternalPromise<string>;
 
   constructor(promises: Promises) {
     this.#ready = promises.resolve().then(() => promises.resolve().then(() => 'ready'));
   }
 
-  get ready(): PromiseValue<string> { return this.#ready; }
+  get ready(): InternalPromise<string> { return this.#ready; }
 }
 
 // interface InitializationProbe {

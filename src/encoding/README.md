@@ -25,7 +25,7 @@ and UTF-16 names to UTF-8 where the caller's specification requires it;
 replacement and UTF-16 deliberately have no encoders.
 
 `decode` and `encode` accept complete inputs and return complete results.
-Their `*Queue` counterparts retain supplied output and return `PromiseValue`
+Their `*Queue` counterparts retain supplied output and return `InternalPromise`
 completion through the trailing JSEnvironment and its exec facilities. `encodeOrFailSync` provides the
 immediate operation used by URL processing; it requires complete input and
 retains the supplied encoder's state across failures.

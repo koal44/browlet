@@ -82,7 +82,7 @@ or a saved-continuation-data lookup. Node reactions, including runtime diagnosti
 remain on Node's queue even when created during a platform operation or HTML task.
 Each realm owns a `Promises` facility for allocation, adoption, and native
 observation. Bindings supply it through RealmExecution to asynchronous implementations. A
-`PromiseValue<T>` retains that facility through `.then()` and `.catch()`;
+`InternalPromise<T>` retains that facility through `.then()` and `.catch()`;
 terminal `.observe()` needs no destination argument. `Promises.import()` brings
 a native or another owner's internal result into the consumer's destination.
 Internal payloads are boxed so they are not accidentally adopted as thenables.

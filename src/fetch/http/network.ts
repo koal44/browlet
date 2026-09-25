@@ -2,7 +2,7 @@ import { isHTTPToken } from '../../http/index';
 import { getBufferSourceCopy, getBufferTypeName } from '../../js-engine/index';
 import { TypeError } from '../../infra/exceptions';
 import { InternalError } from '../../infra/internal-error';
-import type { PromiseValue, PromiseValueCapability } from '../../infra/promises';
+import type { InternalPromise, InternalPromiseCapability } from '../../infra/promises';
 import { ReadableStreamImpl, type ReadableStreamDefaultReaderImpl } from '../../streams/index';
 import { isDOMException } from '../../web-idl/index';
 import { coarsenTime } from '../../infra/time';
@@ -19,7 +19,7 @@ import { isNullBodyStatus } from './statuses';
 /** HTTP-network fetch's wire exchange and demand-driven response body (Fetch §4.7). */
 export function httpNetworkFetch(
   params: FetchParams, includeCredentials = false, forceNewConnection = false,
-): PromiseValue<FetchResponse> {
+): InternalPromise<FetchResponse> {
   const { request, env, controller, timingInfo } = params;
   const result = request.userAgent.hostPromises.withResolvers<FetchResponse>();
   if (params.canceled) {
@@ -210,14 +210,14 @@ class NetworkUpload implements HTTPUploadSource {
   #params: FetchParams;
   #reader: ReadableStreamDefaultReaderImpl | undefined;
   #finished = false;
-  #pending: PromiseValueCapability<Uint8Array | null> | undefined;
+  #pending: InternalPromiseCapability<Uint8Array | null> | undefined;
 
   constructor(body: FetchBody, params: FetchParams) {
     this.#body = body;
     this.#params = params;
   }
 
-  read(): PromiseValue<Uint8Array | null> {
+  read(): InternalPromise<Uint8Array | null> {
     if (this.#pending) throw new InternalError('HTTP transport requested concurrent upload reads');
     const { env, request } = this.#params;
     const result = request.userAgent.hostPromises.withResolvers<Uint8Array | null>();
@@ -292,7 +292,7 @@ class NetworkBody {
   #ended = false;
   #finished = false;
   #failure: (() => unknown) | undefined;
-  #pull: PromiseValueCapability<void> | undefined;
+  #pull: InternalPromiseCapability<void> | undefined;
   #taskQueued = false;
 
   constructor(params: FetchParams, finish: () => void) {

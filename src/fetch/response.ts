@@ -1,7 +1,7 @@
 import type { BlobImpl } from '../file/index';
 import { utf8Encode } from '../encoding/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
@@ -375,12 +375,12 @@ export class ResponseImpl {
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(): PromiseValue<Uint8Array> { return this.#bodyMixin.arrayBuffer(); }
-  blob(): PromiseValue<BlobImpl> { return this.#bodyMixin.blob(); }
-  bytes(): PromiseValue<Uint8Array> { return this.#bodyMixin.bytes(); }
-  formData(): PromiseValue<FormDataImpl> { return this.#bodyMixin.formData(); }
-  json(): PromiseValue<unknown> { return this.#bodyMixin.json(); }
-  text(): PromiseValue<string> { return this.#bodyMixin.text(); }
+  arrayBuffer(): InternalPromise<Uint8Array> { return this.#bodyMixin.arrayBuffer(); }
+  blob(): InternalPromise<BlobImpl> { return this.#bodyMixin.blob(); }
+  bytes(): InternalPromise<Uint8Array> { return this.#bodyMixin.bytes(); }
+  formData(): InternalPromise<FormDataImpl> { return this.#bodyMixin.formData(); }
+  json(): InternalPromise<unknown> { return this.#bodyMixin.json(); }
+  text(): InternalPromise<string> { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
 
   // -- Internal ---------------------------------------------------------

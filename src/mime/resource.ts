@@ -1,5 +1,5 @@
 import { isomorphicDecode } from '../js-engine/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import { RangeError } from '../infra/exceptions';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
@@ -32,7 +32,7 @@ export type SuppliedMIMETypeDetection = {
 export type ReadResourceBytes = (
   maxBytes: number,
   deadline: number,
-) => PromiseValue<Uint8Array | null>;
+) => InternalPromise<Uint8Array | null>;
 
 /*
  * MIME Sniffing §5.1: supplied MIME type detection algorithm.
@@ -80,12 +80,12 @@ export function detectSuppliedMIMEType(
 export function readResourceHeader(
   readBytes: ReadResourceBytes,
   deadline: number,
-): PromiseValue<Uint8Array> {
+): InternalPromise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   let length = 0;
   return readNext();
 
-  function readNext(): PromiseValue<Uint8Array> {
+  function readNext(): InternalPromise<Uint8Array> {
     const maxBytes = maximumResourceHeaderLength - length;
     return readBytes(maxBytes, deadline).then((chunk) => {
       if (chunk !== null) {

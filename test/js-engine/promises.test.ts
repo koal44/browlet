@@ -2,7 +2,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import { JSRealm, createMicrotaskQueue } from '../../src/js-engine/index';
-import type { PromiseValue } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 
 describe('Promise dependencies', () => {
   it('eventually delivers fulfillment and recovery through the selected queue backend', async () => {
@@ -112,7 +112,7 @@ describe('Promise dependencies', () => {
   itPassesWith('explicitQueues')('rejects self-resolution instead of leaving a chain pending', () => {
     const { queue, promises } = createTarget();
     const errors: unknown[] = [];
-    const result: PromiseValue<unknown> = promises.resolve(1).then(() => result);
+    const result: InternalPromise<unknown> = promises.resolve(1).then(() => result);
     result.observe(fail, (reason) => { errors.push(reason); });
     queue.performMicrotaskCheckpoint();
     expect(errors).toHaveLength(1);

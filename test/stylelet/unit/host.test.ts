@@ -2,7 +2,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import {
-  defaultExecutionCaps, Stylelet, type PromiseValue, type ExecutionCaps,
+  defaultExecutionCaps, Stylelet, type InternalPromise, type ExecutionCaps,
 } from '../../../src/stylelet/stylelet';
 
 describe('Stylelet execution capabilities', () => {
@@ -74,6 +74,6 @@ describe('Stylelet execution capabilities', () => {
   });
 });
 
-function observe<T>(value: PromiseValue<T>): Promise<T> {
+function observe<T>(value: InternalPromise<T>): Promise<T> {
   return new Promise((resolve, reject) => { value.observe(resolve, reject); });
 }

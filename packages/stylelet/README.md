@@ -39,7 +39,7 @@ Stylelet exports its stylesheet, declaration, and media-list implementations.
 Stylesheet construction takes the existing context, which supplies `exec`.
 Declaration and media-list constructors take execution capabilities last.
 `CSSStyleSheetImpl.replace()` returns an internal
-`PromiseValue<CSSStyleSheetImpl>`; use `.observe(fulfilled, rejected)` when consuming
+`InternalPromise<CSSStyleSheetImpl>`; use `.observe(fulfilled, rejected)` when consuming
 it directly. Platform promise and exception projection belong to the host binding.
 
 The exported `Promises` facility accepts a Promise constructor and a native

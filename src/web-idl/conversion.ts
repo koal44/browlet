@@ -3,7 +3,7 @@ import {
   bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject, toBigInt,
   toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
 } from '../js-engine/index';
-import { PromiseValue } from '../infra/promises';
+import { InternalPromise } from '../infra/promises';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
@@ -111,7 +111,7 @@ export function projectPromise(
     }
   };
   try {
-    if (source instanceof PromiseValue) {
+    if (source instanceof InternalPromise) {
       context.realm.promises.import(source).observe(onFulfilled, record.reject);
     } else {
       context.realm.observePromise(source, onFulfilled, record.reject);

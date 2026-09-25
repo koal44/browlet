@@ -10,7 +10,7 @@ import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { InternalError } from '../../src/infra/internal-error';
-import type { PromiseValue } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { parseURL } from '../../src/url/url';
 
@@ -150,7 +150,7 @@ async function createWindowFixture() {
   return { env, userAgent, request };
 }
 
-function responseFrom(response: PromiseValue<FetchResponse>) {
+function responseFrom(response: InternalPromise<FetchResponse>) {
   const result = Promise.withResolvers<FetchResponse>();
   response.observe(result.resolve, result.reject);
   return result.promise;

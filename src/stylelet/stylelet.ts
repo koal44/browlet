@@ -81,5 +81,5 @@ export type ExecutionCaps = {
 // Hosts can configure the small Promise facility without loading JSRealm or JSRuntime.
 export { defaultExecutionCaps, StyleletContext } from './context';
 export { Promises } from '../infra/promises';
-export type { NativePromiseObserver, PromiseValue } from '../infra/promises';
+export type { NativePromiseObserver, InternalPromise } from '../infra/promises';
 export type { DOMExceptionName };

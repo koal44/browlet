@@ -1,5 +1,5 @@
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import { lineEndingPattern } from '../infra/patterns';
 import { type JSEnvironment, getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
@@ -86,12 +86,12 @@ export class BlobImpl {
     return this.#data.stream(this.#env);
   }
 
-  text(): PromiseValue<string> {
+  text(): InternalPromise<string> {
     return this.#read().then(utf8Decode);
   }
 
   /** File API §3.3.4; the binding allocates the result ArrayBuffer from these bytes. */
-  arrayBuffer(): PromiseValue<Uint8Array> {
+  arrayBuffer(): InternalPromise<Uint8Array> {
     return this.#read();
   }
 
@@ -104,12 +104,12 @@ export class BlobImpl {
     return stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
 
-  bytes(): PromiseValue<Uint8Array> {
+  bytes(): InternalPromise<Uint8Array> {
     return this.#read();
   }
 
   /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
-  #read(): PromiseValue<Uint8Array> {
+  #read(): InternalPromise<Uint8Array> {
     const result = this.#env.exec.promises.withResolvers<Uint8Array>();
     const reader = this.stream().getDefaultReader();
     reader.readAllBytes(result.resolve, result.reject);

@@ -34,7 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { asciiLower } from '../infra/ascii';
 import { RangeError } from '../infra/exceptions';
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import { surroundingASCIIWhitespacePattern } from '../infra/patterns';
 import type { JSEnvironment } from '../js-engine/index';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
@@ -241,7 +241,7 @@ export function decode(
 export function decodeQueue(
   input: IOQueue<Uint8Array>, encoding: Encoding,
   output: IOQueue<string> = new IOQueue<string>(), env: JSEnvironment,
-): PromiseValue<IOQueue<string>> {
+): InternalPromise<IOQueue<string>> {
   return input.waitFor(3, env).then(() => {
     const bom = bomSniff(input);
     if (bom) input.readAvailable(bom === 'UTF-8' ? 3 : 2);
@@ -267,7 +267,7 @@ export function encode(input: string, encoding: Encoding): Uint8Array {
 /** §6.1 — Encode with HTML error handling, appending to the caller's output. */
 export function encodeQueue(
   input: IOQueue<string>, encoding: Encoding, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), env: JSEnvironment,
-): PromiseValue<IOQueue<Uint8Array>> {
+): InternalPromise<IOQueue<Uint8Array>> {
   const encoder = getEncoder(encoding);
   return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output);
 }
@@ -282,7 +282,7 @@ export function encodeOrFailSync(input: IOQueue<string>, encoder: Encoder, outpu
 /** §6.1 — Encode or fail; end this output even when encoding stops at an error. */
 export function encodeOrFail(
   input: IOQueue<string>, encoder: Encoder, output: IOQueue<Uint8Array>, env: JSEnvironment,
-): PromiseValue<number | null> {
+): InternalPromise<number | null> {
   return processQueue(input, () => encoder.encode(input, output, 'fatal'), env).then((result) => {
     output.push(endOfQueue);
     return typeof result === 'object' ? result.error : null;

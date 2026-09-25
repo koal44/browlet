@@ -5,7 +5,7 @@ import { FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import type { GlobalObject, JSEnvironment } from '../../src/js-engine/index';
-import type { PromiseValue } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 import {
   defineInterface, idlType, impl, op, promise, BindingWorld,
 } from '../../src/web-idl/index';
@@ -210,13 +210,13 @@ class BodyConsumerImpl {
     public env: JSEnvironment,
   ) {}
 
-  full(): PromiseValue<void> {
+  full(): InternalPromise<void> {
     const result = this.env.exec.promises.withResolvers<void>();
     this.body.fullyRead(() => result.resolve(), result.reject, this.destination);
     return result.promise;
   }
 
-  incremental(): PromiseValue<void> {
+  incremental(): InternalPromise<void> {
     const result = this.env.exec.promises.withResolvers<void>();
     this.body.incrementallyRead(() => {}, result.resolve, result.reject, this.destination);
     return result.promise;

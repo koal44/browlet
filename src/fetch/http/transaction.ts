@@ -1,5 +1,5 @@
 import { InternalError } from '../../infra/internal-error';
-import type { PromiseValue } from '../../infra/promises';
+import type { InternalPromise } from '../../infra/promises';
 import { serializeURL } from '../../url/index';
 import { FetchBody } from '../body';
 import { FetchParams } from '../params';
@@ -10,7 +10,7 @@ import type { HTTPAuthentication } from './authentication';
 /** Fetch §4.6: prepare one HTTP transaction, then handle authentication or a fresh-connection retry. */
 export function httpNetworkOrCacheFetch(
   params: FetchParams, isAuthenticationFetch = false, isNewConnectionFetch = false,
-): PromiseValue<FetchResponse> {
+): InternalPromise<FetchResponse> {
   const { request, env } = params;
   const { userAgent } = request;
   return inOwnerTask(params, () => {
@@ -131,7 +131,7 @@ export function httpNetworkOrCacheFetch(
 }
 
 /** Stream replay and cloning enter the actual body owner before returning to browser continuations. */
-function inOwnerTask<T>(params: FetchParams, steps: () => T): PromiseValue<T> {
+function inOwnerTask<T>(params: FetchParams, steps: () => T): InternalPromise<T> {
   const result = params.request.userAgent.hostPromises.withResolvers<T>();
   queueFetchTask(() => {
     try { result.resolve(steps()); }

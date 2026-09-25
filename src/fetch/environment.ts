@@ -18,7 +18,7 @@ import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
-import type { Promises, PromiseValue } from '../infra/promises';
+import type { Promises, InternalPromise } from '../infra/promises';
 
 /** https://fetch.spec.whatwg.org/#is-offline */
 export function isOffline(env: FetchEnvironment): boolean {
@@ -168,7 +168,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Offer a request to Service Workers; null or timing-only results continue to the network. */
   handleFetch(
     request: FetchRequest, controller: FetchController, useHighResPerformanceTimers: boolean,
-  ): PromiseValue<FetchResponse | ServiceWorkerTimingInfo | null>;
+  ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null>;
   /** Select the browser's scheduling state from the request's priority and resource hints. */
   determineFetchPriority(request: FetchRequest): RequestInternalPriority;
   /** Whether the browser supports this MIME type for Resource Timing's content-type exposure. */

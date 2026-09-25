@@ -1,4 +1,4 @@
-import type { PromiseValue } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { AssembledDictionaryDefinition, AssembledInterfaceDefinition } from './assembly';
 import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
@@ -422,8 +422,8 @@ function createAsyncIteratorSteps(
 }
 
 type AsyncIteratorValue = {
-  next: (this: object) => Promise<unknown> | PromiseValue<unknown>;
-  return?: (this: object, value: unknown) => Promise<unknown> | PromiseValue<unknown>;
+  next: (this: object) => Promise<unknown> | InternalPromise<unknown>;
+  return?: (this: object, value: unknown) => Promise<unknown> | InternalPromise<unknown>;
 };
 
 // Project helper: register adapters for implementation accessors or fields.

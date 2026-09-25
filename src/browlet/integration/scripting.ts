@@ -14,7 +14,7 @@ export const runInParallel = requestNodeEventLoopTurn;
 
 /** Internal continuations for browser-owned work that has no HTML realm. */
 // Page implementations use their environment's execution facilities instead.
-// This is the same Promises/PromiseValue machinery, with Node's host queue
+// This is the same Promises/InternalPromise machinery, with Node's host queue
 // selected as its continuation destination rather than a page's microtask queue.
 // eslint-disable-next-line no-restricted-globals -- Browser-owned work uses Node's host Promise queue, independently of Window lifetime.
 export const hostPromises = new Promises(Promise, (promise, fulfilled, rejected) => {

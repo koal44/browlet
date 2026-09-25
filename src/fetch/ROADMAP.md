@@ -886,7 +886,7 @@ override without inventing a client for browser-owned requests. There is no
 process-wide override callback, and this hook does not replace Service Worker
 or WebDriver BiDi interception at their own prescribed stages.
 
-The result uses `PromiseValue<FetchResponse>` to carry downstream completion.
+The result uses `InternalPromise<FetchResponse>` to carry downstream completion.
 Its continuations use UserAgent's host Promise destination; main fetch still
 enters the body owner's networking task before processing the result. The
 Promise return shape is accepted, including recursive main fetch and downstream

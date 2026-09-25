@@ -11,7 +11,7 @@
   to preserve document-relative line numbers in inline-script stack traces.
 - `document-parser.ts` enters and resumes parsing through HTML networking tasks.
   It retains the supplied EventLoop and JSEnvironment; stylesheet waits and
-  script-handler completion use `PromiseValue`. Node's stream-finished callback
+  script-handler completion use `InternalPromise`. Node's stream-finished callback
   only queues document finalization back into HTML. `Browlet.navigate()` keeps
   a native Promise at its outer Node API boundary.
 

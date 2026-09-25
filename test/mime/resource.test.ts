@@ -2,7 +2,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createMicrotaskQueue } from '../../src/js-engine/index';
-import type { PromiseValue } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 import { BindingWorld } from '../../src/web-idl/index';
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
@@ -274,7 +274,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   });
 });
 
-function observe<T>(value: PromiseValue<T>): Promise<T> {
+function observe<T>(value: InternalPromise<T>): Promise<T> {
   return new Promise((resolve, reject) => { value.observe(resolve, reject); });
 }
 

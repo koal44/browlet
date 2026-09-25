@@ -1,4 +1,4 @@
-import type { PromiseValue, Promises } from '../infra/promises';
+import type { InternalPromise, Promises } from '../infra/promises';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
@@ -23,7 +23,7 @@ export function toImplementationPromise(
   context: ConversionContext,
   convertValue: (value: unknown) => unknown,
   promises: Promises,
-): PromiseValue<unknown> {
+): InternalPromise<unknown> {
   const conversionContext = { binding: context.binding, realm: promise.realm };
   return promises.import(promise.promise, (value) =>
     convertValue(convertToIDL(value, promise.type, conversionContext)));

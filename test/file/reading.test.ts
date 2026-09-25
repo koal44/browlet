@@ -4,7 +4,7 @@ import {
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
 import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
-import type { PromiseValue } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../assertions/bytes';
 
@@ -51,7 +51,7 @@ describe('File reading implementation', () => {
   });
 });
 
-function observe<T>(result: PromiseValue<T>): Promise<T> {
+function observe<T>(result: InternalPromise<T>): Promise<T> {
   const observed = Promise.withResolvers<T>();
   result.observe(observed.resolve, observed.reject);
   return observed.promise;

@@ -203,7 +203,7 @@ Its body contains UTF-8 `application/reports+json` bytes. Fetch accepts bytes
 before body extraction; no stream or execution owner from a retiring Window
 is captured. `UserAgent.attemptReportDelivery(endpoint, origin, reports)` calls
 Fetch with `useParallelQueue: true`, because this clientless request has no
-Window to receive callbacks. It returns `PromiseValue<ReportDeliveryResult>`:
+Window to receive callbacks. It returns `InternalPromise<ReportDeliveryResult>`:
 `success`, `remove-endpoint`, or `failure`. The internal Promise represents the
 draft's wait for a response. Fetch's processing callback only classifies the
 response and settles that Promise; the caller resets consecutive failures after

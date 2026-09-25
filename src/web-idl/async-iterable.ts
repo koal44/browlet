@@ -1,5 +1,5 @@
 import { isObject, type JSFunction } from '../js-engine/index';
-import { PromiseValue } from '../infra/promises';
+import { InternalPromise } from '../infra/promises';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import { endOfIteration } from './async-sequence';
@@ -203,7 +203,7 @@ export class AsynchronousIterableBinding {
     }
 
     const steps = this.#requireSteps(state.primaryInterface, declaration);
-    let nextPromise: Promise<unknown> | PromiseValue<unknown>;
+    let nextPromise: Promise<unknown> | InternalPromise<unknown>;
     try {
       nextPromise = steps.next(state.implementationIterator);
     } catch (exception) {
@@ -293,7 +293,7 @@ export class AsynchronousIterableBinding {
 
   // Project helper: convert an iteration completion before resolving its realm-owned result promise.
   #react(
-    promise: Promise<unknown> | PromiseValue<unknown>,
+    promise: Promise<unknown> | InternalPromise<unknown>,
     fulfilled: (value: unknown) => unknown,
     rejected?: (reason: unknown) => unknown,
   ): IDLPromiseRecord {
@@ -323,7 +323,7 @@ export class AsynchronousIterableBinding {
       { length: 1, name: '' },
     );
     try {
-      if (promise instanceof PromiseValue) {
+      if (promise instanceof InternalPromise) {
         this.#binding.realm.promises.import(promise).observe(onFulfilled, onRejected);
       } else {
         this.#binding.realm.observePromise(promise, onFulfilled, onRejected);
