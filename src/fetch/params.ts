@@ -2,9 +2,7 @@ import type { ParallelQueue } from '../infra/parallel-queue';
 import { getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 import type { InternalPromise } from '../infra/promises';
-import { surroundingTabOrSpacePattern } from '../infra/patterns';
 import { coarsenTime } from '../infra/time';
-import { isHTTPToken } from '../http/index';
 import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
 import { TransformStreamImpl } from '../streams/index';
 import { areSameOrigin, obtainURLOrigin } from '../url/index';
@@ -12,10 +10,12 @@ import { FetchBody } from './body';
 import { FetchController } from './controller';
 import {
   convertHeaderNamesToSortedLowercaseSet, isCORSNonWildcardRequestHeaderName, isRequestBodyHeaderName,
+  parseCORSTokenList,
 } from './headers';
 import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff } from './http/blocking';
 import { isCORSSafelistedMethod } from './http/methods';
 import { httpNetworkFetch } from './http/network';
+import { corsPreflightFetch } from './http/cors-preflight';
 import type { HTTPCachePartition } from './http/cache/store';
 import { httpNetworkOrCacheFetch } from './http/transaction';
 import { isNullBodyStatus, isRangeStatus, isRedirectStatus } from './http/statuses';
@@ -285,8 +285,7 @@ export class FetchParams {
   /** Perform a preflight request and populate the browser's CORS permission cache. */
   // https://fetch.spec.whatwg.org/#cors-preflight-fetch-0
   corsPreflightFetch(): InternalPromise<FetchResponse> {
-    // PROVISIONAL(Fetch 9): implement the preflight transaction and permission validation.
-    return this.request.userAgent.hostPromises.reject(new InternalError('CORS-preflight fetch is not implemented'));
+    return corsPreflightFetch(this);
   }
 
   #fetchFromServiceWorker(): InternalPromise<FetchResponse | null> {
@@ -353,6 +352,7 @@ export class FetchParams {
     const preflight = needsPreflight ? this.corsPreflightFetch() : hostPromises.try(() => null);
     return preflight.then((preflightResponse: FetchResponse | null) => {
       if (preflightResponse?.type === 'error') return preflightResponse;
+      preflightResponse?.discardBody?.();
       if (request.redirectMode === 'follow') request.allowServiceWorkerInterception = false;
       return this.httpNetworkOrCacheFetch().then((response: FetchResponse) => {
         if (request.responseTainting === 'cors' && response.isBlockedByCORS(request)) {
@@ -407,7 +407,7 @@ export class FetchParams {
     const { request } = this;
     if (response.type !== 'error' && !isFilteredResponse(response)) {
       if (request.responseTainting === 'cors') {
-        const names = response.headerList.extractValues('Access-Control-Expose-Headers', parseHeaderNames, true);
+        const names = response.headerList.extractValues('Access-Control-Expose-Headers', parseCORSTokenList, true);
         if (request.credentialsMode !== 'include' && names?.includes('*')) {
           response.corsExposedHeaderNameList = convertHeaderNamesToSortedLowercaseSet(
             response.headerList.list.map(([name]) => name),
@@ -528,17 +528,4 @@ export class FetchParams {
     if (this.taskDestination === null) throw new InternalError('Fetch callback delivery requires a task destination');
     queueFetchTask(steps, this.taskDestination, this.env);
   }
-}
-
-// Access-Control-Expose-Headers uses #field-name: empty list members are ignored,
-// but a non-token invalidates the field rather than exposing a partial result.
-function parseHeaderNames(value: string): string[] | null {
-  const names: string[] = [];
-  for (const part of value.split(',')) {
-    const name = part.replace(surroundingTabOrSpacePattern, '');
-    if (name === '') continue;
-    if (!isHTTPToken(name)) return null;
-    names.push(name);
-  }
-  return names;
 }

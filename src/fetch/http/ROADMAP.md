@@ -9,30 +9,25 @@ Reusable syntax, dates, and RFC algorithms belong to [HTTP](../../http/ROADMAP.m
 **Status:** methods, ranges, and status classifications support parent Slice 2.
 Slice 5 adds authentication records, IP/localhost resolution, connection reuse,
 network partition derivation, cache partition identities, and port/MIME blocking.
-Header lists and MIME extraction live in `../headers.ts`. Cache response storage
-and complete HTTP transactions remain planned. Slice 9A adds real HTTP/HTTPS
-connections through the UserAgent's `HTTPTransport`; the earlier ConnectionPool
-records are not yet populated from those live connections.
+Header lists and MIME extraction live in `../headers.ts`. Slices 9A–9C connect
+HTTP/HTTPS transport, HTTP transactions, and cache storage/validation. The
+UserAgent owns the transport, shared connections, and partitioned caches.
 Slice 7 adds cookie/Origin integration, CORS token-list syntax, Content-Length,
 legacy encoding extraction, and nosniff blocking. FetchResponse's CORP methods
 delegate checks and violation submission to
 [`policy/embedder-policy.ts`](../policy/embedder-policy.ts); report generation
 uses the settings object's Reporting hook. Cookie and Origin-header methods
 likewise delegate to Fetch's `policy/` modules.
-Slice 8A declares a UserAgent-owned `CORSPreflightCache` with provisional
-`clearEntries()` for the main-fetch failure path. It cannot store entries yet;
-lookup, insertion, expiration, credential matching, and removal belong together
-in Slice 9's CORS preflight work.
-Slice 8D now calls those lookups, preflight/network fetch, and CORS/TAO checks
-from its HTTP response-selection algorithm. Lookup provisionally returns a miss
-while the cache has no entries. Preflight/network fetch reject with an explicit
-unimplemented InternalError, and the CORS policy stub throws likewise. Slice 9
-replaces those stubs; the parent roadmap lists their owners and remaining work.
-Slice 9A implements `params.httpNetworkFetch()` separately: available-byte uploads,
-bounded response buffering, task-owned Stream delivery, and cancellation over a
-fake transport or the Node Undici adapter. It does not yet connect to the
-network-or-cache stub. Slice 9B supplies that integration, streamed upload demand,
-per-response decoding, header processing, and timing. See the
+Slice 9D connects the UserAgent-owned `CORSPreflightCache`: method/header lookup,
+partition/origin/URL matching, bounded storage, expiration, and clearing after
+a failed preflighted fetch. `cors-preflight.ts` uses the existing HTTP transaction
+for anonymous OPTIONS requests, sharing parent cancellation and execution
+ownership. Response's CORS/TAO methods delegate to implemented policy functions.
+The [approved permission rules](../ROADMAP.md#9d--cors-and-timing-permission)
+restrict wildcard expansion to noncredentialed requests and refresh only the
+exact method/header grant and credentials flag. Broader grants retain their
+original expiry. Two callable shapes remain for review; public fetch and
+consumer integration remain 9E. See the
 [five subdivisions](../ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
 
 ## Sources
@@ -125,9 +120,8 @@ owns RFC 9110/7617 parsing, protection spaces, Basic encoding, and integration.
 Its slice B retains the challenge across retries and supplies credential clearing;
 the approved scope-selection and retry policies are implemented and tested.
 Proxy authentication remains provisional until transport has a configured proxy identity.
-The cache and CORS transactions retain their separate 9C/9D ownership.
+The cache and CORS transactions retain their separate 9C/9D modules; 9D's TAO
+implementation closes the cache's background-completion acceptance gate.
 
 Remove this roadmap when reached HTTP algorithms and transactions are tested,
 and any remaining branches have an explicit owner.
-
-TAO and navigation TAO are implemented with 9C to support background cache completion.

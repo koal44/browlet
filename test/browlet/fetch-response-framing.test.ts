@@ -7,7 +7,7 @@ import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/
 import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
 import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
-import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
+import { type FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
@@ -33,8 +33,6 @@ describe.each(['http/1.1', 'h2'] as const)('Fetch response framing over %s', (pr
       response.end();
     });
     f.params.request.method = method;
-    // Fetch 9D owns the still-unimplemented TAO check; this test exercises body delivery.
-    vi.spyOn(FetchResponse.prototype, 'isTimingAllowed').mockReturnValue(true);
     const received = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();
     f.params.processResponseConsumeBody = (response, body) => received.resolve({ response, body });
     f.params.mainFetch();

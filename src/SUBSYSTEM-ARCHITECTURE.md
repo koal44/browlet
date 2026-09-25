@@ -860,6 +860,14 @@ reader or tee. A cached read creates its body in the current `env`. Clearing
 also invalidates pending writes. Background revalidation belongs to the original
 client's Fetch group and terminates with that client.
 
+The same UserAgent separately owns the CORS preflight permission cache. Its
+entries retain partition keys, serialized origins/URLs, credential scope, and
+expiry, without retaining requests or environments. OPTIONS transactions reuse
+the original client and reserved environment for partitioning, and share the
+parent controller and execution owner. They send no origin credentials and
+have separate timing/callback state. CORS and timing permission checks remain
+in Fetch's policy modules behind Response's forwarding methods.
+
 Storage's `StorageKey` similarly consumes a narrow structural view of the actual
 `Environment` or `EnvironmentRecord`. Full settings supply their security origin;
 earlier records supply their creation URL. Storage acquisition also consults

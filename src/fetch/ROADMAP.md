@@ -8,7 +8,7 @@
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **9C implemented:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); cache storage and validation are connected. Background revalidation completes through the TAO check; the approved Undici vendor repair resolves HTTP/1.1 304 completion. See the [cache gates](http/cache/ROADMAP.md#remaining-acceptance-gates-and-review). Proxy authentication remains provisional.
+- **9D implemented; callable shapes remain for review:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); preflight, CORS, and TAO are connected. 9C's background revalidation now completes. The approved cache permission rules are implemented under [9D](#9d--cors-and-timing-permission); public fetch belongs to 9E. Proxy authentication remains provisional.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -806,7 +806,7 @@ missing subsystem:
 | --- | --- | --- |
 | [Fetch entry](fetch.ts) | `client.consumePreloadedResource(...)` | Returns a miss until HTML has a Document preload map, request-key matching, integrity checks, and deferred response notification. |
 | [Fetch entry](fetch.ts) | UserAgent's BiDi body/language hooks, `defaultAcceptLanguage`, `determineFetchPriority(request)` | BiDi hooks are inert without sessions. Configured language is used, with no header when null. Priority returns an inert update handle until Slice 9 has a transport scheduler; no numeric priority or locale is invented. |
-| [Main fetch](params.ts) | `userAgent.corsPreflightCache.clearEntries(request)` | Empty cache with no insertion yet. Slice 9 supplies lookup, storage, expiration, credentials matching, and invalidation after a failed preflight fetch. |
+| [Main fetch](params.ts) | `userAgent.corsPreflightCache.clearEntries(request)` | 9D supplies lookup, storage, expiration, credentials matching, and invalidation after a failed preflighted fetch. Wildcard expansion is restricted to noncredentialed requests. |
 | [Response handover](params.ts) | UserAgent's BiDi fetch-error/response-completed hooks | No-ops until network instrumentation has sessions to notify. |
 | [Timing handover](params.ts) | `userAgent.supportsMIMEType(type)`, `env.markResourceTiming(...)` | Support defaults false outside MIME Sniffing's independently minimized types. Recording is a no-op pending the [Performance Timeline/Resource Timing foundation](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration). |
 
@@ -968,9 +968,9 @@ The future-owner calls now have explicit provisional implementations:
 | --- | --- |
 | `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
-| `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | Return false while the cache cannot store entries. Slice 9 supplies §4.9 permissions, including partition, origin, credentials, and expiry. |
-| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions and the HTTP detour connects Basic authentication with approved policies. 9C connects cache transactions and the TAO check required by background completion. |
-| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | CORS remains provisional for 9D; TAO and navigation TAO are implemented for background completion. |
+| `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | 9D supplies §4.9 permissions, including partition, origin, credentials, expiry, and the approved wildcard restriction. |
+| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | 9D connects preflight transactions and cached permissions. 9B supplies HTTP transactions and Basic authentication; 9C supplies cache transactions, including background completion through 9D's TAO check. |
+| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | 9D supplies §§4.10–4.11 in Fetch's policy modules, including navigation timing permission. |
 
 **`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
 explicitly permits a null client with retained origin and policy-container state,
@@ -1065,8 +1065,8 @@ Keep five subdivisions, with the first bounded to proving the transport:
 | --- | --- | --- |
 | **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented |
 | **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Implemented with HTTP/2 and Basic credentials; HTTP detour complete; proxy authentication remains provisional |
-| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Implemented, including background completion through TAO |
-| **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | CORS/preflight planned; TAO implemented with caching |
+| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Implemented; background completion passes with 9D's TAO check; two callable shapes remain for review |
+| **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Implemented with approved cache permission rules; two callable shapes remain for review |
 | **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
 
 **9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
@@ -1094,7 +1094,7 @@ their listeners. Adapter shutdown aborts outstanding exchanges and closes client
 separate wire request, applies credentials/COEP, cookies, Origin, Fetch Metadata,
 User-Agent, Referer, cache-control, content-length, and content-coding fields,
 checks the keepalive budget, and handles authentication/retry control flow.
-9C connects cache selection/storage and TAO; CORS remains assigned to 9D.
+9C connects cache selection/storage; 9D connects CORS/TAO.
 
 **9C implementation:** [`http/cache/store.ts`](http/cache/store.ts) retains
 complete decoded bodies and actual Fetch metadata, selected by network partition,
@@ -1104,7 +1104,7 @@ revalidation. Capture follows existing backpressure without an additional reader
 or tee. The UserAgent owns bounded LRU storage; `Browlet.clearHTTPCache()` clears
 identifying validators and pending writes. No retired environment is retained.
 The cache roadmap records its optional partial/range-storage boundary and two
-callable shapes awaiting review. Background revalidation completes through TAO.
+callable shapes awaiting review. 9D closes the TAO background-completion gate.
 
 Each attempt consumes one upload stream on its HTML owner. Retained sources
 (including Blob and encoded multipart data) are recreated only for a retry,
@@ -1228,6 +1228,71 @@ implemented parser, expiry, host matching, and port rules.
 a Browlet `Response`, streams bytes with backpressure, resolves through an
 explicit Fetch task destination, and aborts without leaking an Undici/Node
 public object.
+
+### 9D — CORS and timing permission
+
+[`http/cors-preflight.ts`](http/cors-preflight.ts) constructs the OPTIONS request,
+validates its status and CORS permissions against the original request, and
+stores allowed methods/headers. It uses the existing HTTP transaction, without
+Service Worker interception or sending origin credentials. The original client,
+reserved environment, and policy references preserve network partitioning and
+browser configuration; no replacement environment is constructed. Cancellation
+and task delivery follow the parent execution, while timing and callbacks stay
+separate. Unused preflight bodies are discarded before the actual request.
+
+[`http/cors-preflight-cache.ts`](http/cors-preflight-cache.ts) retains partition,
+serialized origin/URL, credentials, and individual method/header permissions.
+The UserAgent owns a bounded list of 1024 entries, with a two-hour maximum age;
+Fetch permits early eviction and a UA-chosen cap. Expired entries cannot match
+and are pruned on insertion. Entries retain neither environments nor response
+bodies. Clientless requests without a partition can preflight but cannot cache.
+
+[`policy/cors.ts`](policy/cors.ts) validates exact origins and credential
+permission. [`policy/timing.ts`](policy/timing.ts) supplies TAO and navigation
+TAO, including sticky redirect failures, serialized opaque origins, basic
+responses, and explicit cross-origin navigation permission. Request/Response
+remain the small forwarding surface. The existing cache-background completion
+regression now passes without a TAO stub or an unhandled rejection.
+
+**Specification choices and remaining review:**
+
+- `cors-cache-credentialed-wildcard`: §4.9 cache matching accepts `*` broadly,
+  conflicting with §3.3's credential restriction. Approved 2026-09-25: expand
+  wildcards only when the current request's credentials mode is not `include`.
+  Credentialed requests require explicit method/header matches; a literal `*`
+  still matches itself.
+  [Blink's result checks](https://github.com/chromium/chromium/blob/main/services/network/cors/preflight_result.cc)
+  and WebKit's `CrossOriginPreflightResultCacheItem::allowsRequest()` retain a
+  credential restriction. Gecko caches explicit tokens under credential-specific keys.
+- `cors-cache-permission-refresh`: §4.8 uses the broad lookup match, so an anonymous response
+  can refresh an older credentialed grant and a named method can refresh an
+  older wildcard. Approved 2026-09-25: refresh only the exact method/header
+  permission and credentials flag within the same partition, origin, and URL.
+  Header names compare case-insensitively. Narrower grants have separate entries,
+  leaving broader grants at their original expiry. Blink and WebKit
+  replace the response's stored grants; Gecko refreshes explicit tokens in its
+  credential-specific entry. See
+  [Blink's cache insertion](https://github.com/chromium/chromium/blob/main/services/network/cors/preflight_cache.cc).
+- `cors-authorization-wildcard`: follow Fetch's requirement to name Authorization
+  explicitly, both on the wire and in the cache. Browsers' remaining wire-path
+  compatibility exception is tracked in [Fetch #1919](https://github.com/whatwg/fetch/issues/1919)
+  and [#1278](https://github.com/whatwg/fetch/issues/1278).
+- `cors-preflight-invalid-max-age`: follow Fetch's delta-seconds grammar and
+  five-second fallback for malformed or repeated fields, including negative
+  values. Gecko skips caching malformed values; Blink/WebKit accept negative
+  numbers as expired. The two-hour cap follows Blink's permitted UA limit;
+  WebKit uses ten minutes and Gecko one day.
+- Callable shapes: preflight takes `FetchParams` rather than only `request` to
+  share cancellation/task ownership. Cache entries store string values and an
+  absolute monotonic deadline instead of byte-array origins, mutable URL
+  records, and a max-age field. Both carry `SPEC_MISMATCH` review markers.
+
+**Coverage:** focused CORS/TAO/cache tests plus real loopback transactions cover
+OPTIONS ordering, sorted unsafe names, credentials, failure before the actual
+request, wildcard/Authorization rules, independent grant expiry, age fallback,
+cache invalidation, parent abort, body disposal, filtered delivery, redirect
+origin taint, and navigation timing. Public `fetch()` installation and its
+consumers remain 9E.
 
 ## Subresource integrity
 

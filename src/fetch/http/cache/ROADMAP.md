@@ -5,7 +5,7 @@ Fetch request/response records. Browlet owns configured cache instances and thei
 partitioned storage. This is distinct from the service-worker Cache API.
 
 **Status (9C):** storage, Vary selection, validation, and transport transactions
-are implemented. The TAO check closes background Fetch completion; the existing
+are implemented. 9D's TAO check closes background Fetch completion; the existing
 regression now passes without unhandled errors. The approved vendor repair
 resolves Undici's HTTP/1.1 304 length check. Two callable shapes remain for review.
 
