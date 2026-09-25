@@ -10,7 +10,6 @@ import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { FetchTimingInfo } from '../../src/fetch/timing';
-import type { HTTPAuthentication } from '../../src/fetch/http/authentication';
 import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
 
@@ -106,7 +105,7 @@ describe('HTTP transaction credentials and retries', () => {
     const response = await observe(f.params.httpNetworkOrCacheFetch());
     expect(response.status).toBe(401);
     expect(await f.text(response)).toBe('authentication required');
-    expect(f.authentication.prompt).toHaveBeenCalledOnce();
+    expect(f.authentication.onPrompt).toHaveBeenCalledOnce();
     expect(f.params.controller.state).toBe('ongoing');
   });
 
@@ -209,14 +208,8 @@ async function fixture(server: Server = createServer((request, response) => {
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
   cleanup.push(() => env.userAgent.httpTransport.close());
-  // Control the missing authentication owner explicitly; do not fake the browser environment.
-  const authentication = {
-    getAuthorization: vi.fn<HTTPAuthentication['getAuthorization']>(() => null),
-    applyProxyAuthentication: vi.fn<HTTPAuthentication['applyProxyAuthentication']>(),
-    prompt: vi.fn<HTTPAuthentication['prompt']>(() => env.userAgent.hostPromises.resolve(false)),
-    store: vi.fn<HTTPAuthentication['store']>(),
-  };
-  Object.assign(env.userAgent, { httpAuthentication: authentication });
+  const authentication = env.userAgent.httpAuthentication;
+  authentication.onPrompt = vi.fn(() => null);
   const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
   request.populateFromClient();
   request.referrer = null;

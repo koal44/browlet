@@ -13,10 +13,11 @@ import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
 import { NodeHTTPTransport } from './loader/node-transport';
+import { HTTPAuthenticationStore } from './loader/authentication';
 import { createContentDecoder, supportedContentCodings } from './loader/node-decoder';
 import {
   ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
-  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPAuthentication, type HTTPTransport,
+  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
@@ -54,15 +55,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   connectionPool = new ConnectionPool();
   httpTransport: HTTPTransport = new NodeHTTPTransport(undefined, this.connectionPool);
   /** Credentials and authentication challenges shared by this user agent's HTTP requests. */
-  // PROVISIONAL(HTTP authentication): no credentials are supplied or stored, and
-  // prompting declines. RFC 9110/7617 parsing, protection spaces, and Basic follow
-  // the HTTP roadmap; this placeholder does not implement an authentication scheme.
-  httpAuthentication: HTTPAuthentication = {
-    getAuthorization: () => null,
-    applyProxyAuthentication() {},
-    prompt: () => this.hostPromises.resolve(false),
-    store() {},
-  };
+  httpAuthentication = new HTTPAuthenticationStore(this);
   /** Native HTTP codecs, instantiated separately for each response. */
   supportedContentCodings = new Set(supportedContentCodings);
   createContentDecoder = createContentDecoder;

@@ -263,12 +263,18 @@ Current implementation sequence:
    Slice 9A supplies the Undici HTTP/HTTPS adapter and bounded downloads.
    9B now connects transaction headers, credentials gating, cookies/HSTS,
    streamed body reads, decoding, progress, timing, and retries. Its
-   authentication owner remains provisional. HTTP/2 is enabled through the
+   Basic authentication integration is implemented; proxy authentication remains
+   provisional. HTTP/2 is enabled through the
    temporary [Undici vendor patch](../../vendor/README.md), with multiplexing,
    stream cancellation, raw-header recovery, and page uploads verified.
    The [HTTP detour](../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
-   plans A–D for RFC 9110/7617 authentication, credential integration, validators
-   and ranges, then remaining client fields/transport checks. Then come 9C cache,
+   has completed A's RFC 9110 challenge parsing and RFC 7617 Basic encoding.
+   B completes the credential cache and cancelable prompt, including approved
+   scope selection and retry policies. C supplies entity tags, conditional lists,
+   Last-Modified strength, If-Range, and Content-Range parsing. D supplies
+   Retry-After, date serialization, x-gzip decoding, and transport checks,
+   including the approved Undici repair for unsolicited HTTP/1.1 100 Continue.
+   The HTTP detour is complete. Next come 9C cache,
    9D CORS/TAO, and 9E public
    `fetch()` and consumer integration; no public network fetch is exposed yet.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has

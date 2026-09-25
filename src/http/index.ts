@@ -4,7 +4,22 @@ export {
   isHTTPWhitespace,
   isHTTPTabOrSpace,
 } from './syntax';
-export { parseHTTPDate } from './date';
+export { parseHTTPDate, serializeHTTPDate } from './date';
+export { parseRetryAfter, type RetryAfter } from './retry-after';
+export {
+  EntityTag,
+  parseEntityTagList,
+  serializeEntityTagList,
+  isStrongLastModified,
+  selectIfRangeValidator,
+  parseIfRange,
+  matchesIfRange,
+  type EntityTagList,
+  type IfRangeValidator,
+} from './validators';
+export { parseContentRange, type ContentRange } from './content-range';
+export { parseAuthenticationChallenges, type AuthenticationChallenge } from './authentication';
+export { encodeBasicCredentials, selectBasicChallenge, type BasicChallenge } from './basic-authentication';
 
 export { parseStructuredField } from './struct-fields/parse';
 export { serializeStructuredField } from './struct-fields/serialize';

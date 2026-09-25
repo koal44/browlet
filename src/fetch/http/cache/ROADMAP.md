@@ -24,8 +24,9 @@ Local sources and revisions are in the
 [reference inventory](../../PREFLIGHT.md#local-reference-inventory).
 The HTTP cache module owns field parsing and standalone policy contracts.
 The [RFC 9110/7617 detour](../../../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
-supplies the remaining validator/conditional/range helpers before these
-transactions; its algorithms must not depend on Fetch cache records.
+now supplies validator lists, strong/weak tag comparison, Last-Modified strength,
+If-Range, and byte Content-Range parsing. These helpers do not depend on Fetch
+cache records; D supplies HTTP-date serialization for recording a missing Date.
 
 ## Implementation order
 
@@ -42,8 +43,15 @@ transactions; its algorithms must not depend on Fetch cache records.
    deferred status-specific storage branches as their support becomes available.
    Use HTTP's strong/weak validator comparisons and Content-Range validation;
    partial-response combination must additionally satisfy RFC 9111 §3.4's
-   strong-validator requirements. Do not treat the multipart/form-data parser
-   as a multipart/byteranges implementation. Keep trailers separate from headers.
+   strong-validator requirements. Establish the clock evidence required by
+   `isStrongLastModified()`; receipt time or a locally synthesized Date does not
+   alone establish that the origin's clocks agree. If-Range must not fall back
+   to a date when a weak entity tag exists. Interpret Content-Range only for
+   applicable 206/416 responses, check the transferred encoded length, and keep
+   unknown units unstored. Apply conditional precedence, including If-None-Match
+   over If-Modified-Since. Do not treat the multipart/form-data parser as a
+   multipart/byteranges implementation or generate multi-range requests without
+   a multipart consumer. Keep trailers separate from headers.
 3. **Fetch transactions.** Honor cache modes, credentials and partition selection,
    cancellation, and background stale-while-revalidate behavior. RFC 5861's
    stale-if-error is a separate extension; do not enable it as an unconditional

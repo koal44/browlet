@@ -1,10 +1,7 @@
 import { surroundingTabOrSpacePattern } from '../infra/patterns';
 
-/**
- * RFC 9110 §5.6.7 — parse an HTTP-date as UTC epoch milliseconds.
- * Accepts the three HTTP formats, case-insensitively as RFC 9111 §4.2
- * recommends for caches. `now` supplies the reference for two-digit years.
- */
+// RFC 9110 §5.6.7; cache-recipient case insensitivity follows RFC 9111 §4.2.
+/** Parse an HTTP-date as UTC epoch milliseconds; now resolves two-digit years. */
 export function parseHTTPDate(input: string, now: number): number | null {
   const value = input.replace(surroundingTabOrSpacePattern, '');
   let match: string[] | null = imfFixdatePattern.exec(value);
@@ -50,6 +47,15 @@ export function parseHTTPDate(input: string, now: number): number | null {
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month ||
     date.getUTCDate() !== day || date.getUTCDay() !== weekday) return null;
   return date.getTime();
+}
+
+/** Format UTC epoch milliseconds as an HTTP-date, or null outside its four-digit year range. */
+export function serializeHTTPDate(value: number): string | null {
+  const date = new Date(value);
+  const year = date.getUTCFullYear();
+  if (!Number.isFinite(year) || year < 0 || year > 9999) return null;
+  // RFC 9110 §5.6.7 requires senders to use IMF-fixdate, at whole-second precision.
+  return date.toUTCString();
 }
 
 const shortWeekdays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];

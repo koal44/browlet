@@ -82,5 +82,6 @@ export function getDeltaSecondsDirective(
 
 export type CacheDirective = {
   name: string;
+  /** Null for an argument-free directive; an empty string is an explicit argument. */
   value: string | null;
 };

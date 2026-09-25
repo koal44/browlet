@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseHTTPDate } from '../../src/http/date';
+import { parseHTTPDate, serializeHTTPDate } from '../../src/http/date';
 
 const now = Date.UTC(2026, 8, 7, 12);
 const example = Date.UTC(1994, 10, 6, 8, 49, 37);
@@ -71,4 +71,27 @@ describe('HTTP dates (RFC 9110 §5.6.7)', () => {
     const input = `${day}, ${utc.slice(5, 7)}-${utc.slice(8, 11)}-${utc.slice(14, 16)} ${utc.slice(17)}`;
     expect(parseHTTPDate(input, reference)).toBe(expected);
   });
+});
+
+describe('HTTP date serialization', () => {
+  it('emits IMF-fixdate with UTC and whole-second precision', () => {
+    expect(serializeHTTPDate(example)).toBe('Sun, 06 Nov 1994 08:49:37 GMT');
+    expect(serializeHTTPDate(example + 999)).toBe('Sun, 06 Nov 1994 08:49:37 GMT');
+    expect(serializeHTTPDate(0)).toBe('Thu, 01 Jan 1970 00:00:00 GMT');
+  });
+
+  it.each([
+    'Sat, 01 Jan 0000 00:00:00 GMT',
+    'Mon, 01 Jan 0001 00:00:00 GMT',
+    'Tue, 29 Feb 2000 12:34:56 GMT',
+    'Fri, 31 Dec 9999 23:59:59 GMT',
+  ])('round-trips %s', (input) => {
+    expect(serializeHTTPDate(parseHTTPDate(input, now)!)).toBe(input);
+  });
+
+  it.each([NaN, Infinity, -Infinity, Date.UTC(-1, 0, 1), Date.UTC(10000, 0, 1)])(
+    'rejects a time outside HTTP-date syntax: %s', (value) => {
+      expect(serializeHTTPDate(value)).toBeNull();
+    },
+  );
 });

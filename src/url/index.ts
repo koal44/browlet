@@ -2,6 +2,7 @@ export { URLSearchParamsImpl, urlIDLDefinitions } from './api';
 export { originIDL } from './origin-api';
 export {
   copyURL, getDefaultPort, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,
+  setURLUsername, setURLPassword,
   type BlobURLEntry, type URLUserAgent, type URLParseResult, type URLPath, type URLRecord,
 } from './url';
 export {

@@ -8,7 +8,7 @@
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **9B in review:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); HTTP/1.1 and HTTP/2 transactions, streaming, and decoding are connected. Authentication remains provisional.
+- **9B and the HTTP detour complete; 9C next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); HTTP/1.1 and HTTP/2 transactions, streaming, decoding, and Basic credential integration are connected. Detour A–D includes the approved vendor repair for unsolicited HTTP/1.1 100 Continue responses; proxy authentication remains provisional.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -968,7 +968,7 @@ The future-owner calls now have explicit provisional implementations:
 | `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
 | `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | Return false while the cache cannot store entries. Slice 9 supplies §4.9 permissions, including partition, origin, credentials, and expiry. |
-| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions; its authentication owner remains unresolved, and 9C supplies cache transactions. |
+| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions and the HTTP detour connects Basic authentication with approved policies. 9C supplies cache transactions. |
 | `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | Delegate to provisional Fetch policy functions that throw an unimplemented InternalError. Slice 9 supplies §§4.10–4.11. |
 
 **`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
@@ -1063,7 +1063,7 @@ Keep five subdivisions, with the first bounded to proving the transport:
 | Slice | Scope | Status |
 | --- | --- | --- |
 | **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented |
-| **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | In review; HTTP/2 is connected, authentication remains provisional |
+| **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Implemented with HTTP/2 and Basic credentials; HTTP detour complete; proxy authentication remains provisional |
 | **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Planned |
 | **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Planned |
 | **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
@@ -1137,31 +1137,44 @@ upload iterator directly to Undici, avoiding an extra Node Readable and the
 HTTP/2 Node-stream path's incorrect upload-progress listener.
 
 The UserAgent supplies `HTTPContentDecoder` instances backed by bounded Node
-zlib transforms, one chain per response. Supported codings are gzip, zlib-wrapped
+zlib transforms, one chain per response. Supported codings are gzip (including x-gzip), zlib-wrapped
 deflate, and Brotli, applied in reverse header order. Unsupported lists remain
 untouched, malformed compressed data errors the page body, and zero-byte bodies
 do not invoke decoding. Backpressure pauses both decoded output and wire input;
 encoded and decoded byte counts remain distinct. The older complete-buffer
 `handleContentCodings()` helper is not used on network chunks.
 
-**Explicit review dependencies (2026-09-24):**
+**Integration decisions and remaining dependencies (2026-09-24):**
 
-- `userAgent.httpAuthentication` now has the requested provisional implementation:
-  no credentials, declined prompts, and no proxy/storage effects. TypeScript
-  compiles; authentication is not implemented. [`http/authentication.ts`](http/authentication.ts)
-  retains the provisional contract, while the
+- `userAgent.httpAuthentication` now reaches a UserAgent-owned Basic credential
+  cache and cancelable host prompt through [`http/authentication.ts`](http/authentication.ts).
+  The
   [HTTP completion plan](../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
   owns four slices for RFC 9110/7617 and additional cache/client foundations.
-  Implement the authentication owner after this review and before claiming
-  credential reuse; controlled transaction tests do not prove Basic support.
+  Detour A supplies challenge parsing and Basic encoding; B connects credential
+  reuse, clearing, and retry retention, verified over local HTTP/1.1 and HTTP/2.
+  B's approved rules prefer the closest credential scope and the newest accepted
+  entry on ties, return rejected authored Authorization responses without retrying,
+  and allow fresh prompt answers after a failure. Rejected credentials do not
+  retry automatically for the same realm; the host receives `previousFailed`.
+  Proxy operations remain provisional until transport owns a configured proxy.
+- Detour C supplies entity-tag parsing/comparison, conditional lists,
+  Last-Modified strength with explicit clock evidence, If-Range selection, and
+  exact byte Content-Range parsing. Fetch 9C will consume these helpers for
+  validation and partial responses. D now supplies Retry-After parsing and
+  HTTP-date serialization, accepts x-gzip, and fixes HTTP/2 interim timing.
+  Its transport audit verifies bodyless metadata, truncation, and bounded
+  refusal recovery. The approved vendor repair also accepts unsolicited
+  HTTP/1.1 100 Continue responses; the previously failing regression passes.
 - HTTP/2 is enabled with Eric's approved temporary vendor arrangement. Undici
   8.11.2 at `328ab8435079ca6edc1236a29e45a46915456502` is prepared with the tracked
   [patch](../../vendor/_patches/undici.patch), then packed as the ordinary runtime
   dependency. No install hook modifies `node_modules`. The patch preserves
   original final/interim/trailer/CONNECT fields and corrects the declaration
-  of the already-supported iterable upload body. Parsed-header consumers keep
-  their existing behavior. [Undici #5898](https://github.com/nodejs/undici/issues/5898)
-  records the upstream issue; [vendor instructions](../../vendor/README.md)
+  of the already-supported iterable upload body. A separate repair removes
+  HTTP/1.1's unsolicited-100 rejection. Parsed-header consumers keep their
+  existing representation. [Undici #5898](https://github.com/nodejs/undici/issues/5898)
+  records the raw-header issue; [vendor instructions](../../vendor/README.md)
   describe preparation and eventual removal.
   [Transport tests](../../test/browlet/loader/node-http2.test.ts) cover negotiation,
   repeated fields, Early Hints, concurrent streams, pause/resume, stream resets,

@@ -660,6 +660,26 @@ byte accounting, backpressure, and page-owned stream failure. Releasing an
 unused redirect/retry response stops its exchange without canceling the shared
 Fetch controller.
 
+Disabling HTTP/1 pipelined replay does not disable HTTP/2 refusal recovery:
+Undici may replay buffered requests the peer explicitly says it never processed
+(RFC 9113 §8.7), with bounded attempts. Fetch's upload iterator is not replayable
+at that boundary. Status-driven retries remain Fetch work. The adapter supplies
+missing response-start notifications at header receipt for HTTP/2 interim
+responses; it retains Undici's earlier notification where available.
+
+HTTP authentication follows the same ownership boundary. UserAgent owns
+`HTTPAuthenticationStore`, containing origin/realm credentials and their directory
+scopes. Fetch owns challenge selection, outgoing headers, and retry/body handling;
+HTTP supplies pure challenge parsing and Basic encoding. The optional
+`BrowletConfig.authentication` callback is a Host Port for obtaining credentials.
+Its native AbortSignal cancels host UI work; it is not a page platform object.
+The callback result enters `hostPromises` before continuing Fetch. Cached entries
+contain credentials and scopes, without a JavaScript realm, environment, or Binding Context.
+Clearing advances the store generation so old exchanges cannot restore credentials.
+The callback receives `previousFailed` for the challenged realm and controls fresh
+prompt retries; Fetch prevents automatic reuse of rejected cached credentials.
+Approved selection policies and the pending proxy identity remain in the HTTP roadmap.
+
 ### Composition Root
 
 The Composition Root is the logical role allowed to know the complete concrete

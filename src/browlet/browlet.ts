@@ -22,6 +22,7 @@ import {
 import type { Realm } from './scripting/realm';
 import { installHostHooks } from './scripting/host-hooks';
 import { UserAgent } from './user-agent';
+import type { AuthenticationPrompt } from './loader/authentication';
 import { requestNodeEventLoopTurn } from './integration/scripting';
 import { PageEvaluation } from './automation/evaluation';
 import { unsafeSharedCurrentTime } from
@@ -53,6 +54,7 @@ export class Browlet {
       this.#userAgent.defaultUserAgentValue = config.userAgent;
     }
     this.#userAgent.reportDeliveryEnabled = config.reporting ?? true;
+    if (config.authentication) this.#userAgent.httpAuthentication.onPrompt = config.authentication;
     this.#traversable = createNewTopLevelTraversable(
       this.#userAgent,
       null,
@@ -85,6 +87,11 @@ export class Browlet {
 
   route(route: BrowletRoute): void {
     this.#route = route;
+  }
+
+  /** Clear this browser's cached HTTP credentials. */
+  clearHTTPCredentials(): void {
+    this.#userAgent.httpAuthentication.clear();
   }
 
   /** Evaluate page code, await its result, and return a copy to the host. */
@@ -205,6 +212,8 @@ export type BrowletConfig = {
   userAgent?: string;
   /** Allow outbound reports; false retains local ReportingObservers. Defaults to true. */
   reporting?: boolean;
+  /** Answer HTTP authentication challenges; omitted prompts are declined. */
+  authentication?: AuthenticationPrompt;
 };
 
 function getTextContent(element: ElementImpl): string {

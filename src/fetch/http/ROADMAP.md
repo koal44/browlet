@@ -118,13 +118,13 @@ stays in the parent's deferred-work section.
 
 **9B review:** `transaction.ts` now consumes the header, cookie, credentials,
 and cache-mode algorithms. `network.ts` supplies streaming body reads,
-per-response decoding, progress, timing, and HSTS. The desired
-`userAgent.httpAuthentication` calls now reach an explicitly provisional
-no-credentials owner: lookup returns null, prompts decline, and storage/proxy
-operations do nothing. The [HTTP detour](../../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
-owns RFC 9110/7617 parsing, protection spaces, Basic encoding, and the integration
-plan. Challenge retention across retries and proxy identity need to be settled
-with that implementation, rather than inferred from the final response.
+per-response decoding, progress, timing, and HSTS. The
+`userAgent.httpAuthentication` calls now reach a real origin credential cache
+and cancelable host prompt. The [HTTP detour](../../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
+owns RFC 9110/7617 parsing, protection spaces, Basic encoding, and integration.
+Its slice B retains the challenge across retries and supplies credential clearing;
+the approved scope-selection and retry policies are implemented and tested.
+Proxy authentication remains provisional until transport has a configured proxy identity.
 The cache and CORS transactions retain their separate 9C/9D ownership.
 
 Remove this roadmap when reached HTTP algorithms and transactions are tested,

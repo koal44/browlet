@@ -12,7 +12,7 @@ export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
 export { FetchGroup } from './group';
 export { ConnectionPool } from './http/connections';
-export type { HTTPAuthentication } from './http/authentication';
+export type { HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry } from './http/authentication';
 export type {
   HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl, HTTPConnection, HTTPUploadSource,
 } from './http/transport';
