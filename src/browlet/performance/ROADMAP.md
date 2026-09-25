@@ -9,7 +9,8 @@ observability feature.
   clock-neutral durations, and their arithmetic. Unsafe moments coarsen into
   Moments; arithmetic returns new values and never moves an existing moment.
   High Resolution Time and Fetch's connection timestamps share the stateless
-  `coarsenTime()` calculation in Infra. Transport timing observations remain deferred.
+  `coarsenTime()` calculation in Infra. Fetch's transport already supplies
+  connection observations; public timing entries remain deferred.
 - `high-resolution-time.ts` owns the estimated monotonic Unix epoch, relative
   and shared time, and environment-settings time origins. It selects the
   isolation capability passed to `UnsafeMoment.coarsen()`.
@@ -19,6 +20,26 @@ observability feature.
 - Realm-created Events, navigation timing records, and Document load timing
   use this shared clock and the relevant Window's time origin. Each new Window
   realm gets one stable, replaceable `Performance` platform object.
+- `navigation.ts` provisionally defines `NavigationTimingRecord`.
+  `Document.createNavigationTimingEntry()` retains live Fetch timing, body
+  information, and Document load milestones for network navigation. This is
+  internal input storage, not a projected PerformanceNavigationTiming entry.
+  Source-only navigation without a FetchController creates no placeholder entry.
+
+[Navigation Timing §5](https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry)
+associates the entry with a Document and creates it using that Document's realm,
+URL, load/unload timing, and restoration information.
+
+The entry model belongs here because it produces Performance Timeline data.
+Browsing/navigation owns when creation happens and supplies navigation state.
+Performance will own entry construction and buffering.
+Browser examples are Blink's
+[`WindowPerformance::CreateNavigationTimingInstance`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/timing/window_performance.cc),
+Gecko's [`PerformanceMainThread::CreateNavigationTimingEntry`](https://github.com/mozilla-firefox/firefox/blob/main/dom/performance/PerformanceMainThread.cpp),
+and WebKit's [`Performance::addNavigationTiming`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/Performance.cpp).
+The inspected jsdom checkout implements High Resolution Time's
+[Performance surface](https://github.com/jsdom/jsdom/blob/main/lib/jsdom/living/hr-time/Performance-impl.js)
+but no navigation timing entry.
 
 Worker exposure is already declared. It becomes observable when Browlet gains
 `WorkerGlobalScope`; no second clock or Worker-specific `Performance`
@@ -99,6 +120,9 @@ Read these sources, with paths relative to the preflight's local reference root:
    exposing those metrics. Keeping raw header bytes in Fetch is only an input.
 4. Connect Navigation Timing to actual loader/navigation/unload records when
    those lifecycles exist; do not manufacture missing lifecycle timestamps.
+   Replace the provisional retained record with the real entry, preserving
+   time-origin conversion, exposure restrictions, and Timeline delivery. The
+   loader test already verifies that later Fetch byte counts reach the record.
 
 **Exit proof:** real Fetch completion creates the expected resource entry;
 cross-origin restrictions, redirects, cache results, byte sizes, buffering,

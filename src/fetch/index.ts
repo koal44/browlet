@@ -7,10 +7,13 @@ import {
   requestPriorityIDL, requestRedirectIDL,
 } from './request';
 import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
+import { fetchGlobalScopeIDL } from './global';
 
 export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
+export { fetchForGlobal } from './global';
 export { FetchGroup } from './group';
+export type { FetchBody } from './body';
 export { ConnectionPool } from './http/connections';
 export type { HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry } from './http/authentication';
 export type {
@@ -30,8 +33,9 @@ export { getEnvironmentDefaultUserAgent, isHeaderValue, FetchHeaders } from './h
 export {
   requestIDL, FetchRequest, isScriptLikeDestination,
   type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
+  type FetchRequestInfo, type FetchRequestInit,
 } from './request';
-export { responseIDL, FetchResponse, type CacheUsage } from './response';
+export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl } from './response';
 export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
@@ -48,4 +52,5 @@ export const fetchIDLDefinitions: Definition[] = [
   requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
   requestIDL, requestIncludesBodyIDL,
   responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
+  fetchGlobalScopeIDL,
 ];

@@ -17,7 +17,8 @@ import type { NavigationParams } from '../../browsing/navigation/navigation';
 import type { Environment } from '../../scripting/environment';
 import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
 import { CSPList } from '../../browsing/policy/csp/list';
-import type { FetchRequest } from '../../../fetch/index';
+import type { FetchRequest, FetchResponse } from '../../../fetch/index';
+import type { NavigationTimingRecord } from '../../performance/navigation';
 import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
 import type { Realm } from '../../scripting/realm';
@@ -156,7 +157,7 @@ export class DocumentImpl extends NodeImpl {
   /** Whether load abortion has stopped this document's active parser. */
   activeParserWasAborted = false;
   /** Parser currently consuming this document, or null when none is registered. */
-  // PROVISIONAL: connect BrowletParser's lifetime and implement its abort algorithm.
+  // PROVISIONAL: full parser abort/lifecycle steps remain in the HTML parser roadmap.
   activeParser: { abort(): void; } | null = null;
   /** Worker globals whose owner sets contain this document. */
   // PROVISIONAL: worker creation and ownership registration are not implemented.
@@ -205,6 +206,8 @@ export class DocumentImpl extends NodeImpl {
     loadEventStartTime: 0,
     loadEventEndTime: 0,
   };
+  /** Retained navigation inputs; public Performance entry creation is provisional. */
+  navigationTimingEntry?: NavigationTimingRecord;
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
@@ -621,12 +624,35 @@ export class DocumentImpl extends NodeImpl {
     };
   }
 
-  /** Create this document's navigation performance entry from the response timing. */
+  /** Retain navigation timing inputs for this document. */
+  // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry
   createNavigationTimingEntry(navigationParams: NavigationParams): void {
-    if (navigationParams.fetchController !== null) {
-      throw new InternalError('PerformanceNavigationTiming creation is not implemented');
-    }
-    // PROVISIONAL: create PerformanceNavigationTiming when its implementation exists.
+    const controller = navigationParams.fetchController;
+    if (controller === null) return;
+    // PROVISIONAL(Navigation Timing): retain live inputs without exposing a
+    // PerformanceNavigationTiming object before its Timeline foundation exists.
+    this.navigationTimingEntry = {
+      type: navigationParams.navigationTimingType,
+      fetchTimingInfo: controller.extractFullTimingInfo(),
+      bodyInfo: navigationParams.response.bodyInfo,
+      documentTimingInfo: this.loadTimingInfo,
+      responseStatus: navigationParams.response.status,
+    };
+  }
+
+  /** Wait until navigation permits scripts in the newly created document. */
+  // https://html.spec.whatwg.org/#scripts-may-run-for-the-newly-created-document
+  waitForScriptsMayRun(): InternalPromise<void> {
+    // PROVISIONAL(HTML navigation): current callers commit synchronously before
+    // parser tasks run. Full navigation must supply its script-readiness gate.
+    return this.env.exec.promises.try(() => {});
+  }
+
+  /** Process response Link fields for the selected document-loading phase. */
+  // https://html.spec.whatwg.org/multipage/links.html#process-link-headers
+  processLinkHeaders(_response: FetchResponse, _phase: 'pre-media' | 'media'): void {
+    // PROVISIONAL(HTML Link): preload/link processing and media selection are
+    // not implemented. Both loader phases reach this owner without side effects.
   }
 
   /** Apply response integrations that require the newly created document. */
@@ -637,9 +663,7 @@ export class DocumentImpl extends NodeImpl {
     if (response.headerList.get('Refresh') !== null) {
       throw new InternalError('Refresh response processing is not implemented');
     }
-    if (response.headerList.get('Link') !== null) {
-      throw new InternalError('Link response processing is not implemented');
-    }
+    this.processLinkHeaders(response, 'pre-media');
     if (response.headerList.get('Speculation-Rules') !== null) {
       throw new InternalError('Speculation-Rules response processing is not implemented');
     }

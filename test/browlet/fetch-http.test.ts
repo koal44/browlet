@@ -21,15 +21,31 @@ import { observe } from './streams/implementation-fixture';
 afterEach(() => vi.restoreAllMocks());
 
 describe('Fetch §4.4: HTTP response selection', () => {
-  it('offers a clone to Service Workers and falls through to the network with the original request', async () => {
+  it('preserves the original upload stream when no worker requests a copy', async () => {
+    const f = createFixture();
+    f.request.body = FetchBody.fromBytes(utf8Encode('upload'), f.env);
+    const stream = f.request.body.stream;
+    expect(await observe(f.params.httpFetch())).toBe(f.response);
+    expect(f.userAgent.handleFetch.mock.calls[0]![0]).toBe(f.request);
+    expect(f.request.body.stream).toBe(stream);
+    expect(stream.locked).toBe(false);
+  });
+
+  it('prepares an independent request only when the Service Worker owner asks for it', async () => {
     const f = createFixture();
     f.request.headerList.append('X-Request', 'original');
+    f.userAgent.handleFetch.mockImplementation((request, _controller, _isolated, prepareRequest) => {
+      expect(request).toBe(f.request);
+      return prepareRequest().then((copy) => {
+        expect(copy).not.toBe(request);
+        expect(copy.currentURL).not.toBe(request.currentURL);
+        expect(copy.headerList.list).toEqual(request.headerList.list);
+        copy.headerList.set('X-Request', 'worker');
+        return null;
+      });
+    });
     const response = await observe(f.params.httpFetch());
-    const [copy, controller, isolated] = f.userAgent.handleFetch.mock.calls[0]!;
-    expect(copy).not.toBe(f.request);
-    expect(copy.currentURL).not.toBe(f.request.currentURL);
-    expect(copy.headerList.list).toEqual(f.request.headerList.list);
-    copy.headerList.set('X-Request', 'worker');
+    const [, controller, isolated] = f.userAgent.handleFetch.mock.calls[0]!;
     expect(f.request.headerList.get('X-Request')).toBe('original');
     expect(controller).toBe(f.params.controller);
     expect(isolated).toBe(false);
@@ -113,11 +129,12 @@ describe('Fetch §4.4: HTTP response selection', () => {
     f.request.body = FetchBody.fromBytes(utf8Encode('upload'), f.env);
     const body = f.request.body;
     const bytes = Promise.withResolvers<Uint8Array>();
-    f.userAgent.handleFetch.mockImplementation((copy) => {
-      expect(copy.body).toBeInstanceOf(FetchBody);
-      (copy.body as FetchBody).fullyRead(bytes.resolve, bytes.reject);
-      return f.userAgent.hostPromises.try(() => f.response);
-    });
+    f.userAgent.handleFetch.mockImplementation((_request, _controller, _isolated, prepareRequest) =>
+      prepareRequest().then((copy) => {
+        expect(copy.body).toBeInstanceOf(FetchBody);
+        (copy.body as FetchBody).fullyRead(bytes.resolve, bytes.reject);
+        return f.response;
+      }));
     expect(await observe(f.params.httpFetch())).toBe(f.response);
     expect(body.stream.isClosed).toBe(true);
     expect(utf8Decode(await bytes.promise)).toBe('upload');
@@ -134,10 +151,11 @@ describe('Fetch §4.4: HTTP response selection', () => {
       f.params.controller.state = 'terminated';
       terminated.resolve();
     });
-    f.userAgent.handleFetch.mockImplementation((copy) => {
-      (copy.body as FetchBody).fullyRead(() => {}, () => {});
-      return f.userAgent.hostPromises.try(() => f.response);
-    });
+    f.userAgent.handleFetch.mockImplementation((_request, _controller, _isolated, prepareRequest) =>
+      prepareRequest().then((copy) => {
+        (copy.body as FetchBody).fullyRead(() => {}, () => {});
+        return f.response;
+      }));
     await observe(f.params.httpFetch());
     await terminated.promise;
     expect(f.params.controller.state).toBe('terminated');

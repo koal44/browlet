@@ -29,10 +29,30 @@ The transport is callable through Fetch's `httpNetworkFetch()` and is connected
 to the 9B transaction algorithms. Loopback HTTP/HTTPS tests exercise headers,
 upload/download flow, decoding, and cancellation through the actual HTML loop.
 HTTP/2 uses the temporary [vendor patch](../../../vendor/README.md) to preserve
-original response fields. The provisional authentication owner is tracked in
-the [Fetch 9B review](../../fetch/ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
-Public Fetch and loader consumers remain later work; the source-text route
+original response fields. Basic authentication is implemented; proxy authentication
+remains provisional in the [Fetch 9B review](../../fetch/ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
+Public `fetch()` now uses this transport. The source-text navigation route
 below is unchanged.
+
+**Fetch 9E provisional consumer:** `document-loader.ts` creates the Document
+synchronously, including `about:blank`, and consumes a streamed Fetch body.
+`BrowletParser.parseBytes()` implements BOM/transport decoding with a UTF-8
+fallback; `abort()` cancels input and pending continuations. Complete sniffing,
+byte retention for restart, and parser lifecycle remain in the
+[parser integration](../html/parser/ROADMAP.md).
+
+`Document.waitForScriptsMayRun()` provisionally resolves immediately because
+present callers commit before parser tasks run. `processLinkHeaders()` is a
+marked no-op in the pre-media and media phases; preload/link processing and
+media selection remain here. Navigation timing retains live Fetch/body/Document
+records, pending public Performance entries. The extra ScriptHandler parameter
+is still a callable-shape review point until script preparation has an owner.
+
+The real network regression uses Windows-1252 bytes and response CSP, then
+checks parsing and live timing/byte counts. It supplies navigation inputs,
+selects Fetch's parallel callback queue and sandbox body owner, and commits
+before parsing. It does not implement HTML §7.4's state machine, MIME handler
+selection, Refresh, or Speculation-Rules processing. These remain HTML work.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves
@@ -56,8 +76,8 @@ its start time there. Creating PerformanceNavigationTiming remains gated by the
 
 The synchronous source route creates only Fetch response metadata. Its text
 still goes directly to the parser and explicitly into the history source slot;
-a streamed network response body must not be stored in that slot. Full body
-consumption remains loader work. Full policy-container selection must also
+a streamed network response body must not be stored in that slot. Full navigation
+and body-consumption lifecycles remain loader work. Policy-container selection must also
 preserve history/local-URL inheritance and deliver the other response policies.
 
 For HTML, the loader retains response metadata and enough replayable bytes for

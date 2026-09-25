@@ -29,6 +29,7 @@ import type { FetchTimingInfo, ServiceWorkerTimingInfo } from './timing';
 import { isHTTPScheme, isLocalURL } from './url';
 
 /** State and processing steps for one Fetch execution. */
+// https://fetch.spec.whatwg.org/#fetch-params
 export class FetchParams {
   /** Request being processed by this fetch execution. */
   request: FetchRequest;
@@ -65,10 +66,12 @@ export class FetchParams {
     this.env = env;
   }
 
+  // https://fetch.spec.whatwg.org/#fetch-params-aborted
   get aborted(): boolean {
     return this.controller.state === 'aborted';
   }
 
+  // https://fetch.spec.whatwg.org/#fetch-params-canceled
   get canceled(): boolean {
     return this.controller.state !== 'ongoing';
   }
@@ -288,9 +291,14 @@ export class FetchParams {
     return corsPreflightFetch(this);
   }
 
+  // HTTP fetch's service-workers-mode "all" branch, including response validation.
+  // https://fetch.spec.whatwg.org/#concept-http-fetch
   #fetchFromServiceWorker(): InternalPromise<FetchResponse | null> {
     const { request, env, timingInfo, controller } = this;
     const { userAgent } = request;
+    // SPEC_GAP(service-worker-unused-body): Fetch clones before Handle Fetch,
+    // whose no-worker returns omit cleanup of that unused body branch.
+    // Let the worker owner select interception before requesting its copy.
     const prepare = () => {
       const copy = request.clone();
       if (copy.body !== null) {
@@ -308,40 +316,41 @@ export class FetchParams {
       }
       return copy;
     };
-    const prepared = request.body === null ? userAgent.hostPromises.try(prepare) : this.#runBodySteps(prepare);
-    return prepared.then((copy) => {
-      const startTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), this.crossOriginIsolatedCapability);
-      return userAgent.handleFetch(copy, controller, this.crossOriginIsolatedCapability).then(
-        (result: FetchResponse | ServiceWorkerTimingInfo | null) => {
-          if (!(result instanceof FetchResponse)) {
-            if (result !== null) timingInfo.serviceWorkerTimingInfo = result;
-            return null;
+    // Call once, after selecting interception and before consuming or changing the request.
+    const prepareRequest = () => request.body === null ? userAgent.hostPromises.try(prepare) : this.#runBodySteps(prepare);
+    const startTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), this.crossOriginIsolatedCapability);
+    return userAgent.handleFetch(request, controller, this.crossOriginIsolatedCapability, prepareRequest).then(
+      (result: FetchResponse | ServiceWorkerTimingInfo | null) => {
+        if (!(result instanceof FetchResponse)) {
+          if (result !== null) timingInfo.serviceWorkerTimingInfo = result;
+          return null;
+        }
+        timingInfo.finalServiceWorkerStartTime = startTime;
+        timingInfo.serviceWorkerTimingInfo = result.serviceWorkerTimingInfo;
+        const validate = () => {
+          userAgent.webDriverBiDiResponseStarted(request, result);
+          if (result.type === 'error' ||
+            (request.mode === 'same-origin' && result.type === 'cors') ||
+            (request.mode !== 'no-cors' && result.type === 'opaque') ||
+            (request.redirectMode !== 'manual' && result.type === 'opaqueredirect') ||
+            (request.redirectMode !== 'follow' && result.urlList.length > 1)) {
+            return FetchResponse.networkError();
           }
-          timingInfo.finalServiceWorkerStartTime = startTime;
-          timingInfo.serviceWorkerTimingInfo = result.serviceWorkerTimingInfo;
-          const validate = () => {
-            userAgent.webDriverBiDiResponseStarted(request, result);
-            if (result.type === 'error' ||
-              (request.mode === 'same-origin' && result.type === 'cors') ||
-              (request.mode !== 'no-cors' && result.type === 'opaque') ||
-              (request.redirectMode !== 'manual' && result.type === 'opaqueredirect') ||
-              (request.redirectMode !== 'follow' && result.urlList.length > 1)) {
-              return FetchResponse.networkError();
-            }
-            return result;
-          };
-          if (request.body === null) return validate();
-          return this.#runBodySteps(() => {
-            if (!(request.body instanceof FetchBody)) throw new InternalError('HTTP fetch requires an extracted request body');
-            // Cancellation does not wait for the source's cancellation promise.
-            request.body.stream.cancelInternal(undefined).observe(() => {}, () => {});
-            return validate();
-          });
-        },
-      );
-    });
+          return result;
+        };
+        if (request.body === null) return validate();
+        return this.#runBodySteps(() => {
+          if (!(request.body instanceof FetchBody)) throw new InternalError('HTTP fetch requires an extracted request body');
+          // Cancellation does not wait for the source's cancellation promise.
+          request.body.stream.cancelInternal(undefined).observe(() => {}, () => {});
+          return validate();
+        });
+      },
+    );
   }
 
+  // HTTP fetch's response-is-null branch: preflight, HTTP, CORS, and TAO.
+  // https://fetch.spec.whatwg.org/#concept-http-fetch
   #fetchFromNetwork(makeCORSPreflight: boolean): InternalPromise<FetchResponse> {
     const { request } = this;
     const { hostPromises, corsPreflightCache } = request.userAgent;
@@ -365,7 +374,7 @@ export class FetchParams {
     });
   }
 
-  // Stream construction, teeing, cancellation, and replay enter the body's task/checkpoint owner.
+  // Stream operations enter the body's task/checkpoint owner.
   #runBodySteps<T>(steps: () => T): InternalPromise<T> {
     const result = this.request.userAgent.hostPromises.withResolvers<T>();
     queueFetchTask(() => {
@@ -375,6 +384,8 @@ export class FetchParams {
     return result.promise;
   }
 
+  // Main fetch's response selection, beginning with the preloaded-response check.
+  // https://fetch.spec.whatwg.org/#concept-main-fetch
   #dispatch(): FetchResponse | InternalPromise<FetchResponse> {
     if (this.preloadedResponseCandidate !== null) return this.preloadedResponseCandidate;
     const { request } = this;
@@ -403,6 +414,8 @@ export class FetchParams {
     return this.overrideFetch('http-fetch');
   }
 
+  // Main fetch after the recursive return: filtering, blocking, integrity, handover.
+  // https://fetch.spec.whatwg.org/#concept-main-fetch
   #processResponse(response: FetchResponse): void {
     const { request } = this;
     if (response.type !== 'error' && !isFilteredResponse(response)) {
@@ -489,6 +502,8 @@ export class FetchParams {
     }
   }
 
+  // Fetch response handover's processResponseEndOfBody closure and timing steps.
+  // https://fetch.spec.whatwg.org/#fetch-finale
   #endResponseBody(response: FetchResponse): void {
     const { request } = this;
     const unsafeEndTime = request.userAgent.unsafeSharedCurrentTime();

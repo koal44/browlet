@@ -15,6 +15,9 @@ so TypeScript can check the code and infer its result. A function is serialized
 as source; its closure stays in Node. Pass external data as the explicit
 argument.
 
+Use functions in tests of other features, including tests of invalid API
+inputs. Reserve strings for tests of source-string evaluation itself.
+
 `exposeFunction` creates a page function returning a page Promise. The host
 callback receives copies, and its Node Promise or thenable settles on Node's
 queue. An HTML task delivers the copied completion back to the page before
@@ -32,3 +35,10 @@ The [evaluation regression tests](../../../test/browlet/evaluation.test.ts)
 exercise this boundary on stock and add-on runtimes. Direct `Realm.evaluate()`
 remains available to the script runner and tests of exact realm identities or
 individual checkpoints; those tests deliberately operate below this boundary.
+
+## Test cleanup
+
+- TODO: Convert ordinary `Browlet.evaluate()` source-string calls throughout
+  the test suite to functions, passing external data as the argument. Keep
+  source strings only where source-string evaluation is what the test covers.
+  The public Fetch and HTTP/2 tests are the first completed migration batch.

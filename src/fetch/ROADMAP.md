@@ -8,7 +8,7 @@
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **9D implemented; callable shapes remain for review:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); preflight, CORS, and TAO are connected. 9C's background revalidation now completes. The approved cache permission rules are implemented under [9D](#9d--cors-and-timing-permission); public fetch belongs to 9E. Proxy authentication remains provisional.
+- **9A–9E implemented; HTML integrations provisional, audit pending:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch). Public Fetch, Reporting, and the bounded HTML byte-loader path are tested. [9E](#9e--public-fetch-and-consumers) closes the upload-cancellation regression through lazy worker request preparation. Remaining Fetch algorithms, host dependencies, and callable-shape reviews are inventoried below.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -23,14 +23,65 @@ must not cross Browlet's implementation or Web IDL boundaries.
 
 This project contains multipart algorithms; reusable HTTP foundations and cache
 rules live in the [HTTP project](../http/ROADMAP.md).
-The network-independent API objects are complete; the public `fetch()` operation
-remains in Slice 9. The
+The network-independent API objects and public `fetch()` operation are implemented. The
 [dependency preflight](PREFLIGHT.md) retains the remaining external work order.
 
 `index.ts` exports the contracts consumed by production outside Fetch, including
 task delivery, client settings, fetch groups, and browser-owned pools/partitions. Add exports with their real
 consumers; focused tests may import internal algorithms without widening this
 surface.
+
+## Completion boundary and follow-up audit
+
+The completion target is a reusable Fetch implementation for HTML and other
+specification consumers, alongside the author-facing `fetch()`, Request,
+Response, and Headers APIs. The internal entry is
+`fetch(request, options, env) -> FetchController`. Consumers supply request
+metadata and response-processing steps; Fetch supplies response headers,
+streaming body bytes, progress/completion delivery, cancellation, redirect
+continuation, and timing/body information. Content codings are decoded by
+Fetch; choosing an HTML character encoding and constructing a Document belong
+to HTML. Consumers must not recreate Fetch's HTTP, cache, CORS, or policy work.
+
+**9E bounded closure (2026-09-25):** the no-worker path no longer splits an
+upload, and its early-response cancellation regression passes. The HTML loader
+also consumes a real Fetch response through provisional byte parsing and abort,
+script-readiness, Link-header, and navigation-timing contracts. These have
+limited behavior, marked in code and described under their HTML owners below;
+they do not establish full HTML conformance. The synchronous source route is
+still separate from network navigation.
+
+**Remaining within Fetch:**
+
+- Complete `FetchGroup.cancel()`: it is still a provisional no-op, unlike
+  controller cancellation and the implemented non-keepalive `terminate()` path.
+  HTML's cancellation rules require task/data disposal and keepalive handling.
+- Implement §4.12 deferred fetching, its quotas/API, and pending group records
+  when the HTML lifecycle and Permissions Policy dependencies are ready.
+- Close transport-dependent branches: HTTPS DNS resource-record upgrades,
+  proxy authentication, and additional protocols/schemes when their owners
+  exist. Node currently supplies DNS/connection establishment; the older
+  `resolveOrigin()`/`ConnectionPool.obtain()` helpers still throw for those
+  effects and need reconciliation with the real transport during the audit.
+- Review retained callable-shape markers in response cloning, preloaded
+  responses, preflight/cache records, network fetch, and HTTP cache integration.
+  The old complete-buffer content-coding helper also needs review against the
+  streaming decoder now used by network fetch.
+
+Service Worker dispatch, preloads, priority scheduling, BiDi sessions, supported
+document MIME handlers, and public Performance entries remain owner integrations,
+with explicit current behavior in the dependency ledger. They are not additional
+implementations of Fetch's completed HTTP/cache/CORS algorithms.
+
+TODO: After the bounded 9E review, audit Fetch in specification order across
+separate turns: §2 records and infrastructure; §3 HTTP extensions; §4 fetching
+and transport; then §§5-6 public APIs and data URLs. Check each algorithm's
+actual consumers, observable behavior, tests, and retained markers. Record
+coverage and stop for discussion at genuine gaps. Include an explicit inventory
+of §4.12 and the other [deferred work](#explicitly-deferred-work), so closing
+the current delivery sequence is not mistaken for implementing every feature
+in the standard. Reconcile stale roadmap status with the implementation during
+that audit rather than relying on completion labels alone.
 
 ## Implementation order
 
@@ -80,7 +131,7 @@ When an algorithm reaches a missing external dependency:
 | `fetch.ts` | Main Fetch orchestration, response-processing callbacks, task destinations, and ongoing-fetch control | §§4.1–4.2 and “Using fetch in other standards” |
 | `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
 | Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, declaration signatures, and staged Browlet installation during Slice 6 | §§5.1–5.5 |
-| Public `fetch()` binding (planned) | Realm-correct orchestration and abort handling | §5.6 |
+| `global.ts` | Public `fetch()` orchestration and abort handling, contributed to HTML's global-scope mixin | §5.6 |
 
 Policy modules operate on the existing Fetch records and browser contracts.
 They retain no separate request/response state. CSP's language, matching, and
@@ -966,7 +1017,7 @@ The future-owner calls now have explicit provisional implementations:
 
 | Call | Owner and remaining work |
 | --- | --- |
-| `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
+| `userAgent.handleFetch(request, controller, isolated, prepareRequest)` | Returns a host-owned Promise of null without preparing a copy: no registrations or active workers exist. Service Workers later supplies selection, lazy preparation, timing, and response delivery through this entry. |
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
 | `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | 9D supplies §4.9 permissions, including partition, origin, credentials, expiry, and the approved wildcard restriction. |
 | `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | 9D connects preflight transactions and cached permissions. 9B supplies HTTP transactions and Basic authentication; 9C supplies cache transactions, including background completion through 9D's TAO check. |
@@ -1067,7 +1118,7 @@ Keep five subdivisions, with the first bounded to proving the transport:
 | **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Implemented with HTTP/2 and Basic credentials; HTTP detour complete; proxy authentication remains provisional |
 | **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Implemented; background completion passes with 9D's TAO check; two callable shapes remain for review |
 | **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Implemented with approved cache permission rules; two callable shapes remain for review |
-| **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
+| **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Implemented with provisional HTML contracts; upload cancellation passes; full Fetch audit remains |
 
 **9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
 UserAgent-owned host contract. [`node-transport.ts`](../browlet/loader/node-transport.ts)
@@ -1292,7 +1343,112 @@ OPTIONS ordering, sorted unsafe names, credentials, failure before the actual
 request, wildcard/Authorization rules, independent grant expiry, age fallback,
 cache invalidation, parent abort, body disposal, filtered delivery, redirect
 origin taint, and navigation timing. Public `fetch()` installation and its
-consumers remain 9E.
+consumers are covered in 9E below.
+
+### 9E — Public fetch and consumers
+
+[`global.ts`](global.ts) implements `fetch()` over converted Request inputs,
+using the receiver's environment, internal promises, and immutable Responses.
+Fetch contributes a partial `WindowOrWorkerGlobalScope` declaration; HTML's
+existing mixin owns the operation and Window forwards it. No second global
+implementation or Node Fetch object is introduced. A future Service Worker
+environment identifies itself through `isServiceWorker`, disabling interception
+of its own fetches; current Window environments return false.
+
+Local abort preserves the original reason, including values that cannot be
+cloned, and cancels request streams/errors response streams. Remote controller
+aborts deserialize through the relevant environment. Request construction and
+Web IDL conversion failures become rejected promises rather than synchronous
+exceptions. The binding now allocates promises for failed operation invocations
+in the method's realm, independently of successful result allocation.
+
+`SPEC_CLASH(fetch-borrowed-realm)` records the approved receiver-realm choice
+for a borrowed method's successful promise and Response. A same-origin iframe
+probe on 2026-09-25 found that Chromium 149.0.7827.55 and Firefox 151.0 use the
+receiver for both; Playwright WebKit 26.5 uses the method realm for both. All
+three resolve relative URLs against the receiver and reject Request-construction
+failures with a method-realm promise and TypeError. This is Playwright WebKit
+evidence, not a Safari claim. Compare
+[Blink's GlobalFetch](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/fetch/global_fetch.cc)
+and [WebKit's global Fetch implementation](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/fetch/WindowOrWorkerGlobalScopeFetch.cpp).
+Borrowed-method regressions use related Windows on the same agent.
+
+Reporting now has real loopback delivery coverage through preflight and HTTP
+POST, including success, 410 endpoint removal, retryable failure, and completion
+after the generating Document is destroyed. Its existing UserAgent sandbox owns
+continuation. Reporting discards the unused response body after inspecting status;
+the regression with an open collector body first failed and now closes correctly.
+
+Public API tests cover streaming response delivery at headers, HTTP/2 streaming
+uploads, filtering, redirects, HTTP versus network errors, local and controller
+abort, reader-only observability, response cancellation, and transport shutdown.
+These exercise §5.7's observable requirements without imposing a GC strategy or
+adding a partial browser-close API.
+
+**Provisional HTML consumers:**
+
+- [`loadHTMLDocument()`](../browlet/loader/document-loader.ts) creates the
+  Document synchronously and handles `about:blank`. `BrowletParser.parseBytes()`
+  decodes incrementally using a BOM, transport charset, or UTF-8 fallback;
+  `abort()` cancels its reader and suppresses parser continuations. Meta/prescan
+  encoding selection, restart, and the full parser lifecycle remain open.
+  Stream work enters the body's execution owner, while input/EOF and DOM work
+  enter the new Document's networking tasks. The real navigation regression
+  uses a parallel Fetch queue and sandbox-owned body, then commits the new
+  Document before parser tasks run. It verifies Windows-1252 text, response CSP,
+  and live timing/body information without manual checkpoints. These belong to
+  the [HTML loader](../browlet/loader/ROADMAP.md),
+  [parser](../browlet/html/parser/ROADMAP.md), and
+  [performance](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration)
+  owners. `waitForScriptsMayRun()` currently resolves immediately;
+  `processLinkHeaders()` is inert in both phases. Navigation timing retains
+  live records without exposing a PerformanceNavigationTiming object.
+  Full navigation, MIME handler selection, and these HTML features remain open.
+  The extra `ScriptHandler` argument is marked `SPEC_MISMATCH` for review;
+  it supplies the existing parser integration while HTML script preparation
+  remains unfinished.
+
+**Approved upload-cancellation handling (2026-09-25):** `handleFetch()` receives
+the original request for routing and a `prepareRequest()` callback. The owner
+calls it once, only if interception needs a copy, before consuming or modifying
+the request. Preparation clones and validates the body on its existing execution
+owner. The provisional no-worker hook returns null without calling it; no
+unused tee branch can prevent cancellation of the original upload. Tests retain
+the original stream identity on the no-worker path and verify that prepared
+copies remain independent. The formerly failing HTTP/2 early-response test now
+observes the source's cancellation callback.
+
+[Fetch's HTTP algorithm](https://fetch.spec.whatwg.org/#concept-http-fetch)
+clones first, while [Handle Fetch](https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm)
+can return null before dispatch, including when no active worker exists.
+`SPEC_GAP(service-worker-unused-body)` records the missing disposal rule for
+that unused clone. Service Workers does specify cleanup after event dispatch
+when a body has no replay source: an unusable body fails, otherwise it is
+canceled. The early no-worker returns never reach those steps. A null result
+alone does not distinguish the no-dispatch case from network fallback after
+an actual event; cleanup after dispatch belongs to those body-state rules.
+The lazy preparation callback closes the no-dispatch case. Actual dispatch
+still needs the specified worker body-state and lifetime rules when Service
+Workers are implemented; a null result must not unconditionally cancel a
+Request retained by a worker.
+
+Browser source precedent is selection before worker-specific dispatch:
+[Chromium's loader selection](https://github.com/chromium/chromium/blob/main/content/renderer/service_worker/service_worker_network_provider_for_frame.cc)
+uses its configured interception factory;
+[Gecko's ShouldPrepareForIntercept](https://github.com/mozilla-firefox/firefox/blob/main/dom/serviceworkers/ServiceWorkerInterceptController.cpp)
+checks for a controlling worker and fetch handler;
+[WebKit's createFetchTask](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/NetworkProcess/ServiceWorker/WebSWServerConnection.cpp)
+returns before creating a fetch task when no matching active worker exists.
+These support avoiding unused worker work; they are not identical callback APIs
+or a claim that the exact regression was run in all three browsers.
+
+Validation on custom Node 27 with the compatibility addon: 2,092 tests pass
+across 94 Fetch, browser Fetch/loader/Reporting, parser, lifecycle, sandbox, and
+Web IDL test files, with one existing expected failure. Both former 9E regressions
+now pass. TypeScript and changed-file lint pass. The final 40-test parser,
+loader, and document-lifecycle run also covers abort before the first parser
+task. Parser tests cover split BOM/UTF-8 input, parsing before EOF, and abort
+while waiting for bytes or a script.
 
 ## Subresource integrity
 
@@ -1426,9 +1582,8 @@ does not complete every Fetch branch.
   wait for the HTML lifecycle and Permissions Policy checks. §2.4 termination
   must retain its forward dependency; do not accept deferred records before
   their processing works.
-  Revisit the pending-record processor when Slice 8 supplies the internal Fetch
-  entry algorithm. It also needs the client's global task destination and the
-  deferred-fetch task source's priority over script-running tasks. Slice 9 supplies
+  The internal Fetch entry and client task destinations now exist. The processor
+  still needs the deferred-fetch task source's priority over script-running tasks. Slice 9 supplies
   runnable HTTP transport; full `fetchLater()` activation, quotas, and lifecycle
   integration remain a separate deferred feature, without a numbered delivery slice.
 - Service Worker interception waits for worker agents, events, and lifecycle.
@@ -1436,15 +1591,13 @@ does not complete every Fetch branch.
 - WebDriver BiDi offline/emulation/interception hooks use their specified
   no-session paths until real automation exists. Sources for this and the
   preceding specs are in the [reference inventory](PREFLIGHT.md#local-reference-inventory).
-- HTTP authentication UI and additional challenge schemes wait for credential
-  services and review of the supported schemes' RFCs. Connection pooling,
-  proxy/TLS policy, and protocol support need verified host controls.
+- Basic authentication, its cache, and a prompt hook are implemented; the
+  default prompt declines. Additional challenge schemes need their RFCs, and
+  proxy authentication needs a configured proxy identity and transport route.
 - Store, policy, and timing integrations close under their linked owners in
-  the dependency ledger. Fetch-owned CORP remains in the HTTP slice; Metadata
-  and trustworthiness are required for the corresponding outgoing headers.
-- `blob:` URL fetching waits for the [File-owned store and lifetime integration](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration);
-  existing Blob/File bytes are already available. `file:` fetching needs an
-  explicit embedder policy.
+  the dependency ledger. CORP, Metadata, trustworthiness, Blob URLs, and SRI
+  already run in the current Fetch path. Public timing entries remain pending.
+- `file:` fetching needs an explicit embedder policy.
 - WebSockets, WebTransport, and unsupported transport protocols such as HTTP/3
   remain outside the initial Fetch API delivery sequence.
 

@@ -14,6 +14,12 @@
   script-handler completion use `InternalPromise`. Node's stream-finished callback
   only queues document finalization back into HTML. `Browlet.navigate()` keeps
   a native Promise at its outer Node API boundary.
+- Its provisional byte entry decodes incrementally with a BOM, transport
+  charset, or UTF-8 fallback, including split BOM/character input. It allows one
+  input chunk at a time while scripts pause. Reads and cancellation run on the
+  body's execution owner; parsing, the first-input callback, and EOF run on the
+  Document's networking tasks. `abort()` cancels the reader, destroys the
+  parse5 stream, and suppresses pending input/script continuations.
 
 This is enough for Browlet's current document shell, but it is not yet a
 general HTML parser integration. In particular, the tree adapter's
@@ -49,6 +55,28 @@ Then complete these seams in order:
    author-facing exception.
 
 ## Missing host integration
+
+Fetch 9E supplies a concrete consumer in
+[`loadHTMLDocument()`](../../loader/document-loader.ts). The provisional
+`parseBytes(body, headers, onFirstInput)` returns `InternalPromise<void>` and
+has real network coverage. Complete HTML encoding selection still needs the
+prescan/meta rules, encoding confidence, and retained bytes for restart without
+refetching. The current decoder does not retain a whole-body copy for that
+future mechanism. Abort still needs the specified readiness events,
+open-element cleanup, and speculative-parser lifecycle.
+
+The consumer waits for `Document.waitForScriptsMayRun()` before invoking its
+existing script handler. That gate currently resolves immediately: present
+callers commit synchronously before parser tasks run. Full navigation must
+supply its actual readiness condition. None of these provisional contracts
+completes script preparation or replaces the existing source-string route.
+
+[Loading HTML documents](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html)
+defines input tasks, first-input Link processing, the script-readiness wait,
+and EOF; the [input byte stream](https://html.spec.whatwg.org/#input-byte-stream)
+delegates decoding to [Encoding](https://encoding.spec.whatwg.org/#decode).
+[Parser abortion](https://html.spec.whatwg.org/#abort-a-parser) defines input
+disposal and the remaining lifecycle work.
 
 | Planned source or owner | Contract | Specification |
 | --- | --- | --- |

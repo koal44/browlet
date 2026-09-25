@@ -30,6 +30,8 @@ export function isOffline(env: FetchEnvironment): boolean {
 export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
   /** Whether this environment belongs to a Window, which can consume Document preloads. */
   isWindow: boolean;
+  /** Whether this global is a ServiceWorkerGlobalScope, which cannot intercept its own fetches. */
+  isServiceWorker: boolean;
   /** Whether the client's Window has a navigable whose parent is null. */
   isTopLevelWindow: boolean;
   /** Whether secure-context-only response timing headers can be retained. */
@@ -165,9 +167,12 @@ export interface FetchUserAgent extends StorageUserAgent {
   setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void;
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
   potentiallyOverrideResponse(request: FetchRequest, env: JSEnvironment): FetchResponse | null;
-  /** Offer a request to Service Workers; null or timing-only results continue to the network. */
+  /** Select interception from request metadata; prepare its copy only when needed. */
+  // https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm
+  // Null and timing-only results continue to the network with the original request.
   handleFetch(
     request: FetchRequest, controller: FetchController, useHighResPerformanceTimers: boolean,
+    prepareRequest: () => InternalPromise<FetchRequest>,
   ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null>;
   /** Select the browser's scheduling state from the request's priority and resource hints. */
   determineFetchPriority(request: FetchRequest): RequestInternalPriority;

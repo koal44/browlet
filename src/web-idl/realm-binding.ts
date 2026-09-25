@@ -1254,7 +1254,6 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       definition.definition,
       source,
       () => this.realm.createFunction((thisArgument, argumentsList) => {
-        let resultContext: ConversionContext | undefined;
         try {
           const primaryInterface = getMemberInterface(definition);
           const receiver = primaryInterface && !operations[0]?.static
@@ -1269,7 +1268,7 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
           // An explicit allocateIn declaration selects a different result realm without changing ownership.
           // https://github.com/whatwg/webidl/issues/135
-          resultContext = (receiver?.binding ?? this).defaultConversionContext;
+          let resultContext = (receiver?.binding ?? this).defaultConversionContext;
 
           const overload = resolveOverload(
             computeEffectiveOverloadSet(operations, argumentsList.length),
@@ -1309,7 +1308,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
           return this.#handlePromiseException(
             returnType,
             exception,
-            resultContext ?? this.defaultConversionContext,
+            // Invocation failure creates a new promise in the method realm;
+            // allocation of a successful implementation result is unrelated.
+            this.defaultConversionContext,
           );
         }
       }, { length: getCallableLength(operations), name }),

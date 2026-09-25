@@ -7,7 +7,8 @@ import { ReportingEndpoint } from '../reporting/endpoint';
 import type { ReportImpl } from '../reporting/report';
 import { sendReports } from '../reporting/delivery';
 import type { ReportingObserverImpl } from '../reporting/observer';
-import type { FetchResponse } from '../../fetch/index';
+import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
+import type { InternalPromise } from '../../infra/promises';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { Environment } from './environment';
 import { GlobalTimers, timerTaskSource, type TimerAction } from './timers';
@@ -128,6 +129,11 @@ export class WindowOrWorkerGlobalScopeMixin {
     options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
     return this.env.exec.clone(value, options.transfer);
+  }
+
+  /** Fetch's addition to the WindowOrWorkerGlobalScope mixin. */
+  fetch(input: FetchRequestInfo, init: FetchRequestInit): InternalPromise<ResponseImpl> {
+    return fetchForGlobal(input, init, this.env);
   }
 
   /** Replace this global's Reporting endpoint list using its resource response. */

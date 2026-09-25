@@ -388,7 +388,8 @@ function inheritCreatorDocumentState(
   throw new InternalError('Creator Document inheritance is not implemented');
 }
 
-function populateWithHTMLHeadBody(document: DocumentImpl): void {
+/** Populate the synchronously available element tree of an about:blank document. */
+export function populateWithHTMLHeadBody(document: DocumentImpl): void {
   const html = document.createElementNode('html', HTML_NAMESPACE);
   const head = document.createElementNode('head', HTML_NAMESPACE);
   const body = document.createElementNode('body', HTML_NAMESPACE);

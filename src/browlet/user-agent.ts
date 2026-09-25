@@ -16,7 +16,7 @@ import { NodeHTTPTransport } from './loader/node-transport';
 import { HTTPAuthenticationStore } from './loader/authentication';
 import { createContentDecoder, supportedContentCodings } from './loader/node-decoder';
 import {
-  ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isOkStatus,
+  ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
@@ -167,9 +167,10 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   // https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm
   handleFetch(
     _request: FetchRequest, _controller: FetchController, _useHighResPerformanceTimers: boolean,
+    _prepareRequest: () => InternalPromise<FetchRequest>,
   ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null> {
     // PROVISIONAL(Service Workers): no registrations or active workers exist yet.
-    // Handle Fetch returns null when no worker handles the request.
+    // Return without preparing an unused request/body branch.
     return this.hostPromises.try(() => null);
   }
 
@@ -236,6 +237,9 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
         if (isOkStatus(response.status)) result.resolve('success');
         else if (response.status === 410) result.resolve('remove-endpoint');
         else result.resolve('failure');
+        // Reporting uses only the status; no consumer will drain this body.
+        const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+        internalResponse.discardBody?.();
       },
       useParallelQueue: true,
     }, this.sandbox);

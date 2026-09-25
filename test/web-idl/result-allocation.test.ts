@@ -132,11 +132,11 @@ describe('Web IDL result allocation', () => {
     expect(await result).toEqual(['a=1']);
   });
 
-  it('rejects a synchronous implementation failure through a method-realm promise', async () => {
-    const { call, methodRealm } = createFixture(idlType.Uint8Array, 'method');
+  it.each([undefined, 'receiver', 'method'] as const)('rejects invocation failures in the method realm with allocateIn = %s', async (allocation) => {
+    const { call, methodRealm } = createFixture(idlType.Uint8Array, allocation);
     const result = call('failAsync');
-    expect(result).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
     await expect(result).rejects.toThrow('Failed to create result');
+    expect(result).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
   });
 
   it.each([

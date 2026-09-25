@@ -496,10 +496,18 @@ or BiDi interception and does not install a process-wide callback.
 Main-fetch background waits use `hostPromises`, then
 enter the supplied owner's networking task before realm-owned stream work.
 Both pre-dispatch and in-flight Document destruction are covered through Fetch
-without manual checkpoints. Later dispatch and transport still gate actual
-network report delivery.
+without manual checkpoints. Fetch 9E also exercises actual loopback delivery,
+including CORS preflight and completion after Document destruction. Reporting
+discards an unused response body through its transport disposal operation after
+reading status; it does not mutate the sandbox's Streams from a host callback.
 Periodic collection and retirement remain consumer work. The current
 active-document destruction scaffold does not settle inactive history disposal.
+
+Fetch's public operation contributes a partial `WindowOrWorkerGlobalScope`
+declaration. The existing HTML mixin calls `fetchForGlobal(input, init, env)`;
+Window forwards to that mixin. Fetch owns orchestration and Responses, while
+Binding owns argument conversion, rejection of invocation failures, and platform
+projection. A partial declaration creates no separate implementation object.
 `ReportImpl` and derived `ReportBodyImpl` classes are composed in Browlet.
 Fetch supplies plain report data; `Environment.generateReport()` captures its
 environment metadata and constructs the concrete body. Browser-owned CSP
@@ -517,6 +525,21 @@ Consumers retain the record opaquely; HTML owns its representation. Fetch uses
 these separate stages for abort reasons. Runtime integration realizes exception
 requests before serialization, and Fetch integration realizes a fallback error
 before delivering a deserialized reason. No Binding Context enters the controller.
+
+Service Worker selection receives the original request as routing metadata and
+a lazy `prepareRequest()` callback. Only an interception that needs a copy
+clones/tees and validates the body, on its existing execution owner. The
+provisional no-worker path requests no copy. Event-dispatch body cleanup remains
+with Service Workers; a null result alone is not a cancellation instruction.
+
+The provisional HTML response loader consumes a Fetch body without flattening
+it into a source string. Reads and cancellation enter the stream owner's tasks;
+decoding, parser input/EOF, and DOM finalization enter the destination Document's
+networking tasks. Navigation tests use the UserAgent sandbox for the body and
+Fetch's parallel callback queue, so replacing the initiating Document does not
+strand the response stream. BOM/transport decoding and reader abort work;
+script readiness and Link processing are marked provisional. Navigation timing
+retains live input records until Performance Timeline and entry projection exist.
 
 Allocation is an implementation dependency when a value can reach callbacks or
 be retained before return projection. FileReader stores its final buffer once;
@@ -1161,7 +1184,7 @@ Use these role names consistently:
 - `FooContext` only for cohesive contextual state whose members share an
   identity and lifecycle.
 
-## Accommodations, limitations, and specification conflicts
+## Accommodations, limitations, and specification review labels
 
 These labels answer different questions and must not be used interchangeably:
 
@@ -1171,6 +1194,9 @@ These labels answer different questions and must not be used interchangeably:
 | **Limitation** | Which observable requirement can Browlet not currently provide? | The owning `LIMITATIONS.md` or roadmap plus a focused expected-failure test when practical |
 | **Deviation** | Where does Browlet deliberately behave differently from the governing specification? | The owning architecture or roadmap with the rationale, relevant interoperability evidence, and a regression test |
 | **Specification clash** | Where do specification passages or browser implementations disagree, and which behavior did Browlet choose? | A searchable `SPEC_CLASH(identifier)` code marker, evidence and the chosen rule in the owning roadmap or issue notes, and focused tests |
+| **Specification gap** | Which required behavior do the relevant specifications leave unanswered? | A searchable `SPEC_GAP(identifier)` code marker, source references, browser evidence, and the chosen or pending rule in the owning roadmap |
+| **Signature mismatch** | Which callable shape or record representation still needs review? | A single-line `SPEC_MISMATCH: <original signature>` marker, removed after approval |
+| **Implementation TODO** | Which specified behavior is still missing from Browlet? | A TODO at the missing implementation or consumer and an owning roadmap entry |
 
 An accommodation can preserve all observable behavior, or it can cause a
 limitation. It is not automatically a deviation. A Host Port or
@@ -1199,6 +1225,13 @@ Keep the marker after review until the conflict is resolved. For example:
 // WebKit do; Chromium decodes whole paths, equating encoded and literal slashes.
 ```
 
+Use `SPEC_GAP(identifier)` when the relevant specifications do not settle the
+behavior. Record the unanswered case, the sources checked, implementation
+evidence, and Browlet's choice or pending decision. Retain the marker after a
+choice is approved, until the specification settles the question. A missing
+Browlet implementation is an ordinary TODO, not a specification gap; competing
+specified or browser behaviors belong under `SPEC_CLASH`.
+
 Reserve `DEVIATION(identifier)` for an intentional departure that does not
 already have a specification-clash record; do not double-label the same choice.
 Neither label replaces `SPEC_MISMATCH`, the temporary flag for an unreviewed
@@ -1207,7 +1240,7 @@ and expected-failure records because a missing operation may have no code
 boundary to mark. Search the complete source tree with:
 
 ```powershell
-rg -n "(ACCOMMODATION|DEVIATION|SPEC_CLASH)\(" src
+rg -n "(ACCOMMODATION|DEVIATION|SPEC_CLASH|SPEC_GAP)\(|SPEC_MISMATCH:|TODO" src
 ```
 
 An accommodation's owning Markdown entry must identify the intended

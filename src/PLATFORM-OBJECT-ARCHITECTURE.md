@@ -511,6 +511,11 @@ explicit. Static operations use their method realm in either case. This is a
 project allocation policy while [Web IDL #135](https://github.com/whatwg/webidl/issues/135)
 remains unresolved; ordinary declarations, including `Headers.getSetCookie()`,
 keep receiver-realm results.
+If a promise-returning operation's invocation throws, Web IDL creates its
+rejected promise in the method's realm. This failure path does not use the
+successful result's `allocateIn` policy. Public Fetch tests cover borrowed
+methods whose successful promise/Response belong to the receiver but whose
+Request-construction failure belongs to the method realm.
 Implementations must not accept or retain that context. Existing
 `invokeWith(atArg(0, (ctx) => ctx))` dependencies are migration work. A future dependency
 on the calling script or incumbent settings requires explicit invocation

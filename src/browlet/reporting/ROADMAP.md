@@ -13,18 +13,17 @@ implemented. Destruction cleanup still needs HTML's unfinished Document lifecycl
 worker integration needs worker globals. Slice C's serialization, handoff,
 request preparation, response handling, retirement, and test-report generator
 are implemented. UserAgent schedules browser-owned delivery work and returns
-internal Promises for attempt results. Fetch 8A supplies entry/main-fetch processing
-with provisional owner hooks. `UserAgent.attemptReportDelivery()`
+internal Promises for attempt results. Fetch now supplies real network processing.
+`UserAgent.attemptReportDelivery()`
 uses the UserAgent's lazy sandbox environment for its clientless body streams,
-independently of the generating Window. Later Fetch dispatch/transport
-still gates actual delivery. URL owns the stateless stripping helper.
+independently of the generating Window. Fetch 9E verifies loopback delivery and
+completion after Document destruction. URL owns the stateless stripping helper.
 
 Fetch 7c has reached the first concrete consumer: COEP's CORP violation reports.
 FetchResponse implements the policy checks and submits violations through
 `settings.queueReport()`. Environment routes those submissions to
 its actual Window's global-scope mixin, which calls `Environment.generateReport()`,
-notifies local observers, and adds the report to the outbound queue when delivery is enabled. Network
-delivery still needs the later Fetch pipeline.
+notifies local observers, and adds the report to the outbound queue when delivery is enabled.
 
 `FetchRequest.isBlockedByIntegrityPolicy()` also submits reports through that same method, with boolean
 `reportOnly` fields. Its derived body interface is registered at Browlet's binding
@@ -243,12 +242,13 @@ retain their original request origin and applicable network state; the sandbox
 supplies execution, not a new initiating client or security identity.
 
 `test/browlet/reporting/fetch-delivery.test.ts` exercises the real Fetch entry,
-body extraction/reading, policy checks, override fetch, and response handover. Only later network
-dispatch is controlled. It covers Document destruction both before dispatch and
-while awaiting the response, using automatic scheduling on stock Node and the
-compatibility addon's managed queues. No retired Window or manual checkpoint is
-needed. Slice 9 still owns native network transport and must not grow a separate
-Reporting-only Fetch bypass.
+body extraction/reading, policy checks, override fetch, and response handover.
+It covers Document destruction before dispatch and while awaiting a response,
+without relying on the retired Window or manual checkpoints. Fetch 9E adds real
+loopback OPTIONS/POST exchanges, success, 410 endpoint removal, retryable failure,
+and destruction during delivery. It also verifies disposal of an unused response
+body after status processing, including a collector that never ends that body.
+All delivery uses ordinary Fetch; there is no Reporting-only transport bypass.
 
 The selected endpoint and its configuration list have distinct roles. Tasks
 retain both so they can remove that endpoint without affecting another global's
@@ -288,10 +288,7 @@ internal Promise machinery with Node's host continuation queue, independently
 of any Window's microtask queue. Page implementations continue using their
 environment's execution facilities.
 
-**Fetch consumer gate:** [fetch.ts](../../fetch/fetch.ts) is the approved
-provisional no-op. It does not dispatch a request, call processing steps, or
-return a controller. An attempt remains pending until real Fetch processing is
-implemented. Do not substitute Node fetch or another transport. Automatic
+**Remaining lifecycle work:** automatic
 collection of live globals' report queues and periodic retirement remain to be
 connected; implementing task delivery does not supply those policies.
 
@@ -301,10 +298,11 @@ handoff through the current active-document destruction path. It uses the real
 browser-owned scheduler with controlled Fetch responses. The scheduling tests
 cover asynchronous delivery, page-work precedence, and inactive tasks. Retirement and
 observer tests cover local expiration and projected test-report bodies. These
-prove the independent algorithms, not network delivery or inactive destruction.
+prove the independent algorithms; `fetch-delivery.test.ts` supplies the network
+proof. Inactive destruction remains with HTML's history-ownership work.
 
 Reporting is the preflight detour after SRI, before HSTS. Network delivery
-depends on Fetch and is completed at the
+was connected through Fetch 9E at the
 [preflight's final policy stage](../../fetch/PREFLIGHT.md#rejoin-fetch-then-finish-browser-policy).
 Network Error Logging and the repository's separate network-reporting draft
 are not automatically included by implementing document-centered reporting.

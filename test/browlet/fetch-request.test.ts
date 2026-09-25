@@ -29,7 +29,6 @@ describe('Fetch Request construction', () => {
     expect(record.userAgent).toBe(getRelevantRealm(window).env.userAgent);
     expect(record.unsafeRequest).toBe(true);
     expect(record.initiatorType).toBe('fetch');
-    expect(Reflect.has(window, 'fetch')).toBe(false);
   });
 
   it('resolves URLs and referrers using the document API base URL', async () => {

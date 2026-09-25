@@ -15,6 +15,7 @@ export function createClientEnvironment(url = 'https://example.test/'): FetchEnv
   return {
     ...createEnvironment(),
     isWindow: false,
+    isServiceWorker: false,
     isTopLevelWindow: false,
     isSecureContext: true,
     crossOriginIsolatedCapability: false,

@@ -281,14 +281,23 @@ Current implementation sequence:
    The approved Undici vendor repair resolves HTTP/1.1 304 completion.
    9D CORS, preflight caching, and timing permission include the
    [approved cache permission rules](../fetch/ROADMAP.md#9d--cors-and-timing-permission);
-   two callable shapes remain for review. Next is 9E public `fetch()` and consumer
-   integration; no public network fetch is exposed yet.
+   two callable shapes remain for review. 9E now exposes public `fetch()` and
+   exercises real Reporting delivery, streaming, abort, and transport shutdown.
+   Its [consumer review](../fetch/ROADMAP.md#9e--public-fetch-and-consumers) now
+   closes no-worker upload cancellation with lazy request preparation and
+   exercises a real HTML response through provisional byte parsing, abort,
+   script readiness, Link processing, and retained navigation timing. Full HTML
+   navigation/parser/timing work retains its own owners; the synchronous source
+   route is not a network loader. The planned Fetch delivery slices are complete;
+   the [completion inventory and audit](../fetch/ROADMAP.md#completion-boundary-and-follow-up-audit)
+   cover remaining group cancellation, deferred fetch, transport dependencies,
+   and callable-shape reviews before a broader conformance claim.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
    with main-fetch invocation, response-byte verification, and Reporting delivery
-   still at their consumer gates. Reporting A implements records, endpoint
-   parsing, and explicit per-global initialization; loader invocation remains
-   gated on actual Fetch responses. Reporting B's generation, queues, user
+   connected. Reporting A implements records, endpoint parsing, and explicit
+   per-global initialization, invoked by Document response processing.
+   Reporting B's generation, queues, user
    controls, and observers are implemented for Windows; HTML destruction and
    worker lifecycle remain consumer gates. The single-document destruction
    scaffold has provisional Fetch/parser/resource dependencies; retained-history
@@ -322,7 +331,7 @@ Current implementation sequence:
    Document creation now consumes concrete Fetch records; console output uses
    an approved provisional environment method. Hash reporting preserves the
    response body and guards cross-origin disclosure. These bounded CSP slices
-   complete the independent preflight work; network report delivery remains gated on Fetch.
+   complete the independent preflight work; network report delivery is exercised by Fetch 9E.
    CSP policy delivery remains with its policy owner.
    Complete the container relationship with HTML's child-navigable lifecycle.
    Slices 1–4 are complete, and Slice 5's

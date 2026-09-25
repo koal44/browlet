@@ -5,6 +5,11 @@ import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/hig
 import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createMicrotaskQueue } from '../../../../src/js-engine/index';
+import { FetchBody } from '../../../../src/fetch/body';
+import { FetchHeaders } from '../../../../src/fetch/headers';
+import { utf8Encode } from '../../../../src/encoding/codecs/utf-8';
+import { ReadableStreamImpl } from '../../../../src/streams/index';
+import { isText } from '../../../../src/browlet/dom/nodes/node';
 
 import {
   BrowletParser,
@@ -171,6 +176,86 @@ describe('BrowletParser', () => {
     expect(complete).toBe(!reject);
     expect(document.getElementById('after') !== null).toBe(!reject);
     expect(errors).toEqual(reject ? [failure] : []);
+  });
+});
+
+describe('BrowletParser response bytes', () => {
+  it('parses before EOF and retains split BOM and character bytes across input chunks', async () => {
+    const { document, realm, env, drain } = createParserDocument();
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env);
+    const headers = new FetchHeaders();
+    headers.append('Content-Type', 'text/html; charset=windows-1252');
+    stream.enqueueChunk(Uint8Array.of(0xef));
+    stream.enqueueChunk(Uint8Array.of(0xbb));
+    stream.enqueueChunk(Uint8Array.from([0xbf, ...utf8Encode('<p id="first"></p><p id="last">caf'), 0xc3]));
+    const parser = new BrowletParser(document, () => {}, realm.agent.eventLoop, env);
+    let firstInputs = 0;
+    let complete = false;
+    const errors: unknown[] = [];
+    parser.parseBytes(new FetchBody(stream, env), headers, () => {
+      expect(realm.agent.eventLoop.currentlyRunningTask).not.toBeNull();
+      expect(document.getElementById('first')).not.toBeNull();
+      firstInputs++;
+    }).observe(() => { complete = true; }, (error) => { errors.push(error); });
+    await expect.poll(async () => { await inNodeTask(drain); return firstInputs; }).toBe(1);
+    expect(complete).toBe(false);
+    expect(document.encoding).toBe('UTF-8');
+
+    realm.queueGlobalTask(networkingTaskSource, () => {
+      stream.enqueueChunk(Uint8Array.from([0xa9, ...utf8Encode('</p>')]));
+      stream.close();
+    });
+    await expect.poll(async () => { await inNodeTask(drain); return complete; }).toBe(true);
+    const text = document.getElementById('last')?.firstChild;
+    expect(text && isText(text) ? text.data : undefined).toBe('café');
+    expect(firstInputs).toBe(1);
+    expect(errors).toEqual([]);
+    expect(stream.locked).toBe(false);
+  });
+
+  it('cancels response input when aborted before the first parser task', async () => {
+    const { document, realm, env, drain } = createParserDocument();
+    let canceled = 0;
+    const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
+    const parser = new BrowletParser(document, () => {}, realm.agent.eventLoop, env);
+    const errors: unknown[] = [];
+    parser.parseBytes(new FetchBody(stream, env), new FetchHeaders(), () => {})
+      .observe(() => {}, (error) => { errors.push(error); });
+    parser.abort();
+    await expect.poll(async () => { await inNodeTask(drain); return errors.length; }).toBe(1);
+    expect(canceled).toBe(1);
+    expect(stream.locked).toBe(false);
+    expect(document.readyState).toBe('complete');
+  });
+
+  it.each(['input', 'script'])('cancels its response reader and stops parsing while waiting for %s', async (waiting) => {
+    const { document, realm, env, drain } = createParserDocument();
+    const ready = env.exec.promises.withResolvers<void>();
+    let canceled = 0;
+    const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
+    stream.enqueueChunk(utf8Encode(waiting === 'script'
+      ? '<script></script><main id="after"></main>' : '<p></p>'));
+    const parser = new BrowletParser(document, () => ready.promise, realm.agent.eventLoop, env);
+    document.activeParser = parser;
+    document.currentDocumentReadiness = 'loading';
+    let firstInput = false;
+    let complete = false;
+    const errors: unknown[] = [];
+    parser.parseBytes(new FetchBody(stream, env), new FetchHeaders(), () => { firstInput = true; })
+      .observe(() => { complete = true; }, (error) => { errors.push(error); });
+    await expect.poll(async () => { await inNodeTask(drain); return firstInput; }).toBe(true);
+
+    realm.queueGlobalTask(networkingTaskSource, () => {
+      document.abort();
+      ready.resolve(undefined);
+    });
+    await expect.poll(async () => { await inNodeTask(drain); return errors.length; }).toBe(1);
+    expect(canceled).toBe(1);
+    expect(stream.locked).toBe(false);
+    expect(complete).toBe(false);
+    expect(document.activeParser).toBeNull();
+    expect(document.readyState).toBe('complete');
+    expect(document.getElementById('after')).toBeNull();
   });
 });
 

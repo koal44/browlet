@@ -147,6 +147,40 @@ describe('Fetch over HTTP/2', () => {
     expect(f.params.controller.state).toBe('terminated');
     expect(requests).toBe(1);
   });
+
+  it('streams an author-created body through public fetch without exposing transport objects', async () => {
+    const server = createSecureServer(tls, (request, response) => request.pipe(response));
+    const { browlet } = await fixture(server);
+    expect(await browlet.evaluate(async () => {
+      let count = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('chunk' + count++));
+          if (count === 3) controller.close();
+        },
+      });
+      const init = { method: 'POST', body, duplex: 'half' };
+      const response = await fetch('/upload', init);
+      return [response instanceof Response, response.body instanceof ReadableStream, await response.text()];
+    })).toEqual([true, true, 'chunk0chunk1chunk2']);
+  });
+
+  it('cancels an unfinished upload when the server finishes its response', async () => {
+    const server = createSecureServer(tls, (_request, response) => response.end());
+    const { browlet } = await fixture(server);
+    expect(await browlet.evaluate(async () => {
+      const canceled = Promise.withResolvers<unknown>();
+      const body = new ReadableStream({
+        start(stream) { stream.enqueue(new Uint8Array([1])); },
+        cancel(value) { canceled.resolve(value); },
+      });
+      const init = { method: 'POST', body, duplex: 'half' };
+      const response = await fetch('/early', init);
+      await response.text();
+      await canceled.promise;
+      return true;
+    })).toBe(true);
+  });
 });
 
 async function fixture(server: Http2SecureServer) {

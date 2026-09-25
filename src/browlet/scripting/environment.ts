@@ -88,6 +88,11 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
     return false;
   }
 
+  /** Service worker environments override this when that global is implemented. */
+  get isServiceWorker(): boolean {
+    return false;
+  }
+
   /** Only a Window with a top-level navigable can fetch its own Blob URL across partitions. */
   get isTopLevelWindow(): boolean {
     return false;

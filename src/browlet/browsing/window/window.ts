@@ -12,6 +12,8 @@ import { LocationImpl } from './location';
 import type { WindowProxy } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
 import type { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
+import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
+import type { InternalPromise } from '../../../infra/promises';
 import { InternalError } from '../../../infra/internal-error';
 
 /*
@@ -175,6 +177,10 @@ export class WindowImpl
 
   queueMicrotask(callback: VoidFunction): void {
     this.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
+  }
+
+  fetch(input: FetchRequestInfo, init: FetchRequestInit): InternalPromise<ResponseImpl> {
+    return this.getWindowOrWorkerGlobalScopeMixin().fetch(input, init);
   }
 
   structuredClone<T>(
