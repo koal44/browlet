@@ -8,6 +8,7 @@ import { FetchParams } from '../params';
 import { FetchResponse } from '../response';
 import { queueFetchTask } from '../tasks';
 import type { AuthenticationCredentials, AuthenticationEntry } from './authentication';
+import { fetchWithCache } from './cache/transaction';
 
 // Fetch §4.6, HTTP-network-or-cache fetch.
 /** Prepare the wire request and handle authentication or a fresh-connection retry. */
@@ -92,17 +93,12 @@ export function httpNetworkOrCacheFetch(
       }
       authentication.applyProxyAuthentication(httpRequest);
       userAgent.webDriverBiDiBeforeRequestSent(request);
-      const cache = userAgent.httpCachePartitions.determine(httpRequest);
-      if (cache === null) httpRequest.cacheMode = 'no-store';
-      // TODO(Fetch 9C): select/validate stored responses here and store/invalidate after network fetch.
-      // These partitions currently contain no response entries, so every lookup is a miss.
-      if (httpRequest.cacheMode === 'only-if-cached') return FetchResponse.networkError();
       return { httpParams, httpRequest, includeCredentials, sentEntry };
     }).then((prepared) => {
       if (prepared instanceof FetchResponse) return prepared;
       if (params.canceled) return FetchResponse.appropriateNetworkError(params);
       const { httpParams, httpRequest, includeCredentials, sentEntry } = prepared;
-      return httpParams.httpNetworkFetch(includeCredentials, isNewConnectionFetch).then((response) => {
+      return fetchWithCache(httpParams, includeCredentials, isNewConnectionFetch, request).then((response) => {
         if (response.type === 'error') return response;
         if (params.canceled) { response.discardBody?.(); return FetchResponse.appropriateNetworkError(params); }
         response.urlList = [...httpRequest.urlList];

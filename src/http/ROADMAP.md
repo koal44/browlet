@@ -334,8 +334,10 @@ The transport audit verifies:
 - Separate 102/103 and final responses, unknown final status retention, original
   field boundaries, and no merging of trailers into final headers. Both HTTP/1.1
   and HTTP/2 accept an unsolicited 100 before the final response.
-- HEAD/304 representation Content-Length without transferred content; 204/205
-  null-body delivery; coding headers retained without decoding absent bytes.
+- HEAD/304 representation Content-Length without transferred content at the Fetch
+  consumer and transport; 204/205 null-body delivery; coding headers retained
+  without decoding absent bytes. The approved Undici HTTP/1.1 vendor repair
+  preserves a 304's Content-Length and completes it without closing the connection.
 - Short Content-Length responses reject the consuming page's body read with
   its TypeError on both protocols. Existing tests cover coding errors,
   cancellation, bounded buffering, TLS failure, and connection reuse.
@@ -369,7 +371,7 @@ Validation passed: 5,357 HTTP/Fetch/transport tests, TypeScript, and 31 focused
 Undici informational-response, pipelining, and raw-header tests.
 
 Forwarding headers, server negotiation/preconditions, and optional protocol
-upgrades remain outside this client detour. Date receipt/storage is Fetch 9C;
+upgrades remain outside this client detour. Fetch 9C connects Date receipt/storage;
 no new automatic Retry-After policy or trailer consumer was introduced.
 
 ### Boundaries and later dependencies
@@ -384,8 +386,8 @@ Our response decompression is explicitly composed around Node codecs.
 The immediate pure algorithms have no missing DOM or HTML dependency. Browser
 integration now supplies retained challenge state and a prompt/credential-clear
 owner with the approved selection and retry rules. The proxy boundary above
-remains open. Cache storage/freshening remains Fetch 9C; multipart byte-range
-assembly needs its own RFC 2046/9110 consumer if adopted.
+remains open. Fetch 9C implements complete-response storage/freshening;
+multipart byte-range assembly needs its own RFC 2046/9110 consumer if adopted.
 Digest (RFC 7616), connection-bound schemes, and other optional schemes need
 their own reviewed specifications and transport contracts; implementing Basic
 does not claim those schemes. RFC 9110 already defines Authentication-Info

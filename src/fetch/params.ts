@@ -16,6 +16,7 @@ import {
 import { shouldBlockDueToBadPort, shouldBlockDueToMIMEType, shouldBlockDueToNosniff } from './http/blocking';
 import { isCORSSafelistedMethod } from './http/methods';
 import { httpNetworkFetch } from './http/network';
+import type { HTTPCachePartition } from './http/cache/store';
 import { httpNetworkOrCacheFetch } from './http/transaction';
 import { isNullBodyStatus, isRangeStatus, isRedirectStatus } from './http/statuses';
 import { bytesMatchIntegrityMetadata } from './integrity';
@@ -277,8 +278,8 @@ export class FetchParams {
 
   /** Perform one HTTP transport exchange with streamed bodies, decoding, and response processing. */
   // https://fetch.spec.whatwg.org/#concept-http-network-fetch
-  httpNetworkFetch(includeCredentials = false, forceNewConnection = false): InternalPromise<FetchResponse> {
-    return httpNetworkFetch(this, includeCredentials, forceNewConnection);
+  httpNetworkFetch(includeCredentials = false, forceNewConnection = false, cache?: HTTPCachePartition): InternalPromise<FetchResponse> {
+    return httpNetworkFetch(this, includeCredentials, forceNewConnection, cache);
   }
 
   /** Perform a preflight request and populate the browser's CORS permission cache. */

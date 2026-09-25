@@ -852,8 +852,13 @@ Fetch/HTML algorithms.
 and creation URL before a realm exists. Requests retain this actual record as
 their reserved client. Fetch derives network partition keys from it, retaining
 opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
-partitions; they outlive an individual environment. Connection establishment
-and cache response storage remain deferred under Fetch's HTTP roadmap.
+partitions; they outlive an individual environment. The Node transport supplies
+connection establishment. Fetch's private cache retains response metadata and
+immutable `BlobData`, never the original request/client or realm-owned stream.
+Network capture copies chunks under a shared LRU body budget without adding a
+reader or tee. A cached read creates its body in the current `env`. Clearing
+also invalidates pending writes. Background revalidation belongs to the original
+client's Fetch group and terminates with that client.
 
 Storage's `StorageKey` similarly consumes a narrow structural view of the actual
 `Environment` or `EnvironmentRecord`. Full settings supply their security origin;

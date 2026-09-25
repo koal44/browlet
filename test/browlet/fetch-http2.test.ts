@@ -63,6 +63,27 @@ describe('Fetch over HTTP/2', () => {
     expect(paths).toEqual(['/resource']);
   });
 
+  it('validates a cached representation over HTTP/2 and then reuses its complete body', async () => {
+    let exchanges = 0;
+    const server = createSecureServer(tls, (request, response) => {
+      exchanges++;
+      const validating = request.headers['if-none-match'] === '"one"';
+      response.writeHead(validating ? 304 : 200, [
+        'etag', '"one"', 'content-length', '6', 'cache-control', validating ? 'max-age=300' : 'max-age=0',
+        'vary', 'accept', 'vary', 'accept-language',
+      ]);
+      response.end(validating ? '' : 'cached');
+    });
+    const f = await fixture(server);
+    await f.receive();
+    expect(await f.browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text())).toBe('cached');
+    expect((await f.receive()).cacheUsage).toBe('validated');
+    expect(await f.browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text())).toBe('cached');
+    expect((await f.receive()).cacheUsage).toBe('local');
+    expect(await f.browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text())).toBe('cached');
+    expect(exchanges).toBe(2);
+  });
+
   it('records Early Hints timing before the final response', async () => {
     const server = createSecureServer(tls);
     server.on('stream', (stream) => {

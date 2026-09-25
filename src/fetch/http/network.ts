@@ -15,12 +15,15 @@ import { queueFetchTask } from '../tasks';
 import type { HTTPTransportControl, HTTPUploadSource } from './transport';
 import type { HTTPContentDecoder } from './content-decoder';
 import { isNullBodyStatus } from './statuses';
+import type { HTTPCacheEntry, HTTPCachePartition } from './cache/store';
 
 /** HTTP-network fetch's wire exchange and demand-driven response body (Fetch §4.7). */
+// SPEC_MISMATCH: (fetchParams, includeCredentials, forceNewConnection) -> response
 export function httpNetworkFetch(
-  params: FetchParams, includeCredentials = false, forceNewConnection = false,
+  params: FetchParams, includeCredentials = false, forceNewConnection = false, cache?: HTTPCachePartition,
 ): InternalPromise<FetchResponse> {
   const { request, env, controller, timingInfo } = params;
+  const generation = cache?.generation;
   const result = request.userAgent.hostPromises.withResolvers<FetchResponse>();
   if (params.canceled) {
     result.resolve(FetchResponse.appropriateNetworkError(params));
@@ -54,6 +57,7 @@ export function httpNetworkFetch(
     let outputPaused = false;
     let transmitted = 0;
     let uploadEnded = false;
+    let cacheEntry: HTTPCacheEntry | undefined;
     const upload = request.body instanceof FetchBody ? new NetworkUpload(request.body, params) : null;
     const body = new NetworkBody(params, () => {
       removeCancellation();
@@ -67,7 +71,10 @@ export function httpNetworkFetch(
         decoder?.resume();
         if (!decoderBlocked) control?.resume();
       },
-      abort() { decoder?.abort(); upload?.cancel(); control?.abort(); },
+      abort() {
+        if (cacheEntry) cache!.owner.remove(cacheEntry);
+        decoder?.abort(); upload?.cancel(); control?.abort();
+      },
     });
     response.discardBody = () => {
       discarded = true;
@@ -81,6 +88,7 @@ export function httpNetworkFetch(
       if (result.pending) result.resolve(FetchResponse.appropriateNetworkError(params));
     };
     removeCancellation = controller.addCancellationSteps(cancel);
+    const requestTime = Date.now();
     try {
       control = request.userAgent.httpTransport.dispatch({
         url: request.currentURL,
@@ -145,7 +153,7 @@ export function httpNetworkFetch(
               if (supported) {
                 decoder = request.userAgent.createContentDecoder(normalized, {
                   onData: receiveDecoded,
-                  onEnd() { body.end(); },
+                  onEnd: endResponse,
                   onError() { if (!discarded && !params.canceled) controller.terminate(); },
                   onDrain() {
                     decoderBlocked = false;
@@ -155,6 +163,7 @@ export function httpNetworkFetch(
               }
             }
           }
+          if (cache && generation === cache.generation) cacheEntry = cache.begin(request, response, requestTime, Date.now());
           result.resolve(response);
         },
         onData(bytes) {
@@ -166,7 +175,7 @@ export function httpNetworkFetch(
             receiveDecoded(bytes);
           }
         },
-        onEnd() { upload?.cancel(); if (decoder) decoder.end(); else body.end(); },
+        onEnd() { upload?.cancel(); if (decoder) decoder.end(); else endResponse(); },
         onError() {
           // Native transport errors do not become page-owned exception objects.
           if (!params.canceled && !discarded) controller.terminate();
@@ -182,7 +191,14 @@ export function httpNetworkFetch(
     function receiveDecoded(bytes: Uint8Array): void {
       if (params.canceled || discarded) return;
       response.bodyInfo.decodedSize += bytes.byteLength;
+      cacheEntry?.append(bytes);
       body.receive(bytes);
+    }
+    function endResponse(): void {
+      if (params.canceled || discarded) return;
+      cacheEntry?.finish(response.bodyInfo);
+      cacheEntry = undefined;
+      body.end();
     }
     // dispatch() may synchronously deliver callbacks before returning its control.
     function synchronizeControl(): void {

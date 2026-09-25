@@ -64,6 +64,20 @@ describe('Node HTTP transport', () => {
     expect(paths).toEqual(['/']);
   });
 
+  it('completes a 304 with a representation Content-Length and no response body', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(304, { ETag: '"one"', 'Content-Length': '123' });
+      response.end();
+    });
+    servers.push(server);
+    const request = wireRequest(await listen(server));
+    request.headers.append('If-None-Match', '"one"');
+    const result = await exchange(makeTransport(), request);
+    expect(result.status).toBe(304);
+    expect(result.headers.get('Content-Length')).toBe('123');
+    expect(result.body).toHaveLength(0);
+  });
+
   it('accepts an unsolicited 100 Continue before the final response', async () => {
     const server = createServer((_request, response) => { response.writeContinue(); response.end('done'); });
     servers.push(server);

@@ -59,7 +59,7 @@ index a66d931..39f6fcd 100644
  
      const parsedTrailers = Array.isArray(trailers) ? parseHeaders(trailers) : trailers
 diff --git a/lib/dispatcher/client-h1.js b/lib/dispatcher/client-h1.js
-index 3cc2471..f560cde 100644
+index 3cc2471..5a7099f 100644
 --- a/lib/dispatcher/client-h1.js
 +++ b/lib/dispatcher/client-h1.js
 @@ -638,11 +638,6 @@ class Parser {
@@ -74,6 +74,16 @@ index 3cc2471..f560cde 100644
      /* this can only happen if server is misbehaving */
      if (upgrade && !request.upgrade) {
        util.destroy(socket, new SocketError('bad upgrade', util.getSocketInfo(socket)))
+@@ -799,7 +794,8 @@ class Parser {
+       return 0
+     }
+ 
+-    if (request.method !== 'HEAD' && contentLength !== -1 && bytesRead !== contentLength) {
++    // HEAD and 304 advertise representation length without transferring it.
++    if (request.method !== 'HEAD' && statusCode !== 304 && contentLength !== -1 && bytesRead !== contentLength) {
+       util.destroy(socket, new ResponseContentLengthMismatchError())
+       return -1
+     }
 diff --git a/lib/dispatcher/client-h2.js b/lib/dispatcher/client-h2.js
 index 9588097..83ef8ca 100644
 --- a/lib/dispatcher/client-h2.js
@@ -174,6 +184,46 @@ index 9588097..83ef8ca 100644
  }
  
  function writeBodyH2 () {
+diff --git a/test/content-length.js b/test/content-length.js
+index 92386b9..ab906d6 100644
+--- a/test/content-length.js
++++ b/test/content-length.js
+@@ -275,6 +275,35 @@ test('response invalid content length with close', async (t) => {
+   await t.completed
+ })
+ 
++test('304 representation content-length preserves the connection', async (t) => {
++  let connections = 0
++  const representation = 'x'.repeat(123)
++  const server = createServer((req, res) => {
++    const notModified = req.headers['if-none-match'] === '"one"'
++    res.writeHead(notModified ? 304 : 200, { 'content-length': '123', etag: '"one"' })
++    res.end(notModified ? undefined : representation)
++  })
++  server.on('connection', () => connections++)
++  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
++  const client = new Client(`http://127.0.0.1:${server.address().port}`)
++  t.after(async () => {
++    await client.destroy()
++    server.close()
++  })
++
++  const response = await client.request({
++    path: '/', method: 'GET', headers: { 'if-none-match': '"one"' }
++  })
++  t.assert.strictEqual(response.statusCode, 304)
++  t.assert.strictEqual(response.headers['content-length'], '123')
++  t.assert.strictEqual(await response.body.text(), '')
++
++  const nextResponse = await client.request({ path: '/', method: 'GET' })
++  t.assert.strictEqual(nextResponse.statusCode, 200)
++  t.assert.strictEqual(await nextResponse.body.text(), representation)
++  t.assert.strictEqual(connections, 1)
++})
++
+ test('request streaming with Readable.from(buf)', async (t) => {
+   const server = createServer({ joinDuplicateHeaders: true }, (req, res) => {
+     req.pipe(res)
 diff --git a/test/http-100.js b/test/http-100.js
 index 96dd48d..5486383 100644
 --- a/test/http-100.js

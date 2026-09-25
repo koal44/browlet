@@ -165,6 +165,13 @@ describe('File API §7: Blob read failures', () => {
 });
 
 describe('File API §3: Blob serialization data', () => {
+  it('copies host Buffer bytes instead of retaining Buffer.slice views', async () => {
+    const bytes = Buffer.from([0, 1, 2, 3, 4]);
+    const data = BlobData.fromBytes(bytes.subarray(1, 4));
+    bytes.fill(9);
+    expect(await data.read()).toEqual(Uint8Array.of(1, 2, 3));
+  });
+
   it('copies in-memory byte sources for storage', async () => {
     const original = BlobData.fromBytes(Uint8Array.of(1, 2, 3));
     const stored = original.cloneForStorage();

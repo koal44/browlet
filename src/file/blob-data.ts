@@ -33,11 +33,13 @@ export class BlobData {
     return new BlobData([]);
   }
 
+  /** Allocate and copy the supplied bytes into independent Blob storage. */
   static fromBytes(bytes: Uint8Array): BlobData {
-    return BlobData.fromOwnedBytes(bytes.slice());
+    // Host Buffers are Uint8Arrays too, but their slice() retains shared memory.
+    return BlobData.fromOwnedBytes(new Uint8Array(bytes));
   }
 
-  /** Accept bytes whose ownership has already been transferred to Blob data. */
+  /** Retain the supplied storage without copying; the caller must stop mutating or transferring it. */
   static fromOwnedBytes(bytes: Uint8Array): BlobData {
     if (bytes.length === 0) return BlobData.empty();
     const source = new MemoryBlobByteSource(bytes);

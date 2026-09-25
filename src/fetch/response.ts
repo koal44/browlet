@@ -28,7 +28,7 @@ import { parseAndStoreCookies } from './policy/cookies';
 import { isBlockedByCORS } from './policy/cors';
 import { isBlockedByCORP, isBlockedByCORPInternal, queueCORPViolationReport } from './policy/embedder-policy';
 import { isMixedDownload, isResponseBlockedByMixedContent } from './policy/mixed-content';
-import { isTimingAllowed } from './policy/timing';
+import { isNavigationTimingAllowed, isTimingAllowed } from './policy/timing';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
 
@@ -144,9 +144,11 @@ export class FetchResponse {
     }) as FilteredFetchResponse;
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-response-clone */
-  clone(): FetchResponse {
-    if (isFilteredResponse(this)) return this.internalResponse.clone().filter(this.type);
+  /** Clone the response, optionally replacing its body instead of teeing it. */
+  // https://fetch.spec.whatwg.org/#concept-response-clone
+  // SPEC_MISMATCH: (response) -> response
+  clone(body?: FetchBody | null): FetchResponse {
+    if (isFilteredResponse(this)) return this.internalResponse.clone(body).filter(this.type);
     return Object.assign(new FetchResponse(), this, {
       headerList: this.headerList.clone(),
       urlList: this.urlList.map(copyURL),
@@ -154,7 +156,7 @@ export class FetchResponse {
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
       bodyInfo: Object.assign(new ResponseBodyInfo(), this.bodyInfo),
       serviceWorkerTimingInfo: this.serviceWorkerTimingInfo === null ? null : { ...this.serviceWorkerTimingInfo },
-      body: this.body?.clone() ?? null,
+      body: body === undefined ? this.body?.clone() ?? null : body,
     });
   }
 
@@ -251,6 +253,10 @@ export class FetchResponse {
   // https://fetch.spec.whatwg.org/#concept-tao-check
   isTimingAllowed(request: FetchRequest): boolean {
     return isTimingAllowed(this, request);
+  }
+
+  isNavigationTimingAllowed(destinationOrigin: Origin): boolean {
+    return isNavigationTimingAllowed(this, destinationOrigin);
   }
 }
 

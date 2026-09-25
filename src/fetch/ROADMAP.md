@@ -4,11 +4,11 @@
 - **Complete:** [Slice 2 — HTTP methods, headers, and statuses](#slice-2--http-methods-headers-and-statuses).
 - **Complete:** [Slice 3 — bodies and stream processing](#slice-3--bodies-and-stream-processing).
 - **Complete:** [Slice 4 — requests and responses](#slice-4--requests-and-responses), Fetch §§2.2.5–2.2.7.
-- **Infrastructure implemented, effects deferred:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport, response storage, and deferred-fetch processing remain open.
+- **Infrastructure implemented:** [Slice 5 — fetch groups and network infrastructure](#slice-5--fetch-groups-and-network-infrastructure); transport and response storage are connected in Slice 9. Deferred-fetch processing remains open.
 - **Complete:** [Slice 6 — network-independent platform APIs](#slice-6--network-independent-platform-apis), including Request/Response construction and HTML's document-base-URL dependency.
 - **Complete, HTML integrations provisional:** [Slice 7 — HTTP extensions](#slice-7--http-extensions); srcdoc ancestry and report generation retain their explicitly deferred integration hooks.
 - **Complete, later dependencies provisional:** [Slice 8 — Fetch orchestration and local schemes](#slice-8--fetch-orchestration-and-local-schemes), including 8E data URL processing.
-- **9B and the HTTP detour complete; 9C next:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); HTTP/1.1 and HTTP/2 transactions, streaming, decoding, and Basic credential integration are connected. Detour A–D includes the approved vendor repair for unsolicited HTTP/1.1 100 Continue responses; proxy authentication remains provisional.
+- **9C implemented:** [Slice 9 — HTTP transport, CORS, and public fetch](#slice-9--http-transport-cors-and-public-fetch); cache storage and validation are connected. Background revalidation completes through the TAO check; the approved Undici vendor repair resolves HTTP/1.1 304 completion. See the [cache gates](http/cache/ROADMAP.md#remaining-acceptance-gates-and-review). Proxy authentication remains provisional.
 
 This directory owns Browlet's host-neutral implementation of the
 [Fetch Standard](https://fetch.spec.whatwg.org/). It owns Fetch records,
@@ -456,8 +456,9 @@ the separate nosniff check remains in Slice 7.
 cover resolution, connection reuse, partition identity, and blocking. Header
 tests cover MIME extraction. `test/browlet/fetch-control.test.ts` proves actual
 settings/UserAgent ownership, and `test/browlet/fetch-timing.test.ts` exercises
-the composed runtime. Transport, response storage, and pending deferred-fetch
-processing remain explicit completion gates, not passing network/cache claims.
+the composed runtime. Slice 9 connects transport and response storage, with
+the cache acceptance dependencies recorded there. Pending deferred-fetch
+processing remains an explicit completion gate.
 
 ## Slice 6 — network-independent platform APIs
 
@@ -968,8 +969,8 @@ The future-owner calls now have explicit provisional implementations:
 | `userAgent.handleFetch(request, controller, isolated)` | Returns a host-owned Promise of null: no registrations or active workers exist. Service Workers later supplies interception, timing, and response delivery through this entry. |
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
 | `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | Return false while the cache cannot store entries. Slice 9 supplies §4.9 permissions, including partition, origin, credentials, and expiry. |
-| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions and the HTTP detour connects Basic authentication with approved policies. 9C supplies cache transactions. |
-| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | Delegate to provisional Fetch policy functions that throw an unimplemented InternalError. Slice 9 supplies §§4.10–4.11. |
+| `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | Preflight remains an explicit unimplemented InternalError for 9D. 9B connects HTTP transactions and the HTTP detour connects Basic authentication with approved policies. 9C connects cache transactions and the TAO check required by background completion. |
+| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | CORS remains provisional for 9D; TAO and navigation TAO are implemented for background completion. |
 
 **`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
 explicitly permits a null client with retained origin and policy-container state,
@@ -1064,8 +1065,8 @@ Keep five subdivisions, with the first bounded to proving the transport:
 | --- | --- | --- |
 | **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented |
 | **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Implemented with HTTP/2 and Basic credentials; HTTP detour complete; proxy authentication remains provisional |
-| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Planned |
-| **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Planned |
+| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Implemented, including background completion through TAO |
+| **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | CORS/preflight planned; TAO implemented with caching |
 | **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Planned |
 
 **9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
@@ -1093,7 +1094,17 @@ their listeners. Adapter shutdown aborts outstanding exchanges and closes client
 separate wire request, applies credentials/COEP, cookies, Origin, Fetch Metadata,
 User-Agent, Referer, cache-control, content-length, and content-coding fields,
 checks the keepalive budget, and handles authentication/retry control flow.
-Cache selection/storage remain explicitly assigned to 9C; CORS/TAO to 9D.
+9C connects cache selection/storage and TAO; CORS remains assigned to 9D.
+
+**9C implementation:** [`http/cache/store.ts`](http/cache/store.ts) retains
+complete decoded bodies and actual Fetch metadata, selected by network partition,
+URL, method, and Vary. [`http/cache/transaction.ts`](http/cache/transaction.ts)
+applies cache modes, validation, 304/HEAD merging, invalidation, and background
+revalidation. Capture follows existing backpressure without an additional reader
+or tee. The UserAgent owns bounded LRU storage; `Browlet.clearHTTPCache()` clears
+identifying validators and pending writes. No retired environment is retained.
+The cache roadmap records its optional partial/range-storage boundary and two
+callable shapes awaiting review. Background revalidation completes through TAO.
 
 Each attempt consumes one upload stream on its HTML owner. Retained sources
 (including Blob and encoded multipart data) are recreated only for a retry,

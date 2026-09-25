@@ -1,14 +1,18 @@
 # Fetch HTTP cache integration roadmap
 
-This folder will own storage, selection, validation, and cache transactions over
+This folder owns storage, selection, validation, and cache transactions over
 Fetch request/response records. Browlet owns configured cache instances and their
 partitioned storage. This is distinct from the service-worker Cache API.
 
-**Status:** the reusable [HTTP cache rules](../../../http/cache/ROADMAP.md) and
-Fetch request/response cloning exist. `partitions.ts` selects browser-owned
-partition identities from the actual client environment, including opaque-site
-separation. A partition currently holds only its key; response storage,
-selection, validation, and transport transactions remain unimplemented.
+**Status (9C):** storage, Vary selection, validation, and transport transactions
+are implemented. The TAO check closes background Fetch completion; the existing
+regression now passes without unhandled errors. The approved vendor repair
+resolves Undici's HTTP/1.1 304 length check. Two callable shapes remain for review.
+
+`partitions.ts` owns the shared body budget and LRU eviction. `store.ts` retains
+actual Fetch response records without body streams or execution environments,
+plus immutable `BlobData` for completed content. `transaction.ts` connects cache
+modes, validators, invalidation, and background revalidation to the wire path.
 
 ## Sources
 
@@ -28,7 +32,11 @@ now supplies validator lists, strong/weak tag comparison, Last-Modified strength
 If-Range, and byte Content-Range parsing. These helpers do not depend on Fetch
 cache records; D supplies HTTP-date serialization for recording a missing Date.
 
-## Implementation order
+## Implementation boundaries
+
+The complete-response portions below are connected. Range/partial storage and
+local evaluation of authored preconditions are optional and remain unsupported;
+those requests go to the network with their original conditions intact.
 
 1. **Storage and selection.** Retain actual Fetch records and bodies. Implement
    partitioned URI/method keys, Vary matching, newest suitable response selection,
@@ -63,6 +71,58 @@ cache is a configuration, not proof that its algorithms have been implemented.
 Browser privacy-state clearing must include identifying cached validators
 (RFC 9110 §17.14), not only cookies or the independent authentication cache.
 
+## Storage and transaction choices
+
+- Capture copies decoded chunks only as the existing transport delivers them.
+  There is no extra stream reader or tee and no change to backpressure. A write
+  becomes selectable only after framing and decoding finish successfully.
+  Failed, canceled, or oversized writes are discarded. `BlobData.fromBytes()`
+  now copies Node Buffers correctly instead of retaining Buffer.slice views;
+  a focused File regression covers that dependency repair.
+- Defaults are 32 MiB of retained/in-progress body bytes, 8 MiB per entry, and
+  256 entries across partitions. LRU eviction bounds storage; persistence is
+  not implemented. `Browlet.clearHTTPCache()` removes identifying validators
+  and prevents pending writes from restoring cleared data.
+- Each reader receives a new stream in its own environment. The cache retains
+  neither the original stream nor its request/client. Body timing metadata is
+  copied when decoding finishes. Set-Cookie is processed only on network
+  receipt, not replayed on cache hits.
+- Unknown end-to-end fields and duplicates survive storage; hop/proxy fields
+  do not. Vary compares combined field values conservatively, distinguishing
+  absence from an empty value. Overlapping matches use the newest Date,
+  preferring valid explicit Vary rules to responses without Vary.
+- Validation sends both ETag and Last-Modified when available; the origin
+  applies If-None-Match precedence. Strong validators update all matching
+  candidates; weak validators update the newest. Dates remain weak without
+  origin-clock evidence. HEAD freshens matching GET metadata and evicts a
+  contradicted representation. A 304 merges metadata while retaining body
+  interpretation and Content-Length (RFC 9111 §3.2).
+- All six Fetch cache modes are connected. HTTP's only-if-cached directive
+  yields 504 on a miss, while Fetch's cache mode yields a network error.
+  Unsafe successful responses invalidate all target variants. Stale-if-error
+  is not enabled as an unconditional error fallback.
+- Background revalidation enters main Fetch directly, without repeating
+  preload consumption or copying already-generated wire fields. It drains
+  incrementally and belongs to the original client's Fetch group. Its lifetime
+  ends with the client; it is not a keepalive operation.
+
+## Remaining acceptance gates and review
+
+Two callable shapes await review: `FetchResponse.clone(body)` can copy metadata
+without teeing, and HTTP-network fetch accepts the selected cache partition to
+establish capture before the first body chunk. Both carry `SPEC_MISMATCH`
+markers. Neither introduces a parallel response model.
+
+The background-completion gate is closed: `test/browlet/fetch-cache.test.ts`
+observes the revalidation request reach `done` through the real TAO check,
+beyond the earlier successful cache-byte update.
+
+The approved Undici vendor repair exempts 304 from transferred-length checks.
+The transport regression now completes `304 + Content-Length: 123` with no body;
+the upstream-style regression also verifies connection reuse. HTTP/2 validation
+continues to pass. See
+[the issue evidence](../../../../scratch/SPEC-ISSUES.md#undici-http11-checks-304-representation-length-as-body-length).
+
 ## Undici reuse assessment
 
 Reviewed the clean Undici 8.10.0 checkout at `181c293`. Its public
@@ -93,6 +153,11 @@ header preservation, and body conversion must be possible without maintaining
 a second parallel index merely to recover information hidden by the store.
 
 ## Exit proof
+
+`test/fetch/http/cache/store.test.ts` covers storage, selection, validators,
+HEAD, invalidation, and eviction. `test/browlet/fetch-cache.test.ts` exercises
+real HTTP transactions and lifecycle, and `test/browlet/fetch-http2.test.ts`
+covers actual HTTP/2 validation and subsequent local reuse.
 
 Stored-response tests must cover overlapping Vary variants, no-store/no-cache,
 authenticated requests, invalidation, and validation updates. Integration tests

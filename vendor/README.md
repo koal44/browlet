@@ -32,11 +32,16 @@ responses. They pass through the existing informational-response path while the
 client awaits the final response. Regression tests cover repeated 100 responses
 through Fetch and response ordering for pipelined requests on one connection.
 
+The HTTP/1.1 patch also accepts a 304's representation Content-Length without
+expecting response body bytes. Its regression preserves the header, completes
+the empty response, and reuses the connection for the next request. Ordinary
+body-length validation remains in place.
+
 Development history is kept on `codex/http2-raw-headers-experiment` in the regular
 Undici reference checkout. The raw-header fix, iterable-body typing correction,
-and unsolicited-100 repair (`41496d5d`) are separate commits. Keep further fixes
-separate there before updating the tracked vendor patch; the generated checkout
-is disposable.
+unsolicited-100 repair (`41496d5d`), and 304 repair (`10e3655e`) are separate
+commits. Keep further fixes separate there before updating the tracked vendor
+patch; the generated checkout is disposable.
 
 Both workspace manifests install the archive through ordinary `undici` imports.
 Browlet bundles this dependency when packed so its artifact does not depend on a

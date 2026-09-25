@@ -274,8 +274,12 @@ Current implementation sequence:
    Last-Modified strength, If-Range, and Content-Range parsing. D supplies
    Retry-After, date serialization, x-gzip decoding, and transport checks,
    including the approved Undici repair for unsolicited HTTP/1.1 100 Continue.
-   The HTTP detour is complete. Next come 9C cache,
-   9D CORS/TAO, and 9E public
+   The HTTP detour's planned work is complete. 9C supplies bounded cache storage,
+   selection, validation, invalidation, and background revalidation, including
+   the TAO check required for background completion. Callable shapes remain for
+   review in the [cache roadmap](../fetch/http/cache/ROADMAP.md#remaining-acceptance-gates-and-review).
+   The approved Undici vendor repair resolves HTTP/1.1 304 completion.
+   Next come 9D CORS/preflight and 9E public
    `fetch()` and consumer integration; no public network fetch is exposed yet.
    Fetch Metadata's header algorithms are complete. SRI/Integrity Policy has
    completed all [three algorithm slices](../fetch/ROADMAP.md#subresource-integrity),
