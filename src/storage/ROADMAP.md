@@ -21,7 +21,7 @@ Read §4's model before implementing §4.2 keys. Later substrate work follows
 - [HTML Web Storage](../browlet/storage/ROADMAP.md) owns `Storage`,
   `StorageEvent`, per-Document holders, and local/session API behavior.
 - IndexedDB and Cache Storage remain later consumers. The browser HTTP cache
-  has its own [Fetch plan](../fetch/http/cache/ROADMAP.md); the two cache
+  has its own [Fetch plan](../fetch/CACHE-ROADMAP.md); the two cache
   concepts must not acquire one shared implementation merely by name.
 
 ## First slice — storage keys
@@ -35,8 +35,8 @@ Storage acquisition returns null for opaque origins or disabled storage;
 non-storage acquisition preserves opaque-origin identity and remains available
 when storage is disabled. Blob URL checks use the latter.
 
-The narrow `StorageEnvironment` interface in `environment.ts` is extended by
-Browlet's `EnvironmentRecord`. Full `Environment` objects implement that record;
+The narrow `StorageEnvironment` interface in `environment.ts` is implemented by
+Browlet's `EnvironmentRecord` base class. Full `Environment` objects extend it;
 no adapter object is constructed. Settings supply their security origin;
 earlier records supply their creation URL.
 Its `StorageUserAgent` contract supplies `storageEnabled`, read at acquisition

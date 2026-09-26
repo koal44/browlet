@@ -2,17 +2,15 @@ import { readFileSync } from 'node:fs';
 import { constants, createSecureServer, type Http2SecureServer } from 'node:http2';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm, project, unwrap } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
 import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
 import { FetchBody } from '../../src/fetch/body';
-import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { ResponseImpl, type FetchResponse } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
 import type { ReadableStreamImpl } from '../../src/streams/readable-stream';
-import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
+import { createFetchOperation } from './fetch-fixture';
 
 const tls = {
   cert: readFileSync('test/browlet/loader/fixtures/localhost-cert.pem'),
@@ -26,41 +24,84 @@ afterEach(async () => {
 });
 
 describe('Fetch over HTTP/2', () => {
-  it('decodes repeated Content-Encoding, selects the last MIME type, and learns only the first HSTS field', async () => {
-    const plain = 'some plain text';
-    const encoded = brotliCompressSync(gzipSync(plain));
-    const server = createSecureServer(tls, (_request, response) => {
-      response.writeHead(200, [
-        'content-encoding', 'gzip', 'content-encoding', 'br',
-        'content-type', 'text/plain', 'content-type', 'text/html',
-        'strict-transport-security', 'max-age=300; includeSubDomains', 'strict-transport-security', 'max-age=0',
-      ]);
-      response.end(encoded);
-    });
-    const f = await fixture(server);
-    const response = await f.receive();
-    expect(response.status).toBe(200);
-    expect(await f.browlet.evaluate(async () => {
-      const blob = await (globalThis as unknown as NetworkPage).networkResponse.blob();
-      return { type: blob.type, text: await blob.text() };
-    })).toEqual({ type: 'text/html', text: plain });
-    expect(response.bodyInfo).toMatchObject({ encodedSize: encoded.length, decodedSize: plain.length });
-    expect(f.env.userAgent.hstsStore.hosts.get('localhost')?.includeSubDomains).toBe(true);
-    expect(f.env.userAgent.hstsStore.requiresHTTPS(f.request.currentURL.host)).toBe(true);
-    expect(f.params.timingInfo.finalConnectionTimingInfo?.alpnNegotiatedProtocol).toEqual(new TextEncoder().encode('h2'));
+  it('streams an author-created body through public fetch without exposing transport objects', async () => {
+    const server = createSecureServer(tls, (request, response) => request.pipe(response));
+    const { browlet } = await fixture(server);
+    expect(await browlet.evaluate(async () => {
+      let count = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('chunk' + count++));
+          if (count === 3) controller.close();
+        },
+      });
+      const init = { method: 'POST', body, duplex: 'half' };
+      const response = await fetch('/upload', init);
+      return [response instanceof Response, response.body instanceof ReadableStream, await response.text()];
+    })).toEqual([true, true, 'chunk0chunk1chunk2']);
   });
 
-  it('rejects repeated Location fields without following either target', async () => {
-    const paths: string[] = [];
+  it('streams a source-less page upload and reports its transmitted bytes and completion', async () => {
     const server = createSecureServer(tls, (request, response) => {
-      paths.push(request.url);
-      response.writeHead(302, ['location', '/A', 'location', '/B']);
-      response.end();
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => response.end(Buffer.concat(chunks)));
     });
     const f = await fixture(server);
-    const response = await f.receive();
-    expect((await observe(f.params.httpRedirectFetch(response)))?.type).toBe('error');
-    expect(paths).toEqual(['/resource']);
+    await f.browlet.evaluate(() => {
+      let index = 0;
+      Reflect.set(globalThis, 'uploadStream', new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new Uint8Array([65 + index++, 65 + index++]));
+          if (index === 4) controller.close();
+        },
+      }));
+    });
+    const stream = unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream);
+    f.request.method = 'POST';
+    f.request.body = new FetchBody(stream, f.env);
+    expect(f.request.body.source).toBeNull();
+    const progress: number[] = [];
+    const end = Promise.withResolvers<void>();
+    f.operation.options.processRequestBodyChunkLength = (length) => progress.push(length);
+    f.operation.options.processRequestEndOfBody = () => end.resolve();
+    expect((await f.receive()).status).toBe(200);
+    expect(await f.browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text())).toBe('ABCD');
+    await end.promise;
+    expect(progress.reduce((sum, length) => sum + length, 0)).toBe(4);
+  });
+
+  it('cancels an unfinished upload when the server finishes its response', async () => {
+    const server = createSecureServer(tls, (_request, response) => response.end());
+    const { browlet } = await fixture(server);
+    expect(await browlet.evaluate(async () => {
+      const canceled = Promise.withResolvers<unknown>();
+      const body = new ReadableStream({
+        start(stream) { stream.enqueue(new Uint8Array([1])); },
+        cancel(value) { canceled.resolve(value); },
+      });
+      const init = { method: 'POST', body, duplex: 'half' };
+      const response = await fetch('/early', init);
+      await response.text();
+      await canceled.promise;
+      return true;
+    })).toBe(true);
+  });
+
+  it('does not replay a refused request whose body came through the upload iterator', async () => {
+    let requests = 0;
+    const server = createSecureServer(tls);
+    server.on('stream', (stream) => {
+      requests++;
+      stream.on('error', () => {}); // The deliberately refused server stream also emits an error.
+      stream.close(constants.NGHTTP2_REFUSED_STREAM);
+    });
+    const f = await fixture(server);
+    f.request.method = 'POST';
+    f.request.body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), f.env);
+    expect((await f.receive()).type).toBe('error');
+    expect(f.operation.controller.state).toBe('terminated');
+    expect(requests).toBe(1);
   });
 
   it('validates a cached representation over HTTP/2 and then reuses its complete body', async () => {
@@ -93,93 +134,54 @@ describe('Fetch over HTTP/2', () => {
     });
     const f = await fixture(server);
     const hint = Promise.withResolvers<FetchResponse>();
-    f.params.processEarlyHintsResponse = hint.resolve;
+    f.request.mode = 'navigate';
+    f.request.destination = 'document';
+    f.operation.options.processEarlyHintsResponse = hint.resolve;
     const response = await f.receive();
     expect(response.status).toBe(200);
     expect((await hint.promise).headerList.get('Link')).toBe('</asset>; rel=preload');
-    expect(f.params.timingInfo.firstInterimNetworkResponseStartTime).toBeGreaterThan(0);
-    expect(f.params.timingInfo.finalNetworkResponseStartTime)
-      .toBeGreaterThanOrEqual(f.params.timingInfo.firstInterimNetworkResponseStartTime);
+    expect(f.operation.controller.extractFullTimingInfo().firstInterimNetworkResponseStartTime).toBeGreaterThan(0);
+    expect(f.operation.controller.extractFullTimingInfo().finalNetworkResponseStartTime)
+      .toBeGreaterThanOrEqual(f.operation.controller.extractFullTimingInfo().firstInterimNetworkResponseStartTime);
   });
 
-  it('streams a source-less page upload and reports its transmitted bytes and completion', async () => {
+  it('decodes repeated Content-Encoding, selects the last MIME type, and learns only the first HSTS field', async () => {
+    const plain = 'some plain text';
+    const encoded = brotliCompressSync(gzipSync(plain));
+    const server = createSecureServer(tls, (_request, response) => {
+      response.writeHead(200, [
+        'content-encoding', 'gzip', 'content-encoding', 'br',
+        'content-type', 'text/plain', 'content-type', 'text/html',
+        'strict-transport-security', 'max-age=300; includeSubDomains', 'strict-transport-security', 'max-age=0',
+      ]);
+      response.end(encoded);
+    });
+    const f = await fixture(server);
+    f.request.mode = 'navigate';
+    f.request.destination = 'document';
+    const response = await f.receive();
+    expect(response.status).toBe(200);
+    expect(await f.browlet.evaluate(async () => {
+      const blob = await (globalThis as unknown as NetworkPage).networkResponse.blob();
+      return { type: blob.type, text: await blob.text() };
+    })).toEqual({ type: 'text/html', text: plain });
+    expect(response.bodyInfo).toMatchObject({ encodedSize: encoded.length, decodedSize: plain.length });
+    expect(f.env.userAgent.hstsStore.hosts.get('localhost')?.includeSubDomains).toBe(true);
+    expect(f.env.userAgent.hstsStore.requiresHTTPS(f.request.currentURL.host)).toBe(true);
+    expect(f.operation.controller.extractFullTimingInfo().finalConnectionTimingInfo?.alpnNegotiatedProtocol).toEqual(new TextEncoder().encode('h2'));
+  });
+
+  it('rejects repeated Location fields without following either target', async () => {
+    const paths: string[] = [];
     const server = createSecureServer(tls, (request, response) => {
-      const chunks: Buffer[] = [];
-      request.on('data', (chunk: Buffer) => chunks.push(chunk));
-      request.on('end', () => response.end(Buffer.concat(chunks)));
+      paths.push(request.url);
+      response.writeHead(302, ['location', '/A', 'location', '/B']);
+      response.end();
     });
     const f = await fixture(server);
-    await f.browlet.evaluate(() => {
-      let index = 0;
-      Reflect.set(globalThis, 'uploadStream', new ReadableStream({
-        pull(controller) {
-          controller.enqueue(new Uint8Array([65 + index++, 65 + index++]));
-          if (index === 4) controller.close();
-        },
-      }));
-    });
-    const stream = unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream);
-    f.request.method = 'POST';
-    f.request.body = new FetchBody(stream, f.env);
-    expect(f.request.body.source).toBeNull();
-    const progress: number[] = [];
-    const end = Promise.withResolvers<void>();
-    f.params.processRequestBodyChunkLength = (length) => progress.push(length);
-    f.params.processRequestEndOfBody = () => end.resolve();
-    expect((await f.receive()).status).toBe(200);
-    expect(await f.browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text())).toBe('ABCD');
-    await end.promise;
-    expect(progress.reduce((sum, length) => sum + length, 0)).toBe(4);
-  });
-
-  it('does not replay a refused request whose body came through the upload iterator', async () => {
-    let requests = 0;
-    const server = createSecureServer(tls);
-    server.on('stream', (stream) => {
-      requests++;
-      stream.on('error', () => {}); // The deliberately refused server stream also emits an error.
-      stream.close(constants.NGHTTP2_REFUSED_STREAM);
-    });
-    const f = await fixture(server);
-    f.request.method = 'POST';
-    f.request.body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), f.env);
-    expect((await f.receive()).type).toBe('error');
-    expect(f.params.controller.state).toBe('terminated');
-    expect(requests).toBe(1);
-  });
-
-  it('streams an author-created body through public fetch without exposing transport objects', async () => {
-    const server = createSecureServer(tls, (request, response) => request.pipe(response));
-    const { browlet } = await fixture(server);
-    expect(await browlet.evaluate(async () => {
-      let count = 0;
-      const body = new ReadableStream({
-        pull(controller) {
-          controller.enqueue(new TextEncoder().encode('chunk' + count++));
-          if (count === 3) controller.close();
-        },
-      });
-      const init = { method: 'POST', body, duplex: 'half' };
-      const response = await fetch('/upload', init);
-      return [response instanceof Response, response.body instanceof ReadableStream, await response.text()];
-    })).toEqual([true, true, 'chunk0chunk1chunk2']);
-  });
-
-  it('cancels an unfinished upload when the server finishes its response', async () => {
-    const server = createSecureServer(tls, (_request, response) => response.end());
-    const { browlet } = await fixture(server);
-    expect(await browlet.evaluate(async () => {
-      const canceled = Promise.withResolvers<unknown>();
-      const body = new ReadableStream({
-        start(stream) { stream.enqueue(new Uint8Array([1])); },
-        cancel(value) { canceled.resolve(value); },
-      });
-      const init = { method: 'POST', body, duplex: 'half' };
-      const response = await fetch('/early', init);
-      await response.text();
-      await canceled.promise;
-      return true;
-    })).toBe(true);
+    const response = await f.receive();
+    expect(response.type).toBe('error');
+    expect(paths).toEqual(['/resource']);
   });
 });
 
@@ -190,19 +192,19 @@ async function fixture(server: Http2SecureServer) {
   await browlet.navigate(origin);
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
-  env.userAgent.httpTransport = new NodeHTTPTransport(tls.cert, env.userAgent.connectionPool);
+  env.userAgent.httpTransport = new NodeHTTPTransport(env.userAgent, tls.cert);
   cleanup.push(() => env.userAgent.httpTransport.close());
   const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
   request.populateFromClient();
   request.referrer = null;
-  const params = new FetchParams(request, new FetchTimingInfo(), env);
+  const operation = createFetchOperation(request, env);
   const receive = async () => {
-    const response = await observe(params.httpNetworkOrCacheFetch());
+    const response = await operation.start();
     const context = getBindingContext(realm);
     Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
     return response;
   };
-  return { browlet, env, request, params, receive };
+  return { browlet, env, request, operation, receive };
 }
 
 interface NetworkPage { networkResponse: Response; }

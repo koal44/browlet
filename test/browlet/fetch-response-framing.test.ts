@@ -2,15 +2,13 @@ import { readFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { createSecureServer, Http2ServerResponse, type ServerHttp2Stream } from 'node:http2';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
 import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
-import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { type FetchResponse, ResponseImpl } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
-import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
+import { createFetchOperation } from './fetch-fixture';
 
 const tls = {
   cert: readFileSync('test/browlet/loader/fixtures/localhost-cert.pem'),
@@ -32,10 +30,10 @@ describe.each(['http/1.1', 'h2'] as const)('Fetch response framing over %s', (pr
       if (length !== null) response.setHeader('Content-Length', length);
       response.end();
     });
-    f.params.request.method = method;
+    f.operation.request.method = method;
     const received = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();
-    f.params.processResponseConsumeBody = (response, body) => received.resolve({ response, body });
-    f.params.mainFetch();
+    f.operation.options.processResponseConsumeBody = (response, body) => received.resolve({ response, body });
+    void f.operation.start();
     const { response, body } = await received.promise;
     expect(response.status).toBe(status);
     expect(response.body).toBeNull();
@@ -43,7 +41,7 @@ describe.each(['http/1.1', 'h2'] as const)('Fetch response framing over %s', (pr
     expect(response.headerList.get('Content-Length')).toBe(length);
     expect(response.headerList.get('Content-Encoding')).toBe('gzip');
     expect(response.bodyInfo).toMatchObject({ encodedSize: 0, decodedSize: 0 });
-    expect(f.params.controller.state).toBe('ongoing');
+    expect(f.operation.controller.state).toBe('ongoing');
   });
 
   it('rejects a page body read when the response ends before its declared length', async () => {
@@ -62,7 +60,7 @@ describe.each(['http/1.1', 'h2'] as const)('Fetch response framing over %s', (pr
       try { await (globalThis as unknown as NetworkPage).networkResponse.text(); return false; }
       catch (error) { return error instanceof TypeError; }
     })).toBe(true);
-    expect(f.params.controller.state).toBe('terminated');
+    expect(f.operation.controller.state).toBe('terminated');
   });
 });
 
@@ -77,20 +75,19 @@ async function fixture(protocol: 'http/1.1' | 'h2', respond: (response: ServerRe
   await browlet.navigate(origin);
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
-  env.userAgent.httpTransport = new NodeHTTPTransport(tls.cert, env.userAgent.connectionPool);
+  env.userAgent.httpTransport = new NodeHTTPTransport(env.userAgent, tls.cert);
   cleanup.push(() => env.userAgent.httpTransport.close());
   const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
   request.populateFromClient();
   request.referrer = null;
-  const params = new FetchParams(request, new FetchTimingInfo(), env);
-  params.taskDestination = env.exec.global;
+  const operation = createFetchOperation(request, env);
   const receive = async () => {
-    const response = await observe(params.httpNetworkOrCacheFetch());
+    const response = await operation.start();
     const context = getBindingContext(realm);
     Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
     return response;
   };
-  return { browlet, params, receive };
+  return { browlet, operation, receive };
 }
 
 interface NetworkPage { networkResponse: Response; }

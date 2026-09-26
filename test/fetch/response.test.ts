@@ -9,20 +9,49 @@ import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment } from './client-fixture';
 import { createEnvironment } from '../js-engine/execution-fixture';
 
-describe('Fetch response reporting URLs', () => {
-  it('reports the first URL without credentials or fragment, preserving the response URLs', () => {
+describe('Fetch response state', () => {
+  it('starts a response with §2.2.6 defaults and a URL derived from its list', () => {
     const response = new FetchResponse();
-    response.urlList = [
-      parseURL('https://user:pass@example.test/start?q=1#private').url!,
-      parseURL('https://elsewhere.test/private-redirect-target').url!,
-    ];
-    expect(response.serializeURLForReporting()).toBe('https://example.test/start?q=1');
-    expect(serializeURL(response.urlList[0]!)).toBe('https://user:pass@example.test/start?q=1#private');
-    expect(serializeURL(response.url!)).toBe('https://elsewhere.test/private-redirect-target');
+    expect(response).toEqual({
+      type: 'default', aborted: false, urlList: [], status: 200, statusMessage: '', headerList: new FetchHeaders(),
+      body: null, discardBody: null, cacheUsage: undefined, corsExposedHeaderNameList: [], rangeRequested: false,
+      requestIncludesCredentials: true, timingAllowPassed: false, navigationTimingAllowValuesList: [],
+      bodyInfo: new ResponseBodyInfo(), serviceWorkerTimingInfo: null, redirectTaint: 'same-origin',
+    });
+    expect(response.url).toBeNull();
+    const url = createFetchRequest().url;
+    response.urlList.push(url);
+    expect(response.url).toBe(url);
   });
 
-  it('requires a nonempty URL list', () => {
-    expect(() => new FetchResponse().serializeURLForReporting()).toThrow('Response URL list is empty');
+  it('does not share mutable defaults between independent responses', () => {
+    const response = new FetchResponse();
+    response.headerList.list.push(['Set-Cookie', 'one']);
+    response.urlList.push(createFetchRequest().url);
+    response.bodyInfo.encodedSize = 42;
+    response.corsExposedHeaderNameList.push('x-example');
+    expect(new FetchResponse()).toMatchObject({ headerList: new FetchHeaders(), urlList: [], bodyInfo: { encodedSize: 0 }, corsExposedHeaderNameList: [] });
+  });
+});
+
+describe('Response implementation state', () => {
+  it('keeps the response view live', () => {
+    const fixture = createFetchFixture();
+    const record = new FetchResponse();
+    const response = fixture.createResponse(record, 'immutable');
+    expect(response.getResponse()).toBe(record);
+    expect(response.headers.headerList).toBe(record.headerList);
+    expect(response.headers.guard).toBe('immutable');
+    expect(fixture.bindings.getRealm(response)).toBe(fixture.realm);
+    record.status = 404;
+    record.statusMessage = 'Not Found';
+    record.urlList.push(createFetchRequest().url, createFetchRequest('https://example.test/end#hidden').url);
+    expect(response.status).toBe(404);
+    expect(response.statusText).toBe('Not Found');
+    expect(response.ok).toBe(false);
+    expect(response.redirected).toBe(true);
+    expect(response.url).toBe('https://example.test/end');
+    expect(response.body).toBeNull();
   });
 });
 
@@ -209,6 +238,29 @@ describe('Fetch response cloning', () => {
     const response = FetchResponse.abortedNetworkError();
     expect(response.clone()).toEqual(response);
   });
+
+  it.each(['default', 'basic', 'cors', 'opaque', 'opaqueredirect'] as const)('copies %s metadata with an explicit body without teeing either body', (type) => {
+    const { createBody } = createBodyFixture();
+    const response = new FetchResponse();
+    response.body = createBody([Uint8Array.of(1)]);
+    response.headerList.append('X-Value', 'original');
+    const originalStream = response.body.stream;
+    const replacement = createBody([Uint8Array.of(2)]);
+    const replacementStream = replacement.stream;
+    const view = type === 'default' ? response : response.filter(type);
+    for (const body of [null, replacement]) {
+      const copy = view.copy(body);
+      const internalCopy = type === 'default' ? copy : (copy as FilteredFetchResponse).internalResponse;
+      expect(copy.type).toBe(type);
+      expect(internalCopy.body).toBe(body);
+      expect(internalCopy.headerList).not.toBe(response.headerList);
+      expect(internalCopy.headerList.list).toEqual(response.headerList.list);
+      expect(response.body.stream).toBe(originalStream);
+      expect(replacement.stream).toBe(replacementStream);
+      expect(originalStream.locked).toBe(false);
+      expect(replacementStream.locked).toBe(false);
+    }
+  });
 });
 
 describe('Fetch response freshness', () => {
@@ -299,5 +351,22 @@ describe('Fetch response Location URLs', () => {
     response.status = status;
     response.headerList.list.push(['Location', 'https://example.test/']);
     expect(response.getLocationURL(null, env)).toBeUndefined();
+  });
+});
+
+describe('Fetch response reporting URLs', () => {
+  it('reports the first URL without credentials or fragment, preserving the response URLs', () => {
+    const response = new FetchResponse();
+    response.urlList = [
+      parseURL('https://user:pass@example.test/start?q=1#private').url!,
+      parseURL('https://elsewhere.test/private-redirect-target').url!,
+    ];
+    expect(response.serializeURLForReporting()).toBe('https://example.test/start?q=1');
+    expect(serializeURL(response.urlList[0]!)).toBe('https://user:pass@example.test/start?q=1#private');
+    expect(serializeURL(response.url!)).toBe('https://elsewhere.test/private-redirect-target');
+  });
+
+  it('requires a nonempty URL list', () => {
+    expect(() => new FetchResponse().serializeURLForReporting()).toThrow('Response URL list is empty');
   });
 });

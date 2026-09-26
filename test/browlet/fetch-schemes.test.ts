@@ -1,30 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../../src/browlet/bindings';
-import { createEnvironmentRecord, type WindowEnvironment } from '../../src/browlet/scripting/environment';
+import { Browlet } from '../../src/browlet/browlet';
+import { EnvironmentRecord, type WindowEnvironment } from '../../src/browlet/scripting/environment';
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { utf8Decode } from '../../src/encoding/codecs/utf-8';
 import { fetch } from '../../src/fetch/fetch';
-import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
 import { BlobImpl } from '../../src/file/blob';
 import { InternalError } from '../../src/infra/internal-error';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { copyURL, parseURL } from '../../src/url/url';
 import { readBodyBytes } from '../fetch/body-fixture';
 import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
-import { observe } from './streams/implementation-fixture';
+import { createFetchOperation, nextFetchTaskError } from './fetch-fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('Fetch §4.3: scheme dispatch', () => {
   it.each(['about:blank', 'about:blank?query#fragment'])('returns an empty HTML body for %s', async (url) => {
-    const params = createParams(url);
-    const response = await observe(params.schemeFetch());
-    expect(response.type).toBe('default');
+    const operation = createOperation(url);
+    const response = await operation.start();
+    expect(response.type).toBe('basic');
     expect(response.status).toBe(200);
     expect(response.statusMessage).toBe('OK');
     expect(response.headerList.list).toEqual([['Content-Type', 'text/html;charset=utf-8']]);
@@ -35,7 +33,7 @@ describe('Fetch §4.3: scheme dispatch', () => {
 
   it.each(['about:config', 'about:Blank', 'about:/blank', 'file:///private.txt', 'ftp://example.test/a', 'custom:resource'])(
     'returns a network error for %s', async (url) => {
-      const response = await observe(createParams(url).schemeFetch());
+      const response = await createOperation(url).start();
       expect(response.type).toBe('error');
       expect(response.status).toBe(0);
       expect(response.body).toBeNull();
@@ -43,43 +41,46 @@ describe('Fetch §4.3: scheme dispatch', () => {
   );
 
   it.each(['aborted', 'terminated'] as const)('stops a %s fetch before scheme processing', async (state) => {
-    const params = createParams('https://example.test/resource');
-    if (state === 'aborted') params.controller.abort(params.env);
-    else params.controller.terminate();
-    const http = vi.spyOn(params, 'httpFetch');
-    const response = await observe(params.schemeFetch());
+    const operation = createOperation('https://example.test/resource');
+    const pending = operation.start();
+    if (state === 'aborted') operation.controller.abort(operation.env);
+    else operation.controller.terminate();
+    const http = vi.spyOn(operation.request.userAgent, 'handleFetch');
+    const response = await pending;
     expect(response.type).toBe('error');
     expect(response.aborted).toBe(state === 'aborted');
     expect(http).not.toHaveBeenCalled();
   });
 
-  it.each(['http', 'https'])('delegates %s directly to HTTP fetch without another override', async (scheme) => {
-    const params = createParams(`${scheme}://example.test/resource`);
-    const pending = params.request.userAgent.hostPromises.withResolvers<FetchResponse>();
-    const http = vi.spyOn(params, 'httpFetch').mockReturnValue(pending.promise);
-    const override = vi.spyOn(params, 'overrideFetch');
-    const result = observe(params.schemeFetch());
-    expect(http).toHaveBeenCalledExactlyOnceWith();
-    expect(http.mock.contexts[0]).toBe(params);
-    expect(override).not.toHaveBeenCalled();
+  it.each(['http', 'https'])('consults the override once before delegating %s to HTTP fetch', async (scheme) => {
+    const operation = createOperation(`${scheme}://example.test/resource`);
+    operation.request.mode = 'navigate';
+    const pending = operation.request.userAgent.hostPromises.withResolvers<FetchResponse>();
+    const http = vi.spyOn(operation.request.userAgent, 'handleFetch').mockReturnValue(pending.promise);
+    const override = vi.spyOn(operation.request.userAgent, 'potentiallyOverrideResponse');
+    const result = operation.start();
+    await vi.waitFor(() => expect(http).toHaveBeenCalledOnce());
+    expect(http.mock.calls[0]!.slice(0, 3)).toEqual([operation.request, operation.controller, false]);
+    expect(override).toHaveBeenCalledOnce();
     const response = new FetchResponse();
     pending.resolve(response);
-    expect(await result).toBe(response);
+    expect(await result).toHaveProperty('internalResponse', response);
   });
 
   it('dispatches the current URL after a redirect instead of the original URL', async () => {
-    const params = createParams('https://example.test/start');
-    params.request.urlList.push(parseURL('about:blank').url!);
-    const http = vi.spyOn(params, 'httpFetch');
-    expect((await observe(params.schemeFetch())).statusMessage).toBe('OK');
+    const operation = createOperation('https://example.test/start');
+    operation.request.mode = 'navigate';
+    operation.request.urlList.push(parseURL('about:blank').url!);
+    const http = vi.spyOn(operation.request.userAgent, 'handleFetch');
+    expect((await operation.start()).statusMessage).toBe('OK');
     expect(http).not.toHaveBeenCalled();
   });
 });
 
 describe('Blob scheme responses and access', () => {
   it.each(['text/plain', ''])('returns Blob bytes with length and %j Content-Type', async (type) => {
-    const { params, blob } = createBlob('0123456789', type);
-    const response = await observe(params.schemeFetch());
+    const { operation, blob } = createBlob('0123456789', type);
+    const response = await operation.start();
     expect(response.status).toBe(200);
     expect(response.statusMessage).toBe('OK');
     expect(response.headerList.list).toEqual([['Content-Length', '10'], ['Content-Type', type]]);
@@ -89,96 +90,101 @@ describe('Blob scheme responses and access', () => {
   });
 
   it('returns a readable zero-length Blob body', async () => {
-    const { params } = createBlob('');
-    const response = await observe(params.schemeFetch());
+    const { operation } = createBlob('');
+    const response = await operation.start();
     expect(response.status).toBe(200);
     expect(response.headerList.get('Content-Length')).toBe('0');
     expect(await readBodyBytes(response.body!)).toEqual(new Uint8Array());
   });
 
   it.each(['HEAD', 'POST', 'get'])('rejects the %s method', async (method) => {
-    const { params } = createBlob();
-    params.request.method = method;
-    expect((await observe(params.schemeFetch())).type).toBe('error');
+    const { operation } = createBlob();
+    operation.request.method = method;
+    expect((await operation.start()).type).toBe('error');
   });
 
   it('uses the captured entry after revocation and rejects a fresh parse', async () => {
-    const { params, env, url } = createBlob();
+    const { operation, env, url } = createBlob();
     env.userAgent.blobURLStore.revoke(url, env);
-    expect(utf8Decode(await readBodyBytes((await observe(params.schemeFetch())).body!))).toBe('0123456789');
-    const fresh = createParams(url, env);
+    expect(utf8Decode(await readBodyBytes((await operation.start()).body!))).toBe('0123456789');
+    const fresh = createOperation(url, env);
     expect(fresh.request.currentURL.blobURLEntry).toBeNull();
-    expect((await observe(fresh.schemeFetch())).type).toBe('error');
+    expect((await fresh.start()).type).toBe('error');
   });
 
   it('denies a different partition, including iframe navigation, but permits top-level navigation', async () => {
-    const { params, env } = createBlob();
+    const { operation, env } = createBlob();
     const other = createPolicyEnvironment('https://other.test/', undefined, env.userAgent);
-    params.request.client = other;
+    operation.request.client = other;
     for (const destination of ['', 'iframe', 'document'] as const) {
-      params.request.destination = destination;
-      const response = await observe(params.schemeFetch());
-      expect(response.type).toBe(destination === 'document' ? 'default' : 'error');
+      operation.request.destination = destination;
+      const response = await operation.start();
+      expect(response.type).toBe(destination === 'document' ? 'basic' : 'error');
     }
   });
 
   it('permits clientless top-level navigation through its explicit exemption', async () => {
-    const { params } = createBlob();
-    params.request.client = null;
-    params.request.destination = 'document';
-    const response = await observe(params.schemeFetch());
+    const { operation } = createBlob();
+    operation.request.client = null;
+    operation.request.destination = 'document';
+    const response = await operation.start();
     expect(utf8Decode(await readBodyBytes(response.body!))).toBe('0123456789');
   });
 
   it('requires a partition context even when a clientless Blob request retains its origin', async () => {
-    const { params } = createBlob();
-    params.request.populateFromClient();
-    params.request.client = null;
-    await expect(observe(params.schemeFetch())).rejects.toThrow(InternalError);
+    const { operation } = createBlob();
+    operation.request.populateFromClient();
+    operation.request.client = null;
+    operation.request.destination = 'report';
+    const failure = nextFetchTaskError(operation.env);
+    void operation.start();
+    expect(await failure).toBeInstanceOf(InternalError);
+    expect(await failure).toHaveProperty('message', 'Blob fetch requires an access context');
   });
 
   it('uses the reserved environment before the client, including a reservation without a realm', async () => {
-    const { params, env } = createBlob();
+    const { operation, env } = createBlob();
     const other = createPolicyEnvironment('https://other.test/', undefined, env.userAgent);
-    const reserved = createEnvironmentRecord({
+    const reserved = new EnvironmentRecord({
       userAgent: env.userAgent, creationURL: copyURL(env.creationURL),
       topLevelOrigin: env.topLevelOrigin, topLevelCreationURL: env.topLevelCreationURL,
       targetBrowsingContext: null, isSecureContext: true,
     });
-    params.request.client = other;
-    params.request.reservedClient = reserved;
-    expect(params.request.determineEnvironment()).toBe(reserved);
-    expect((await observe(params.schemeFetch())).status).toBe(200);
-    params.request.client = null;
-    expect((await observe(params.schemeFetch())).status).toBe(200);
-    params.request.client = env;
-    params.request.reservedClient = other;
-    expect((await observe(params.schemeFetch())).type).toBe('error');
+    operation.request.client = other;
+    operation.request.reservedClient = reserved;
+    expect(operation.request.determineEnvironment()).toBe(reserved);
+    expect((await operation.start()).status).toBe(200);
+    operation.request.client = null;
+    operation.request.destination = 'iframe';
+    expect((await operation.start()).status).toBe(200);
+    operation.request.client = env;
+    operation.request.reservedClient = other;
+    expect((await operation.start()).type).toBe('error');
   });
 
   it('only exempts an attached top-level Window fetching its exact creation URL', async () => {
-    const { params, env } = createBlob();
+    const { operation, env } = createBlob();
     const other = createPolicyEnvironment('https://other.test/', undefined, env.userAgent);
-    other.creationURL = copyURL(params.request.currentURL);
-    params.request.client = other;
+    other.creationURL = copyURL(operation.request.currentURL);
+    operation.request.client = other;
     expect(other.isTopLevelWindow).toBe(true);
-    expect((await observe(params.schemeFetch())).status).toBe(200);
-    params.request.currentURL.fragment = 'different';
-    expect((await observe(params.schemeFetch())).type).toBe('error');
-    params.request.currentURL.fragment = null;
+    expect((await operation.start()).status).toBe(200);
+    operation.request.currentURL.fragment = 'different';
+    expect((await operation.start()).type).toBe('error');
+    operation.request.currentURL.fragment = null;
     other.window.getAssociatedDocument().browsingContext = null;
     expect(other.isTopLevelWindow).toBe(false);
-    expect((await observe(params.schemeFetch())).type).toBe('error');
+    expect((await operation.start()).type).toBe('error');
   });
 
   it('does not grant a nested Window the top-level self-fetch exemption', async () => {
-    const { params, env } = createBlob();
+    const { operation, env } = createBlob();
     const parent = createPolicyEnvironment('https://other.test/', undefined, env.userAgent);
     const child = createPolicyEnvironment('https://other.test/child', parent);
-    child.creationURL = copyURL(params.request.currentURL);
-    params.request.client = child;
+    child.creationURL = copyURL(operation.request.currentURL);
+    operation.request.client = child;
     expect(child.isTopLevelWindow).toBe(false);
-    expect((await observe(params.schemeFetch())).type).toBe('error');
+    expect((await operation.start()).type).toBe('error');
   });
 });
 
@@ -195,9 +201,9 @@ describe('Blob byte ranges', () => {
     ['bytes=8-999999999999999999999999999', '89', 'bytes 8-9/10'],
     ['bytes \t=\t 2 \t- \t5', '2345', 'bytes 2-5/10'],
   ])('handles %s without losing integer precision', async (range, text, contentRange) => {
-    const { params } = createBlob();
-    params.request.headerList.append('Range', range);
-    const response = await observe(params.schemeFetch());
+    const { operation } = createBlob();
+    operation.request.headerList.append('Range', range);
+    const response = await operation.start();
     expect(response.status).toBe(206);
     expect(response.statusMessage).toBe('Partial Content');
     expect(response.rangeRequested).toBe(true);
@@ -209,9 +215,9 @@ describe('Blob byte ranges', () => {
 
   it.each(['bytes=10-', 'bytes=999999999999999999999-', 'bytes=7-3', 'bytes=-', 'bytes=0-1,3-4', 'items=0-1', 'Bytes=0-1'])(
     'returns a network error for %s', async (range) => {
-      const { params } = createBlob();
-      params.request.headerList.append('Range', range);
-      const response = await observe(params.schemeFetch());
+      const { operation } = createBlob();
+      operation.request.headerList.append('Range', range);
+      const response = await operation.start();
       expect(response.type).toBe('error');
       expect(response.body).toBeNull();
     },
@@ -220,28 +226,32 @@ describe('Blob byte ranges', () => {
   it.each([
     ['0123456789', 'bytes=-0'], ['', 'bytes=-1'], ['', 'bytes=-0'], ['', 'bytes=0-'], ['', 'bytes=0-0'],
   ])('rejects an empty range on %j with %s', async (text, range) => {
-    const { params } = createBlob(text);
-    params.request.headerList.append('Range', range);
-    expect((await observe(params.schemeFetch())).type).toBe('error');
+    const { operation } = createBlob(text);
+    operation.request.headerList.append('Range', range);
+    expect((await operation.start()).type).toBe('error');
   });
 });
 
 describe('Data scheme responses', () => {
-  it.each(['GET', 'HEAD', 'POST', 'PUT'])('constructs the data response for %s before main-fetch body filtering', async (method) => {
-    const params = createParams('data:application/octet-stream;base64,AP8=#fragment');
-    params.request.method = method;
-    const response = await observe(params.schemeFetch());
-    expect(response.type).toBe('default');
+  it.each(['GET', 'HEAD', 'POST', 'PUT'])('delivers the data response for %s with main-fetch body filtering', async (method) => {
+    const operation = createOperation('data:application/octet-stream;base64,AP8=#fragment');
+    operation.request.method = method;
+    const { response, body } = await consume(operation.request, operation.env);
+    expect(response.type).toBe('basic');
     expect(response.status).toBe(200);
     expect(response.statusMessage).toBe('OK');
     expect(response.headerList.list).toEqual([['Content-Type', 'application/octet-stream']]);
-    expect(response.body!.stream.env).toBe(params.env);
-    expect(response.body!.length).toBe(2);
-    expect(await readBodyBytes(response.body!)).toEqual(Uint8Array.of(0, 255));
+    if (method === 'HEAD') {
+      expect(response.body).toBeNull();
+    } else {
+      expect(response.body!.stream.env).toBe(operation.env);
+      expect(response.body!.length).toBe(2);
+      expect(body).toEqual(Uint8Array.of(0, 255));
+    }
   });
 
   it.each(['data:text/plain', 'data:;base64,WA='])('returns a network error for malformed %s', async (url) => {
-    const response = await observe(createParams(url).schemeFetch());
+    const response = await createOperation(url).start();
     expect(response.type).toBe('error');
     expect(response.status).toBe(0);
     expect(response.body).toBeNull();
@@ -293,7 +303,7 @@ describe('Scheme responses through main Fetch', () => {
     const request = new FetchRequest(env.parseURL('data:;charset=UTF-8,hello%20world#fragment').url!, env, env.userAgent);
     request.mode = mode;
     request.localURLsOnly = true;
-    const http = vi.spyOn(FetchParams.prototype, 'httpFetch');
+    const http = vi.spyOn(env.userAgent.httpTransport, 'dispatch');
     const completed = Promise.withResolvers<void>();
     const consumed = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();
     fetch(request, {
@@ -312,9 +322,9 @@ describe('Scheme responses through main Fetch', () => {
   });
 
   it('removes the data body for HEAD in main fetch', async () => {
-    const params = createParams('data:,hello', createPolicyEnvironment('https://example.test/'));
-    params.request.method = 'HEAD';
-    const { response, body } = await consume(params.request, params.env);
+    const operation = createOperation('data:,hello', createPolicyEnvironment('https://example.test/'));
+    operation.request.method = 'HEAD';
+    const { response, body } = await consume(operation.request, operation.env);
     expect(response.status).toBe(200);
     expect(response.headerList.get('Content-Type')).toBe('text/plain;charset=US-ASCII');
     expect(response.body).toBeNull();
@@ -322,45 +332,48 @@ describe('Scheme responses through main Fetch', () => {
   });
 
   it('delivers a readable empty data body for a clientless navigation', async () => {
-    const params = createParams('data:,', createPolicyEnvironment('https://example.test/'));
-    params.request.populateFromClient();
-    params.request.client = null;
-    params.request.mode = 'navigate';
-    params.request.destination = 'document';
-    const { response, body } = await consume(params.request, params.env);
+    const operation = createOperation('data:,', createPolicyEnvironment('https://example.test/'));
+    operation.request.populateFromClient();
+    operation.request.client = null;
+    operation.request.mode = 'navigate';
+    operation.request.destination = 'document';
+    const { response, body } = await consume(operation.request, operation.env);
     expect(response.type).toBe('basic');
     expect(response.status).toBe(200);
     expect(body).toEqual(new Uint8Array());
   });
 
   it('delivers a malformed data URL as a network error through main fetch', async () => {
-    const params = createParams('data:;base64,invalid!', createPolicyEnvironment('https://example.test/'));
-    const { response, body } = await consume(params.request, params.env);
+    const operation = createOperation('data:;base64,invalid!', createPolicyEnvironment('https://example.test/'));
+    const { response, body } = await consume(operation.request, operation.env);
     expect(response.type).toBe('error');
     expect(response.status).toBe(0);
     expect(body).toBeNull();
   });
 
   it.each(['hello', 'changed'])('applies integrity verification to the decoded data body %s', async (text) => {
-    const params = createParams(`data:,${text}`, createPolicyEnvironment('https://example.test/'));
+    const operation = createOperation(`data:,${text}`, createPolicyEnvironment('https://example.test/'));
     // SHA-256 of the decoded bytes "hello".
-    params.request.integrityMetadata = 'sha256-LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=';
-    const { response, body } = await consume(params.request, params.env);
+    operation.request.integrityMetadata = 'sha256-LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=';
+    const { response, body } = await consume(operation.request, operation.env);
     expect(response.type).toBe(text === 'hello' ? 'basic' : 'error');
     expect(body).toEqual(text === 'hello' ? new TextEncoder().encode('hello') : null);
   });
 });
 
-function createParams(url: string, client: WindowEnvironment | null = null, userAgent = client?.userAgent ?? new UserAgent()) {
+function createOperation(url: string, client: WindowEnvironment | null = createPolicyEnvironment('http://example.test/'), userAgent = client?.userAgent ?? new UserAgent()) {
   const request = new FetchRequest(userAgent.parseURL(url).url!, client, userAgent);
-  return new FetchParams(request, new FetchTimingInfo(), userAgent.sandbox);
+  request.populateFromClient();
+  request.referrer = null;
+  if (request.currentURL.scheme === 'about') request.mode = 'navigate';
+  return createFetchOperation(request, userAgent.sandbox);
 }
 
 function createBlob(text = '0123456789', type = 'text/plain') {
   const env = createPolicyEnvironment('https://example.test/creator');
   const blob = new BlobImpl([text], { type }, env);
   const url = env.userAgent.blobURLStore.add(blob, env);
-  return { env, blob, url, params: createParams(url, env) };
+  return { env, blob, url, operation: createOperation(url, env) };
 }
 
 function consume(request: FetchRequest, env: JSEnvironment) {

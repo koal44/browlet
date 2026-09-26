@@ -2,11 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import { createPolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
+import { UserAgent } from '../../src/browlet/user-agent';
 import type { FetchBody } from '../../src/fetch/body';
+import { FetchController } from '../../src/fetch/controller';
+import { isOffline } from '../../src/fetch/environment';
+import { FetchGroup } from '../../src/fetch/group';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { parseURL } from '../../src/url/url';
+import { createFetchWindow } from './fetch-fixture';
 
 describe('Fetch Request construction', () => {
   it('constructs a request with independent headers, a signal, and the relevant client', () => {
@@ -444,6 +450,98 @@ describe('Fetch client population with HTML settings', () => {
     expect(request.traversableForUserPrompts).toBeNull();
     expect(request.policyContainer).toEqual(env.userAgent.createPolicyContainer());
     expect(request.policyContainer).not.toBe(env.policyContainer);
+  });
+});
+
+describe('Fetch client settings ownership', () => {
+  it('shares networking owners across settings while separating opaque cache partitions', () => {
+    const userAgent = new UserAgent();
+    const first = createFetchWindow(userAgent).realm.env;
+    const second = createFetchWindow(userAgent).realm.env;
+    const firstRequest = new FetchRequest(first.creationURL, first, first.userAgent);
+    const secondRequest = new FetchRequest(second.creationURL, second, second.userAgent);
+    const partitions = userAgent.httpCache;
+    const firstPartition = partitions.determine(firstRequest);
+
+    expect(first.userAgent.connectionPool).toBe(second.userAgent.connectionPool);
+    expect(first.userAgent.httpCache).toBe(second.userAgent.httpCache);
+    expect(first.userAgent.cookieStore).toBe(second.userAgent.cookieStore);
+    expect(firstPartition).not.toBeNull();
+    expect(partitions.determine(firstRequest.clone())).toBe(firstPartition);
+    expect(partitions.determine(secondRequest)).not.toBe(firstPartition);
+    expect(new UserAgent().connectionPool).not.toBe(userAgent.connectionPool);
+    expect(new UserAgent().httpCache.determine(firstRequest)).not.toBe(firstPartition);
+    expect(new UserAgent().cookieStore).not.toBe(userAgent.cookieStore);
+  });
+
+  it('owns a separate fetch group for each settings object in the same user agent', () => {
+    const userAgent = new UserAgent();
+    const first = createFetchWindow(userAgent).realm.env;
+    const second = createFetchWindow(userAgent).realm.env;
+    const request = new FetchRequest(first.creationURL, first, first.userAgent);
+    const controller = new FetchController();
+
+    expect(first.fetchGroup).toBeInstanceOf(FetchGroup);
+    expect(first.fetchGroup).not.toBe(second.fetchGroup);
+    expect(request.client!.fetchGroup).toBe(first.fetchGroup);
+    request.client!.fetchGroup.fetchRecords.push({ request, controller });
+    expect(second.fetchGroup.fetchRecords).toEqual([]);
+    expect(first.fetchGroup.deferredFetchRecords).not.toBe(second.fetchGroup.deferredFetchRecords);
+
+    second.fetchGroup.terminate();
+    expect(controller.state).toBe('ongoing');
+    first.fetchGroup.terminate();
+    expect(controller.state).toBe('terminated');
+  });
+
+  it('reads the Document\'s current embedder policy through the actual client settings', () => {
+    const { realm, document } = createFetchWindow();
+    const env = realm.env;
+    const request = new FetchRequest(parseURL('https://example.test/').url!, env, env.userAgent);
+    request.origin = env.origin;
+    const container = document!.policyContainer;
+
+    expect(request.client!.policyContainer).toBe(container);
+    expect(container.embedderPolicy).toEqual({
+      value: 'unsafe-none', reportingEndpoint: '',
+      reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '',
+    });
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+
+    container.embedderPolicy.reportOnlyValue = 'credentialless';
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+
+    container.embedderPolicy.value = 'credentialless';
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
+
+    document!.policyContainer = createPolicyContainer();
+    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+  });
+
+  it('reads the owning browser\'s live offline state even after its browsing context is detached', () => {
+    const first = createFetchWindow();
+    const second = createFetchWindow();
+    const env = first.realm.env;
+    const otherEnv = second.realm.env;
+    const request = new FetchRequest(env.creationURL, env, env.userAgent);
+
+    expect(request.client).toBe(env);
+    expect(env.userAgent).not.toBe(otherEnv.userAgent);
+    expect(env.userAgent.webDriverBiDiNetworkIsOffline(env)).toBe(false);
+    expect(isOffline(request.client!)).toBe(false);
+
+    env.userAgent.assumeNoInternetConnectivity = true;
+    expect(isOffline(request.client!)).toBe(true);
+    expect(isOffline(otherEnv)).toBe(false);
+
+    const context = first.document!.browsingContext!;
+    expect(context.group!.userAgent).toBe(env.userAgent);
+    context.group!.remove(context);
+    expect(context.group).toBeNull();
+    expect(isOffline(env)).toBe(true);
+
+    env.userAgent.assumeNoInternetConnectivity = false;
+    expect(isOffline(env)).toBe(false);
   });
 });
 

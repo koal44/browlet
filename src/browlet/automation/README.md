@@ -41,4 +41,4 @@ individual checkpoints; those tests deliberately operate below this boundary.
 - TODO: Convert ordinary `Browlet.evaluate()` source-string calls throughout
   the test suite to functions, passing external data as the argument. Keep
   source strings only where source-string evaluation is what the test covers.
-  The public Fetch and HTTP/2 tests are the first completed migration batch.
+  Fetch's subsystem and browser integration tests are complete.

@@ -1,14 +1,184 @@
 import { describe, expect, it } from 'vitest';
-import type { FetchEnvironment } from '../../src/fetch/environment';
+import { FetchHeaders } from '../../src/fetch/headers';
 import {
   isScriptLikeDestination, translatePotentialDestination, type Destination,
-  type PotentialDestination, type FetchRequest,
+  type PotentialDestination, FetchRequest,
 } from '../../src/fetch/request';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
-import { createFetchRequest } from './fetch-fixture';
-import { createClientEnvironment } from './client-fixture';
+import { createFetchFixture, createFetchRequest } from './fetch-fixture';
+import { createClientEnvironment, createFetchUserAgent } from './client-fixture';
+
+describe('Fetch request state', () => {
+  it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
+    const client = createClientEnvironment();
+    const request = createFetchRequest(undefined, client);
+    expect(request).toMatchObject({
+      method: 'GET', localURLsOnly: false, headerList: new FetchHeaders(), unsafeRequest: false, body: null,
+      client, reservedClient: null, replacesClientId: '', traversableForUserPrompts: undefined,
+      keepalive: false, initiatorType: null, allowServiceWorkerInterception: true, initiator: '', destination: '',
+      priority: 'auto', internalPriority: null, origin: undefined, topLevelNavigationInitiatorOrigin: null,
+      policyContainer: undefined, referrer: undefined, referrerPolicy: '', mode: 'no-cors',
+      useCORSPreflight: false, credentialsMode: 'same-origin', useURLCredentials: false,
+      cacheMode: 'default', redirectMode: 'follow', integrityMetadata: '', cryptographicNonceMetadata: '',
+      parserInserted: undefined, reloadNavigation: false, historyNavigation: false, userActivation: false,
+      webDriverNavigationId: null, renderBlocking: false, webTransportHashList: [], redirectCount: 0,
+      responseTainting: 'basic', preventNoCacheCacheControlHeaderModification: false, done: false,
+      timingAllowFailed: false, navigationTimingAllowValuesList: [],
+    });
+    expect(request.client).toBe(client);
+    expect(request.userAgent).toBe(client.userAgent);
+    expect(request.urlList).toHaveLength(1);
+    expect(request.url).toBe(request.currentURL);
+    expect(request.webDriverId).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+  });
+
+  it('keeps URL/current URL as live pointers and copies the initial URL components', () => {
+    const url = parseURL('https://[::1]/start#fragment').url!;
+    const userAgent = createFetchUserAgent();
+    const request = new FetchRequest(url, null, userAgent);
+    expect(request.userAgent).toBe(userAgent);
+    expect(request.url).toEqual(url);
+    expect(request.url).not.toBe(url);
+    expect(request.url.path).not.toBe(url.path);
+    expect(request.url.host).not.toBe(url.host);
+    if (url.host?.kind !== 'ipv6' || request.url.host?.kind !== 'ipv6') throw new Error('Expected IPv6');
+    expect(request.url.host.pieces).not.toBe(url.host.pieces);
+
+    const redirect = parseURL('https://example.test/redirect').url!;
+    request.urlList.push(redirect);
+    expect(request.url).toBe(request.urlList[0]);
+    expect(request.currentURL).toBe(redirect);
+    expect(request.url.fragment).toBe('fragment');
+    expect(request.webDriverId).not.toBe(createFetchRequest().webDriverId);
+  });
+
+  it('does not share mutable defaults between independent requests', () => {
+    const request = createFetchRequest();
+    request.headerList.list.push(['X-Example', 'one']);
+    request.webTransportHashList.push({ algorithm: 'sha-256', value: Uint8Array.of(1) });
+    request.navigationTimingAllowValuesList.push(['*']);
+    expect(createFetchRequest()).toMatchObject({ headerList: new FetchHeaders(), webTransportHashList: [], navigationTimingAllowValuesList: [] });
+  });
+});
+
+describe('Request implementation state', () => {
+  it('retains the same request, signal, and duplicate-preserving Headers list', () => {
+    const fixture = createFetchFixture();
+    const record = createFetchRequest();
+    const signal = fixture.env.exec.createAbortController().signal;
+    const request = fixture.createRequest(record, signal);
+    expect(request.getRequest()).toBe(record);
+    expect(request.signal).toBe(signal);
+    expect(request.headers).toBe(request.headers);
+    expect(request.headers.headerList).toBe(record.headerList);
+    expect(request.headers.guard).toBe('request');
+    record.headerList.list.push(['X-Example', 'first'], ['X-Example', 'second']);
+    expect(request.headers.headerList.list).toEqual([['X-Example', 'first'], ['X-Example', 'second']]);
+    record.method = 'POST';
+    expect(request.method).toBe('POST');
+    expect(request.referrer).toBe('about:client');
+    record.referrer = null;
+    expect(request.referrer).toBe('');
+    expect(request.body).toBeNull();
+    expect(request.bodyUsed).toBe(false);
+    record.body = fixture.createBody();
+    expect(request.body).toBe(record.body.stream);
+  });
+});
+
+describe('Fetch client population', () => {
+  it('retains explicitly supplied fields', () => {
+    const client = createClientEnvironment();
+    const request = createFetchRequest('https://example.test/', client);
+    const origin = createOpaqueOrigin();
+    const policy = createClientEnvironment().policyContainer;
+    request.traversableForUserPrompts = null;
+    request.origin = origin;
+    request.policyContainer = policy;
+    request.populateFromClient();
+    expect(request.traversableForUserPrompts).toBeNull();
+    expect(request.origin).toBe(origin);
+    expect(request.policyContainer).toBe(policy);
+  });
+
+  it('resolves the origin once instead of following later client changes', () => {
+    const client = createClientEnvironment();
+    const request = createFetchRequest('https://example.test/', client);
+    const origin = client.origin;
+    request.traversableForUserPrompts = null;
+    request.policyContainer = client.policyContainer;
+    request.populateFromClient();
+    expect(request.origin).toBe(origin);
+    client.origin = createOpaqueOrigin();
+    request.populateFromClient();
+    expect(request.origin).toBe(origin);
+  });
+
+  it('requires an explicit origin for a clientless request', () => {
+    const request = createFetchRequest();
+    request.traversableForUserPrompts = null;
+    expect(() => request.populateFromClient()).toThrow('An unresolved request origin requires a client');
+  });
+});
+
+describe('Fetch request classifications', () => {
+  const classifications: Record<Destination, [boolean, boolean, boolean, boolean]> = {
+    // Script-like destination, subresource, non-subresource, navigation.
+    '': [false, true, false, false],
+    audio: [false, true, false, false],
+    audioworklet: [true, true, false, false],
+    document: [false, false, true, true],
+    embed: [false, false, true, true],
+    font: [false, true, false, false],
+    frame: [false, false, true, true],
+    iframe: [false, false, true, true],
+    image: [false, true, false, false],
+    json: [false, true, false, false],
+    manifest: [false, true, false, false],
+    object: [false, false, true, true],
+    paintworklet: [true, true, false, false],
+    report: [false, false, true, false],
+    script: [true, true, false, false],
+    serviceworker: [true, false, true, false],
+    sharedworker: [true, false, true, false],
+    style: [false, true, false, false],
+    text: [false, true, false, false],
+    track: [false, true, false, false],
+    video: [false, true, false, false],
+    webidentity: [false, false, false, false],
+    worker: [true, false, true, false],
+    xslt: [false, true, false, false],
+  };
+
+  it.each(Object.keys(classifications) as Destination[])('classifies destination "%s"', (destination) => {
+    const request = createFetchRequest();
+    request.destination = destination;
+    expect([
+      isScriptLikeDestination(destination), request.isSubresource,
+      request.isNonSubresource, request.isNavigation,
+    ]).toEqual(classifications[destination]);
+  });
+
+  it('reads the current destination independently of request mode', () => {
+    const request = createFetchRequest();
+    request.mode = 'navigate';
+    expect(request.isNavigation).toBe(false);
+    request.destination = 'document';
+    expect(request.isNavigation).toBe(true);
+    expect(request.isSubresource).toBe(false);
+    request.destination = '';
+    expect(request.isNavigation).toBe(false);
+    expect(request.isSubresource).toBe(true);
+  });
+
+  it.each(['fetch', ...Object.keys(classifications).filter((destination) => destination !== '')] as PotentialDestination[])(
+    'translates the potential destination %s', (destination) => {
+      expect(translatePotentialDestination(destination)).toBe(destination === 'fetch' ? '' : destination);
+    },
+  );
+});
 
 describe('Fetch request cloning', () => {
   it('copies owned data, retains owner references, and gives the clone a fresh WebDriver ID', () => {
@@ -20,9 +190,11 @@ describe('Fetch request cloning', () => {
     request.initiator = 'prefetch';
     request.origin = obtainURLOrigin(request.url);
     request.policyContainer = client.policyContainer;
+    const reservedOrigin = createOpaqueOrigin();
     request.reservedClient = {
       userAgent: client.userAgent, creationURL: request.url,
-      topLevelOrigin: createOpaqueOrigin(), topLevelCreationURL: null,
+      topLevelOrigin: reservedOrigin, topLevelCreationURL: null,
+      determineNetworkPartitionKey: () => [reservedOrigin, null],
     };
     request.referrer = parseURL('https://example.test/referrer').url!;
     request.headerList.list.push(['X-Test', 'first'], ['X-Test', 'second']);
@@ -107,114 +279,6 @@ describe('Fetch request cloning', () => {
     originalBytes[0] = 9;
     expect(clonedBytes).toEqual(Uint8Array.of(1, 2));
   });
-});
-
-describe('Fetch request User-Agent headers', () => {
-  it('uses the client\'s effective value when inserting a missing header', () => {
-    const client = createClientEnvironment();
-    client.userAgent.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
-    const request = createFetchRequest(undefined, client);
-    expect(request.headerList.has('User-Agent')).toBe(false);
-    request.appendUserAgentHeader();
-    expect(request.headerList.get('User-Agent')).toBe('Emulated/1.0');
-    request.appendUserAgentHeader();
-    expect(request.headerList.list).toEqual([['User-Agent', 'Emulated/1.0']]);
-  });
-
-  it('uses the owning user agent for a request without a client', () => {
-    const request = createFetchRequest();
-    request.userAgent.defaultUserAgentValue = 'BrowserInitiated/1.0';
-    request.appendUserAgentHeader();
-    expect(request.headerList.get('User-Agent')).toBe('BrowserInitiated/1.0');
-  });
-
-  it.each(['Explicit/1.0', ''])('preserves an existing header with value %j', (value) => {
-    const request = createFetchRequest();
-    request.headerList.append('user-agent', value);
-    request.appendUserAgentHeader();
-    expect(request.headerList.list).toEqual([['user-agent', value]]);
-  });
-});
-
-describe('Fetch request Range headers', () => {
-  it.each<[number | bigint, number | bigint | undefined, string]>([
-    [0, undefined, 'bytes=0-'], [0, 0, 'bytes=0-0'], [1, 500, 'bytes=1-500'],
-    [9007199254740993n, 9007199254740995n, 'bytes=9007199254740993-9007199254740995'],
-  ])('adds the inclusive range %s through %s', (first, last, value) => {
-    const request = createFetchRequest();
-    request.addRangeHeader(first, last);
-    expect(request.headerList.list).toEqual([['Range', value]]);
-  });
-
-  it('appends using header-list rules instead of replacing a previous range', () => {
-    const request = createFetchRequest();
-    request.headerList.list.push(['range', 'bytes=0-1']);
-    request.addRangeHeader(2);
-    expect(request.headerList.list).toEqual([['range', 'bytes=0-1'], ['range', 'bytes=2-']]);
-  });
-
-  it('rejects a reversed range before changing headers', () => {
-    const request = createFetchRequest();
-    expect(() => request.addRangeHeader(2, 1)).toThrow('Range start exceeds its end');
-    expect(request.headerList.list).toEqual([]);
-  });
-});
-
-describe('Fetch request classifications', () => {
-  const classifications: Record<Destination, [boolean, boolean, boolean, boolean]> = {
-    // Script-like destination, subresource, non-subresource, navigation.
-    '': [false, true, false, false],
-    audio: [false, true, false, false],
-    audioworklet: [true, true, false, false],
-    document: [false, false, true, true],
-    embed: [false, false, true, true],
-    font: [false, true, false, false],
-    frame: [false, false, true, true],
-    iframe: [false, false, true, true],
-    image: [false, true, false, false],
-    json: [false, true, false, false],
-    manifest: [false, true, false, false],
-    object: [false, false, true, true],
-    paintworklet: [true, true, false, false],
-    report: [false, false, true, false],
-    script: [true, true, false, false],
-    serviceworker: [true, false, true, false],
-    sharedworker: [true, false, true, false],
-    style: [false, true, false, false],
-    text: [false, true, false, false],
-    track: [false, true, false, false],
-    video: [false, true, false, false],
-    webidentity: [false, false, false, false],
-    worker: [true, false, true, false],
-    xslt: [false, true, false, false],
-  };
-
-  it.each(Object.keys(classifications) as Destination[])('classifies destination "%s"', (destination) => {
-    const request = createFetchRequest();
-    request.destination = destination;
-    expect([
-      isScriptLikeDestination(destination), request.isSubresource,
-      request.isNonSubresource, request.isNavigation,
-    ]).toEqual(classifications[destination]);
-  });
-
-  it('reads the current destination independently of request mode', () => {
-    const request = createFetchRequest();
-    request.mode = 'navigate';
-    expect(request.isNavigation).toBe(false);
-    request.destination = 'document';
-    expect(request.isNavigation).toBe(true);
-    expect(request.isSubresource).toBe(false);
-    request.destination = '';
-    expect(request.isNavigation).toBe(false);
-    expect(request.isSubresource).toBe(true);
-  });
-
-  it.each(['fetch', ...Object.keys(classifications).filter((destination) => destination !== '')] as PotentialDestination[])(
-    'translates the potential destination %s', (destination) => {
-      expect(translatePotentialDestination(destination)).toBe(destination === 'fetch' ? '' : destination);
-    },
-  );
 });
 
 describe('Fetch request redirect-taint', () => {
@@ -310,100 +374,53 @@ describe('Fetch request origin serialization', () => {
   });
 });
 
-describe('Fetch request COEP credentials', () => {
-  const home = 'https://a.example.test/';
-  const foreign = 'https://outside.test/';
-  const client = createClientEnvironment();
-  client.policyContainer.embedderPolicy.value = 'credentialless';
-
-  it.each<{ name: string; urls: [string, ...string[]]; allowed: boolean; }>([
-    { name: 'same-origin without redirects', urls: [home], allowed: true },
-    { name: 'cross-origin without redirects', urls: [foreign], allowed: false },
-    { name: 'same-origin redirects', urls: [home, `${home}next`], allowed: true },
-    { name: 'a redirect away from home', urls: [home, foreign], allowed: false },
-    { name: 'a redirect from a foreign origin to home', urls: [foreign, home], allowed: false },
-    { name: 'a foreign redirect and return home', urls: [home, foreign, home], allowed: false },
-    { name: 'a same-site redirect and return home', urls: [home, 'https://b.example.test/', home], allowed: false },
-    { name: 'a port change and return home', urls: [home, 'https://a.example.test:8443/', home], allowed: false },
-  ])('$name: credentials allowed = $allowed', ({ urls, allowed }) => {
-    const request = createFetchRequest(urls[0], client);
-    request.origin = obtainURLOrigin(parseURL(home).url!);
-    request.urlList.push(...urls.slice(1).map((url) => parseURL(url).url!));
-    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(allowed);
+describe('Fetch request User-Agent headers', () => {
+  it('uses the client\'s effective value when inserting a missing header', () => {
+    const client = createClientEnvironment();
+    client.userAgent.webDriverBiDiEmulatedUserAgent = () => 'Emulated/1.0';
+    const request = createFetchRequest(undefined, client);
+    expect(request.headerList.has('User-Agent')).toBe(false);
+    request.appendUserAgentHeader();
+    expect(request.headerList.get('User-Agent')).toBe('Emulated/1.0');
+    request.appendUserAgentHeader();
+    expect(request.headerList.list).toEqual([['User-Agent', 'Emulated/1.0']]);
   });
 
-  it.each<FetchRequest['mode']>([
-    'cors', 'same-origin', 'navigate', 'websocket', 'webtransport',
-  ])('does not restrict credentials in %s mode', (mode) => {
-    const request = createFetchRequest(foreign, client);
-    request.origin = obtainURLOrigin(parseURL(home).url!);
-    request.mode = mode;
-    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
+  it('uses the owning user agent for a request without a client', () => {
+    const request = createFetchRequest();
+    request.userAgent.defaultUserAgentValue = 'BrowserInitiated/1.0';
+    request.appendUserAgentHeader();
+    expect(request.headerList.get('User-Agent')).toBe('BrowserInitiated/1.0');
   });
 
-  it.each<FetchEnvironment['policyContainer']['embedderPolicy']['value']>([
-    'unsafe-none', 'require-corp',
-  ])('does not restrict credentials under %s', (value) => {
-    const request = createFetchRequest(foreign, {
-      ...client, policyContainer: {
-        ...client.policyContainer, embedderPolicy: { ...client.policyContainer.embedderPolicy, value },
-      },
-    });
-    request.origin = obtainURLOrigin(parseURL(home).url!);
-    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
-  });
-
-  it('does not restrict a clientless request', () => {
-    const request = createFetchRequest(foreign);
-    request.origin = obtainURLOrigin(parseURL(home).url!);
-    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
-  });
-
-  it('does not treat an opaque request origin as same-origin with the URL', () => {
-    const request = createFetchRequest(home, client);
-    request.origin = createOpaqueOrigin();
-    expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
-  });
-
-  it('requires a concrete origin before checking policy', () => {
-    const request = createFetchRequest(home);
-    expect(() => request.crossOriginEmbedderPolicyAllowsCredentials()).toThrow(
-      'Fetch request origin has not been resolved',
-    );
+  it.each(['Explicit/1.0', ''])('preserves an existing header with value %j', (value) => {
+    const request = createFetchRequest();
+    request.headerList.append('user-agent', value);
+    request.appendUserAgentHeader();
+    expect(request.headerList.list).toEqual([['user-agent', value]]);
   });
 });
 
-describe('Fetch client population', () => {
-  it('retains explicitly supplied fields', () => {
-    const client = createClientEnvironment();
-    const request = createFetchRequest('https://example.test/', client);
-    const origin = createOpaqueOrigin();
-    const policy = createClientEnvironment().policyContainer;
-    request.traversableForUserPrompts = null;
-    request.origin = origin;
-    request.policyContainer = policy;
-    request.populateFromClient();
-    expect(request.traversableForUserPrompts).toBeNull();
-    expect(request.origin).toBe(origin);
-    expect(request.policyContainer).toBe(policy);
-  });
-
-  it('resolves the origin once instead of following later client changes', () => {
-    const client = createClientEnvironment();
-    const request = createFetchRequest('https://example.test/', client);
-    const origin = client.origin;
-    request.traversableForUserPrompts = null;
-    request.policyContainer = client.policyContainer;
-    request.populateFromClient();
-    expect(request.origin).toBe(origin);
-    client.origin = createOpaqueOrigin();
-    request.populateFromClient();
-    expect(request.origin).toBe(origin);
-  });
-
-  it('requires an explicit origin for a clientless request', () => {
+describe('Fetch request Range headers', () => {
+  it.each<[number | bigint, number | bigint | undefined, string]>([
+    [0, undefined, 'bytes=0-'], [0, 0, 'bytes=0-0'], [1, 500, 'bytes=1-500'],
+    [9007199254740993n, 9007199254740995n, 'bytes=9007199254740993-9007199254740995'],
+  ])('adds the inclusive range %s through %s', (first, last, value) => {
     const request = createFetchRequest();
-    request.traversableForUserPrompts = null;
-    expect(() => request.populateFromClient()).toThrow('An unresolved request origin requires a client');
+    request.addRangeHeader(first, last);
+    expect(request.headerList.list).toEqual([['Range', value]]);
+  });
+
+  it('appends using header-list rules instead of replacing a previous range', () => {
+    const request = createFetchRequest();
+    request.headerList.list.push(['range', 'bytes=0-1']);
+    request.addRangeHeader(2);
+    expect(request.headerList.list).toEqual([['range', 'bytes=0-1'], ['range', 'bytes=2-']]);
+  });
+
+  it('rejects a reversed range before changing headers', () => {
+    const request = createFetchRequest();
+    expect(() => request.addRangeHeader(2, 1)).toThrow('Range start exceeds its end');
+    expect(request.headerList.list).toEqual([]);
   });
 });

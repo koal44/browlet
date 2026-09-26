@@ -9,7 +9,8 @@ export function bytesMatchIntegrityMetadata(bytes: Uint8Array, metadataList: str
   if (metadata.length === 0) return true;
   const actual = applyIntegrityAlgorithm(metadata[0]!.algorithm, bytes);
   for (const item of metadata) {
-    // Compare bytes so Base64url and omitted padding remain equivalent.
+    // SPEC_CLASH(sri-digest-comparison): Compare bytes; the draft compares encoded strings.
+    // Base64url and omitted padding must remain equivalent.
     const expected = forgivingBase64Decode(item.digest.replace(base64URLCharacters, toBase64Character));
     if (expected !== null && actual.length === expected.length && actual.every((byte, i) => byte === expected[i])) return true;
   }
@@ -18,6 +19,8 @@ export function bytesMatchIntegrityMetadata(bytes: Uint8Array, metadataList: str
 
 /** Parse supported hash expressions, ignoring malformed expressions and unknown options. */
 // https://w3c.github.io/webappsec-subresource-integrity/#parse-metadata-section
+// SPEC_CLASH(sri-metadata-parsing): Follow the expression grammar over the prose parser.
+// Use ASCII whitespace and canonical names; retain undecodable strongest hashes to fail verification.
 export function parseIntegrityMetadata(metadata: string): IntegrityMetadata[] {
   const result: IntegrityMetadata[] = [];
   for (const expression of metadata.split(asciiWhitespaceRunPattern)) {
@@ -59,28 +62,6 @@ export type IntegrityMetadata = {
   algorithm: IntegrityAlgorithm;
   /** Encoded digest, retained until verification. */
   digest: string;
-};
-
-/** The HTML-owned integrity policy fields used by request blocking and reporting. */
-export type FetchIntegrityPolicy = {
-  /** Locations from which integrity metadata may be supplied. */
-  sources: 'inline'[];
-  /** Request destinations that require integrity metadata. */
-  blockedDestinations: ('script' | 'style')[];
-  /** Reporting endpoint names, resolved by the owner's Reporting state. */
-  endpoints: string[];
-};
-
-/** Data supplied to Reporting for one enforced or report-only integrity violation. */
-export type IntegrityViolationReportBody = {
-  /** Sanitized URL of the document or worker that initiated the request. */
-  documentURL: string;
-  /** Sanitized original request URL, before redirects. */
-  blockedURL: string;
-  /** Intended use of the blocked resource. */
-  destination: string;
-  /** Whether this report describes a policy that does not block the request. */
-  reportOnly: boolean;
 };
 
 // https://w3c.github.io/webappsec-subresource-integrity/#valid-sri-hash-algorithm-token-set

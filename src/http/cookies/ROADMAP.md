@@ -74,7 +74,7 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    [Fetch Slice 7a](../../fetch/ROADMAP.md#slice-7--http-extensions) supplies §3.1's
    cookie header algorithms; Slice 9 connects them to network request/response
    processing and credentials decisions through its
-   [HTTP integration](../../fetch/http/ROADMAP.md).
+   [HTTP integration](../../fetch/HTTP-ROADMAP.md).
    Browlet's Document implementation supplies non-HTTP access and the
    required browser context. The core does not infer those contexts from
    whichever realm happens to be executing.
@@ -235,10 +235,10 @@ segment matching. Parsing/storage/retrieval tests cover byte and attribute limit
 precedence, public suffixes, IP hosts, all prefixes, secure and HTTP-only overwrite
 protection, unchanged replacements, deletion, SameSite modes, expiry, and path
 ordering. Serialization preserves the supplied ordering and byte values.
-`test/browlet/fetch-control.test.ts` checks shared ownership across
+`test/browlet/fetch-request.test.ts` checks shared ownership across
 Window settings and separation between UserAgents.
 
-`test/fetch/http/cookies.test.ts` covers header processing, SameSite sending
+`test/fetch/policy/cookies.test.ts` covers header processing, SameSite sending
 versus acceptance, redirects, disabling, and the grace-period boundary.
 `test/browlet/scripting/environment.test.ts` covers the real Window ancestry
 query and a shared UserAgent store. Credentials omission and actual network

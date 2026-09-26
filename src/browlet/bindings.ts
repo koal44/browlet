@@ -1,7 +1,7 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon, createMicrotaskQueue, type JSEnvironment } from '../js-engine/index';
+import { addon, createMicrotaskQueue, queueNetworkingTask, type JSEnvironment } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -49,7 +49,7 @@ import {
 import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
 import { SandboxAgent, type WindowAgent } from './scripting/agents';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { WindowEnvironment, createEnvironmentRecord, type EnvironmentRecord } from './scripting/environment';
+import { EnvironmentRecord, WindowEnvironment } from './scripting/environment';
 import type { UserAgent } from './user-agent';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
@@ -138,7 +138,7 @@ class BrowletBindings {
   register(
     realm: Realm,
     createEnvironment: (context: BindingContext<Realm>) => JSEnvironment =
-      (context) => ({ exec: createExecution(context) }),
+      (context) => ({ exec: createExecution(context), queueNetworkingTask }),
   ): BindingContext<Realm> {
     return this.#world.register(realm, createEnvironment);
   }
@@ -161,7 +161,7 @@ class BrowletBindings {
     // parent's full chain. A reserved environment already carries that decision.
     // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
     // https://w3c.github.io/webappsec-secure-contexts/#ancestors
-    const envRecord = reservedEnv ?? createEnvironmentRecord({
+    const envRecord = reservedEnv ?? new EnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
@@ -185,9 +185,10 @@ class BrowletBindings {
     const context = this.#world.register(realm, (binding) => {
       // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
       // Execution reads the installed global lazily; all consumers retain this environment.
-      env = new WindowEnvironment(realm, {
-        ...envRecord, creationURL, topLevelCreationURL, topLevelOrigin,
-      }, createExecution(binding));
+      env = new WindowEnvironment(realm, envRecord, createExecution(binding));
+      env.creationURL = creationURL;
+      env.topLevelCreationURL = topLevelCreationURL;
+      env.topLevelOrigin = topLevelOrigin;
       return env;
     });
     const chain = realm.globalPrototypeChain;

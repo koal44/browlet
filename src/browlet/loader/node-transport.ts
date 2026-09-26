@@ -1,9 +1,11 @@
 import { TLSSocket, type ConnectionOptions } from 'node:tls';
-import { isIP, type Socket } from 'node:net';
+import { isIP, type LookupFunction, type Socket } from 'node:net';
+import dns from 'node:dns';
+import { nextTick } from 'node:process';
 import { Client, buildConnector, errors, type Dispatcher } from 'undici';
 import {
-  ConnectionPool, ConnectionTimingInfo, FetchHeaders, networkPartitionKeysEqual,
-  type HTTPConnection, type HTTPTransport, type HTTPTransportControl,
+  ConnectionTimingInfo, FetchHeaders, networkPartitionKeysEqual,
+  type FetchUserAgent, type HTTPConnection, type HTTPTransport, type HTTPTransportControl,
   type HTTPTransportListener, type HTTPTransportRequest, type HTTPUploadSource, type NetworkPartitionKey,
 } from '../../fetch/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../url/index';
@@ -19,12 +21,12 @@ export class NodeHTTPTransport implements HTTPTransport {
   #clients = new Set<Client>();
   /** Optional host trust roots; certificate and hostname verification always remain enabled. */
   #ca: ConnectionOptions['ca'];
-  #pool: ConnectionPool;
+  #userAgent: FetchUserAgent;
   #closed = false;
 
-  constructor(ca?: ConnectionOptions['ca'], pool = new ConnectionPool()) {
+  constructor(userAgent: FetchUserAgent, ca?: ConnectionOptions['ca']) {
     this.#ca = ca;
-    this.#pool = pool;
+    this.#userAgent = userAgent;
   }
 
   dispatch(request: HTTPTransportRequest, listener: HTTPTransportListener): HTTPTransportControl {
@@ -142,7 +144,9 @@ export class NodeHTTPTransport implements HTTPTransport {
       partition = { key, clients: new Map() };
       this.#partitions.push(partition);
     }
-    const origin = serializeOrigin(obtainURLOrigin(request.url));
+    const urlOrigin = obtainURLOrigin(request.url);
+    if (urlOrigin.kind !== 'tuple') throw new InternalError('HTTP transport requires a tuple origin');
+    const origin = serializeOrigin(urlOrigin);
     const clientKey = `${origin}\0${request.includeCredentials}`;
     const previous = partition.clients.get(clientKey) ?? [];
     if (!request.forceNewConnection) {
@@ -154,8 +158,11 @@ export class NodeHTTPTransport implements HTTPTransport {
       }
     }
 
-    const connect = buildConnector({ ca: this.#ca, rejectUnauthorized: true, allowH2: true, preferH2: true });
-    const pool = this.#pool;
+    const connect = buildConnector({
+      ca: this.#ca, rejectUnauthorized: true, allowH2: true, preferH2: true,
+      lookup: lookupHost,
+    });
+    const pool = this.#userAgent.connectionPool;
     const entry: TransportClient = {
       active: 0,
       connection: undefined,
@@ -163,15 +170,16 @@ export class NodeHTTPTransport implements HTTPTransport {
         allowH2: true,
         connect(options, callback) {
           const timingInfo = new ConnectionTimingInfo();
-          timingInfo.connectionStartTime = unsafeSharedCurrentTime().milliseconds;
-          if (isIP(options.hostname) === 0) timingInfo.domainLookupStartTime = timingInfo.connectionStartTime;
+          timingInfo.domainLookupStartTime = timingInfo.connectionStartTime = unsafeSharedCurrentTime().milliseconds;
+          // Literal addresses resolve immediately; Node emits no lookup event for them.
+          if (isIP(options.hostname) !== 0) timingInfo.domainLookupEndTime = timingInfo.connectionStartTime;
           // Undici's connector returns its Socket; its declaration incorrectly says void.
           const socket = connect(options, (error, socket) => {
             if (error) { callback(error, null); return; }
             timingInfo.connectionEndTime = unsafeSharedCurrentTime().milliseconds;
             const protocol = socket instanceof TLSSocket && socket.alpnProtocol === 'h2' ? 'h2' : 'http/1.1';
             const connection: HTTPConnection = {
-              key, origin: obtainURLOrigin(request.url), credentials: request.includeCredentials,
+              key, origin: urlOrigin, credentials: request.includeCredentials,
               timingInfo, supportsUnreliable: false, protocol,
               hasValidTLS: socket instanceof TLSSocket && socket.authorized,
             };
@@ -211,6 +219,28 @@ type TransportClient = {
   client: Client;
   active: number;
   connection: HTTPConnection | undefined;
+};
+
+/** Supply socket addresses, confining localhost names to loopback without DNS. */
+// https://fetch.spec.whatwg.org/#resolve-an-origin
+// Node bypasses lookup for IP literals; other hostnames are already normalized by URL parsing.
+const lookupHost: LookupFunction = (hostname, options, callback) => {
+  if (hostname !== 'localhost' && hostname !== 'localhost.' &&
+    !hostname.endsWith('.localhost') && !hostname.endsWith('.localhost.')) {
+    dns.lookup(hostname, options, callback);
+    return;
+  }
+
+  // Match native lookup's asynchronous completion so the socket can install its listeners.
+  nextTick(() => {
+    const family = options.family === 'IPv4' ? 4 : options.family === 'IPv6' ? 6 : options.family;
+    const addresses = [
+      { address: '::1', family: 6 },
+      { address: '127.0.0.1', family: 4 },
+    ].filter((address) => !family || address.family === family);
+    if (options.all) callback(null, addresses);
+    else callback(null, addresses[0]!.address, addresses[0]!.family);
+  });
 };
 
 /** Native I/O awaits a neutral chunk; the source queues each read on its own HTML owner. */

@@ -96,7 +96,7 @@ export class Browlet {
 
   /** Clear cached HTTP responses and identifying validators, including pending writes. */
   clearHTTPCache(): void {
-    this.#userAgent.httpCachePartitions.clear();
+    this.#userAgent.httpCache.clear();
   }
 
   /** Evaluate page code, await its result, and return a copy to the host. */

@@ -1,90 +1,103 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../src/fetch/body';
 import { fetch } from '../../src/fetch/fetch';
-import { FetchParams } from '../../src/fetch/params';
+import { FetchHeaders } from '../../src/fetch/headers';
+import type { HTTPTransportListener } from '../../src/fetch/transport';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
 import { InternalError } from '../../src/infra/internal-error';
-import type { InternalPromise } from '../../src/infra/promises';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { parseURL } from '../../src/url/url';
+import { mockHTTPTransport } from '../fetch/transport-fixture';
+import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
+import { createFetchOperation, nextFetchTaskError } from './fetch-fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('Fetch response overrides', () => {
-  it('defaults to no override and dispatches scheme fetch with the same Fetch state', async () => {
-    const { params, userAgent, request, env } = createFixture();
+  it('defaults to no override and dispatches the request through its URL scheme', async () => {
+    const { operation, userAgent, request, env } = createFixture('about:blank');
     const override = vi.spyOn(userAgent, 'potentiallyOverrideResponse');
-    const response = new FetchResponse();
-    const scheme = vi.spyOn(params, 'schemeFetch').mockReturnValue(userAgent.hostPromises.resolve(response));
-    const http = vi.spyOn(params, 'httpFetch');
-    expect(await responseFrom(params.overrideFetch('scheme-fetch'))).toBe(response);
+    const transport = vi.spyOn(userAgent.httpTransport, 'dispatch');
+    const response = await operation.start();
+    expect(response.status).toBe(200);
+    expect(response.headerList.get('Content-Type')).toBe('text/html;charset=utf-8');
+    expect(response.body!.stream.env).toBe(env);
     expect(override).toHaveBeenCalledExactlyOnceWith(request, env);
     expect(override.mock.results[0]!.value).toBeNull();
-    expect(scheme).toHaveBeenCalledExactlyOnceWith();
-    expect(scheme.mock.contexts[0]).toBe(params);
-    expect(http).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('forwards the HTTP preflight choice %s and waits for dispatch', async (preflight) => {
-    const { params, userAgent } = createFixture();
-    const pending = userAgent.hostPromises.withResolvers<FetchResponse>();
-    const http = vi.spyOn(params, 'httpFetch').mockReturnValue(pending.promise);
-    const scheme = vi.spyOn(params, 'schemeFetch');
-    const result = responseFrom(preflight ? params.overrideFetch('http-fetch', true) : params.overrideFetch('http-fetch'));
-    expect(http).toHaveBeenCalledExactlyOnceWith(preflight);
-    expect(http.mock.contexts[0]).toBe(params);
-    expect(scheme).not.toHaveBeenCalled();
-    const response = new FetchResponse();
-    pending.resolve(response);
-    expect(await result).toBe(response);
+    const { operation, userAgent, request } = createFixture();
+    request.method = 'PUT';
+    request.mode = 'cors';
+    request.responseTainting = 'cors';
+    request.useCORSPreflight = preflight;
+    const waiting = Promise.withResolvers<HTTPTransportListener>();
+    const wire = mockHTTPTransport(userAgent, (request, listener) => {
+      if (request.method === 'OPTIONS') {
+        listener.onHeaders(204, '', new FetchHeaders([
+          ['Access-Control-Allow-Origin', '*'], ['Access-Control-Allow-Methods', 'PUT'],
+        ]), false);
+        listener.onEnd();
+      } else { waiting.resolve(listener); }
+    });
+    const result = operation.start();
+    const listener = await waiting.promise;
+    expect(wire.mock.calls.map(([request]) => request.method)).toEqual(preflight ? ['OPTIONS', 'PUT'] : ['PUT']);
+    listener.onHeaders(201, 'Created', new FetchHeaders([['Access-Control-Allow-Origin', '*']]), false);
+    listener.onEnd();
+    expect((await result).status).toBe(201);
   });
 
   it.each(['scheme-fetch', 'http-fetch'] as const)('returns a supplied response without %s dispatch', async (type) => {
-    const { params, userAgent, request, env } = createFixture();
-    const scheme = vi.spyOn(params, 'schemeFetch');
-    const http = vi.spyOn(params, 'httpFetch');
+    const { operation, userAgent, request, env } = createFixture();
+    const transport = vi.spyOn(userAgent.httpTransport, 'dispatch');
+    const worker = vi.spyOn(userAgent, 'handleFetch');
+    if (type === 'http-fetch') {
+      request.mode = 'cors';
+      request.responseTainting = 'cors';
+    }
     const response = new FetchResponse().filter('cors');
     const override = vi.spyOn(userAgent, 'potentiallyOverrideResponse').mockReturnValue(response);
-    expect(await responseFrom(params.overrideFetch(type, true))).toBe(response);
+    expect(await operation.start()).toBe(response);
     expect(override).toHaveBeenCalledExactlyOnceWith(request, env);
-    expect(scheme).not.toHaveBeenCalled();
-    expect(http).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+    expect(worker).not.toHaveBeenCalled();
   });
 
   it('accepts an intentional network-error response without falling through to HTTP', async () => {
-    const { params, userAgent } = createFixture();
+    const { operation, userAgent } = createFixture();
     const response = FetchResponse.networkError();
     vi.spyOn(userAgent, 'potentiallyOverrideResponse').mockReturnValue(response);
-    const http = vi.spyOn(params, 'httpFetch');
-    expect(await responseFrom(params.overrideFetch('http-fetch'))).toBe(response);
-    expect(http).not.toHaveBeenCalled();
+    const transport = vi.spyOn(userAgent.httpTransport, 'dispatch');
+    expect(await operation.start()).toBe(response);
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it('keeps response policy on the request owner instead of sharing overrides between browsers', async () => {
-    const first = createFixture();
-    const second = createFixture();
+    const first = createFixture('about:blank');
+    const second = createFixture('about:blank');
     const blocked = FetchResponse.networkError();
     vi.spyOn(first.userAgent, 'potentiallyOverrideResponse').mockReturnValue(blocked);
-    const ordinary = new FetchResponse();
-    const scheme = vi.spyOn(second.params, 'schemeFetch').mockReturnValue(second.userAgent.hostPromises.resolve(ordinary));
-    expect(await responseFrom(first.params.overrideFetch('scheme-fetch'))).toBe(blocked);
-    expect(await responseFrom(second.params.overrideFetch('scheme-fetch'))).toBe(ordinary);
-    expect(scheme).toHaveBeenCalledOnce();
+    expect(await first.operation.start()).toBe(blocked);
+    expect((await second.operation.start()).status).toBe(200);
   });
 
   it('propagates an override implementation failure without dispatching a replacement request', async () => {
-    const { params, userAgent } = createFixture();
+    const { operation, userAgent, env } = createFixture();
     const failure = new InternalError('Override implementation failed');
     vi.spyOn(userAgent, 'potentiallyOverrideResponse').mockImplementation(() => { throw failure; });
-    const scheme = vi.spyOn(params, 'schemeFetch');
-    await expect(responseFrom(params.overrideFetch('scheme-fetch'))).rejects.toBe(failure);
-    expect(scheme).not.toHaveBeenCalled();
+    const transport = vi.spyOn(userAgent.httpTransport, 'dispatch');
+    const error = nextFetchTaskError(env);
+    void operation.start();
+    expect(await error).toBe(failure);
+    expect(transport).not.toHaveBeenCalled();
   });
 });
 
@@ -134,11 +147,15 @@ describe('Override responses through main fetch', () => {
   });
 });
 
-function createFixture() {
+function createFixture(url = 'https://example.test/resource') {
   const userAgent = new UserAgent();
   const env = userAgent.sandbox;
-  const request = new FetchRequest(parseURL('https://example.test/resource').url!, null, userAgent);
-  return { userAgent, env, request, params: new FetchParams(request, new FetchTimingInfo(), env) };
+  const client = createPolicyEnvironment('https://example.test/', undefined, userAgent);
+  const request = new FetchRequest(parseURL(url).url!, client, userAgent);
+  if (request.currentURL.scheme === 'about') request.mode = 'navigate';
+  request.referrer = null;
+  request.populateFromClient();
+  return { userAgent, env, request, operation: createFetchOperation(request, env) };
 }
 
 async function createWindowFixture() {
@@ -150,11 +167,6 @@ async function createWindowFixture() {
   return { env, userAgent, request };
 }
 
-function responseFrom(response: InternalPromise<FetchResponse>) {
-  const result = Promise.withResolvers<FetchResponse>();
-  response.observe(result.resolve, result.reject);
-  return result.promise;
-}
 
 function consume(request: FetchRequest, env: JSEnvironment) {
   const result = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();

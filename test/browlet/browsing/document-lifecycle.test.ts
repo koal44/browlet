@@ -14,9 +14,7 @@ import { Realm, WindowRealm } from '../../../src/browlet/scripting/realm';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../src/browlet/scripting/agents';
-import {
-  createEnvironmentRecord,
-} from '../../../src/browlet/scripting/environment';
+import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
 import {
   createNewTopLevelTraversable, Navigable, TopLevelTraversable,
 } from '../../../src/browlet/browsing/navigable';
@@ -123,7 +121,7 @@ describe('browsing context groups', () => {
     window.setAssociatedDocument(document);
     const realm = new WindowRealm(window, {
       agent: new WindowAgent(),
-      envRecord: createEnvironmentRecord({
+      envRecord: new EnvironmentRecord({
         userAgent: new UserAgent(), creationURL: document.url,
         topLevelCreationURL: document.url, topLevelOrigin: document.origin,
         targetBrowsingContext: null, isSecureContext: false,
@@ -387,8 +385,9 @@ describe('environment settings objects', () => {
     const creationURL = requireURL('https://example.test/');
     const origin = obtainURLOrigin(creationURL);
     const userAgent = new UserAgent();
-    const reservedEnv = createEnvironmentRecord({
-      userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
+    const reservedURL = requireURL('https://reserved.test/');
+    const reservedEnv = new EnvironmentRecord({
+      userAgent, creationURL: reservedURL, topLevelCreationURL: reservedURL, topLevelOrigin: obtainURLOrigin(reservedURL),
       targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {}, isSecureContext: true,
     });
     const reservedId = reservedEnv.id;
@@ -409,6 +408,12 @@ describe('environment settings objects', () => {
     expect(reservedEnv.id).toBe('');
     expect(env.targetBrowsingContext).toBe(reservedEnv.targetBrowsingContext);
     expect(env.activeServiceWorker).toBe(reservedEnv.activeServiceWorker);
+    expect(env.creationURL).toBe(creationURL);
+    expect(env.topLevelCreationURL).toBe(creationURL);
+    expect(env.topLevelOrigin).toBe(origin);
+    expect(reservedEnv.creationURL).toBe(reservedURL);
+    expect(env.executionReady).toBe(false);
+    expect(reservedEnv.executionReady).toBe(false);
     expect(bindingEnv).toBe(env);
     expect(env.exec.global).toBe(env.global);
     expect(realm.hostDefined).toBe(env);

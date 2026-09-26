@@ -185,6 +185,80 @@ describe('Streams operations for other specifications', () => {
   });
 });
 
+describe('Readable-stream completion steps', () => {
+  it('waits for queued bytes without locking or pulling and precedes read completion', async () => {
+    const env = createEnvironment();
+    const pull = vi.fn();
+    const stream = ReadableStreamImpl.createDefault(pull, undefined, 0, () => 1, env);
+    const events: string[] = [];
+    const closed = vi.fn(() => { events.push('closed'); });
+    const errored = vi.fn();
+    stream.onCompletion(closed, errored);
+    stream.enqueueChunk(Uint8Array.of(1, 2, 3));
+    stream.close();
+    await observe(env.exec.promises.resolve());
+
+    expect(stream.locked).toBe(false);
+    expect(stream.disturbed).toBe(false);
+    expect(pull).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+    const reader = stream.getDefaultReader();
+    reader.readAllBytes((bytes) => {
+      events.push('read');
+      expect(bytes).toEqual(Uint8Array.of(1, 2, 3));
+    }, errored);
+    expect(events).toEqual(['closed', 'read']);
+    expect(closed).toHaveBeenCalledOnce();
+    expect(errored).not.toHaveBeenCalled();
+    reader.release();
+  });
+
+  it.each(['close', 'error', 'cancel'] as const)('observes %s once despite reader release, including late registrations', async (mode) => {
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, createEnvironment());
+    const closed = vi.fn();
+    const errored = vi.fn();
+    const second = vi.fn();
+    stream.onCompletion(closed, errored);
+    stream.onCompletion(second, second);
+    const reader = stream.getDefaultReader();
+    reader.closed.observe(() => {}, () => {});
+    reader.release();
+    expect(closed).not.toHaveBeenCalled();
+    expect(errored).not.toHaveBeenCalled();
+    if (mode === 'close') stream.close();
+    else if (mode === 'error') stream.error(undefined);
+    else await observe(stream.cancelInternal('stop'));
+    expect(closed).toHaveBeenCalledTimes(mode === 'error' ? 0 : 1);
+    expect(errored).toHaveBeenCalledTimes(mode === 'error' ? 1 : 0);
+    if (mode === 'error') expect(errored).toHaveBeenCalledWith(undefined);
+    expect(second).toHaveBeenCalledOnce();
+    const late = vi.fn();
+    stream.onCompletion(late, late);
+    expect(late).toHaveBeenCalledOnce();
+  });
+
+  it('notifies completion before pending reads fail, preserving the original error', () => {
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, createEnvironment());
+    const failure = new Error('source failed');
+    const events: unknown[] = [];
+    stream.onCompletion(vi.fn(), (reason) => { events.push(['end', reason]); });
+    stream.getDefaultReader().readAllBytes(vi.fn(), (reason) => { events.push(['read', reason]); });
+    stream.error(failure);
+    expect(events).toEqual([['end', failure], ['read', failure]]);
+  });
+
+  it('completes closure even if source cancellation subsequently rejects', async () => {
+    const env = createEnvironment();
+    const stream = ReadableStreamImpl.createDefault(undefined, () => env.exec.promises.reject('cleanup'), 0, () => 1, env);
+    const closed = vi.fn();
+    const errored = vi.fn();
+    stream.onCompletion(closed, errored);
+    await expect(observe(stream.cancelInternal('stop'))).rejects.toBe('cleanup');
+    expect(closed).toHaveBeenCalledOnce();
+    expect(errored).not.toHaveBeenCalled();
+  });
+});
+
 function requireObject(value: unknown): object {
   if (typeof value !== 'object' || value === null) {
     throw new Error('Expected an object');

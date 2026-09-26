@@ -9,12 +9,13 @@ import type { WindowProxy } from '../../../src/browlet/browsing/window/window-pr
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { createEnvironmentRecord } from '../../../src/browlet/scripting/environment';
+import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
 import { StorageKey } from '../../../src/storage/keys';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { determineRequestReferrer } from '../../../src/browlet/browsing/policy/referrer-policy';
 import { FetchRequest, RequestImpl } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
+import { networkPartitionKeysEqual } from '../../../src/fetch/transport';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 
 describe('Window environment cross-site ancestry', () => {
@@ -192,6 +193,58 @@ describe('Window environment prompt targets', () => {
   });
 });
 
+describe('network partition keys from browser environments', () => {
+  it('uses the top-level origin in preference to the creation URL', () => {
+    const env = createReservedEnvironment('https://fallback.test/');
+    env.topLevelOrigin = obtainURLOrigin(parseURL('https://a.example.com:8443/').url!);
+
+    expect(env.determineNetworkPartitionKey())
+      .toEqual([['https', { kind: 'domain', value: 'example.com' }], null]);
+  });
+
+  it('falls back to the top-level creation URL when no top-level origin was supplied', () => {
+    const env = createReservedEnvironment('https://a.example.com/');
+
+    expect(env.determineNetworkPartitionKey())
+      .toEqual([['https', { kind: 'domain', value: 'example.com' }], null]);
+  });
+
+  it('preserves and distinguishes opaque-origin identities', () => {
+    const env = createReservedEnvironment('https://example.test/');
+    env.topLevelOrigin = createOpaqueOrigin();
+    const first = env.determineNetworkPartitionKey();
+    const again = env.determineNetworkPartitionKey();
+    env.topLevelOrigin = createOpaqueOrigin();
+
+    expect(first[0]).toBe(again[0]);
+    expect(networkPartitionKeysEqual(first, again)).toBe(true);
+    expect(networkPartitionKeysEqual(first, env.determineNetworkPartitionKey())).toBe(false);
+  });
+
+  it('uses the same partition for a reserved record and the Window environment that consumes it', () => {
+    const userAgent = new UserAgent();
+    const creationURL = parseURL('https://a.example.com/').url!;
+    const origin = obtainURLOrigin(creationURL);
+    const reservedEnv = new EnvironmentRecord({
+      userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: null,
+      targetBrowsingContext: null, isSecureContext: true,
+    });
+    const request = new FetchRequest(creationURL, null, userAgent);
+    request.reservedClient = reservedEnv;
+    const key = request.determineNetworkPartitionKey();
+    expect(key).toEqual([['https', { kind: 'domain', value: 'example.com' }], null]);
+
+    const env = createWindowEnvironment({
+      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv,
+      topLevelCreationURL: creationURL, topLevelOrigin: origin,
+    });
+    request.reservedClient = null;
+    request.client = env;
+    expect(request.determineNetworkPartitionKey()).toEqual(key);
+    expect(env.determineNetworkPartitionKey()).toEqual(key);
+  });
+});
+
 describe('storage keys from browser environments', () => {
   it('uses a Window\'s actual security origin, including an inherited about:blank origin', () => {
     const { document, env } = createEnvironment('about:blank');
@@ -208,7 +261,7 @@ describe('storage keys from browser environments', () => {
   it('uses the creation URL of a reserved environment before any realm exists', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL('https://reserved.test/').url!;
-    const record = createEnvironmentRecord({
+    const record = new EnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL,
       topLevelOrigin: obtainURLOrigin(creationURL), targetBrowsingContext: null, isSecureContext: true,
     });
@@ -230,6 +283,14 @@ describe('storage keys from browser environments', () => {
     expect(StorageKey.obtain(env)?.equals(key)).toBe(true);
   });
 });
+
+function createReservedEnvironment(url: string) {
+  const creationURL = parseURL(url).url!;
+  return new EnvironmentRecord({
+    userAgent: new UserAgent(), creationURL, topLevelCreationURL: creationURL,
+    topLevelOrigin: null, targetBrowsingContext: null, isSecureContext: true,
+  });
+}
 
 // Compose real Window settings and navigables without requiring the iframe loader.
 function createEnvironment(url: string, parent: Navigable | null = null) {

@@ -1,26 +1,26 @@
-import type { FetchGroup } from './group';
-import type { FetchController } from './controller';
-import type { ConnectionPool } from './http/connections';
-import type { HTTPCachePartitions } from './http/cache/partitions';
-import type { CORSPreflightCache } from './http/cors-preflight-cache';
-import type { HTTPTransport } from './http/transport';
-import type { HTTPAuthentication } from './http/authentication';
-import type { HTTPContentDecoder, HTTPContentDecoderListener } from './http/content-decoder';
-import type { FetchIntegrityPolicy } from './integrity';
-import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
-import type { CacheUsage, FetchResponse } from './response';
-import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
-import type { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
+import type { CookieStore } from '../http/index';
+import { InternalError } from '../infra/internal-error';
+import type { InternalPromise, Promises } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
-import { InternalError } from '../infra/internal-error';
-import type { Promises, InternalPromise } from '../infra/promises';
+import type { FetchController } from './controller';
+import type { FetchGroup } from './group';
+import type { HTTPCacheStore } from './cache-http';
+import type { CORSPreflightCache } from './cache-cors';
+import type {
+  ConnectionPool, HTTPContentDecoder, HTTPContentDecoderListener, HTTPTransport, NetworkPartitionKey,
+} from './transport';
+import type { FetchIntegrityPolicy } from './policy';
+import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
+import type { CacheUsage, FetchResponse } from './response';
+import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 
-/** https://fetch.spec.whatwg.org/#is-offline */
+/** Combine browser-wide connectivity state with the client's emulated offline state. */
+// https://fetch.spec.whatwg.org/#is-offline
 export function isOffline(env: FetchEnvironment): boolean {
   return env.userAgent.assumeNoInternetConnectivity ||
     env.userAgent.webDriverBiDiNetworkIsOffline(env);
@@ -146,6 +146,8 @@ export interface FetchEnvironmentRecord extends StorageEnvironment {
   topLevelOrigin: Origin | null;
   /** Top-level creation URL used to derive an unavailable top-level origin, or null. */
   topLevelCreationURL: URLRecord | null;
+  /** Network isolation key available even for a reserved client without a realm. */
+  determineNetworkPartitionKey(): NetworkPartitionKey;
 }
 
 export interface FetchUserAgent extends StorageUserAgent {
@@ -207,7 +209,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Browser-owned HTTP credentials and challenge handling, independent of a client's lifetime. */
   httpAuthentication: HTTPAuthentication;
   /** Shared logical HTTP caches, separated by network partition key. */
-  httpCachePartitions: HTTPCachePartitions;
+  httpCache: HTTPCacheStore;
   /** Cached CORS permissions, including invalidation after a failed preflight fetch. */
   corsPreflightCache: CORSPreflightCache;
   /** Cookie state shared by requests belonging to this user agent. */
@@ -234,9 +236,37 @@ export interface FetchUserAgent extends StorageUserAgent {
   ): BlobImpl | null;
 }
 
-/** Fetch §2, serialize an integer as its shortest decimal representation. */
-export function serializeInteger(integer: number | bigint): string {
-  return BigInt(integer).toString();
+/** Credentials returned by the browser's authentication prompt. */
+export type AuthenticationCredentials = {
+  username: string;
+  password: string;
+};
+
+// https://fetch.spec.whatwg.org/#authentication-entries
+export interface AuthenticationEntry extends AuthenticationCredentials {
+  /** HTTP protection-space label, not a JavaScript realm. */
+  realm: string;
+}
+
+/** Browser authentication state and prompting required by Fetch's HTTP transaction. */
+export interface HTTPAuthentication {
+  /** Changes when credentials are cleared, preventing an older exchange from restoring them. */
+  generation: number;
+  /** Find a known realm, or infer one from the URL's directory scope. */
+  find(url: URLRecord, realm?: string): AuthenticationEntry | null;
+  /** Remove rejected credentials without removing a concurrent replacement. */
+  invalidate(url: URLRecord, entry: AuthenticationEntry): void;
+  /** Retain an accepted exchange, including its challenge and authenticated path. */
+  store(url: URLRecord, entry: AuthenticationEntry, generation: number): void;
+  /** Obtain credentials or null; cancellation settles a pending prompt. */
+  prompt(
+    request: FetchRequest, realm: string, previous: AuthenticationEntry | null, controller: FetchController,
+  ): InternalPromise<AuthenticationEntry | null>;
+
+  // PROVISIONAL: proxy authentication awaits a configured proxy identity and transport route.
+  /** Apply configured proxy credentials independently of the request's credentials mode. */
+  applyProxyAuthentication(request: FetchRequest): void;
+  promptProxy(request: FetchRequest, response: FetchResponse): InternalPromise<boolean>;
 }
 
 /** Binding integration: HTML supplies the relevant browser environment and its execution facilities. */

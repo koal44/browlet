@@ -432,9 +432,10 @@ current adapter. It must not recreate a second object model around values Web
 IDL has already converted.
 
 In Browlet, the binding's `getEnvironment()` returns the actual browser environment.
-Portable implementations see its `JSEnvironment` contract (`exec: RealmExecution`), while
-browser-owned consumers use `Environment` when they also need HTML state. Its
-required `realm` and `exec` fields keep those responsibilities explicit without
+Portable implementations see its `JSEnvironment` contract (`exec: RealmExecution`
+and `queueNetworkingTask()`), while browser-owned consumers use `Environment` when
+they also need HTML state. Its required `realm` and `exec` fields keep those
+responsibilities explicit without
 flattening execution facilities onto the environment. The neutral contract
 does not expose Binding Context, conversion, or projection. Neither the request's
 client nor an ambient current Window replaces an explicitly selected allocation
@@ -913,7 +914,8 @@ base HTML `Realm` has no Window-only state or event methods.
 `createWindowEnvironment()` shares Window, realm, settings, and global-scope
 initialization between HTML's initial browsing-context and navigation paths.
 The Document algorithms retain their separate initialization steps.
-`EnvironmentRecord` holds the secure-context decision before a realm exists.
+The `EnvironmentRecord` base class holds the secure-context decision before a
+realm exists; the full `Environment` inherits that state and its accessors.
 A new Window uses its selected origin and parent Window; a reserved record
 already carries its decision. The composition root gives that record to the
 Realm, and Web IDL reads `Realm.secureContext` through it when installing

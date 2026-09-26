@@ -276,7 +276,7 @@ Current implementation sequence:
    including the approved Undici repair for unsolicited HTTP/1.1 100 Continue.
    The HTTP detour's planned work is complete. 9C supplies bounded cache storage,
    selection, validation, invalidation, and background revalidation. 9D's TAO
-   check closes its background-completion gate; the [cache roadmap](../fetch/http/cache/ROADMAP.md#remaining-acceptance-gates-and-review)
+   check closes its background-completion gate; the [cache roadmap](../fetch/CACHE-ROADMAP.md#remaining-acceptance-gates-and-review)
    retains two callable-shape review points.
    The approved Undici vendor repair resolves HTTP/1.1 304 completion.
    9D CORS, preflight caching, and timing permission include the

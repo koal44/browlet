@@ -4,7 +4,8 @@ import type { FetchTimingInfo } from './timing';
 import type { FetchEnvironment } from './environment';
 import { InternalError } from '../infra/internal-error';
 
-/** Fetch §2, fetch controller and its operations. */
+/** Cancellation, timing, and manual-redirect controls for an ongoing fetch. */
+// https://fetch.spec.whatwg.org/#fetch-controller
 export class FetchController {
   /** Controls whether fetch work may continue and how cancellation is reported. */
   state: 'ongoing' | 'terminated' | 'aborted' = 'ongoing';
@@ -27,18 +28,21 @@ export class FetchController {
   }
 
   // The selected global's environment supplies its time origin and Resource Timing owner.
+  // https://fetch.spec.whatwg.org/#finalize-and-report-timing
   reportTiming(env: FetchEnvironment): void {
     const steps = this.reportTimingSteps;
     if (steps === null) throw new InternalError('Fetch timing steps are not set');
     steps(env);
   }
 
+  // https://fetch.spec.whatwg.org/#fetch-controller-process-the-next-manual-redirect
   processNextManualRedirect(): void {
     const steps = this.nextManualRedirectSteps;
     if (steps === null) throw new InternalError('Fetch manual redirect steps are not set');
     steps();
   }
 
+  // https://fetch.spec.whatwg.org/#extract-full-timing-info
   extractFullTimingInfo(): FetchTimingInfo {
     if (this.fullTimingInfo === null) {
       throw new InternalError('Fetch full timing info is not set');
@@ -46,7 +50,8 @@ export class FetchController {
     return this.fullTimingInfo;
   }
 
-  /** Fetch §2, abort a fetch controller; an omitted error differs from explicit undefined. */
+  /** Abort active work, serializing the reason; omission differs from explicit undefined. */
+  // https://fetch.spec.whatwg.org/#fetch-controller-abort
   abort(
     ...args: [env: JSEnvironment] | [error: unknown, env: JSEnvironment]
   ): void {
@@ -64,6 +69,7 @@ export class FetchController {
     this.#cancelOperations();
   }
 
+  // https://fetch.spec.whatwg.org/#fetch-controller-terminate
   terminate(): void {
     this.state = 'terminated';
     this.#cancelOperations();
@@ -76,7 +82,8 @@ export class FetchController {
   }
 }
 
-/** Fetch §2, deserialize a serialized abort reason in the target runtime's realm. */
+/** Restore an abort reason in the target environment, falling back to AbortError. */
+// https://fetch.spec.whatwg.org/#deserialize-a-serialized-abort-reason
 export function deserializeAbortReason(
   abortReason: object | null,
   env: JSEnvironment,

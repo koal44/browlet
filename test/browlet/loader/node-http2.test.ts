@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { constants, createSecureServer, type Http2SecureServer, type ServerHttp2Session, type ServerHttp2Stream } from 'node:http2';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NodeHTTPTransport } from '../../../src/browlet/loader/node-transport';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchHeaders } from '../../../src/fetch/headers';
 import { getMIMETypeEssence } from '../../../src/mime/index';
-import type { HTTPConnection, HTTPTransportRequest } from '../../../src/fetch/http/transport';
+import type { HTTPConnection, HTTPTransportRequest } from '../../../src/fetch/transport';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
 import { obtainSite } from '../../../src/url/origin';
 import { closeServer, listen } from './http-fixture';
@@ -220,7 +221,7 @@ describe('Node HTTP/2 transport', () => {
 async function fixture(server: Http2SecureServer) {
   servers.push(server);
   const origin = await listen(server, 'https');
-  const transport = new NodeHTTPTransport(tls.cert);
+  const transport = new NodeHTTPTransport(new UserAgent(), tls.cert);
   transports.push(transport);
   return { origin, transport };
 }

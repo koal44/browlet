@@ -7,29 +7,28 @@ import {
   requestPriorityIDL, requestRedirectIDL,
 } from './request';
 import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
-import { fetchGlobalScopeIDL } from './global';
+import { fetchGlobalScopeIDL } from './fetch-global';
 
 export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
-export { fetchForGlobal } from './global';
+export { fetchForGlobal } from './fetch-global';
 export { FetchGroup } from './group';
 export type { FetchBody } from './body';
-export { ConnectionPool } from './http/connections';
-export type { HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry } from './http/authentication';
+export { ConnectionPool, networkPartitionKeysEqual, type NetworkPartitionKey } from './transport';
 export type {
   HTTPTransport, HTTPTransportRequest, HTTPTransportListener, HTTPTransportControl, HTTPConnection, HTTPUploadSource,
-} from './http/transport';
-export type { HTTPContentDecoder, HTTPContentDecoderListener } from './http/content-decoder';
-export { networkPartitionKeysEqual, type NetworkPartitionKey } from './http/network-partition';
-export { HTTPCachePartitions } from './http/cache/partitions';
-export { CORSPreflightCache } from './http/cors-preflight-cache';
+  HTTPContentDecoder, HTTPContentDecoderListener,
+} from './transport';
+export { HTTPCacheStore } from './cache-http';
+export { CORSPreflightCache } from './cache-cors';
 export type {
   FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
+  HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry,
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
 } from './environment';
 export { fetchEnvironment } from './environment';
-export { getEnvironmentDefaultUserAgent, isHeaderValue, FetchHeaders } from './headers';
+export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
 export {
   requestIDL, FetchRequest, isScriptLikeDestination,
   type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
@@ -39,10 +38,9 @@ export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type R
 export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
-  type FetchIntegrityPolicy, type IntegrityViolationReportBody,
 } from './integrity';
-export { isLocalScheme } from './url';
-export { isOkStatus } from './http/statuses';
+export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
+export { isLocalScheme, isLocalURL } from './url';
 
 export const fetchIDLDefinitions: Definition[] = [
   headersInitIDL,

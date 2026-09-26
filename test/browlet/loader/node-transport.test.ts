@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { createServer as createHTTPSServer } from 'node:https';
+import dns from 'node:dns';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NodeHTTPTransport } from '../../../src/browlet/loader/node-transport';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchHeaders } from '../../../src/fetch/headers';
-import type { HTTPTransportListener, HTTPTransportRequest } from '../../../src/fetch/http/transport';
-import type { NetworkPartitionKey } from '../../../src/fetch/http/network-partition';
+import type { HTTPTransportListener, HTTPTransportRequest, NetworkPartitionKey } from '../../../src/fetch/transport';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
 import { obtainSite } from '../../../src/url/origin';
 import { closeServer, listen } from './http-fixture';
@@ -16,6 +17,7 @@ const cert = readFileSync('test/browlet/loader/fixtures/localhost-cert.pem');
 const key = readFileSync('test/browlet/loader/fixtures/localhost-key.pem');
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(transports.splice(0).map((transport) => transport.close()));
   await Promise.all(servers.splice(0).map(closeServer));
 });
@@ -145,6 +147,91 @@ describe('Node HTTP transport', () => {
     expect(requests).toBe(1);
   });
 
+  it.each([
+    ['127.0.0.1', '127.0.0.1'], ['127.0.0.1', '127.1'], ['::1', '[::1]'],
+  ])('connects to %s through the IP literal %s without DNS', async (address, hostname) => {
+    const server = createServer((_request, response) => response.end('literal'));
+    servers.push(server);
+    const url = (await listen(server, 'http', address)).replace(address.includes(':') ? `[${address}]` : address, hostname);
+    const lookup = vi.spyOn(dns, 'lookup');
+
+    const result = await exchange(makeTransport(), wireRequest(url));
+    expect(result.body.toString()).toBe('literal');
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it.each(['127.0.0.1', '::1'])('records host-resolution timing for a new connection to %s', async (address) => {
+    const server = createServer((_request, response) => response.end('literal'));
+    servers.push(server);
+    const userAgent = new UserAgent();
+    const transport = new NodeHTTPTransport(userAgent);
+    transports.push(transport);
+
+    await exchange(transport, wireRequest(await listen(server, 'http', address)));
+    const [connection] = userAgent.connectionPool.connections;
+    const timing = connection!.timingInfo;
+
+    // Fetch's obtain-a-connection algorithm brackets origin resolution even for IP literals.
+    // https://fetch.spec.whatwg.org/#concept-connection-obtain
+    expect(timing.domainLookupStartTime).toBeGreaterThan(0);
+    expect(timing.domainLookupEndTime).toBeGreaterThanOrEqual(timing.domainLookupStartTime);
+    expect(timing.connectionStartTime).toBeGreaterThanOrEqual(timing.domainLookupEndTime);
+  });
+
+  it.each(['localhost', 'localhost.', 'browlet-fetch.localhost', 'deep.browlet-fetch.localhost.', 'LOCALHOST'])(
+    'resolves %s to loopback without consulting native DNS', async (hostname) => {
+      const server = createServer((_request, response) => response.end('loopback'));
+      servers.push(server);
+      const url = (await listen(server)).replace('127.0.0.1', hostname);
+      const lookup = vi.spyOn(dns, 'lookup');
+
+      const result = await exchange(makeTransport(), wireRequest(url));
+      expect(result.status).toBe(200);
+      expect(result.body.toString()).toBe('loopback');
+      expect(lookup).not.toHaveBeenCalled();
+    },
+  );
+
+  it('resolves localhost to IPv6 loopback as well as IPv4', async () => {
+    const server = createServer((_request, response) => response.end('IPv6 loopback'));
+    servers.push(server);
+    const url = (await listen(server, 'http', '::1')).replace('[::1]', 'browlet-fetch.localhost');
+    const lookup = vi.spyOn(dns, 'lookup');
+
+    const result = await exchange(makeTransport(), wireRequest(url));
+    expect(result.body.toString()).toBe('IPv6 loopback');
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it.each(['resource.test', 'localhost.example.test', 'notlocalhost'])(
+    'uses native DNS for %s while preserving the request authority', async (hostname) => {
+      let authority: string | undefined;
+      const server = createServer((request, response) => { authority = request.headers.host; response.end('resolved'); });
+      servers.push(server);
+      const url = (await listen(server)).replace('127.0.0.1', hostname);
+      const lookup = vi.spyOn(dns, 'lookup').mockImplementation((
+        (_hostname: string, _options: dns.LookupAllOptions, complete: (error: null, addresses: dns.LookupAddress[]) => void) => {
+          process.nextTick(() => complete(null, [{ address: '::1', family: 6 }, { address: '127.0.0.1', family: 4 }]));
+        }
+      ) as typeof dns.lookup);
+
+      const result = await exchange(makeTransport(), wireRequest(url));
+      expect(result.status).toBe(200);
+      expect(result.body.toString()).toBe('resolved');
+      expect(authority).toBe(new URL(url).host);
+      expect(lookup).toHaveBeenCalledExactlyOnceWith(hostname, expect.objectContaining({ all: true }), expect.any(Function));
+    },
+  );
+
+  it('preserves native DNS lookup failures', async () => {
+    const failure = Object.assign(new Error('Temporary DNS failure'), { code: 'EAI_AGAIN' });
+    vi.spyOn(dns, 'lookup').mockImplementation((
+      (_hostname: string, _options: dns.LookupAllOptions, complete: (error: Error) => void) => process.nextTick(() => complete(failure))
+    ) as typeof dns.lookup);
+
+    await expect(exchange(makeTransport(), wireRequest('http://resource.test/'))).rejects.toBe(failure);
+  });
+
   it('reuses value-equal partitions and separates different partitions, credentials, and forced connections', async () => {
     const ports: number[] = [];
     const server = createServer((request, response) => { ports.push(request.socket.remotePort!); response.end('ok'); });
@@ -253,7 +340,7 @@ describe('Node HTTPS transport', () => {
 });
 
 function makeTransport(ca?: Buffer) {
-  const transport = new NodeHTTPTransport(ca);
+  const transport = new NodeHTTPTransport(new UserAgent(), ca);
   transports.push(transport);
   return transport;
 }

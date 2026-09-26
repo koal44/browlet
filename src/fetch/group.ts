@@ -2,21 +2,22 @@ import type { FetchController } from './controller';
 import type { FetchRequest } from './request';
 import { InternalError } from '../infra/internal-error';
 
-/** https://fetch.spec.whatwg.org/#fetch-groups */
+/** Requests and deferred invocations associated with one environment's lifetime. */
+// https://fetch.spec.whatwg.org/#concept-fetch-group
 export class FetchGroup {
   /** Requests tracked for one environment, including the controllers used during termination. */
   fetchRecords: FetchRecord[] = [];
   /** Deferred requests and invocation state retained for that environment. */
   deferredFetchRecords: DeferredFetchRecord[] = [];
 
-  /** Cancel document-owned fetch work, reporting whether any work was discarded. */
-  // PROVISIONAL: controllers now stop registered network operations. Complete the HTML
-  // cancellation algorithm's task/data cleanup and keepalive/deferred-fetch rules here.
+  /** Placeholder for document cancellation; currently discards no work. */
+  // PROVISIONAL: complete HTML's task/data cleanup and keepalive/deferred-fetch rules.
   cancel(): boolean {
     return false;
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-fetch-group-terminate */
+  /** Terminate unfinished non-keepalive requests, then process deferred invocations. */
+  // https://fetch.spec.whatwg.org/#concept-fetch-group-terminate
   terminate(): void {
     for (const { request, controller } of this.fetchRecords) {
       if (controller !== null && !request.done && !request.keepalive) {
@@ -26,7 +27,8 @@ export class FetchGroup {
     this.#processDeferredFetches();
   }
 
-  /** https://fetch.spec.whatwg.org/#process-deferred-fetches */
+  // https://fetch.spec.whatwg.org/#process-deferred-fetches
+  // TODO: fetch pending records and queue their invocation notifications.
   #processDeferredFetches(): void {
     for (const record of this.deferredFetchRecords) {
       if (record.invokeState !== 'pending') continue;

@@ -1,7 +1,7 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { Browlet } from '../../../src/browlet/browlet';
 import type { ReportDeliveryResult } from '../../../src/browlet/reporting/delivery';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
@@ -9,11 +9,12 @@ import { Realm } from '../../../src/browlet/scripting/realm';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { utf8Decode } from '../../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../../src/fetch/body';
-import { FetchParams } from '../../../src/fetch/params';
-import { FetchResponse } from '../../../src/fetch/response';
+import { FetchHeaders } from '../../../src/fetch/headers';
+import type { HTTPTransportListener, HTTPUploadSource } from '../../../src/fetch/transport';
 import { ParallelQueue } from '../../../src/infra/parallel-queue';
 import { serializeOrigin } from '../../../src/url/origin';
 import { parseURL } from '../../../src/url/url';
+import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { closeServer, listen } from '../loader/http-fixture';
 import { observe } from '../streams/implementation-fixture';
 
@@ -120,14 +121,27 @@ describe('Reporting through Fetch', () => {
       scope.reportingEndpoints.push(endpoint);
       scope.queueReport('test', 'default', { message: 'survives destruction' });
 
-      const upload = Promise.withResolvers<{ params: FetchParams; bytes: Uint8Array; }>();
-      const response = userAgent.hostPromises.withResolvers<FetchResponse>();
-      // Fetch entry, policy checks, byte-stream construction, handover, and
-      // scheduling are real. Only the later network-dispatch slice is controlled.
-      vi.spyOn(FetchParams.prototype, 'httpFetch').mockImplementation(function(this: FetchParams) {
-        const body = this.request.body as FetchBody;
-        body.fullyRead((bytes) => upload.resolve({ params: this, bytes }), upload.reject, this.env.exec.global);
-        return response.promise;
+      const upload = Promise.withResolvers<{ bytes: Uint8Array; listener: HTTPTransportListener; }>();
+      const sending = vi.spyOn(userAgent, 'webDriverBiDiBeforeRequestSent');
+      const queued = vi.spyOn(ParallelQueue.prototype, 'enqueue');
+      mockHTTPTransport(userAgent, (request, listener) => {
+        if (request.method === 'OPTIONS') {
+          listener.onHeaders(204, '', new FetchHeaders([
+            ['Access-Control-Allow-Origin', '*'], ['Access-Control-Allow-Methods', 'POST'],
+            ['Access-Control-Allow-Headers', 'Content-Type'],
+          ]), false);
+          listener.onEnd();
+          return;
+        }
+        const body = request.body as HTTPUploadSource;
+        body.read().observe((bytes) => {
+          expect(bytes).not.toBeNull();
+          body.read().observe((end) => {
+            expect(end).toBeNull();
+            listener.onRequestEnd?.();
+            upload.resolve({ bytes: bytes!, listener });
+          }, upload.reject);
+        }, upload.reject);
       });
       const delivered = Promise.withResolvers<ReportDeliveryResult>();
       const attemptDelivery = userAgent.attemptReportDelivery.bind(userAgent);
@@ -155,14 +169,14 @@ describe('Reporting through Fetch', () => {
       expect(scope.reportBuffer).toEqual([]);
       expect(scope.reportingEndpoints).toEqual([]);
 
-      const { params, bytes } = await upload.promise;
-      const { request } = params;
-      expect(params.env).toBe(userAgent.sandbox);
-      expect(params.env).not.toBe(env);
-      const sandboxRealm = Realm.getAssociatedRealm(params.env.exec.global)!;
+      const { bytes, listener } = await upload.promise;
+      const request = sending.mock.calls.map(([request]) => request).find((request) => request.method === 'POST')!;
+      const body = request.body as FetchBody;
+      expect(body.stream.env).toBe(userAgent.sandbox);
+      expect(body.stream.env).not.toBe(env);
+      const sandboxRealm = Realm.getAssociatedRealm(body.stream.env.exec.global)!;
       expect(sandboxRealm.agent).not.toBe(realm.agent);
       expect(sandboxRealm.getAssociatedDocument()).toBeNull();
-      expect(params.taskDestination).toBeInstanceOf(ParallelQueue);
       expect(request.client).toBeNull();
       expect(request.origin).toBeDefined();
       expect(serializeOrigin(request.origin!)).toBe('https://source.test');
@@ -171,16 +185,13 @@ describe('Reporting through Fetch', () => {
       expect(JSON.parse(utf8Decode(bytes))).toMatchObject([{
         type: 'test', url: 'https://source.test/page', body: { message: 'survives destruction' },
       }]);
-      const completed = Promise.withResolvers<void>();
-      params.processResponseEndOfBody = () => completed.resolve();
-      const result = new FetchResponse();
-      result.status = 204;
       // Settle on the host after destruction; Fetch must enter the sandbox to
       // process the response and then deliver Reporting's parallel callback.
-      response.resolve(result);
+      listener.onHeaders(204, '', new FetchHeaders([['Access-Control-Allow-Origin', '*']]), false);
+      listener.onEnd();
       expect(await delivered.promise).toBe('success');
-      await completed.promise;
-      expect(request.done).toBe(true);
+      await expect.poll(() => request.done).toBe(true);
+      expect(queued).toHaveBeenCalled();
       expect(endpoint.failures).toBe(0);
     },
   );

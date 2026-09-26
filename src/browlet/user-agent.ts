@@ -16,7 +16,7 @@ import { NodeHTTPTransport } from './loader/node-transport';
 import { HTTPAuthenticationStore } from './loader/authentication';
 import { createContentDecoder, supportedContentCodings } from './loader/node-decoder';
 import {
-  ConnectionPool, HTTPCachePartitions, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
+  ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
@@ -53,13 +53,13 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   defaultAcceptLanguage: string | null = null;
   /** Wire connections outlive individual documents and are closed by their browser owner. */
   connectionPool = new ConnectionPool();
-  httpTransport: HTTPTransport = new NodeHTTPTransport(undefined, this.connectionPool);
+  httpTransport: HTTPTransport = new NodeHTTPTransport(this);
   /** Credentials and authentication challenges shared by this user agent's HTTP requests. */
   httpAuthentication = new HTTPAuthenticationStore(this);
   /** Native HTTP codecs, instantiated separately for each response. */
   supportedContentCodings = new Set(supportedContentCodings);
   createContentDecoder = createContentDecoder;
-  httpCachePartitions = new HTTPCachePartitions();
+  httpCache = new HTTPCacheStore();
   /** CORS permissions are owned independently of ordinary HTTP cache entries. */
   corsPreflightCache = new CORSPreflightCache();
   cookieStore = new CookieStore();
@@ -322,7 +322,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     if (host.kind === 'ipv4' && host.value >>> 24 === 127) return true;
     if (host.kind === 'ipv6' && host.pieces.every((piece, i) => piece === (i === 7 ? 1 : 0))) return true;
 
-    // Fetch's resolveOrigin confines these names to loopback without DNS.
+    // The Node transport confines these names to loopback without DNS.
     // https://w3c.github.io/webappsec-secure-contexts/#localhost
     if (host.kind === 'domain' && (
       host.value === 'localhost' || host.value === 'localhost.' ||

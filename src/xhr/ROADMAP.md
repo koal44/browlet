@@ -11,7 +11,7 @@ transport.
 The Fetch-independent File API foundation is implemented through `Blob`,
 `File`, and `FileList`. XHR §5 `ProgressEvent` and the no-form portion of §4
 `FormData` are also implemented. `FormData(form, submitter)` remains blocked
-on HTML forms; [multipart body work](../fetch/multipart/ROADMAP.md) is integrated
+on HTML forms; [multipart body work](../fetch/MULTIPART-ROADMAP.md) is integrated
 with Fetch Body extraction and consumption.
 
 Do not expose `XMLHttpRequest` merely because its declaration can be assembled:

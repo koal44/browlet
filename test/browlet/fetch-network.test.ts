@@ -1,18 +1,17 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm, project, unwrap } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
+import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
 import { FetchBody } from '../../src/fetch/body';
 import { FetchHeaders } from '../../src/fetch/headers';
-import { FetchParams } from '../../src/fetch/params';
+import type { HTTPTransport, HTTPTransportListener, HTTPTransportRequest, HTTPUploadSource } from '../../src/fetch/transport';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
-import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
 import type { ReadableStreamImpl } from '../../src/streams/readable-stream';
-import type { HTTPTransport, HTTPTransportListener, HTTPTransportRequest, HTTPUploadSource } from '../../src/fetch/http/transport';
-import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
+import { observe } from './streams/implementation-fixture';
+import { createFetchOperation } from './fetch-fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -43,13 +42,13 @@ describe('HTTP network response streams', () => {
     const first = new Uint8Array(32 * 1024).fill(1);
     const second = new Uint8Array(32 * 1024).fill(2);
     f.transport.send(first);
+    const queued = queue.mock.calls.length;
     f.transport.send(second);
     expect(f.transport.paused).toBe(true);
     expect(f.transport.pause).toHaveBeenCalledOnce();
-    // Incoming chunks stay in Fetch's buffer, not a queue of per-chunk HTML tasks.
-    expect(queue).not.toHaveBeenCalled();
+    // Buffering unread chunks does not queue a networking task per chunk.
+    expect(queue).toHaveBeenCalledTimes(queued);
     expect(await readChunk(f.browlet)).toEqual({ done: false, size: first.length, first: 1, owned: true });
-    expect(f.transport.resume).not.toHaveBeenCalled();
     expect(await readChunk(f.browlet)).toEqual({ done: false, size: second.length, first: 2, owned: true });
     expect(f.transport.resume).toHaveBeenCalledOnce();
     expect(first.byteLength).toBe(32 * 1024);
@@ -59,46 +58,53 @@ describe('HTTP network response streams', () => {
     expect(await readChunk(f.browlet)).toMatchObject({ done: false, size: 1, first: 3 });
     expect(await readChunk(f.browlet)).toMatchObject({ done: true });
     // Completion removes this operation's cancellation hook.
-    f.params.controller.terminate();
+    f.operation.controller.terminate();
     expect(f.transport.abort).not.toHaveBeenCalled();
   });
 
-  it('satisfies byte reads using the caller buffer and closes a pending BYOB read', async () => {
+  it.each([false, true])('satisfies byte reads and closes a pending BYOB read (cloned: %s)', async (cloned) => {
     const f = await fixture();
     f.transport.send(Uint8Array.of(1, 2, 3));
     f.transport.listener!.onEnd();
-    expect(await f.browlet.evaluate(async () => {
+    expect(await f.browlet.evaluate(async (clone) => {
       const { networkResponse } = globalThis as unknown as NetworkPage;
-      const reader = networkResponse.body!.getReader({ mode: 'byob' });
+      // SPEC_CLASH(fetch-finale-byte-stream): Preserve BYOB through Fetch finale and cloning.
+      const response = clone ? networkResponse.clone() : networkResponse;
+      const reader = response.body!.getReader({ mode: 'byob' });
       const result: number[] = [];
       while (true) {
         const { value, done } = await reader.read(new Uint8Array(2));
         if (done) return result;
         result.push(...value);
       }
-    })).toEqual([1, 2, 3]);
+    }, cloned)).toEqual([1, 2, 3]);
   });
 
   it('reads the upload body on demand and passes duplicate request headers without flattening them', async () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
+    await browlet.navigate('https://example.test/');
     const env = getRelevantRealm(browlet.window).env;
     const transport = new ControlledTransport();
     env.userAgent.httpTransport = transport;
     const request = new FetchRequest(env.parseURL('https://example.test/upload').url!, env, env.userAgent);
     request.method = 'POST';
+    request.credentialsMode = 'include';
     request.headerList.append('X-Value', 'one');
     request.headerList.append('X-Value', 'two');
     const bytes = Uint8Array.of(1, 2, 3);
     request.body = FetchBody.fromBytes(bytes, env);
-    const params = new FetchParams(request, new FetchTimingInfo(), env);
-    await observe(params.httpNetworkFetch(true, true));
-    expect(transport.request).toMatchObject({ includeCredentials: true, forceNewConnection: true });
+    request.populateFromClient();
+    request.cacheMode = 'no-store';
+    const operation = createFetchOperation(request, env);
+    await operation.start();
+    expect(transport.request).toMatchObject({ includeCredentials: true, forceNewConnection: false });
     expect(request.body.stream.disturbed).toBe(false);
     const upload = transport.request!.body as HTTPUploadSource;
     expect(await observe(upload.read())).toEqual(bytes);
     expect(request.body.stream.disturbed).toBe(true);
     expect(await observe(upload.read())).toBeNull();
-    expect(transport.request!.headers.list).toEqual([['X-Value', 'one'], ['X-Value', 'two']]);
+    expect(transport.request!.headers.list.filter(([name]) => name === 'X-Value')).toEqual([['X-Value', 'one'], ['X-Value', 'two']]);
+    expect(request.headerList.list.filter(([name]) => name === 'X-Value')).toEqual([['X-Value', 'one'], ['X-Value', 'two']]);
     transport.listener!.onEnd();
   });
 });
@@ -107,14 +113,15 @@ describe('HTTP network cancellation and failures', () => {
   it('discards an exchange with a pending upload read without terminating the redirect controller', async () => {
     const f = await fixture(false);
     await f.browlet.evaluate(() => { Reflect.set(globalThis, 'uploadStream', new ReadableStream()); });
-    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
-    const response = await observe(f.params.httpNetworkFetch());
+    f.operation.request.method = 'POST';
+    f.operation.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    const response = await f.operation.start();
     const pending = observe((f.transport.request!.body as HTTPUploadSource).read());
     await f.browlet.evaluate(() => 0);
     response.discardBody!();
     expect(await pending).toBeNull();
     await f.browlet.evaluate(() => 0);
-    expect(f.params.controller.state).toBe('ongoing');
+    expect(f.operation.controller.state).toBe('ongoing');
     expect(f.transport.abort).toHaveBeenCalledOnce();
   });
 
@@ -125,19 +132,20 @@ describe('HTTP network cancellation and failures', () => {
       const failure = real ? new DOMException('stopped', 'AbortError') : { name: 'AbortError' };
       Reflect.set(globalThis, 'uploadStream', new ReadableStream({ start(controller) { controller.error(failure); } }));
     }, genuine);
-    f.params.request.method = 'POST';
-    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
-    const pending = observe(f.params.httpNetworkFetch());
+    f.operation.request.method = 'POST';
+    f.operation.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    const pending = f.operation.start();
     await f.transport.dispatched.promise;
     await observe((f.transport.request!.body as HTTPUploadSource).read());
     expect(await pending).toMatchObject({ type: 'error', aborted: genuine });
-    expect(f.params.controller.state).toBe(genuine ? 'aborted' : 'terminated');
+    expect(f.operation.controller.state).toBe(genuine ? 'aborted' : 'terminated');
   });
 
   it('does not dispatch an already aborted request', async () => {
     const f = await fixture(false);
-    f.params.controller.abort('stop', f.env);
-    const response = await observe(f.params.httpNetworkFetch());
+    const pending = f.operation.start();
+    f.operation.controller.abort('stop', f.env);
+    const response = await pending;
     expect(response.type).toBe('error');
     expect(response.aborted).toBe(true);
     expect(f.transport.listener).toBeUndefined();
@@ -146,9 +154,9 @@ describe('HTTP network cancellation and failures', () => {
   it('aborts a request waiting for response headers', async () => {
     const f = await fixture(false);
     f.transport.headers = false;
-    const pending = observe(f.params.httpNetworkFetch());
+    const pending = f.operation.start();
     await f.transport.dispatched.promise;
-    f.params.controller.abort('stop', f.env);
+    f.operation.controller.abort('stop', f.env);
     expect(await pending).toMatchObject({ type: 'error', aborted: true });
     expect(f.transport.abort).toHaveBeenCalledOnce();
   });
@@ -156,23 +164,23 @@ describe('HTTP network cancellation and failures', () => {
   it('propagates body cancellation while the network is paused', async () => {
     const f = await fixture();
     f.transport.send(new Uint8Array(64 * 1024));
+    f.transport.resume.mockImplementation(() => expect(f.operation.controller.state).toBe('ongoing'));
     await f.browlet.evaluate(async () => {
       const { networkResponse } = globalThis as unknown as NetworkPage;
       await networkResponse.body!.cancel('finished reading');
     });
-    expect(f.params.controller.state).toBe('aborted');
+    expect(f.operation.controller.state).toBe('aborted');
     expect(f.transport.abort).toHaveBeenCalledOnce();
-    expect(f.transport.resume).not.toHaveBeenCalled();
   });
 
   it('converts a connection failure before headers to a network error', async () => {
     const f = await fixture(false);
     f.transport.headers = false;
-    const pending = observe(f.params.httpNetworkFetch());
+    const pending = f.operation.start();
     await f.transport.dispatched.promise;
     f.transport.listener!.onError(new Error('native socket error'));
     expect(await pending).toMatchObject({ type: 'error', aborted: false });
-    expect(f.params.controller.state).toBe('terminated');
+    expect(f.operation.controller.state).toBe('terminated');
   });
 
   it('rejects a page body read with its own TypeError after a network failure', async () => {
@@ -188,7 +196,7 @@ describe('HTTP network cancellation and failures', () => {
   it('delivers the serialized abort reason when cancellation races with queued body bytes', async () => {
     const f = await fixture();
     f.transport.send(Uint8Array.of(1));
-    f.params.controller.abort('stopped', f.env);
+    f.operation.controller.abort('stopped', f.env);
     expect(await f.browlet.evaluate(async () => {
       const { networkResponse } = globalThis as unknown as NetworkPage;
       try { await networkResponse.text(); return 'unexpected success'; }
@@ -204,16 +212,18 @@ describe('HTTP network responses through the real transport and page', () => {
     const origin = await listen(server);
     const f = await fixture(false);
     // Restore the real adapter for the protocol decision.
-    const transport = new NodeHTTPTransport();
+    const transport = new NodeHTTPTransport(f.env.userAgent);
+    const dispatch = vi.spyOn(transport, 'dispatch');
     f.env.userAgent.httpTransport = transport;
-    f.params.request.urlList = [f.env.parseURL(origin).url!];
-    f.params.request.method = 'POST';
+    f.operation.request.urlList = [f.env.parseURL(origin).url!];
+    f.operation.request.method = 'POST';
     await f.browlet.evaluate(() => {
       Reflect.set(globalThis, 'uploadStream', new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); controller.close(); } }));
     });
-    f.params.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
+    f.operation.request.body = new FetchBody(unwrap<ReadableStreamImpl>(Reflect.get(f.browlet.window, 'uploadStream') as ReadableStream), f.env);
     try {
-      expect((await observe(f.params.httpNetworkFetch())).type).toBe('error');
+      expect((await f.operation.start()).type).toBe('error');
+      expect(dispatch).toHaveBeenCalledOnce();
       expect(seen).not.toHaveBeenCalled();
     } finally {
       await transport.close();
@@ -228,12 +238,15 @@ describe('HTTP network responses through the real transport and page', () => {
     });
     const origin = await listen(server);
     const browlet = new Browlet({ route: () => '', reporting: false });
+    await browlet.navigate(origin);
     const realm = getRelevantRealm(browlet.window);
     const env = realm.env;
     try {
       const request = new FetchRequest(env.parseURL(origin + '/bytes').url!, env, env.userAgent);
-      const params = new FetchParams(request, new FetchTimingInfo(), env);
-      const response = await observe(params.httpNetworkFetch());
+      request.populateFromClient();
+      request.cacheMode = 'no-store';
+      const operation = createFetchOperation(request, env);
+      const response = await operation.start();
       const context = getBindingContext(realm);
       Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
       expect(await browlet.evaluate(async () => {
@@ -264,12 +277,15 @@ describe('HTTP network responses through the real transport and page', () => {
     });
     const origin = await listen(server);
     const browlet = new Browlet({ route: () => '', reporting: false });
+    await browlet.navigate(origin);
     const realm = getRelevantRealm(browlet.window);
     const env = realm.env;
     try {
       const request = new FetchRequest(env.parseURL(origin).url!, env, env.userAgent);
-      const params = new FetchParams(request, new FetchTimingInfo(), env);
-      const response = await observe(params.httpNetworkFetch());
+      request.populateFromClient();
+      request.cacheMode = 'no-store';
+      const operation = createFetchOperation(request, env);
+      const response = await operation.start();
       const context = getBindingContext(realm);
       Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
       await browlet.evaluate(async () => {
@@ -277,7 +293,7 @@ describe('HTTP network responses through the real transport and page', () => {
         await networkResponse.body!.cancel('enough');
       });
       await disconnected.promise;
-      expect(params.controller.state).toBe('aborted');
+      expect(operation.controller.state).toBe('aborted');
     } finally {
       await env.userAgent.httpTransport.close();
       await closeServer(server);
@@ -287,18 +303,21 @@ describe('HTTP network responses through the real transport and page', () => {
 
 async function fixture(start = true) {
   const browlet = new Browlet({ route: () => '', reporting: false });
+  await browlet.navigate('https://example.test/');
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
   const transport = new ControlledTransport();
   env.userAgent.httpTransport = transport;
   const request = new FetchRequest(env.parseURL('https://example.test/data').url!, env, env.userAgent);
-  const params = new FetchParams(request, new FetchTimingInfo(), env);
-  const response = start ? await observe(params.httpNetworkFetch()) : new FetchResponse();
+  request.populateFromClient();
+  request.cacheMode = 'no-store';
+  const operation = createFetchOperation(request, env);
+  const response = start ? await operation.start() : new FetchResponse();
   if (start) {
     const context = getBindingContext(realm);
     Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
   }
-  return { browlet, env, transport, params, response };
+  return { browlet, env, transport, operation, response };
 }
 
 function readChunk(browlet: Browlet) {

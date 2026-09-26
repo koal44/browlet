@@ -13,7 +13,7 @@ import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/cloc
 import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
-import { getBufferSourceCopy } from '../../src/js-engine/index';
+import { getBufferSourceCopy, queueNetworkingTask } from '../../src/js-engine/index';
 import { serializeDefinition, type BindingContext } from '../../src/web-idl/index';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
 
@@ -342,6 +342,7 @@ describe('File API §6.2: FileReader reads', () => {
     const clock = vi.spyOn(monotonicClock, 'unsafeCurrentTime')
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
+      queueNetworkingTask,
       exec: {
         ...env.exec,
         fileReading: {

@@ -1,13 +1,14 @@
 # JS Engine boundary
 
 This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
-and has no knowledge of HTML Agents, environment settings objects, tasks,
+and does not implement HTML Agents, environment settings objects, task sources,
 Documents, Windows, or platform-object projection.
 
 It also defines [`JSEnvironment`](./environment.ts), the portable contract for an
-environment owning `exec: RealmExecution`. Implementations receive this environment
-and pass it to derived implementations. Browlet's existing `Environment` satisfies
-the contract, with task,
+environment owning `exec: RealmExecution` and `queueNetworkingTask(steps, destination)`.
+The shared method queues work on a parallel queue or delegates global delivery to
+`exec.networking`. Implementations receive this environment and pass it to derived
+implementations. Browlet's existing `Environment` satisfies the contract, with task,
 abort, and structured-data facilities assembled at its composition root.
 Portable implementations need no HTML state; other hosts supply a standalone
 environment and its [`RealmExecution`](./realm-execution.ts) facilities. Specification

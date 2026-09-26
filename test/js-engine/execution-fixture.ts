@@ -1,13 +1,13 @@
 import { deserialize, serialize } from 'node:v8';
 
-import type {
-  AbortControllerCapability, JSEnvironment, RealmExecution,
+import {
+  queueNetworkingTask, type AbortControllerCapability, type JSEnvironment, type RealmExecution,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 
 /** A standalone realm environment with facilities supplied by the unit host. */
 export function createEnvironment(realm = new TestRealm()): JSEnvironment {
-  return { exec: createExecution(realm) };
+  return { exec: createExecution(realm), queueNetworkingTask };
 }
 
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */

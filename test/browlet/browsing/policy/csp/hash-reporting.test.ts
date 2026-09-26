@@ -28,7 +28,7 @@ describe('CSP hash reports', () => {
     expect(scope.reports).toHaveLength(0);
     expect(response.body.stream.locked).toBe(false);
     expect(response.body.stream.disturbed).toBe(false);
-    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.fullyRead(resolve, reject, env.global));
+    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.readAll(resolve, reject, env.global));
     const [received] = await Promise.all([read, reported]);
     expect([...received]).toEqual([97, 98, 99]);
     expect(scope.reports).toHaveLength(1);
@@ -125,7 +125,7 @@ describe('CSP hash reports', () => {
     request.policyContainer = document.policyContainer.clone();
     response.body = FetchBody.fromBytes(utf8Encode('abc'), env);
     response.isBlockedByCSP(request);
-    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.fullyRead(resolve, reject, env.global));
+    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.readAll(resolve, reject, env.global));
     const [received] = await Promise.all([read, reported]);
     expect([...received]).toEqual([97, 98, 99]);
     expect(scope.reports).toHaveLength(2);
@@ -175,7 +175,7 @@ describe('CSP hash disclosure and read failures', () => {
     response.body = new FetchBody(stream, env);
     response.isBlockedByCSP(request);
     const failure = new window.TypeError('Network read failed');
-    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.fullyRead(resolve, reject, env.global));
+    const read = new Promise<Uint8Array>((resolve, reject) => response.body!.readAll(resolve, reject, env.global));
     const rejected = expect(read).rejects.toBe(failure);
     realm.queueGlobalTask(networkingTaskSource, () => stream.enqueueChunk(env.exec.buffers.copyUint8Array(utf8Encode('a'))));
     realm.queueGlobalTask(networkingTaskSource, () => stream.error(failure));

@@ -28,8 +28,8 @@ The network-independent API objects and public `fetch()` operation are implement
 
 `index.ts` exports the contracts consumed by production outside Fetch, including
 task delivery, client settings, fetch groups, and browser-owned pools/partitions. Add exports with their real
-consumers; focused tests may import internal algorithms without widening this
-surface.
+consumers. Fetch orchestration algorithms remain private in `fetch.ts`; their
+tests enter through `fetch(request, options, env)` and control owner/transport hooks.
 
 ## Completion boundary and follow-up audit
 
@@ -60,13 +60,15 @@ still separate from network navigation.
   when the HTML lifecycle and Permissions Policy dependencies are ready.
 - Close transport-dependent branches: HTTPS DNS resource-record upgrades,
   proxy authentication, and additional protocols/schemes when their owners
-  exist. Node currently supplies DNS/connection establishment; the older
-  `resolveOrigin()`/`ConnectionPool.obtain()` helpers still throw for those
-  effects and need reconciliation with the real transport during the audit.
-- Review retained callable-shape markers in response cloning, preloaded
-  responses, preflight/cache records, network fetch, and HTTP cache integration.
-  The old complete-buffer content-coding helper also needs review against the
-  streaming decoder now used by network fetch.
+  exist. The Node connector applies Fetch's localhost rules and delegates
+  external DNS and connection establishment to Node. `ConnectionPool.obtain()`
+  survives as commented reference code; its ordinary HTTP reuse rules are
+  implemented by the transport.
+
+Response copying, pending preloads, preflight/cache records, and network-fetch
+callable shapes have been reviewed. Response `clone()` tees its body;
+`copy(body)` supplies an explicit replacement without teeing. Pending preloads
+use an internal promise rather than a polling sentinel.
 
 Service Worker dispatch, preloads, priority scheduling, BiDi sessions, supported
 document MIME handlers, and public Performance entries remain owner integrations,
@@ -82,6 +84,40 @@ of §4.12 and the other [deferred work](#explicitly-deferred-work), so closing
 the current delivery sequence is not mistaken for implementing every feature
 in the standard. Reconcile stale roadmap status with the implementation during
 that audit rather than relying on completion labels alone.
+
+### Response-body completion
+
+**`SPEC_CLASH(fetch-finale-byte-stream)`:** [Fetch finale](https://fetch.spec.whatwg.org/#fetch-finale)
+prescribes an identity TransformStream solely to observe its flush.
+[TransformStream initialization](https://streams.spec.whatwg.org/#initialize-transform-stream)
+creates a default readable stream, losing the network body's BYOB support.
+Browlet retains the original stream and uses Streams' internal `onCompletion()`
+hook. Undici likewise skips the transform and uses Node's `finished()`; see its
+[implementation discussion](https://github.com/nodejs/undici/pull/3093#issuecomment-2050198541).
+Blink's `BodyStreamBuffer`, Gecko's `FetchBody`, and WebKit's `FetchBodySource`
+retain byte streams and use native loading/source callbacks. Their native loading
+completion is separate from consuming all queued body bytes; Browlet observes
+the stream's terminal state, not merely network EOF.
+
+**`SPEC_CLASH(fetch-body-completion)`:** the prescribed transform's flush only
+covers normal completion. Browlet also runs Fetch completion on body error or
+cancellation, marking the request done while preserving the reader/consumer's
+failure. Undici's `finished()` callback likewise handles close and error.
+Streams runs trusted internal completion steps before settling pending reads;
+Fetch still queues outward callbacks. A promise observer delayed completion and
+timing until after consumption in existing regressions, so the hook adds no
+promise reaction or extra stream.
+
+The browser probe on 2026-09-25 passed network/clone BYOB and pending-read
+cancellation/abort in Chromium 149.0.7827.55, Firefox 151.0, and Playwright WebKit
+26.5 (not Safari). Source evidence:
+[Blink](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/fetch/body_stream_buffer.cc),
+[Gecko](https://searchfox.org/mozilla-central/source/dom/fetch/Fetch.cpp),
+[WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/Modules/fetch/FetchBodySource.cpp).
+Regressions live in `test/browlet/fetch-network.test.ts`,
+`test/browlet/fetch-orchestration.test.ts`, and the Streams cross-specification
+tests. Revisit both choices if Fetch specifies byte-preserving completion and
+its error/cancellation rules; the generic TransformStream behavior is unchanged.
 
 ## Implementation order
 
@@ -117,26 +153,38 @@ When an algorithm reaches a missing external dependency:
 | Planned area | Contract | Fetch sections |
 | --- | --- | --- |
 | Cross-specification capabilities at their consumers | HTML serialization/task delivery, client state, clocks, policy, and storage supplied explicitly without a Browlet dependency; no combined host service bag | §2, 4, and “Using fetch in other standards” |
-| `controller.ts`, `timing.ts`, `tasks.ts`, `environment.ts`, `url.ts` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, integer serialization, and URL classifications | Opening §2 and §2.1 |
+| `controller.ts`, `timing.ts`, `environment.ts`, `url.ts`, and `JSEnvironment.queueNetworkingTask()` | Controller state, abort reasons, timing/body information, task delivery, offline-state inputs, and URL classifications | Opening §2 and §2.1 |
 | `params.ts` | Fetch bookkeeping over the real request/response records and the controller | §2, “Infrastructure” |
-| `headers.ts` | Header lists, parsing, normalization, extraction, guards, and forbidden/safelisted names | §§2.2.2, 3.3–3.8, and 5.1 |
+| `headers.ts` | Header lists, parsing, normalization, extraction, integer serialization, guards, and forbidden/safelisted names | §§2, 2.2.2, 3.3–3.8, and 5.1 |
 | `body.ts` | Body records, stream extraction, cloning, consumption, and `BodyInit` conversion | §§2.2.4 and 5.2–5.3 |
 | `request.ts` | Request records, cloning, policy inputs, destinations, and the `Request` implementation | §§2.2.5 and 5.4 |
 | `response.ts` | Response records, filtered responses, cloning, network errors, and the `Response` implementation | §§2.2.6 and 5.5 |
-| `policy/` | Cookie rules, Origin-header disclosure, COEP/CORP, Integrity Policy checks, mixed content, and request upgrades; Request/Response methods delegate here | §§3.1, 3.7, 4.1, and contributing policy specifications |
-| [`http/`](http/ROADMAP.md) | Fetch-specific HTTP rules and transactions; its [cache plan](http/cache/ROADMAP.md) owns storage/validation over Fetch records | §§2.2–2.10, 3, and 4.4–4.11 |
-| [`multipart/`](multipart/ROADMAP.md) | FormData byte encoding/parsing used by Body | §§5.2–5.3 |
+| `policy.ts` | Port and MIME/nosniff blocking, cookie rules, Origin-header disclosure, Fetch Metadata, CORS/COEP/CORP, timing exposure, Integrity Policy, mixed content, and request upgrades | §§2.9–2.10, 3.1–3.3, 3.6–3.7, 4.1, and contributing policy specifications |
+| `cache-http.ts`, `cache-cors.ts` | Partitioned HTTP and CORS permission stores; [HTTP plan](HTTP-ROADMAP.md) and [cache plan](CACHE-ROADMAP.md) | §§2.8, 4.6, and 4.9 |
+| [`multipart.ts`](multipart.ts) | FormData byte encoding/parsing used by Body; [focused roadmap](MULTIPART-ROADMAP.md) | §§5.2–5.3 |
 | `integrity.ts` | SRI metadata and byte verification; see [the scoped plan below](#subresource-integrity) | §4.1 and SRI |
-| `schemes/` | `about:`, `blob:`, `data:`, `file:`, and HTTP(S) scheme dispatch | §§4.3 and 6 |
-| `fetch.ts` | Main Fetch orchestration, response-processing callbacks, task destinations, and ongoing-fetch control | §§4.1–4.2 and “Using fetch in other standards” |
-| `transport.ts` | HTTP request/response bytes, streaming, cancellation, connection reuse, and TLS metadata without Fetch redirects or CORS policy | §§2.5–2.6 and 4.6–4.7 |
+| `data-url.ts` | Data URL processing used by scheme fetch | §6 |
+| `fetch.ts` | Fetch entry, main/override/scheme/HTTP fetch, redirects, network-or-cache selection, wire exchange and upload/download machinery, CORS preflight, and response handover | §§4.1–4.8 and “Using fetch in other standards” |
+| `transport.ts` | Host I/O and decoder contracts, connection records, and network partition keys | §§2.5–2.7 and 4.7 |
 | Co-located API implementations and IDL in `headers.ts`, `body.ts`, `request.ts`, `response.ts` | Record ownership, Body composition, declaration signatures, and staged Browlet installation during Slice 6 | §§5.1–5.5 |
-| `global.ts` | Public `fetch()` orchestration and abort handling, contributed to HTML's global-scope mixin | §5.6 |
+| `fetch-global.ts` | Public `fetch()` orchestration and abort handling, contributed to HTML's global-scope mixin | §5.6 |
 
-Policy modules operate on the existing Fetch records and browser contracts.
-They retain no separate request/response state. CSP's language, matching, and
+`UNUSED:` marks retained algorithms with no production callers; investigate their
+intended consumers before removing them. Direct tests alone do not establish use.
+
+`policy.ts` groups its algorithms by topic and operates on the existing Fetch
+records and browser contracts without retaining separate request/response state.
+CSP's language, matching, and
 list behavior stay with [Browlet's CSP implementation](../browlet/browsing/policy/csp/ROADMAP.md)
 behind `FetchCSPList`; SRI metadata and byte verification remain in `integrity.ts`.
+Integrity-policy contracts and report data live with `policy.ts`.
+Record methods expose policy entry points; subordinate helpers stay in the
+policy module instead of adding unused forwarding methods to the records.
+
+Tests follow these owners under `test/fetch/`: records, caches, multipart, and
+other algorithms have topic files; policy checks live under `policy/`.
+`test/browlet/fetch*.test.ts` covers browser composition and transport. Within
+each topic, ordinary use and defaults precede specialized and failure cases.
 
 ## Dependency ledger
 
@@ -151,11 +199,11 @@ the external dependency work and catalogs its specification sources.
 | Parallel queues and global task destinations | §2 task delivery | Existing `src/infra/parallel-queue.ts` and HTML task lifecycle |
 | Streams, Encoding, and MIME | §§2.2.2–2.2.4 and 5 | Existing subsystem implementations; body processing and header-list integration remain Fetch-owned |
 | Structured fields | §2.2.2 | [Structured fields](../http/struct-fields/README.md) |
-| HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP syntax](../http/ROADMAP.md); [Fetch Metadata](http/ROADMAP.md#fetch-metadata) |
+| HTTP syntax / Metadata headers | §2.2 / §4.6 | [HTTP syntax](../http/ROADMAP.md); [Fetch Metadata](HTTP-ROADMAP.md#fetch-metadata) |
 | Blob/File bytes and Blob URLs | §§2.2.4, 5 / §4.3 | [File](../file/ROADMAP.md); shared keys come from [Storage](../storage/ROADMAP.md) |
-| FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/ROADMAP.md); [multipart](multipart/ROADMAP.md) owns byte processing |
+| FormData / multipart | §§2.2.4 and 5.2–5.3 | Existing [XHR entry list](../xhr/ROADMAP.md); [multipart](MULTIPART-ROADMAP.md) owns byte processing |
 | UUIDs and cryptographic hashes | §2.2.5 / integrity checks | Narrow host primitives; a complete public Web Crypto API is not a prerequisite |
-| HTTP cache | §2.2.6, §2.8, and §4.6 | [RFC cache rules](../http/cache/ROADMAP.md); [Fetch cache integration](http/cache/ROADMAP.md) |
+| HTTP cache | §2.2.6, §2.8, and §4.6 | [RFC cache rules](../http/cache/ROADMAP.md); [Fetch cache integration](CACHE-ROADMAP.md) |
 | Cookies | §3.1 | [Cookies](../http/cookies/ROADMAP.md); Fetch owns its request/response inputs |
 | Trustworthiness, referrer, HSTS, and integrity policy | Request construction and §4 | [Browser policy](../browlet/browsing/policy/ROADMAP.md); SRI byte verification is scoped below |
 | CSP / Mixed Content / Upgrade Insecure Requests | §4 | [Browser policy](../browlet/browsing/policy/ROADMAP.md) and its [CSP plan](../browlet/browsing/policy/csp/ROADMAP.md) |
@@ -202,8 +250,8 @@ Fetch §5.3 explicitly describes its RFC 7578 integration as incomplete.
 | §2 fetch params | `params.ts`: request/response record references, typed callbacks, defaults, and aborted/canceled predicates |
 | §2 fetch controller and its operations | `controller.ts`: state, reporting/redirect steps, abort/terminate, and serialized abort-reason restoration |
 | §2 fetch timing info, response body info, opaque timing | `timing.ts`: defaults and opaque filtering; §2.6's connection timing **record only** is brought forward as a field dependency |
-| §2 queue a fetch task | `tasks.ts`: existing `ParallelQueue` or the global networking-task capability |
-| §2 is offline and serialize an integer | `environment.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent`, which provides the scoped BiDi query; decimal serialization precedes §2.1 |
+| §2 queue a fetch task | [`JSEnvironment.queueNetworkingTask()`](../js-engine/environment.ts): existing `ParallelQueue` or the global networking-task capability |
+| §2 is offline and serialize an integer | `environment.ts`: `FetchEnvironment` supplies its owning `FetchUserAgent`, which provides the scoped BiDi query; `headers.ts` owns decimal serialization |
 | §2.1 URL | `url.ts`: local, HTTP(S), and fetch scheme predicates over existing URL records |
 
 **Status:** complete. The independent controller, timing, task, and URL work is implemented.
@@ -232,8 +280,8 @@ environments must receive their owner's UserAgent when those paths are implement
 
 **Exit proof:** abort serialization/fallback, controller transitions, timing,
 and deterministic task routing execute without transport or public Fetch APIs.
-Covered by `test/fetch/control.test.ts`,
-`test/browlet/fetch-control.test.ts`, and the record tests below.
+Covered by `test/fetch/controller.test.ts`, `test/fetch/timing.test.ts`,
+`test/browlet/fetch-controller.test.ts`, and the record tests below.
 
 ### Record and API spine
 
@@ -284,10 +332,10 @@ URL components while retaining any Blob URL entry reference.
 - API IDL is co-located with the implementations and installed in Browlet.
   The public `fetch()` operation and transport remain uninstalled.
 
-**Exit proof:** `test/fetch/state.test.ts` covers defaults, independent
-mutable state, live URL/body references, shared Headers, allocation realm, and
-FetchParams cancellation. Tests allocate implementations through the shared
-Binding Context and check Headers identity and realm through borrowed getters.
+**Exit proof:** Request, Response, and Body tests cover defaults, independent
+mutable state, live URL/body references, and shared Headers. Headers tests check
+allocation through borrowed getters; controller tests cover FetchParams
+cancellation. These topic files live under `test/fetch/` and use real bindings.
 Full API construction/conversion coverage belongs to Slice 6. Repeated setup
 lives in `test/fetch/fetch-fixture.ts`.
 
@@ -353,7 +401,7 @@ runtime comparison was performed.
 
 **Exit proof:** focused tests cover invalid bytes, duplicate headers,
 `Set-Cookie`, range/safelist rules, structured fields, and extraction failures;
-`test/fetch/headers.test.ts` and `test/fetch/http/concepts.test.ts` exercise these
+`test/fetch/headers.test.ts` exercises these
 operations, including header mutation over the real request record. Public
 `Headers` projection remains in the API slice.
 
@@ -375,18 +423,15 @@ and forwards it when cloning. Its networking facilities supply HTML global
 tasks and parallel execution; the read signatures keep the specified
 callbacks and optional destination. An omitted destination starts a new parallel queue.
 
-`handleContentCodings` accepts host decoders keyed by lowercase coding names.
-It checks support for the entire list before decoding in reverse application
-order, leaves unsupported lists unchanged, and maps decoding errors to failure.
-Tests supply actual Node gzip, deflate, and Brotli codecs. The transport adapter
-will choose its codec set and retain decoder state across network chunks in
-§4.7; this slice proves decoding complete byte sequences.
+Content-coding handling lives in `fetch.ts`, with a per-response
+streaming decoder supplied by `FetchUserAgent.createContentDecoder()`.
+Slice 9B and `test/browlet/fetch-content-decoding.test.ts` cover this path.
 
 The full `BodyInit` union and public Body mixin operations are implemented in Slice 6b.
 
 **Exit proof:** `test/fetch/body.test.ts` covers tee identity, branch isolation
 and cancellation, byte/BYOB extraction, global and parallel delivery, byte copies,
-cross-realm chunks, read failures, and content codings. `test/browlet/fetch-body.test.ts`
+cross-realm chunks, and read failures. `test/browlet/fetch-body.test.ts`
 proves delivery to the destination Window's networking task source and Document,
 full-read completion through its microtask checkpoint, and HTML parallel scheduling.
 
@@ -437,7 +482,7 @@ response-header processing, inheritance, and reporting remain unfinished, as
 does invoking this predicate from network orchestration. A true result here
 does not override the request's credentials mode.
 
-**Exit proof:** `test/fetch/request.test.ts`, `response.test.ts`, and `state.test.ts`
+**Exit proof:** `test/fetch/request.test.ts` and `response.test.ts`
 cover record defaults, owner identity, independent clone data and streamed bytes,
 filtered visibility and live field forwarding, reporting/Location URLs, freshness
 boundaries, and destination translation without a network connection. The byte
@@ -456,7 +501,7 @@ feature remains deferred. Network/storage effects require explicit host
 contracts and deterministic fakes.
 
 **Status: infrastructure implemented (2026-09-19), with the effects below deferred.**
-`http/authentication.ts` defines the shared username/password/realm
+`environment.ts` defines the shared username/password/realm
 entry shape from §2.3. Credential storage, request associations, and clearing
 remain with the later HTTP authentication integration. `group.ts` contains the
 §2.4 records and ordinary termination. Each HTML environment settings object
@@ -467,17 +512,22 @@ integration. It does not mark an unsent request sent or invoke its notification.
 Automatic request registration and lifecycle termination calls remain with
 their Fetch/HTML consumers. No deferred-fetch API is exposed.
 
-`http/connections.ts` implements §2.5's direct IP and localhost resolution.
-External origin resolution explicitly throws until the transport supplies that
-effect. Resolution accepts a tuple origin (the origin kind with a host) and
-represents returned addresses as an array, with null reserved for resolution
-failure. That signature translation retains its pending-review marker.
+The UserAgent-owned Node transport implements §2.5 origin resolution at its
+socket lookup callback. Node bypasses lookup for IP literals; localhost names
+resolve to loopback without DNS. Other names go directly to native DNS with
+the socket's lookup options and callback, preserving native errors. No shared
+address-record API or promise bridge is needed by Fetch's transport consumer.
+Browlet does not cache DNS results. Any future local DNS cache must account for
+network partitioning; system DNS caching remains outside Browlet's control.
 
-Each UserAgent owns a `ConnectionPool`. §2.6 reuse compares partition keys,
-origins, credentials, and the unreliable-transport requirement, while forced-new
-settings bypass reuse. A cache miss or forced-new request explicitly throws:
-proxy selection, DNS, connection establishment, certificate policy, ALPN, and
-timing observations join through the Slice 9 transport. No socket is opened here.
+Each UserAgent owns a `ConnectionPool` recording live connections. Node transport
+clients enforce partition/origin/credentials isolation and forced-new behavior;
+Undici owns native connection establishment and reuse. The earlier `obtain()`
+body is retained as commented reference code, including future WebTransport
+options. Its direct-call tests were retired; real transport tests cover ordinary
+reuse and isolation. Tests in `test/browlet/loader/node-transport.test.ts` cover
+IP literals and localhost without DNS, ordinary host lookups, and lookup
+failures. Proxy and WebTransport establishment remain deferred.
 
 `ConnectionTimingInfo.clampAndCoarsen()` hides reused-connection details and
 directly imports Infra's `coarsenTime()` for new-connection timestamps.
@@ -491,21 +541,25 @@ creation URL, preferring a request's reserved client over its client. The
 implementation-defined second key is null. Equal sites share a key; opaque
 origins retain their distinct identities. `reservedClient` now has the concrete
 `FetchEnvironmentRecord` contract rather than `object`.
+That interface requires `determineNetworkPartitionKey()`; HTML's
+`EnvironmentRecord` base class implements it for reserved records and full settings.
+Fetch retains the key type and site-based comparison.
 
 §2.8 selects browser-owned `HTTPCachePartition` identities using those keys.
 A clientless request returns null. These objects do not yet store responses;
 the signature's pending-review marker makes that partial representation explicit.
 Storage, selection, validation, and transactions remain in the
-[HTTP cache slice](http/cache/ROADMAP.md#implementation-order).
+[HTTP cache slice](CACHE-ROADMAP.md#implementation-order).
 
 §§2.9–2.10 implement the complete bad-port table and script-like MIME blocking.
 §3.5 MIME extraction is brought forward for that check, retaining its last-valid
 Content-Type and same-essence charset rules. Main Fetch will invoke the blockers;
 the separate nosniff check remains in Slice 7.
 
-**Exit proof:** `test/fetch/group.test.ts` covers termination; the HTTP tests
-cover resolution, connection reuse, partition identity, and blocking. Header
-tests cover MIME extraction. `test/browlet/fetch-control.test.ts` proves actual
+**Exit proof:** `test/fetch/group.test.ts` covers termination; connection,
+cache, and Fetch tests cover resolution, connection reuse, partition identity,
+and blocking. Header tests cover MIME extraction.
+`test/browlet/fetch-request.test.ts` proves actual
 settings/UserAgent ownership, and `test/browlet/fetch-timing.test.ts` exercises
 the composed runtime. Slice 9 connects transport and response storage, with
 the cache acceptance dependencies recorded there. Pending deferred-fetch
@@ -591,7 +645,7 @@ Implement:
 1. `Headers` and its iterator from §5.1 over the existing header-list and guard
    algorithms.
 2. The complete `XMLHttpRequestBodyInit` and `BodyInit` unions from §5.2,
-   consuming the [multipart implementation](multipart/ROADMAP.md).
+   consuming the [multipart implementation](MULTIPART-ROADMAP.md).
 3. The Body mixin from §5.3, including realm-correct promises, ArrayBuffers,
    `Uint8Array`, Blob/File, FormData, JSON parsing, UTF-8 text decoding, and
    `textStream()` through a Browlet `TextDecoderStream`.
@@ -670,7 +724,7 @@ header algorithms while preserving existing stored cookies.
 
 The serialized-cookie-default-path algorithm reuses HTTP's default-path rule
 and URL path serialization without mutating the input. Focused coverage is in
-`test/fetch/http/cookies.test.ts` and `test/browlet/scripting/environment.test.ts`.
+`test/fetch/policy/cookies.test.ts` and `test/browlet/scripting/environment.test.ts`.
 Slice 9 must invoke these algorithms at the HTTP network boundary after its
 credentials decision; completing 7a does not imply network requests or
 `document.cookie` are implemented.
@@ -699,7 +753,7 @@ recognized token, ignores well-formed extension tokens, and rejects the entire
 header list value on malformed syntax. This follows the grammar and Chromium;
 Gecko/WebKit instead retain recognized policies alongside malformed tokens.
 Absent, unrecognized, or malformed headers leave the existing redirect policy
-unchanged. Coverage is in `test/fetch/http/origin.test.ts` and
+unchanged. Coverage is in `test/fetch/policy/origin.test.ts` and
 `test/browlet/browsing/policy/referrer-policy.test.ts`.
 
 Window settings expose `getReferrerSource()`: the live Document URL for ordinary
@@ -764,7 +818,8 @@ and outbound delivery; `test/browlet/reporting/observers.test.ts` exercises the
 real COEP and Integrity Policy submission paths.
 
 Focused coverage is in `test/fetch/headers.test.ts`,
-`test/fetch/http/blocking.test.ts`, and `test/fetch/http/corp.test.ts`.
+`test/fetch/policy/mime.test.ts`, `test/fetch/policy/ports.test.ts`, and
+`test/fetch/policy/embedder.test.ts`.
 The focused tests supply the Reporting capability to verify Fetch's decision,
 report-only/enforcing behavior, endpoint selection, ordering, and URL stripping.
 The six Node variants, typecheck, and repository-wide lint cover the completed
@@ -814,7 +869,7 @@ traversable; HTML's policy container owns cloning, and the UserAgent supplies
 default containers for clientless requests. Integration tests cover these paths
 with real settings and traversables, including a cross-origin child Window.
 `fetch.ts` now contains the entry algorithm and returns its controller.
-`FetchParams.mainFetch()` supplies policy ordering, response selection/filtering,
+`mainFetch(params)` supplies policy ordering, response selection/filtering,
 SRI verification, and handover, including body-end and consumption callbacks.
 It replaces the entry no-op; policy-blocked, preload, and overridden-response
 paths can complete. 8C supplies local-scheme dispatch, 8D HTTP/redirect
@@ -857,9 +912,9 @@ missing subsystem:
 | --- | --- | --- |
 | [Fetch entry](fetch.ts) | `client.consumePreloadedResource(...)` | Returns a miss until HTML has a Document preload map, request-key matching, integrity checks, and deferred response notification. |
 | [Fetch entry](fetch.ts) | UserAgent's BiDi body/language hooks, `defaultAcceptLanguage`, `determineFetchPriority(request)` | BiDi hooks are inert without sessions. Configured language is used, with no header when null. Priority returns an inert update handle until Slice 9 has a transport scheduler; no numeric priority or locale is invented. |
-| [Main fetch](params.ts) | `userAgent.corsPreflightCache.clearEntries(request)` | 9D supplies lookup, storage, expiration, credentials matching, and invalidation after a failed preflighted fetch. Wildcard expansion is restricted to noncredentialed requests. |
-| [Response handover](params.ts) | UserAgent's BiDi fetch-error/response-completed hooks | No-ops until network instrumentation has sessions to notify. |
-| [Timing handover](params.ts) | `userAgent.supportsMIMEType(type)`, `env.markResourceTiming(...)` | Support defaults false outside MIME Sniffing's independently minimized types. Recording is a no-op pending the [Performance Timeline/Resource Timing foundation](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration). |
+| [Main fetch](fetch.ts) | `userAgent.corsPreflightCache.clearEntries(request)` | 9D supplies lookup, storage, expiration, credentials matching, and invalidation after a failed preflighted fetch. Wildcard expansion is restricted to noncredentialed requests. |
+| [Response handover](fetch.ts) | UserAgent's BiDi fetch-error/response-completed hooks | No-ops until network instrumentation has sessions to notify. |
+| [Timing handover](fetch.ts) | `userAgent.supportsMIMEType(type)`, `env.markResourceTiming(...)` | Support defaults false outside MIME Sniffing's independently minimized types. Recording is a no-op pending the [Performance Timeline/Resource Timing foundation](../browlet/performance/ROADMAP.md#fetch-and-navigation-integration). |
 
 `FetchParams` retains the explicit `JSEnvironment` used for body allocation;
 this is separate from the nullable initiating client and callback destination.
@@ -928,12 +983,12 @@ result for `file:`. File-scheme support remains an embedder policy.
 
 ### 8B — Override fetch
 
-**Complete:** `FetchParams.overrideFetch(type, makeCORSPreflight)` consults the
+**Complete:** `overrideFetch(params, type, makeCORSPreflight)` consults the
 request's own `UserAgent.potentiallyOverrideResponse(request, env)` before
 dispatch. The UserAgent implements Fetch's specified default, returning null.
 An implementation can supply a concrete response, including a network error;
-otherwise the same FetchParams continues into `schemeFetch()` or
-`httpFetch(makeCORSPreflight)`. The environment supplies body execution for an
+otherwise the same FetchParams continues into `schemeFetch(params)` or
+`httpFetch(params, makeCORSPreflight)`. The environment supplies body execution for an
 override without inventing a client for browser-owned requests. There is no
 process-wide override callback, and this hook does not replace Service Worker
 or WebDriver BiDi interception at their own prescribed stages.
@@ -953,12 +1008,12 @@ exercise real override fetch while controlling only the later scheme/HTTP work.
 
 ### 8C — Scheme fetch
 
-**Complete:** `FetchParams.schemeFetch()`
+**Complete:** `schemeFetch(params)`
 checks cancellation, dispatches the current URL, constructs `about:blank`'s
-empty HTML body, delegates Blob handling to `schemes/blob.ts`, and dispatches
+empty HTML body, delegates Blob handling to `blobFetch()`, and dispatches
 HTTP(S) directly to HTTP fetch. Other about URLs, file URLs, and unsupported
 schemes return network errors. 8D supplies the HTTP-fetch consumer algorithm;
-8E supplies `schemes/data.ts`'s processor and completes the data branch's
+8E supplies `data-url.ts`'s processor and completes the data branch's
 MIME/header/body integration.
 
 Blob handling enforces GET, uses the captured registration without another
@@ -1004,7 +1059,7 @@ reserved clients, top-level exemptions, range syntax/bytes/headers, and lifetime
 ### 8D — HTTP fetch and redirects
 
 **Consumer algorithms complete; dependencies provisional.**
-`FetchParams.httpFetch()` offers a cloned request to Service Workers,
+`httpFetch(params)` offers a cloned request to Service Workers,
 validates intercepted responses, selects preflight from cached permissions,
 delegates network/cache work, applies CORS/TAO/CORP checks, and handles redirect
 modes. `httpRedirectFetch()` resolves Location, checks scheme/credentials/count,
@@ -1021,7 +1076,7 @@ The future-owner calls now have explicit provisional implementations:
 | `userAgent.webDriverBiDiResponseStarted(request, response)` | No-op until BiDi sessions exist, alongside the other UserAgent hooks. |
 | `corsPreflightCache.matchesMethod()` / `matchesHeaderName()` | 9D supplies §4.9 permissions, including partition, origin, credentials, expiry, and the approved wildcard restriction. |
 | `params.corsPreflightFetch()` / `httpNetworkOrCacheFetch()` | 9D connects preflight transactions and cached permissions. 9B supplies HTTP transactions and Basic authentication; 9C supplies cache transactions, including background completion through 9D's TAO check. |
-| `response.isBlockedByCORS(request)` / `isTimingAllowed(request)` | 9D supplies §§4.10–4.11 in Fetch's policy modules, including navigation timing permission. |
+| `response.isBlockedByCORS(request)` / `isTimingBlocked(request)` | 9D supplies §§4.10–4.11 in Fetch's policy module, including navigation timing permission. |
 
 **`SPEC_CLASH(corp-clientless-policy)`:** [Fetch's guidance for background consumers](https://fetch.spec.whatwg.org/#fetch-elsewhere-request)
 explicitly permits a null client with retained origin and policy-container state,
@@ -1091,7 +1146,7 @@ already implemented. The existing scheme-fetch branch now returns a readable
 200 response or a network error through the normal body/task machinery, with
 no new environment contracts or transport dependency.
 
-`test/fetch/schemes/data.test.ts` has 69 cases, including representative WPT
+`test/fetch/data-url.test.ts` has 69 cases, including representative WPT
 `fetch/data-urls/resources/data-urls.json` cases. Browser integration adds 14
 cases for response construction, malformed input, basic filtering in all three
 ordinary request modes, HEAD body removal, clientless navigation, SRI, and
@@ -1116,11 +1171,11 @@ Keep five subdivisions, with the first bounded to proving the transport:
 | --- | --- | --- |
 | **9A — Transport and download flow** | Narrow HTTP host contract, Undici dispatcher adapter, available-byte uploads, bounded streamed downloads, cancellation, and network failures | Implemented |
 | **9B — HTTP transactions** | Connect §§4.6–4.7, consume request bodies and send progress callbacks, stream uploads with demand, decode responses with one decoder per exchange, process headers/cookies/authentication/HSTS, and populate connection/body timing | Implemented with HTTP/2 and Basic credentials; HTTP detour complete; proxy authentication remains provisional |
-| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](http/cache/ROADMAP.md) | Implemented; background completion passes with 9D's TAO check; two callable shapes remain for review |
+| **9C — HTTP cache transactions** | Storage, selection, validation, and response merging from §4.6 and the [cache roadmap](CACHE-ROADMAP.md) | Implemented; background completion passes with 9D's TAO check; two callable shapes remain for review |
 | **9D — CORS and timing permission** | Preflight fetch, its permission cache, CORS check, and TAO check from §§4.8–4.11 | Implemented with approved cache permission rules; two callable shapes remain for review |
 | **9E — Public fetch and consumers** | §5.6 binding, local abort, realm-owned promises, filtering, and loader/Reporting integration; observable §5.7 lifetime requirements and browser-owned transport shutdown | Implemented with provisional HTML contracts; upload cancellation passes; full Fetch audit remains |
 
-**9A implementation:** [`http/transport.ts`](http/transport.ts) defines the
+**9A implementation:** [`transport.ts`](transport.ts) defines the
 UserAgent-owned host contract. [`node-transport.ts`](../browlet/loader/node-transport.ts)
 uses Undici's dispatcher, preserving ordered duplicate response fields,
 strict certificate/hostname verification, and actual TLS verification evidence.
@@ -1128,9 +1183,10 @@ Undici is a direct Browlet runtime dependency and a matching workspace developme
 dependency. Its Node floor matches Browlet's 22.19-or-newer requirement. The
 temporary [vendor pin and patch](../../vendor/README.md) preserve HTTP/2 fields.
 
-[`http/network.ts`](http/network.ts) implements the wire exchange behind
-`FetchParams.httpNetworkFetch()`. A deterministic transport tests byte delivery,
-BYOB reads, errors, and cancellation; local HTTP/HTTPS servers exercise the
+The private `httpNetworkFetch()` and stream helpers in [`fetch.ts`](fetch.ts)
+implement the wire exchange. Tests enter through HTTP-network-or-cache fetch;
+a deterministic transport tests byte delivery, BYOB reads, errors, and
+cancellation; local HTTP/HTTPS servers exercise the
 adapter and real response consumption through `browlet.evaluate()`. Page tests
 use the ordinary running HTML event loop, without manual checkpoints.
 
@@ -1141,15 +1197,15 @@ owner. Native callbacks do not mutate page Streams. Controller cancellation stop
 active and queued requests, including before Undici assigns a socket, and releases
 their listeners. Adapter shutdown aborts outstanding exchanges and closes clients.
 
-**9B implementation:** [`http/transaction.ts`](http/transaction.ts) prepares a
+**9B implementation:** [`fetch.ts`](fetch.ts) prepares a
 separate wire request, applies credentials/COEP, cookies, Origin, Fetch Metadata,
 User-Agent, Referer, cache-control, content-length, and content-coding fields,
 checks the keepalive budget, and handles authentication/retry control flow.
 9C connects cache selection/storage; 9D connects CORS/TAO.
 
-**9C implementation:** [`http/cache/store.ts`](http/cache/store.ts) retains
+**9C implementation:** [`cache-http.ts`](cache-http.ts) retains
 complete decoded bodies and actual Fetch metadata, selected by network partition,
-URL, method, and Vary. [`http/cache/transaction.ts`](http/cache/transaction.ts)
+URL, method, and Vary. [`fetch.ts`](fetch.ts)
 applies cache modes, validation, 304/HEAD merging, invalidation, and background
 revalidation. Capture follows existing backpressure without an additional reader
 or tee. The UserAgent owns bounded LRU storage; `Browlet.clearHTTPCache()` clears
@@ -1203,13 +1259,16 @@ zlib transforms, one chain per response. Supported codings are gzip (including x
 deflate, and Brotli, applied in reverse header order. Unsupported lists remain
 untouched, malformed compressed data errors the page body, and zero-byte bodies
 do not invoke decoding. Backpressure pauses both decoded output and wire input;
-encoded and decoded byte counts remain distinct. The older complete-buffer
-`handleContentCodings()` helper is not used on network chunks.
+encoded and decoded byte counts remain distinct.
+`test/browlet/fetch-content-decoding.test.ts` exercises the actual codec chain,
+including case-insensitive names, unsupported lists, truncated data, failures
+at either decoding stage, and backpressure. Undici supplies encoded wire bytes;
+[`node-decoder.ts`](../browlet/loader/node-decoder.ts) supplies the Node zlib codecs.
 
 **Integration decisions and remaining dependencies (2026-09-24):**
 
 - `userAgent.httpAuthentication` now reaches a UserAgent-owned Basic credential
-  cache and cancelable host prompt through [`http/authentication.ts`](http/authentication.ts).
+  cache and cancelable host prompt through [`environment.ts`](environment.ts).
   The
   [HTTP completion plan](../http/ROADMAP.md#rfc-9110-and-7617-client-completion)
   owns four slices for RFC 9110/7617 and additional cache/client foundations.
@@ -1250,7 +1309,7 @@ encoded and decoded byte counts remain distinct. The older complete-buffer
   that the current registered request counts once, not twice, against 64 KiB.
   Details and browser source pointers are in `scratch/SPEC-ISSUES.md`.
 
-`fetch-transactions.test.ts`, `fetch-network.test.ts`, and
+`fetch-network-or-cache.test.ts`, `fetch-network.test.ts`, and
 `fetch-content-decoding.test.ts` exercise actual HTTP/HTTPS servers and page
 consumption, including fast-response upload completion, 421 replay, cookies,
 HSTS, Early Hints, decoded expansion, cancellation, and realm-owned errors.
@@ -1282,7 +1341,7 @@ public object.
 
 ### 9D — CORS and timing permission
 
-[`http/cors-preflight.ts`](http/cors-preflight.ts) constructs the OPTIONS request,
+[`fetch.ts`](fetch.ts) constructs the OPTIONS request,
 validates its status and CORS permissions against the original request, and
 stores allowed methods/headers. It uses the existing HTTP transaction, without
 Service Worker interception or sending origin credentials. The original client,
@@ -1291,17 +1350,17 @@ browser configuration; no replacement environment is constructed. Cancellation
 and task delivery follow the parent execution, while timing and callbacks stay
 separate. Unused preflight bodies are discarded before the actual request.
 
-[`http/cors-preflight-cache.ts`](http/cors-preflight-cache.ts) retains partition,
+[`cache-cors.ts`](cache-cors.ts) retains partition,
 serialized origin/URL, credentials, and individual method/header permissions.
 The UserAgent owns a bounded list of 1024 entries, with a two-hour maximum age;
 Fetch permits early eviction and a UA-chosen cap. Expired entries cannot match
 and are pruned on insertion. Entries retain neither environments nor response
 bodies. Clientless requests without a partition can preflight but cannot cache.
 
-[`policy/cors.ts`](policy/cors.ts) validates exact origins and credential
-permission. [`policy/timing.ts`](policy/timing.ts) supplies TAO and navigation
-TAO, including sticky redirect failures, serialized opaque origins, basic
-responses, and explicit cross-origin navigation permission. Request/Response
+[`policy.ts`](policy.ts) validates exact origins and credential permission in
+its CORS section. Its timing section supplies TAO and navigation TAO, including
+sticky redirect failures, serialized opaque origins, basic responses, and
+explicit cross-origin navigation permission. Request/Response
 remain the small forwarding surface. The existing cache-background completion
 regression now passes without a TAO stub or an unhandled rejection.
 
@@ -1333,10 +1392,10 @@ regression now passes without a TAO stub or an unhandled rejection.
   values. Gecko skips caching malformed values; Blink/WebKit accept negative
   numbers as expired. The two-hour cap follows Blink's permitted UA limit;
   WebKit uses ten minutes and Gecko one day.
-- Callable shapes: preflight takes `FetchParams` rather than only `request` to
-  share cancellation/task ownership. Cache entries store string values and an
-  absolute monotonic deadline instead of byte-array origins, mutable URL
-  records, and a max-age field. Both carry `SPEC_MISMATCH` review markers.
+- Approved representations: preflight takes `FetchParams` to share cancellation
+  and task ownership. Cache entries store serialized origin/URL strings and an
+  absolute monotonic expiry deadline instead of retaining URL records and a
+  max-age duration.
 
 **Coverage:** focused CORS/TAO/cache tests plus real loopback transactions cover
 OPTIONS ordering, sorted unsafe names, credentials, failure before the actual
@@ -1347,7 +1406,7 @@ consumers are covered in 9E below.
 
 ### 9E — Public fetch and consumers
 
-[`global.ts`](global.ts) implements `fetch()` over converted Request inputs,
+[`fetch-global.ts`](fetch-global.ts) implements `fetch()` over converted Request inputs,
 using the receiver's environment, internal promises, and immutable Responses.
 Fetch contributes a partial `WindowOrWorkerGlobalScope` declaration; HTML's
 existing mixin owns the operation and Window forwards it. No second global

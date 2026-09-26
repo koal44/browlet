@@ -1,69 +1,12 @@
 import { observe } from '../browlet/streams/implementation-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import {
-  brotliCompressSync, brotliDecompressSync, deflateSync, gunzipSync, gzipSync,
-  inflateSync,
-} from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
-import { FetchBody, handleContentCodings } from '../../src/fetch/body';
+import { FetchBody } from '../../src/fetch/body';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
 } from '../../src/js-engine/index';
 import { createBodyFixture, readBodyBytes } from './body-fixture';
 import { ReadableStreamImpl } from '../../src/streams/index';
-
-describe('Fetch body cloning', () => {
-  it('clones a body by replacing its stream with one tee branch and retaining the other', async () => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody([Uint8Array.of(1, 2), Uint8Array.of(3)]);
-    const original = body.stream;
-    body.source = Uint8Array.of(1, 2, 3);
-    body.length = 3;
-    original.close();
-
-    const clone = body.clone();
-
-    expect(body.stream).not.toBe(original);
-    expect(clone.stream).not.toBe(body.stream);
-    expect(original.locked).toBe(true);
-    expect(clone.source).toBe(body.source);
-    expect(clone.length).toBe(3);
-    const [first, second] = await Promise.all([readBodyBytes(body), readBodyBytes(clone)]);
-    expect(first).toEqual(Uint8Array.of(1, 2, 3));
-    expect(second).toEqual(first);
-    first[0] = 99;
-    expect(second).toEqual(Uint8Array.of(1, 2, 3));
-  });
-
-  it('clones a chunk before either branch can modify it', async () => {
-    const { createBody } = createBodyFixture();
-    const body = createBody([Uint8Array.of(1, 2)]);
-    body.stream.close();
-    const clone = body.clone();
-    const chunk = await new Promise<Uint8Array>((resolve, reject) => {
-      body.stream.getDefaultReader().readChunk({
-        chunkSteps: (value) => resolve(value as Uint8Array),
-        closeSteps: () => reject(new Error('Expected a body chunk')),
-        errorSteps: reject,
-      });
-    });
-    chunk[0] = 99;
-    expect(await readBodyBytes(clone)).toEqual(Uint8Array.of(1, 2));
-  });
-
-  it('cancels the source only after both cloned branches cancel', async () => {
-    const { env } = createBodyFixture();
-    const cancel = vi.fn();
-    const body = new FetchBody(ReadableStreamImpl.createDefault(undefined, cancel, 1, () => 1, env), env);
-    const clone = body.clone();
-
-    const first = body.stream.cancelInternal('first');
-    expect(cancel).not.toHaveBeenCalled();
-    const second = clone.stream.cancelInternal('second');
-    await Promise.all([observe(first), observe(second)]);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(['first', 'second']);
-  });
-});
 
 describe('Fetch byte sequences as bodies', () => {
   it('retains the source and length and delivers bytes through the owning global task', async () => {
@@ -119,7 +62,7 @@ describe('Fetch byte sequences as bodies', () => {
     const clone = body.clone();
     const process = vi.fn();
     const error = vi.fn();
-    clone.fullyRead(process, error, fixture.global);
+    clone.readAll(process, error, fixture.global);
     const reading = readBodyBytes(body);
     fixture.runTask();
     expect(await reading).toEqual(source);
@@ -149,6 +92,110 @@ describe('Fetch byte sequences as bodies', () => {
     body.stream.error(failure);
     fixture.runTask();
     await expect(readBodyBytes(body)).rejects.toBe(failure);
+  });
+});
+
+describe('Fetch body cloning', () => {
+  it('clones a body by replacing its stream with one tee branch and retaining the other', async () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1, 2), Uint8Array.of(3)]);
+    const original = body.stream;
+    body.source = Uint8Array.of(1, 2, 3);
+    body.length = 3;
+    original.close();
+
+    const clone = body.clone();
+
+    expect(body.stream).not.toBe(original);
+    expect(clone.stream).not.toBe(body.stream);
+    expect(original.locked).toBe(true);
+    expect(clone.source).toBe(body.source);
+    expect(clone.length).toBe(3);
+    const [first, second] = await Promise.all([readBodyBytes(body), readBodyBytes(clone)]);
+    expect(first).toEqual(Uint8Array.of(1, 2, 3));
+    expect(second).toEqual(first);
+    first[0] = 99;
+    expect(second).toEqual(Uint8Array.of(1, 2, 3));
+  });
+
+  it('clones a chunk before either branch can modify it', async () => {
+    const { createBody } = createBodyFixture();
+    const body = createBody([Uint8Array.of(1, 2)]);
+    body.stream.close();
+    const clone = body.clone();
+    const chunk = await new Promise<Uint8Array>((resolve, reject) => {
+      body.stream.getDefaultReader().readChunk({
+        chunkSteps: (value) => resolve(value as Uint8Array),
+        closeSteps: () => reject(new Error('Expected a body chunk')),
+        errorSteps: reject,
+      });
+    });
+    chunk[0] = 99;
+    expect(await readBodyBytes(clone)).toEqual(Uint8Array.of(1, 2));
+  });
+
+  it('cancels the source only after both cloned branches cancel', async () => {
+    const { env } = createBodyFixture();
+    const cancel = vi.fn();
+    const body = new FetchBody(ReadableStreamImpl.createDefault(undefined, cancel, 1, () => 1, env), env);
+    const clone = body.clone();
+
+    const first = body.stream.cancelInternal('first');
+    expect(cancel).not.toHaveBeenCalled();
+    const second = clone.stream.cancelInternal('second');
+    await Promise.all([observe(first), observe(second)]);
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(['first', 'second']);
+  });
+});
+
+describe('Fetch full body reading', () => {
+  it.each(['global', 'parallel', 'default'] as const)('delivers all bytes in one task to a %s destination', async (kind) => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1, 2), Uint8Array.of(3)]);
+    body.stream.close();
+    const destination = kind === 'global' ? fixture.global : kind === 'parallel' ? fixture.createParallelQueue() : null;
+    const process = vi.fn();
+    const error = vi.fn();
+    body.readAll(process, error, destination);
+    await nextTurn();
+    expect(process).not.toHaveBeenCalled();
+    if (kind === 'global') {
+      expect(fixture.tasks).toHaveLength(1);
+      expect(fixture.tasks[0]!.global).toBe(fixture.global);
+      fixture.runTask();
+    } else {
+      expect(fixture.parallelSteps).toHaveLength(1);
+      fixture.runParallel();
+      expect(fixture.scheduling.queueGlobalTask).not.toHaveBeenCalled();
+    }
+    expect(process).toHaveBeenCalledExactlyOnceWith(Uint8Array.of(1, 2, 3));
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('queues an empty body as a successful zero-length byte sequence', () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody();
+    body.stream.close();
+    const process = vi.fn();
+    body.readAll(process, vi.fn());
+    expect(process).not.toHaveBeenCalled();
+    fixture.runParallel();
+    expect(process).toHaveBeenCalledExactlyOnceWith(new Uint8Array());
+  });
+
+  it('queues stream failures without exposing partial bytes', async () => {
+    const fixture = createBodyFixture();
+    const body = fixture.createBody([Uint8Array.of(1)]);
+    const failure = new Error('source failed');
+    const process = vi.fn();
+    const error = vi.fn();
+    body.readAll(process, error);
+    body.stream.error(failure);
+    await nextTurn();
+    expect(error).not.toHaveBeenCalled();
+    fixture.runParallel();
+    expect(error).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(process).not.toHaveBeenCalled();
   });
 });
 
@@ -258,98 +305,5 @@ describe('Fetch incremental body reading', () => {
     fixture.runParallel();
     expect(end).toHaveBeenCalledExactlyOnceWith();
     expect(error).not.toHaveBeenCalled();
-  });
-});
-
-describe('Fetch full body reading', () => {
-  it.each(['global', 'parallel', 'default'] as const)('delivers all bytes in one task to a %s destination', async (kind) => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody([Uint8Array.of(1, 2), Uint8Array.of(3)]);
-    body.stream.close();
-    const destination = kind === 'global' ? fixture.global : kind === 'parallel' ? fixture.createParallelQueue() : null;
-    const process = vi.fn();
-    const error = vi.fn();
-    body.fullyRead(process, error, destination);
-    await nextTurn();
-    expect(process).not.toHaveBeenCalled();
-    if (kind === 'global') {
-      expect(fixture.tasks).toHaveLength(1);
-      expect(fixture.tasks[0]!.global).toBe(fixture.global);
-      fixture.runTask();
-    } else {
-      expect(fixture.parallelSteps).toHaveLength(1);
-      fixture.runParallel();
-      expect(fixture.scheduling.queueGlobalTask).not.toHaveBeenCalled();
-    }
-    expect(process).toHaveBeenCalledExactlyOnceWith(Uint8Array.of(1, 2, 3));
-    expect(error).not.toHaveBeenCalled();
-  });
-
-  it('queues an empty body as a successful zero-length byte sequence', () => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody();
-    body.stream.close();
-    const process = vi.fn();
-    body.fullyRead(process, vi.fn());
-    expect(process).not.toHaveBeenCalled();
-    fixture.runParallel();
-    expect(process).toHaveBeenCalledExactlyOnceWith(new Uint8Array());
-  });
-
-  it('queues stream failures without exposing partial bytes', async () => {
-    const fixture = createBodyFixture();
-    const body = fixture.createBody([Uint8Array.of(1)]);
-    const failure = new Error('source failed');
-    const process = vi.fn();
-    const error = vi.fn();
-    body.fullyRead(process, error);
-    body.stream.error(failure);
-    await nextTurn();
-    expect(error).not.toHaveBeenCalled();
-    fixture.runParallel();
-    expect(error).toHaveBeenCalledExactlyOnceWith(failure);
-    expect(process).not.toHaveBeenCalled();
-  });
-});
-
-describe('Fetch content codings', () => {
-  const bytes = Uint8Array.of(1, 2, 3, 4);
-  const decoders = new Map([
-    ['gzip', (input: Uint8Array) => Uint8Array.from(gunzipSync(input))],
-    ['deflate', (input: Uint8Array) => Uint8Array.from(inflateSync(input))],
-    ['br', (input: Uint8Array) => Uint8Array.from(brotliDecompressSync(input))],
-  ]);
-
-  it.each([
-    ['gzip', gzipSync(bytes)], ['deflate', deflateSync(bytes)], ['br', brotliCompressSync(bytes)],
-  ] as const)('decodes %s with a supplied host codec', (coding, encoded) => {
-    expect(handleContentCodings([coding], encoded, decoders)).toEqual(bytes);
-  });
-
-  it('decodes case-insensitive codings in reverse application order', () => {
-    const encoded = brotliCompressSync(gzipSync(bytes));
-    expect(handleContentCodings(['GZip', 'BR'], encoded, decoders)).toEqual(bytes);
-  });
-
-  it('returns the original bytes without partially decoding an unsupported coding list', () => {
-    const decode = vi.fn(() => bytes);
-    const available = new Map([['known', decode]]);
-    for (const codings of [[], ['unknown'], ['unknown', 'known'], ['known', 'unknown']]) {
-      expect(handleContentCodings(codings, bytes, available)).toBe(bytes);
-    }
-    expect(decode).not.toHaveBeenCalled();
-  });
-
-  it('returns failure for corrupt or truncated encoded bytes', () => {
-    expect(handleContentCodings(['gzip'], bytes, decoders)).toBeNull();
-    expect(handleContentCodings(['gzip'], gzipSync(bytes).subarray(0, 10), decoders)).toBeNull();
-  });
-
-  it('stops decoding after a codec fails', () => {
-    const inner = vi.fn(() => bytes);
-    const outer = vi.fn((): Uint8Array => { throw new Error('corrupt data'); });
-    expect(handleContentCodings(['inner', 'outer'], bytes, new Map([['inner', inner], ['outer', outer]]))).toBeNull();
-    expect(inner).not.toHaveBeenCalled();
-    expect(outer).toHaveBeenCalledExactlyOnceWith(bytes);
   });
 });

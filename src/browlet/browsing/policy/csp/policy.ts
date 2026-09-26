@@ -177,7 +177,7 @@ export class ContentSecurityPolicy {
     // byte algorithm without defining a completed-body read. Hash a separate
     // branch after completion, preserving the consumer's body and skipping errors.
     // TODO: Reuse loader/SRI completed bytes or digests when those consumers exist.
-    response.body.clone().fullyRead(reportBytes, () => {}, env.global);
+    response.body.clone().readAll(reportBytes, () => {}, env.global);
   }
 
   /** Copy directive data without sharing mutable maps or value lists. */

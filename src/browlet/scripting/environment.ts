@@ -2,11 +2,11 @@ import type { BrowsingContext } from '../browsing/browsing-context';
 import type { TraversableNavigable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
 import {
-  FetchGroup, getEnvironmentDefaultUserAgent, type FetchEnvironment, type IntegrityViolationReportBody,
+  FetchGroup, getEnvironmentDefaultUserAgent,
+  type FetchEnvironment, type FetchEnvironmentRecord, type IntegrityViolationReportBody, type NetworkPartitionKey,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type RequestCredentials, type ResponseBodyInfo,
 } from '../../fetch/index';
-import type { StorageEnvironment } from '../../storage/index';
 import type { EventLoop } from './event-loop';
 import type { Realm, WindowRealm } from './realm';
 import type { ModuleMap } from '../dom/nodes/document';
@@ -14,23 +14,22 @@ import type { PolicyContainer } from '../browsing/policy/container';
 import { InsecureRequestsPolicy } from '../browsing/policy/upgrade-insecure-requests';
 import type { WindowImpl } from '../browsing/window/window';
 import {
-  areSameSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
+  areSameSite, obtainSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
 } from '../../url/index';
 import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
-import type { RealmExecution } from '../../js-engine/index';
+import { queueNetworkingTask, type RealmExecution } from '../../js-engine/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import { ReportImpl, ReportBodyImpl } from '../reporting/report';
 import { TestReportBodyImpl } from '../reporting/test-report';
 import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
 import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
 
-/** Browser state and operations associated with one realm and global. */
-// HTML's environment settings object. The engine owns execution-context stacks;
-// its realm component is retained directly here.
-export abstract class Environment implements EnvironmentRecord, FetchEnvironment {
-  /** Identity retained from the early environment record. */
+/** Browser state shared by reserved records and full environments. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#environment
+export class EnvironmentRecord implements FetchEnvironmentRecord {
+  /** Identity transferred to the full environment when a reservation is consumed. */
   id: string;
   /** Browser owner shared by navigation and networking. */
   userAgent: UserAgent;
@@ -44,6 +43,65 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   targetBrowsingContext: BrowsingContext | null;
   /** Service worker controlling this environment, when present. */
   activeServiceWorker: object | null;
+  #isSecureContext: boolean;
+  #executionReady = false;
+
+  constructor(initialization: EnvironmentInit) {
+    this.id = initialization.id ?? crypto.randomUUID();
+    this.userAgent = initialization.userAgent;
+    this.creationURL = initialization.creationURL;
+    this.topLevelCreationURL = initialization.topLevelCreationURL;
+    this.topLevelOrigin = initialization.topLevelOrigin;
+    this.targetBrowsingContext = initialization.targetBrowsingContext;
+    this.activeServiceWorker = initialization.activeServiceWorker ?? null;
+    this.#isSecureContext = initialization.isSecureContext;
+  }
+
+  /** Security classification fixed when the environment was created. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+  get isSecureContext(): boolean {
+    return this.#isSecureContext;
+  }
+
+  /** Whether HTML has completed setup for script execution. */
+  get executionReady(): boolean {
+    return this.#executionReady;
+  }
+
+  /** Mark HTML setup complete. */
+  markExecutionReady(): void {
+    this.#executionReady = true;
+  }
+
+  /** Determine this environment's partition before or after a realm exists. */
+  // https://fetch.spec.whatwg.org/#determine-the-network-partition-key
+  determineNetworkPartitionKey(): NetworkPartitionKey {
+    let topLevelOrigin = this.topLevelOrigin;
+    if (topLevelOrigin === null) {
+      if (this.topLevelCreationURL === null) throw new InternalError('Fetch environment has no top-level origin or creation URL');
+      topLevelOrigin = obtainURLOrigin(this.topLevelCreationURL);
+    }
+    return [obtainSite(topLevelOrigin), null];
+  }
+}
+
+/** State supplied when reserving an environment or transferring it into full settings. */
+export interface EnvironmentInit {
+  /** Omitted for a fresh reservation; retained when constructing full settings. */
+  id?: string;
+  userAgent: UserAgent;
+  creationURL: URLRecord;
+  topLevelCreationURL: URLRecord | null;
+  topLevelOrigin: Origin | null;
+  targetBrowsingContext: BrowsingContext | null;
+  activeServiceWorker?: object | null;
+  isSecureContext: boolean;
+}
+
+/** Browser state and operations associated with one realm and global. */
+// HTML's environment settings object. The engine owns execution-context stacks;
+// its realm component is retained directly here.
+export abstract class Environment extends EnvironmentRecord implements FetchEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
@@ -54,19 +112,11 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   realm: Realm;
   /** Allocation, execution, and owner task delivery for this realm. */
   exec: RealmExecution;
-  #isSecureContext: boolean;
-  #executionReady = false;
+  queueNetworkingTask = queueNetworkingTask;
 
   constructor(realm: Realm, record: EnvironmentRecord, exec: RealmExecution) {
+    super(record);
     this.exec = exec;
-    this.id = record.id;
-    this.userAgent = record.userAgent;
-    this.creationURL = record.creationURL;
-    this.topLevelCreationURL = record.topLevelCreationURL;
-    this.topLevelOrigin = record.topLevelOrigin;
-    this.targetBrowsingContext = record.targetBrowsingContext;
-    this.activeServiceWorker = record.activeServiceWorker;
-    this.#isSecureContext = record.isSecureContext;
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;
     realm.setHostDefined(this);
@@ -75,12 +125,6 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
   /** The platform global installed in this environment's realm. */
   get global(): RealmExecution['global'] {
     return this.realm.global;
-  }
-
-  /** Security classification fixed when the environment was created. */
-  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
-  get isSecureContext(): boolean {
-    return this.#isSecureContext;
   }
 
   /** Window environments can consume their Document's preload map. */
@@ -120,16 +164,6 @@ export abstract class Environment implements EnvironmentRecord, FetchEnvironment
     _integrityMetadata: string, _onResponseAvailable: (response: FetchResponse) => void,
   ): boolean {
     return false;
-  }
-
-  /** Whether HTML has completed setup for script execution. */
-  get executionReady(): boolean {
-    return this.#executionReady;
-  }
-
-  /** Mark HTML setup complete. */
-  markExecutionReady(): void {
-    this.#executionReady = true;
   }
 
   /** Parse with this browser's Blob URL store; the caller selects any base URL. */
@@ -327,41 +361,4 @@ export class WindowEnvironment extends Environment {
   override getTraversableForUserPrompts(): TraversableNavigable | null {
     return this.window.getAssociatedDocument().getNodeNavigable()?.traversableNavigable ?? null;
   }
-}
-
-/** State that can identify an environment before a realm or global exists. */
-// HTML's environment, including reserved environments and reserved Fetch clients.
-export interface EnvironmentRecord extends StorageEnvironment {
-  /** Identity transferred to the full environment when a reservation is consumed. */
-  id: string;
-  /** Browser owner shared by navigation and networking. */
-  userAgent: UserAgent;
-  /** URL associated with the environment's creation. */
-  creationURL: URLRecord;
-  /** Top-level creation URL, or null when the environment has none. */
-  topLevelCreationURL: URLRecord | null;
-  /** Top-level origin, or null until it can be determined. */
-  topLevelOrigin: Origin | null;
-  /** Navigation's target browsing context, when present. */
-  targetBrowsingContext: BrowsingContext | null;
-  /** Service worker controlling this environment, when present. */
-  activeServiceWorker: object | null;
-  /** Security classification established before Web IDL exposure. */
-  isSecureContext: boolean;
-  /** Whether HTML has completed setup for script execution. */
-  executionReady: boolean;
-}
-
-/** Create the state needed before allocating a realm. */
-export function createEnvironmentRecord(initialization: EnvironmentInit): EnvironmentRecord {
-  return {
-    ...initialization,
-    id: crypto.randomUUID(),
-    activeServiceWorker: initialization.activeServiceWorker ?? null,
-    executionReady: false,
-  };
-}
-
-export interface EnvironmentInit extends Omit<EnvironmentRecord, 'id' | 'executionReady' | 'activeServiceWorker'> {
-  activeServiceWorker?: object | null;
 }

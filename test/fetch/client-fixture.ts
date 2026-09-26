@@ -1,16 +1,17 @@
-import { FetchGroup } from '../../src/fetch/group';
-import { ConnectionPool } from '../../src/fetch/http/connections';
-import { HTTPCachePartitions } from '../../src/fetch/http/cache/partitions';
-import { CORSPreflightCache } from '../../src/fetch/http/cors-preflight-cache';
+import { hostPromises, runInParallel } from '../../src/browlet/integration/scripting';
 import type {
   FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/environment';
+import { FetchGroup } from '../../src/fetch/group';
+import { HTTPCacheStore } from '../../src/fetch/cache-http';
+import { ConnectionPool } from '../../src/fetch/transport';
+import { CORSPreflightCache } from '../../src/fetch/cache-cors';
 import { CookieStore } from '../../src/http/index';
+import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createEnvironment } from '../js-engine/execution-fixture';
-import { hostPromises, runInParallel } from '../../src/browlet/integration/scripting';
 
-export function createClientEnvironment(url = 'https://example.test/'): FetchEnvironment {
+export function createClientEnvironment(url = 'https://example.test/'): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   return {
     ...createEnvironment(),
@@ -36,9 +37,15 @@ export function createClientEnvironment(url = 'https://example.test/'): FetchEnv
     userAgent: createFetchUserAgent(),
     topLevelOrigin: obtainURLOrigin(topLevelCreationURL),
     topLevelCreationURL,
+    determineNetworkPartitionKey() { return [obtainSite(this.topLevelOrigin), null]; },
     policyContainer: createFetchPolicyContainer(),
     queueReport() {},
   };
+}
+
+// These test clients have known origins; reserved-record derivation is tested in HTML.
+interface ClientEnvironment extends FetchEnvironment {
+  topLevelOrigin: Origin;
 }
 
 export function createFetchUserAgent(): FetchUserAgent {
@@ -80,7 +87,7 @@ export function createFetchUserAgent(): FetchUserAgent {
       promptProxy: () => hostPromises.resolve(false),
       store() {},
     },
-    httpCachePartitions: new HTTPCachePartitions(),
+    httpCache: new HTTPCacheStore(),
     corsPreflightCache: new CORSPreflightCache(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,

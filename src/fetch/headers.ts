@@ -3,7 +3,7 @@ import { getEncoding, type Encoding } from '../encoding/index';
 import { TypeError } from '../infra/exceptions';
 import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
 import {
-  collectHTTPQuotedString, isHTTPToken, parseStructuredField, serializeStructuredField,
+  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseStructuredField, serializeStructuredField,
   type StructuredField,
 } from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
@@ -12,8 +12,6 @@ import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,
 } from '../web-idl/index';
-import { isForbiddenMethod } from './http/methods';
-import { parseSingleRangeHeaderValue } from './http/ranges';
 import type { FetchEnvironment } from './environment';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */
@@ -148,7 +146,7 @@ export class FetchHeaders {
   }
 
   /** Extract a length; undefined means absent/unusable, and null means conflicting values. */
-  // https://fetch.spec.whatwg.org/#extract-a-length
+  // https://fetch.spec.whatwg.org/#header-list-extract-a-length
   extractLength(): bigint | undefined | null {
     const values = this.getDecodeAndSplit('Content-Length');
     if (values === null) return undefined;
@@ -357,7 +355,31 @@ export type HeadersGuard = 'immutable' | 'request' | 'request-no-cors' | 'respon
 /** Binding converts HeadersInit's sequence/record branches to arrays/plain objects. */
 export type HeadersInitValue = string[][] | Record<string, string>;
 
-/** Input is already isomorphically decoded. Most consumers use the list operation. */
+/** Validate method syntax, including extension methods. */
+// https://fetch.spec.whatwg.org/#concept-method
+export function isValidMethod(value: string): boolean {
+  return isHTTPToken(value);
+}
+
+// https://fetch.spec.whatwg.org/#cors-safelisted-method
+export function isCORSSafelistedMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'POST';
+}
+
+// https://fetch.spec.whatwg.org/#forbidden-method
+export function isForbiddenMethod(method: string): boolean {
+  return ['CONNECT', 'TRACE', 'TRACK'].includes(method.toUpperCase());
+}
+
+/** Uppercase the six legacy methods; preserve other spellings, including patch. */
+// https://fetch.spec.whatwg.org/#concept-method-normalize
+export function normalizeMethod(method: string): string {
+  const upper = method.toUpperCase();
+  return ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT'].includes(upper) ? upper : method;
+}
+
+/** Split at unquoted commas and trim surrounding tabs/spaces; input is already decoded. */
+// https://fetch.spec.whatwg.org/#header-value-get-decode-and-split
 export function getDecodeAndSplitHeaderValue(value: string): string[] {
   const position = new TextCursor(value);
   const values: string[] = [];
@@ -397,25 +419,31 @@ export function legacyExtractEncoding(mimeType: MIMEType | null, fallbackEncodin
   return charset === undefined ? fallbackEncoding : getEncoding(charset) ?? fallbackEncoding;
 }
 
+// https://fetch.spec.whatwg.org/#convert-header-names-to-a-sorted-lowercase-set
 export function convertHeaderNamesToSortedLowercaseSet(names: string[]): string[] {
   const unique = new Set<string>();
   for (const name of names) unique.add(name.toLowerCase());
   return [...unique].sort();
 }
 
+// https://fetch.spec.whatwg.org/#header-name
 export function isHeaderName(name: string): boolean {
   return isHTTPToken(name);
 }
 
+// https://fetch.spec.whatwg.org/#header-value
 export function isHeaderValue(value: string): boolean {
-  return !/^[ \t]|[ \t]$|[\0\r\n\u0100-\uffff]/.test(value);
+  return !invalidHeaderValuePattern.test(value);
 }
 
+/** Strip leading and trailing HTTP whitespace without changing the interior. */
+// https://fetch.spec.whatwg.org/#concept-header-value-normalize
 export function normalizeHeaderValue(value: string): string {
-  return value.replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
+  return value.replace(surroundingHTTPWhitespacePattern, '');
 }
 
-/** Fetch §2.2.2 — CORS-safelisted request-header, including the 128-byte limit. */
+/** Check the name, value restrictions, and 128-byte safelist limit. */
+// https://fetch.spec.whatwg.org/#cors-safelisted-request-header
 export function isCORSSafelistedRequestHeader([name, value]: Header): boolean {
   if (value.length > 128) return false;
   switch (name.toLowerCase()) {
@@ -431,7 +459,7 @@ export function isCORSSafelistedRequestHeader([name, value]: Header): boolean {
     }
     case 'accept-language':
     case 'content-language':
-      return !/[^0-9A-Za-z *,\-.;=]/.test(value);
+      return !corsUnsafeLanguageValuePattern.test(value);
     case 'range': {
       const range = parseSingleRangeHeaderValue(value, false);
       return range !== null && range[0] !== undefined;
@@ -441,33 +469,42 @@ export function isCORSSafelistedRequestHeader([name, value]: Header): boolean {
   }
 }
 
+// https://fetch.spec.whatwg.org/#cors-unsafe-request-header-byte
 export function isCORSUnsafeRequestHeaderByte(byte: number): boolean {
   return byte < 0x20 && byte !== 0x09 || byte === 0x7f ||
     '"():<>?@[\\]{}'.includes(String.fromCharCode(byte));
 }
 
+// https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
 export function isCORSNonWildcardRequestHeaderName(name: string): boolean {
   return name.toLowerCase() === 'authorization';
 }
 
+// https://fetch.spec.whatwg.org/#privileged-no-cors-request-header-name
 export function isPrivilegedNoCORSRequestHeaderName(name: string): boolean {
   return name.toLowerCase() === 'range';
 }
 
+/** Include explicit exposure while always excluding forbidden response fields. */
+// https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name
 export function isCORSSafelistedResponseHeaderName(name: string, exposedNames: string[]): boolean {
   const lower = name.toLowerCase();
   return corsSafelistedResponseHeaderNames.has(lower) ||
     !isForbiddenResponseHeaderName(name) && exposedNames.some((exposed) => exposed.toLowerCase() === lower);
 }
 
+// https://fetch.spec.whatwg.org/#no-cors-safelisted-request-header-name
 export function isNoCORSSafelistedRequestHeaderName(name: string): boolean {
   return ['accept', 'accept-language', 'content-language', 'content-type'].includes(name.toLowerCase());
 }
 
+// https://fetch.spec.whatwg.org/#no-cors-safelisted-request-header
 export function isNoCORSSafelistedRequestHeader(header: Header): boolean {
   return isNoCORSSafelistedRequestHeaderName(header[0]) && isCORSSafelistedRequestHeader(header);
 }
 
+/** Check reserved names and method-override fields that name forbidden methods. */
+// https://fetch.spec.whatwg.org/#forbidden-request-header
 export function isForbiddenRequestHeader([name, value]: Header): boolean {
   const lower = name.toLowerCase();
   if (forbiddenRequestHeaderNames.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-')) {
@@ -477,12 +514,77 @@ export function isForbiddenRequestHeader([name, value]: Header): boolean {
     getDecodeAndSplitHeaderValue(value).some(isForbiddenMethod);
 }
 
+// https://fetch.spec.whatwg.org/#forbidden-response-header-name
 export function isForbiddenResponseHeaderName(name: string): boolean {
   return ['set-cookie', 'set-cookie2'].includes(name.toLowerCase());
 }
 
+// https://fetch.spec.whatwg.org/#request-body-header-name
 export function isRequestBodyHeaderName(name: string): boolean {
   return ['content-encoding', 'content-language', 'content-location', 'content-type'].includes(name.toLowerCase());
+}
+
+/** Serialize an integer in decimal, without exponent notation or padding. */
+// https://fetch.spec.whatwg.org/#serialize-an-integer
+export function serializeInteger(integer: number | bigint): string {
+  return BigInt(integer).toString();
+}
+
+/** Parse exact byte offsets; null means invalid and an undefined endpoint means omitted. */
+// https://fetch.spec.whatwg.org/#simple-range-header-value
+// BigInts preserve the ordering of unbounded decimal offsets.
+export function parseSingleRangeHeaderValue(
+  value: string, allowWhitespace: boolean,
+): [start?: bigint, end?: bigint] | null {
+  if (!value.startsWith('bytes')) return null;
+  const position = new TextCursor(value, 5);
+  if (allowWhitespace) position.consumeWhile(isHTTPTabOrSpace);
+  if (!position.match('=')) return null;
+  if (allowWhitespace) position.consumeWhile(isHTTPTabOrSpace);
+
+  const start = position.pos();
+  position.consumeWhile(isASCIIDigit);
+  const startValue = position.slice(start);
+  if (allowWhitespace) position.consumeWhile(isHTTPTabOrSpace);
+  if (!position.match('-')) return null;
+  if (allowWhitespace) position.consumeWhile(isHTTPTabOrSpace);
+
+  const end = position.pos();
+  position.consumeWhile(isASCIIDigit);
+  const endValue = position.slice(end);
+  if (!position.eof() || startValue === '' && endValue === '') return null;
+
+  const rangeStart = startValue === '' ? undefined : BigInt(startValue);
+  const rangeEnd = endValue === '' ? undefined : BigInt(endValue);
+  if (rangeStart !== undefined && rangeEnd !== undefined && rangeStart > rangeEnd) return null;
+  return [rangeStart, rangeEnd];
+}
+
+/** Accept Fetch's internal status domain, including zero. */
+// https://fetch.spec.whatwg.org/#concept-status
+// UNUSED: only direct tests call this status-range predicate.
+export function isStatus(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 999;
+}
+
+// https://fetch.spec.whatwg.org/#null-body-status
+export function isNullBodyStatus(status: number): boolean {
+  return [101, 103, 204, 205, 304].includes(status);
+}
+
+// https://fetch.spec.whatwg.org/#ok-status
+export function isOkStatus(status: number): boolean {
+  return status >= 200 && status <= 299;
+}
+
+// https://fetch.spec.whatwg.org/#range-status
+export function isRangeStatus(status: number): boolean {
+  return status === 206 || status === 416;
+}
+
+// https://fetch.spec.whatwg.org/#redirect-status
+export function isRedirectStatus(status: number): boolean {
+  return [301, 302, 303, 307, 308].includes(status);
 }
 
 /** Select this environment's identification header value, including an explicit empty override. */
@@ -493,7 +595,16 @@ export function getEnvironmentDefaultUserAgent(env: FetchEnvironment): string {
   return userAgent.webDriverBiDiEmulatedUserAgent(env) ?? userAgent.defaultUserAgentValue;
 }
 
+// https://fetch.spec.whatwg.org/#document-accept-header-value
 export const documentAcceptHeaderValue = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
+function isASCIIDigit(character: string): boolean {
+  return character >= '0' && character <= '9';
+}
+
+const invalidHeaderValuePattern = /^[ \t]|[ \t]$|[\0\r\n\u0100-\uffff]/;
+const surroundingHTTPWhitespacePattern = /^[\t\n\r ]+|[\t\n\r ]+$/g;
+const corsUnsafeLanguageValuePattern = /[^0-9A-Za-z *,\-.;=]/;
 
 const corsSafelistedResponseHeaderNames = new Set([
   'cache-control', 'content-language', 'content-length', 'content-type', 'expires', 'last-modified', 'pragma',

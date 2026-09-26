@@ -1,14 +1,12 @@
 import { createServer, type IncomingHttpHeaders, type RequestListener, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
 import { fetch } from '../../src/fetch/fetch';
-import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, isFilteredResponse, ResponseImpl } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
 import { closeServer, listen } from './loader/http-fixture';
-import { observe } from './streams/implementation-fixture';
+import { createFetchOperation } from './fetch-fixture';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -30,18 +28,23 @@ describe('CORS preflight transactions', () => {
       });
       response.end(request.method === 'OPTIONS' ? 'unused preflight body' : 'actual response');
     });
-    const first = f.params();
-    first.timingInfo.startTime = 12;
-    const preparation = vi.spyOn(FetchParams.prototype, 'httpNetworkOrCacheFetch');
-    expect(await f.text(await observe(first.httpFetch(true)))).toBe('actual response');
-    const preflight = (preparation.mock.contexts as FetchParams[]).find((params) => params.request.method === 'OPTIONS')!;
-    expect(preflight.request.client).toBe(f.env);
-    expect(preflight.request.determineNetworkPartitionKey()).toEqual(first.request.determineNetworkPartitionKey());
-    expect(preflight.request.webDriverId).toBe(first.request.webDriverId);
-    expect(preflight.controller).toBe(first.controller);
-    expect(preflight.timingInfo).not.toBe(first.timingInfo);
-    expect(first.timingInfo.startTime).toBe(12);
-    expect(await f.text(await observe(f.params().httpFetch(true)))).toBe('actual response');
+    const first = f.operation();
+    const clock = vi.spyOn(f.env.userAgent, 'unsafeSharedCurrentTime').mockReturnValue(12);
+    const mark = vi.spyOn(f.env, 'markResourceTiming');
+    first.request.initiatorType = 'fetch';
+    first.options.useParallelQueue = false;
+    const preparation = vi.spyOn(f.env.userAgent, 'webDriverBiDiBeforeRequestSent');
+    const pending = first.start();
+    const cancellation = vi.spyOn(first.controller, 'addCancellationSteps');
+    expect(await f.text(await pending)).toBe('actual response');
+    const preflight = preparation.mock.calls.map(([request]) => request).find((request) => request.method === 'OPTIONS')!;
+    expect(preflight.client).toBe(f.env);
+    expect(preflight.determineNetworkPartitionKey()).toEqual(first.request.determineNetworkPartitionKey());
+    expect(preflight.webDriverId).toBe(first.request.webDriverId);
+    expect(cancellation).toHaveBeenCalledTimes(2);
+    expect(mark.mock.calls[0]![0].startTime).toBe(12);
+    clock.mockRestore();
+    expect(await f.text(await f.operation().start())).toBe('actual response');
     expect(wire.map(({ method }) => method)).toEqual(['OPTIONS', 'PUT', 'PUT']);
     expect(wire[0]!.headers).toMatchObject({
       accept: '*/*', origin: 'http://127.0.0.1',
@@ -62,14 +65,14 @@ describe('CORS preflight transactions', () => {
       });
       response.end('ready');
     });
-    const params = f.params();
-    params.request.credentialsMode = 'include';
+    const operation = f.operation();
+    operation.request.credentialsMode = 'include';
     const cookies = new FetchResponse();
     cookies.headerList.append('Set-Cookie', 'session=existing; Path=/');
-    cookies.parseAndStoreCookies(params.request);
+    cookies.parseAndStoreCookies(operation.request);
     const authentication = f.env.userAgent.httpAuthentication;
-    authentication.store(params.request.currentURL, { username: 'user', password: 'secret', realm: 'test' }, authentication.generation);
-    expect(await f.text(await observe(params.httpFetch(true)))).toBe('ready');
+    authentication.store(operation.request.currentURL, { username: 'user', password: 'secret', realm: 'test' }, authentication.generation);
+    expect(await f.text(await operation.start())).toBe('ready');
     expect(wire[0]!.authorization).toBeUndefined();
     expect(wire[0]!.cookie).toBeUndefined();
     expect(wire[1]!.authorization).toBe('Basic dXNlcjpzZWNyZXQ=');
@@ -100,11 +103,11 @@ describe('CORS preflight transactions', () => {
       }
       response.end();
     });
-    const params = f.params(method);
-    params.request.credentialsMode = credentials ? 'include' : 'omit';
-    expect((await observe(params.httpFetch(true))).type).toBe('error');
+    const operation = f.operation(method);
+    operation.request.credentialsMode = credentials ? 'include' : 'omit';
+    expect((await operation.start()).type).toBe('error');
     expect(wire).toEqual(['OPTIONS']);
-    expect(f.env.userAgent.corsPreflightCache.matchesMethod(method, params.request)).toBe(false);
+    expect(f.env.userAgent.corsPreflightCache.matchesMethod(method, operation.request)).toBe(false);
   });
 
   it.each([302, 401, 403])('rejects a %i preflight without following redirects or prompting', async (status) => {
@@ -119,7 +122,7 @@ describe('CORS preflight transactions', () => {
     });
     const prompt = vi.fn(() => null);
     f.env.userAgent.httpAuthentication.onPrompt = prompt;
-    expect((await observe(f.params().httpFetch(true))).type).toBe('error');
+    expect((await f.operation().start()).type).toBe('error');
     expect(wire).toEqual(['/resource']);
     expect(prompt).not.toHaveBeenCalled();
   });
@@ -135,12 +138,12 @@ describe('CORS preflight transactions', () => {
       });
       response.end('ready');
     });
-    expect(await f.text(await observe(f.params().httpFetch(true)))).toBe('ready');
-    const authorized = f.params();
+    expect(await f.text(await f.operation().start())).toBe('ready');
+    const authorized = f.operation();
     authorized.request.headerList.append('Authorization', 'Bearer authored');
-    expect((await observe(authorized.httpFetch(true))).type).toBe('error');
+    expect((await authorized.start()).type).toBe('error');
     allowAuthorization = true;
-    expect(await f.text(await observe(authorized.httpFetch(true)))).toBe('ready');
+    expect(await f.text(await authorized.start())).toBe('ready');
     expect(methods).toEqual(['OPTIONS', 'PUT', 'OPTIONS', 'OPTIONS', 'PUT']);
   });
 
@@ -149,10 +152,10 @@ describe('CORS preflight transactions', () => {
       response.writeHead(204, { 'Access-Control-Allow-Origin': request.headers.origin!, 'Access-Control-Allow-Headers': 'X-A,X-Z' });
       response.end();
     });
-    expect((await observe(f.params('GET').httpFetch(true))).status).toBe(204);
-    const forced = f.params('POST');
+    expect((await f.operation('GET').start()).status).toBe(204);
+    const forced = f.operation('POST');
     forced.request.useCORSPreflight = true;
-    expect((await observe(forced.httpFetch(true))).status).toBe(204);
+    expect((await forced.start()).status).toBe(204);
     expect(f.env.userAgent.corsPreflightCache.matchesMethod('POST', forced.request)).toBe(true);
   });
 
@@ -167,12 +170,12 @@ describe('CORS preflight transactions', () => {
       response.end('ready');
     });
     const clock = vi.spyOn(f.env.userAgent, 'unsafeSharedCurrentTime').mockReturnValue(0);
-    expect(await f.text(await observe(f.params().httpFetch(true)))).toBe('ready');
+    expect(await f.text(await f.operation().start())).toBe('ready');
     clock.mockReturnValue(4999);
-    expect(await f.text(await observe(f.params().httpFetch(true)))).toBe('ready');
+    expect(await f.text(await f.operation().start())).toBe('ready');
     expect(preflights).toBe(1);
     clock.mockReturnValue(5000);
-    expect(await f.text(await observe(f.params().httpFetch(true)))).toBe('ready');
+    expect(await f.text(await f.operation().start())).toBe('ready');
     expect(preflights).toBe(2);
   });
 
@@ -180,13 +183,13 @@ describe('CORS preflight transactions', () => {
     const started = Promise.withResolvers<void>();
     const methods: string[] = [];
     const f = await fixture((request) => { methods.push(request.method!); started.resolve(); });
-    const params = f.params();
-    const pending = observe(params.httpFetch(true));
+    const operation = f.operation();
+    const pending = operation.start();
     await started.promise;
-    params.controller.abort(f.env);
+    operation.controller.abort(f.env);
     expect(await pending).toMatchObject({ type: 'error', aborted: true });
     expect(methods).toEqual(['OPTIONS']);
-    expect(f.env.userAgent.corsPreflightCache.matchesMethod('PUT', params.request)).toBe(false);
+    expect(f.env.userAgent.corsPreflightCache.matchesMethod('PUT', operation.request)).toBe(false);
   });
 });
 
@@ -201,7 +204,7 @@ describe('CORS and timing through main Fetch', () => {
       });
       response.end('body');
     });
-    const first = f.params();
+    const first = f.operation();
     const delivered = await f.complete(first.request);
     expect(delivered.response.type).toBe('cors');
     expect(delivered.response.headerList.get('X-Visible')).toBe('public');
@@ -210,7 +213,7 @@ describe('CORS and timing through main Fetch', () => {
     expect(first.request.timingAllowFailed).toBe(true);
     expect(delivered.response.timingAllowPassed).toBe(false);
     timingAllowed = true;
-    expect((await f.complete(f.params().request)).response.timingAllowPassed).toBe(true);
+    expect((await f.complete(f.operation().request)).response.timingAllowPassed).toBe(true);
   });
 
   it('clears matching preflight permissions when the actual response fails CORS', async () => {
@@ -225,10 +228,10 @@ describe('CORS and timing through main Fetch', () => {
       }
       response.end();
     });
-    const first = f.params();
+    const first = f.operation();
     expect((await f.complete(first.request)).response.type).toBe('error');
     expect(f.env.userAgent.corsPreflightCache.matchesMethod('PUT', first.request)).toBe(false);
-    expect((await f.complete(f.params().request)).response.type).toBe('error');
+    expect((await f.complete(f.operation().request)).response.type).toBe('error');
     expect(preflights).toBe(2);
   });
 
@@ -251,12 +254,12 @@ describe('CORS and timing through main Fetch', () => {
       });
       response.end();
     });
-    const params = f.params();
-    const result = await f.complete(params.request);
+    const operation = f.operation();
+    const result = await f.complete(operation.request);
     expect(result.response.type).toBe('cors');
     expect(result.body).toEqual(new TextEncoder().encode('redirected'));
     expect(observedOrigins).toEqual(['null', 'null']);
-    expect(params.request.timingAllowFailed).toBe(true);
+    expect(operation.request.timingAllowFailed).toBe(true);
     expect(result.response.timingAllowPassed).toBe(false);
   });
 
@@ -269,14 +272,14 @@ describe('CORS and timing through main Fetch', () => {
       }
       response.end();
     });
-    const params = f.params('GET');
-    params.request.mode = 'navigate';
-    params.request.destination = 'document';
-    params.request.headerList.list = [];
-    const { response } = await f.complete(params.request);
+    const operation = f.operation('GET');
+    operation.request.mode = 'navigate';
+    operation.request.destination = 'document';
+    operation.request.headerList.list = [];
+    const { response } = await f.complete(operation.request);
     expect(response.type).toBe('basic');
     expect(isFilteredResponse(response) ? response.internalResponse.navigationTimingAllowValuesList : []).toEqual([['*']]);
-    expect(response.isNavigationTimingAllowed(f.env.origin)).toBe(true);
+    expect(response.isNavigationTimingBlocked(f.env.origin)).toBe(false);
   });
 });
 
@@ -289,7 +292,7 @@ async function fixture(respond: RequestListener) {
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
   cleanup.push(() => env.userAgent.httpTransport.close());
-  const params = (method = 'PUT') => {
+  const operation = (method = 'PUT') => {
     const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
     request.populateFromClient();
     request.method = method;
@@ -299,7 +302,7 @@ async function fixture(respond: RequestListener) {
     request.referrer = null;
     request.headerList.append('X-Z', 'z');
     request.headerList.append('X-A', 'a');
-    return new FetchParams(request, new FetchTimingInfo(), env);
+    return createFetchOperation(request, env);
   };
   const text = (response: FetchResponse) => {
     const context = getBindingContext(realm);
@@ -311,5 +314,5 @@ async function fixture(respond: RequestListener) {
     fetch(request, { processResponseConsumeBody: (response, body) => result.resolve({ response, body }) }, env);
     return result.promise;
   };
-  return { browlet, env, origin, params, text, complete };
+  return { browlet, env, origin, operation, text, complete };
 }

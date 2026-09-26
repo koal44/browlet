@@ -1,27 +1,23 @@
-import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
+import { TextDecoderStreamImpl, utf8Decode, utf8Encode } from '../encoding/index';
 import { BlobData, BlobImpl } from '../file/index';
-import { ParallelQueue } from '../infra/parallel-queue';
-import {
-  type GlobalObject, type JSEnvironment, getBufferSourceCopy, getBufferTypeName,
-} from '../js-engine/index';
-import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
+import { InternalError } from '../infra/internal-error';
+import { ParallelQueue } from '../infra/parallel-queue';
+import type { InternalPromise } from '../infra/promises';
+import { getBufferSourceCopy, getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
-import { URLSearchParamsImpl, parseFormUrlEncoded } from '../url/index';
+import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
 import {
-  allocateIn, defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr,
-  union, xattr,
+  allocateIn, defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
-import { encodeMultipartFormData } from './multipart/encode';
-import { parseMultipartFormData } from './multipart/parse';
+import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
-import { queueFetchTask } from './tasks';
-import { InternalError } from '../infra/internal-error';
 
-/** Fetch §2.2.4: a stream and the source/length retained for replay. */
+/** A body stream and its retained replay source and length. */
+// https://fetch.spec.whatwg.org/#concept-body
 export class FetchBody {
   /** Stream supplying the body bytes; cloning replaces it with one branch of a tee. */
   stream: ReadableStreamImpl;
@@ -37,17 +33,18 @@ export class FetchBody {
     this.#env = env;
   }
 
-  /** Fetch §§2.2.4 and 5.2, safely extract an internal byte sequence as a body. */
+  /** Retain internal bytes for replay and queue a copy for delivery to the stream. */
+  // https://fetch.spec.whatwg.org/#byte-sequence-as-a-body
+  // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
   static fromBytes(bytes: Uint8Array, env: JSEnvironment): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     // The bytes are already available; only delivery to the owning loop is deferred.
-    // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-for-spec-authors
-    queueFetchTask(() => {
+    env.queueNetworkingTask(() => {
       if (bytes.length > 0 && !stream.isErrored) {
         stream.enqueueChunk(env.exec.buffers.copyUint8Array(bytes));
       }
       stream.close();
-    }, env.exec.global, env);
+    }, env.exec.global);
     const body = new FetchBody(stream, env);
     body.source = bytes;
     body.length = bytes.length;
@@ -98,6 +95,7 @@ export class FetchBody {
     return { body: FetchBody.fromBytes(getBufferSourceCopy(object), env), type: null };
   }
 
+  // https://fetch.spec.whatwg.org/#concept-body-clone
   clone(): FetchBody {
     const [out1, out2] = this.stream.teeWithCloning();
     this.stream = out1;
@@ -107,7 +105,8 @@ export class FetchBody {
     return clone;
   }
 
-  /** Fetch §2.2.4, incrementally read a body. */
+  /** Deliver copied chunks as tasks, reading the next only after the previous callback. */
+  // https://fetch.spec.whatwg.org/#body-incrementally-read
   incrementallyRead(
     processBodyChunk: (bytes: Uint8Array) => void,
     processEndOfBody: () => void,
@@ -133,16 +132,17 @@ export class FetchBody {
               readLoop();
             };
           }
-          queueFetchTask(continueAlgorithm, destination, env);
+          env.queueNetworkingTask(continueAlgorithm, destination);
         },
-        closeSteps: () => queueFetchTask(processEndOfBody, destination, env),
-        errorSteps: (error) => queueFetchTask(() => processBodyError(error), destination, env),
+        closeSteps: () => env.queueNetworkingTask(processEndOfBody, destination),
+        errorSteps: (error) => env.queueNetworkingTask(() => processBodyError(error), destination),
       });
     }
   }
 
-  /** Fetch §2.2.4, fully read a body. */
-  fullyRead(
+  /** Queue the complete bytes or read failure on the selected task destination. */
+  // https://fetch.spec.whatwg.org/#body-fully-read
+  readAll(
     processBody: (bytes: Uint8Array<ArrayBuffer>) => void,
     processBodyError: (error?: unknown) => void,
     taskDestination: GlobalObject | ParallelQueue | null = null,
@@ -150,9 +150,9 @@ export class FetchBody {
     const env = this.#env;
     const destination = taskDestination ?? new ParallelQueue(env.exec.runInParallel);
     const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
-      queueFetchTask(() => processBody(bytes), destination, env);
+      env.queueNetworkingTask(() => processBody(bytes), destination);
     const errorSteps = (error?: unknown) =>
-      queueFetchTask(() => processBodyError(error), destination, env);
+      env.queueNetworkingTask(() => processBodyError(error), destination);
     let reader: ReturnType<ReadableStreamImpl['getDefaultReader']>;
     try {
       reader = this.stream.getDefaultReader();
@@ -170,30 +170,6 @@ export type BodyWithType = {
   /** Inferred Content-Type value, or null when extraction supplies none. */
   type: string | null;
 };
-
-/**
- * Fetch §2.2.4 and RFC 9110 §8.4. The extra decoder map supplies the host's
- * supported codecs, keyed by lowercase coding names; null represents failure.
- */
-// Network fetch uses the UserAgent's per-response HTTPContentDecoder instead.
-// This complete-buffer algorithm must not be applied independently to wire chunks.
-// SPEC_MISMATCH: (codings, bytes) -> bytes or failure
-export function handleContentCodings(
-  codings: string[],
-  bytes: Uint8Array,
-  decoders: Map<string, (bytes: Uint8Array) => Uint8Array>,
-): Uint8Array | null {
-  const selected = codings.map((coding) => decoders.get(coding.toLowerCase()));
-  if (selected.some((decode) => decode === undefined)) return bytes;
-  try {
-    for (let index = selected.length - 1; index >= 0; index--) {
-      bytes = selected[index]!(bytes);
-    }
-    return bytes;
-  } catch {
-    return null;
-  }
-}
 
 /*
  * typedef (Blob or BufferSource or FormData or URLSearchParams or USVString) XMLHttpRequestBodyInit;
@@ -330,7 +306,7 @@ export class BodyMixin {
     };
     const body = this.getBody();
     if (body === null) success(new Uint8Array());
-    else body.fullyRead(success, result.reject, this.#env.exec.global);
+    else body.readAll(success, result.reject, this.#env.exec.global);
     return result.promise;
   }
 }

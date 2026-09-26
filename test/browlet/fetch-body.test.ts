@@ -68,7 +68,7 @@ describe('Fetch body delivery through HTML', () => {
     fixture.runTask();
     const process = vi.fn();
     const error = vi.fn();
-    fixture.queueTask(() => body.fullyRead(process, error, fixture.realm.global));
+    fixture.queueTask(() => body.readAll(process, error, fixture.realm.global));
 
     fixture.runTask();
     expect(process).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ class BodyConsumerImpl {
 
   full(): InternalPromise<void> {
     const result = this.env.exec.promises.withResolvers<void>();
-    this.body.fullyRead(() => result.resolve(), result.reject, this.destination);
+    this.body.readAll(() => result.resolve(), result.reject, this.destination);
     return result.promise;
   }
 

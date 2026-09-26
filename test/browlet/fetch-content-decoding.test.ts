@@ -1,14 +1,12 @@
 import { createServer } from 'node:http';
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
-import { FetchParams } from '../../src/fetch/params';
+import { Browlet } from '../../src/browlet/browlet';
 import { FetchRequest } from '../../src/fetch/request';
 import { ResponseImpl } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
-import { observe } from './streams/implementation-fixture';
 import { closeServer, listen } from './loader/http-fixture';
+import { createFetchOperation } from './fetch-fixture';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -17,10 +15,19 @@ afterEach(async () => {
 });
 
 describe('HTTP response content decoding', () => {
+  it.each([undefined, ''])('preserves bytes without allocating a decoder for Content-Encoding %j', async (coding) => {
+    const plain = 'no content coding';
+    const f = await fixture(Buffer.from(plain), coding);
+    expect(await f.text()).toBe(plain);
+    expect(f.createDecoder).not.toHaveBeenCalled();
+    expect(f.response.bodyInfo).toMatchObject({ encodedSize: plain.length, decodedSize: plain.length });
+  });
+
   it.each([
     ['gzip', gzipSync], ['deflate', deflateSync], ['br', brotliCompressSync],
     ['x-gzip', gzipSync], ['X-GZip', gzipSync],
     ['gzip, br', (bytes: Buffer) => brotliCompressSync(gzipSync(bytes))],
+    ['GZip, BR', (bytes: Buffer) => brotliCompressSync(gzipSync(bytes))],
     ['x-gzip, br', (bytes: Buffer) => brotliCompressSync(gzipSync(bytes))],
   ] as const)('decodes %s across wire chunks and records encoded and decoded lengths', async (coding, encode) => {
     const plain = Buffer.from('one response, multiple chunks: '.repeat(64));
@@ -34,29 +41,10 @@ describe('HTTP response content decoding', () => {
     });
   });
 
-  it('does not partially decode a list containing an unsupported coding', async () => {
-    const bytes = gzipSync(Buffer.from('leave encoded'));
-    const f = await fixture(bytes, 'unsupported, gzip');
-    expect(await f.browlet.evaluate(async () => {
-      const response = (globalThis as unknown as NetworkPage).networkResponse;
-      return Array.from(new Uint8Array(await response.arrayBuffer()));
-    })).toEqual([...bytes]);
-    expect(f.response.bodyInfo.decodedSize).toBe(bytes.length);
-  });
-
-  it('delivers a coding failure as the consuming page\'s TypeError', async () => {
-    const f = await fixture(Buffer.from('invalid gzip bytes'), 'gzip');
-    expect(await f.browlet.evaluate(async () => {
-      try { await (globalThis as unknown as NetworkPage).networkResponse.text(); return false; }
-      catch (error) { return error instanceof TypeError; }
-    })).toBe(true);
-    expect(f.params.controller.state).toBe('terminated');
-  });
-
   it('finishes empty encoded responses without asking a codec to decode nonexistent bytes', async () => {
     const f = await fixture(Buffer.alloc(0), 'gzip');
     expect(await f.text()).toBe('');
-    expect(f.params.controller.state).toBe('ongoing');
+    expect(f.operation.controller.state).toBe('ongoing');
   });
 
   it('bounds decoded expansion while unread and resumes without losing bytes', async () => {
@@ -79,11 +67,39 @@ describe('HTTP response content decoding', () => {
     })).toBe(plain.length);
     expect(f.response.bodyInfo.decodedSize).toBe(plain.length);
   });
+
+  it.each(['unsupported', 'unsupported, gzip', 'gzip, unsupported'])(
+    'leaves the entire body encoded without allocating a decoder for %s', async (coding) => {
+      const bytes = gzipSync(Buffer.from('leave encoded'));
+      const f = await fixture(bytes, coding);
+      expect(await f.browlet.evaluate(async () => {
+        const response = (globalThis as unknown as NetworkPage).networkResponse;
+        return Array.from(new Uint8Array(await response.arrayBuffer()));
+      })).toEqual([...bytes]);
+      expect(f.createDecoder).not.toHaveBeenCalled();
+      expect(f.response.bodyInfo.decodedSize).toBe(bytes.length);
+    },
+  );
+
+  it.each([
+    { name: 'corrupt gzip', coding: 'gzip', bytes: Buffer.from('invalid gzip bytes') },
+    { name: 'truncated gzip', coding: 'gzip', bytes: gzipSync(Buffer.from('unfinished')).subarray(0, 10) },
+    { name: 'outer coding failure', coding: 'deflate, gzip', bytes: Buffer.from('invalid gzip bytes') },
+    { name: 'inner coding failure', coding: 'deflate, gzip', bytes: gzipSync(Buffer.from('invalid deflate bytes')) },
+  ])('terminates $name with the consuming page\'s TypeError and no decoded bytes', async ({ coding, bytes }) => {
+    const f = await fixture(bytes, coding);
+    expect(await f.browlet.evaluate(async () => {
+      try { await (globalThis as unknown as NetworkPage).networkResponse.text(); return false; }
+      catch (error) { return error instanceof TypeError; }
+    })).toBe(true);
+    expect(f.operation.controller.state).toBe('terminated');
+    expect(f.response.bodyInfo.decodedSize).toBe(0);
+  });
 });
 
-async function fixture(bytes: Buffer, coding: string) {
+async function fixture(bytes: Buffer, coding?: string) {
   const server = createServer((_request, response) => {
-    response.writeHead(200, { 'Content-Encoding': coding });
+    response.writeHead(200, coding === undefined ? {} : { 'Content-Encoding': coding });
     // A deterministic split ensures the adapter is not given one complete compressed message.
     const midpoint = Math.max(1, Math.floor(bytes.length / 2));
     response.write(bytes.subarray(0, midpoint));
@@ -92,8 +108,10 @@ async function fixture(bytes: Buffer, coding: string) {
   const origin = await listen(server);
   cleanup.push(() => closeServer(server));
   const browlet = new Browlet({ route: () => '', reporting: false });
+  await browlet.navigate(origin);
   const realm = getRelevantRealm(browlet.window);
   const env = realm.env;
+  const createDecoder = vi.spyOn(env.userAgent, 'createContentDecoder');
   cleanup.push(() => env.userAgent.httpTransport.close());
   const paused = Promise.withResolvers<void>();
   const transport = env.userAgent.httpTransport;
@@ -103,12 +121,14 @@ async function fixture(bytes: Buffer, coding: string) {
     return { ...control, pause() { control.pause(); paused.resolve(); } };
   });
   const request = new FetchRequest(env.parseURL(origin).url!, env, env.userAgent);
-  const params = new FetchParams(request, new FetchTimingInfo(), env);
-  const response = await observe(params.httpNetworkFetch());
+  request.populateFromClient();
+  request.cacheMode = 'no-store';
+  const operation = createFetchOperation(request, env);
+  const response = await operation.start();
   const context = getBindingContext(realm);
   Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
   const text = () => browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text());
-  return { browlet, env, params, response, text, paused: paused.promise };
+  return { browlet, env, operation, response, text, createDecoder, paused: paused.promise };
 }
 
 interface NetworkPage { networkResponse: Response; }

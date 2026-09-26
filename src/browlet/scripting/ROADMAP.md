@@ -12,8 +12,9 @@
 - The composition root's `createWindowEnvironment()` shares Window, realm,
   execution, and global-scope initialization between the initial browsing-context
   and navigation paths. It returns a `WindowEnvironment` with required `realm`,
-  `exec`, and `window` fields. A plain `EnvironmentRecord` supplies security and
-  navigation state before the realm exists.
+  `exec`, and `window` fields. The `EnvironmentRecord` base class supplies security,
+  navigation state, and network partitioning before the realm exists; full
+  `Environment` objects inherit those fields and operations.
 - Each `EnvironmentRecord` and full `Environment` retains its owning UserAgent. Window creation/navigation
   supplies the target group's owner; this reference does not depend on a live
   Document or browsing-context association. Settings objects satisfy Fetch's

@@ -11,7 +11,7 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
-describe('Public fetch', () => {
+describe('Public fetch requests and responses', () => {
   it('returns realm-owned promises, responses, headers, streams, and bytes', async () => {
     const { browlet, origin } = await fixture((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'text/plain', 'X-Visible': 'yes', 'Set-Cookie': 'secret=value' });
@@ -39,6 +39,85 @@ describe('Public fetch', () => {
     });
   });
 
+  it('transfers a Request body into fetch and prevents reuse', async () => {
+    const { browlet } = await fixture((request, response) => request.pipe(response));
+    expect(await browlet.evaluate(async () => {
+      const request = new Request('/echo', { method: 'POST', body: 'payload' });
+      const response = await fetch(request);
+      let rejected = false;
+      try { await fetch(request); } catch (error) { rejected = error instanceof TypeError; }
+      return [await response.text(), request.bodyUsed, rejected];
+    })).toEqual(['payload', true, true]);
+  });
+
+  it('resolves at headers and reads the body as it arrives', async () => {
+    const pending = Promise.withResolvers<ServerResponse>();
+    const { browlet } = await fixture((_request, response) => {
+      response.writeHead(200); response.flushHeaders(); pending.resolve(response);
+    });
+    expect(await browlet.evaluate(async () => {
+      const response = await fetch('/stream');
+      (globalThis as unknown as FetchPage).reader = response.body!.getReader();
+      return response.status;
+    })).toBe(200);
+    const response = await pending.promise;
+    const read = browlet.evaluate(async () => {
+      const { value, done } = await (globalThis as unknown as FetchPage).reader.read();
+      return [new TextDecoder().decode(value), done];
+    });
+    response.write('first');
+    expect(await read).toEqual(['first', false]);
+    const final = browlet.evaluate(() => (globalThis as unknown as FetchPage).reader.read().then(({ done }) => done));
+    response.end();
+    expect(await final).toBe(true);
+  });
+
+  it('follows redirects, exposes manual redirects opaquely, and rejects redirect errors', async () => {
+    const { browlet } = await fixture((request, response) => {
+      if (request.url === '/redirect') response.writeHead(302, { Location: '/final' });
+      response.end('final body');
+    });
+    expect(await browlet.evaluate(async () => {
+      const followed = await fetch('/redirect');
+      const manual = await fetch('/redirect', { redirect: 'manual' });
+      let rejected = false;
+      try { await fetch('/redirect', { redirect: 'error' }); } catch (error) { rejected = error instanceof TypeError; }
+      return [followed.redirected, await followed.text(), manual.type, manual.status, manual.body, [...manual.headers], rejected];
+    })).toEqual([true, 'final body', 'opaqueredirect', 0, null, [], true]);
+  });
+
+  it('applies CORS filtering and returns opaque no-cors responses', async () => {
+    const { origin } = await fixture((_request, response) => {
+      response.writeHead(200, {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'X-Visible',
+        'X-Visible': 'yes', 'X-Hidden': 'no',
+      });
+      response.end('cross origin');
+    });
+    const { browlet } = await fixture((_request, response) => response.end());
+    expect(await browlet.evaluate(async (origin) => {
+      const response = await fetch(`${origin}/cors`);
+      const opaque = await fetch(`${origin}/opaque`, { mode: 'no-cors' });
+      return [response.type, response.headers.get('X-Visible'), response.headers.get('X-Hidden'), await response.text(),
+        opaque.type, opaque.status, opaque.body, [...opaque.headers]];
+    }, origin)).toEqual(['cors', 'yes', null, 'cross origin', 'opaque', 0, null, []]);
+  });
+
+  it('preserves HTTP error statuses while rejecting network failures', async () => {
+    const { browlet } = await fixture((request, response) => {
+      if (request.url === '/disconnect') { response.destroy(); return; }
+      response.writeHead(404); response.end('missing');
+    });
+    expect(await browlet.evaluate(async () => {
+      const response = await fetch('/missing');
+      let networkError = false;
+      try { await fetch('/disconnect'); } catch (error) { networkError = error instanceof TypeError; }
+      return [response.status, response.ok, await response.text(), networkError];
+    })).toEqual([404, false, 'missing', true]);
+  });
+});
+
+describe('Public fetch binding and realm ownership', () => {
   it('uses the initial Request implementation and returns a fresh promise on every call', async () => {
     const { browlet } = await fixture((_request, response) => response.end('hello'));
     expect(await browlet.evaluate(async () => {
@@ -89,40 +168,9 @@ describe('Public fetch', () => {
       catch (error) { return [p instanceof otherWindow.Promise, error instanceof otherWindow.TypeError]; }
     })).toEqual([true, true]);
   });
+});
 
-  it('transfers a Request body into fetch and prevents reuse', async () => {
-    const { browlet } = await fixture((request, response) => request.pipe(response));
-    expect(await browlet.evaluate(async () => {
-      const request = new Request('/echo', { method: 'POST', body: 'payload' });
-      const response = await fetch(request);
-      let rejected = false;
-      try { await fetch(request); } catch (error) { rejected = error instanceof TypeError; }
-      return [await response.text(), request.bodyUsed, rejected];
-    })).toEqual(['payload', true, true]);
-  });
-
-  it('resolves at headers and reads the body as it arrives', async () => {
-    const pending = Promise.withResolvers<ServerResponse>();
-    const { browlet } = await fixture((_request, response) => {
-      response.writeHead(200); response.flushHeaders(); pending.resolve(response);
-    });
-    expect(await browlet.evaluate(async () => {
-      const response = await fetch('/stream');
-      (globalThis as unknown as FetchPage).reader = response.body!.getReader();
-      return response.status;
-    })).toBe(200);
-    const response = await pending.promise;
-    const read = browlet.evaluate(async () => {
-      const { value, done } = await (globalThis as unknown as FetchPage).reader.read();
-      return [new TextDecoder().decode(value), done];
-    });
-    response.write('first');
-    expect(await read).toEqual(['first', false]);
-    const final = browlet.evaluate(() => (globalThis as unknown as FetchPage).reader.read().then(({ done }) => done));
-    response.end();
-    expect(await final).toBe(true);
-  });
-
+describe('Public fetch cancellation and lifetime', () => {
   it.each(['before fetch', 'after fetch'])('preserves the local abort reason %s without sending a request', async (when) => {
     let received = 0;
     const { browlet } = await fixture((_request, response) => { received++; response.end(); });
@@ -221,50 +269,6 @@ describe('Public fetch', () => {
       await response.body!.cancel(); return response.bodyUsed;
     })).toBe(true);
     await closed.promise;
-  });
-
-  it('follows redirects, exposes manual redirects opaquely, and rejects redirect errors', async () => {
-    const { browlet } = await fixture((request, response) => {
-      if (request.url === '/redirect') response.writeHead(302, { Location: '/final' });
-      response.end('final body');
-    });
-    expect(await browlet.evaluate(async () => {
-      const followed = await fetch('/redirect');
-      const manual = await fetch('/redirect', { redirect: 'manual' });
-      let rejected = false;
-      try { await fetch('/redirect', { redirect: 'error' }); } catch (error) { rejected = error instanceof TypeError; }
-      return [followed.redirected, await followed.text(), manual.type, manual.status, manual.body, [...manual.headers], rejected];
-    })).toEqual([true, 'final body', 'opaqueredirect', 0, null, [], true]);
-  });
-
-  it('applies CORS filtering and returns opaque no-cors responses', async () => {
-    const { origin } = await fixture((_request, response) => {
-      response.writeHead(200, {
-        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'X-Visible',
-        'X-Visible': 'yes', 'X-Hidden': 'no',
-      });
-      response.end('cross origin');
-    });
-    const { browlet } = await fixture((_request, response) => response.end());
-    expect(await browlet.evaluate(async (origin) => {
-      const response = await fetch(`${origin}/cors`);
-      const opaque = await fetch(`${origin}/opaque`, { mode: 'no-cors' });
-      return [response.type, response.headers.get('X-Visible'), response.headers.get('X-Hidden'), await response.text(),
-        opaque.type, opaque.status, opaque.body, [...opaque.headers]];
-    }, origin)).toEqual(['cors', 'yes', null, 'cross origin', 'opaque', 0, null, []]);
-  });
-
-  it('preserves HTTP error statuses while rejecting network failures', async () => {
-    const { browlet } = await fixture((request, response) => {
-      if (request.url === '/disconnect') { response.destroy(); return; }
-      response.writeHead(404); response.end('missing');
-    });
-    expect(await browlet.evaluate(async () => {
-      const response = await fetch('/missing');
-      let networkError = false;
-      try { await fetch('/disconnect'); } catch (error) { networkError = error instanceof TypeError; }
-      return [response.status, response.ok, await response.text(), networkError];
-    })).toEqual([404, false, 'missing', true]);
   });
 
   it('rejects pending requests and body readers when the browser shuts down its transport', async () => {

@@ -8,11 +8,11 @@ interfaces, and realm bindings.
 The named functions exported by `bindings.ts` forward to its main
 `BrowletBindings` instance. `createWindowEnvironment()` constructs the Window,
 allocates its realm and execution facilities, and installs its platform global.
-The Realm initially reads security from a plain `EnvironmentRecord`. After Web
-IDL installation, the composition root constructs and publishes the complete
-`WindowEnvironment`, which owns `realm`, `exec`, and `window`, and constructs its
-shared global-scope mixin. The Document lifecycle algorithms retain their own
-initialization. `createDocument()` obtains the node factory and
+The Realm initially reads security from an `EnvironmentRecord` instance.
+Registration constructs the complete `WindowEnvironment` before global projection;
+it inherits the record state and adds `realm`, `exec`, and `window`. The composition
+root then constructs its shared global-scope mixin. The Document lifecycle
+algorithms retain their own initialization. `createDocument()` obtains the node factory and
 Stylelet execution facilities through Document's existing construction declaration. Record
 creation initializes its realm-owned event factory without projecting it.
 The mixin uses `env.exec.clone()` and derives timer ownership from

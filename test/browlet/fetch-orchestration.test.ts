@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Browlet } from '../../src/browlet/browlet';
 import { getRelevantRealm } from '../../src/browlet/bindings';
+import { Browlet } from '../../src/browlet/browlet';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../src/browlet/browsing/policy/csp/policy';
 import { FetchBody } from '../../src/fetch/body';
 import { fetch } from '../../src/fetch/fetch';
-import { FetchParams } from '../../src/fetch/params';
 import { FetchRequest, type Destination } from '../../src/fetch/request';
 import { FetchResponse, isFilteredResponse } from '../../src/fetch/response';
-import { FetchTimingInfo } from '../../src/fetch/timing';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
+import { mockHTTPTransport } from '../fetch/transport-fixture';
+
+import { createFetchOperation } from './fetch-fixture';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -119,15 +120,14 @@ describe('Fetch entry', () => {
     request.destination = 'report';
     request.localURLsOnly = true;
     request.body = Uint8Array.of(3, 4);
-    const entry = vi.spyOn(FetchParams.prototype, 'mainFetch');
+    const queued = vi.spyOn(ParallelQueue.prototype, 'enqueue');
     const done = Promise.withResolvers<void>();
     fetch(request, { useParallelQueue: true, processResponseEndOfBody: () => done.resolve() }, env);
-    const params = entry.mock.contexts[0] as FetchParams;
-    expect(params.env).toBe(env);
-    expect(params.taskDestination).toBeInstanceOf(ParallelQueue);
-    expect(params.crossOriginIsolatedCapability).toBe(false);
     expect(request.body).toBeInstanceOf(FetchBody);
+    expect(request.body).toHaveProperty('stream.env', env);
     await done.promise;
+    expect(queued).toHaveBeenCalled();
+    expect(queued.mock.contexts.every((queue) => queue instanceof ParallelQueue)).toBe(true);
   });
 
   it('rejects Early Hints callbacks outside navigation before changing the request', async () => {
@@ -140,7 +140,7 @@ describe('Fetch entry', () => {
 
 describe('Main fetch policy and dispatch', () => {
   it('reports the original URL, enforces after upgrades, and dispatches the upgraded URL', async () => {
-    const { params, request, env } = await createFixture('http://example.test/image');
+    const { operation, request, env, override } = await createFixture('http://example.test/image');
     env.insecureRequestsPolicy.upgrade = true;
     const list = new CSPList(env.origin);
     list.policies.push(ContentSecurityPolicy.parse('img-src https:', 'header', 'enforce'));
@@ -159,14 +159,14 @@ describe('Main fetch policy and dispatch', () => {
       return block(value);
     });
     request.populateFromClient();
-    await complete(params);
+    await complete(operation);
     expect(urls).toEqual(['report:http://example.test/image', 'block:https://example.test/image']);
-    expect(params.dispatches).toEqual([['scheme-fetch', false]]);
+    expect(override).toHaveBeenCalledExactlyOnceWith(request, env);
   });
 
   it.each(['local', 'port', 'csp', 'same-origin', 'no-cors-redirect'] as const)(
     'returns a network error without dispatch for %s blocking', async (kind) => {
-      const { params, request, env } = await createFixture('https://other.test/resource');
+      const { operation, request, env, override } = await createFixture('https://other.test/resource');
       if (kind === 'local') request.localURLsOnly = true;
       if (kind === 'port') request.currentURL.port = 25;
       if (kind === 'csp') {
@@ -177,204 +177,266 @@ describe('Main fetch policy and dispatch', () => {
       if (kind === 'same-origin') request.mode = 'same-origin';
       if (kind === 'no-cors-redirect') request.redirectMode = 'error';
       request.populateFromClient();
-      const { response } = await complete(params);
+      const { response } = await complete(operation);
       expect(response.type).toBe('error');
-      expect(params.dispatches).toEqual([]);
+      expect(override).not.toHaveBeenCalled();
     },
   );
 
   it('selects a referrer before applying HSTS', async () => {
-    const { params, request, agent } = await createFixture('http://example.test/resource');
+    const { operation, request, agent } = await createFixture('http://example.test/resource');
     request.client = null;
     request.origin = obtainURLOrigin(parseURL('http://example.test/').url!);
+    request.destination = 'document';
+    request.mode = 'navigate';
+    operation.options.useParallelQueue = true;
     request.referrer = parseURL('https://example.test/page').url!;
     const referrer = vi.spyOn(agent, 'determineRequestReferrer');
     // Supply an already-known policy rather than a transport response in this orchestration test.
     vi.spyOn(agent.hstsStore, 'requiresHTTPS').mockReturnValue(true);
     request.populateFromClient();
-    await complete(params);
+    await complete(operation);
     expect(referrer).toHaveBeenCalledOnce();
     expect(request.referrer).toBeNull();
     expect(request.currentURL.scheme).toBe('https');
   });
 
-  it('returns recursive responses without filtering or running completion callbacks', async () => {
-    const { params, request } = await createFixture();
-    request.populateFromClient();
-    params.processResponse = vi.fn();
-    const response = await new Promise<FetchResponse>((resolve, reject) => params.mainFetch(true).observe(resolve, reject));
-    expect(response).toBe(params.response);
-    expect(response.type).toBe('default');
-    expect(params.processResponse).not.toHaveBeenCalled();
+  it('delivers only the final response after recursive redirect dispatch', async () => {
+    const { operation, request, agent, override } = await createFixture();
+    override.mockReturnValue(null);
+    const reachedFinal = Promise.withResolvers<void>();
+    let finish!: () => void;
+    mockHTTPTransport(agent, (wire, listener) => {
+      if (wire.url.path.at(-1) !== 'final') {
+        const response = new FetchResponse();
+        response.headerList.append('Location', '/final');
+        listener.onHeaders(302, '', response.headerList, false);
+        listener.onEnd();
+      } else {
+        finish = () => { listener.onHeaders(201, '', new FetchResponse().headerList, false); listener.onEnd(); };
+        reachedFinal.resolve();
+      }
+    });
+    const delivered = vi.fn();
+    operation.options.processResponse = delivered;
+    const pending = operation.start();
+    await reachedFinal.promise;
+    expect(delivered).not.toHaveBeenCalled();
     expect(request.done).toBe(false);
+    finish();
+    expect(await pending).toMatchObject({ type: 'basic', status: 201 });
+    expect(delivered).toHaveBeenCalledOnce();
   });
 
   it('requests a CORS preflight for unsafe headers and clears failed preflight entries', async () => {
-    const { params, request, agent } = await createFixture('https://other.test/resource');
+    const { operation, request, agent, override } = await createFixture('https://other.test/resource');
     request.mode = 'cors';
     request.unsafeRequest = true;
     request.headerList.append('X-Private', 'value');
     request.populateFromClient();
-    params.response = FetchResponse.networkError();
-    await complete(params);
-    expect(params.dispatches).toEqual([['http-fetch', true]]);
+    override.mockReturnValue(null);
+    const wire = mockHTTPTransport(agent, (_request, listener) => listener.onError(new Error('preflight failed')));
+    await complete(operation);
+    expect(wire.mock.calls.map(([request]) => request.method)).toEqual(['OPTIONS']);
     expect(agent.corsPreflightCache.clearEntries).toHaveBeenCalledExactlyOnceWith(request);
   });
 });
 
 describe('Main fetch response processing', () => {
   it.each(['same-origin', 'include'] as const)('exposes wildcard CORS headers with credentials mode %s', async (credentials) => {
-    const { params, request } = await createFixture('https://other.test/resource');
+    const { operation, request, reply } = await createFixture('https://other.test/resource');
     request.mode = 'cors';
     request.credentialsMode = credentials;
     request.populateFromClient();
-    params.response.headerList.append('Access-Control-Expose-Headers', '*');
-    params.response.headerList.append('X-Private', 'value');
-    params.response.headerList.append('Set-Cookie', 'secret=1');
-    const { response } = await complete(params);
+    reply.response.headerList.append('Access-Control-Expose-Headers', '*');
+    reply.response.headerList.append('X-Private', 'value');
+    reply.response.headerList.append('Set-Cookie', 'secret=1');
+    const { response } = await complete(operation);
     expect(response.type).toBe('cors');
     expect(response.headerList.get('X-Private')).toBe(credentials === 'include' ? null : 'value');
     expect(response.headerList.get('Set-Cookie')).toBeNull();
   });
 
   it('rejects a malformed expose-headers field as a whole', async () => {
-    const { params, request } = await createFixture('https://other.test/resource');
+    const { operation, request, reply } = await createFixture('https://other.test/resource');
     request.mode = 'cors';
     request.populateFromClient();
-    params.response.headerList.append('Access-Control-Expose-Headers', 'X-Private, "bad"');
-    params.response.headerList.append('X-Private', 'value');
-    const { response } = await complete(params);
+    reply.response.headerList.append('Access-Control-Expose-Headers', 'X-Private, "bad"');
+    reply.response.headerList.append('X-Private', 'value');
+    const { response } = await complete(operation);
     expect(response.headerList.get('X-Private')).toBeNull();
   });
 
   it('fills URL history before CSP checks and preserves an existing filtered response', async () => {
-    const { params, request, env } = await createFixture();
+    const { operation, request, env, reply } = await createFixture();
     const list = new CSPList(env.origin);
     request.policyContainer = env.policyContainer.clone();
     request.policyContainer.cspList = list;
     request.populateFromClient();
-    const raw = params.response;
+    const raw = reply.response;
     const check = vi.spyOn(list, 'isResponseBlocked').mockImplementation((response) => {
       expect(response.urlList).toEqual(request.urlList);
       return false;
     });
-    params.response = raw.filter('basic');
-    const { response } = await complete(params);
+    reply.response = raw.filter('basic');
+    const { response } = await complete(operation);
     expect(check).toHaveBeenCalledExactlyOnceWith(raw, request);
-    expect(response).toBe(params.response);
+    expect(response).toBe(reply.response);
     expect(raw.urlList).not.toBe(request.urlList);
   });
 
   it.each(['mime', 'nosniff', 'unsolicited-range'] as const)('blocks a response for %s', async (kind) => {
-    const { params, request } = await createFixture('https://other.test/resource');
+    const { operation, request, reply } = await createFixture('https://other.test/resource');
     request.destination = 'script';
     request.populateFromClient();
-    if (kind === 'mime') params.response.headerList.append('Content-Type', 'image/png');
-    if (kind === 'nosniff') params.response.headerList.append('X-Content-Type-Options', 'nosniff');
-    if (kind === 'unsolicited-range') { params.response.status = 206; params.response.rangeRequested = true; }
-    expect((await complete(params)).response.type).toBe('error');
+    if (kind === 'mime') reply.response.headerList.append('Content-Type', 'image/png');
+    if (kind === 'nosniff') reply.response.headerList.append('X-Content-Type-Options', 'nosniff');
+    if (kind === 'unsolicited-range') { reply.response.status = 206; reply.response.rangeRequested = true; }
+    expect((await complete(operation)).response.type).toBe('error');
   });
 
   it.each(['HEAD', 'CONNECT', '204'] as const)('discards the body for %s before consumption', async (kind) => {
-    const { params, request, env } = await createFixture();
-    if (kind === '204') params.response.status = 204;
+    const { operation, request, env, reply } = await createFixture();
+    if (kind === '204') reply.response.status = 204;
     else request.method = kind;
     request.populateFromClient();
-    params.response.body = FetchBody.fromBytes(Uint8Array.of(1), env);
-    expect((await complete(params)).body).toBeNull();
+    reply.response.body = FetchBody.fromBytes(Uint8Array.of(1), env);
+    expect((await complete(operation)).body).toBeNull();
   });
 
   it.each([true, false])('checks SRI before delivering response bytes: matching = %s', async (matching) => {
-    const { params, request, env } = await createFixture();
+    const { operation, request, env, reply } = await createFixture();
     const bytes = Uint8Array.of(1, 2, 3);
     request.integrityMetadata = `sha256-${createHash('sha256').update(matching ? bytes : Uint8Array.of(9)).digest('base64')}`;
     request.populateFromClient();
-    params.response.body = FetchBody.fromBytes(bytes, env);
-    const result = await complete(params);
+    reply.response.body = FetchBody.fromBytes(bytes, env);
+    const result = await complete(operation);
     expect(result.response.type).toBe(matching ? 'basic' : 'error');
     expect(result.body).toEqual(matching ? bytes : null);
     expect(result.events).toEqual(['response', 'end', 'consume']);
   });
 
   it('rejects an opaque response with integrity metadata even when its internal bytes match', async () => {
-    const { params, request, env } = await createFixture('https://other.test/resource');
+    const { operation, request, env, reply } = await createFixture('https://other.test/resource');
     const bytes = Uint8Array.of(1, 2, 3);
     request.integrityMetadata = `sha256-${createHash('sha256').update(bytes).digest('base64')}`;
     request.populateFromClient();
-    params.response.body = FetchBody.fromBytes(bytes, env);
-    const result = await complete(params);
+    reply.response.body = FetchBody.fromBytes(bytes, env);
+    const result = await complete(operation);
     expect(result.response.type).toBe('error');
     expect(result.body).toBeNull();
   });
+});
 
-  it('reports body-read failure to the consume callback', async () => {
-    const { params, request, env } = await createFixture();
+describe('Fetch body completion', () => {
+  it.each(['drain', 'empty', 'already-closed', 'cancel', 'error'] as const)('preserves the body stream and completes once for %s', async (mode) => {
+    const { env, request, operation, reply } = await createFixture();
+    const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env);
+    reply.response.body = new FetchBody(stream, env);
+    if (mode === 'already-closed') stream.close();
+    const run = (steps: () => void) => new Promise<void>((resolve, reject) => env.queueNetworkingTask(() => {
+      try { steps(); resolve(); }
+      catch (error) { reject(new Error('Body task failed', { cause: error })); }
+    }, env.exec.global));
+    const events: string[] = [];
+    operation.options.processResponse = () => { events.push('response'); };
+    operation.options.processResponseEndOfBody = () => { events.push('end'); };
+    const delivered = await operation.start();
+    expect(delivered.body!.stream).toBe(stream);
+    if (mode === 'drain') {
+      await run(() => { stream.enqueueChunk(Uint8Array.of(1, 2, 3)); stream.close(); });
+      expect(events).toEqual(['response']);
+      expect(request.done).toBe(false);
+      const bytes = await new Promise((resolve, reject) => env.queueNetworkingTask(() => {
+        stream.getDefaultReader().readAllBytes(resolve, reject);
+      }, env.exec.global));
+      expect(bytes).toEqual(Uint8Array.of(1, 2, 3));
+    } else if (mode === 'cancel') {
+      await run(() => { stream.cancelInternal('stop').observe(() => {}, () => {}); });
+    } else if (mode === 'error') {
+      await run(() => stream.error('failure'));
+    } else if (mode === 'empty') {
+      await run(() => stream.close());
+    }
+    await vi.waitFor(() => expect(events).toEqual(['response', 'end']));
+    expect(request.done).toBe(true);
+  });
+
+  it('finishes the request while reporting body-read failure to the consume callback', async () => {
+    const { operation, request, env, reply } = await createFixture();
     request.populateFromClient();
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     stream.error(new Error('body failed'));
-    params.response.body = new FetchBody(stream, env);
-    const result = await complete(params);
+    reply.response.body = new FetchBody(stream, env);
+    const result = await complete(operation);
     expect(result.body).toBe('failure');
-    expect(result.events).toEqual(['response', 'consume']);
+    // SPEC_CLASH(fetch-body-completion): Errors finish the operation without becoming successful reads.
+    expect(result.events).toEqual(['response', 'end', 'consume']);
+    expect(request.done).toBe(true);
   });
 });
 
 describe('Fetch timing handover', () => {
   it('retains Server-Timing for secure clients and supplies the selected environment to Resource Timing', async () => {
-    const { params, request, env } = await createFixture();
-    const mark = vi.fn();
-    Object.assign(env, { markResourceTiming: mark });
+    const { operation, request, env, reply } = await createFixture();
+    const mark = vi.spyOn(env, 'markResourceTiming');
     request.initiatorType = 'fetch';
     request.populateFromClient();
-    params.response.headerList.append('Server-Timing', 'db;dur=4, app;dur=2');
-    params.response.headerList.append('Content-Type', 'application/problem+json; charset=utf-8');
-    params.response.cacheUsage = 'validated';
-    await complete(params);
-    expect(params.timingInfo.serverTimingHeaders).toEqual(['db;dur=4', 'app;dur=2']);
-    expect(params.timingInfo.endTime).toBeGreaterThanOrEqual(0);
+    reply.response.headerList.append('Server-Timing', 'db;dur=4, app;dur=2');
+    reply.response.headerList.append('Content-Type', 'application/problem+json; charset=utf-8');
+    reply.response.cacheUsage = 'validated';
+    await complete(operation);
+    const timing = mark.mock.calls[0]![0];
+    expect(timing.serverTimingHeaders).toEqual(['db;dur=4', 'app;dur=2']);
+    expect(timing.endTime).toBeGreaterThanOrEqual(0);
     expect(mark).toHaveBeenCalledExactlyOnceWith(
-      params.timingInfo, request.url, 'fetch', 'validated', params.response.bodyInfo, 200,
+      timing, request.url, 'fetch', 'validated', reply.response.bodyInfo, 200,
     );
-    expect(params.response.bodyInfo.contentType).toBe('application/json');
+    expect(reply.response.bodyInfo.contentType).toBe('application/json');
   });
 
   it('makes failed timing checks opaque and removes cache classification', async () => {
-    const { params, request, env } = await createFixture();
-    const mark = vi.fn();
-    Object.assign(env, { markResourceTiming: mark });
+    const { operation, request, env, agent, override } = await createFixture();
+    const mark = vi.spyOn(env, 'markResourceTiming');
     request.initiatorType = 'fetch';
     request.timingAllowFailed = true;
     request.populateFromClient();
-    params.timingInfo.startTime = 23;
-    params.timingInfo.finalNetworkRequestStartTime = 99;
-    params.response.cacheUsage = 'local';
-    await complete(params);
+    request.mode = 'navigate';
+    request.destination = 'document';
+    const clock = vi.spyOn(agent, 'unsafeSharedCurrentTime').mockReturnValue(23);
+    override.mockReturnValue(null);
+    mockHTTPTransport(agent, (_request, listener) => {
+      clock.mockReturnValue(99);
+      listener.onResponseStarted!();
+      listener.onHeaders(200, '', new FetchResponse().headerList, false);
+      listener.onEnd();
+    });
+    await complete(operation);
     expect(mark.mock.calls[0]![0]).toMatchObject({
       startTime: 23, postRedirectStartTime: 23, finalNetworkRequestStartTime: 0, endTime: 0,
     });
     expect(mark.mock.calls[0]![3]).toBeUndefined();
-    expect(params.timingInfo.finalNetworkRequestStartTime).toBe(99);
+    expect(operation.controller.extractFullTimingInfo().finalNetworkResponseStartTime).toBe(99);
   });
 
   it('retains full document timing without automatically reporting a parallel-destination fetch', async () => {
-    const { params, request, env, agent } = await createFixture();
+    const { operation, request, env } = await createFixture();
     request.destination = 'document';
     request.mode = 'navigate';
     request.initiatorType = 'other';
     request.populateFromClient();
-    const mark = vi.fn();
-    Object.assign(env, { markResourceTiming: mark });
-    params.taskDestination = new ParallelQueue(agent.runInParallel);
-    await complete(params);
-    expect(params.controller.extractFullTimingInfo()).toBe(params.timingInfo);
+    const mark = vi.spyOn(env, 'markResourceTiming');
+    operation.options.useParallelQueue = true;
+    await complete(operation);
+    expect(operation.controller.extractFullTimingInfo().startTime).toBeGreaterThan(0);
     expect(mark).not.toHaveBeenCalled();
-    params.controller.reportTiming(env);
+    operation.controller.reportTiming(env);
     expect(mark).toHaveBeenCalledOnce();
   });
 });
 
 // The actual Window, bindings, stream machinery, clock, and event loop remain in use.
-// Only provisional owner algorithms and the later scheme/HTTP stages are controlled.
+// Browser response overrides supply the response being processed.
 async function createFixture(url = 'https://example.test/resource') {
   const browlet = new Browlet({ route: () => '', reporting: false });
   await browlet.navigate('https://example.test/page');
@@ -386,7 +448,9 @@ async function createFixture(url = 'https://example.test/resource') {
     webDriverBiDiFetchError: vi.fn(),
     webDriverBiDiResponseCompleted: vi.fn(),
     determineFetchPriority: vi.fn(() => ({ update: vi.fn() })),
-    corsPreflightCache: { clearEntries: vi.fn() },
+    corsPreflightCache: Object.assign(env.userAgent.corsPreflightCache, {
+      clearEntries: vi.spyOn(env.userAgent.corsPreflightCache, 'clearEntries'),
+    }),
     supportsMIMEType: () => true,
   });
   const preload = vi.fn<(
@@ -395,43 +459,30 @@ async function createFixture(url = 'https://example.test/resource') {
   ) => boolean>(() => false);
   Object.assign(env, { consumePreloadedResource: preload });
   const request = new FetchRequest(parseURL(url).url!, env, agent);
-  const params = new ControlledFetchParams(request, new FetchTimingInfo(), env);
-  params.taskDestination = env.exec.global;
-  return { env, agent, request, params, preload };
+  const operation = createFetchOperation(request, env);
+  const reply = { response: new FetchResponse() };
+  const override = vi.spyOn(agent, 'potentiallyOverrideResponse').mockImplementation(() => reply.response);
+  operation.options.useParallelQueue = false;
+  return { env, agent, request, operation, preload, reply, override };
 }
 
-class ControlledFetchParams extends FetchParams {
-  response = new FetchResponse();
-  dispatches: [string, boolean][] = [];
-
-  override schemeFetch() {
-    this.dispatches.push(['scheme-fetch', false]);
-    return this.request.userAgent.hostPromises.resolve(this.response);
-  }
-
-  override httpFetch(preflight = false) {
-    this.dispatches.push(['http-fetch', preflight]);
-    return this.request.userAgent.hostPromises.resolve(this.response);
-  }
-}
-
-function complete(params: FetchParams) {
+function complete(operation: ReturnType<typeof createFetchOperation>) {
   const result = Promise.withResolvers<{
     response: FetchResponse; body: Uint8Array | null | 'failure'; events: string[];
   }>();
   const events: string[] = [];
-  params.processResponse = (response) => {
+  operation.options.processResponse = (response) => {
     expect(response.type === 'error' || isFilteredResponse(response)).toBe(true);
     events.push('response');
   };
-  params.processResponseEndOfBody = () => {
-    expect(params.request.done).toBe(true);
+  operation.options.processResponseEndOfBody = () => {
+    expect(operation.request.done).toBe(true);
     events.push('end');
   };
-  params.processResponseConsumeBody = (response, body) => {
+  operation.options.processResponseConsumeBody = (response, body) => {
     events.push('consume');
     result.resolve({ response, body, events });
   };
-  params.mainFetch();
+  void operation.start();
   return result.promise;
 }

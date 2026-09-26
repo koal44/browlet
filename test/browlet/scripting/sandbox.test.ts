@@ -51,7 +51,7 @@ describe('Browser-owned sandbox execution', () => {
     const allocation = vi.spyOn(env.exec.buffers, 'copyUint8Array');
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), env);
     const done = Promise.withResolvers<Uint8Array>();
-    body.fullyRead(done.resolve, done.reject, env.exec.global);
+    body.readAll(done.resolve, done.reject, env.exec.global);
     expect([...(await done.promise)]).toEqual([1, 2, 3]);
     const chunk = allocation.mock.results[0]!.value as Uint8Array;
     expect(Realm.getAssociatedRealm(chunk)).toBe(realm);

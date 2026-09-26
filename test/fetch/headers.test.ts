@@ -7,15 +7,20 @@ import {
   isCORSSafelistedResponseHeaderName, isCORSUnsafeRequestHeaderByte, isForbiddenRequestHeader,
   isForbiddenResponseHeaderName, isHeaderName, isHeaderValue, isNoCORSSafelistedRequestHeader,
   isNoCORSSafelistedRequestHeaderName, isPrivilegedNoCORSRequestHeaderName, isRequestBodyHeaderName,
-  legacyExtractEncoding, normalizeHeaderValue, parseCORSTokenList,
+  legacyExtractEncoding, normalizeHeaderValue, parseCORSTokenList, serializeInteger,
+  isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, parseSingleRangeHeaderValue,
+  isNullBodyStatus, isOkStatus, isRangeStatus, isRedirectStatus, isStatus,
 } from '../../src/fetch/headers';
+import { RequestImpl } from '../../src/fetch/request';
+import { ResponseImpl, FetchResponse } from '../../src/fetch/response';
 import {
   parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
 } from '../../src/http/index';
 import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
-import { allocateIn, BindingWorld } from '../../src/web-idl/index';
+import { allocateIn, BindingWorld, type BindingContext } from '../../src/web-idl/index';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
-import { createFetchRequest } from './fetch-fixture';
+import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment } from './client-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {
@@ -124,6 +129,102 @@ describe('header syntax and normalization', () => {
     expect(normalizeHeaderValue('\fx\f')).toBe('\fx\f');
     expect(normalizeHeaderValue('\u00a0x\u00a0')).toBe('\u00a0x\u00a0');
     expect(isHeaderValue(normalizeHeaderValue('x\ry'))).toBe(false);
+  });
+});
+
+describe('integer serialization (Fetch §2)', () => {
+  it.each([
+    [0, '0'], [-0, '0'], [42, '42'], [-42, '-42'],
+    [Number.MAX_SAFE_INTEGER, '9007199254740991'],
+    [1e21, '1000000000000000000000'],
+    [12345678901234567890123456789n, '12345678901234567890123456789'],
+  ] as const)('serializes %s without exponent notation or padding', (integer, expected) => {
+    expect(serializeInteger(integer)).toBe(expected);
+  });
+});
+
+describe('HTTP methods (Fetch §2.2.1)', () => {
+  it.each(['GET', 'CHICKEN', 'Egg', 'eGg', 'patch', "!#$%&'*+-.^_`|~0123456789"])(
+    'accepts the method %j', (method) => expect(isValidMethod(method)).toBe(true),
+  );
+  it.each(['', 'GET ', ' GET', 'GET\n', 'GET\r', 'GET\t', 'G:E:T', 'G\0ET', 'GÉT', 'ＧＥＴ'])(
+    'rejects the method %j', (method) => expect(isValidMethod(method)).toBe(false),
+  );
+  it.each(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT'])('normalizes %s', (method) => {
+    expect(normalizeMethod(method.toLowerCase())).toBe(method);
+    expect(normalizeMethod(method)).toBe(method);
+  });
+  it.each(['patch', 'Egg', 'eGg', 'trace'])('preserves %s', (method) => {
+    expect(normalizeMethod(method)).toBe(method);
+  });
+  it('checks safelisting case-sensitively and forbidden methods case-insensitively', () => {
+    for (const method of ['GET', 'HEAD', 'POST']) expect(isCORSSafelistedMethod(method)).toBe(true);
+    for (const method of ['get', 'post', 'PUT', 'OPTIONS']) expect(isCORSSafelistedMethod(method)).toBe(false);
+    for (const method of ['CONNECT', 'Connect', 'tRaCe', 'TRACK']) expect(isForbiddenMethod(method)).toBe(true);
+    for (const method of ['GET', 'DELETE', 'CONNECTX']) expect(isForbiddenMethod(method)).toBe(false);
+  });
+});
+
+describe('HTTP statuses (Fetch §2.2.3)', () => {
+  it('classifies every status in Fetch’s domain', () => {
+    for (let status = 0; status <= 999; status++) {
+      expect(isStatus(status), `status ${status}`).toBe(true);
+      expect(isNullBodyStatus(status), `null body ${status}`).toBe([101, 103, 204, 205, 304].includes(status));
+      expect(isOkStatus(status), `ok ${status}`).toBe(Math.floor(status / 100) === 2);
+      expect(isRangeStatus(status), `range ${status}`).toBe([206, 416].includes(status));
+      expect(isRedirectStatus(status), `redirect ${status}`).toBe([301, 302, 303, 307, 308].includes(status));
+    }
+  });
+  it.each([-1, 1000, 200.5, NaN, Infinity, -Infinity])('rejects non-status %j', (value) => {
+    expect(isStatus(value)).toBe(false);
+  });
+});
+
+describe('single ranges (Fetch §2.2.2)', () => {
+  it.each([
+    ['bytes=0-499', 0n, 499n], ['bytes=0-', 0n, undefined], ['bytes=-500', undefined, 500n],
+    ['bytes=-0', undefined, 0n], ['bytes=0001-0002', 1n, 2n], ['bytes=3-3', 3n, 3n],
+    ['bytes=9007199254740992-9007199254740993', 9007199254740992n, 9007199254740993n],
+  ])('parses %j', (value, start, end) => {
+    expect(parseSingleRangeHeaderValue(value, false)).toEqual([start, end]);
+    expect(parseSingleRangeHeaderValue(value, true)).toEqual([start, end]);
+  });
+  it.each(['bytes = 0 - 499', 'bytes\t=\t0\t-\t499', 'bytes= - 500', 'bytes=0 - '])(
+    'allows specified whitespace only when requested: %j', (value) => {
+      expect(parseSingleRangeHeaderValue(value, false)).toBeNull();
+      expect(parseSingleRangeHeaderValue(value, true)).not.toBeNull();
+    },
+  );
+  it.each([
+    '', 'Bytes=0-1', 'bytes', 'bytes=', 'bytes=-', 'bytes=500-499', 'bytes=0-1,2-3',
+    'bytes=0-1 ', 'bytes=0-1\t', ' bytes=0-1', 'bytes=+0-1', 'bytes=0-1.5',
+    'bytes=0--1', 'bytes=1e2-200', 'bytes=０-１', 'bytes\n=0-1', 'bytes=0-1\n',
+    'bytes=9007199254740993-9007199254740992',
+  ])('rejects %j in both modes', (value) => {
+    expect(parseSingleRangeHeaderValue(value, false)).toBeNull();
+    expect(parseSingleRangeHeaderValue(value, true)).toBeNull();
+  });
+  it('preserves arbitrarily large range integers', () => {
+    const end = '9'.repeat(400);
+    expect(parseSingleRangeHeaderValue(`bytes=0-${end}`, false)).toEqual([0n, BigInt(end)]);
+  });
+});
+
+describe('default request header values', () => {
+  it('selects the owning user agent\'s default when there is no emulation', () => {
+    const client = createClientEnvironment();
+    client.userAgent.defaultUserAgentValue = 'Configured/1.0';
+    expect(getEnvironmentDefaultUserAgent(client)).toBe('Configured/1.0');
+  });
+
+  it.each(['Emulated', '', 'Agent/\u00e9'])('preserves the emulated value %j as a byte string', (value) => {
+    const client = createClientEnvironment();
+    client.userAgent.webDriverBiDiEmulatedUserAgent = () => value;
+    expect(getEnvironmentDefaultUserAgent(client)).toBe(value);
+  });
+
+  it('defines the document Accept header value', () => {
+    expect(documentAcceptHeaderValue).toBe('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
   });
 });
 
@@ -452,24 +553,6 @@ describe('Sec-Purpose (Fetch §3.8)', () => {
   });
 });
 
-describe('default request header values', () => {
-  it('selects the owning user agent\'s default when there is no emulation', () => {
-    const client = createClientEnvironment();
-    client.userAgent.defaultUserAgentValue = 'Configured/1.0';
-    expect(getEnvironmentDefaultUserAgent(client)).toBe('Configured/1.0');
-  });
-
-  it.each(['Emulated', '', 'Agent/\u00e9'])('preserves the emulated value %j as a byte string', (value) => {
-    const client = createClientEnvironment();
-    client.userAgent.webDriverBiDiEmulatedUserAgent = () => value;
-    expect(getEnvironmentDefaultUserAgent(client)).toBe(value);
-  });
-
-  it('defines the document Accept header value', () => {
-    expect(documentAcceptHeaderValue).toBe('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
-  });
-});
-
 describe('Headers implementation (Fetch §5.1)', () => {
   it('mutates its shared list while supplying sorted copies for iteration', () => {
     const list = new FetchHeaders();
@@ -603,27 +686,53 @@ describe('Headers implementation (Fetch §5.1)', () => {
   });
 });
 
-it('can opt getSetCookie into method-realm allocation with a declaration', () => {
-  const definition = {
-    ...headersIDL,
-    members: headersIDL.members.map((member) =>
-      member.kind === 'operation' && member.name === 'getSetCookie'
-        ? { ...member, ...allocateIn('method') }
-        : member),
-  };
-  const world = new BindingWorld([headersInitIDL, definition]);
-  const receiverRealm = new TestRealm();
-  const methodRealm = new TestRealm();
-  const context = world.register(receiverRealm);
-  context.install(receiverRealm.global);
-  world.register(methodRealm).install(methodRealm.global);
-  const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
-  const method = Reflect.get(Constructor.prototype, 'getSetCookie');
-  const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
-  const cookies = Reflect.apply(method, headers, []);
-  expect(cookies).toBeInstanceOf(methodRealm.intrinsics.array);
-  expect(cookies).not.toBeInstanceOf(receiverRealm.intrinsics.array);
-  expect(cookies).toEqual(['a=1']);
+describe('Headers realm allocation', () => {
+  it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
+    const fixture = createFetchFixture();
+    const foreignRealm = new TestRealm();
+    const foreign = fixture.bindings.register(foreignRealm, () => createEnvironment(foreignRealm));
+    const createObject = (context: BindingContext) => name === 'Request'
+      ? context.project(RequestImpl, context.construct(
+        RequestImpl, createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal,
+      ))
+      : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
+    const receiver = createObject(fixture.context);
+    const foreignReceiver = createObject(foreign);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowing the getter is the behavior under test.
+    const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreignReceiver), 'headers')?.get;
+    if (!getter) throw new Error('Missing Headers getter');
+
+    // The borrowed getter is the first path to expose the receiver's Headers.
+    const headers = Reflect.apply(getter, receiver, []) as object;
+    expect(fixture.bindings.getRealm(headers)).toBe(fixture.realm);
+    expect(Reflect.get(receiver, 'headers')).toBe(headers);
+    const foreignHeaders = Reflect.apply(getter, foreignReceiver, []) as object;
+    expect(fixture.bindings.getRealm(foreignHeaders)).toBe(foreignRealm);
+    expect(foreignHeaders).not.toBe(headers);
+  });
+
+  it('can opt getSetCookie into method-realm allocation with a declaration', () => {
+    const definition = {
+      ...headersIDL,
+      members: headersIDL.members.map((member) =>
+        member.kind === 'operation' && member.name === 'getSetCookie'
+          ? { ...member, ...allocateIn('method') }
+          : member),
+    };
+    const world = new BindingWorld([headersInitIDL, definition]);
+    const receiverRealm = new TestRealm();
+    const methodRealm = new TestRealm();
+    const context = world.register(receiverRealm);
+    context.install(receiverRealm.global);
+    world.register(methodRealm).install(methodRealm.global);
+    const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
+    const method = Reflect.get(Constructor.prototype, 'getSetCookie');
+    const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
+    const cookies = Reflect.apply(method, headers, []);
+    expect(cookies).toBeInstanceOf(methodRealm.intrinsics.array);
+    expect(cookies).not.toBeInstanceOf(receiverRealm.intrinsics.array);
+    expect(cookies).toEqual(['a=1']);
+  });
 });
 
 function structuredItem(bareItem: StructuredBareItem): StructuredItem {

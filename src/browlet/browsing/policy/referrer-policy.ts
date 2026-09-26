@@ -1,4 +1,4 @@
-import { isLocalScheme, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
+import { isLocalURL, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import { surroundingTabOrSpacePattern } from '../../../infra/patterns';
@@ -80,7 +80,7 @@ export function determineRequestReferrer(request: FetchRequest): URLRecord | nul
 /** Omits local URLs with null; otherwise copies without credentials or fragment, optionally as an origin. */
 // https://w3c.github.io/webappsec-referrer-policy/#strip-url
 export function stripURLForReferrer(url: URLRecord, originOnly = false): URLRecord | null {
-  if (isLocalScheme(url.scheme)) return null;
+  if (isLocalURL(url)) return null;
   // The source belongs to a Document or request; full and origin-only referrers need independent copies.
   const referrer = copyURL(url);
   referrer.username = '';

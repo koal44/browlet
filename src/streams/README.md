@@ -52,6 +52,12 @@ transformer requests allocation for later setup; an empty record runs normal
 constructor initialization. Internal callers use these implementation entry
 points directly.
 
+`ReadableStreamImpl.onCompletion(closed, errored)` registers internal steps at
+the terminal state transition, before read completion, or runs them immediately
+for an already completed stream. It neither acquires a reader nor pulls bytes.
+Steps must not throw or invoke author code. Fetch uses this to retain byte-stream
+support while queuing its own completion tasks; it is not a Web IDL operation.
+
 The wider ownership rules live in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md)
 and [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARCHITECTURE.md).
 

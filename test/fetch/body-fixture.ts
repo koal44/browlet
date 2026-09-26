@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
+import { queueNetworkingTask } from '../../src/js-engine/index';
 import { createTestContext } from '../browlet/streams/environment';
 import { ReadableStreamImpl } from '../../src/streams/index';
 
@@ -12,6 +13,7 @@ export function createBodyFixture() {
     queueGlobalTask: vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); }),
   };
   const env = {
+    queueNetworkingTask,
     exec: {
       ...context.getEnvironment().exec,
       runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),

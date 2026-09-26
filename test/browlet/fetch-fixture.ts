@@ -12,9 +12,46 @@ import { Realm } from '../../src/browlet/scripting/realm';
 import { AgentCluster } from '../../src/browlet/scripting/agents';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
-import { queueFetchTask } from '../../src/fetch/tasks';
+import { fetch, type FetchOptions } from '../../src/fetch/fetch';
+import type { FetchController } from '../../src/fetch/controller';
+import type { FetchRequest } from '../../src/fetch/request';
+import type { FetchResponse } from '../../src/fetch/response';
+import type { JSEnvironment } from '../../src/js-engine/environment';
+import { queueNetworkingTask } from '../../src/js-engine/index';
 import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
-import { createControllerFixture } from '../fetch/control-fixture';
+import { createControllerFixture } from '../fetch/controller-fixture';
+
+/** Configure a fetch through its public entry; start() supplies the controller and awaits response delivery. */
+export function createFetchOperation(request: FetchRequest, env: JSEnvironment) {
+  let controller: FetchController;
+  const options: FetchOptions = { useParallelQueue: true };
+  return {
+    request, env, options,
+    start() {
+      const response = Promise.withResolvers<FetchResponse>();
+      controller = fetch(request, {
+        ...options,
+        processResponse: (value) => {
+          options.processResponse?.(value);
+          response.resolve(value);
+        },
+      }, env);
+      return response.promise;
+    },
+    get controller() { return controller; },
+  };
+}
+
+/** Capture an invariant failure thrown on Fetch's owning task, without changing ordinary task delivery. */
+export function nextFetchTaskError(env: JSEnvironment) {
+  const failure = Promise.withResolvers<unknown>();
+  const queue = env.queueNetworkingTask.bind(env);
+  const spy = vi.spyOn(env, 'queueNetworkingTask').mockImplementation((steps, destination) => queue(() => {
+    try { steps(); }
+    catch (error) { spy.mockRestore(); failure.resolve(error); }
+  }, destination));
+  return failure.promise;
+}
 
 /** Create a Window for task inspection; the default UserAgent leaves its event loop unstarted. */
 export function createFetchWindow(userAgent = new UserAgent()) {
@@ -27,7 +64,7 @@ export function createFetchWindow(userAgent = new UserAgent()) {
     realm,
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      queueFetchTask(steps, realm.global, context.getEnvironment());
+      context.getEnvironment().queueNetworkingTask(steps, realm.global);
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];
@@ -47,7 +84,7 @@ export function createIsolatedFetchRealm() {
   new AgentCluster('concrete').add(realm.agent);
   const registration = new BindingWorld<Realm>([], {
     capabilities: domExceptionCapabilities,
-  }).register(realm, (context) => ({ exec: createExecution(context) }));
+  }).register(realm, (context) => ({ exec: createExecution(context), queueNetworkingTask }));
   registration.install(realm.global);
   return createFetchRealmFixture(registration);
 }

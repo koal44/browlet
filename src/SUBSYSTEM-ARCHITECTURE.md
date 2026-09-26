@@ -355,14 +355,20 @@ The neutral contract and engine-owned buffer operations live in `js-engine/`.
 HTML task policy, DOM aborting, and HTML structured data retain their
 implementations in Browlet. `Environment` owns this contract as `exec`, alongside
 its `realm` and browser state. Portable implementations accept `JSEnvironment`,
-whose shared contract is `exec: RealmExecution`. Browser algorithms accept the
-existing `Environment` when they need HTML state. Both use `env.exec`;
+which supplies `exec: RealmExecution` and `queueNetworkingTask(steps, destination)`.
+Browser algorithms accept the existing `Environment` when they need HTML state.
+Both use `env.exec`;
 the browser environment satisfies the portable contract directly, without a
 second environment object. Environment operations such as `parseURL()` can
 forward to their owner; execution facilities remain grouped in `exec`.
 Name environment parameters, locals, and stored references `env`, qualifying
 them when multiple owners are in scope (`sourceEnv`, `targetEnv`). Keep type
 and factory names descriptive, such as `JSEnvironment` and `createWindowEnvironment()`.
+
+`queueNetworkingTask()` sends work to an explicit global or parallel queue. Its
+shared method implementation is assigned to HTML environments and sandbox objects;
+global delivery remains the host's `exec.networking.queueGlobalTask()` operation.
+It needs no Fetch client settings and does not create another environment object.
 
 [`integration/execution.ts`](browlet/integration/execution.ts) assembles the
 execution object during Window realm registration, reusing that realm's existing
@@ -603,6 +609,20 @@ one index exposes the public algorithms and types. Fetch-specific policy and
 transactions remain with Fetch. The UserAgent owns its cookie store alongside
 its networking state; Fetch/HTML will supply browser access policy.
 
+Fetch's orchestration, wire exchange, and upload/download lifecycle live in
+`fetch/fetch.ts`. Only the `fetch()` entry and its options are exported there;
+the subordinate algorithms and stream helpers remain private. Orchestration
+tests use that entry and control browser/transport hooks.
+Fetch observes response-body closure/errors through Streams' internal
+`onCompletion()` operation, preserving the original stream and BYOB support.
+Streams owns the state transition; Fetch queues its own completion/timing tasks.
+The hook does not introduce a Fetch dependency or author callback into Streams.
+`fetch/transport.ts` groups host I/O and decoder contracts, connection records,
+and network partition keys.
+The cache stores sit alongside those modules. `fetch/policy.ts`
+groups decisions about sending, accepting, upgrading, and exposing requests or
+responses, including port restrictions and MIME/nosniff checks.
+
 When a complete platform implementation spans a host-neutral subsystem and
 Browlet-owned facilities, keep its implementation state and IDL together on
 the Browlet side of that seam. Do not invent separate facade and browser
@@ -675,6 +695,12 @@ execution owner's networking task source. Native callbacks retain bytes and
 update neutral records; they do not enter page Streams or allocate page objects.
 Pause/resume/abort functions cross this boundary without exposing Undici objects.
 Closing the transport belongs to its UserAgent lifetime, not an individual Window.
+Origin resolution stays in the transport's socket lookup callback: Node handles
+IP literals, the callback confines localhost names to loopback, and native DNS
+resolves other names. The sole consumer is Node's connection machinery, so no
+shared address-record contract or promise bridge is needed. The transport's
+UserAgent ownership supplies its lifetime. Browlet retains no DNS results; any
+future local DNS cache must respect the request's network partition.
 An upload source returns one neutral byte chunk per native write demand by
 queuing a read on that body's HTML owner. Native async iteration exists only
 inside the Node adapter. UserAgent also supplies a per-response content decoder;
@@ -739,11 +765,15 @@ Binding Context or global passed by the calling algorithm and must not import
 the assembled `browletBindings` singleton or use its forwarding functions to
 rediscover either.
 
-HTML's pre-realm state is an `EnvironmentRecord`, created by
-`createEnvironmentRecord()`. It includes the owning `UserAgent`, identity,
-creation URLs, and `isSecureContext` decision. It has no realm or execution
-facilities. The HTML Realm initially references this record so Web IDL can read
-the security decision before installing properties.
+HTML's pre-realm state is an `EnvironmentRecord` instance. The full `Environment`
+extends that class, sharing its UserAgent, identity, creation URLs, fixed
+`isSecureContext` decision, readiness state, and network-partition operation.
+A reserved record has no realm or execution facilities. The HTML Realm initially
+references it so Web IDL can read the security decision before installing
+properties. Constructing full settings retains its identity and security state;
+Window setup applies the navigation's creation URL and top-level origin.
+`EnvironmentRecord.determineNetworkPartitionKey()` derives the top-level site
+directly; Fetch calls this method through its interface and owns key comparison.
 
 `createWindowEnvironment()` constructs the Window and `WindowRealm`, then
 registers the realm with a factory that constructs its execution facilities and
@@ -797,12 +827,14 @@ the embedder-policy value, typed referrer policy, integrity policy fields, and
 an HTML-owned `clone()` without importing Browlet. HTML's `PolicyContainer`
 class implements that structural type. Client population clones it once into the request; the
 UserAgent supplies fresh default containers for requests without a client.
-Fetch's `policy/` modules own its cookie rules, Origin-header disclosure,
-COEP/CORP decisions and reporting, Integrity Policy checks, mixed-content
-checks, and URL upgrades. Request and Response retain small delegating methods;
-the modules work directly with their records and existing browser contracts.
-Policy modules import those records as types and call their own helpers directly,
-without a policy manager or a runtime dependency on Browlet.
+Fetch's `policy.ts` owns its cookie rules, Origin-header disclosure, Fetch
+Metadata, CORS/COEP/CORP decisions and reporting, timing exposure, Integrity
+Policy checks, mixed-content checks, URL upgrades, port restrictions, and
+MIME/nosniff blocking. Request and Response retain small delegating methods for
+policy entry points; the policy algorithms work directly with their records
+and existing browser contracts.
+Topic sections keep related algorithms and private helpers together, without a
+policy manager or a runtime dependency on Browlet.
 Integrity Policy owns concrete, independently copied policy lists. The request's
 `isBlockedByIntegrityPolicy()` delegates to Fetch's policy module, which submits
 reports through its client's Reporting seam. CSP lists copy their policies independently
@@ -824,7 +856,7 @@ properties are not that sink. CSP hash reporting reads a separate body branch,
 queues completion on the client's HTML loop, and captures sanitized attribution.
 Request tainting protects opaque internal responses from hash disclosure. These
 reports use ordinary Reporting data but remain invisible to ReportingObservers.
-Fetch's embedder-policy module owns the COEP credentials decision, which needs
+Fetch's `policy.ts` owns the COEP credentials decision, which needs
 the request's mode, origin, and redirect history as well as that policy value.
 
 An undefined request origin, policy container, or referrer represents Fetch's
@@ -873,8 +905,9 @@ Fetch/HTML algorithms.
 
 `EnvironmentRecord` satisfies `FetchEnvironmentRecord`, including top-level origin
 and creation URL before a realm exists. Requests retain this actual record as
-their reserved client. Fetch derives network partition keys from it, retaining
-opaque-origin identity. The UserAgent owns its connection pool and HTTP cache
+their reserved client. Requests call its `determineNetworkPartitionKey()` method,
+which delegates to Fetch's shared algorithm and retains opaque-origin identity.
+The UserAgent owns its connection pool and HTTP cache
 partitions; they outlive an individual environment. The Node transport supplies
 connection establishment. Fetch's private cache retains response metadata and
 immutable `BlobData`, never the original request/client or realm-owned stream.
@@ -889,7 +922,7 @@ expiry, without retaining requests or environments. OPTIONS transactions reuse
 the original client and reserved environment for partitioning, and share the
 parent controller and execution owner. They send no origin credentials and
 have separate timing/callback state. CORS and timing permission checks remain
-in Fetch's policy modules behind Response's forwarding methods.
+in Fetch's policy module behind Response's forwarding methods.
 
 Storage's `StorageKey` similarly consumes a narrow structural view of the actual
 `Environment` or `EnvironmentRecord`. Full settings supply their security origin;
@@ -900,8 +933,8 @@ Fetch's network partition keys. These are direct shared algorithms, without a
 Binding capability, execution dependency, or browser-to-Storage adapter object.
 `storage/environment.ts` defines the `StorageEnvironment` and `StorageUserAgent`
 interfaces; the latter supplies the storage preference and UUID generation.
-HTML's `EnvironmentRecord` extends `StorageEnvironment`, so both early records
-and the full `Environment` implementing that record satisfy the same contract.
+HTML's `EnvironmentRecord` implements that contract through `FetchEnvironmentRecord`,
+so both early records and the full `Environment` subclass supply the same state.
 
 Browlet's File integration owns `BlobURLStore` and `BlobURLEntry` in
 `browlet/integration/file/blob-url.ts`. The store retains each registered Blob

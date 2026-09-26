@@ -2,7 +2,7 @@
 
 This module owns reusable private-cache calculations and policy. Its inputs
 are field values, methods/statuses, and caller-supplied timestamps; it imports
-neither Fetch nor Browlet. The [Fetch cache plan](../../fetch/http/cache/ROADMAP.md)
+neither Fetch nor Browlet. The [Fetch cache plan](../../fetch/CACHE-ROADMAP.md)
 owns storage, response selection, validation, and transactions over Fetch records.
 
 **Status:** age/freshness, bounded field parsing, storage eligibility, request
@@ -99,6 +99,6 @@ overflow, duplicate directives, private-cache permission, request restrictions,
 Vary syntax, and unsafe-method invalidation triggers.
 
 These calculations do not prove storage or transaction behavior. The
-[Fetch cache plan](../../fetch/http/cache/ROADMAP.md) owns those acceptance gates
+[Fetch cache plan](../../fetch/CACHE-ROADMAP.md) owns those acceptance gates
 and the external Undici store comparison. Extend these rules alongside those
 consumers, with a focused test for each newly supported branch.

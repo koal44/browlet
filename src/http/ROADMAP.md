@@ -19,9 +19,9 @@ notes describe their contracts, tests, and any remaining work.
 | [Cache rules](cache/ROADMAP.md) | RFC 9111/5861 field parsing, freshness, storage eligibility, and request policy |
 | [Cookies](cookies/ROADMAP.md) | Cookie records, parsing, storage, retrieval, serialization, store limits, and eviction |
 
-[Fetch HTTP](../fetch/http/ROADMAP.md) retains CORS and forbidden-method rules,
+[Fetch HTTP](../fetch/HTTP-ROADMAP.md) retains CORS and forbidden-method rules,
 Fetch status/range classifications, header protocols, and transactions. Its
-[cache integration](../fetch/http/cache/ROADMAP.md) owns storage and selection
+[cache integration](../fetch/CACHE-ROADMAP.md) owns storage and selection
 over Fetch records, validation, and network processing. MIME retains MIME type
 parsing/sniffing; XHR retains its API and Fetch-consuming state machine.
 
@@ -184,7 +184,7 @@ credentials are removed by identity so an older failure cannot remove a newer
 replacement. Clearing advances a generation, preventing in-flight exchanges
 from repopulating the cleared cache.
 
-[`transaction.ts`](../fetch/http/transaction.ts) retains the selected entry across
+[`../fetch/fetch.ts`](../fetch/fetch.ts) retains the selected entry across
 authentication and 421 retries; successful responses need not repeat the challenge.
 It applies credentials-mode, COEP, prompt-target, CORS-taint, URL-credential, and
 body-replay gates. URL credentials are percent-decoded before UTF-8 Basic encoding.

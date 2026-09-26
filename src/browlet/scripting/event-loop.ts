@@ -269,11 +269,9 @@ export class EventLoop {
     try {
       this.microtaskQueue.performMicrotaskCheckpoint();
 
-      /*
-       * TODO(HTML section 8.1.7.3): Notify rejected promises, clean up
-       * IndexedDB transactions, and perform ClearKeptObjects once their
-       * owning subsystems supply those operations.
-       */
+      // TODO(HTML §8.1.7.3): Notify rejected promises and clean up IndexedDB transactions.
+      // Native checkpoints already clear kept objects; review ordering and isolation
+      // with those consumers (EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint).
     } finally {
       this.#performingMicrotaskCheckpoint = false;
     }

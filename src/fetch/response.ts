@@ -15,24 +15,23 @@ import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue, type BodyWithType } from './body';
 import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
-  isForbiddenResponseHeaderName, type HeadersGuard, type HeadersInitValue,
+  isForbiddenResponseHeaderName, isNullBodyStatus, isRedirectStatus, type HeadersGuard, type HeadersInitValue,
 } from './headers';
-import { isNullBodyStatus, isRedirectStatus } from './http/statuses';
 import {
-  getFetchEnvironment, type FetchEmbedderPolicy, type FetchEmbedderPolicyValue,
+  getFetchEnvironment, type FetchEmbedderPolicy,
   type FetchEnvironment, type FetchUserAgent,
 } from './environment';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
-import { parseAndStoreCookies } from './policy/cookies';
-import { isBlockedByCORS } from './policy/cors';
-import { isBlockedByCORP, isBlockedByCORPInternal, queueCORPViolationReport } from './policy/embedder-policy';
-import { isMixedDownload, isResponseBlockedByMixedContent } from './policy/mixed-content';
-import { isNavigationTimingAllowed, isTimingAllowed } from './policy/timing';
+import {
+  isBlockedByCORP, isBlockedByCORS, isMixedDownload, isNavigationTimingBlocked,
+  isResponseBlockedByMixedContent, isTimingBlocked, parseAndStoreCookies,
+} from './policy';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
 import { InternalError } from '../infra/internal-error';
 
-/** Fetch §2.2.6: response fields can continue changing after delivery. */
+/** Response state that can continue changing after headers are delivered. */
+// https://fetch.spec.whatwg.org/#concept-response
 export class FetchResponse {
   /** Response category determining filtering and author-visible exposure. */
   type: ResponseType = 'default';
@@ -69,7 +68,7 @@ export class FetchResponse {
   /** Origin/site classification of the request's redirect chain retained on the response. */
   redirectTaint: RedirectTaint = 'same-origin';
 
-  /** https://fetch.spec.whatwg.org/#concept-network-error */
+  // https://fetch.spec.whatwg.org/#concept-network-error
   static networkError(): FetchResponse {
     const response = new FetchResponse();
     response.type = 'error';
@@ -77,14 +76,14 @@ export class FetchResponse {
     return response;
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-aborted-network-error */
+  // https://fetch.spec.whatwg.org/#concept-aborted-network-error
   static abortedNetworkError(): FetchResponse {
     const response = FetchResponse.networkError();
     response.aborted = true;
     return response;
   }
 
-  /** https://fetch.spec.whatwg.org/#appropriate-network-error */
+  // https://fetch.spec.whatwg.org/#appropriate-network-error
   static appropriateNetworkError(params: FetchParams): FetchResponse {
     if (!params.canceled) throw new InternalError('Fetch params are not canceled');
     return params.aborted ? FetchResponse.abortedNetworkError() : FetchResponse.networkError();
@@ -94,19 +93,18 @@ export class FetchResponse {
     return this.urlList.at(-1) ?? null;
   }
 
-  /** https://fetch.spec.whatwg.org/#serialize-a-response-url-for-reporting */
+  /** Serialize the original URL without credentials, fragment, or later redirect targets. */
+  // https://fetch.spec.whatwg.org/#serialize-a-response-url-for-reporting
   serializeURLForReporting(): string {
     const url = this.urlList[0];
     if (url === undefined) throw new InternalError('Response URL list is empty');
     return serializeURL({ ...url, username: '', password: '' }, true);
   }
 
-  /**
-   * https://fetch.spec.whatwg.org/#concept-filtered-response
-   * Only the specified overrides belong to the view. Other fields continue to
-   * refer to the internal response, including replacement bodies and timing updates.
-   * Headers are a separate filtered list, as in Blink, Gecko, and WebKit.
-   */
+  /** Create a filtered view whose unmasked fields track the underlying response. */
+  // https://fetch.spec.whatwg.org/#concept-filtered-response
+  // Masked fields and the filtered header list belong to the view. Body replacements
+  // and timing updates remain visible through its references to the internal response.
   filter(type: FilteredResponseType): FilteredFetchResponse {
     if (this.type === 'error' || isFilteredResponse(this)) {
       throw new InternalError('Cannot filter a network error or an already filtered response');
@@ -144,11 +142,16 @@ export class FetchResponse {
     }) as FilteredFetchResponse;
   }
 
-  /** Clone the response, optionally replacing its body instead of teeing it. */
+  /** Clone the response and tee its body, preserving any response filtering. */
   // https://fetch.spec.whatwg.org/#concept-response-clone
-  // SPEC_MISMATCH: (response) -> response
-  clone(body?: FetchBody | null): FetchResponse {
-    if (isFilteredResponse(this)) return this.internalResponse.clone(body).filter(this.type);
+  clone(): FetchResponse {
+    if (isFilteredResponse(this)) return this.internalResponse.clone().filter(this.type);
+    return this.copy(this.body?.clone() ?? null);
+  }
+
+  /** Copy the response metadata with the supplied body, leaving the original body untouched. */
+  copy(body: FetchBody | null): FetchResponse {
+    if (isFilteredResponse(this)) return this.internalResponse.copy(body).filter(this.type);
     return Object.assign(new FetchResponse(), this, {
       headerList: this.headerList.clone(),
       urlList: this.urlList.map(copyURL),
@@ -156,16 +159,14 @@ export class FetchResponse {
       navigationTimingAllowValuesList: this.navigationTimingAllowValuesList.map((values) => [...values]),
       bodyInfo: Object.assign(new ResponseBodyInfo(), this.bodyInfo),
       serviceWorkerTimingInfo: this.serviceWorkerTimingInfo === null ? null : { ...this.serviceWorkerTimingInfo },
-      body: body === undefined ? this.body?.clone() ?? null : body,
+      body,
     });
   }
 
-  /**
-   * https://fetch.spec.whatwg.org/#concept-fresh-response
-   * https://fetch.spec.whatwg.org/#concept-stale-while-revalidate-response
-   * https://fetch.spec.whatwg.org/#concept-stale-response
-   * The cache transaction supplies its timestamps; this record does not read a clock.
-   */
+  /** Classify freshness using caller-supplied timestamps, without reading a clock. */
+  // https://fetch.spec.whatwg.org/#concept-fresh-response
+  // https://fetch.spec.whatwg.org/#concept-stale-while-revalidate-response
+  // https://fetch.spec.whatwg.org/#concept-stale-response
   getFreshness(timing: CacheTiming): 'fresh' | 'stale-while-revalidate' | 'stale' {
     const freshness = calculateCacheFreshness({
       cacheControl: this.headerList.get('Cache-Control') ?? undefined,
@@ -178,10 +179,8 @@ export class FetchResponse {
     return freshness.staleWhileRevalidate ? 'stale-while-revalidate' : 'stale';
   }
 
-  /**
-   * https://fetch.spec.whatwg.org/#concept-response-location-url
-   * Undefined means absent; null means extraction or URL parsing failed.
-   */
+  /** Resolve a redirect target; undefined means no redirect, null means an invalid Location. */
+  // https://fetch.spec.whatwg.org/#concept-response-location-url
   getLocationURL(requestFragment: string | null, env: FetchEnvironment | FetchUserAgent): URLRecord | undefined | null {
     if (!isRedirectStatus(this.status)) return undefined;
     const values = this.headerList.extractValues('Location', (value) => [value], false);
@@ -227,36 +226,22 @@ export class FetchResponse {
     return isBlockedByCORP(this, origin, policy, destination, forNavigation, env);
   }
 
-  /** Whether CORP blocks this response under one embedder policy, without reporting violations. */
-  // https://fetch.spec.whatwg.org/#cross-origin-resource-policy-internal-check
-  isBlockedByCORPInternal(
-    origin: Origin, embedderPolicyValue: FetchEmbedderPolicyValue, forNavigation: boolean,
-  ): boolean {
-    return isBlockedByCORPInternal(this, origin, embedderPolicyValue, forNavigation);
-  }
-
-  /** Queue a COEP violation with the selected endpoint and sanitized original response URL. */
-  // https://fetch.spec.whatwg.org/#queue-a-cross-origin-embedder-policy-corp-violation-report
-  queueCORPViolationReport(
-    policy: FetchEmbedderPolicy, destination: string, reportOnly: boolean, env: FetchEnvironment,
-  ): void {
-    queueCORPViolationReport(this, policy, destination, reportOnly, env);
-  }
-
   /** Whether CORS blocks access to this response for the request's origin and credentials. */
   // https://fetch.spec.whatwg.org/#concept-cors-check
   isBlockedByCORS(request: FetchRequest): boolean {
     return isBlockedByCORS(this, request);
   }
 
-  /** Whether detailed timing may be exposed for this response and request. */
+  /** Whether detailed timing is blocked for this response and request. */
   // https://fetch.spec.whatwg.org/#concept-tao-check
-  isTimingAllowed(request: FetchRequest): boolean {
-    return isTimingAllowed(this, request);
+  isTimingBlocked(request: FetchRequest): boolean {
+    return isTimingBlocked(this, request);
   }
 
-  isNavigationTimingAllowed(destinationOrigin: Origin): boolean {
-    return isNavigationTimingAllowed(this, destinationOrigin);
+  /** Whether a redirect blocks navigation timing exposure to the destination origin. */
+  // https://fetch.spec.whatwg.org/#navigation-tao-check
+  isNavigationTimingBlocked(destinationOrigin: Origin): boolean {
+    return isNavigationTimingBlocked(this, destinationOrigin);
   }
 }
 

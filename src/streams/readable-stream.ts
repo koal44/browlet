@@ -46,6 +46,7 @@ import { InternalError } from '../infra/internal-error';
  */
 export class ReadableStreamImpl {
   #state: ReadableStreamState;
+  #completionSteps: { closed: () => void; errored: (reason: unknown) => void; }[] | undefined;
 
   /**
    * Streams §4.2.4, ReadableStream(underlyingSource, strategy).
@@ -741,6 +742,17 @@ export class ReadableStreamImpl {
     return [branch1, branch2];
   }
 
+  /**
+   * Run synchronous internal steps once at close/error, or immediately if already complete.
+   * Does not lock, pull, or disturb the stream. Steps must not throw or invoke author code.
+   */
+  onCompletion(closed: () => void, errored: (reason: unknown) => void): void {
+    const state = this.state;
+    if (state.state === 'readable') (this.#completionSteps ??= []).push({ closed, errored });
+    else if (state.state === 'closed') closed();
+    else errored(state.storedError);
+  }
+
   /** ReadableStreamClose. */
   closeInternal(): void {
     const state = this.state;
@@ -748,6 +760,9 @@ export class ReadableStreamImpl {
       throw new InternalError('Only a readable stream can be closed');
     }
     state.state = 'closed';
+    const completionSteps = this.#completionSteps;
+    this.#completionSteps = undefined;
+    if (completionSteps) for (const steps of completionSteps) steps.closed();
 
     const reader = state.reader;
     if (!reader) return;
@@ -770,6 +785,9 @@ export class ReadableStreamImpl {
     }
     state.state = 'errored';
     state.storedError = error;
+    const completionSteps = this.#completionSteps;
+    this.#completionSteps = undefined;
+    if (completionSteps) for (const steps of completionSteps) steps.errored(error);
 
     const reader = state.reader;
     if (!reader) return;

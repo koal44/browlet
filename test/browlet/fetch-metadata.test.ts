@@ -17,7 +17,7 @@ describe('Browlet Fetch Metadata integration', () => {
     source.populateFromClient();
     const outgoing = source.clone();
 
-    outgoing.appendFetchMetadataHeaders();
+    outgoing.appendMetadataHeadersIfTrustworthy();
 
     expect(outgoing.client).toBe(getRelevantRealm(window).env);
     expect(outgoing.headerList.list).toEqual([
@@ -31,7 +31,7 @@ describe('Browlet Fetch Metadata integration', () => {
     'uses browser trust policy for %s', (url) => {
       const request = new FetchRequest(parseURL(url).url!, null, new UserAgent());
       request.origin = createOpaqueOrigin();
-      request.appendFetchMetadataHeaders();
+      request.appendMetadataHeadersIfTrustworthy();
       expect(request.headerList.get('Sec-Fetch-Dest')).toBe('empty');
       expect(request.headerList.get('Sec-Fetch-Site')).toBe('cross-site');
     },
@@ -48,8 +48,8 @@ describe('Browlet Fetch Metadata integration', () => {
     const ordinary = new FetchRequest(url, null, new UserAgent());
     ordinary.origin = origin;
 
-    trusted.appendFetchMetadataHeaders();
-    ordinary.appendFetchMetadataHeaders();
+    trusted.appendMetadataHeadersIfTrustworthy();
+    ordinary.appendMetadataHeadersIfTrustworthy();
 
     expect(trusted.headerList.get('Sec-Fetch-Site')).toBe('same-origin');
     expect(ordinary.headerList.list).toEqual([]);

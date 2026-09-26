@@ -39,14 +39,13 @@ src/
 ├── fetch/
 │   ├── ROADMAP.md
 │   ├── PREFLIGHT.md
-│   ├── request.ts         # Includes Fetch Metadata request headers
+│   ├── request.ts
+│   ├── policy.ts          # Includes Fetch Metadata request headers
 │   ├── integrity.ts
-│   ├── multipart/
-│   │   └── ROADMAP.md
-│   └── http/
-│       ├── ROADMAP.md
-│       └── cache/
-│           └── ROADMAP.md
+│   ├── multipart.ts
+│   ├── MULTIPART-ROADMAP.md
+│   ├── HTTP-ROADMAP.md
+│   └── CACHE-ROADMAP.md
 ├── file/
 │   ├── ROADMAP.md
 │   └── blob-url-store.ts
@@ -88,12 +87,12 @@ acceptance criteria live in the linked owner, not in a second checklist here.
 | Order | Work / authoritative plan | First integration point |
 | --- | --- | --- |
 | 1 | [Structured fields](../http/struct-fields/README.md), RFC 9651 | Fetch header operations |
-| 2 | [Multipart bytes](multipart/ROADMAP.md), RFC 7578 + HTML/Fetch | Body extraction/consumption, complete in Fetch 6b |
-| 3 | [HTTP foundation](../http/ROADMAP.md) and [cache rules](../http/cache/ROADMAP.md), RFCs 9110/9111/5861 | Response freshness, then [Fetch cache transactions](http/cache/ROADMAP.md) |
+| 2 | [Multipart bytes](MULTIPART-ROADMAP.md), RFC 7578 + HTML/Fetch | Body extraction/consumption, complete in Fetch 6b |
+| 3 | [HTTP foundation](../http/ROADMAP.md) and [cache rules](../http/cache/ROADMAP.md), RFCs 9110/9111/5861 | Response freshness, then [Fetch cache transactions](CACHE-ROADMAP.md) |
 | 4 | [Trustworthiness](../browlet/browsing/policy/ROADMAP.md#trustworthiness), Secure Contexts | Browser policy and Metadata inputs |
 | 5 | [Cookies](../http/cookies/ROADMAP.md), the current HTTPWG draft + HTML/Fetch | HTTP cookie processing, then HTML consumers |
 | 6 | [Referrer Policy](../browlet/browsing/policy/ROADMAP.md#referrer-policy) | Request/redirect handling and policy delivery |
-| 7 | [Fetch Metadata](http/ROADMAP.md#fetch-metadata); header algorithms implemented | Outgoing HTTP request headers in Fetch Slice 9 |
+| 7 | [Fetch Metadata](HTTP-ROADMAP.md#fetch-metadata); header algorithms implemented | Outgoing HTTP request headers in Fetch Slice 9 |
 | 8 | [SRI verification](ROADMAP.md#subresource-integrity) and [Integrity Policy](../browlet/browsing/policy/ROADMAP.md#integrity-policy) | Response bytes and request policy |
 | 9 | [Reporting](../browlet/reporting/ROADMAP.md): configuration, queues, user controls, and observers | COEP and Integrity Policy report submission; network delivery remains a Fetch consumer |
 | 10 | [HSTS](../browlet/browsing/policy/ROADMAP.md#hsts), RFC 6797 | Scheme upgrading and secure transport |
@@ -257,8 +256,8 @@ Existing stubs and planned features remain with their implementation roadmaps.
 
 | Slice | Bounded source scope | Specification comparison |
 | --- | --- | --- |
-| 1 — Fetch control and bodies — marked | `controller.ts`, `tasks.ts`, `environment.ts`, `params.ts`, `timing.ts`, `url.ts`, `body.ts`, `multipart/`, and `src/infra/parallel-queue.ts`; include constructor-supplied scheduling and the remaining extracted-helper signatures | Fetch §2 preamble, §2.1, §2.2.4, and implemented §5.2–§5.3 paths; HTML parallel queues and multipart encoding |
-| 2 — Fetch HTTP adapters — marked | `headers.ts`, `http/methods.ts`, `http/ranges.ts`, `http/statuses.ts`, and implemented operations in `request.ts`/`response.ts` | Fetch §§2.2.1–2.2.3 and implemented §§2.2.5–2.2.7; compare present API declarations with §5 without treating stubs as implemented |
+| 1 — Fetch control and bodies — marked | `controller.ts`, `environment.ts`, `params.ts`, `timing.ts`, `url.ts`, `body.ts`, `multipart.ts`, `src/js-engine/environment.ts`, and `src/infra/parallel-queue.ts`; include constructor-supplied scheduling and the remaining extracted-helper signatures | Fetch §2 preamble, §2.1, §2.2.4, and implemented §5.2–§5.3 paths; HTML parallel queues and multipart encoding |
+| 2 — Fetch HTTP adapters — marked | `headers.ts` (including method, range, and status helpers) and implemented operations in `request.ts`/`response.ts` | Fetch §§2.2.1–2.2.3 and implemented §§2.2.5–2.2.7; compare present API declarations with §5 without treating stubs as implemented |
 | 3 — Blob, File, and FileList — marked | `src/file/blob.ts`, `file.ts`, `file-list.ts`; inspect `blob-data.ts`/`integration.ts` only where they explain a signature | File API §§2–5 and referenced stream/byte operations; distinguish internal construction from author-facing Web IDL |
 | 4 — File reading and serialization — marked | `src/file/package-data.ts` and `src/browlet/integration/file/`, including FileReader and registered serialization steps | File API §§6–7 and Blob/File/FileList serialization; follow immediate HTML/Streams dependencies without auditing those whole subsystems |
 | 5 — HTTP syntax, dates, and cache policy — marked | `src/http/syntax.ts`, `date.ts`, and `cache/` | Fetch's quoted-string algorithm and the implemented RFC 9110/9111/5861 rules; distinguish local policy predicates from named algorithms |

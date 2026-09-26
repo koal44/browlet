@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { ReportImpl, ReportBodyImpl } from '../../../src/browlet/reporting/report';
-import type { IntegrityViolationReportBody } from '../../../src/fetch/integrity';
+import type { IntegrityViolationReportBody } from '../../../src/fetch/policy';
 import { reference } from '../../../src/web-idl/index';
 
 describe('Reporting platform objects', () => {

@@ -1,5 +1,4 @@
 import type { BlobImpl } from '../file/index';
-import type { CookieSameSiteMode } from '../http/index';
 import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode } from '../js-engine/index';
 import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
@@ -17,26 +16,25 @@ import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import {
   FetchHeaders, getEnvironmentDefaultUserAgent, HeadersImpl, type HeadersGuard, type HeadersInitValue,
+  isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
 import {
-  getFetchEnvironment, serializeInteger,
+  getFetchEnvironment,
   type FetchEnvironment, type FetchEnvironmentRecord, type FetchUserAgent,
   type FetchPolicyContainer, type FetchPromptTarget, type ReferrerPolicy,
 } from './environment';
-import { isCORSSafelistedMethod, isForbiddenMethod, isMethod, normalizeMethod } from './http/methods';
-import { determineNetworkPartitionKey, type NetworkPartitionKey } from './http/network-partition';
-import { appendCookieHeader, determineSameSiteMode, isSameSiteForCookies } from './policy/cookies';
-import { crossOriginEmbedderPolicyAllowsCredentials } from './policy/embedder-policy';
-import { upgradeForHSTS } from './policy/hsts';
-import { isBlockedByIntegrityPolicy } from './policy/integrity-policy';
-import { isRequestBlockedByMixedContent, upgradeMixedContent } from './policy/mixed-content';
-import { appendOriginHeader } from './policy/origin';
-import { upgradeInsecureRequest } from './policy/upgrade-insecure-requests';
+import type { NetworkPartitionKey } from './transport';
+import {
+  appendCookieHeader, appendMetadataHeadersIfTrustworthy, appendOriginHeader,
+  crossOriginEmbedderPolicyAllowsCredentials, isBlockedByIntegrityPolicy,
+  isRequestBlockedByMixedContent, upgradeForHSTS, upgradeInsecureRequest, upgradeMixedContent,
+} from './policy';
 import { InternalError } from '../infra/internal-error';
 
-/** Fetch §2.2.5. URL, client, and user agent are required inputs; the other fields have defaults. */
+/** Request state initialized with a URL, nullable client, and shared networking owner. */
+// https://fetch.spec.whatwg.org/#concept-request
 export class FetchRequest {
-  /** HTTP method as a byte string; recognized standard methods use their canonical casing. */
+  /** HTTP method as a byte string; only the six legacy method names are normalized. */
   method = 'GET';
   /** Restricts fetching to local schemes such as about, blob, and data. */
   localURLsOnly = false;
@@ -146,22 +144,23 @@ export class FetchRequest {
     return this.urlList[this.urlList.length - 1]!;
   }
 
-  /** https://fetch.spec.whatwg.org/#subresource-request */
+  // https://fetch.spec.whatwg.org/#subresource-request
   get isSubresource(): boolean {
     return subresourceDestinations.has(this.destination);
   }
 
-  /** https://fetch.spec.whatwg.org/#non-subresource-request */
+  // https://fetch.spec.whatwg.org/#non-subresource-request
   get isNonSubresource(): boolean {
     return nonSubresourceDestinations.has(this.destination);
   }
 
-  /** https://fetch.spec.whatwg.org/#navigation-request */
+  // https://fetch.spec.whatwg.org/#navigation-request
   get isNavigation(): boolean {
     return navigationDestinations.has(this.destination);
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-request-tainted-origin */
+  /** Classify the complete redirect chain relative to the resolved request origin. */
+  // https://fetch.spec.whatwg.org/#concept-request-tainted-origin
   get redirectTaint(): RedirectTaint {
     if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
     let lastURL: URLRecord | null = null;
@@ -184,13 +183,14 @@ export class FetchRequest {
     return taint;
   }
 
-  /** https://fetch.spec.whatwg.org/#serializing-a-request-origin */
+  /** Serialize the resolved origin, returning "null" when redirects taint it. */
+  // https://fetch.spec.whatwg.org/#serializing-a-request-origin
   serializeOrigin(): string {
     if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
     return this.redirectTaint === 'same-origin' ? serializeOrigin(this.origin) : 'null';
   }
 
-  /** https://fetch.spec.whatwg.org/#byte-serializing-a-request-origin */
+  // https://fetch.spec.whatwg.org/#byte-serializing-a-request-origin
   byteSerializeOrigin(): Uint8Array<ArrayBuffer> {
     return isomorphicEncode(this.serializeOrigin());
   }
@@ -256,14 +256,15 @@ export class FetchRequest {
     return this.policyContainer.cspList?.isRequestBlocked(this) ?? false;
   }
 
-  /** https://fetch.spec.whatwg.org/#concept-request-add-range-header */
+  /** Append an inclusive byte range, optionally leaving its end open. */
+  // https://fetch.spec.whatwg.org/#concept-request-add-range-header
   addRangeHeader(first: number | bigint, last?: number | bigint): void {
     if (last !== undefined && first > last) throw new InternalError('Range start exceeds its end');
     const value = `bytes=${serializeInteger(first)}-${last === undefined ? '' : serializeInteger(last)}`;
     this.headerList.append('Range', value);
   }
 
-  /** https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials */
+  // https://fetch.spec.whatwg.org/#cross-origin-embedder-policy-allows-credentials
   crossOriginEmbedderPolicyAllowsCredentials(): boolean {
     return crossOriginEmbedderPolicyAllowsCredentials(this);
   }
@@ -274,10 +275,11 @@ export class FetchRequest {
     return isBlockedByIntegrityPolicy(this);
   }
 
-  /** https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key */
+  /** Derive the reserved client's or initiating client's partition; null means neither exists. */
+  // https://fetch.spec.whatwg.org/#request-determine-the-network-partition-key
   determineNetworkPartitionKey(): NetworkPartitionKey | null {
     const env = this.determineEnvironment();
-    return env === null ? null : determineNetworkPartitionKey(env);
+    return env === null ? null : env.determineNetworkPartitionKey();
   }
 
   /** Select the reserved environment before the client; browser-owned requests can have neither. */
@@ -300,17 +302,6 @@ export class FetchRequest {
   // https://fetch.spec.whatwg.org/#append-a-request-cookie-header
   appendCookieHeader(): void {
     appendCookieHeader(this);
-  }
-
-  /** Selects sending restrictions, including Lax-by-default for unspecified SameSite. */
-  // https://fetch.spec.whatwg.org/#determine-the-same-site-mode
-  determineSameSiteMode(): CookieSameSiteMode {
-    return determineSameSiteMode(this);
-  }
-
-  /** Whether the initiator and client ancestry are same-site with the current URL. */
-  get isSameSiteForCookies(): boolean {
-    return isSameSiteForCookies(this);
   }
 
   /** Appends the request origin, applying redirect taint and non-CORS disclosure policy. */
@@ -336,73 +327,21 @@ export class FetchRequest {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Fetch Metadata: Sec-Fetch-* request headers
-  // https://w3c.github.io/webappsec-fetch-metadata/
-  // ---------------------------------------------------------------------------
-
   /** Set the outgoing request's Fetch Metadata headers when its current URL is trustworthy. */
   // https://w3c.github.io/webappsec-fetch-metadata/#fetch-integration
-  appendFetchMetadataHeaders(): void {
-    if (!this.userAgent.isURLPotentiallyTrustworthy(this.currentURL)) return;
-    this.#setFetchDestHeader();
-    this.#setFetchModeHeader();
-    this.#setFetchSiteHeader();
-    this.#setFetchUserHeader();
-  }
-
-  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-dest-header
-  #setFetchDestHeader(): void {
-    this.headerList.setStructuredFieldValue('Sec-Fetch-Dest', {
-      type: 'item', bareItem: { type: 'token', value: this.destination || 'empty' }, parameters: new Map(),
-    });
-  }
-
-  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-mode-header
-  #setFetchModeHeader(): void {
-    this.headerList.setStructuredFieldValue('Sec-Fetch-Mode', {
-      type: 'item', bareItem: { type: 'token', value: this.mode }, parameters: new Map(),
-    });
-  }
-
-  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-site-header
-  #setFetchSiteHeader(): void {
-    let site: 'same-origin' | 'same-site' | 'cross-site' | 'none' = 'same-origin';
-    // HTML's navigation-fetch algorithm has a null client only for browser-UI initiation.
-    // https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching
-    if (this.isNavigation && this.client === null) {
-      site = 'none';
-    } else {
-      if (this.origin === undefined) throw new InternalError('Fetch request origin has not been resolved');
-      for (const url of this.urlList) {
-        const origin = obtainURLOrigin(url);
-        if (areSameOrigin(origin, this.origin)) continue;
-        site = 'cross-site';
-        if (!areSameSite(this.origin, origin)) break;
-        site = 'same-site';
-      }
-    }
-    this.headerList.setStructuredFieldValue('Sec-Fetch-Site', {
-      type: 'item', bareItem: { type: 'token', value: site }, parameters: new Map(),
-    });
-  }
-
-  // https://w3c.github.io/webappsec-fetch-metadata/#sec-fetch-user-header
-  #setFetchUserHeader(): void {
-    if (!this.isNavigation || !this.userActivation) return;
-    // The field definition and ABNF require a boolean; step 3's "token" is a typo.
-    this.headerList.setStructuredFieldValue('Sec-Fetch-User', {
-      type: 'item', bareItem: { type: 'boolean', value: true }, parameters: new Map(),
-    });
+  appendMetadataHeadersIfTrustworthy(): void {
+    appendMetadataHeadersIfTrustworthy(this);
   }
 }
 
-/** https://fetch.spec.whatwg.org/#request-destination-script-like */
+// https://fetch.spec.whatwg.org/#request-destination-script-like
 export function isScriptLikeDestination(destination: Destination): boolean {
   return scriptLikeDestinations.has(destination);
 }
 
-/** https://fetch.spec.whatwg.org/#concept-potential-destination-translate */
+/** Translate the potential destination "fetch" to the empty request destination. */
+// https://fetch.spec.whatwg.org/#concept-potential-destination-translate
+// UNUSED: consumer integration has not needed this destination translation yet.
 export function translatePotentialDestination(destination: PotentialDestination): Destination {
   return destination === 'fetch' ? '' : destination;
 }
@@ -587,7 +526,7 @@ export class RequestImpl {
     if (init.integrity !== undefined) request.integrityMetadata = init.integrity;
     if (init.keepalive !== undefined) request.keepalive = init.keepalive;
     if (init.method !== undefined) {
-      if (!isMethod(init.method) || isForbiddenMethod(init.method)) throw new TypeError('Invalid Request method');
+      if (!isValidMethod(init.method) || isForbiddenMethod(init.method)) throw new TypeError('Invalid Request method');
       request.method = normalizeMethod(init.method);
     }
     if (init.signal !== undefined) signal = init.signal;
@@ -701,13 +640,11 @@ export type RequestDestination = EmptyDestination | 'audio' | 'audioworklet' | '
   'font' | 'frame' | 'iframe' | 'image' | 'json' | 'manifest' | 'object' | 'paintworklet' |
   'report' | 'script' | 'sharedworker' | 'style' | 'text' | 'track' | 'video' | 'worker' | 'xslt';
 
-/**
- * No specific resource destination, as with fetch(), XHR, and beacons; not an uninitialized value.
- * https://fetch.spec.whatwg.org/#concept-request-destination
- */
+/** No specific resource destination, as with fetch(), XHR, and beacons; not an unset value. */
+// https://fetch.spec.whatwg.org/#concept-request-destination
 export type EmptyDestination = '';
 
-/** https://fetch.spec.whatwg.org/#concept-potential-destination */
+// https://fetch.spec.whatwg.org/#concept-potential-destination
 export type PotentialDestination = 'fetch' | Exclude<Destination, EmptyDestination>;
 
 export type RequestMode = 'navigate' | 'same-origin' | 'no-cors' | 'cors';

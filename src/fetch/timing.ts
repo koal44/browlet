@@ -1,6 +1,7 @@
 import { coarsenTime } from '../infra/time';
 
-/** Fetch §2, fetch timing info. Timestamps are DOMHighResTimeStamp values. */
+/** Timing observations retained for Resource Timing and Navigation Timing, in milliseconds. */
+// https://fetch.spec.whatwg.org/#fetch-timing-info
 export class FetchTimingInfo {
   /** Fetch start timestamp in milliseconds, including time spent on redirects. */
   startTime = 0;
@@ -29,7 +30,8 @@ export class FetchTimingInfo {
   /** Whether the fetch was classified as render-blocking. */
   renderBlocking = false;
 
-  /** Fetch §2, create an opaque timing info. */
+  /** Hide timing details, retaining only the original fetch start. */
+  // https://fetch.spec.whatwg.org/#create-an-opaque-timing-info
   createOpaque(): FetchTimingInfo {
     const opaque = new FetchTimingInfo();
     opaque.startTime = this.startTime;
@@ -38,7 +40,8 @@ export class FetchTimingInfo {
   }
 }
 
-/** Fetch §2, response body info. */
+/** Encoded and decoded body sizes and metadata retained for timing reports. */
+// https://fetch.spec.whatwg.org/#response-body-info
 export class ResponseBodyInfo {
   /** Body byte count before removing content codings, excluding HTTP headers. */
   encodedSize = 0;
@@ -50,7 +53,7 @@ export class ResponseBodyInfo {
   contentEncoding = '';
 }
 
-/** https://fetch.spec.whatwg.org/#connection-timing-info */
+// https://fetch.spec.whatwg.org/#connection-timing-info
 export class ConnectionTimingInfo {
   /** DNS lookup start timestamp in milliseconds; initially zero. */
   domainLookupStartTime = 0;
@@ -65,7 +68,8 @@ export class ConnectionTimingInfo {
   /** Negotiated ALPN protocol identifier as bytes; empty when no protocol is recorded. */
   alpnNegotiatedProtocol = new Uint8Array();
 
-  /** https://fetch.spec.whatwg.org/#clamp-and-coarsen-connection-timing-info */
+  /** Hide earlier connection activity and apply the caller's permitted timing precision. */
+  // https://fetch.spec.whatwg.org/#clamp-and-coarsen-connection-timing-info
   clampAndCoarsen(
     defaultStartTime: number, crossOriginIsolatedCapability: boolean,
   ): ConnectionTimingInfo {
@@ -84,7 +88,7 @@ export class ConnectionTimingInfo {
     result.domainLookupEndTime = coarsenTime(this.domainLookupEndTime, crossOriginIsolatedCapability);
     result.connectionStartTime = coarsenTime(this.connectionStartTime, crossOriginIsolatedCapability);
     result.connectionEndTime = coarsenTime(this.connectionEndTime, crossOriginIsolatedCapability);
-    // Preserve TLS start; the spec currently names connection end here.
+    // SPEC_CLASH(fetch-tls-start): Preserve TLS start; the draft names connection end here.
     result.secureConnectionStartTime = coarsenTime(this.secureConnectionStartTime, crossOriginIsolatedCapability);
     return result;
   }

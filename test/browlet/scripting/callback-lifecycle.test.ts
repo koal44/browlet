@@ -23,7 +23,7 @@ import type { ModuleMap } from
 import { Agent } from '../../../src/browlet/scripting/agents';
 import { createExecution } from '../../../src/browlet/integration/execution';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { Environment, createEnvironmentRecord } from
+import { Environment, EnvironmentRecord } from
   '../../../src/browlet/scripting/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/scripting/global-scope';
 import type { EventLoopOptions, Task } from
@@ -313,7 +313,7 @@ function createTestRealm(
   const realm = createRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
-  const record = createEnvironmentRecord({
+  const record = new EnvironmentRecord({
     userAgent: new UserAgent(),
     isSecureContext: false,
     creationURL: requireURL(`https://${name}.test/`),

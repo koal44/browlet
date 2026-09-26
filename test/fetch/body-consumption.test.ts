@@ -1,13 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
 import { utf8Encode } from '../../src/encoding/codecs/utf-8';
-import { FetchBody } from '../../src/fetch/body';
+import { BodyMixin, FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { BlobImpl } from '../../src/file/index';
 import { getBufferSourceCopy } from '../../src/js-engine/index';
 import { FormDataImpl } from '../../src/xhr/index';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
+
+describe('Body mixin state', () => {
+  it('reads replacement bodies and stream state through the same mixin', () => {
+    const fixture = createFetchFixture();
+    const record = new FetchResponse();
+    const response = fixture.createResponse(record);
+    const mixin = new BodyMixin(record, fixture.env);
+    const first = fixture.createBody();
+    expect(first.source).toBeNull();
+    expect(first.length).toBeNull();
+    record.body = first;
+    expect(response.body).toBe(first.stream);
+    const reader = first.stream.getDefaultReader();
+    expect(mixin.unusable).toBe(true);
+    expect(response.bodyUsed).toBe(false);
+    reader.readChunk({ chunkSteps() {}, closeSteps() {}, errorSteps() {} });
+    expect(response.bodyUsed).toBe(true);
+    reader.release();
+    const second = fixture.createBody();
+    record.body = second;
+    expect(response.body).toBe(second.stream);
+    expect(response.bodyUsed).toBe(false);
+    expect(mixin.unusable).toBe(false);
+    record.body = null;
+    expect(response.body).toBeNull();
+  });
+});
 
 describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) => {
   it('reads UTF-8 text once and marks the body used immediately', async () => {
