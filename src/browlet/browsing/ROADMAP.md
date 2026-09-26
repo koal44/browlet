@@ -66,12 +66,12 @@ frozen-base and Blob acquisition tests already cover retention.
   Browsing owns the ordering; each subsystem owns its internal state.
   Reporting adds global endpoints, outbound reports, observer registrations,
   and its report buffer to that cleanup. Do not clear them merely when the
-  Document becomes inactive; [Reporting B](../reporting/ROADMAP.md#b-generation-observers-and-user-controls)
-  leaves destruction integration explicitly outstanding.
+  Document becomes inactive. [Reporting delivery](../reporting/ROADMAP.md#delivery-and-lifetime)
+  already survives active-Document destruction; retained-history disposal is separate work.
 
 ## Document destruction review
 
-Reporting B is the immediate consumer. HTML §7.5.10's single-document destruction
+Reporting is an existing cleanup consumer. HTML §7.5.10's single-document destruction
 calls §7.5.11's load abortion and §7.5.9's shared unloading cleanup. The full
 unload algorithm is a separate caller: its pagehide/unload events, visibility,
 timing, and back/forward-cache decisions are not prerequisites for expressing
@@ -86,20 +86,21 @@ claiming those producers exist. Navigation does not invoke destruction yet.
 destruction, registered cleanup calls, parser abortion, and BiDi notification
 arguments through those provisional contracts.
 
-Ready independently: document salvageability/blocking-reason state,
+Implemented: document salvageability/blocking-reason state,
 `EventLoop.removeTasksForDocument()`, `GlobalTimers.clear()`, and global
-`clearReportingState()`. Focused tests cover task ownership, queued and delayed
-timer cancellation, and isolation of report state between globals.
+`clearReportingState()`. Blob URL unloading cleanup removes registrations by
+creator environment. The bounded HTML loader registers its active parser and
+cancels input/resumptions on abort. Focused tests cover these paths, task ownership,
+queued/delayed timer cancellation, and isolation of report state between globals.
 
 | Provisional dependency | Required owner and behavior |
 | --- | --- |
-| `env.fetchGroup.cancel()` | Currently returns false without changing records. Fetch must cancel in-flight work, discard its queued callbacks and subsequent data, and report whether anything was canceled. Existing `terminate()` only changes controller state and processes deferred fetches; it excludes keepalive requests. Settle cancellation/lifetime rules with Fetch orchestration. No DOM types should enter Fetch. |
-| `document.activeParser` and `parser.abort()` | HTML parser integration must track an actually active parser, stop its input and resumptions, and perform §13.2's abort readiness/stack steps. The current `document.write()` callback does not supply this lifetime. |
+| `env.fetchGroup.cancel()` | Still returns false. Complete group task/data disposal and keepalive/deferred rules. Controller cancellation and non-keepalive group termination now stop network operations; deferred processing remains unfinished. No DOM types should enter Fetch. |
+| `parser.abort()` | Active registration and input cancellation exist. Complete §13.2's readiness events, open-element cleanup, speculative-parser cancellation, and full parser lifecycle. |
 | `userAgent.webDriverBiDiNavigationAborted()` | A no-op until BiDi sessions exist. The lifecycle call supplies the navigation ID, canceled status, URL, and navigable. UserAgent also owns the environment-scoped BiDi queries. |
 | Global `messagePorts` | Messaging must maintain relevant-global membership and disentangle those ports. MessagePort itself is not implemented. |
 | Global `webSockets`, `webTransports`, `eventSources` | Those subsystems must own their live objects and cleanup operations. They are not current runnable producers. |
 | `document.ownedWorkers` / `workletGlobalScopes` | Worker and Worklet integration must maintain actual ownership, remove the Document from worker owner sets, and terminate document-owned worklets. |
-| `userAgent.blobURLStore` | The storage-keys/Blob-URLs detour must implement File API's environment-based unloading cleanup. Other unimplemented cleanup producers remain with their own specifications. |
 
 The global collections and inline structural types are deliberately minimal.
 Replace them with concrete subsystem types and actual registration when those
@@ -123,18 +124,11 @@ History disposal remains a lifecycle question before general use:
   the currently active entry. Settle our callable shape in the dedicated
   history-ownership slice below, not as a Reporting-specific parameter. The local HTML
   inconsistency is recorded in `scratch/SPEC-ISSUES.md`.
-- Reporting defines best-effort delivery and retirement, but no explicit
-  document-destruction flush. Reporting C's `sendReports()` flow hands
-  copied outbound reports to browser-owned tasks before clearing local report
-  state, after removing document tasks. UserAgent's scheduler survives that
-  removal; Fetch's entry remains a provisional no-op. Extending destruction must still ensure
-  it does not erase an unrelated or reused Window's state. Blink's
-  `core/frame/reporting_context.cc` hands reports to the reporting service when
-  generated; Gecko's `dom/reporting/ReportDeliver.cpp` captures delivery data
-  then; WebKit's `loader/PingLoader.cpp` uses keepalive for violation reports.
-  The handoff retains no Environment or Window, so document cleanup does not
-  erase pending delivery or require a synchronous network flush. This bounded
-  implementation does not settle retained-history ownership or Window reuse.
+- Reporting hands copied data to UserAgent-owned delivery before clearing local
+  state. Real Fetch uploads continue through the browser sandbox after destruction;
+  they require no synchronous flush. Preserve unrelated/reused Window state when
+  extending cleanup. The [Reporting roadmap](../reporting/ROADMAP.md#delivery-and-lifetime)
+  owns the delivery contract and browser evidence.
 
 ### Planned slice: history ownership and document disposal
 
@@ -160,8 +154,8 @@ returning to A by recreation; shared same-document history state; descendant
 teardown; and initial about:blank Window reuse. Any missing dependency is shown
 at that consumer rather than hidden by extra nullable lookups or a second owner
 registry. Keep the current active-document scaffold provisional until those
-relationships and callers exist. Reporting C's independent serialization,
-retirement, and delivery-ownership work does not require this slice to finish.
+relationships and callers exist. Reporting's implemented delivery does not settle
+this history-ownership question.
 
 ## Lifecycle completion order
 

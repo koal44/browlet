@@ -50,7 +50,7 @@ function createWptFailure(test: WptTestResult): Error {
   if (test.stack) {
     error.stack = test.stack.replaceAll(
       'http://web-platform.test/',
-      'test/wpt/tests/',
+      'wpt/tests/',
     );
   }
   return error;

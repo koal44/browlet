@@ -34,9 +34,9 @@ not add a generic `listener-observation.ts` registry in advance.
 
 | Owner | Contract | Specification |
 | --- | --- | --- |
-| `browsing/window/` | Own the legacy Window `event` attribute and default-passive Window/Document/body targets | DOM §§2.3 and 2.7 |
+| `browsing/window/` and elements | Extend the existing Window.event/default-passive integration with complete body/element targets | DOM §§2.3 and 2.7 |
 | concrete HTML elements | Supply activation, legacy pre-activation, and canceled-activation behavior only for the elements that define it | DOM §§2.7 and 2.9; HTML |
-| `scripting/` and Web IDL | Prepare/clean up callback execution and report listener exceptions in the callback's realm | DOM §2.9; HTML §8.1; Web IDL callbacks |
+| `scripting/` | Extend existing callback preparation/cleanup and exception routing with formal Script records, ErrorEvent, and full runtime-error reporting | DOM §2.9; HTML §8.1; Web IDL callbacks |
 | `performance/` | Record event-listener timing when the Event Timing and Long Animation Frames producers exist | DOM §2.9; Event Timing; Long Animation Frames |
 | workers/service workers | Apply the late-listener warning and legacy fetch-listener inspection at their specified globals | DOM §§2.7–2.8; Service Workers |
 

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve('.');
-const wptDir = resolve(root, 'test/wpt');
+const wptDir = resolve(root, 'wpt');
 const checkoutDir = resolve(wptDir, 'tests');
 
 function installWpt(): void {

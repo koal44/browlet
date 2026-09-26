@@ -93,10 +93,10 @@ of Fetch, input, rendering, or scheduling.
 ## Fetch and navigation integration
 
 This section owns the timing integration gate linked from the
-[Fetch preflight](../../fetch/PREFLIGHT.md). Existing clocks remain the
+[Fetch roadmap](../../fetch/ROADMAP.md#owner-integration-gates). Existing clocks remain the
 foundation; collecting raw Fetch timestamps does not complete entry delivery.
 
-Read these sources, with paths relative to the preflight's local reference root:
+Read these sources, with paths relative to the [reference root](../../fetch/README.md#sources):
 
 | Specification | Local source | Role |
 | --- | --- | --- |

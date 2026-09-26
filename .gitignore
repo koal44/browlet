@@ -3,7 +3,7 @@ node_modules/
 test-results/
 .last-run.json
 dist/
-/test/wpt/tests/
+/wpt/tests/
 /node-compat/addon/build/
 /node-compat/.cache/
 /node-compat/results/

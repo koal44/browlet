@@ -18,14 +18,16 @@
 | existing `window-proxy.ts` | Complete exotic internal methods and same-origin/cross-origin switching | HTML §7.2.3 |
 | existing `location.ts` | Complete navigation setters/methods, ancestor origins, and exotic internal methods | HTML §7.2.4 |
 
-The Node/V8 global-proxy limitation remains an expected failure; do not deform
-these contracts to hide it. Blink owns Window/Location in `core/frame` and the
+Native context/global-proxy allocation and reuse are implemented through the
+compatibility addon. Stock Node retains a modeled fallback with documented
+[limitations](../../../LIMITATIONS.md); cross-origin security remains HTML work
+on either backend. Blink owns Window/Location in `core/frame` and the
 actual V8 WindowProxy in `bindings/core/v8/window_proxy.*`, reinforcing that
 the proxy is binding/engine machinery attached to—but not identical with—the
 Window implementation.
 
-`Window.postMessage()` is declared on Window but implemented by
-`communication/window-messaging.ts`; it consumes the single structured-data
+`Window.postMessage()` belongs on Window, with its future algorithms in
+`communication/window-messaging.ts`; it must consume the single structured-data
 implementation and the target agent's event loop. It must not add a
 Window-local cloning format. User activation and focus likewise associate state
 with Window while retaining their algorithms under `interaction/`.

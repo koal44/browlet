@@ -1,11 +1,9 @@
 # Browlet roadmap
 
-This file records unimplemented browser-host domains whose eventual ownership
-is already clear. It is not a compatibility promise. Burn each entry when
-its domain has real source and its narrower roadmap has been removed.
-
-Cross-domain implementation order and the observable exit proof for each wave
-are maintained in [PRIORITY.md](PRIORITY.md).
+This is the browser-host ownership map. Rows can describe implemented or planned
+domains; narrower roadmaps carry their actual status and remaining contracts.
+[Project priority](../PRIORITY.md) owns execution order, and
+[architecture](../ARCHITECTURE.md) owns composition and environment conventions.
 
 ## Source map
 
@@ -33,53 +31,49 @@ are maintained in [PRIORITY.md](PRIORITY.md).
 | SVG and MathML host elements | HTML foreign-content integration plus SVG 2 and MathML Core | `svg/` and `mathml/` |
 | CSSOM/HTML host integration | CSSOM, CSSOM View, and HTML link/style processing | `style/` |
 
-Blink uses the same broad boundaries—`core/dom`, `core/html`,
-`core/html/parser`, `core/frame`, `core/loader`, `core/execution_context`,
-`core/workers`, `core/svg`, and `core/mathml`—but Browlet should not reproduce
-Blink's native-code file granularity.
+## Current boundary
 
-## External specification sequence
+Fetch's planned delivery slices and independent preflight are complete within
+their recorded scope. Reuse the implemented HTTP transport/cache/authentication,
+CORS, policy checks, Reporting delivery, Storage keys, and Blob URLs. Their
+remaining audits and owner gates are in the [Fetch roadmap](../fetch/ROADMAP.md).
+They no longer need to be scheduled as missing foundations for HTML.
 
-HTML §2.1.9 is a cross-reference inventory for the entire standard, not a
-prerequisite list. Adopt an external standard when Browlet reaches its first
-observable consumer; do not implement every specification merely because HTML
-imports one of its terms.
+Full browser navigation, script loading/execution, nested contexts, element-driven
+loading, and much of the public DOM remain unfinished. Follow the
+[DOM](dom/ROADMAP.md), [browsing](browsing/ROADMAP.md),
+[loader](loader/ROADMAP.md), and [scripting](scripting/ROADMAP.md) plans rather
+than interpreting implemented Fetch as complete HTML loading.
 
-| Wave | Specifications | Browlet decision or first consumer |
-| --- | --- | --- |
-| Substrate | Infra; JavaScript, Intl, and core WebAssembly; Unicode and Encoding | Translate Infra notation directly into TypeScript; use the host JavaScript engine; use Browlet's Encoding codecs, queues, and APIs with published WHATWG mapping data; see [Encoding](../encoding/README.md) |
-| Implemented foundations | DOM, Web IDL, URL | Continue document-order audits as consumers reveal gaps; these are foundational because nearly every public object and algorithm crosses them |
-| Additional document syntax | XML and its namespace/style-sheet-processing specifications; later XPath and XSLT | Keep the DOM namespace-aware; qualify a strict evented XML 1.0 engine against W3C conformance, §14 fragments, and bounded entity processing before character-input DOMParser work, then add byte-oriented XML navigation through the loader. Qualify XPath/XSLT engines separately; Browlet owns their DOM/Web IDL adapters, result objects, mutation integration, and HTML-specific behavior rather than another parser/evaluator by default |
-| Execution and loading kernel | High Resolution Time; Fetch; HTTP; MIME Sniffing; Streams and the Blob subset of File API; cookies | Implement timing first, then Fetch records/APIs and an Undici-backed transport; connect loader/parser/document lifecycle without absorbing browser policy into the transport |
-| Secure external content | Referrer Policy, CSP, Subresource Integrity, Mixed Content, Secure Contexts, Permissions Policy, Trusted Types, Reporting | Add with external scripts, styles, frames, and navigation; these are required for faithful loading but need not block the first response-bearing Fetch slice |
-| Performance observability | Performance Timeline, Navigation Timing, Resource Timing, Paint Timing; later Long Tasks and Long Animation Frames | Build on the shared clock and Fetch/loader timestamps; paint and long-frame entries wait for rendering and scheduler machinery |
-| Interaction and DOM extensions | UI Events, Pointer Events, Touch Events, Clipboard, DOM Parsing and Serialization, Selection, Fullscreen, `execCommand`, Console, and cooperative scheduling | Add from concrete focus/input/editing/parser consumers; selection and fullscreen require layout/lifecycle, while idle callbacks require a real event loop and scheduler |
-| Styling, layout, and accessibility | CSS modules, Media Queries, Geometry, SVG, MathML, ARIA; later Intersection Observer, Resize Observer, Filter Effects, and Compositing | Stylelet owns CSS semantics; Browlet supplies DOM, environment, layout, rendering, and accessibility integration. Observers wait for geometry/layout |
-| Application and offline platform | Full File API, Storage, IndexedDB, Service Workers, Web Locks, Web App Manifest, Background Sync/Fetch, XMLHttpRequest, URL Pattern, No-Vary-Search | Add storage-key derivation when SharedWorker or BroadcastChannel first consumes it; the public Web Storage facade can wait. Add Fetch before XHR/service workers, Navigation API before URL Pattern, and HTTP caching before No-Vary-Search |
-| Network, crypto, and identity APIs | WebSockets, WebTransport, Web Crypto, Credential Management, WebAuthn, Payment Request | Add after streams, event-loop, origin, permissions, and secure-context foundations; none is needed to create and run an ordinary Document |
-| Media and graphics | HTML media, WebVTT, Media Source Extensions, WebCodecs, Media Capture, WebRTC, Picture-in-Picture, canvas, WebGL, WebGPU | The [media roadmap](media/ROADMAP.md) owns shared HTML media types and MSE as later work. Blob URL integration proceeds with Blob support. Full media remains gated on HTML media, format/decoder, and worker support. Other media and graphics APIs remain separate later projects |
-| Automation | WebDriver and WebDriver BiDi | Preserve narrow lifecycle/navigation instrumentation points, but implement the protocols in a separate automation package after browsing, script, input, and network behavior are stable enough to drive |
-| Optional device APIs | Battery, Screen Orientation, Idle Detection, Web Speech/OTP/Share, Smart Card, Keyboard Lock, MIDI, Sensors, HID, and WebXR | Defer until the corresponding host capability and an explicit product use case exist |
+## Later external consumers
 
-Core WebAssembly execution remains the JavaScript engine's responsibility.
-Browlet only needs the HTML module-loader and structured-clone integration
-when WebAssembly module scripts or cross-realm module transfer become a target.
+HTML's dependency inventory is not a prerequisite list. Introduce an external
+standard with its first real consumer and retain its own ownership:
+
+- XML parsing/serialization, XPath, and XSLT need qualified engines and DOM
+  integration; an HTML parser is not an XML parser.
+- Performance Timeline/Navigation/Resource Timing build on existing clocks and
+  Fetch records. Paint/long-frame APIs also need rendering/scheduler consumers.
+- Permissions Policy, Trusted Types, and remaining CSP enforcement enter with
+  the relevant navigation, element, worker, and compilation lifecycles.
+- IndexedDB, Web Locks, manifest, background APIs, and public Web Storage remain
+  future application work. XHR can now use Fetch; SharedWorker/BroadcastChannel
+  can use existing storage keys. URL Pattern and No-Vary-Search need their actual
+  navigation/cache consumers.
+- WebSockets, WebTransport, Web Crypto, credentials, WebAuthn, and payments have
+  separate protocol/security/host dependencies.
+- [Media](media/ROADMAP.md), graphics, layout, accessibility, and interaction
+  retain their own prerequisites. MSE is unnecessary for existing Blob URLs.
+- Device APIs need both an explicit use case and a host capability.
+  Core WebAssembly execution remains engine-owned; HTML module/clone integration
+  enters with its consumers.
 
 ## Deferred top-level domains
 
-- [ ] Add `accessibility/` when its first observable behavior is implemented
-  rather than reserving empty TypeScript modules. `interaction/` already has a
-  specification roadmap but should gain TypeScript only with real behavior.
-- [ ] Add other application APIs only when a consumer reaches them. The
-  `communication/`, `navigator/`, `graphics/`, `workers/`, `worklets/`, and
-  `storage/` roadmaps reserve Section 8–12 ownership without adding empty
-  runtime modules.
-- [ ] Add an automation/driver package outside `src/browlet` if Browlet grows
-  into a Playwright-compatible headless engine. The browser core must not own
-  the transport protocol.
+Add accessibility and other new domains when their first behavior arrives,
+not as empty source placeholders. Existing narrow roadmaps reserve ownership
+for communication, workers/worklets, storage, navigation, and rendering.
 
-## Removal condition
-
-Burn this file once every row is represented by implemented source or a
-more specific surviving roadmap, and the automation north star has a project
-of its own.
+A future WebDriver/BiDi protocol package can drive the browser's normal algorithms.
+The core retains scoped instrumentation hooks and the existing evaluation bridge;
+it should not acquire a second navigation lifecycle or the driver transport.

@@ -47,7 +47,7 @@ must not become one oversized HTML Document module.
 
 | Section | Owner |
 | --- | --- |
-| §3.1.1 `Document` object | `dom/nodes/document.ts` for the object and slots; `html/web-idl.ts` for HTML's partial interface; policy, scripting, and navigation retain their contributed state |
+| §3.1.1 `Document` object | `dom/nodes/document.ts` for the implementation and co-located HTML partial declaration; policy, scripting, and navigation retain their contributed state |
 | §3.1.2 `DocumentOrShadowRoot` | DOM's mixin implementation; focus management supplies `activeElement` |
 | §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `html/collections/` |
 | §3.1.4 resource metadata | Document accessors over URL, Fetch response metadata, cookies, and loader state |

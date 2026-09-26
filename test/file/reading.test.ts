@@ -6,7 +6,7 @@ import type { TaskScheduling } from '../../src/infra/index';
 import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
 import type { InternalPromise } from '../../src/infra/promises';
 import { createEnvironment } from '../js-engine/execution-fixture';
-import { expectBytesEqual } from '../assertions/bytes';
+import { expectBytesEqual } from '../support/bytes';
 
 describe('File reading implementation', () => {
   it.each([

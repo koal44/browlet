@@ -2,7 +2,7 @@
 
 This module owns reusable private-cache calculations and policy. Its inputs
 are field values, methods/statuses, and caller-supplied timestamps; it imports
-neither Fetch nor Browlet. The [Fetch cache plan](../../fetch/CACHE-ROADMAP.md)
+neither Fetch nor Browlet. The [Fetch cache implementation](../../fetch/README.md#bodies-and-caches)
 owns storage, response selection, validation, and transactions over Fetch records.
 
 **Status:** age/freshness, bounded field parsing, storage eligibility, request
@@ -18,7 +18,7 @@ status-specific policy extensions wait for the corresponding storage support.
   validators, conditional requests, and other HTTP rules.
 
 Local sources are `rfcs/rfc9111.txt`, `rfcs/rfc5861.txt`, and
-`rfcs/rfc9110.txt` under the [reference root](../../fetch/PREFLIGHT.md#local-reference-inventory).
+`rfcs/rfc9110.txt` under the [reference root](../../fetch/README.md#sources).
 The [HTTP roadmap](../ROADMAP.md) owns shared syntax and date parsing.
 
 ## Age and freshness contract
@@ -99,6 +99,6 @@ overflow, duplicate directives, private-cache permission, request restrictions,
 Vary syntax, and unsafe-method invalidation triggers.
 
 These calculations do not prove storage or transaction behavior. The
-[Fetch cache plan](../../fetch/CACHE-ROADMAP.md) owns those acceptance gates
+[Fetch roadmap](../../fetch/ROADMAP.md#http-cache) owns the remaining storage work
 and the external Undici store comparison. Extend these rules alongside those
 consumers, with a focused test for each newly supported branch.

@@ -12,7 +12,7 @@ export default defineConfig({
           isolate: false,
           include: [
             'test/lint/**/*.test.mjs',
-            'test/assertions/**/*.test.ts',
+            'test/support/**/*.test.ts',
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/**/*.test.ts',
             'test/js-engine/**/*.test.ts',
@@ -41,7 +41,7 @@ export default defineConfig({
         test: {
           name: 'wpt',
           environment: 'node',
-          include: ['test/wpt/browlet.test.ts'],
+          include: ['wpt/browlet.test.ts'],
           testTimeout: 70_000,
         },
       },

@@ -1,98 +1,59 @@
 # Abort roadmap
 
-DOM §3's synchronous core and public interface are present. Observable
-`AbortSignal.timeout()` delivery is wired to provisional HTML-owned active-time
-and task-queuing seams, which remain the only unfinished dependency.
+DOM [§3](https://dom.spec.whatwg.org/#aborting-ongoing-activities) is implemented
+for the current Window host: controller/signal projection, composition,
+EventTarget integration, onabort, and active-time timeout delivery.
+Worker exposure and nondeterministic retention evidence remain below.
 
-## Present
+## Current contract
 
-| Source | Contract | Specification |
-| --- | --- | --- |
-| `abort-controller.ts` | `AbortController`, its same-object signal, and idempotent `abort(reason)` | DOM §3.1, `#interface-abortcontroller` |
-| `abort-signal.ts` | `AbortSignal` state, static `abort()`/`any()`/`timeout()`, `throwIfAborted()`, `onabort`, internal abort algorithms, dependent-signal composition, and abort-event ordering | DOM §3.2, `#interface-AbortSignal` |
-| `scripting/event-handlers.ts` | Ordinary event-handler IDL state, activation, replacement, deactivation, and callback processing used by `onabort` | HTML §8.1.8; DOM §3.2 |
+`AbortSignalImpl` exposes add/remove-algorithm operations to converted internal
+consumers. Its platform object does not expose them. Signal abort sets source
+and dependent reasons first, runs/clears internal algorithms, then fires abort.
+Consumers reject with that stored reason and own their own cancellation/cleanup.
 
-Both interfaces have declarative Web IDL definitions and realm-specific
-projection. Default `AbortError` values are `DOMException` objects from the
-current/relevant realm. `AbortSignal.any()` returns a dependent signal in the
-current realm, preserves the first already-aborted source's reason, and
-flattens dependent sources as specified.
+AbortController retains its same-object signal and aborts idempotently.
+AbortSignal.any preserves the first already-aborted source's reason and flattens
+dependent sources. Default AbortError and TimeoutError objects use the required
+binding/relevant realm.
 
-## Internal abort contract
+EventTarget's converted signal registers listener removal as an internal abort
+algorithm and removes it when listener cleanup no longer needs it. Removal
+precedes the public abort event. Streams and Fetch consume the same internal
+contract; their cancellation algorithms do not belong to DOM.
 
-`AbortSignalImpl` directly exposes its internal add/remove-algorithm contract
-to post-conversion implementation code. The public `AbortSignal` wrapper does
-not expose those methods. A type-only EventTarget dependency preserves the
-acyclic runtime graph without a secondary registry or reverse platform-object
-lookup. Signaling abort sets source and dependent reasons first, then runs and
-clears each signal's internal algorithms, and only then fires its public
-`abort` event. Promise-based consumers reject with the stored reason, but each
-consumer owns that promise and its cleanup; DOM does not grow a generic
-"abort a promise" utility.
+## HTML delivery and retention
 
-`EventTarget.addEventListener()` is the first consumer. It now:
+AbortSignal.timeout's declaration composes the owning global's active-time wait
+with Realm.queueGlobalTask on the timer task source. GlobalTimers and the running
+event loop now supply those operations. It retains the original Window owner
+across WindowProxy retargeting. DOM does not schedule a separate Node timer.
 
-- declares `AddEventListenerOptions.signal` as `AbortSignal`, not `object`;
-- accepts Browlet platform signals through Web IDL branding rather than Node's
-  ambient `AbortSignal`;
-- registers listener removal as an internal abort algorithm; and
-- removes that algorithm when listener cleanup makes it unnecessary.
+The global-owned timer closure retains the signal until completion. Dependent
+signal relationships use ordered weak references; a private per-global retention
+set keeps non-aborted dependents alive while they have sources and a listener or
+abort algorithm. It releases them when that condition ends. The set belongs to
+the per-realm Window object, so proxy reuse does not move it to a new Window.
 
-Streams consumes that structural post-conversion contract directly. Fetch,
-loaders, and other APIs can do the same without importing their cancellation
-behavior into this directory.
+The onabort property uses HTML's ordinary IDL-handler core: replacement preserves
+listener order, null/legacy non-object assignment removes it, and reactivation
+adds it later. Content-attribute compilation and special global error/beforeunload
+handlers remain scripting work.
 
-## HTML-owned pieces
+## Remaining integration
 
-`AbortSignal.timeout(milliseconds)` creates the signal in the binding realm.
-Its declaration supplies a timeout-scheduling callback composed from that
-Window's `GlobalTimers.runStepsAfterTimeout()` and `Realm.queueGlobalTask()`
-on the timer task source. The implementation aborts the signal when that task
-runs. HTML §8.1.7 owns task delivery; §8.7 owns the per-global ordered timer
-map, fully-active-time suspension, and host wake-up. The callback retains the
-original Window's timer owner when navigation retargets WindowProxy.
-The scheduled completion closure captures the signal,
-so the global-owned timer entry also supplies the required strong reachability
-while delivery is pending.
+- Install the declared interfaces with real worker globals, active-time suspension,
+  termination, and worker-owned retention. Reuse the existing global lifecycle.
+- Keep dependent-signal and timeout retention topology explicit. Deterministic GC
+  evidence is unavailable; ordinary behavior tests do not prove collection timing.
+  Do not add flaky collection tests or use finalization to drive cancellation.
+- New APIs register their specified abort steps through DOM §3.3. Browser teardown
+  and Fetch group disposal remain with those owners, not a generic DOM promise helper.
 
-The `onabort` event-handler IDL attribute uses HTML's ordinary event-handler
-core. It preserves listener registration order across replacement, removes
-its listener on null or legacy non-object assignment, restores it at the later
-position on reactivation, and applies the ordinary false-return cancellation
-rule. Content-attribute compilation and the special global error and
-beforeunload handlers remain later HTML §8.1.8 work, not DOM §3 prerequisites.
+## Validation
 
-## Retention
-
-Source-to-dependent relationships use an ordered weak-reference collection.
-Each signal owns one WeakRef shared by these collections and its abort-algorithm
-handles. `AbortSignalRetentionStamper` privately attaches a strong retention
-set to each global object. For a Window, the set stays with the per-realm
-Window object across WindowProxy retargeting. It keeps a live, non-aborted
-dependent signal strongly reachable while it has source signals and an abort
-listener or abort algorithm, then releases it when that condition ends. Node
-does not provide a deterministic observable GC test, so the implementation
-preserves the topology without adding a flaky collection test.
-
-DOM §3.3 (`#abortcontroller-api-integration`) supplies the contract by which
-Fetch, streams, and other hosts register abort algorithms. Do not put those
-consumer algorithms into this directory.
-
-Blink's `core/dom/abort_controller.*`, `abort_signal.*`, and composition
-manager are useful decomposition evidence; Browlet can begin with two modules
-until composition warrants a third.
-
-## Remaining delivery
-
-1. Implement HTML §8.7's active-time timer algorithm and start the owning
-   agent's event loop in production behind the existing
-   `AbortSignal.timeout()` seams. Global task routing and queue ownership are
-   already implemented.
-2. Replace the provisional scheduling-failure test with deterministic
-   active-time, timer-task, realm-native `TimeoutError`, and retention coverage.
-
-## Removal condition
-
-Burn this file after abort composition, EventTarget integration, timeout, and
-the observable retention contract are implemented or have an explicit tested
-host limitation.
+[Abort tests](../../../../test/browlet/dom/abort.test.ts) cover projected APIs,
+composition, ordering, reasons, listener cleanup, and actual timer-task delivery.
+[Timer tests](../../../../test/browlet/scripting/timers.test.ts) cover active-time
+suspension, ordering, clearing, and navigation/lifecycle behavior. Window timeout
+delivery is no longer a provisional missing prerequisite.

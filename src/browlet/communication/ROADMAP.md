@@ -35,9 +35,9 @@ transfer and cross-agent task delivery together.
 | `message-port.ts` | `MessagePort`, `MessageEventTarget`, entanglement, port task sources, transfer/receiving steps, start/close, and lifecycle cleanup | HTML §§9.4.3–9.4.5 |
 | `event-source.ts` | `EventSource`, UTF-8 event-stream parsing, Fetch streaming, reconnection, remote-event tasks, and abort/close | HTML §9.2 |
 | `broadcast-channel.ts` | Storage-key-scoped channel discovery, per-agent ordering, target-realm delivery, eligibility, close, and liveness | HTML §9.5; Storage |
-| `web-idl.ts` | Communication interfaces, dictionaries, mixins, overloads, exposure, and Window/worker contributions | HTML §9 |
 
-`StructuredSerializeOptions` belongs to the shared structured-data declaration,
+Co-locate declarations with their implementations and Window/worker contributions
+with their primary constructs. `StructuredSerializeOptions` belongs to the shared structured-data declaration,
 not to one transport. `MessageEvent` is HTML-owned even though WebSockets,
 workers, EventSource, and several later specifications reuse it. Generic DOM
 event code must not absorb either interface.
@@ -50,10 +50,10 @@ event code must not absorb either interface.
    Document destruction before using ports as the dedicated-worker channel.
 3. Add Window `postMessage()` with nested navigables and cross-navigation
    WindowProxy/origin tests.
-4. Add EventSource after Fetch provides streaming bodies, cancellation, and a
-   networking task destination; its retry delay consumes the scheduler rather
-   than inventing a timer loop.
-5. Add BroadcastChannel after storage keys and multi-global lifetime exist.
+4. Build EventSource on the existing Fetch streams, cancellation, and networking
+   task destination. Its retry delay consumes the existing scheduler.
+5. Build BroadcastChannel on the existing storage keys when multi-global
+   lifetime and delivery eligibility are implemented.
 
 The WebSockets interface has moved to the separate WebSockets Standard. It may
 reuse `MessageEvent`, but it is not owned by this directory.

@@ -8,9 +8,10 @@ Browlet is a monorepo containing three web engines developed against web specs:
 
 The project is tested with unit suites, Playwright comparisons, and selected WPTs.
 
-Cross-subsystem design decisions are recorded in the
-[subsystem composition architecture](src/SUBSYSTEM-ARCHITECTURE.md) and the
-[platform-object architecture](src/PLATFORM-OBJECT-ARCHITECTURE.md).
+See the [project architecture](src/ARCHITECTURE.md) for shared ownership,
+[Web IDL](src/web-idl/README.md) for declarations and binding,
+[implementation priority](src/PRIORITY.md) for the work ahead, and
+[known limitations](src/LIMITATIONS.md) for current constraints.
 
 ## Development
 

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { Browlet, type BrowletRoute } from '../../src/browlet/browlet';
+import { Browlet, type BrowletRoute } from '../src/browlet/browlet';
 import {
   reporterSource, resolveWptPath, withWptTimeout, wptOrigin,
   type WptReport,

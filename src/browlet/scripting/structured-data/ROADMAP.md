@@ -1,330 +1,117 @@
 # Structured data roadmap
 
-HTML §2.7 owns structured serialization, deserialization, transfer, and the
-`structuredClone()` API. These operations serve realms, history, messaging,
-workers, Streams, and Fetch, so their graph machinery belongs with scripting
-rather than any one consumer.
+HTML [§2.7](https://html.spec.whatwg.org/multipage/structured-data.html) supplies
+structured serialization, storage serialization, target-realm deserialization,
+transfer, and structuredClone(). The generic algorithms, ArrayBuffer transfer,
+and the current Window API are implemented. MessagePort-backed platform transfer
+and the remaining history/worker/messaging consumers are still future work.
 
-The implementation should proceed in specification order, but in bounded
-slices with an observable proof after each slice. Do not translate §2.7 into
-one large recursive function before its Web IDL, realm, and host-capability
-boundaries have been proved.
+## Current ownership
 
-## Starting point
+| Location | Responsibility |
+| --- | --- |
+| `records.ts` | Closed record families and graph-memory types |
+| `serializable.ts`, `transferable.ts` | Exact-interface capabilities and HTML-owned detached state |
+| `serialize.ts`, `deserialize.ts` | Graph traversal, storage mode, target-realm reconstruction, and shared memory |
+| `transfer.ts` | Transfer-list validation, serialization/transfer order, and receiving steps |
+| `structured-clone.ts` | The internal structured-cloning operation |
+| `web-idl.ts` | Shared StructuredSerializeOptions declaration |
+| `../global-scope.ts` | The public WindowOrWorkerGlobalScope contribution |
+| [Integration](../../integration/README.md) | Providers owned by the contributing platform subsystems |
 
-Browlet already has the following prerequisites:
+[Web IDL](../../../web-idl/README.md) owns platform identity, exposure checks,
+internal target-realm creation, and the generic capability seam. HTML owns graph
+records, memories, storage mode, transfer ordering, and sub-operations. Each
+defining specification supplies its interface's steps. Dispatch uses the exact
+primary interface; inherited interfaces do not each run an independent hook.
 
-- platform-object records containing the exact primary interface and realm;
-- assembled-interface lookup, exposure checks, and per-realm bindings;
-- a realm-bound interface adapter for resolving exact primary interfaces,
-  consulting specification capabilities, and internally creating platform
-  objects without invoking author-facing constructor steps;
-- declarative preservation of `[Serializable]` and `[Transferable]`;
-- typed serializable and transferable capability contracts;
-- HTML-owned platform-object `[[Detached]]` state;
-- concrete Realm, agent, and agent-cluster ownership;
-- realm-aware BufferSource construction, copying, detachment, and transfer;
-- realm-correct `DOMException` and `QuotaExceededError` implementations; and
-- an expected-failure `DOMException` `structuredClone()` test that can become
-  the first public platform-object proof.
+Serializable/Transferable attributes remain declaration metadata. Executable
+capabilities stay separate from that syntax. Deserialization creates internal
+instances without invoking public constructors or requiring public constructibility.
+Native structuredClone cannot replace this graph/binding/exposure machinery.
 
-The missing foundations are the closed structured-data record families, graph
-memory, reliable built-in brand/slot operations, and the recursive HTML
-algorithms themselves.
+## Invariants to preserve
 
-## Architecture boundaries
+Serialization supports the specified primitive, boxed, built-in collection,
+Error, buffer/view, ordinary object, and serializable-platform families.
+Insert each shallow record into memory before descending; deserialization likewise
+allocates and remembers the target value before recursively populating it.
+Cycles and repeated identity must survive across graph and transfer memories.
 
-- Web IDL owns platform-object identity, target-realm creation, exposure, and
-  a generic language-binding extension seam. It must not import HTML's graph
-  records or structured-clone algorithms.
-- HTML owns serialized records, memory maps, storage mode, sub-serialization,
-  sub-deserialization, transfer ordering, and the public API.
-- The specification defining an interface owns that interface's serialization,
-  deserialization, transfer, and transfer-receiving steps. It implements those
-  capabilities through the generic seam; HTML invokes them.
-- Dispatch is by the platform object's exact primary interface. Inherited
-  interfaces do not each run independent hooks; a derived interface's steps
-  explicitly reuse inherited steps when its specification says to do so.
-- `[Serializable]` and `[Transferable]` remain normative declaration metadata.
-  Executable hooks are binding behavior. Declare them through the relevant
-  capability or interface options; callbacks must not be hidden inside the raw
-  extended-attribute syntax tree.
-- Internal Web IDL object creation is distinct from invoking an author-facing
-  IDL constructor. Deserialization must never depend on an interface being
-  publicly constructible.
-- Native `structuredClone()` can supply a narrowly proved host primitive, such
-  as ArrayBuffer detachment, but it cannot replace Browlet's graph, interface
-  dispatch, exposure checks, or target-realm reconstruction.
+Use captured target-realm intrinsics and exact platform capabilities rather than
+active-host instanceof checks. DOMException, QuotaExceededError, Blob, File, and
+FileList provide concrete serialization consumers. An interface restores its
+specified data, not arbitrary author-added properties.
 
-## Planned source
+SharedArrayBuffer reconstruction uses a distinct wrapper over the retained
+backing store, with the destination's captured prototype. Storage mode and
+agent-cluster restrictions remain HTML decisions, not native-clone defaults.
 
-The exact filenames may change when a slice reveals a clearer ownership
-boundary. Do not create an otherwise empty module merely to satisfy this table.
+Transfer-list shape/duplicate checks and graph serialization precede irreversible
+transfers. ArrayBuffers detach once; platform detached state belongs to the
+source implementation, shared by its implementation/platform identities. Received
+implementations start undetached. Transfer receiving and the main graph share memory.
 
-| Planned source | Contract | Specification |
-| --- | --- | --- |
-| `records.ts` | Serialized record families and graph-memory types | HTML §§2.7.3–2.7.8 |
-| `serializable.ts` | Per-interface serialization/deserialization capabilities and lookup | HTML §§2.7.1, 2.7.3, 2.7.6 |
-| `transferable.ts` | Per-interface transfer/receiving capabilities and detached state | HTML §§2.7.2, 2.7.7–2.7.8 |
-| `../../integration/` | Serializable and Transferable providers organized with the subsystem they connect to HTML | HTML §§2.7.1–2.7.2 and the defining specification |
-| `serialize.ts` | Structured serialization and storage mode | HTML §§2.7.3–2.7.5 |
-| `deserialize.ts` | Target-realm reconstruction and graph population | HTML §2.7.6 |
-| `transfer.ts` | Serialization and deserialization with transfer lists | HTML §§2.7.7–2.7.8 |
-| `structured-clone.ts` | `structuredClone()` semantic operation | HTML §2.7.10 |
-| `web-idl.ts` | `StructuredSerializeOptions` and `WindowOrWorkerGlobalScope` contribution | HTML §2.7.10 |
+Detachedness validation in the transfer pass remains sequential. An earlier
+buffer can transfer before a later already-detached item fails; the algorithm
+does not promise list-wide atomicity. Chromium/WebKit preflight ArrayBuffer lists,
+while Gecko follows sequential ordering; mixed transfer types can partially
+transfer in all three. Retain the written order until a generic, non-mutating
+validity phase exists. [HTML #3557](https://github.com/whatwg/html/pull/3557),
+[WPT #9672](https://github.com/web-platform-tests/wpt/pull/9672), and
+[WebKit #62527](https://github.com/WebKit/WebKit/pull/62527) establish
+serialization-before-detachedness checks without establishing full-list atomicity.
 
-## Implementation slices
+Cross-specification consumers call the internal operations. An asynchronous
+caller serializing arbitrary objects must prepare to run script and a callback:
+serialization can invoke author getters. The existing Realm lifecycle supplies
+that boundary. Streams' ordinary tee-with-cloning and Fetch body/abort handling
+already use the shared implementation.
 
-### 1. Establish serializable and transferable platform contracts
+## Engine limits
 
-Status: complete. The generic Web IDL capability seam is keyed by exact
-interface-definition identity; registered realms expose target-realm creation,
-exposure checks, and primary-interface resolution. HTML owns the hook contracts
-and detached state. A private `DetachedTransferableStamper` marker on the source
-implementation instance records successful transfer. Both object identities
-resolve to that instance; the newly received instance starts undetached.
-DOMException and QuotaExceededError provide the first
-standalone Serializable capability registrations and cross-realm proof.
+[JS Engine](../../../js-engine/ROADMAP.md) and
+[the limitations catalog](../../../LIMITATIONS.md) own missing engine primitives.
+Keep their approved failures visible rather than weakening graph behavior.
 
-Controlling sections: HTML §§2.7.1–2.7.2, "Serializable objects" and
-"Transferable objects"; Web IDL §3.8, "Platform objects implementing
-interfaces".
+- Built-in slot predicates and the bounded propertyless-iterator probe recognize
+  supported families. Unknown native slot-bearing objects and decorated iterators
+  remain limited; probing an arbitrary property graph could invoke getters twice
+  or misattribute a nested failure.
+- Native length-mode inspection preserves growable/shared view behavior. Without
+  it, the reversible ordinary ArrayBuffer probe cannot safely recover ambiguous
+  growable SharedArrayBuffer views. Do not clone an arbitrarily large backing
+  buffer merely to inspect its view.
+- A non-destructive ArrayBuffer detach-key predicate remains unavailable.
+  Other detached-view and Error-slot constraints stay with the engine owner.
 
-First establish the boundary that every later platform-object branch needs:
+The native queue/context and host-hook work does not remove these slot limitations.
 
-1. Document and test `createPlatformObject()` as Browlet's implementation of
-   Web IDL's internal new-instance operation, separate from public constructor
-   steps.
-2. Add the smallest generic per-interface language-binding capability seam
-   needed for a defining specification to register structured-data hooks.
-   Web IDL preserves and indexes the implementation but does not understand its
-   HTML-owned record or context types.
-3. Let HTML resolve a platform object's exact primary interface, verify that it
-   is exposed in a target realm, and create a target-realm instance through the
-   registered realm binding.
-4. Register the `DOMException` and `QuotaExceededError` Serializable
-   capability registrations without implementing the recursive graph yet.
+## Remaining work
 
-Proof: synthetic interface tests show exact-primary-interface lookup, inherited
-interface behavior, target-realm identity, and that internal creation does not
-run public constructor steps. Direct hook tests show that DOMException state can
-be written to and restored from an HTML-owned record.
+1. **Real platform transfer.** Connect MessagePort transfer/receiving with its
+   actual entanglement and lifecycle. Generic capability tests are synthetic;
+   ArrayBuffer success does not prove a platform consumer. Streams transfer
+   depends on the same MessagePort machinery.
+2. **Consumer integration.** History state, cross-document/channel/broadcast
+   messaging, workers, and worklets must use these operations and the specified
+   storage/realm/agent-cluster rules rather than caller-specific clone paths.
+3. **Exposure.** Install the existing global contribution with real Worker
+   settings and lifetime. Window exposure alone is not worker coverage.
+4. **Conformance.** Extend focused WPT coverage as those globals/consumers become
+   runnable. Preserve sequential partial-transfer failures; add atomicity coverage
+   only when the specified validity contract supports it.
+5. **Engine replacements.** Replace bounded slot accommodations when their
+   real primitive becomes available, preserving observable failure and realm behavior.
 
-Stop and confer with Eric if `createPlatformObject()` cannot create valid blank
-state for deserialization without observable constructor behavior. Do not add a
-second allocator, a `create/setup/new` trio, or constructor-owned allocation as
-an unreviewed workaround. A genuinely exceptional interface may retain a real
-interface-level `create` binding.
+## Validation
 
-### 2. Implement structured serialization
+The structured-data suites cover record families, cross-realm reconstruction,
+self/mutual cycles, repeated identity, sparse arrays, collection order, getter
+failures, storage differences, detached buffers, and exact failure types.
+Projected structuredClone tests cover receiver realms, serializable platforms,
+ArrayBuffer transfer, duplicate rejection, and partial-transfer ordering.
 
-Status: complete, subject to the host limitations below. The implementation
-uses JS Engine's V8-backed primitives for exposed built-in slot
-tests, keeps the HTML graph and storage mode independent of Node's native clone
-serializer, and inserts shallow records into memory before every recursive
-traversal.
-
-Controlling sections: HTML §2.7.3, `StructuredSerializeInternal`; HTML
-§2.7.4, `StructuredSerialize`; HTML §2.7.5,
-`StructuredSerializeForStorage`.
-
-Implement §2.7.3 in normative order, then add its two small public wrappers.
-This phase includes:
-
-- caller-provided or fresh memory;
-- duplicate-object lookup;
-- primitives and rejection of Symbols;
-- boxed Boolean, Number, BigInt, and String values;
-- Date, RegExp, and Error records;
-- ArrayBuffer, SharedArrayBuffer, DataView, and typed-array records;
-- Map, Set, Array, and ordinary Object recursive data;
-- insertion into memory before recursive traversal;
-- sub-serialization bound to the same storage mode and memory;
-- serializable platform-object dispatch, detached-state rejection, and the
-  interface's serialization steps;
-- rejection of callable and unsupported objects with a realm-correct
-  `DataCloneError`; and
-- the non-storage and storage wrappers with fresh graph memory.
-
-Brand checks must work across Browlet realms and must not rely on `instanceof`
-against the active Node realm. Add narrow realm/host intrinsic operations when
-JavaScript does not expose the specification's internal-slot test directly.
-
-Use JS Engine's ArrayBuffer and view operations for engine facts.
-Keep Web IDL's conversion, realm-owned allocation, copying, detachment, and
-transfer algorithms at the binding boundary. Keep inaccessible
-`[[ArrayBufferDetachKey]]` and detached-view limitations explicit rather than
-weakening the algorithm.
-
-Proof: direct internal tests cover every record family, source-realm
-independence, self- and mutual cycles, repeated identity, sparse arrays,
-Map/Set ordering, Error accompanying data, getter failures, detached buffers,
-storage-mode differences, DOMException records, and exact failure types.
-
-JavaScript does not expose a general “has unsupported internal slots” query.
-The `node-v8-exotic-object-slots` accommodation in
-[`built-in-primitives.ts`](../../../js-engine/built-in-primitives.ts)
-exposes predicates for the available V8-branded families (including Promise,
-WeakMap/WeakSet, generators, Map and Set iterators, WeakRef,
-FinalizationRegistry, proxies, and crypto-key objects), but an unrecognized
-Node-native slot-bearing object can still resemble an ordinary object. Its
-bounded native-clone probe recognizes propertyless Array and String iterators
-without advancing them and distinguishes real slots from prototype impostors.
-HTML uses those facts to reject the object. Decorated iterators and the broader
-unknown-internal-slot category remain expected failures because probing their
-full property graph could invoke author code twice or attribute a nested clone
-failure to the wrong object.
-
-The custom engine exposes a view's length-tracking bit through
-`ArrayBufferView::IsLengthTracking()` and the compatibility addon. Ordinary
-resizable and growable shared views retain their length mode through cloning.
-On stock engines and without the addon, the
-[`node-v8-array-buffer-slots`](../../../js-engine/README.md#nodev8-accommodations)
-accommodation recovers it for ordinary resizable ArrayBuffers with a
-synchronous, reversible intrinsic resize probe. The probe grows or truncates
-at most one element, restores both size and bytes, and runs no author code.
-Growable SharedArrayBuffer cannot use that technique because growth is
-irreversible; without the native query, its ambiguous fixed-at-end and
-auto-length views still serialize as fixed-length. Do not replace the bounded
-probe with a second native structured clone of an arbitrarily large backing buffer.
-
-### 3. Implement target-realm deserialization
-
-Status: complete.
-Every closed record family reconstructs through captured target-realm
-intrinsics, graph memory is populated before deep traversal, and exact
-platform-interface capabilities receive a shared sub-deserialization context.
-
-Controlling section: HTML §2.7.6, `StructuredDeserialize`; Web IDL §3.8,
-"Platform objects implementing interfaces".
-
-Mirror the serialized record families in §2.7.6 while preserving its critical
-ordering:
-
-1. resolve a prior memory entry;
-2. create the shallow value in `targetRealm`;
-3. insert it into memory; and only then
-4. recursively populate containers or run interface deserialization steps.
-
-Use target-realm intrinsic prototypes for boxed primitives, Date, RegExp,
-buffers/views, Map, Set, Array, Object, and Error. For platform records, verify
-exposure, create the exact primary interface through the target realm's Web IDL
-binding, and run only that interface's registered deserialization steps.
-
-Proof: every serialized family reconstructs in a second Browlet realm with the
-correct intrinsic or platform prototype; cycles and repeated identity survive;
-DOMException and QuotaExceededError restore only their specified state, not
-author-added properties.
-
-Node's native clone primitive creates the distinct SharedArrayBuffer wrapper
-needed to retain its backing store. Before exposing that wrapper, Browlet gives
-it the target realm's captured intrinsic prototype. Focused tests cover shared
-memory, target-realm brand and prototype behavior, and target-realm `slice()`
-construction.
-
-### 4. Implement transfer and cross-specification operations
-
-Status: complete for the generic algorithms and ArrayBuffer transfer. The
-exact-interface platform hook is covered synthetically; retain the missing
-real platform-transfer proof until MessagePort exists.
-
-Controlling sections: HTML §2.7.7, `StructuredSerializeWithTransfer`; HTML
-§2.7.8, `StructuredDeserializeWithTransfer`; HTML §2.7.9, "Performing
-serialization and transferring from other specifications".
-
-Implement §2.7.7 and §2.7.8 after ordinary serialization is stable:
-
-- validate the complete transfer list and reject duplicates before mutation;
-- serialize the input before any irreversible transfer;
-- transfer fixed and resizable ArrayBuffers and detach the source;
-- register platform transfer and receiving hooks by exact primary interface;
-- maintain platform-object `[[Detached]]` state at its semantic owner;
-- reconstruct transferred values in the target realm; and
-- deserialize the main record using the shared transfer memory.
-
-Proof: transfer-list shape and duplicate failures, and graph-serialization
-failures, leave every source untouched. Successful ArrayBuffer transfer
-detaches exactly once and preserves identity between the transferred list and
-the cloned graph. The detached-state checks in the irreversible second pass
-remain sequential as specified, so a later already-detached item can fail
-after an earlier item has transferred; tests preserve that distinction rather
-than promising stronger atomicity than HTML provides.
-
-Decision: retain that literal ordering until the standard defines a generic,
-non-mutating transfer-validation phase. Chromium and WebKit preflight lists of
-ArrayBuffers, while Firefox follows the sequential order; mixed transfer types
-can still partially transfer in all three engines. WHATWG HTML
-[#3557](https://github.com/whatwg/html/pull/3557), WPT
-[#9672](https://github.com/web-platform-tests/wpt/pull/9672), and WebKit
-[#62527](https://github.com/WebKit/WebKit/pull/62527) establish
-serialization-before-detachedness validation, but do not test or guarantee
-list-wide atomicity. Add that WPT coverage when every list item has a
-side-effect-free transfer-validity operation.
-
-JavaScript exposes no non-destructive `[[ArrayBufferDetachKey]]` predicate.
-Keep that limitation explicit. MessagePort is the first platform-transfer
-consumer, but its absence must not block completion of the generic algorithm
-or ArrayBuffer transfer. Do not claim platform-transfer coverage until a real
-registered consumer exists.
-
-Section 2.7.9 adds no new graph algorithm. It fixes the reusable operation
-boundary: other specifications call these operations rather than the
-author-facing `structuredClone()` method or a caller-specific clone path.
-An asynchronous caller serializing arbitrary objects must first prepare to run
-script and a callback because serialization can invoke author accessors. That
-lifecycle boundary is now available through the HTML §§8.1.3.3 and 8.1.4.4
-Realm hooks. Cross-specification callers must enter it rather than treating the
-serialization operation as context-free.
-
-### 5. Expose `structuredClone()` and connect the first consumers
-
-Status: complete for the available platform surface. The projected
-`WindowOrWorkerGlobalScope` API uses the receiver's realm, ArrayBuffer transfer
-and Serializable platform objects share the same implementation, and
-Streams cross-specification tee clones its second branch through the realm
-global's structured-data seam. Fetch body cloning is unblocked; MessagePort,
-workers, history, and messaging remain with their owning future slices.
-
-Controlling sections: HTML §2.7.10, "Structured cloning API"; WHATWG Streams
-§4.9.1, readable-stream operations including `ReadableStreamTee`; Fetch
-§2.2.4, "Bodies".
-
-Implement §2.7.10 only after the internal algorithms are independently tested:
-
-- declare `StructuredSerializeOptions`;
-- co-locate the `WindowOrWorkerGlobalScope` partial contribution with its
-  primary mixin according to project policy;
-- keep `structuredClone()` as an author-facing boundary adapter that obtains
-  the relevant realm and calls the semantic transfer algorithms; and
-- expose it through Window now and Worker globals when those exist.
-
-Proof: tests cover DOMException, cycles, repeated identity, target-realm
-built-ins, ArrayBuffer transfer, duplicate transfers, failure atomicity, and
-`this`/realm behavior through the projected Window API.
-
-The first cross-specification consumer is connected:
-
-- Streams' cross-specification tee with `cloneForBranch2 = true` uses the same
-  implementation and realizes clone failures in the stream realm; and
-- Fetch body cloning and abort-reason serialization are unblocked.
-
-Remaining consumers:
-
-- add focused WPT coverage once Browlet's WPT harness can install and execute
-  the required globals; and
-- later connect history, messaging, workers, and MessagePort without creating
-  caller-specific cloning paths.
-
-## Commit boundaries
-
-Each numbered slice is intended to be independently reviewable and normally
-commit-sized. A slice may be divided when a host limitation or an unexpectedly
-large record family appears, but the roadmap should retain these five semantic
-phases rather than turning every record family into a separate project.
-
-## Removal condition
-
-Burn this file after structured serialization and transfer have cross-realm,
-cycle, platform-object, failure-atomicity, and public-consumer coverage. Until
-MessagePort exists, retain the explicit missing platform-transfer proof even if
-ordinary `structuredClone()` and ArrayBuffer transfer are complete.
+A new platform type needs actual serialization/receiving and public-consumer
+proof in addition to capability registration. Keep the missing platform-transfer
+proof explicit until a real registered type supplies it.

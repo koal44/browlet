@@ -17,7 +17,7 @@ import {
 import {
   structuredSerialize, structuredSerializeForStorage,
 } from '../../src/browlet/scripting/structured-data/serialize';
-import { expectBytesEqual } from '../assertions/bytes';
+import { expectBytesEqual } from '../support/bytes';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
 } from './test-runtime';

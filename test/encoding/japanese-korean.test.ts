@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
 import { createEnvironment } from '../js-engine/execution-fixture';
-import { expectBytesEqual } from '../assertions/bytes';
+import { expectBytesEqual } from '../support/bytes';
 import { japaneseKoreanDigests } from './gen/japanese-korean-vectors';
 
 const encodings = ['EUC-JP', 'ISO-2022-JP', 'Shift_JIS', 'EUC-KR'] as const;

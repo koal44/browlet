@@ -35,6 +35,7 @@
     { "path": "./src/stylelet" },
     { "path": "./src/browlet" },
     { "path": "./scripts" },
-    { "path": "./test" }
+    { "path": "./test" },
+    { "path": "./wpt" }
   ]
 }

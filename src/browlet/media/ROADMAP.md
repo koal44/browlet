@@ -2,7 +2,7 @@
 
 **Status:** planned; ownership and dependency review complete. Media
 implementations are deferred to the later media work in Browlet's priority
-roadmap. File API's Blob URL work proceeds with `BlobImpl` entries and a
+roadmap. File API's completed Blob URL path uses `BlobImpl` entries and a
 provisional Blob-only `URL.createObjectURL()` declaration. Media Source
 Extensions (MSE) is not a Fetch preflight prerequisite.
 
@@ -20,7 +20,7 @@ media behavior. The draft is maintained as ReSpec HTML, rather than Bikeshed.
   links separate specifications for WebM, ISO BMFF, MPEG-2 TS, and MPEG audio.
   Choose supported formats explicitly before implementing a segment parser.
 - [File API §8](https://w3c.github.io/FileAPI/#url) owns object URL registration;
-  its [roadmap](../../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration)
+  its [roadmap](../../file/ROADMAP.md#blob-url-integration)
   remains authoritative for URL parsing, revocation, and Fetch integration.
 
 This folder owns shared media state and MSE implementations. HTML audio/video
@@ -88,8 +88,8 @@ Keep related SourceBuffer/handle declarations explicit; show missing operations
 at their consumers rather than inserting empty stand-ins to satisfy a union.
 
 Then extend the existing Blob URL store and `URL.createObjectURL()` declaration
-with the real MediaSource implementation. File slice C can proceed independently
-with Blob support. An unattached object and an object URL do not establish
+with the real MediaSource implementation. Existing Blob support is independent
+of this media work. An unattached object and an object URL do not establish
 playback support. Do not report worker or codec support that Browlet cannot provide.
 
 **Proof:** projection/brand checks, initial state, range boundaries, rejected

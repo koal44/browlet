@@ -29,7 +29,7 @@ export default defineConfig(
       'node-compat/results/**',
       'test/selectlet/scenarios/fixtures/**',
       'test/selectlet/perf/engines/**',
-      'test/wpt/tests/**',
+      'wpt/tests/**',
       'eslint.config.mjs',
     ],
   },
@@ -278,7 +278,7 @@ export default defineConfig(
   },
 
   {
-    files: ['test/**/*.ts'],
+    files: ['test/**/*.ts', 'wpt/*.ts'],
     rules: {
       'no-console': 'off',
       '@typescript-eslint/no-explicit-any': 'off',

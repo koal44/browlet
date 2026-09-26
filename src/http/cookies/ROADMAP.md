@@ -7,10 +7,9 @@ this project must not discover a process-global cookie jar or import Browlet.
 
 **Status:** §§5.1–5.4 implemented: cookie records and predicates, store limits,
 eviction, subcomponent parsing/matching, and the main parse/store/retrieve/serialize
-algorithms. Each Browlet UserAgent owns a store. Fetch 7a now supplies cookie
-header algorithms, SameSite decisions, and Window ancestry inputs; network
-invocation and credentials checks remain in Fetch Slice 9. Document cookie
-access remains a later HTML consumer.
+algorithms. Each Browlet UserAgent owns a store. Fetch supplies cookie header
+algorithms, SameSite decisions, Window ancestry inputs, network invocation,
+and credentials checks. Document cookie access remains a later HTML consumer.
 
 ## Sources
 
@@ -26,7 +25,7 @@ Those corrections are not yet in that local revision.
 The §5.4 slice follows the live draft dated 2026-09-17, retrieved 2026-09-20,
 with the reviewed corrections below.
 
-Local sources under the [reference root](../../fetch/PREFLIGHT.md#local-reference-inventory):
+Local sources under the [reference root](../../fetch/README.md#sources):
 
 - `httpwg-http-extensions/draft-ietf-httpbis-layered-cookies.md`: §5
   user-agent records, eviction, subcomponent/main algorithms, and browser
@@ -70,11 +69,9 @@ Reviewed §§1–4 and §§6–9 on 2026-09-20:
    HttpOnly, SameSite, all four name prefixes, overwrite protection,
    replacement, ordering, deletion, and eviction. A `Set-Cookie` value is processed
    separately; it must not be treated as a comma-combinable field.
-4. **Fetch header integration complete; network and Document consumers deferred.**
-   [Fetch Slice 7a](../../fetch/ROADMAP.md#slice-7--http-extensions) supplies §3.1's
-   cookie header algorithms; Slice 9 connects them to network request/response
-   processing and credentials decisions through its
-   [HTTP integration](../../fetch/HTTP-ROADMAP.md).
+4. **Fetch header and network integration complete; Document access remains HTML work.**
+   [Fetch](../../fetch/README.md#module-guide) supplies §3.1's cookie header
+   algorithms, network request/response processing, and credentials decisions.
    Browlet's Document implementation supplies non-HTTP access and the
    required browser context. The core does not infer those contexts from
    whichever realm happens to be executing.

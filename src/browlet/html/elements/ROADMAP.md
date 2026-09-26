@@ -38,8 +38,8 @@ insertion, removal, and reordering, including whole subtrees. `Attr.value` and
 `NamedNodeMap` changes use the same element notification as `setAttribute`.
 The original Request regression and Response.redirect integration tests pass.
 
-Pending integrations stay with their owners: CSP's `base-uri` check, setting
-srcdoc document state during iframe creation, DOM adoption, HTML constructors/
+CSP's `base-uri` check is connected to frozen-base selection. Pending
+integrations stay with their owners: srcdoc state during iframe creation, DOM adoption, HTML constructors/
 custom-element reactions, and base-change consumers such as hyperlink state and
 speculation rules. The fallback algorithm distinguishes explicit srcdoc document
 state from a URL that merely spells `about:srcdoc`.

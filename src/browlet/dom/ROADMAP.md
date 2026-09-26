@@ -8,8 +8,8 @@ more focused roadmaps below are the implementation queues.
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
 | DOM §1, infrastructure | Tree topology, ordered sets, and name validation exist | DOM §1.3 scope matching is not yet exposed through the DOM selector APIs; see `infra/ROADMAP.md` |
-| DOM §2, events | `Event`, `CustomEvent`, `EventTarget`, listener invocation, dispatch, firing, and shared high-resolution timestamps substantially exist | Replace the temporary native-`AbortSignal` path and connect only the concrete HTML host hooks described in `events/ROADMAP.md` |
-| DOM §3, aborting | Controller/signal projection, composition, retention, EventTarget integration, and `onabort` are implemented | Complete observable `AbortSignal.timeout()` delivery through the already-wired HTML event-loop and timer seams; see `abort/ROADMAP.md` |
+| DOM §2, events | Event/CustomEvent, EventTarget, dispatch/firing, timestamps, callback lifecycle, and Browlet signal-bound listeners exist | Complete the concrete HTML element, error-reporting, timing, and worker consumers in `events/ROADMAP.md` |
+| DOM §3, aborting | Controller/signal projection, composition, retention, EventTarget integration, onabort, and active-time timeout delivery exist | Worker lifecycle and retention-evidence limits remain in `abort/ROADMAP.md` |
 
 Event dispatch is synchronous. DOM §2 does not require an event loop merely to
 dispatch or fire an event. A producer from HTML or another specification might
@@ -21,15 +21,10 @@ that directly requires HTML's timeout and global-task machinery.
 
 1. Add the DOM §1.3 scope-match adapter over Selectlet and exercise it through
    the public DOM selector methods when their DOM §4 members are projected.
-2. **Complete:** Implement the synchronous portion of DOM §3:
-   `AbortController`, `AbortSignal.abort()`, `AbortSignal.any()`, abort reasons,
-   abort algorithms, dependent signals, and abort-event ordering.
-3. **Complete:** Change `AddEventListenerOptions.signal` from an unbranded
-   object/native `AbortSignal` shortcut to the Browlet interface and its
-   internal abort algorithm contract.
-4. Complete the behavior behind the projected `AbortSignal.timeout()` once
-   HTML's active-time timeout and global timer task destination exist; do not
-   substitute a direct Node timer in DOM.
+2. Extend event hooks with real HTML activation, error-reporting, and worker
+   consumers. Keep synchronous DOM dispatch separate from producer-owned tasks.
+3. Carry the implemented abort/timer contracts into worker lifecycle when it
+   arrives; do not introduce a separate DOM timer or cancellation stack.
 
 ## Sections 4-5 audit
 
@@ -39,8 +34,8 @@ that directly requires HTML's timeout and global-task machinery.
 | DOM §4.3, mutation observers | Not implemented | Put observer/signal-slot state on the Window agent and deliver it through HTML's microtask checkpoint; DOM owns records and callback semantics |
 | DOM §5, ranges | Not implemented | Establish boundary points and live-range mutation adjustment alongside the mutation spine; see `ranges/ROADMAP.md` |
 
-The future project-priority file should not schedule “DOM §4” as one enormous
-feature. Its first DOM milestone is the mutation spine plus live Range and
+The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
+Its first DOM milestone is the mutation spine plus live Range and
 NodeIterator participant points. MutationObserver, slot signaling, and custom
 element reactions form the next lifecycle milestone with the HTML event loop.
 Public interface breadth, convenience methods, and XML-only leaf nodes can then

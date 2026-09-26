@@ -4,6 +4,12 @@ css/css-cascade/important-vs-inline-001.html
 css/cssom/preferred-stylesheet-order.html
 css/cssom/preferred-stylesheet-reversed-order.html
 css/cssom/StyleSheetList.html
+fetch/api/headers/headers-basic.any.js
+fetch/api/request/request-constructor-init-body-override.any.js
+# Empty FormData text expects zero bytes; browsers emit a closing boundary.
+# Known upstream expectation disagreement; see src/fetch/ROADMAP.md.
+fetch/api/response/response-consume-empty.any.js
+fetch/api/response/response-static-json.any.js
 FileAPI/file/File-constructor-endings.any.js
 # FileAPI/file/File-constructor.any.js otherwise passes; its Window variant
 # additionally requires the separately roadmapped HTMLBodyElement identity.

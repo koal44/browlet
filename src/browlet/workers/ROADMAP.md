@@ -16,6 +16,8 @@ structured-clone implementation.
   so Fetch continues to the network. Replace it with Service Workers' Handle
   Fetch algorithm when registration, worker execution, and FetchEvent delivery
   exist; retain host-owned completion independently of a page's task queue.
+  Select interception before invoking `prepareRequest()` once, before body
+  consumption. The no-worker path must not create an unused upload branch.
 - `scripting/agents.ts` reserves dedicated- and shared-worker agent types with
   the specified true `[[CanBlock]]` value. It does not yet obtain those agents
   or run workers.
@@ -65,9 +67,9 @@ structured-clone implementation.
 | `lifetime.ts` if the algorithms outgrow the global-scope modules | Owner/port discovery and active-needed, protected, permissible, suspendable, close, and termination decisions | HTML §§10.2.2–10.2.3 |
 | `processing-model.ts` | Agent/realm/settings creation, worker-script fetching and execution, queue enablement, monitoring, and teardown | HTML §§10.2.4–10.2.5 |
 | `worker-location.ts` | Immutable URL view over a worker global's final response URL | HTML §10.3.3 |
-| `web-idl.ts` | Worker interfaces, dictionaries, mixins, global names, and exposure contributions | HTML §10 |
 
-Worker settings extend `scripting/environment.ts`; worker-agent acquisition
+Declarations accompany their implementations; partial contributions stay with
+their primary constructs. Worker settings extend `scripting/environment.ts`; worker-agent acquisition
 extends `scripting/agents.ts`; `WorkerNavigator` and its shared capability
 mixins belong under `navigator/`. Keeping those owners explicit prevents the
 worker processing model from turning into a second browser kernel.
@@ -84,14 +86,14 @@ threads, script loading, and storage-backed shared-worker discovery.
 
 ## Delivery order
 
-1. Complete task sources, environment-targeted queuing, MessagePort transfer,
-   and classic/module script fetching.
+1. Use the existing task/environment routing and Fetch transport; complete
+   MessagePort transfer and classic/module script fetching/execution.
 2. Implement worker settings/global construction and the dedicated-worker
    path, including realm exposure, inside/outside ports, errors, close, and
    terminate.
 3. Add owner-derived lifetime and Document-destruction behavior before relying
    on garbage collection or host-thread exit.
-4. Add storage-key derivation and the serialized shared-worker manager, then
+4. Use existing storage-key derivation for the serialized shared-worker manager, then
    shared connection, mismatch, and extended-lifetime behavior.
 5. Complete `importScripts()`, `WorkerNavigator`, `WorkerLocation`, and the
    remaining global event surfaces over the same machinery.

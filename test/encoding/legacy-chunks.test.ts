@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
-import { expectBytesEqual } from '../assertions/bytes';
+import { expectBytesEqual } from '../support/bytes';
 
 describe('legacy codec chunk processing', () => {
   it('limits ISO-2022-JP ASCII scanning to the supplied byte view', () => {

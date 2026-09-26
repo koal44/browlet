@@ -4,14 +4,14 @@ The current `BrowletRoute` returns source text synchronously. This directory
 will replace that test-oriented seam with response-bearing loading while
 leaving Fetch's protocol algorithms in the Fetch implementation.
 
-The sibling `src/fetch` project is a prerequisite: it supplies request,
+The implemented sibling `src/fetch` project supplies request,
 response, header, body, cancellation, and fetch-algorithm semantics. This
 directory supplies HTML settings, policy, task, navigation, and element inputs;
 it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 
 | Source / planned source | Contract | Specification |
 | --- | --- | --- |
-| `document-loader.ts` | Navigation response consumption, replayable response bytes for parser encoding restart, and Document load coordination | HTML §§7.4–7.5 and 13.2.3 |
+| `document-loader.ts` | Streamed navigation response consumption and Document load coordination; encoding-restart byte retention remains pending | HTML §§7.4–7.5 and 13.2.3 |
 | `document-handlers.ts` | Select and populate HTML, XML, text, multipart, media, and content-handler Documents from response MIME/type state | HTML §§7.5.2–7.5.7 |
 | `resource-loader.ts` | Fetch-backed subresource requests, credentials, referrer and policy inputs | Fetch plus each HTML element's fetch algorithm |
 | `resource-type.ts` | Determine resource type from response metadata and sniffing inputs | HTML §2.5.2 and MIME Sniffing |
@@ -22,19 +22,18 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
-| `node-transport.ts` | Fetch 9A–B: UserAgent-owned Undici HTTP/1.1 and HTTP/2 adapter, TLS verification, partitioned connection sets/timing, multiplexing, demand-driven uploads, pause/resume, abort, and shutdown | Fetch network fetch |
+| `node-transport.ts` | UserAgent-owned Undici HTTP/1.1 and HTTP/2 adapter, TLS verification, partitioned connections/timing, multiplexing, demand-driven uploads, pause/resume, abort, and shutdown | Fetch network fetch |
 | `node-decoder.ts` | Per-response streaming gzip/deflate/Brotli codecs and bounded native transform queues | Fetch content codings |
 
-The transport is callable through Fetch's `httpNetworkFetch()` and is connected
-to the 9B transaction algorithms. Loopback HTTP/HTTPS tests exercise headers,
+Fetch's internal network algorithm calls the transport. Loopback HTTP/HTTPS tests exercise headers,
 upload/download flow, decoding, and cancellation through the actual HTML loop.
 HTTP/2 uses the temporary [vendor patch](../../../vendor/README.md) to preserve
 original response fields. Basic authentication is implemented; proxy authentication
-remains provisional in the [Fetch 9B review](../../fetch/ROADMAP.md#slice-9--http-transport-cors-and-public-fetch).
+remains provisional in the [Fetch roadmap](../../fetch/ROADMAP.md#remaining-fetch-work).
 Public `fetch()` now uses this transport. The source-text navigation route
 below is unchanged.
 
-**Fetch 9E provisional consumer:** `document-loader.ts` creates the Document
+**Implemented bounded consumer:** `document-loader.ts` creates the Document
 synchronously, including `about:blank`, and consumes a streamed Fetch body.
 `BrowletParser.parseBytes()` implements BOM/transport decoding with a UTF-8
 fallback; `abort()` cancels input and pending continuations. Complete sniffing,
@@ -77,15 +76,14 @@ its start time there. Creating PerformanceNavigationTiming remains gated by the
 The synchronous source route creates only Fetch response metadata. Its text
 still goes directly to the parser and explicitly into the history source slot;
 a streamed network response body must not be stored in that slot. Full navigation
-and body-consumption lifecycles remain loader work. Policy-container selection must also
+and complete resource lifecycles remain loader work. Policy-container selection must also
 preserve history/local-URL inheritance and deliver the other response policies.
 
-For HTML, the loader retains response metadata and enough replayable bytes for
-the parser's encoding component to sniff, decode, and request the specified
-navigation restart without repeating the network request. It then feeds
-decoded character chunks to the streaming parser rather than assembling a
-second source string. XML Documents use XML's encoding rules instead of HTML's
-sniffer, but share the same response/body and completion ownership.
+Encoding restart still needs loader-owned replayable bytes and response metadata
+so the parser can restart without repeating the network request. The current
+decoder streams character chunks without retaining the whole body or assembling
+a second source string. Future XML Documents use XML's encoding rules instead
+of HTML's sniffer, sharing the response/body and completion ownership.
 
 Transport and Fetch callbacks may produce realm-neutral bytes and records off
 the event loop. Loader completion, parser resumption, resource events, and

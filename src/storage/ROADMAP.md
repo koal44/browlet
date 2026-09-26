@@ -12,22 +12,22 @@ author-facing StorageManager API remain later work.
 ## Sources and boundaries
 
 Local source: `whatwg-storage/storage.bs`, relative to the
-[reference root](../fetch/PREFLIGHT.md#local-reference-inventory).
+[reference root](../fetch/README.md#sources).
 Read §4's model before implementing §4.2 keys. Later substrate work follows
 §§4–7; the §8 public API needs explicit browser integration.
 
-- [File API](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration)
+- [File API](../file/ROADMAP.md#blob-url-integration)
   owns Blob URL entries, authorization, revocation, and cleanup.
 - [HTML Web Storage](../browlet/storage/ROADMAP.md) owns `Storage`,
   `StorageEvent`, per-Document holders, and local/session API behavior.
 - IndexedDB and Cache Storage remain later consumers. The browser HTTP cache
-  has its own [Fetch plan](../fetch/CACHE-ROADMAP.md); the two cache
+  has its own [Fetch plan](../fetch/ROADMAP.md#http-cache); the two cache
   concepts must not acquire one shared implementation merely by name.
 
 ## First slice — storage keys
 
 This is **A** of the combined Storage keys/Blob URLs detour. File's roadmap
-owns [B–C](../file/ROADMAP.md#slice-4--blob-url-store-and-urlfetch-integration).
+owns [B–C](../file/ROADMAP.md#blob-url-integration).
 
 `StorageKey` in `keys.ts` owns `obtain()`, `obtainForNonStoragePurposes()`, and
 `equals()`. The one-member tuple is represented by its named `origin` field.

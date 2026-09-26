@@ -19,9 +19,9 @@ notes describe their contracts, tests, and any remaining work.
 | [Cache rules](cache/ROADMAP.md) | RFC 9111/5861 field parsing, freshness, storage eligibility, and request policy |
 | [Cookies](cookies/ROADMAP.md) | Cookie records, parsing, storage, retrieval, serialization, store limits, and eviction |
 
-[Fetch HTTP](../fetch/HTTP-ROADMAP.md) retains CORS and forbidden-method rules,
+[Fetch](../fetch/README.md#module-guide) retains CORS and forbidden-method rules,
 Fetch status/range classifications, header protocols, and transactions. Its
-[cache integration](../fetch/CACHE-ROADMAP.md) owns storage and selection
+[cache integration](../fetch/README.md#bodies-and-caches) owns storage and selection
 over Fetch records, validation, and network processing. MIME retains MIME type
 parsing/sniffing; XHR retains its API and Fetch-consuming state machine.
 
@@ -41,8 +41,8 @@ Internal imports and focused tests can refer directly to individual modules.
 - [Fetch §2.2](https://fetch.spec.whatwg.org/#http): its shared HTTP whitespace
   and quoted-string algorithms, also consumed by MIME.
 
-Published RFCs and editable specifications are catalogued in the
-[reference inventory](../fetch/PREFLIGHT.md#local-reference-inventory).
+Published RFCs and editable specifications live under the
+[reference root](../fetch/README.md#sources).
 Each submodule names its additional governing sources.
 
 ## Syntax and dates
@@ -229,8 +229,8 @@ Binding Context is retained by the credential cache.
   header and valid automation credentials: Firefox 151.0 sent one request;
   Chromium 149.0.7827.55 and WebKit 26.5 sent two requests with the unchanged bad
   header. All returned 401. The unauthenticated control succeeded in all three.
-  Reproduction: `node Scratch/basic-auth-browser-probe.mjs`. This substitutes
-  automation for the prompt; Windows Playwright WebKit is not Safari's Cocoa port.
+  The probe substituted automation for the prompt; Windows Playwright WebKit is
+  not Safari's Cocoa port.
   The caller can start a new request with a changed or omitted Authorization field.
 - Allow a fresh prompt to supply credentials already rejected by the same Basic
   challenge. Rejected cached credentials cannot retry automatically, including

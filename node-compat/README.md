@@ -1,46 +1,30 @@
 # Node compatibility
 
-Native support for Browlet's engine backend. The first addon ports shared
-microtask queues and detachable/reusable context handles onto stock Node
-24.19.0 and 26.8.1, including the context/queue lifetime fix. Post-creation immutable
-prototypes remain unavailable through the addon. A custom engine containing our
-V8 patches also enables the five host hooks described below.
+The maintained native backend for Browlet's JS Engine integration. The addon
+supplies explicit microtask queues, reusable context handles, native global
+allocation, realm lookup, and Promise observation on supported official Node
+builds. Additional V8 patches expose job hooks, collection iterators, and buffer
+view inspection. HTML owns the policy applied through those facilities.
 
-With the V8 `CollectionIterator::New` patch, the addon also exports
-`createCollectionIterator(contextHandle, kind, next)`, where `kind` is `map` or
-`set`. It creates an iterator in that context, accepted by the corresponding
-native `next()`, including one borrowed from another realm. The callback supplies
-each IteratorResult; it owns value conversion and allocation. V8 handles
-reentrancy, completion, and closing after exceptions. The build detects this API
-in the selected headers; official Node builds leave the export unavailable.
-Callback iterators have no table-backed entries to preview: V8's existing
-`IsMapIterator`/`IsSetIterator` storage queries and Node inspection remain unchanged.
+## Source and build ownership
 
-| Facility | Stock Node | Stock + addon | Original source patches |
-| --- | --- | --- | --- |
-| Explicit shared microtask queues | No | Yes | Yes |
-| Context handles and reusable global proxies | No | Yes | Yes |
-| Make an existing global's prototype immutable | No | No | Yes |
-| Allocate an immutable global and prototype chain | No JS API | Opt-in prototype | Not needed by original route |
+| Location | Responsibility |
+| --- | --- |
+| [addon/](addon/) | Native implementation and JavaScript entry; `vm.cc` owns contexts/queues, `property-delegate.cc` global forwarding, and `host-hooks.*` callback/job integration |
+| [test/](test/) | Standalone capability, lifetime, GC, and host-hook regressions |
+| [build-node.mjs](../scripts/build-node.mjs) | Official dependency preparation and addon compilation |
+| `CUSTOM_NODE_SOURCE` | Regular Node checkout: engine patches on `v8-patches`, engine builds there |
+| `experimental/` | Independent, ignored Git repository for probes and findings; not a build dependency |
+| `.cache/`, `addon/build/`, `results/` | Ignored official dependencies, addon outputs, and temporary investigation results |
+
+Keep Node source and engine builds in the regular checkout, not under Browlet.
+The custom base uses its `out/Release/node.exe`, `node.lib`, and source headers
+directly. The older `browlet-node-compat-history` branch is reference material.
+Each repository has its own index; addon and engine changes are separate work.
 
 ## Build and run on Windows x64
 
-`npm.cmd run build:node` prepares the selected Node base and compiles
-the addon. Missing official executables, headers and import libraries are
-downloaded and checked against pinned release hashes. Rebuilds reuse these
-cached files; header archives are deleted after extraction.
-
-Building requires Visual Studio's Desktop development with C++ workload. The
-build reuses an x64 developer prompt, honors VSINSTALLDIR, or discovers the
-installed C++ tools with vswhere. VsDevCmd initializes the compiler and Windows
-SDK environment.
-
-```powershell
-# Override the configured base for this build:
-npm.cmd run build:node -- --base 24.19.0
-```
-
-Copy `.env.example` to `.env` and set the defaults there:
+Copy [.env.example](../.env.example) to `.env` and choose the defaults:
 
 ```ini
 NODE_BASE=24.19.0
@@ -49,373 +33,156 @@ NODE_RUNTIME=compat
 # CUSTOM_NODE_SOURCE=C:/path/to/node
 ```
 
-| Setting | Choices | Meaning |
+`NODE_BASE` accepts `24.19.0`, `26.8.1`, or `custom`. `NODE_RUNTIME=compat`
+loads the matching addon; `stock` disables it. Shell settings override `.env`,
+and explicit command options override both. The defaults are `24.19.0/compat`.
+
+```powershell
+npm.cmd run build:node -- --base 24.19.0
+npm.cmd run test:unit
+npm.cmd run test:node-compat
+# One-off selection and a focused suite:
+node scripts/with-node.mjs --base 26.8.1 --runtime compat vitest run --project=unit test/js-engine
+```
+
+Building requires Visual Studio's Desktop development with C++ workload.
+The build uses an existing x64 developer prompt, `VSINSTALLDIR`, or `vswhere`.
+It downloads missing official runtimes, headers, and import libraries, verifies
+pinned hashes, and reuses the cache. Windows x64 is the supported target.
+
+For `custom`, first build Node in `CUSTOM_NODE_SOURCE`, then run
+`npm.cmd run build:node -- --base custom`. This compiles only the addon;
+changing the base never builds the engine. Rebuild the addon after an engine
+rebuild, even when the reported Node version is unchanged.
+
+Each base has its own `addon/build/<base>/node-compat.node` and `node.json`.
+The loader checks version, ABI, platform, and architecture; those checks cannot
+prove a custom executable matches its current source. Missing inputs fail
+explicitly instead of selecting another base. `addon/build/compile_commands.json`
+tracks the most recent addon build for editor tooling.
+
+The [launcher](../scripts/with-node.mjs) reports the selected executable/addon,
+sets subprocess PATH and `BROWLET_NODE_ADDON`, checks compatibility, and preserves
+exit status. Unit, artifact, WPT, oracle, and performance commands use it.
+Playwright's browser engines are independent of its Node host.
+
+## Runtime test matrix
+
+Three bases, each with the addon disabled or enabled, give six configurations.
+Package test commands run **one selected configuration**; `test:all` does not
+sweep this matrix.
+
+| Base | `stock` | `compat` |
 | --- | --- | --- |
-| `NODE_BASE` | `custom`, `24.19.0`, `26.8.1` | Which Node executable and development files to use |
-| `NODE_RUNTIME` | `compat`, `stock` | Enable the addon, or run the selected base alone |
-| `CUSTOM_NODE_SOURCE` | Absolute source-directory path | The single location for the custom engine, headers and import library |
+| `24.19.0` | Official Node fallback paths | Native queues/globals; older Promise-observation limit |
+| `26.8.1` | Official Node fallback paths | Native queues/globals and newer Promise observation |
+| `custom` | Patched engine without the addon bridge | Native integration plus available V8 extensions |
 
-Both the addon compiler and all test commands read these settings. The shell
-environment overrides `.env`; explicit launcher/compiler options take precedence.
-Without settings, the defaults are Node 24.19.0 and `compat`. An explicit addon
-build compiles for the selected base regardless of `NODE_RUNTIME`.
+`custom/stock` still contains engine patches. It does not connect addon-mediated
+hooks to Browlet. Check capabilities individually: a custom build can be stale
+or lack a patch, and explicit queues do not imply job-hook support.
 
-Run tests normally; their internal launcher reports the actual Node version and
-paths, and puts that executable first on subprocess PATH.
-`compat` supplies the internal `BROWLET_NODE_ADDON` module path to Browlet;
-`stock` removes it. You do not configure a separate addon path. For the custom
-base, `stock` still runs your custom engine, just without this addon.
-Unit, artifact, WPT, oracle and performance test commands all use this selection.
-Browser engines remain independent of the Node process running Playwright.
+For changes to realm ownership, scheduling, native capabilities, or fallback
+behavior, run the affected suites in all six configurations. Use the full unit
+suite for broad integration changes. Documentation and pure algorithms do not
+need a matrix sweep. Run type contracts once, then repeat the launcher command
+with each base/runtime pair; append paths for focused checks:
 
 ```powershell
-npm.cmd run test:unit
-npm.cmd run test:artifact
-npm.cmd run test:node-compat
-# Test-runner arguments are forwarded unchanged:
-npm.cmd run test:unit -- test/js-engine/runtime.test.ts
+npm.cmd run test:types
+node scripts/with-node.mjs --base custom --runtime compat vitest run --project=unit
 ```
 
-The C++ code selects the callback API using `NODE_MAJOR_VERSION` from the target
-headers. To prepare and target Node 26:
+Addon changes also need the native suite on each supported base:
 
 ```powershell
-npm.cmd run build:node -- --base 26.8.1
-# One-off overrides without editing .env:
-node scripts/with-node.mjs --base 26.8.1 node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
-node scripts/with-node.mjs --base 26.8.1 --runtime stock vitest run --project=unit
+node scripts/with-node.mjs --base custom --runtime compat node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 ```
 
-Each base has its own output directory under `addon/build/`: `24.19.0/`,
-`26.8.1/`, or `custom/`. Each successful build writes `node-compat.node` and a
-`node.json` recording its target version, native module ABI, architecture and
-platform. The loader checks those against the running Node and reports how to
-rebuild on a mismatch. Switching bases does not overwrite another base's addon.
-Missing runtimes, development files or addons produce errors; there is no
-fallback to a different base. Windows x64 is the supported build target.
-Other official releases have not been validated. No dependency on experimental/
-is needed to build.
+Record passed, failed, and unavailable runs per configuration. Capability-gated
+Vitest tests use `itPassesWith(...)` to retain required assertions as approved
+expected failures on unsupported paths; unexpected passes require review.
+Ordinary asynchronous completion remains required on every backend.
 
-The build generates addon/build/compile_commands.json with the actual compiler,
-headers, SDK paths and C++20 options. The repository's VS Code C/C++ settings
-use that database for each source file, following the most recent successful
-addon build. Machine-specific paths stay in ignored build output. Rebuild after
-changing the installed compiler or target headers.
+## Contexts, globals, and optional facilities
 
-## Node engine work
+`createMicrotaskQueue()` supplies enqueue/checkpoint operations.
+`createContextHandle()` creates a native V8 context registered with Node;
+`runInContext()` evaluates there. These are not `node:vm` Contextify objects.
+The supported options are queue selection, `reuseGlobalProxyFrom`, and
+`globalPrototypeChain`; evaluation accepts filename, lineOffset, and
+`displayErrors: false`. Unsupported options fail explicitly. Dynamic-import
+callbacks, vm.Script interoperability, timeouts, and automatic afterEvaluate
+checkpoints remain outside this API.
 
-Edit and build Node/V8 in the regular checkout named by `CUSTOM_NODE_SOURCE`.
-Do not create Node checkouts or engine builds under node-compat or .cache.
-The custom base uses `out/Release/node.exe`, `out/Release/node.lib`, and the
-headers in `src`, `deps/v8/include` and `deps/uv/include` directly from that
-checkout. Nothing is copied or linked into Browlet's cache.
+A handle separates its stable realm reference from its reusable global proxy.
+Detachment allows that proxy to transfer once to a fresh context. Retaining the
+realm reference keeps the old realm alive; `.global` is not its identity.
+`getRealm(object)` reports creation context, while `getFunctionRealm(callable)`
+follows bound/proxy targets without traps and rejects revoked callable proxies.
 
-After building the Node engine there, build only the addon here:
+`globalPrototypeChain` preallocates an immutable global proxy/target and ordered
+`mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
+layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
+behavior and `setGlobalObject()` selects the Window target. This avoids the old
+post-creation immutability patch. Node's shared VM security token permits embedder
+access; it does not implement browser cross-origin policy.
 
-```powershell
-npm.cmd run build:node -- --base custom
-# With NODE_BASE=custom in .env:
-npm.cmd run test:node-compat
-npm.cmd run test:unit
-```
+| Optional operation | Availability and contract |
+| --- | --- |
+| `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
+| `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
+| `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |
+| `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
 
-The addon build checks that the executable and headers agree on Node version
-and native module ABI. Rebuild the addon whenever you rebuild the custom engine:
-two custom builds can report the same version while containing different V8
-changes. These checks do not establish that an engine binary matches the current
-Git checkout. Changing `NODE_BASE` never builds the Node engine automatically.
+Callback iterators have no table-backed entries for native debugger/Node previews.
 
-Compile the experimental probe against the regular checkout and run it with
-that checkout's executable;
-see experimental/node-promise-hooks/engine-capture.md for the commands.
-
-The active engine patches are on `v8-patches` in that checkout. The addon build
-detects the required hook APIs in the target headers; selecting `custom` alone
-does not imply that the engine supplies them.
-
-The custom engine also carries two Node-level `TextEncoder.encodeInto()` sizing
-corrections in `src/encoding_binding.cc`. These require an engine rebuild, not
-a new addon API. JS Engine checks both defects once before selecting native
-encoding; affected official Node 26 builds retain the scalar writer, while
-Node 24 and corrected builds use the builtin with or without the addon.
-
-The unused opaque Promise-job handle and saved-data API is preserved on
-`codex/promise-job-handles` at `f79760c4a`. The active branch uses the earlier
-callable-job API. Rebuild the engine and addon together when switching between
-those APIs; their native callback signatures differ.
-
-## ArrayBuffer views
-
-When the engine exposes `v8::ArrayBufferView::IsLengthTracking()`, the addon
-exports `isLengthTrackingArrayBufferView(view)`. It reads whether the view's
-length is `auto`, without resizing its buffer or invoking author properties.
-It supports typed arrays and DataView over both resizable ArrayBuffers and
-growable SharedArrayBuffers, including detached or out-of-bounds views.
-
-The build detects this API independently of the host hooks. Official Node
-24.19.0 and 26.8.1 leave the query unavailable. Browlet keeps its reversible
-resize probe for ordinary resizable buffers on those bases and on plain Node;
-growable shared views retain their documented limitation there.
+Use operation availability rather than a version label. [Known limitations](../src/LIMITATIONS.md)
+owns the observable fallback constraints. Native global acceptance lives in
+[native-global.test.ts](../test/browlet/browsing/native-global.test.ts) and the
+Document lifecycle tests; the standalone suite also checks retained-context GC.
 
 ## Host hooks
 
-The addon also supplies `observePromise(promise, realmAnchor, onFulfilled?,
-onRejected?)` on supported bases. `realmAnchor` is a function from the observer's
-realm. Native `v8::Promise::Then` installs the reactions there. Node 26.8.1 and
-the custom engine bypass author `then`, `constructor`, and `@@species`
-properties. Node 24.19.0 still consults `constructor`; its capability regression
-remains an expected failure. The addon does not work around that older engine
-behavior. The operation returns V8's derived promise; Browlet's internal
-observation boundary discards that result.
-
-The addon exports `setHostHooks` only when built with the required V8 APIs.
-Check the method directly before calling it. Official Node 24.19.0 and 26.8.1
-keep the existing context/queue APIs but omit this method.
-
-`setHostHooks(hooks)` installs any combination of the following callbacks and
-returns nothing. The configuration lasts until the owning Node environment
-shuts down; there is no public removal or replacement operation. One installation
-owns the isolate; another installation throws `ERR_HOST_HOOKS_INSTALLED`.
-Workers are independent.
-
-The names follow the five targeted ECMAScript operations in
-[Jobs and Host Operations to Enqueue Jobs](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
+The hooks correspond to ECMAScript's [job operations](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
+One `setHostHooks()` installation owns the isolate until Node environment teardown;
+reinstallation throws `ERR_HOST_HOOKS_INSTALLED`. Workers have independent state.
+Each callback is optional; omitted enqueue hooks leave that job kind with V8.
 
 | Callback | Contract |
 | --- | --- |
-| `makeJobCallback(callback, registration)` | Return a record `{ callback, hostDefined }` with the original callback. Each callable reaction slot and thenable registration gets its own call to make. A FinalizationRegistry captures once at construction. |
-| `callJobCallback(record, receiver, args)` | Invoke `record.callback` with the supplied receiver and argument array; return its result or propagate its exception. The retained record is exactly the object returned by make. |
-| `enqueuePromiseJob(job, realm, enqueue)` | Take ownership of scheduling a single-use Promise job, or return `false` to leave it on its original V8 queue. `realm` is null for a reaction without a callable handler. `enqueue` also supplies the enqueue-time snapshot and `kind`, either `reaction` or `thenable`. |
-| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job. Currently this receives Atomics.waitAsync notification delivery. |
-| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule a single-use timeout job no earlier than the supplied delay. Currently this receives Atomics.waitAsync deadlines. A cancelled timeout may still be called once and does nothing. |
+| `makeJobCallback(callback, registration)` | Return `{ callback, hostDefined }`, retaining the original callback. Each reaction/thenable registration captures separately; FinalizationRegistry captures at construction. |
+| `callJobCallback(record, receiver, args)` | Invoke the captured callback using the exact retained record; return its result or propagate its exception. |
+| `enqueuePromiseJob(job, realm, enqueue)` | Schedule the single-use job, or return `false` to leave it on its original queue. The specification realm can be null; `enqueue` includes a snapshot and reaction/thenable kind. |
+| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job; currently Atomics.waitAsync notification delivery. |
+| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay; currently Atomics.waitAsync deadlines. Calling a cancelled timeout once is harmless. |
 
-Every callback is optional. Make defaults to `{ callback, hostDefined: undefined }`;
-call defaults to `Reflect.apply`. Omitting an enqueue callback leaves that kind
-of scheduling with V8. The internal make/call adapters share registration data,
-but the public callbacks can be supplied independently:
+Registration/enqueue snapshots contain current, entered, and incumbent realm
+references plus opaque `hostDefinedOptions`. The addon does not interpret script
+metadata. Make defaults to `{ callback, hostDefined: undefined }`, call to
+`Reflect.apply`; either can be supplied independently.
 
-```js
-const compat = require('./node-compat/addon/index.cjs');
-compat.setHostHooks({
-  makeJobCallback(callback, registration) {
-    return { callback, hostDefined: registration };
-  },
-  callJobCallback(record, receiver, args) {
-    // Host setup and finally cleanup can surround this call.
-    return Reflect.apply(record.callback, receiver, args);
-  },
-});
-```
+Jobs take no arguments and must run asynchronously in the required order.
+They retain the original V8 job and restore its saved continuation when called;
+calling twice throws. A Promise job's creation realm identifies its queue even
+when the specification realm is null. Returning `false` delegates immediately:
+do not also schedule that job. Generic/timeout hooks cannot decline a job.
 
-Registration and Promise-enqueue snapshots contain `current`, `entered`,
-`incumbent`, and `hostDefinedOptions`, captured before entering the host's JS.
-The first three are realm references (or null when absent). The last is an array
-of V8's opaque script metadata; the addon does not interpret Node's loader identity.
+Make/enqueue callbacks must not throw: invalid records and exceptions reach
+Node's uncaught-exception machinery. Call-hook exceptions follow the original
+Promise or registry path. Private async-context state preserves application ALS;
+recursive capture of the host's own work is suppressed. Pre-installation work
+keeps its original callback path. Teardown clears native hooks/references.
 
-Promise jobs are callable functions retaining V8's original job. Running one
-restores its saved continuation internally; that data is not exposed to the
-enqueue callback. The function's creation realm identifies its execution queue.
+[JS Engine](../src/js-engine/runtime.ts) translates references to registered realms.
+[HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings and owns
+callback cleanup, microtask tasks, generic tasks, and active-time timeouts.
+Ordinary Node Promise jobs remain on Node's queues. Unrelated Node/VM
+Atomics.waitAsync is unsupported while HTML's generic/timeout hooks are installed.
+Script records and restoration remain [engine/HTML work](../src/js-engine/ROADMAP.md).
 
-`getRealm(object)` returns the stable reference for an object's creation realm.
-`getFunctionRealm(callable)` instead follows bound-function and proxy targets,
-then returns the target's realm reference. It uses public V8 APIs on all supported
-Node bases, invokes no proxy traps, and throws `ERR_REVOKED_PROXY` for a revoked
-callable proxy. It does not replace the creation-realm lookup used for job queues.
-Each context handle also exposes `.realm`. References have a read-only `.global`
-property and remain distinct when successive contexts reuse one global proxy.
-Use the reference itself as the identity, not `.global`. A Node vm sandbox is
-usually created outside its context; use an object evaluated inside that context
-when obtaining its realm. Retaining a reference keeps that realm alive.
-
-Enqueue hooks must schedule asynchronously, preserving the required ordering
-and timeout delay. Call the supplied job with no arguments. Promise jobs can be
-placed on the maintained queue's `enqueueMicrotask(job)` or wrapped for host
-setup/cleanup; running them does not enqueue the same job through the hook again.
-The host owns queue selection and checkpoints. No raw queue pointer is exposed.
-Returning `false` from the Promise enqueue hook delegates that job to the
-engine-selected queue immediately; do not also schedule it yourself. This lets
-an HTML embedder leave unrelated Node and VM Promise jobs alone. Generic and
-timeout hooks always transfer scheduling to the host and ignore the return
-value. Their installation applies to every realm in the isolate.
-The host may retain jobs until ready to run them; calling an already-run job throws.
-
-Make and enqueue callbacks must not throw. Invalid make records and exceptions
-from these callbacks are reported through Node's uncaught-exception machinery;
-without a handler the process exits with failure. Call-hook exceptions follow
-the underlying Promise or FinalizationRegistry callback path. Make/call records
-use private AsyncLocalStorage state alongside the application's existing ALS.
-Recursive make calls for the host's own capture work are suppressed. Work that
-predates installation invokes its original callback without a custom call hook.
-Environment teardown clears the engine callbacks and releases their native
-references. Tests use fresh workers for independent configurations.
-
-`test/host-hooks.test.cjs` exercises this public API. Browlet now installs
-all five hooks through `src/browlet/scripting/host-hooks.ts` on a
-supported custom engine. It retains incumbent settings and applies callback
-and script cleanup through HTML microtask tasks. Generic jobs enter the HTML
-JavaScript engine task source; timeout jobs use the global's fully-active time
-before entering that same task source. These two HTML handlers require an HTML
-realm; Atomics.waitAsync in ordinary Node/VM realms is unsupported while they
-are installed. Active-script restoration and module loading remain separate
-adoption work. HTML job integration tests require the custom engine; official
-Node plus the addon still lacks these hooks.
-
-### Embedder integration caveat
-
-These hooks grant isolate-wide scheduling authority. An upstream proposal should
-explain that adopting them requires explicit boundaries between the embedding,
-Node, and other libraries already running in the isolate.
-
-Our ambient-ownership experiment demonstrated the risk: Node restored an owned
-async context while reporting an unhandled rejection. Vitest's reporting
-continuation inherited that ownership and was diverted to an HTML queue. The
-tests finished, but the runner could not finish reporting and exit. A separate
-Promise-instrumentation probe reproduced ownership leakage outside the rejection
-path, so repairing rejection reporting alone did not establish a complete boundary.
-
-Selecting owned author realms alone also leaves implementation async functions
-compiled in Node's realm on Node's queue. Saved continuation data records context;
-it does not by itself establish which subsystem owns a job. Integration needs
-deliberate implementation, backend, and reporting boundaries, with regression
-coverage for unrelated Node progress and runner shutdown without an HTML
-checkpoint. A passing application result alone is insufficient evidence that
-the host-hook policy coexists correctly with the surrounding runtime.
-
-## Scope
-
-The addon exports createMicrotaskQueue(), createContextHandle(), runInContext()
-and isContext(). Its contexts are native V8 contexts registered with Node,
-not node:vm Contextify objects. JSRuntime routes evaluation through the
-selected backend; node:vm itself is not modified.
-
-This supports Browlet's current context creation and script evaluation needs,
-not the entire vm API. Baseline context options are microtaskQueue and
-reuseGlobalProxyFrom; the opt-in globalPrototypeChain is described below.
-Evaluation supports filename, lineOffset and
-displayErrors: false. Timeouts, code-generation controls, dynamic-import
-callbacks, vm.Script interoperability and automatic afterEvaluate checkpoints
-are not implemented. Unsupported options are rejected. Existing HTML
-WindowProxy/origin accommodations remain; host-hook adoption is described above.
-
-The standalone suite retains two cases from the retired Node proxy-reuse
-experiments: collecting the old realm while the replacement remains live
-passes; indirect eval selecting its realm's dynamic-import callback is skipped
-until createContextHandle supports importModuleDynamically. Re-enable that
-acceptance case with the [module-loading integration](../src/js-engine/ROADMAP.md);
-it does not require implementing the entire vm API.
-
-The addon does not replace V8's existing isolate Promise hook. Node's
-context registration preserves its Promise hooks; tests cover hooks installed
-after context creation and ALS transport. Each worker owns its native state.
-
-## Native global integration
-
-`createContextHandle({ globalPrototypeChain: [...] })` preallocates an immutable
-global proxy, a separate immutable per-context global target (`globalObject`),
-and the requested `prototypeChain`. The nonempty layout lists prototype layers
-from nearest to furthest; each is `mutable`, `immutable`, or `delegated`
-(immutable with native property callbacks). Reuse requires the same layout.
-These are host construction APIs, not replacements for arbitrary JS objects.
-
-For Window, the chain is Window.prototype -> WindowProperties ->
-EventTarget.prototype -> Object.prototype. Web IDL populates the allocated
-objects. `setPropertyDelegate(object, delegate)` connects the named-properties
-layer to Web IDL's existing algorithms. `setGlobalObject(handle, globalObject)`
-connects native global access to the per-Window target after JSRealm transfers
-the initial global properties. The implementation keeps `WindowImpl.prototype`;
-the native proxy can be reused without rewriting either Window's binding record.
-
-**Node 24 limitation:** detached-context callbacks need the deprecated
-`PropertyCallbackInfo::Holder()` solely to retrieve the original creation
-context. With `HolderV2()` in the tested Node 24.19.0, an old closure's unqualified
-`document` lookup instead reaches the new Window after proxy reuse. The native
-code never passes the hidden holder to JavaScript. The Node 26 build uses
-`HolderV2()` and passes the same detached-global regression. That build also
-uses the holder for prototype delegation because property callbacks no longer
-expose `This()`; this covers Browlet's named-properties delegate, not arbitrary
-accessor delegates that depend on the access receiver. `SetImmutableProto()`
-itself remains a supported creation-time API; no Node or V8 source patch is used.
-
-The integration test is
-`test/browlet/browsing/native-global.test.ts`. It covers real Window and
-EventTarget bindings, the exact visible prototype chain, named properties,
-property operations and strict failures, stable receiver records, and old
-global reads/writes after reuse. The ordinary browser bootstrap and navigation
-now use this allocation when the addon is enabled. Document-lifecycle tests
-cover actual global-this identity, immutable prototypes, proxy reuse, and old
-closures retaining their original Window state. Plain Node keeps its existing
-fallback. Cross-origin access checks, history traversal, and a native mutable
-global mode remain separate work. Property forwarding adds JS/native calls and
-has not been benchmarked.
-
-## Files and local state
-
-- addon/: one native backend and its JS entry point. addon.cc registers the
-  binary; vm.cc owns queues, contexts and their shared lifetime management.
-  property-delegate.cc contains the opt-in global/prototype property callbacks.
-  host-hooks.cc dispatches engine hooks; host-hooks.cjs retains callback records.
-  Add distinct features in their own C++ source files and initialize them from
-  addon.cc. Separate binaries are useful for independently loadable components,
-  not required for separate features or upstream commits.
-- test/: standalone behavior and GC regressions plus a quick startup check.
-- ../scripts/build-node.mjs: verified dependency preparation and addon compilation.
-- experimental/: an independent local Git repository for Node/V8 and Browlet
-  investigations. Source and findings are committed there, separately from
-  Browlet. Like Scratch, its exclusion belongs in the developer's global Git
-  ignore file (`core.excludesFile`), as `/node-compat/experimental/`, rather
-  than Browlet's tracked `.gitignore`. See its README for the investigation index.
-- .cache/node-v24.19.0/: Node 24 headers, Release/node.lib and node.exe.
-- .cache/node-v26.8.1/: Node 26 headers, Release/node.lib and node.exe.
-  These are replaceable dependencies prepared by `build:node`,
-  not Node source checkouts. Download archives and duplicate libraries are
-  discarded after preparation.
-- results/: disposable, ignored run output; never a build input. Stale logs,
-  reports, reference downloads, and temporary caches were cleared on 2026-09-16.
-  Keep raw failure logs while investigating an unresolved bug, then remove them
-  once the maintained tests or experimental notes preserve the useful findings.
-
-The original Promise investigation is now experimental/node-promise-hooks/.
-Its imported Git baseline is b1bcdfb. The older accumulated Node work is retained
-on browlet-node-compat-history, rebased onto origin/main at 6f41e4156. Its first
-four commits end at fa65b0f98 (equivalent to the original 1ce916938): three
-features and a lifetime fix. The following three commits preserve the earlier
-Promise callback-state and native-function experiments. All seven patches were
-verified unchanged by git range-diff after the rebase.
-The unused patch exports and their temporary
-verification checkout have been removed; this build consumes neither.
-
-The previously shared proxy-reuse branch is preserved as annotated tag
-archive/vm-global-proxy-reuse at 4e82339b8 in the Node repository (the closed
-PR #65477 tip). The useful GC and dynamic-import cases from the retired
-experiments now live in test/capabilities.test.cjs above.
-
-| Original Node commit | Addon status |
-| --- | --- |
-| a53496abb: shared microtask queues | Ported in vm.cc |
-| ad6ce57a1: reusable context handles | Ported in vm.cc |
-| f2decfdd9: post-creation immutable prototypes | Replaced for Window by the creation-time integration above; the arbitrary-object operation is not ported |
-| 1ce916938: retain handles with their contexts | Included in vm.cc, covered by the retained-Promise GC test |
-
-The standalone addon suite covers queues, contexts, native global allocation,
-and their lifetimes. Browlet uses `itPassesWith(...requirements)` to declare
-capabilities (`'explicitQueues'`, `'hostHooks'`, `'lengthTracking'`) and minimum
-Node versions (`'v24+'`, `'v26+'`). All requirements must hold. For example,
-`itPassesWith('v26+', 'explicitQueues')` covers native Promise observation without
-constructor/species lookup. The helper returns Vitest's `it` or `it.fails`,
-including their `.each` support. Unsupported backends run the original
-assertions as expected failures; an unexpected pass fails the test so the
-support boundary is revisited. Node 24's corresponding standalone addon
-assertion runs as a TODO.
-
-Ordinary completion remains unconditional. The Streams constructor tests run
-page scripts that fulfill and reject after a timer, then continue reading,
-without test-driven checkpoints. Blob reads and Promise fulfillment/recovery
-also remain ordinary tests on every backend. These demonstrate useful fallback
-behavior without claiming identical queue ordering or host-hook support.
-
-Window global prototype-immutability and unforgeable
-descriptor tests now pass under the addon. The unsupported context dynamic-import
-callback test is explicitly skipped until module-loading integration. Addon tests
-are not full Browlet or HTML conformance. The Stream rejection regression observes process events in its
-Vitest worker, reusing the loaded Browlet modules. It uses the ordinary unit
-timeout and restores its event listeners after the check.
+When changing routing, verify unrelated Node progress and runner shutdown as well
+as page results. Earlier ambient-owner routing captured runtime diagnostics and
+prevented shutdown. Existing isolate Promise hooks and application ALS must keep
+working; [host-hooks.test.cjs](test/host-hooks.test.cjs) uses fresh workers to test
+independent installations.

@@ -3,19 +3,19 @@ import { resolve, sep } from 'node:path';
 
 export const wptOrigin = new URL('http://web-platform.test/');
 export const reporterSource = readFileSync(
-  resolve('test/wpt/testharnessreport.js'),
+  resolve('wpt/testharnessreport.js'),
   'utf8',
 );
 
 export function readSelection(): string[] {
-  return readFileSync(resolve('test/wpt/selection.txt'), 'utf8')
+  return readFileSync(resolve('wpt/selection.txt'), 'utf8')
     .split(/\r?\n/)
     .map((line) => line.replace(/#.*$/, '').trim())
     .filter((line) => line !== '');
 }
 
 export function resolveWptPath(path: string): string {
-  const testsDirectory = resolve('test/wpt/tests');
+  const testsDirectory = resolve('wpt/tests');
   const relativePath = decodeURIComponent(path).replace(/^\/+|^\.\//u, '');
   const resolved = resolve(testsDirectory, relativePath);
 

@@ -24,7 +24,7 @@
     "clean": "node scripts/clean.mjs",
     "build": "node scripts/build.mjs",
     "build:node": "node scripts/build-node.mjs",
-    "lint": "node --run typecheck && eslint src test scripts packages node-compat",
+    "lint": "node --run typecheck && eslint src test wpt scripts packages node-compat",
     "typecheck": "tsc -b",
     "install:vendor": "node scripts/vendor.ts",
     "install:wpt": "tsx scripts/install-wpt.ts",

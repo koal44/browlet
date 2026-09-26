@@ -58,8 +58,8 @@ for an already completed stream. It neither acquires a reader nor pulls bytes.
 Steps must not throw or invoke author code. Fetch uses this to retain byte-stream
 support while queuing its own completion tasks; it is not a Web IDL operation.
 
-The wider ownership rules live in [SUBSYSTEM-ARCHITECTURE.md](../SUBSYSTEM-ARCHITECTURE.md)
-and [PLATFORM-OBJECT-ARCHITECTURE.md](../PLATFORM-OBJECT-ARCHITECTURE.md).
+The wider ownership rules live in [ARCHITECTURE.md](../ARCHITECTURE.md);
+[Web IDL](../web-idl/README.md) describes the platform-object boundary.
 
 ## Specification correspondence
 
@@ -85,7 +85,7 @@ npm.cmd run test:browlet:wpt
 The [unit tests](../../test/browlet/streams) cover implementation records and
 projected APIs, including callback receivers, borrowed getters, independent
 queues, error identity, and BYOB ownership. The WPT command runs the repository's
-[selected tests](../../test/wpt/selection.txt), including Window `.any.js` cases;
+[selected tests](../../wpt/selection.txt), including Window `.any.js` cases;
 it does not run the entire upstream Streams suite. Queue-sensitive coverage
 depends on the [selected Node runtime](../../node-compat/README.md).
 
