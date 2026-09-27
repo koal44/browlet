@@ -8,9 +8,18 @@ its failures; broader coverage should accompany implementation milestones in
 
 ## A. Investigate the selected tests
 
-Reproduce the outstanding FileReader event-ordering, readable-stream bad-source,
-readable-byte-stream general/patched-global/read-min, and writable-stream
-count-queuing-strategy failures, including the two unhandled rejections.
+The FileReader/event-loop fix is retained. Promise redesigns are parked on
+`explore/promise-binding`; main keeps the earlier Promise and binding machinery.
+The restored custom/compat baseline passes 77 of 82 selected documents. Outstanding
+failures are readable-stream bad-source, readable-byte-stream
+general/patched-global/read-min, and writable-stream count-queuing-strategy.
+Unhandled rejections remain part of the investigation.
+
+Public regressions in `test/browlet/streams/read-result.test.ts` and
+`promise-errors.test.ts` also capture borrowed released-read allocation and shared
+write/close failures. Three assertions fail consistently across all six Node
+configurations; the shared byte-controller close case passes. Continue the
+reduced Promise/binding experiment before choosing a production repair.
 Distinguish implementation defects from runner limitations and disputed tests.
 Keep focused regressions for fixes; changing an expectation requires review.
 The empty multipart FormData result is already recorded as contested in the

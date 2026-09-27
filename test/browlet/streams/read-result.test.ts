@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
@@ -6,7 +6,7 @@ import type { InternalPromise } from '../../../src/infra/promises';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
   ReadableStreamDefaultReaderImpl, readableStreamReadResultIDL,
-  type ReadableStreamReadResult,
+  type ReadableStreamReadResult as ReadResultValue,
 } from '../../../src/streams/index';
 import {
   arg, defineCallbackFunction, defineInterface, impl, op, promise, reference, BindingWorld,
@@ -17,11 +17,10 @@ import * as scheduling from '../../../src/browlet/integration/scripting';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('stream read Promise boundaries', () => {
-  itPassesWith('explicitQueues').each(['chunk', 'close', 'error', 'released'] as const)(
+  itPassesWith('explicitQueues').each(['chunk', 'close', 'error'] as const)(
     'projects a borrowed read on %s in the receiver queue', (mode) => {
       const { first, second } = createFixture();
       const read = Reflect.get(second.reader, 'read') as CallableFunction;
-      if (mode === 'released') first.implementation.releaseLock();
       const result = Reflect.apply(read, first.reader, []) as Promise<unknown>;
       const trace = observe(first, result);
       settle(first, mode);
@@ -31,8 +30,31 @@ describe('stream read Promise boundaries', () => {
       expect(trace).toEqual([]);
       first.realm.agent.eventLoop.performMicrotaskCheckpoint();
       expect(trace).toHaveLength(1);
-      if (mode === 'released') expect(trace[0]).toBeInstanceOf(first.realm.intrinsics.typeError);
-      else expectResult(first, trace[0], mode);
+      expectResult(first, trace[0], mode);
+    },
+  );
+
+  it.each(['default', 'byob'] as const)(
+    'allocates a borrowed released %s read rejection in the method realm', async (kind) => {
+      const browlet = new Browlet({ route: () => '' });
+      const foreign = new Browlet({ route: () => '' });
+      Reflect.set(browlet.window, 'foreignStreamRealm', foreign.window);
+      const result = await browlet.evaluate(async (kind) => {
+        const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;
+        let reading: Promise<ReadableStreamReadResult<unknown>>;
+        if (kind === 'byob') {
+          const reader = new ReadableStream({ type: 'bytes' }).getReader({ mode: 'byob' });
+          reader.releaseLock();
+          reading = other.ReadableStreamBYOBReader.prototype.read.call(reader, new Uint8Array(1));
+        } else {
+          const reader = new ReadableStream().getReader();
+          reader.releaseLock();
+          reading = other.ReadableStreamDefaultReader.prototype.read.call(reader);
+        }
+        const error: unknown = await reading.catch((error: unknown) => error);
+        return { methodPromise: reading instanceof other.Promise, methodError: error instanceof other.TypeError };
+      }, kind);
+      expect(result).toEqual({ methodPromise: true, methodError: true });
     },
   );
 
@@ -120,17 +142,17 @@ function expectResult(
 
 // A test consumer exercises the shared argument/callback adapter with real reads.
 class ReadConsumerImpl {
-  received: ReadableStreamReadResult | undefined;
+  received: ReadResultValue | undefined;
 
   consume(
-    result: InternalPromise<ReadableStreamReadResult>,
-  ): InternalPromise<ReadableStreamReadResult> {
+    result: InternalPromise<ReadResultValue>,
+  ): InternalPromise<ReadResultValue> {
     return result.then((value) => { this.received = value; return value; });
   }
 
   invoke(
-    callback: () => InternalPromise<ReadableStreamReadResult>,
-  ): InternalPromise<ReadableStreamReadResult> {
+    callback: () => InternalPromise<ReadResultValue>,
+  ): InternalPromise<ReadResultValue> {
     return this.consume(callback());
   }
 }
