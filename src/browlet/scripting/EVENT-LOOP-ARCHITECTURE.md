@@ -102,10 +102,12 @@ These anchors retain the ownership and replacement conditions for source markers
 
 ### `node-v8-execution-contexts`
 
-Node does not expose V8's full execution-context stack. The controlled-entry
-mirror distinguishes Browlet task entries from engine entries with a nullable
-task. Cleanup checkpoints only for the former; incumbent selection uses mirrored
-script/backup-incumbent evidence, then the explicit entry settings.
+Node does not expose V8's full execution-context stack. Cleanup checkpoints when
+the mirrored stack empties within a controlled task or script entry. A nested
+checkpoint clears HTML's current task, so the loop separately tracks whether an
+outer task turn is still running. A null task alone cannot identify an uncontrolled
+engine entry. Incumbent selection uses mirrored script/backup-incumbent evidence,
+then the explicit entry settings.
 
 Custom job hooks add native job association but do not justify deleting this
 mirror or its direct-host-entry fallback. Complete Script records, transparent

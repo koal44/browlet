@@ -304,6 +304,29 @@ describe('File API §6.2: FileReader reads', () => {
     expect(reader.result).toBe('abc');
   });
 
+  it('runs microtasks between successive completion event callbacks', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const events = await browlet.evaluate(() => new Promise<string[]>((resolve, reject) => {
+      const reader = new FileReader();
+      const events: string[] = [];
+      for (const type of ['progress', 'load', 'loadend']) {
+        reader.addEventListener(type, () => {
+          events.push(type);
+          queueMicrotask(() => {
+            events.push(`${type} microtask`);
+            if (type === 'loadend') resolve(events);
+          });
+        });
+      }
+      reader.onerror = () => { reject(reader.error!); };
+      reader.readAsText(new Blob(['abc']));
+    }));
+
+    expect(events).toEqual([
+      'progress', 'progress microtask', 'load', 'load microtask', 'loadend', 'loadend microtask',
+    ]);
+  });
+
   it('does not fire progress for an empty Blob', async () => {
     const context = getContext(createWindow());
     const blob = new BlobImpl([], {}, context.getEnvironment());

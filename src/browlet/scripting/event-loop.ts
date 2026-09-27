@@ -16,6 +16,7 @@ export class EventLoop {
   #backupIncumbentSettingsObjectStack: Environment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
+  #runningTaskTurn = false;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
   #schedulingOptions: EventLoopOptions | null = null;
@@ -53,7 +54,7 @@ export class EventLoop {
   }
 
   runTaskTurn(options: EventLoopOptions): boolean {
-    if (this.#currentlyRunningTask !== null) {
+    if (this.#runningTaskTurn || this.#currentlyRunningTask !== null) {
       throw new InternalError('An event loop cannot run a task reentrantly');
     }
 
@@ -90,6 +91,7 @@ export class EventLoop {
     }
 
     let taskError: { value: unknown; } | null = null;
+    this.#runningTaskTurn = true;
     this.#currentlyRunningTask = oldestTask;
     try {
       oldestTask.steps();
@@ -97,7 +99,8 @@ export class EventLoop {
       taskError = { value: error };
     } finally {
       this.#currentlyRunningTask = null;
-      this.performMicrotaskCheckpoint();
+      try { this.performMicrotaskCheckpoint(); }
+      finally { this.#runningTaskTurn = false; }
     }
 
     const taskEndTime = options.unsafeSharedCurrentTime();
@@ -207,11 +210,12 @@ export class EventLoop {
     this.#jsExecutionContextStack.pop();
 
     /*
-     * ACCOMMODATION(node-v8-execution-contexts): A null task means the entry
-     * came from engine-owned work whose surrounding execution stack is hidden.
+     * ACCOMMODATION(node-v8-execution-contexts): A checkpoint clears the current
+     * task even while its outer task turn continues. Later callbacks in that
+     * turn still have a controlled entry; unrelated engine entries do not.
      */
     if (
-      entry.task !== null &&
+      (entry.task !== null || this.#runningTaskTurn) &&
       this.#jsExecutionContextStack.length === 0
     ) {
       this.performMicrotaskCheckpoint();

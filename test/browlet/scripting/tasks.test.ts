@@ -491,7 +491,7 @@ describe('task queues', () => {
     expect(checkpoint).not.toHaveBeenCalled();
   });
 
-  it('clears an outer task after a nested microtask runs', () => {
+  it('clears the current task after a nested microtask without permitting another task turn', () => {
     let queuedSteps: (() => void) | undefined;
     const eventLoop = new EventLoop(createMicrotaskQueue({
       enqueueMicrotask(steps) { queuedSteps = steps; },
@@ -502,6 +502,9 @@ describe('task queues', () => {
       eventLoop.queueMicrotask(microtask);
       queuedSteps?.();
       expect(eventLoop.currentlyRunningTask).toBeNull();
+      expect(() => eventLoop.runTaskTurn(createEventLoopOptions())).toThrow(
+        'An event loop cannot run a task reentrantly',
+      );
     });
 
     eventLoop.queueTask(source, null, outer);
