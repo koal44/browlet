@@ -35,10 +35,3 @@ The [evaluation regression tests](../../../test/browlet/evaluation.test.ts)
 exercise this boundary on stock and add-on runtimes. Direct `Realm.evaluate()`
 remains available to the script runner and tests of exact realm identities or
 individual checkpoints; those tests deliberately operate below this boundary.
-
-## Test cleanup
-
-- TODO: Convert ordinary `Browlet.evaluate()` source-string calls throughout
-  the test suite to functions, passing external data as the argument. Keep
-  source strings only where source-string evaluation is what the test covers.
-  Fetch's subsystem and browser integration tests are complete.

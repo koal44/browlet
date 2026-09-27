@@ -8,7 +8,7 @@
     "outDir": "../dist/.typecheck/wpt",
     "tsBuildInfoFile": "../dist/.typecheck/wpt.tsbuildinfo"
   },
-  "include": ["./*.ts"],
+  "include": ["./*.ts", "./scripts/**/*.ts"],
   "references": [
     { "path": "../src/browlet" }
   ]

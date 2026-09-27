@@ -125,7 +125,7 @@ metadata, source failures, and packaging. Browser tests cover
 [public object URLs](../../test/browlet/object-url.test.ts).
 Structured-data tests check destination realms, storage cloning, and graph identity.
 
-Selected FileAPI WPT groups live in [selection.txt](../../wpt/selection.txt).
+Selected FileAPI WPT groups live in [file.json](../../wpt/suites/file.json).
 The complete File-constructor Window case still requires HTMLBodyElement;
 File-specific assertions have focused coverage. Extend worker, lifetime, and
 host-file groups as their owners arrive. Keep failures attributable to the

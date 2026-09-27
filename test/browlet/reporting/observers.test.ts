@@ -31,19 +31,21 @@ describe('ReportingObserver', () => {
       env.queueReport('coep', 'reports', coepBody());
       env.queueReport('integrity-violation', 'reports', integrityBody());
     });
-    const result = await browlet.evaluate(`new Promise(resolve => {
+    const result = await browlet.evaluate(() => new Promise<object>((resolve) => {
+      const { ReportingObserver, ReportBody } = globalThis as unknown as ReportingWindow;
+      const produceReports = Reflect.get(globalThis, 'produceReports') as () => Promise<void>;
       const observer = new ReportingObserver(function(reports, argument) {
         resolve({
           receiver: this === observer, argument: argument === observer,
           array: reports instanceof Array,
-          bodies: reports.map(report => report.body instanceof ReportBody),
-          records: reports.map(report => JSON.parse(JSON.stringify(report))),
+          bodies: reports.map((report) => report.body instanceof ReportBody),
+          records: reports.map((report) => JSON.parse(JSON.stringify(report)) as object),
           drained: observer.takeRecords().length,
         });
       });
       observer.observe();
-      produceReports();
-    })`);
+      void produceReports();
+    }));
     expect(result).toEqual({
       receiver: true, argument: true, array: true, bodies: [true, true], drained: 0,
       records: [
@@ -342,11 +344,12 @@ describe('Reporting policy integration and user control', () => {
     await browlet.exposeFunction('produceReport', () => {
       env.queueReport('coep', 'reports', coepBody());
     });
-    expect(await browlet.evaluate(`new Promise(resolve => {
-      const observer = new ReportingObserver(reports => resolve(reports.length));
+    expect(await browlet.evaluate(() => new Promise<number>((resolve) => {
+      const produceReport = Reflect.get(globalThis, 'produceReport') as () => Promise<void>;
+      const observer = new ReportingObserver((reports) => resolve(reports.length));
       observer.observe();
-      produceReport();
-    })`)).toBe(1);
+      void produceReport();
+    }))).toBe(1);
     expect(scope.reports).toEqual([]);
     expect(scope.reportBuffer).toHaveLength(1);
   });

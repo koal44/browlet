@@ -13,6 +13,7 @@ export default defineConfig({
           include: [
             'test/lint/**/*.test.mjs',
             'test/support/**/*.test.ts',
+            'test/wpt/**/*.test.ts',
             'test/selectlet/unit/**/*.test.ts',
             'test/infra/**/*.test.ts',
             'test/js-engine/**/*.test.ts',

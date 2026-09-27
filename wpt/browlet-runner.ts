@@ -1,28 +1,30 @@
 import { readFileSync } from 'node:fs';
 import { Browlet, type BrowletRoute } from '../src/browlet/browlet';
+import type { WptTest } from './catalogue';
 import {
   reporterSource, resolveWptPath, withWptTimeout, wptOrigin,
   type WptReport,
 } from './harness';
 
-export async function runTest(testPath: string): Promise<WptReport> {
-  const anyTest = testPath.endsWith('.any.js')
-    ? createWindowAnyTest(testPath)
+export async function runTest(test: WptTest): Promise<WptReport> {
+  const testUrl = new URL(test.url, wptOrigin);
+  const anyTest = test.source.endsWith('.any.js')
+    ? createWindowAnyTest(test.source)
     : undefined;
+  if (anyTest && testUrl.pathname !== anyTest.documentPath) {
+    throw new Error(`WPT runner does not yet support this global: ${test.url}`);
+  }
   const browlet = new Browlet({ route: createWptRoute(anyTest) });
-  const testUrl = new URL(
-    anyTest?.documentPath ?? testPath,
-    wptOrigin,
-  );
 
   const { promise: report, resolve: complete } =
     Promise.withResolvers<WptReport>();
 
   await browlet.exposeFunction('__wptComplete', complete);
 
-  await browlet.navigate(testUrl);
-
-  return await withWptTimeout(report, testPath);
+  return await withWptTimeout((async () => {
+    await browlet.navigate(testUrl);
+    return await report;
+  })(), test.url, test.timeout);
 }
 
 function createWptRoute(anyTest?: WindowAnyTest): BrowletRoute {
@@ -52,10 +54,6 @@ export function createWindowAnyTest(testPath: string): WindowAnyTest {
   if (globals && !globals.includes('window')) {
     throw new Error(`${testPath} does not define a Window test variant`);
   }
-  if (metadata.has('variant')) {
-    throw new Error(`${testPath} requires unsupported WPT variants`);
-  }
-
   const sourcePath = normalizeWptUrlPath(testPath);
   const documentPath = sourcePath.replace(/\.any\.js$/u, '.any.html');
   const title = metadata.get('title')?.at(-1) ?? testPath;

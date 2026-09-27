@@ -7,13 +7,6 @@ export const reporterSource = readFileSync(
   'utf8',
 );
 
-export function readSelection(): string[] {
-  return readFileSync(resolve('wpt/selection.txt'), 'utf8')
-    .split(/\r?\n/)
-    .map((line) => line.replace(/#.*$/, '').trim())
-    .filter((line) => line !== '');
-}
-
 export function resolveWptPath(path: string): string {
   const testsDirectory = resolve('wpt/tests');
   const relativePath = decodeURIComponent(path).replace(/^\/+|^\.\//u, '');
@@ -32,11 +25,12 @@ export function resolveWptPath(path: string): string {
 export function withWptTimeout<T>(
   completion: Promise<T>,
   testPath: string,
+  timeoutMs = 65_000,
 ): Promise<T> {
   return new Promise((resolveCompletion, rejectCompletion) => {
     const timeout = setTimeout(() => {
       rejectCompletion(new Error(`WPT runner timed out: ${testPath}`));
-    }, 65_000);
+    }, timeoutMs);
 
     void completion.then(
       (result) => {
@@ -57,13 +51,13 @@ export type WptReport = {
 };
 
 export type WptHarnessResult = {
-  status: 'ok' | 'error' | 'timeout';
+  status: 'ok' | 'error' | 'timeout' | 'precondition-failed';
   message: string | null;
 };
 
 export type WptTestResult = {
   name: string;
-  status: 'pass' | 'fail' | 'timeout' | 'not-run';
+  status: 'pass' | 'fail' | 'timeout' | 'not-run' | 'precondition-failed';
   message: string | null;
   stack: string | null;
 };

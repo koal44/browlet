@@ -14,6 +14,7 @@
   ],
   "exclude": ["./web-idl/contracts"],
   "references": [
+    { "path": "../wpt" },
     { "path": "../src/infra" },
     { "path": "../src/js-engine" },
     { "path": "../src/http" },

@@ -170,18 +170,23 @@ describe('CSP violation delivery', () => {
       request.populateFromClient();
       request.isBlockedByCSP();
     });
-    const result = await browlet.evaluate(`new Promise(resolve => {
-      const observer = new ReportingObserver(reports => {
-        const report = reports[0];
+    const result = await browlet.evaluate(() => new Promise<object>((resolve) => {
+      // lib.dom does not expose the ReportBody interfaces or their toJSON operation.
+      const ReportBody = Reflect.get(globalThis, 'ReportBody') as new () => { toJSON(): object; };
+      const CSPViolationReportBody = Reflect.get(globalThis, 'CSPViolationReportBody') as new () => object;
+      const violate = Reflect.get(globalThis, 'violate') as () => Promise<void>;
+      const observer = new ReportingObserver((reports) => {
+        const report = reports[0]!;
+        const body = report.body as InstanceType<typeof ReportBody>;
         resolve({
-          type: report.type, derived: report.body instanceof CSPViolationReportBody,
-          base: report.body instanceof ReportBody, fields: report.body.toJSON(),
-          json: JSON.parse(JSON.stringify(report)).body,
+          type: report.type, derived: body instanceof CSPViolationReportBody,
+          base: body instanceof ReportBody, fields: body.toJSON(),
+          json: (JSON.parse(JSON.stringify(report)) as { body: object; }).body,
         });
       });
       observer.observe();
-      violate();
-    })`);
+      void violate();
+    }));
     const fields = {
       documentURL: 'about', referrer: null, blockedURL: 'https://blocked.test/image',
       effectiveDirective: 'img-src', originalPolicy: policy.serialized, sourceFile: null, sample: '',

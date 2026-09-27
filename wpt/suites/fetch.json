@@ -1,0 +1,18 @@
+{
+  "$schema": "../suite.schema.json",
+  "directory": "/fetch/api/",
+  "include": [
+    "headers/headers-basic.any.html",
+    "request/request-constructor-init-body-override.any.html",
+    "response/response-consume-empty.any.html",
+    "response/response-static-json.any.html"
+  ],
+  "failing": [
+    {
+      "test": "response/response-consume-empty.any.html",
+      "subtests": ["Consume empty FormData response body as text"],
+      "reason": "contested",
+      "note": "An empty multipart body still contains a closing boundary."
+    }
+  ]
+}

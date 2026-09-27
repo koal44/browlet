@@ -224,7 +224,11 @@ describe('CSP hash reporting through the running browser', () => {
       ResponseImpl, new ResponseImpl(response, 'immutable', env),
     ));
     await browlet.exposeFunction('checkCSP', () => response.isBlockedByCSP(request));
-    const read = browlet.evaluate('checkCSP().then(() => scriptResponse.text())');
+    const read = browlet.evaluate(() => {
+      const checkCSP = Reflect.get(globalThis, 'checkCSP') as () => Promise<boolean>;
+      const scriptResponse = Reflect.get(globalThis, 'scriptResponse') as Response;
+      return checkCSP().then(() => scriptResponse.text());
+    });
     const [text] = await Promise.all([read, reported]);
     expect(text).toBe('abc');
     expect(env.getWindowOrWorkerGlobalScopeMixin().reports).toHaveLength(1);

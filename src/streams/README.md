@@ -85,7 +85,7 @@ npm.cmd run test:browlet:wpt
 The [unit tests](../../test/browlet/streams) cover implementation records and
 projected APIs, including callback receivers, borrowed getters, independent
 queues, error identity, and BYOB ownership. The WPT command runs the repository's
-[selected tests](../../wpt/selection.txt), including Window `.any.js` cases;
+[selected tests](../../wpt/suites/streams.json), including Window `.any.js` cases;
 it does not run the entire upstream Streams suite. Queue-sensitive coverage
 depends on the [selected Node runtime](../../node-compat/README.md).
 

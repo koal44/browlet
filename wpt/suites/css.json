@@ -1,0 +1,10 @@
+{
+  "$schema": "../suite.schema.json",
+  "directory": "/css/",
+  "include": [
+    "css-cascade/important-vs-inline-001.html",
+    "cssom/preferred-stylesheet-order.html",
+    "cssom/preferred-stylesheet-reversed-order.html",
+    "cssom/StyleSheetList.html"
+  ]
+}

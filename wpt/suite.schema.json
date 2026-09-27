@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WPT suite",
+  "type": "object",
+  "required": ["directory"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "directory": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Upstream directory prefix for all patterns in this suite."
+    },
+    "include": {
+      "$ref": "#/definitions/patterns"
+    },
+    "skip": {
+      "type": "array",
+      "description": "Do not run these test documents. Subtest skips are not supported.",
+      "items": {
+        "type": "object",
+        "allOf": [{ "$ref": "#/definitions/rule" }],
+        "properties": { "subtests": false }
+      }
+    },
+    "failing": {
+      "type": "array",
+      "description": "Reviewed assertion failures, optionally limited to named subtests.",
+      "items": { "$ref": "#/definitions/rule" }
+    },
+    "support": {
+      "$ref": "#/definitions/patterns"
+    }
+  },
+  "definitions": {
+    "patterns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["test", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "test": { "type": "string", "minLength": 1 },
+        "subtests": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Exact subtest names. Omit for a whole-test failure rule."
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["not-implemented", "implementation-bug", "harness-limitation", "contested"]
+        },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

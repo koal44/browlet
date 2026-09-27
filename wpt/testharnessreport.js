@@ -28,11 +28,13 @@ function testStatus(test) {
   if (test.status === test.PASS) return 'pass';
   if (test.status === test.FAIL) return 'fail';
   if (test.status === test.TIMEOUT) return 'timeout';
+  if (test.status === test.PRECONDITION_FAILED) return 'precondition-failed';
   return 'not-run';
 }
 
 function harnessStatus(harness) {
   if (harness.status === harness.OK) return 'ok';
   if (harness.status === harness.TIMEOUT) return 'timeout';
+  if (harness.status === harness.PRECONDITION_FAILED) return 'precondition-failed';
   return 'error';
 }

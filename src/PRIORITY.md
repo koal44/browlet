@@ -34,6 +34,11 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
+The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. Investigate the
+selected suite's failures now; add reports and bounded CI with the project
+presentation pass. Broaden test coverage as each owning subsystem becomes ready,
+rather than postponing all conformance work until the browser is complete.
+
 ## Dependency order
 
 Numbers express default focus, not a requirement to finish unrelated work first.
@@ -114,6 +119,10 @@ Prove inline style, external link, script, and image loading in that order.
 Retain navigation/resource timing from the same records. Exercise timer, Fetch,
 parser, and load ordering on the supported runtime backends; plain Node's
 limitations do not redefine HTML behavior.
+
+Use the first Fetch-backed Document/external-script slice to integrate
+[WPT's servers](../wpt/ROADMAP.md#c-use-wpts-servers-with-document-loading).
+Dynamic-markup, child-context, and worker tests follow their own prerequisites.
 
 **6: render that Document.** [Style](browlet/style/ROADMAP.md) supplies versioned
 UA rules and presentational hints; [rendering](browlet/rendering/ROADMAP.md)

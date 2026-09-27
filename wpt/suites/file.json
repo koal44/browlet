@@ -1,0 +1,19 @@
+{
+  "$schema": "../suite.schema.json",
+  "directory": "/FileAPI/",
+  "include": [
+    "file/File-constructor-endings.any.html",
+    "reading-data-section/Determining-Encoding.any.html",
+    "reading-data-section/filereader_error.any.html",
+    "reading-data-section/filereader_readAsArrayBuffer.any.html",
+    "reading-data-section/filereader_readAsBinaryString.any.html",
+    "reading-data-section/filereader_readAsDataURL.any.html",
+    "reading-data-section/filereader_readAsText.any.html",
+    "reading-data-section/filereader_readystate.any.html",
+    "reading-data-section/FileReader-event-handler-attributes.any.html",
+    "reading-data-section/FileReader-multiple-reads.any.html",
+    "reading-data-section/filereader_abort.any.html",
+    "reading-data-section/filereader_events.any.html",
+    "reading-data-section/filereader_result.any.html"
+  ]
+}
