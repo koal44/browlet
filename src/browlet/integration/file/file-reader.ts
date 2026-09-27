@@ -183,7 +183,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#result = null;
     this.#error = null;
 
-    const { fileReading, promises, runInParallel } = this.#env.exec;
+    const { fileReading, Promise: P, runInParallel } = this.#env.exec;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -242,7 +242,7 @@ export class FileReaderImpl extends EventTargetImpl {
               fireProgressEvent('progress', this, transmitted, blob.size);
             });
           }
-          void promises.resolve().then(readNextChunk);
+          void P.resolve(undefined, idlType.undefined).then(readNextChunk);
         },
         closeSteps: () => {
           if (this.#operation !== operation) return;

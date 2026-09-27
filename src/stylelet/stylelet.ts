@@ -3,7 +3,7 @@ import type { CSSStyleSheetImpl } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { StyleletContext } from './context';
-import type { Promises } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { DOMExceptionName } from '../web-idl/core/index';
 
 export class Stylelet {
@@ -71,15 +71,14 @@ export type TreeCaps = {
 
 /** Execution and failure facilities supplied by the embedding host. */
 export type ExecutionCaps = {
-  promises: Promises;
+  Promise: typeof InternalPromise;
   runInParallel(steps: () => void): void;
   /** Deliver stylesheet updates on the owner's task queue. */
   queueTask(steps: () => void): void;
   createDOMException(name: DOMExceptionName, message?: string): DOMException;
 };
 
-// Hosts can configure the small Promise facility without loading JSRealm or JSRuntime.
+// Hosts can specialize the Promise constructor without loading JSRealm or JSRuntime.
 export { defaultExecutionCaps, StyleletContext } from './context';
-export { Promises } from '../infra/promises';
-export type { NativePromiseObserver, InternalPromise } from '../infra/promises';
+export { InternalPromise } from '../infra/promises';
 export type { DOMExceptionName };

@@ -1,3 +1,4 @@
+import { idlType } from '../../../src/web-idl/core/index';
 import { createEnvironment } from '../../js-engine/execution-fixture';
 import { createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
@@ -137,8 +138,8 @@ describe('Streams operations for other specifications', () => {
 
   it('waits for internal promises returned by writable algorithms', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
-    const finishWrite = promises.withResolvers<void>();
+    const { Promise: P } = env.exec;
+    const finishWrite = P.withResolvers(idlType.undefined);
     const write = vi.fn(() => finishWrite.promise);
     const stream = WritableStreamImpl.createDefault(write, undefined, undefined, 1, () => 1, env);
     const writer = stream.getWriter();
@@ -196,7 +197,7 @@ describe('Readable-stream completion steps', () => {
     stream.onCompletion(closed, errored);
     stream.enqueueChunk(Uint8Array.of(1, 2, 3));
     stream.close();
-    await observe(env.exec.promises.resolve());
+    await observe(env.exec.Promise.resolve(undefined, idlType.undefined));
 
     expect(stream.locked).toBe(false);
     expect(stream.disturbed).toBe(false);
@@ -249,7 +250,7 @@ describe('Readable-stream completion steps', () => {
 
   it('completes closure even if source cancellation subsequently rejects', async () => {
     const env = createEnvironment();
-    const stream = ReadableStreamImpl.createDefault(undefined, () => env.exec.promises.reject('cleanup'), 0, () => 1, env);
+    const stream = ReadableStreamImpl.createDefault(undefined, () => env.exec.Promise.reject('cleanup', idlType.undefined), 0, () => 1, env);
     const closed = vi.fn();
     const errored = vi.fn();
     stream.onCompletion(closed, errored);

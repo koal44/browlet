@@ -1,3 +1,4 @@
+import { internalType } from '../../src/infra/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
@@ -55,7 +56,7 @@ describe('Fetch §4.3: scheme dispatch', () => {
   it.each(['http', 'https'])('consults the override once before delegating %s to HTTP fetch', async (scheme) => {
     const operation = createOperation(`${scheme}://example.test/resource`);
     operation.request.mode = 'navigate';
-    const pending = operation.request.userAgent.hostPromises.withResolvers<FetchResponse>();
+    const pending = operation.request.userAgent.HostPromise.withResolvers(internalType<FetchResponse>('FetchResponse'));
     const http = vi.spyOn(operation.request.userAgent, 'handleFetch').mockReturnValue(pending.promise);
     const override = vi.spyOn(operation.request.userAgent, 'potentiallyOverrideResponse');
     const result = operation.start();

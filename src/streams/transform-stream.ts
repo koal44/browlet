@@ -1,5 +1,5 @@
 import type { JSEnvironment } from '../js-engine/index';
-import type { InternalPromise, InternalPromiseCapability } from '../infra/promises';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl,
@@ -49,7 +49,7 @@ export class TransformStreamImpl {
     const readableSizeAlgorithm = extractSizeAlgorithm(readableStrategy);
     const writableHighWaterMark = extractHighWaterMark(writableStrategy, 1);
     const writableSizeAlgorithm = extractSizeAlgorithm(writableStrategy);
-    const start = env.exec.promises.withResolvers<unknown>();
+    const start = env.exec.Promise.withResolvers(idlType.any);
     this.#initialize(
       start.promise,
       writableHighWaterMark,
@@ -63,7 +63,7 @@ export class TransformStreamImpl {
     const startResult = transformer.start
       ? Reflect.apply(transformer.start, transformer, [controller])
       : undefined;
-    env.exec.promises.resolve(startResult).observe(start.resolve, start.reject);
+    env.exec.Promise.fromValue(startResult, env.exec.NativePromise, idlType.any).observe(start.resolve, start.reject);
   }
 
   /** Streams §9.3.1, creating an identity TransformStream. */
@@ -96,7 +96,7 @@ export class TransformStreamImpl {
     cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown> | void,
   ): void {
     this.#initialize(
-      this.env.exec.promises.resolve(),
+      this.env.exec.Promise.resolve(undefined, idlType.undefined),
       1,
       () => 1,
       0,
@@ -104,9 +104,9 @@ export class TransformStreamImpl {
     );
     new TransformStreamDefaultControllerImpl().setUp(
       this,
-      (chunk) => this.env.exec.promises.try(() => transformAlgorithm(chunk)),
-      () => this.env.exec.promises.try(() => flushAlgorithm?.()),
-      (reason) => this.env.exec.promises.try(() => cancelAlgorithm?.(reason)),
+      (chunk) => this.env.exec.Promise.try(() => transformAlgorithm(chunk), idlType.any),
+      () => this.env.exec.Promise.try(() => flushAlgorithm?.(), idlType.any),
+      (reason) => this.env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
     );
   }
 
@@ -137,7 +137,7 @@ export class TransformStreamImpl {
       throw new InternalError('Transform stream backpressure did not change');
     }
     this.state.backpressureChange?.resolve();
-    this.state.backpressureChange = this.env.exec.promises.withResolvers<void>();
+    this.state.backpressureChange = this.env.exec.Promise.withResolvers(idlType.undefined);
     this.state.backpressure = backpressure;
   }
 
@@ -192,7 +192,7 @@ export class TransformStreamImpl {
       .promise.then(() => {
         if (state.state === 'erroring') throw state.storedError;
         return this.#controller.performTransform(chunk);
-      });
+      }, undefined, idlType.any);
   }
 
   /** Streams §6.4.3, TransformStreamDefaultSinkAbortAlgorithm. */
@@ -200,7 +200,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.env.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.Promise.withResolvers(idlType.undefined);
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
@@ -224,7 +224,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.env.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.Promise.withResolvers(idlType.undefined);
     controller.state.finishPromise = finish.promise;
     const flushPromise = controller.flush();
     controller.clearAlgorithms();
@@ -257,7 +257,7 @@ export class TransformStreamImpl {
     const controller = this.#controller;
     if (controller.state.finishPromise) return controller.state.finishPromise;
 
-    const finish = this.env.exec.promises.withResolvers<void>();
+    const finish = this.env.exec.Promise.withResolvers(idlType.undefined);
     controller.state.finishPromise = finish.promise;
     const cancelPromise = controller.cancel(reason);
     controller.clearAlgorithms();
@@ -281,7 +281,7 @@ export class TransformStreamImpl {
 
 type TransformStreamState = {
   backpressure?: boolean;
-  backpressureChange?: InternalPromiseCapability<void>;
+  backpressureChange?: InternalPromiseWithResolvers<void>;
   controller?: TransformStreamDefaultControllerImpl;
   readable?: ReadableStreamImpl;
   writable?: WritableStreamImpl;
@@ -470,9 +470,9 @@ export class TransformStreamDefaultControllerImpl {
     const { transform, flush, cancel } = transformer;
     this.setUp(
       stream,
-      (chunk) => stream.env.exec.promises.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk)),
-      () => stream.env.exec.promises.try(() => flush?.call(transformer, this)),
-      (reason) => stream.env.exec.promises.try(() => cancel?.call(transformer, reason)),
+      (chunk) => stream.env.exec.Promise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk), idlType.any),
+      () => stream.env.exec.Promise.try(() => flush?.call(transformer, this), idlType.any),
+      (reason) => stream.env.exec.Promise.try(() => cancel?.call(transformer, reason), idlType.any),
     );
   }
 

@@ -3,13 +3,13 @@ import { BlobData, BlobImpl } from '../file/index';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
-import type { InternalPromise } from '../infra/promises';
+import type { InternalPromise, PromiseResultType } from '../infra/promises';
 import { getBufferSourceCopy, getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
 import {
-  allocateIn, defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
+  defineInterfaceMixin, defineTypedef, idlType, implementationType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
 import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
@@ -218,14 +218,13 @@ export class BodyMixin {
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-arraybuffer
-  // The binding allocates the ArrayBuffer from these bytes in the receiver realm.
-  arrayBuffer(): InternalPromise<Uint8Array> {
-    return this.#consume((bytes) => bytes);
+  arrayBuffer(): InternalPromise<ArrayBuffer> {
+    return this.#consume(idlType.ArrayBuffer, (bytes) => this.#env.exec.buffers.copyArrayBuffer(bytes));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-blob
   blob(): InternalPromise<BlobImpl> {
-    return this.#consume((bytes) => {
+    return this.#consume(implementationType<BlobImpl>(reference('Blob')), (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       const data = BlobData.fromOwnedBytes(bytes);
       return BlobImpl.create(data, type === null ? '' : serializeMIMEType(type), undefined, this.#env);
@@ -234,12 +233,12 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-bytes
   bytes(): InternalPromise<Uint8Array> {
-    return this.#consume((bytes) => bytes);
+    return this.#consume(idlType.Uint8Array, (bytes) => this.#env.exec.buffers.copyUint8Array(bytes));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-formdata
   formData(): InternalPromise<FormDataImpl> {
-    return this.#consume((bytes) => {
+    return this.#consume(implementationType<FormDataImpl>(reference('FormData')), (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       if (type?.type === 'multipart' && type.subtype === 'form-data') {
         return FormDataImpl.fromEntries(
@@ -258,12 +257,12 @@ export class BodyMixin {
   // https://fetch.spec.whatwg.org/#dom-body-json
   // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
   json(): InternalPromise<unknown> {
-    return this.#consume((bytes) => this.#env.exec.parseJSON(utf8Decode(bytes)));
+    return this.#consume(idlType.any, (bytes) => this.#env.exec.parseJSON(utf8Decode(bytes)));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-text
   text(): InternalPromise<string> {
-    return this.#consume(utf8Decode);
+    return this.#consume(idlType.USVString, utf8Decode);
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-textstream
@@ -293,10 +292,10 @@ export class BodyMixin {
   }
 
   // https://fetch.spec.whatwg.org/#concept-body-consume-body
-  #consume<Result>(convert: (bytes: Uint8Array<ArrayBuffer>) => Result): InternalPromise<Result> {
-    const { promises } = this.#env.exec;
-    if (this.unusable) return promises.reject(new TypeError('Body is disturbed or locked'));
-    const result = promises.withResolvers<Result>();
+  #consume<Result>(type: PromiseResultType<Result>, convert: (bytes: Uint8Array<ArrayBuffer>) => NoInfer<Result>): InternalPromise<Result> {
+    const { Promise: P } = this.#env.exec;
+    if (this.unusable) return P.reject(new TypeError('Body is disturbed or locked'), type);
+    const result = P.withResolvers(type);
     const success = (bytes: Uint8Array<ArrayBuffer>) => {
       try {
         result.resolve(convert(bytes));
@@ -335,9 +334,9 @@ export const bodyIDL = defineInterfaceMixin({
   members: [
     roAttr('body', nullable(reference('ReadableStream'))),
     roAttr('bodyUsed', idlType.boolean),
-    op('arrayBuffer', promise(idlType.ArrayBuffer), [], { ...xattr('NewObject'), ...allocateIn('receiver') }),
+    op('arrayBuffer', promise(idlType.ArrayBuffer), [], xattr('NewObject')),
     op('blob', promise(reference('Blob')), [], xattr('NewObject')),
-    op('bytes', promise(idlType.Uint8Array), [], { ...xattr('NewObject'), ...allocateIn('receiver') }),
+    op('bytes', promise(idlType.Uint8Array), [], xattr('NewObject')),
     op('formData', promise(reference('FormData')), [], xattr('NewObject')),
     op('json', promise(idlType.any), [], xattr('NewObject')),
     op('text', promise(idlType.USVString), [], xattr('NewObject')),

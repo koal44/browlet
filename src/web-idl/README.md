@@ -20,7 +20,7 @@ cannot hide a dependency in the standalone surface.
 
 | Modules | Responsibility |
 | --- | --- |
-| `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL types |
+| `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
 | `assembly.ts` | Combine definitions, partials, includes, capabilities, and implementation-class lookup |
 | `binding-world.ts`, `binding-context.ts` | Register realms and expose their shared boundary operations |
 | `realm-binding.ts`, `definition-binding.ts` | Realm-owned prototypes, functions, allocation, and member adapters |
@@ -137,7 +137,8 @@ Add worlds for actual isolation/runtime lifetimes, not merely for new Agent type
 | Arguments, overloads, synchronous invocation errors | Executing member's realm |
 | Implementation receiver and its injected dependencies | Recognized receiver's realm binding |
 | Fresh implementation returned as a declared interface | Receiver owner; an already stamped implementation keeps its owner |
-| Ordinary result containers and successful Promise projection | Receiver by default; `allocateIn('method' \| 'receiver')` can select allocation |
+| Ordinary result containers | Receiver by default; `allocateIn('method' \| 'receiver')` can select allocation |
+| Declared implementation Promise | Its creation environment selects allocation and conversion; returning it preserves the native Promise |
 | Invocation failure of a Promise-returning method | Rejected Promise in the method's realm |
 | Constructor fallback for non-object `newTarget.prototype` | Constructor's associated realm selects the interface prototype |
 
@@ -154,17 +155,42 @@ Later conversions explicitly required by an algorithm remain at that later step.
 
 ## Promises, iteration, and exceptions
 
-Infra's `InternalPromise<T>` carries implementation results and their continuation
-destination. Web IDL projects typed author Promises and converts fulfillment
-values once. A private `PromiseProjectionStamper` preserves identity by source,
-world, realm, result type, and allocation policy. Retaining a source Promise also
-retains those projections; this is not a weak registry. Projection does not
-reschedule earlier implementation work.
+Every `InternalPromise<T>` stores its runtime result descriptor in `type`.
+Select its owner's constructor: `env.exec.Promise.withResolvers(idlType.Uint8Array)`.
+The descriptor determines the resolver's TypeScript payload too; named IDL
+results associate that payload once with `implementationType<BarImpl>(reference('Bar'))`.
+Web IDL owns those descriptors and their payload mappings; Infra retains them
+through a generic result-type contract. `all(values, sequence(idlType.long))`
+takes the complete array result descriptor.
+`then()` and `catch()` keep the descriptor. To change it, use
+`then(fulfill, reject, type)`, passing `undefined` when no rejection handler is needed.
+TypeScript requires the new descriptor when the callback changes the payload
+type. An explicit descriptor also permits changes such as DOMString to USVString,
+whose TypeScript payloads are both `string`.
+`P.fromInternal(source)` changes the view's constructor and reaction destination while
+retaining its descriptor, native backing, and source fulfillment conversion.
+Its next `then()` allocates through the destination constructor.
 
-Internal fulfillment does not adopt arbitrary implementation `then` properties.
-Adoption occurs only at explicit author-Promise/thenable resolution boundaries.
-Promise-capability records remain inside Binding. Implementations use their
-environment's Promise facility and already-adapted values.
+Binding supplies a `WebIDLPromise` subclass of the realm's constructor, inheriting
+observation and overriding typed creation. Resolution converts to JavaScript and
+immediately calls the native resolver. Internal
+reactions convert that native Promise's actual fulfillment back to `T` inside
+the reaction. Both consumers share adoption, rejection, identity, and handled
+state. Binding checks the result descriptor and returns the view's `backing`
+directly; it owns the allocation and conversion contract. There is no projection
+cache or second settlement, and returning the backing cannot change its realm.
+
+Implementation records outside IDL use named `internalType<T>(name)` descriptors
+through the same static methods. Their boxed values retain implementation identity and
+do not adopt arbitrary `then` properties. A host without Binding also retains
+values without IDL conversion; their backing Promises retain implementation
+payloads. `P.fromValue(value, env.exec.NativePromise, type)` uses native Promise
+resolution; `NativePromise` is the owner's captured JavaScript constructor. Forwarding
+through `try()` or `fromValue()` preserves an existing internal Promise's contract.
+There is no untyped creation path or separate Promise class for private methods.
+Resolving functions remain in `InternalPromiseWithResolvers`; importing an existing
+native Promise through `P.fromNative(source, convert, type)` does not allocate
+another backing or manufacture settlement controls.
 
 For synchronous pair iterables, the implementation exposes live entries and
 Binding owns the author's cursor and result conversion. Value iterables use

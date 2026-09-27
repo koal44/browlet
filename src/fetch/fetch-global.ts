@@ -1,7 +1,9 @@
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
-import type { InternalPromise, InternalPromiseCapability } from '../infra/promises';
-import { arg, definePartialInterfaceMixin, emptyDictionary, op, promise, reference, xattr } from '../web-idl/index';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import {
+  arg, definePartialInterfaceMixin, emptyDictionary, implementationType, op, promise, reference, xattr,
+} from '../web-idl/index';
 import { FetchBody } from './body';
 import { deserializeAbortReason, type FetchController } from './controller';
 import type { FetchEnvironment } from './environment';
@@ -19,7 +21,7 @@ export function fetchForGlobal(
   const requestObject = RequestImpl.create(input, init, env);
   // SPEC_CLASH(fetch-borrowed-realm): Blink/Gecko use the receiver realm for
   // successful promises and Responses; WebKit uses the method realm. Keep the receiver.
-  const result = env.exec.promises.withResolvers<ResponseImpl>();
+  const result = env.exec.Promise.withResolvers(implementationType<ResponseImpl>(reference('Response')));
   const request = requestObject.getRequest();
   const signal = requestObject.signal;
   if (signal.aborted) {
@@ -73,7 +75,7 @@ export const fetchGlobalScopeIDL = definePartialInterfaceMixin({
 // https://fetch.spec.whatwg.org/#abort-fetch
 // The internal capability supplies the promise's settlement operations.
 function abortFetch(
-  result: InternalPromiseCapability<ResponseImpl>, request: FetchRequest, response: ResponseImpl | null, error: unknown,
+  result: InternalPromiseWithResolvers<ResponseImpl>, request: FetchRequest, response: ResponseImpl | null, error: unknown,
 ): void {
   result.reject(error);
   if (request.body instanceof FetchBody && request.body.stream.isReadable) {

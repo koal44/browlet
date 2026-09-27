@@ -7,7 +7,7 @@ import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs
 import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
 
 const runtimeGlobals = [
-  { name: 'Promise', message: 'Use the supplied Promises dependency for implementation continuations.' },
+  { name: 'Promise', message: 'Use the supplied InternalPromise constructor for implementation continuations.' },
   { name: 'queueMicrotask', message: 'Use the supplied Promise or task scheduling dependency.' },
 ];
 

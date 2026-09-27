@@ -1,3 +1,4 @@
+import { internalType } from '../../src/infra/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
@@ -43,7 +44,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
         expect(copy.headerList.list).toEqual(request.headerList.list);
         copy.headerList.set('X-Request', 'worker');
         return null;
-      });
+      }, undefined, internalType<FetchResponse | ServiceWorkerTimingInfo | null>('OptionalResult'));
     });
     const response = await f.operation.start();
     const [, controller, isolated] = f.userAgent.handleFetch.mock.calls[0]!;
@@ -68,7 +69,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
 
   it('waits for interception and keeps Service Worker responses out of network CORS and TAO checks', async () => {
     const f = createFixture();
-    const pending = f.userAgent.hostPromises.withResolvers<FetchResponse | ServiceWorkerTimingInfo | null>();
+    const pending = f.userAgent.HostPromise.withResolvers(internalType<FetchResponse | ServiceWorkerTimingInfo | null>('OptionalResult'));
     f.userAgent.handleFetch.mockReturnValue(pending.promise);
     f.request.responseTainting = 'cors';
     vi.spyOn(f.client, 'crossOriginIsolatedCapability', 'get').mockReturnValue(true);
@@ -91,7 +92,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
     const f = createFixture();
     f.request.destination = 'document';
     const timing = workerTiming();
-    f.userAgent.handleFetch.mockReturnValue(f.userAgent.hostPromises.try(() => timing));
+    f.userAgent.handleFetch.mockReturnValue(f.userAgent.HostPromise.try(() => timing, internalType<ServiceWorkerTimingInfo>('ServiceWorkerTimingInfo')));
     expect(await f.operation.start()).toHaveProperty('internalResponse', f.receivedResponse);
     expect(f.operation.controller.extractFullTimingInfo().serviceWorkerTimingInfo).toBe(timing);
     expect(f.operation.controller.extractFullTimingInfo().finalServiceWorkerStartTime).toBe(0);
@@ -110,7 +111,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
       f.request.redirectMode = redirectMode;
       if (count === 2) f.response.urlList.push(parseURL('https://example.test/second').url!);
       const worker = f.response.filter(type);
-      f.userAgent.handleFetch.mockReturnValue(f.userAgent.hostPromises.try(() => worker));
+      f.userAgent.handleFetch.mockReturnValue(f.userAgent.HostPromise.try(() => worker, internalType<FetchResponse>('FetchResponse')));
       expect((await f.operation.start()).type).toBe('error');
       expect(f.network).not.toHaveBeenCalled();
     },
@@ -121,7 +122,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
     f.request.responseTainting = 'opaque';
     f.client.policyContainer.embedderPolicy.value = 'require-corp';
     const error = FetchResponse.networkError();
-    f.userAgent.handleFetch.mockReturnValue(f.userAgent.hostPromises.try(() => error));
+    f.userAgent.handleFetch.mockReturnValue(f.userAgent.HostPromise.try(() => error, internalType<FetchResponse>('FetchResponse')));
     expect((await f.operation.start()).type).toBe('error');
     expect(f.network).not.toHaveBeenCalled();
   });
@@ -137,7 +138,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
         expect(copy.body).toBeInstanceOf(FetchBody);
         (copy.body as FetchBody).readAll(bytes.resolve, bytes.reject);
         return f.response;
-      }));
+      }, undefined, internalType<FetchResponse | ServiceWorkerTimingInfo | null>('OptionalResult')));
     expect(await f.operation.start()).toHaveProperty('internalResponse', f.receivedResponse);
     expect(body.stream.isClosed).toBe(true);
     expect(utf8Decode(await bytes.promise)).toBe('upload');
@@ -154,7 +155,7 @@ describe('Fetch §4.4: HTTP response selection', () => {
       prepareRequest().then((copy) => {
         (copy.body as FetchBody).readAll(() => {}, () => {});
         return f.response;
-      }));
+      }, undefined, internalType<FetchResponse | ServiceWorkerTimingInfo | null>('OptionalResult')));
     const pending = f.operation.start();
     const terminate = f.operation.controller.terminate.bind(f.operation.controller);
     vi.spyOn(f.operation.controller, 'terminate').mockImplementation(() => {
@@ -206,7 +207,7 @@ describe('HTTP preflight selection and response checks', () => {
     const f = createFixture('https://other.test/resource');
     f.request.method = 'PUT';
     f.request.unsafeRequest = true;
-    const pending = f.userAgent.hostPromises.withResolvers<FetchResponse>();
+    const pending = f.userAgent.HostPromise.withResolvers(internalType<FetchResponse>('FetchResponse'));
     f.preflight.mockReturnValue(pending.promise);
     const result = f.operation.start();
     expect(f.network).not.toHaveBeenCalled();
@@ -245,7 +246,7 @@ describe('HTTP preflight selection and response checks', () => {
     f.request.mode = 'no-cors';
     f.response.headerList.append('Cross-Origin-Resource-Policy', 'same-origin');
     if (source === 'worker') {
-      f.userAgent.handleFetch.mockReturnValue(f.userAgent.hostPromises.try(() => f.response.filter('opaque')));
+      f.userAgent.handleFetch.mockReturnValue(f.userAgent.HostPromise.try(() => f.response.filter('opaque'), internalType<FetchResponse>('FetchResponse')));
     } else {
       f.request.responseTainting = 'opaque';
     }
@@ -330,8 +331,8 @@ describe('HTTP redirect modes', () => {
     f.response.headerList.append('Location', '/next');
     f.response.headerList.append('Timing-Allow-Origin', '*');
     const next = responseAt('https://example.test/next');
-    f.network.mockReturnValueOnce(f.userAgent.hostPromises.try(() => f.response))
-      .mockReturnValue(f.userAgent.hostPromises.try(() => next));
+    f.network.mockReturnValueOnce(f.userAgent.HostPromise.try(() => f.response, internalType<FetchResponse>('FetchResponse')))
+      .mockReturnValue(f.userAgent.HostPromise.try(() => next, internalType<FetchResponse>('FetchResponse')));
     const first = Promise.withResolvers<FetchResponse>();
     const second = Promise.withResolvers<FetchResponse>();
     f.operation.options.processResponse = vi.fn().mockImplementationOnce(first.resolve).mockImplementation(second.resolve);
@@ -538,7 +539,7 @@ describe('Fetch §4.5: redirect target and request updates', () => {
       response.status = status;
       response.headerList.append('Location', `/next-${status}`);
       const previous = f.request.body;
-      f.network.mockReturnValueOnce(f.userAgent.hostPromises.resolve(response));
+      f.network.mockReturnValueOnce(f.userAgent.HostPromise.fromValue(response, Promise, internalType<FetchResponse>('FetchResponse')));
       main.mockReturnValueOnce(null);
       await f.operation.start();
       expect(f.request.body).not.toBe(previous);
@@ -627,12 +628,12 @@ function createFixture(url = 'https://example.test/resource') {
   request.populateFromClient();
   request.mode = 'cors';
   const response = responseAt(url);
-  const network = vi.fn(() => userAgent.hostPromises.resolve(response));
+  const network = vi.fn(() => userAgent.HostPromise.fromValue(response, Promise, internalType<FetchResponse>('FetchResponse')));
   const preflight = vi.fn(() => {
     const allowed = new FetchResponse();
     allowed.headerList.append('Access-Control-Allow-Methods', 'PUT');
     allowed.headerList.append('Access-Control-Allow-Headers', 'X-Custom');
-    return userAgent.hostPromises.resolve(allowed);
+    return userAgent.HostPromise.fromValue(allowed, Promise, internalType<FetchResponse>('FetchResponse'));
   });
   const cors = vi.spyOn(FetchResponse.prototype, 'isBlockedByCORS').mockReturnValue(false);
   const timing = vi.spyOn(FetchResponse.prototype, 'isTimingBlocked').mockReturnValue(false);

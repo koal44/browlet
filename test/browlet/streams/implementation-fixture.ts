@@ -23,8 +23,8 @@ export function createWritableStream(
   return new WritableStreamImpl(sink, strategy, createEnvironment());
 }
 
-export function createPromises() {
-  return new TestRealm().promises;
+export function createPromiseConstructor() {
+  return new TestRealm().Promise;
 }
 
 /** Observe an implementation result on the unit harness's queue. */

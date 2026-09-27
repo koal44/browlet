@@ -20,7 +20,8 @@ export function createExecution(context: BindingContext<Realm>): RealmExecution 
     // Window installation follows binding registration.
     get global() { return realm.global; },
     nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
-    promises: realm.promises,
+    Promise: context.Promise,
+    NativePromise: realm.intrinsics.promise.constructor,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel,

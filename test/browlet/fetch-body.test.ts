@@ -211,13 +211,13 @@ class BodyConsumerImpl {
   ) {}
 
   full(): InternalPromise<void> {
-    const result = this.env.exec.promises.withResolvers<void>();
+    const result = this.env.exec.Promise.withResolvers(idlType.undefined);
     this.body.readAll(() => result.resolve(), result.reject, this.destination);
     return result.promise;
   }
 
   incremental(): InternalPromise<void> {
-    const result = this.env.exec.promises.withResolvers<void>();
+    const result = this.env.exec.Promise.withResolvers(idlType.undefined);
     this.body.incrementallyRead(() => {}, result.resolve, result.reject, this.destination);
     return result.promise;
   }

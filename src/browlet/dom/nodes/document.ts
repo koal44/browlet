@@ -2,7 +2,7 @@ import {
   type TreeScope, defaultExecutionCaps as defaultStyleletExecutionCaps, Stylelet,
   type ExecutionCaps as StyleletExecutionCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
-import type { InternalPromise, InternalPromiseCapability } from '../../../infra/promises';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
 import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
@@ -225,7 +225,7 @@ export class DocumentImpl extends NodeImpl {
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
   #scriptBlockingStyleSheets = new Set<ElementImpl>();
-  #scriptBlockingStyleSheetsReady: InternalPromiseCapability<void> | null = null;
+  #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
   #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
@@ -645,7 +645,7 @@ export class DocumentImpl extends NodeImpl {
   waitForScriptsMayRun(): InternalPromise<void> {
     // PROVISIONAL(HTML navigation): current callers commit synchronously before
     // parser tasks run. Full navigation must supply its script-readiness gate.
-    return this.env.exec.promises.try(() => {});
+    return this.env.exec.Promise.try(() => {}, idlType.undefined);
   }
 
   /** Process response Link fields for the selected document-loading phase. */
@@ -869,14 +869,14 @@ export class DocumentImpl extends NodeImpl {
   }
 
   waitForScriptBlockingStyleSheets(env: JSEnvironment): InternalPromise<void> {
-    return env.exec.promises.try(() => {
+    return env.exec.Promise.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=
-        env.exec.promises.withResolvers<void>();
+        env.exec.Promise.withResolvers(idlType.undefined);
       return ready.promise.then(() =>
         this.waitForScriptBlockingStyleSheets(env),
       );
-    });
+    }, idlType.undefined);
   }
 }
 

@@ -4,11 +4,11 @@ import {
   getArrayBufferViewElementSize, getBufferTypeName, isBufferSourceDetached,
   getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
 } from '../js-engine/index';
-import type { InternalPromise, InternalPromiseCapability, Promises } from '../infra/promises';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
   arg, atArg, asyncIter, asyncSequence, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
-  dictMember, emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr, reference,
+  dictMember, emptyDictionary, idlType, impl, implementationType, invokeWith, op, promise, roAttr, reference,
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
   endOfIteration, type AsyncSequenceValue,
 } from '../web-idl/index';
@@ -112,17 +112,17 @@ export class ReadableStreamImpl {
     iterator: AsyncSequenceValue<unknown>,
     env: JSEnvironment,
   ): ReadableStreamImpl {
-    const { promises } = env.exec;
+    const { Promise: P } = env.exec;
     const stream = ReadableStreamImpl.create(
       () => undefined,
-      () => promises.import(iterator.next()).then((result) => {
+      () => P.fromInternal(iterator.next()).then((result) => {
         const controller = stream.defaultController;
         if (result === endOfIteration) controller.closeInternal();
         else controller.enqueueInternal(result);
       }, (reason: unknown) => {
         stream.defaultController.error(reason);
       }),
-      (reason) => promises.import(iterator.return(reason)),
+      (reason) => P.fromInternal(iterator.return(reason)),
       0,
       () => 1,
       env,
@@ -156,8 +156,8 @@ export class ReadableStreamImpl {
     controller.setUp(
       stream,
       () => undefined,
-      () => env.exec.promises.try(() => pullAlgorithm?.()),
-      (reason) => env.exec.promises.try(() => cancelAlgorithm?.(reason)),
+      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.any),
+      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
       highWaterMark,
       undefined,
     );
@@ -174,8 +174,8 @@ export class ReadableStreamImpl {
   ): ReadableStreamImpl {
     return ReadableStreamImpl.create(
       () => undefined,
-      () => env.exec.promises.try(() => pullAlgorithm?.()),
-      (reason) => env.exec.promises.try(() => cancelAlgorithm?.(reason)),
+      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.any),
+      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
       highWaterMark,
       sizeAlgorithm,
       env,
@@ -190,9 +190,9 @@ export class ReadableStreamImpl {
   /** Streams §4.2.4, cancel(reason). */
   cancel(reason?: unknown): InternalPromise<void> {
     if (this.locked) {
-      return this.env.exec.promises.reject(new TypeError(
+      return this.env.exec.Promise.reject(new TypeError(
         'Cannot cancel a stream that already has a reader',
-      ));
+      ), idlType.undefined);
     }
     return this.cancelInternal(reason);
   }
@@ -245,14 +245,14 @@ export class ReadableStreamImpl {
     options: StreamPipeOptions,
   ): InternalPromise<void> {
     if (this.locked) {
-      return this.env.exec.promises.reject(new TypeError(
+      return this.env.exec.Promise.reject(new TypeError(
         'ReadableStream.prototype.pipeTo cannot be used on a locked ReadableStream',
-      ));
+      ), idlType.undefined);
     }
     if (destination.locked) {
-      return this.env.exec.promises.reject(new TypeError(
+      return this.env.exec.Promise.reject(new TypeError(
         'ReadableStream.prototype.pipeTo cannot be used on a locked WritableStream',
-      ));
+      ), idlType.undefined);
     }
 
     return this.pipeToInternal(
@@ -391,10 +391,10 @@ export class ReadableStreamImpl {
     state.disturbed = true;
 
     if (state.state === 'closed') {
-      return this.env.exec.promises.resolve(undefined);
+      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     }
     if (state.state === 'errored') {
-      return this.env.exec.promises.reject(state.storedError);
+      return this.env.exec.Promise.reject(state.storedError, idlType.undefined);
     }
 
     this.closeInternal();
@@ -405,12 +405,12 @@ export class ReadableStreamImpl {
       for (const request of requests) request.closeSteps(undefined);
     }
     const sourceCancelPromise = this.controller.cancel(reason);
-    return sourceCancelPromise.then(() => undefined);
+    return sourceCancelPromise.then(() => undefined, undefined, idlType.undefined);
   }
 
   /** Streams §4.2.5, asynchronous iterator initialization steps. */
   createAsyncIterator(options: ReadableStreamIteratorOptions): ReadableStreamIterator {
-    return new ReadableStreamIterator(this.getDefaultReader(), options.preventCancel);
+    return new ReadableStreamIterator(this.getDefaultReader(), options.preventCancel, this.env);
   }
 
   /** Streams §4.9.1, ReadableStreamPipeTo. */
@@ -431,18 +431,18 @@ export class ReadableStreamImpl {
     sourceState.disturbed = true;
 
     let shuttingDown = false;
-    let currentWrite = this.env.exec.promises.resolve(undefined);
-    const result = this.env.exec.promises.withResolvers<void>();
+    let currentWrite = this.env.exec.Promise.resolve(undefined, idlType.undefined);
+    const result = this.env.exec.Promise.withResolvers(idlType.undefined);
     let abortAlgorithmHandle: AbortAlgorithmHandle | null | undefined;
 
     const pipeLoop = (): InternalPromise<void> => {
-      const loop = this.env.exec.promises.withResolvers<void>();
+      const loop = this.env.exec.Promise.withResolvers(idlType.undefined);
       const next = (done: unknown): void => {
         if (done) {
           loop.resolve(undefined);
           return;
         }
-        void pipeStep().then(next, (reason) => loop.reject(reason));
+        void pipeStep().then(next, (reason) => loop.reject(reason), idlType.undefined);
       };
       next(false);
       return loop.promise;
@@ -450,13 +450,13 @@ export class ReadableStreamImpl {
 
     const pipeStep = (): InternalPromise<boolean> => {
       if (shuttingDown) {
-        return this.env.exec.promises.resolve(true);
+        return this.env.exec.Promise.resolve(true, idlType.boolean);
       }
-      return this.env.exec.promises.import(writerState.readyPromise.promise).then(() => {
-        const read = this.env.exec.promises.withResolvers<boolean>();
+      return this.env.exec.Promise.fromInternal(writerState.readyPromise.promise).then(() => {
+        const read = this.env.exec.Promise.withResolvers(idlType.boolean);
         reader.readChunk({
           chunkSteps: (chunk) => {
-            const write = this.env.exec.promises.resolve(undefined).then(() => writer.writeInternal(chunk));
+            const write = this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => writer.writeInternal(chunk));
             currentWrite = write.then(undefined, () => undefined);
             read.resolve(false);
           },
@@ -464,7 +464,7 @@ export class ReadableStreamImpl {
           errorSteps: (reason) => read.reject(reason),
         });
         return read.promise;
-      });
+      }, undefined, idlType.boolean);
     };
 
     const waitForWritesToFinish = (): InternalPromise<void> => {
@@ -482,7 +482,7 @@ export class ReadableStreamImpl {
       if (state.state === 'errored') {
         action(state.storedError);
       } else {
-        void this.env.exec.promises.import(promise).then(undefined, action);
+        void this.env.exec.Promise.fromInternal(promise).then(undefined, action);
       }
     };
 
@@ -494,7 +494,7 @@ export class ReadableStreamImpl {
       if (state.state === 'closed') {
         action();
       } else {
-        void this.env.exec.promises.import(promise).then(action, () => undefined);
+        void this.env.exec.Promise.fromInternal(promise).then(action, () => undefined);
       }
     };
 
@@ -507,7 +507,7 @@ export class ReadableStreamImpl {
       if (shuttingDown) return;
       shuttingDown = true;
       const doTheRest = (): void => {
-        void this.env.exec.promises.import(action()).then(
+        void this.env.exec.Promise.fromInternal(action()).then(
           () => finalize(originalError, originalIsError),
           (newError) => finalize(newError, true),
         );
@@ -548,15 +548,16 @@ export class ReadableStreamImpl {
         if (!preventAbort) {
           actions.push(() => destination.isWritable
             ? destination.abortInternal(error)
-            : this.env.exec.promises.resolve(undefined));
+            : this.env.exec.Promise.resolve(undefined, idlType.undefined));
         }
         if (!preventCancel) {
           actions.push(() => sourceState.state === 'readable'
             ? this.cancelInternal(error)
-            : this.env.exec.promises.resolve(undefined));
+            : this.env.exec.Promise.resolve(undefined, idlType.undefined));
         }
         shutdownWithAction(
-          () => this.env.exec.promises.all(actions.map((action) => action())).then(() => undefined),
+          () => this.env.exec.Promise.all(actions.map((action) => action()), sequence(idlType.any))
+            .then(() => undefined, undefined, idlType.any),
           error,
           true,
         );
@@ -641,7 +642,7 @@ export class ReadableStreamImpl {
     let canceled2 = false;
     let reason1: unknown = undefined;
     let reason2: unknown = undefined;
-    const cancelPromise = this.env.exec.promises.withResolvers<void>();
+    const cancelPromise = this.env.exec.Promise.withResolvers(idlType.undefined);
 
     const settleCancelPromise = (reason: unknown[]): void => {
       void this.cancelInternal([...reason]).then(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error));
@@ -650,12 +651,12 @@ export class ReadableStreamImpl {
     const pullAlgorithm = (): InternalPromise<unknown> => {
       if (reading) {
         readAgain = true;
-        return this.env.exec.promises.resolve(undefined);
+        return this.env.exec.Promise.resolve(undefined, idlType.undefined);
       }
       reading = true;
       reader.readChunk({
         chunkSteps: (chunk) => {
-          void this.env.exec.promises.resolve().then(() => {
+          void this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => {
             readAgain = false;
             let chunk2 = chunk;
             if (cloneForBranch2 && !canceled2) {
@@ -696,7 +697,7 @@ export class ReadableStreamImpl {
           reading = false;
         },
       });
-      return this.env.exec.promises.resolve(undefined);
+      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
     const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
@@ -828,7 +829,7 @@ export class ReadableStreamImpl {
     let canceled2 = false;
     let reason1: unknown = undefined;
     let reason2: unknown = undefined;
-    const cancelPromise = this.env.exec.promises.withResolvers<void>();
+    const cancelPromise = this.env.exec.Promise.withResolvers(idlType.undefined);
 
     const forwardReaderError = (
       currentReader: ReadableStreamDefaultReaderImpl |
@@ -856,7 +857,7 @@ export class ReadableStreamImpl {
       reader.readChunk({
         chunkSteps: (chunk) => {
           const byteChunk = requireObject(chunk);
-          void this.env.exec.promises.resolve().then(() => {
+          void this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => {
             readAgainForBranch1 = false;
             readAgainForBranch2 = false;
             let chunk2 = byteChunk;
@@ -923,7 +924,7 @@ export class ReadableStreamImpl {
         1,
         {
           chunkSteps: (chunk) => {
-            void this.env.exec.promises.resolve().then(() => {
+            void this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => {
               readAgainForBranch1 = false;
               readAgainForBranch2 = false;
               const byobCanceled = forBranch2 ? canceled2 : canceled1;
@@ -984,27 +985,27 @@ export class ReadableStreamImpl {
     const pull1Algorithm = (): InternalPromise<unknown> => {
       if (reading) {
         readAgainForBranch1 = true;
-        return this.env.exec.promises.resolve();
+        return this.env.exec.Promise.resolve(undefined, idlType.undefined);
       }
       reading = true;
       const request = branch1.byteController.byobRequest;
       const view = request?.view;
       if (view) pullWithBYOBReader(view, false);
       else pullWithDefaultReader();
-      return this.env.exec.promises.resolve();
+      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
     const pull2Algorithm = (): InternalPromise<unknown> => {
       if (reading) {
         readAgainForBranch2 = true;
-        return this.env.exec.promises.resolve();
+        return this.env.exec.Promise.resolve(undefined, idlType.undefined);
       }
       reading = true;
       const request = branch2.byteController.byobRequest;
       const view = request?.view;
       if (view) pullWithBYOBReader(view, true);
       else pullWithDefaultReader();
-      return this.env.exec.promises.resolve();
+      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
     const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
@@ -1460,19 +1461,21 @@ export const underlyingSourceIDL = defineDictionary({
 class ReadableStreamIterator {
   #reader: ReadableStreamDefaultReaderImpl;
   #preventCancel: boolean;
+  #env: JSEnvironment;
 
-  constructor(reader: ReadableStreamDefaultReaderImpl, preventCancel: boolean) {
+  constructor(reader: ReadableStreamDefaultReaderImpl, preventCancel: boolean, env: JSEnvironment) {
     this.#reader = reader;
     this.#preventCancel = preventCancel;
+    this.#env = env;
   }
 
   /** Streams §4.2.5, get the next iteration result. */
   next(): InternalPromise<unknown> {
     const reader = this.#reader;
-    const promises = reader.genericReaderMixin.state.promises;
-    const promise = promises.withResolvers<unknown>();
+    const P = reader.genericReaderMixin.state.Promise;
+    const promise = P.withResolvers(idlType.any);
     reader.readChunk({
-      chunkSteps: (chunk) => promises.resolve(chunk).observe(promise.resolve, promise.reject),
+      chunkSteps: (chunk) => P.fromValue(chunk, this.#env.exec.NativePromise, idlType.any).observe(promise.resolve, promise.reject),
       closeSteps() {
         reader.release();
         promise.resolve(endOfIteration);
@@ -1490,7 +1493,7 @@ class ReadableStreamIterator {
     const reader = this.#reader;
     const generic = reader.genericReaderMixin;
     const result = this.#preventCancel
-      ? generic.state.promises.resolve(undefined)
+      ? generic.state.Promise.resolve(undefined, idlType.undefined)
       : generic.cancelInternal(value);
     reader.release();
     return result;
@@ -1528,8 +1531,8 @@ export class ReadableStreamDefaultControllerImpl {
     const controller = new ReadableStreamDefaultControllerImpl();
     const { start, pull, cancel } = source;
     const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-    const pullAlgorithm = () => stream.env.exec.promises.try(() => pull?.call(source, controller));
-    const cancelAlgorithm = (reason: unknown) => stream.env.exec.promises.try(() => cancel?.call(source, reason));
+    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.any);
+    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.any);
 
     controller.setUp(
       stream,
@@ -1758,7 +1761,7 @@ export class ReadableStreamDefaultControllerImpl {
     this.state = state;
     streamState.controller = this;
 
-    const startPromise = stream.env.exec.promises.resolve(startAlgorithm());
+    const startPromise = stream.env.exec.Promise.fromValue(startAlgorithm(), stream.env.exec.NativePromise, idlType.any);
     void startPromise.then(() => {
       state.started = true;
       this.callPullIfNeeded();
@@ -1830,8 +1833,8 @@ export class ReadableByteStreamControllerImpl {
     const controller = new ReadableByteStreamControllerImpl();
     const { start, pull, cancel } = source;
     const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-    const pullAlgorithm = () => stream.env.exec.promises.try(() => pull?.call(source, controller));
-    const cancelAlgorithm = (reason: unknown) => stream.env.exec.promises.try(() => cancel?.call(source, reason));
+    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.any);
+    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.any);
     const autoAllocateChunkSize = source.autoAllocateChunkSize;
     if (autoAllocateChunkSize === 0) {
       throw new TypeError(
@@ -2056,7 +2059,7 @@ export class ReadableByteStreamControllerImpl {
     this.state = state;
     stream.state.controller = this;
 
-    void stream.env.exec.promises.resolve(startAlgorithm()).then(() => {
+    void stream.env.exec.Promise.fromValue(startAlgorithm(), stream.env.exec.NativePromise, idlType.any).then(() => {
       state.started = true;
       this.callPullIfNeeded();
     }, (error) => {
@@ -2607,9 +2610,9 @@ export class ReadableStreamGenericReaderMixin {
   cancel(reason?: unknown): InternalPromise<void> {
     const state = this.state;
     if (!state.stream) {
-      return state.promises.reject(new TypeError(
+      return state.Promise.reject(new TypeError(
         'Cannot cancel a stream using a released reader',
-      ));
+      ), idlType.undefined);
     }
     return this.cancelInternal(reason);
   }
@@ -2640,14 +2643,14 @@ export class ReadableStreamGenericReaderMixin {
     stream: ReadableStreamImpl,
   ): void {
     const streamState = stream.state;
-    const closedPromise = stream.env.exec.promises.withResolvers<void>();
+    const closedPromise = stream.env.exec.Promise.withResolvers(idlType.undefined);
     if (streamState.state === 'closed') closedPromise.resolve();
     if (streamState.state === 'errored') {
       closedPromise.reject(streamState.storedError);
       void closedPromise.promise.then(undefined, () => {});
     }
 
-    this.state = { closedPromise, stream, promises: stream.env.exec.promises };
+    this.state = { closedPromise, stream, Promise: stream.env.exec.Promise };
     streamState.reader = reader;
   }
 
@@ -2667,7 +2670,7 @@ export class ReadableStreamGenericReaderMixin {
     if (streamState.state === 'readable') {
       genericState.closedPromise.reject(error);
     } else {
-      genericState.closedPromise = genericState.promises.withResolvers<void>();
+      genericState.closedPromise = genericState.Promise.withResolvers(idlType.undefined);
       genericState.closedPromise.reject(error);
     }
     void genericState.closedPromise.promise.then(undefined, () => {});
@@ -2679,8 +2682,8 @@ export class ReadableStreamGenericReaderMixin {
 }
 
 type ReadableStreamGenericReaderState = {
-  promises: Promises;
-  closedPromise: InternalPromiseCapability<void>;
+  Promise: typeof InternalPromise;
+  closedPromise: InternalPromiseWithResolvers<void>;
   stream?: ReadableStreamImpl;
 };
 
@@ -2743,7 +2746,7 @@ export class ReadableStreamDefaultReaderImpl {
   read(): InternalPromise<ReadableStreamReadResult> {
     const generic = this.genericReaderMixin;
     const state = generic.state;
-    const promise = state.promises.withResolvers<ReadableStreamReadResult>();
+    const promise = state.Promise.withResolvers(readResultType);
     if (!state.stream) {
       promise.reject(new TypeError(
         'Cannot read from a stream using a released reader',
@@ -3000,18 +3003,18 @@ export class ReadableStreamBYOBReaderImpl {
     const viewByteLength = getBufferSourceByteLength(view);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     if (viewByteLength === 0) {
-      return state.promises.reject(new TypeError('view must have non-zero byteLength'));
+      return state.Promise.reject(new TypeError('view must have non-zero byteLength'), readResultType);
     }
     if (getBufferSourceByteLength(buffer) === 0) {
-      return state.promises.reject(new TypeError(
+      return state.Promise.reject(new TypeError(
         'view\'s buffer must have non-zero byteLength',
-      ));
+      ), readResultType);
     }
     if (isBufferSourceDetached(buffer)) {
-      return state.promises.reject(new TypeError('view\'s buffer is detached'));
+      return state.Promise.reject(new TypeError('view\'s buffer is detached'), readResultType);
     }
     if (options.min === 0) {
-      return state.promises.reject(new TypeError('options.min must be greater than 0'));
+      return state.Promise.reject(new TypeError('options.min must be greater than 0'), readResultType);
     }
 
     const type = requireBufferViewType(view);
@@ -3020,19 +3023,19 @@ export class ReadableStreamBYOBReaderImpl {
       ? viewByteLength
       : viewByteLength / elementSize;
     if (options.min > viewLength) {
-      return state.promises.reject(new RangeError(
+      return state.Promise.reject(new RangeError(
         `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
         }`,
-      ));
+      ), readResultType);
     }
     if (!state.stream) {
-      return state.promises.reject(new TypeError(
+      return state.Promise.reject(new TypeError(
         'Cannot read from a stream using a released reader',
-      ));
+      ), readResultType);
     }
 
-    const promise = state.promises.withResolvers<ReadableStreamReadResult>();
+    const promise = state.Promise.withResolvers(readResultType);
     this.readInto(
       view,
       options.min,
@@ -3331,3 +3334,5 @@ function canCopyDataBlockBytes(
     destinationOffset + count <= getBufferSourceByteLength(destination) &&
     sourceOffset + count <= getBufferSourceByteLength(source);
 }
+
+const readResultType = implementationType<ReadableStreamReadResult>(reference('ReadableStreamReadResult'));

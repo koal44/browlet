@@ -1,7 +1,7 @@
 import type { BlobImpl } from '../file/index';
 import type { CookieStore } from '../http/index';
 import { InternalError } from '../infra/internal-error';
-import type { InternalPromise, Promises } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
@@ -158,7 +158,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Create one decoder per response; codings are applied in reverse order. */
   createContentDecoder(codings: string[], listener: HTTPContentDecoderListener): HTTPContentDecoder;
   /** Browser-owned continuations, independent of any client's realm or lifetime. */
-  hostPromises: Promises;
+  HostPromise: typeof InternalPromise;
   /** Schedule background processing without entering an HTML global task. */
   runInParallel(this: void, steps: () => void): void;
   /** Read the browser's shared monotonic clock in milliseconds. */

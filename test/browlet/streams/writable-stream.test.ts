@@ -1,3 +1,4 @@
+import { idlType } from '../../../src/web-idl/core/index';
 import { createEnvironment } from '../../js-engine/execution-fixture';
 import { observe, createWritableStream } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
@@ -17,9 +18,9 @@ describe('writable-stream implementation', () => {
 
   it('writes queued chunks and closes the underlying sink', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
+    const { Promise: P } = env.exec;
     const write = vi.fn();
-    const close = vi.fn(() => promises.resolve(undefined));
+    const close = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const stream = createWritableStream({
       close,
       write,
@@ -54,10 +55,10 @@ describe('writable-stream implementation', () => {
 
   it('uses the injected Abort capability and exposes its signal', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
+    const { Promise: P } = env.exec;
     const abortController = createAbortController();
     vi.spyOn(env.exec, 'createAbortController').mockReturnValue(abortController);
-    const sinkAbort = vi.fn(() => promises.resolve(undefined));
+    const sinkAbort = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const stream = new WritableStreamImpl({ abort: sinkAbort }, {}, env);
     const controller = requireController(stream);
 
@@ -70,8 +71,8 @@ describe('writable-stream implementation', () => {
 
   it('applies backpressure until queued writes drain', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
-    const finishWrite = promises.withResolvers<void>();
+    const { Promise: P } = env.exec;
+    const finishWrite = P.withResolvers(idlType.undefined);
     const stream = createWritableStream({
       write: () => finishWrite.promise,
     }, { highWaterMark: 1 });
@@ -95,12 +96,12 @@ describe('writable-stream implementation', () => {
 
   it('signals abort immediately and waits for an in-flight write', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
-    const writeStarted = promises.withResolvers<void>();
-    const finishWrite = promises.withResolvers<void>();
+    const { Promise: P } = env.exec;
+    const writeStarted = P.withResolvers(idlType.undefined);
+    const finishWrite = P.withResolvers(idlType.undefined);
     const abortController = createAbortController();
     vi.spyOn(env.exec, 'createAbortController').mockReturnValue(abortController);
-    const abort = vi.fn(() => promises.resolve());
+    const abort = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const stream = new WritableStreamImpl({
       write: () => {
         writeStarted.resolve();
@@ -125,13 +126,13 @@ describe('writable-stream implementation', () => {
 
   it('rejects writes with a TypeError once close is queued while erroring', async () => {
     const env = createEnvironment();
-    const { promises } = env.exec;
+    const { Promise: P } = env.exec;
     const failure = new Error('stream failure');
     let controller: WritableStreamDefaultControllerImpl | undefined;
     const stream = createWritableStream({
       start(value: WritableStreamDefaultControllerImpl) {
         controller = value;
-        return promises.withResolvers<unknown>().promise;
+        return P.withResolvers(idlType.any).promise;
       },
     });
     const writer = stream.getWriter();
@@ -142,7 +143,7 @@ describe('writable-stream implementation', () => {
 
     const writing = writer.write('late');
     await expect(observe(writing)).rejects.toBeInstanceOf(
-      TypeError,
+      Reflect.get(stream.env.exec.global, 'TypeError'),
     );
     await expect(observe(writing)).rejects.not.toBe(failure);
   });

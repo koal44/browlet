@@ -3,7 +3,6 @@ import {
   BlobData, BlobImpl, BlobReadFailure, packageData,
 } from '../../src/file/index';
 import type { TaskScheduling } from '../../src/infra/index';
-import { DOMException as InternalDOMException } from '../../src/web-idl/core/dom-exception';
 import type { InternalPromise } from '../../src/infra/promises';
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../support/bytes';
@@ -22,10 +21,35 @@ describe('File reading implementation', () => {
     ]);
     expect(decoded).toBe(text);
     expectBytesEqual(bytes, new TextEncoder().encode(text));
-    expectBytesEqual(bufferBytes, bytes);
+    expectBytesEqual(new Uint8Array(bufferBytes), bytes);
   });
 
-  it.each(['text', 'bytes', 'arrayBuffer'] as const)('retains a %s read-failure request for the binding boundary', async (method) => {
+  it.each(['text', 'bytes', 'arrayBuffer'] as const)('transforms the completed read in a Promise reaction for %s', async (method) => {
+    const env = createEnvironment();
+    const tasks: (() => void)[] = [];
+    env.exec.runInParallel = (steps) => { steps(); };
+    env.exec.fileReading = {
+      queueTask(steps) {
+        tasks.push(steps);
+        return { remove() {} };
+      },
+    };
+    const blob = new BlobImpl([], {}, env);
+    const result = blob[method]();
+    const trace: string[] = [];
+    const completed = Promise.withResolvers<void>();
+    result.observe(() => {
+      trace.push('result');
+      completed.resolve();
+    }, completed.reject);
+    expect(tasks).toHaveLength(1);
+    tasks[0]!();
+    env.exec.queueMicrotask(() => { trace.push('after reading'); });
+    await completed.promise;
+    expect(trace).toEqual(['after reading', 'result']);
+  });
+
+  it.each(['text', 'bytes', 'arrayBuffer'] as const)('realizes a %s read failure when rejecting the declared result', async (method) => {
     const data = BlobData.fromSource({
       size: 1,
       snapshotState: null,
@@ -35,8 +59,8 @@ describe('File reading implementation', () => {
     const blob = BlobImpl.create(data, '', null, env);
     const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
-    expect(InternalDOMException.is(failure)).toBe(true);
     expect(failure).toHaveProperty('name', 'NotFoundError');
+    expect(Object.prototype.toString.call(failure)).toBe('[object DOMException]');
   });
 
   it('packages bytes without a binding context and preserves the source', () => {

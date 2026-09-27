@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
-import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
+import { TestRealm } from '../web-idl/test-realm';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([
@@ -39,12 +39,12 @@ describe('TextDecoderStream chunk conversion', () => {
     ['growable shared buffer', () => new SharedArrayBuffer(1, { maxByteLength: 2 })],
     ['growable shared view', () => new Uint8Array(new SharedArrayBuffer(1, { maxByteLength: 2 }))],
   ])('rejects a %s', async (_label, createChunk) => {
-    const { reader, writer } = createDecoder();
+    const { reader, writer, realm } = createDecoder();
     const reading = observe(reader.read()).catch((error: unknown) => error);
     const writing = observe(writer.write(createChunk())).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
-    expect(InternalTypeError.is(error)).toBe(true);
+    expect(error).toBeInstanceOf(realm.intrinsics.typeError);
     expect(await reading).toBe(error);
   });
 
@@ -61,8 +61,9 @@ describe('TextDecoderStream chunk conversion', () => {
 });
 
 function createDecoder() {
+  const realm = new TestRealm();
   const decoder = new TextDecoderStreamImpl(
-    'utf-8', { fatal: false, ignoreBOM: false }, createEnvironment(),
+    'utf-8', { fatal: false, ignoreBOM: false }, createEnvironment(realm),
   );
-  return { reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
+  return { realm, reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
 }

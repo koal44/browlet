@@ -1,10 +1,11 @@
+import { idlType } from '../../web-idl/index';
 import type {
   AuthenticationCredentials, AuthenticationEntry, HTTPAuthentication, FetchController, FetchPromptTarget, FetchRequest,
 } from '../../fetch/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath, stripURLForReporting, type URLRecord } from '../../url/index';
 import { encodeBasicCredentials } from '../../http/index';
 import { InternalError } from '../../infra/internal-error';
-import type { InternalPromise } from '../../infra/promises';
+import { internalType, type InternalPromise } from '../../infra/promises';
 import type { UserAgent } from '../user-agent';
 
 /** Session credentials and authentication prompts owned by one user agent. */
@@ -76,15 +77,15 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
   ): InternalPromise<AuthenticationEntry | null> {
     const target = request.traversableForUserPrompts;
     if (target === null || target === undefined) throw new InternalError('HTTP authentication prompt requires a traversable');
-    const promises = this.#userAgent.hostPromises;
-    const result = promises.withResolvers<AuthenticationEntry | null>();
+    const P = this.#userAgent.HostPromise;
+    const result = P.withResolvers(internalType<AuthenticationEntry | null>('AuthenticationEntry?'));
     // This signal belongs to the Node-facing prompt hook, not a page's AbortSignal implementation.
     const cancellation = new AbortController();
     const removeCancellation = controller.addCancellationSteps(() => {
       result.resolve(null);
       cancellation.abort();
     });
-    if (!result.pending) return result.promise;
+    if (result.isResolved) return result.promise;
     const generation = this.#generation;
     let answer: AuthenticationCredentials | null | Promise<AuthenticationCredentials | null>;
     try {
@@ -99,8 +100,8 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
       result.reject(error);
       return result.promise;
     }
-    promises.resolve(answer).observe((credentials) => {
-      if (!result.pending) return;
+    P.fromValue(answer, NativePromise, internalType<AuthenticationCredentials | null>('AuthenticationCredentials?')).observe((credentials) => {
+      if (result.isResolved) return;
       removeCancellation();
       if (generation !== this.#generation || credentials === null ||
         encodeBasicCredentials(credentials.username, credentials.password) === null) {
@@ -109,7 +110,7 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
         result.resolve({ username: credentials.username, password: credentials.password, realm });
       }
     }, (error) => {
-      if (!result.pending) return;
+      if (result.isResolved) return;
       removeCancellation();
       result.reject(error);
     });
@@ -121,9 +122,12 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
   applyProxyAuthentication(): void {}
 
   promptProxy(): InternalPromise<boolean> {
-    return this.#userAgent.hostPromises.resolve(false);
+    return this.#userAgent.HostPromise.resolve(false, idlType.boolean);
   }
 }
+
+// eslint-disable-next-line no-restricted-globals -- Authentication prompt hooks belong to the Node host.
+const NativePromise = Promise;
 
 /** Host UI hook; its signal aborts when the requesting Fetch is canceled. */
 export type AuthenticationPrompt = (challenge: {

@@ -324,7 +324,7 @@ export class AsynchronousIterableBinding {
     );
     try {
       if (promise instanceof InternalPromise) {
-        this.#binding.realm.promises.import(promise).observe(onFulfilled, onRejected);
+        this.#binding.realm.Promise.fromInternal(promise).observe(onFulfilled, onRejected);
       } else {
         this.#binding.realm.observePromise(promise, onFulfilled, onRejected);
       }

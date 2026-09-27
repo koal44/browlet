@@ -1,4 +1,4 @@
-import { Promises } from '../../infra/promises';
+import { InternalPromise } from '../../infra/promises';
 
 export function requestNodeEventLoopTurn(steps: () => void): void {
   // Enter from a later Node task; never run an HTML turn synchronously.
@@ -14,11 +14,10 @@ export const runInParallel = requestNodeEventLoopTurn;
 
 /** Internal continuations for browser-owned work that has no HTML realm. */
 // Page implementations use their environment's execution facilities instead.
-// This is the same Promises/InternalPromise machinery, with Node's host queue
-// selected as its continuation destination rather than a page's microtask queue.
-// eslint-disable-next-line no-restricted-globals -- Browser-owned work uses Node's host Promise queue, independently of Window lifetime.
-export const hostPromises = new Promises(Promise, (promise, fulfilled, rejected) => {
-  void promise.then(fulfilled, rejected).catch((error: unknown) => {
-    requestNodeEventLoopTurn(() => { throw error; });
-  });
-});
+export class HostPromise<T> extends InternalPromise<T> {
+  protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
+    void this.backing.then(fulfilled, rejected).catch((error: unknown) => {
+      requestNodeEventLoopTurn(() => { throw error; });
+    });
+  }
+}

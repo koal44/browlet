@@ -12,7 +12,7 @@ import { domManipulationTaskSource } from '../scripting/tasks';
 /** Compose Stylelet with this owner's task delivery, promises, and exception requests. */
 export function createStyleletExecution(realm: Realm, env: JSEnvironment): StyleletExecutionCaps {
   return {
-    promises: env.exec.promises,
+    Promise: env.exec.Promise,
     runInParallel: env.exec.runInParallel,
     // CSSOM leaves the source unspecified; DOM manipulation delivers stylesheet updates.
     queueTask: (steps) => { realm.queueGlobalTask(domManipulationTaskSource, steps); },

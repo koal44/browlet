@@ -1,54 +1,123 @@
 import { describe, expect, it } from 'vitest';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { projectPromise } from '../../src/web-idl/conversion';
-import { idlType } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { convertToJavaScript } from '../../src/web-idl/conversion';
+import { createResolvedPromise } from '../../src/web-idl/promise';
+import {
+  annotated, defineTypedef, idlType, implementationType, promise, reference, sequence, xattr,
+} from '../../src/web-idl/core/index';
+import { InternalError } from '../../src/infra/internal-error';
+import { internalType } from '../../src/infra/promises';
 import { TestRealm } from './test-realm';
 
-describe('Promise projection ownership', () => {
-  it.each(['native', 'internal'] as const)('preserves a frozen %s source and its projected identity', async (kind) => {
+describe('declared Promise ownership', () => {
+  it('keeps inherited creation methods in their selected realms', async () => {
+    const world = new BindingWorld([]);
+    const first = new TestRealm();
+    const second = new TestRealm();
+    const a = new RealmBinding(new DefinitionAssembly([]), first, world).context.Promise;
+    const b = new RealmBinding(new DefinitionAssembly([]), second, world).context.Promise;
+    const initial = a.resolve(1, idlType.long);
+    const foreign = b.resolve(2, idlType.long);
+    const later = a.try(() => 3, idlType.long);
+    const recovered = b.reject('failure', idlType.long).catch(() => 4);
+    for (const value of [initial, later]) expect(value.backing).toBeInstanceOf(first.intrinsics.promise.constructor);
+    for (const value of [foreign, recovered]) expect(value.backing).toBeInstanceOf(second.intrinsics.promise.constructor);
+    const combined = a.all([initial, foreign, later, recovered], sequence(idlType.long));
+    expect(combined.backing).toBeInstanceOf(first.intrinsics.promise.constructor);
+    const values = await combined.backing;
+    expect(values).toEqual([1, 2, 3, 4]);
+    expect(values).toBeInstanceOf(first.intrinsics.array);
+  });
+
+  it('uses a named sequence contract when joining results', async () => {
+    const alias = defineTypedef({ name: 'Counts', type: sequence(idlType.long) });
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([alias]), realm, new BindingWorld([alias]));
+    const P = binding.context.Promise;
+    const type = implementationType<number[]>(reference('Counts'));
+    const result = P.all([P.resolve(1, idlType.long), P.resolve(2, idlType.long)], type);
+    const values = await convertToJavaScript(result, promise(type), binding.defaultConversionContext);
+    expect(values).toEqual([1, 2]);
+    expect(values).toBeInstanceOf(realm.intrinsics.array);
+  });
+
+  it.each(['record', 'implementation'] as const)('exposes a frozen %s result without changing identity', async (kind) => {
     const realm = new TestRealm();
     const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]));
-    const ctx = binding.defaultConversionContext;
-    const source = Object.freeze(kind === 'native' ? Promise.resolve(7) : realm.promises.resolve(7));
+    const context = binding.defaultConversionContext;
+    const source = Object.freeze(kind === 'record'
+      ? createResolvedPromise(7, idlType.long, context)
+      : binding.context.Promise.resolve(7, idlType.long));
     const keys = Reflect.ownKeys(source);
     const prototype = Reflect.getPrototypeOf(source);
-
-    const projected = projectPromise(source, idlType.long, ctx);
-    expect(projectPromise(source, idlType.long, ctx)).toBe(projected);
-    await expect(projected).resolves.toBe(7);
-    expect(projectPromise(source, idlType.long, { binding, realm })).toBe(projected);
+    const type = promise(idlType.long);
+    const result = convertToJavaScript(source, type, context);
+    expect(convertToJavaScript(source, type, context)).toBe(result);
+    expect(result).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    await expect(result).resolves.toBe(7);
     expect(Reflect.ownKeys(source)).toEqual(keys);
     expect(Reflect.getPrototypeOf(source)).toBe(prototype);
     expect(Object.isFrozen(source)).toBe(true);
   });
 
-  it.each(['native', 'internal'] as const)('distinguishes world, realm, and result type for one %s source', async (kind) => {
-    const definitions = new DefinitionAssembly([]);
-    const world = new BindingWorld([]);
+  it('rejects exposure when the result descriptor disagrees with the declaration', () => {
     const realm = new TestRealm();
-    const otherRealm = new TestRealm();
-    const binding = new RealmBinding(definitions, realm, world);
-    const otherRealmBinding = new RealmBinding(definitions, otherRealm, world);
-    const otherWorldBinding = new RealmBinding(definitions, realm, new BindingWorld([]));
-    const ctx = binding.defaultConversionContext;
-    const otherRealmContext = otherRealmBinding.defaultConversionContext;
-    const otherWorldContext = otherWorldBinding.defaultConversionContext;
-    const source = kind === 'native' ? Promise.resolve(7) : realm.promises.resolve(7);
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]));
+    const source = binding.context.Promise.withResolvers(idlType.double);
+    expect(() => convertToJavaScript(source.promise, promise(idlType.long), binding.defaultConversionContext))
+      .toThrow(InternalError);
+  });
 
-    const projected = projectPromise(source, idlType.long, ctx);
-    const differentRealm = projectPromise(source, idlType.long, otherRealmContext);
-    const differentWorld = projectPromise(source, idlType.long, otherWorldContext);
-    const differentType = projectPromise(source, idlType.any, ctx);
-    expect(new Set([projected, differentRealm, differentWorld, differentType]).size).toBe(4);
-    expect(projected).toBeInstanceOf(realm.intrinsics.promise.constructor);
-    expect(differentRealm).toBeInstanceOf(otherRealm.intrinsics.promise.constructor);
-    await expect(Promise.all([projected, differentRealm, differentWorld, differentType]))
-      .resolves.toEqual([7, 7, 7, 7]);
-    expect(projectPromise(source, idlType.long, ctx)).toBe(projected);
-    expect(projectPromise(source, idlType.long, otherRealmContext)).toBe(differentRealm);
-    expect(projectPromise(source, idlType.long, otherWorldContext)).toBe(differentWorld);
-    expect(projectPromise(source, idlType.any, ctx)).toBe(differentType);
+  it('selects a new IDL contract through then even when the payload remains a string', async () => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]));
+    const source = binding.context.Promise.resolve('text', idlType.DOMString);
+    const result = source.then((value) => value, undefined, idlType.USVString);
+    const context = binding.defaultConversionContext;
+    expect(result.type).toBe(idlType.USVString);
+    expect(() => convertToJavaScript(result, promise(idlType.DOMString), context)).toThrow(InternalError);
+    await expect(convertToJavaScript(result, promise(idlType.USVString), context)).resolves.toBe('text');
+  });
+
+  it('retains implementation result metadata without exposing its private representation', () => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]));
+    const type = internalType<number>('Counter');
+    const source = binding.context.Promise.resolve(7, type);
+    expect(source.type).toBe(type);
+    expect(() => convertToJavaScript(source, promise(idlType.long), binding.defaultConversionContext)).toThrow(InternalError);
+  });
+
+  it('resolves aliases inside nested result types while retaining conversion attributes', async () => {
+    const alias = defineTypedef({ name: 'Count', type: idlType.long });
+    const realm = new TestRealm();
+    const world = new BindingWorld([alias]);
+    const binding = new RealmBinding(new DefinitionAssembly([alias]), realm, world);
+    const source = binding.context.Promise.resolve([7], sequence(implementationType<number>(reference('Count'))));
+    const context = binding.defaultConversionContext;
+    await expect(convertToJavaScript(source, promise(sequence(idlType.long)), context)).resolves.toEqual([7]);
+    const clamped = annotated(idlType.long, xattr('Clamp'));
+    expect(() => convertToJavaScript(source, promise(sequence(clamped)), context)).toThrow(InternalError);
+  });
+
+  it('retains allocation and identity when an implementation view changes reaction destination', async () => {
+    const world = new BindingWorld([]);
+    const first = new TestRealm();
+    const second = new TestRealm();
+    const a = new RealmBinding(new DefinitionAssembly([]), first, world);
+    const b = new RealmBinding(new DefinitionAssembly([]), second, world);
+    const source = a.context.Promise.resolve(7, idlType.long);
+    const view = b.context.Promise.fromInternal(source);
+    const type = promise(idlType.long);
+    const result = convertToJavaScript(source, type, a.defaultConversionContext);
+    expect(convertToJavaScript(view, type, b.defaultConversionContext)).toBe(result);
+    expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
+    expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
+    await expect(result).resolves.toBe(7);
+    const next = view.then((value) => value + 1);
+    expect(next.backing).toBeInstanceOf(second.intrinsics.promise.constructor);
+    await expect(next.backing).resolves.toBe(8);
   });
 });

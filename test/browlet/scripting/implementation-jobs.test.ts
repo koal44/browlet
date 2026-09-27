@@ -6,11 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import {
-  createDocument, getRelevantRealm,
-} from '../../../src/browlet/bindings';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { createDocument, getRelevantRealm, createWindowEnvironment } from '../../../src/browlet/bindings';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
@@ -18,7 +15,7 @@ import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr,
 } from '../../../src/web-idl/index';
-import type { Promises, InternalPromise } from '../../../src/infra/promises';
+import type { InternalPromise } from '../../../src/infra/promises';
 
 describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
@@ -176,7 +173,7 @@ function createFixture(sharedAgent = false) {
     };
     const binding = bindings.register(realm);
     const implementation = new OwnershipProbeImpl(
-      name, realm.promises.import(pending.promise, String), trace, realm.promises,
+      name, binding.Promise.fromNative(pending.promise, String, idlType.DOMString), trace, binding.Promise,
     );
     const object = binding.project(OwnershipProbeImpl, implementation);
     expose('record', (value: string) => {
@@ -215,7 +212,7 @@ class OwnershipProbeImpl {
     public name: string,
     public pending: InternalPromise<string>,
     public trace: string[],
-    public promises: Promises,
+    public P: typeof InternalPromise,
   ) {}
 
   get result(): InternalPromise<string> { return this.read(); }
@@ -224,23 +221,23 @@ class OwnershipProbeImpl {
     return this.pending.then((value) => {
       this.observe();
       this.trace.push(`${this.name} continues`);
-      return this.promises.resolve().then(() => {
+      return this.P.resolve(undefined, idlType.undefined).then(() => {
         this.observe();
         this.trace.push(`${this.name} after continuation`);
         return `${this.name} ${value}`;
-      });
-    });
+      }, undefined, idlType.DOMString);
+    }, undefined, idlType.DOMString);
   }
 
   invoke(callback: () => InternalPromise<string>): InternalPromise<string> {
     return callback().then((value) => {
       this.trace.push(`${this.name} callback returned`);
       return `${this.name} ${value}`;
-    });
+    }, undefined, idlType.DOMString);
   }
 
   consume(value: InternalPromise<string>): InternalPromise<string> {
-    return value.then((value) => `${this.name} ${value}`);
+    return value.then((value) => `${this.name} ${value}`, undefined, idlType.DOMString);
   }
 }
 
@@ -267,8 +264,8 @@ const operationIDL = defineInterface({
 class InitializationProbeImpl {
   #ready: InternalPromise<string>;
 
-  constructor(promises: Promises) {
-    this.#ready = promises.resolve().then(() => promises.resolve().then(() => 'ready'));
+  constructor(P: typeof InternalPromise) {
+    this.#ready = P.resolve(undefined, idlType.undefined).then(() => P.resolve(undefined, idlType.undefined).then(() => 'ready', undefined, idlType.DOMString), undefined, idlType.DOMString);
   }
 
   get ready(): InternalPromise<string> { return this.#ready; }
@@ -280,7 +277,7 @@ class InitializationProbeImpl {
 // };
 const initializationIDL = defineInterface({
   name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.promises)],
+    constructWith: [atArg(0, (ctx) => ctx.Promise)],
   }),
   members: [ctor(), roAttr('ready', promise(idlType.DOMString))],
 });

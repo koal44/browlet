@@ -613,7 +613,7 @@ export class RequestImpl {
 
   get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
   get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
-  arrayBuffer(): InternalPromise<Uint8Array> { return this.#bodyMixin.arrayBuffer(); }
+  arrayBuffer(): InternalPromise<ArrayBuffer> { return this.#bodyMixin.arrayBuffer(); }
   blob(): InternalPromise<BlobImpl> { return this.#bodyMixin.blob(); }
   bytes(): InternalPromise<Uint8Array> { return this.#bodyMixin.bytes(); }
   formData(): InternalPromise<FormDataImpl> { return this.#bodyMixin.formData(); }

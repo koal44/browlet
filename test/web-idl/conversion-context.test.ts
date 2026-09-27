@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
-import type { Promises, InternalPromise } from '../../src/infra/promises';
+import type { InternalPromise } from '../../src/infra/promises';
 import {
-  arg, defineCallbackFunction, defineInterface, idlType, impl, onError, op,
+  arg, defineCallbackFunction, defineInterface, idlType, impl, implementationType, onError, op,
   promise, reference, sequence,
 } from '../../src/web-idl/core/index';
 
@@ -54,15 +54,15 @@ describe('Conversion realm and implementation ownership', () => {
     expect(reason).not.toBeInstanceOf(second.intrinsics.typeError);
   });
 
-  it('projects a callback promise and fulfillment array in B without moving fresh elements from A', async () => {
+  it('keeps a declared promise and its values in A when passed to a callback in B', async () => {
     const { first, second, owner } = fixture();
     const callback = second.evaluate('(value) => { globalThis.received = value; }', 'receive-promise.js');
     call(owner, 'sendPromise', callback);
     const pending = Reflect.get(second.global, 'received') as Promise<object[]>;
     const values = await pending;
 
-    expect(pending).toBeInstanceOf(second.intrinsics.promise.constructor);
-    expect(values).toBeInstanceOf(second.intrinsics.array);
+    expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
+    expect(values).toBeInstanceOf(first.intrinsics.array);
     expect(values[0]).toBeInstanceOf(Reflect.get(first.global, 'Child'));
     expect(values[0]).not.toBeInstanceOf(Reflect.get(second.global, 'Child'));
   });
@@ -74,7 +74,7 @@ describe('Conversion realm and implementation ownership', () => {
     const pending = Reflect.get(second.global, 'received') as Promise<unknown>;
     const reason = await pending;
 
-    expect(pending).toBeInstanceOf(second.intrinsics.promise.constructor);
+    expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
     expect(reason).toBeInstanceOf(first.intrinsics.typeError);
     expect(reason).not.toBeInstanceOf(second.intrinsics.typeError);
   });
@@ -87,7 +87,7 @@ function fixture() {
   const context = world.register(first);
   context.install(first.global);
   world.register(second).install(second.global);
-  const owner = context.project(SourceImpl, new SourceImpl(first.promises));
+  const owner = context.project(SourceImpl, new SourceImpl(context.Promise));
   return { first, second, owner };
 }
 
@@ -98,17 +98,21 @@ function call(owner: object, name: string, ...args: unknown[]): unknown {
 class ChildImpl {}
 
 class SourceImpl {
-  constructor(public promises: Promises) {}
+  constructor(public P: typeof InternalPromise) {}
 
   send(callback: (values: ChildImpl[]) => void): void { callback([new ChildImpl()]); }
   invokeNumber(callback: () => number): number { return callback(); }
-  invokePromise(callback: () => InternalPromise<number>): InternalPromise<number> { return callback(); }
-  consume(value: InternalPromise<number>): InternalPromise<number> { return value; }
+  invokePromise(callback: () => InternalPromise<number>): InternalPromise<number> {
+    return callback().then((value) => value, undefined, idlType.long);
+  }
+  consume(value: InternalPromise<number>): InternalPromise<number> {
+    return value.then((item) => item, undefined, idlType.long);
+  }
   sendPromise(callback: (value: InternalPromise<ChildImpl[]>) => void): void {
-    callback(this.promises.try(() => [new ChildImpl()]));
+    callback(this.P.resolve([new ChildImpl()], sequence(implementationType<ChildImpl>(reference('Child')))));
   }
   sendFailure(callback: (value: InternalPromise<ChildImpl[]>) => void): void {
-    callback(this.promises.reject(new InternalTypeError('implementation failure')));
+    callback(this.P.reject(new InternalTypeError('implementation failure'), sequence(implementationType<ChildImpl>(reference('Child')))));
   }
 }
 
@@ -127,12 +131,12 @@ const definitions = [
   }),
   defineCallbackFunction({
     name: 'Receive', returns: idlType.undefined,
-    arguments: [arg('values', sequence(reference('Child')))],
+    arguments: [arg('values', sequence(implementationType<ChildImpl>(reference('Child'))))],
   }),
   defineCallbackFunction({ name: 'NumberCallback', returns: idlType.long, arguments: [] }),
   defineCallbackFunction({ name: 'PromiseCallback', returns: promise(idlType.long), arguments: [] }),
   defineCallbackFunction({
     name: 'ReceivePromise', returns: idlType.undefined,
-    arguments: [arg('value', promise(sequence(reference('Child'))))],
+    arguments: [arg('value', promise(sequence(implementationType<ChildImpl>(reference('Child')))))],
   }),
 ];

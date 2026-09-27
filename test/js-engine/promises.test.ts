@@ -1,18 +1,19 @@
+import { idlType, sequence } from '../../src/web-idl/core/index';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 import { JSRealm, createMicrotaskQueue } from '../../src/js-engine/index';
-import type { InternalPromise } from '../../src/infra/promises';
+import { internalType, type InternalPromise } from '../../src/infra/promises';
 
 describe('Promise dependencies', () => {
   it('eventually delivers fulfillment and recovery through the selected queue backend', async () => {
-    const { queue, promises } = createTarget();
-    const source = promises.withResolvers<number>();
+    const { queue, Promise: P } = createTarget();
+    const source = P.withResolvers(idlType.double);
     const values: number[] = [];
     const reasons: unknown[] = [];
     const failure = new Error('recoverable');
     source.promise.then((value) => value + 1).observe((value) => { values.push(value); }, fail);
-    promises.reject(failure).catch((reason) => {
+    P.reject(failure, idlType.double).catch((reason) => {
       reasons.push(reason);
       return source.promise;
     }).observe((value) => { values.push(value); }, fail);
@@ -26,8 +27,8 @@ describe('Promise dependencies', () => {
   itPassesWith('explicitQueues')('retains the destination through chains without adopting internal payloads', () => {
     const a = createTarget();
     const b = createTarget();
-    const first = a.promises.withResolvers<object>();
-    const second = b.promises.withResolvers<object>();
+    const first = a.Promise.withResolvers(idlType.object);
+    const second = b.Promise.withResolvers(idlType.object);
     const value = { get then(): never { throw new Error('Not an author thenable'); } };
     const observed: unknown[] = [];
     first.promise.then((item) => ({ item })).observe((item) => { observed.push(item); }, fail);
@@ -44,10 +45,10 @@ describe('Promise dependencies', () => {
   itPassesWith('explicitQueues').each(['pending', 'settled'] as const)('adopts a %s result from another destination', (state) => {
     const a = createTarget();
     const b = createTarget();
-    const source = b.promises.withResolvers<number>();
+    const source = b.Promise.withResolvers(idlType.double);
     if (state === 'settled') source.resolve(7);
     const observed: number[] = [];
-    a.promises.resolve(1).then(() => source.promise).then((value) => value + 1)
+    a.Promise.resolve(1, idlType.double).then(() => source.promise).then((value) => value + 1)
       .observe((value) => { observed.push(value); }, fail);
     a.queue.performMicrotaskCheckpoint();
     if (state === 'pending') {
@@ -63,9 +64,9 @@ describe('Promise dependencies', () => {
     const b = createTarget();
     const source = Promise.withResolvers<number>();
     const observed: string[] = [];
-    a.promises.import(source.promise, (value) => Number(value)).then((value) => `A: ${value}`)
+    a.Promise.fromNative(source.promise, (value) => Number(value), idlType.double).then((value) => `A: ${value}`, undefined, idlType.DOMString)
       .observe((value) => { observed.push(value); }, fail);
-    b.promises.import(source.promise, (value) => Number(value)).then((value) => `B: ${value}`)
+    b.Promise.fromNative(source.promise, (value) => Number(value), idlType.double).then((value) => `B: ${value}`, undefined, idlType.DOMString)
       .observe((value) => { observed.push(value); }, fail);
     source.resolve(7);
     a.queue.performMicrotaskCheckpoint();
@@ -75,11 +76,11 @@ describe('Promise dependencies', () => {
   });
 
   itPassesWith('explicitQueues')('keeps thrown values intact and adopts asynchronous recovery', () => {
-    const { queue, promises } = createTarget();
+    const { queue, Promise: P } = createTarget();
     const failure = new Error('original failure');
-    const recovery = promises.withResolvers<number>();
+    const recovery = P.withResolvers(idlType.double);
     const observed: unknown[] = [];
-    promises.resolve(1).then(() => { throw failure; }).catch((reason) => {
+    P.resolve(1, idlType.double).then(() => { throw failure; }).catch((reason) => {
       observed.push(reason);
       return recovery.promise;
     }).observe((value) => { observed.push(value); }, fail);
@@ -90,8 +91,22 @@ describe('Promise dependencies', () => {
     expect(observed).toEqual([failure, 7]);
   });
 
+  itPassesWith('explicitQueues')('retains source conversion when an imported view changes reaction destination', () => {
+    const a = createTarget();
+    const b = createTarget();
+    const source = a.Promise.fromNative(Promise.resolve(7), (value) => `source: ${String(value)}`, idlType.DOMString);
+    const imported = b.Promise.fromInternal(source);
+    const observed: string[] = [];
+    expect(imported.backing).toBe(source.backing);
+    imported.then((value) => value + '; destination').observe((value) => { observed.push(value); }, fail);
+    a.queue.performMicrotaskCheckpoint();
+    expect(observed).toEqual([]);
+    b.queue.performMicrotaskCheckpoint();
+    expect(observed).toEqual(['source: 7; destination']);
+  });
+
   itPassesWith('explicitQueues')('adopts an author thenable once and calls then asynchronously', () => {
-    const { queue, realm, promises } = createTarget();
+    const { queue, realm, Promise: P } = createTarget();
     const observed: unknown[] = [];
     const then = realm.createFunction((_receiver, [resolve]) => {
       observed.push('call then');
@@ -103,16 +118,18 @@ describe('Promise dependencies', () => {
         return then;
       },
     };
-    promises.resolve(value).observe((value) => { observed.push(value); }, fail);
+    const result = P.fromValue(value, realm.intrinsics.promise.constructor, idlType.any);
+    expect(result.backing).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    result.observe((value) => { observed.push(value); }, fail);
     expect(observed).toEqual(['get then']);
     queue.performMicrotaskCheckpoint();
     expect(observed).toEqual(['get then', 'call then', 7]);
   });
 
   itPassesWith('explicitQueues')('rejects self-resolution instead of leaving a chain pending', () => {
-    const { queue, promises } = createTarget();
+    const { queue, Promise: P } = createTarget();
     const errors: unknown[] = [];
-    const result: InternalPromise<unknown> = promises.resolve(1).then(() => result);
+    const result: InternalPromise<unknown> = P.resolve(1, idlType.double).then(() => result, undefined, idlType.any);
     result.observe(fail, (reason) => { errors.push(reason); });
     queue.performMicrotaskCheckpoint();
     expect(errors).toHaveLength(1);
@@ -121,15 +138,69 @@ describe('Promise dependencies', () => {
 });
 
 describe('internal Promise results', () => {
+  it('keeps the result descriptor through rejection, same-type chaining, and import', () => {
+    const a = createTarget();
+    const b = createTarget();
+    const type = internalType<number>('Count');
+    const result = a.Promise.withResolvers(type);
+    expect(result.promise.type).toBe(type);
+    expect(result.promise.then().type).toBe(type);
+    expect(b.Promise.fromInternal(result.promise).type).toBe(type);
+    expect(result.promise.then(String, undefined, idlType.DOMString).type).toBe(idlType.DOMString);
+    const rejected = a.Promise.reject('failed', type);
+    rejected.observe(fail, () => {});
+    expect(rejected.type).toBe(type);
+    a.queue.performMicrotaskCheckpoint();
+  });
+
+  it('requires a runtime descriptor even from an untyped caller', () => {
+    const { Promise: P } = createTarget();
+    expect(() => {
+      // @ts-expect-error JavaScript can omit the required descriptor.
+      P.withResolvers();
+    }).toThrow('A Promise result type is required');
+  });
+
+  itPassesWith('explicitQueues').each(['fulfill', 'reject'] as const)('keeps the first adoption when its source later %ss', (mode) => {
+    const { queue, Promise: P } = createTarget();
+    const result = P.withResolvers(idlType.DOMString);
+    const source = P.withResolvers(idlType.DOMString);
+    const values: unknown[] = [];
+    const errors: unknown[] = [];
+    result.promise.observe((value) => { values.push(value); }, (reason) => { errors.push(reason); });
+    result.resolve(source.promise);
+    expect(result.isResolved).toBe(true);
+    result.reject('late rejection');
+    result.resolve('late fulfillment');
+    if (mode === 'fulfill') source.resolve('first');
+    else source.reject('first');
+    queue.performMicrotaskCheckpoint();
+    expect(values).toEqual(mode === 'fulfill' ? ['first'] : []);
+    expect(errors).toEqual(mode === 'reject' ? ['first'] : []);
+  });
+
+  itPassesWith('explicitQueues')('rejects the derived result when fulfillment conversion throws', () => {
+    const { queue, Promise: P } = createTarget();
+    const failure = new Error('conversion failed');
+    const recovered: unknown[] = [];
+    const rejected: unknown[] = [];
+    P.fromNative(Promise.resolve(1), () => { throw failure; }, idlType.undefined)
+      .then(undefined, (reason) => { recovered.push(reason); })
+      .observe(() => { recovered.push('fulfilled'); }, (reason) => { rejected.push(reason); });
+    queue.performMicrotaskCheckpoint();
+    expect(recovered).toEqual([]);
+    expect(rejected).toEqual([failure]);
+  });
+
   itPassesWith('explicitQueues')('maps one retained payload in separate destinations without thenable adoption', () => {
     const a = createTarget();
     const b = createTarget();
-    const pending = a.promises.withResolvers<{ then: never; value: number; }>();
+    const pending = a.Promise.withResolvers(internalType<{ then: never; value: number; }>('Result'));
     const values: unknown[] = [];
     const payload = { value: 7, get then(): never { throw new Error('Payload is not a thenable'); } };
-    pending.promise.then((value) => value.value + 1)
+    pending.promise.then((value) => value.value + 1, undefined, idlType.double)
       .observe((value) => { values.push(value); }, fail);
-    b.promises.import(pending.promise).observe((value) => { values.push(value); }, fail);
+    b.Promise.fromInternal(pending.promise).observe((value) => { values.push(value); }, fail);
     pending.resolve(payload);
     pending.reject('late rejection');
     expect(values).toEqual([]);
@@ -140,8 +211,8 @@ describe('internal Promise results', () => {
   });
 
   itPassesWith('explicitQueues')('rejects a mapped result with the original thrown value', () => {
-    const { queue, promises } = createTarget();
-    const pending = promises.withResolvers<number>();
+    const { queue, Promise: P } = createTarget();
+    const pending = P.withResolvers(idlType.double);
     const failure = { reason: 'original' };
     const reasons: unknown[] = [];
     // eslint-disable-next-line @typescript-eslint/only-throw-error -- Preserve arbitrary thrown values.
@@ -155,48 +226,48 @@ describe('internal Promise results', () => {
   itPassesWith('explicitQueues')('adopts an internal chain result without adopting its payload', () => {
     const first = createTarget();
     const second = createTarget();
-    const pending = second.promises.withResolvers<object>();
+    const pending = second.Promise.withResolvers(idlType.object);
     const payload = { get then(): never { throw new Error('Not a thenable'); } };
     const values: unknown[] = [];
-    const result = first.promises.resolve(1).then(() => pending.promise);
+    const result = first.Promise.resolve(1, idlType.double).then(() => pending.promise, undefined, idlType.object);
     result.observe((value) => { values.push(value); }, fail);
     pending.resolve(payload);
     second.queue.performMicrotaskCheckpoint();
     expect(values).toEqual([]);
     first.queue.performMicrotaskCheckpoint();
     expect(values).toEqual([payload]);
-    expect(second.promises.import(pending.promise)).toBe(pending.promise);
+    expect(second.Promise.fromInternal(pending.promise)).toBe(pending.promise);
   });
 
   itPassesWith('explicitQueues')('captures a thrown failure and adopts an asynchronous recovery', () => {
-    const { queue, promises } = createTarget();
+    const { queue, Promise: P } = createTarget();
     const failure = new Error('failed step');
-    const recovery = promises.withResolvers<number>();
+    const recovery = P.withResolvers(idlType.DOMString);
     const values: unknown[] = [];
-    promises.try(() => { throw failure; })
-      .then(undefined, (reason) => {
+    P.try(() => { throw failure; }, idlType.double)
+      .then(String, (reason) => {
         expect(reason).toBe(failure);
         return recovery.promise;
-      })
+      }, idlType.DOMString)
       .observe((value) => { values.push(value); }, fail);
     queue.performMicrotaskCheckpoint();
     expect(values).toEqual([]);
-    recovery.resolve(7);
+    recovery.resolve('recovered');
     queue.performMicrotaskCheckpoint();
-    expect(values).toEqual([7]);
+    expect(values).toEqual(['recovered']);
   });
 
   itPassesWith('explicitQueues')('joins out-of-order results and forwards a rejection unchanged', () => {
-    const { queue, promises } = createTarget();
-    const first = promises.withResolvers<number>();
-    const second = promises.withResolvers<number>();
+    const { queue, Promise: P } = createTarget();
+    const first = P.withResolvers(idlType.double);
+    const second = P.withResolvers(idlType.double);
     const values: unknown[] = [];
     const failure = new Error('failed input');
-    promises.all([first.promise, second.promise])
+    P.all([first.promise, second.promise], sequence(idlType.double))
       .observe((value) => { values.push(value); }, fail);
-    promises.all([])
+    P.all([], internalType<unknown[]>('EmptyResults'))
       .observe((value) => { values.push(value); }, fail);
-    promises.all([first.promise, promises.reject(failure)])
+    P.all([first.promise, P.reject(failure, idlType.double)], sequence(idlType.double))
       .observe(fail, (reason) => { values.push(reason); });
     second.resolve(2);
     queue.performMicrotaskCheckpoint();
@@ -210,7 +281,7 @@ describe('internal Promise results', () => {
 function createTarget() {
   const queue = createMicrotaskQueue();
   const realm = new JSRealm(queue);
-  return { queue, realm, promises: realm.promises };
+  return { queue, realm, Promise: realm.Promise };
 }
 
 function fail(value: unknown): never { throw new Error(`Unexpected completion: ${String(value)}`); }

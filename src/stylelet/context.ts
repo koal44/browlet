@@ -1,7 +1,7 @@
 import { escapeRegExp } from '../infra/strings';
 import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
-import { Promises } from '../infra/promises';
+import { InternalPromise } from '../infra/promises';
 import type { ExecutionCaps, StyleletOptions } from './stylelet';
 
 export class StyleletContext {
@@ -137,12 +137,13 @@ export class StyleletContext {
  * this complete provider when no execution facilities are supplied at construction.
  */
 export const defaultExecutionCaps: ExecutionCaps = {
-  // eslint-disable-next-line no-restricted-globals -- This provider deliberately uses native Promise allocation and scheduling.
-  promises: new Promises(Promise, (promise, fulfilled, rejected) => {
-    void promise.then(fulfilled, rejected).catch((error: unknown) => {
-      setTimeout(() => { throw error; }, 0);
-    });
-  }),
+  Promise: class StyleletPromise<T> extends InternalPromise<T> {
+    protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
+      void this.backing.then(fulfilled, rejected).catch((error: unknown) => {
+        setTimeout(() => { throw error; }, 0);
+      });
+    }
+  },
   runInParallel: (steps) => { setTimeout(steps, 0); },
   queueTask: (steps) => { setTimeout(steps, 0); },
   createDOMException: (name, message = '') => new DOMException(message, name),

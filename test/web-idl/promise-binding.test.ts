@@ -8,13 +8,13 @@ import { RealmBinding } from '../../src/web-idl/realm-binding';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
   arg, asyncIter, defineCallbackFunction, defineDictionary, defineInterface, dictMember,
-  idlType, impl, op, promise as promiseType,
+  idlType, impl, implementationType, op, promise as promiseType,
   reference, roAttr,
   type AttributeMember, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
-import type { Promises, InternalPromise } from '../../src/infra/promises';
+import { internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../src/infra/promises';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import {
   createRejectedPromise, createResolvedPromise,
@@ -52,7 +52,7 @@ describe('Web IDL promise member binding', () => {
     const observed = Promise.all([
       firstResult.catch((reason: unknown) => reason),
       secondResult.catch((reason: unknown) => reason),
-      implementation.pending.promise.catch((reason: unknown) => reason),
+      new Promise((resolve) => { implementation.pending.promise.observe(resolve, resolve); }),
     ]);
     implementation.pending.reject(request);
     const [firstReason, secondReason] = await observed;
@@ -140,9 +140,9 @@ describe('Web IDL promise member binding', () => {
       }
     }
     class ItemsImpl {
-      constructor(public item: ItemImpl, public promises: Promises) {}
+      constructor(public item: ItemImpl, public P: typeof InternalPromise) {}
       createIterator() {
-        return { next: () => this.promises.try(() => this.item) };
+        return { next: () => this.P.try(() => this.item, internalType<ItemImpl>('ItemImpl')) };
       }
     }
     const itemIDL = defineInterface({
@@ -157,11 +157,11 @@ describe('Web IDL promise member binding', () => {
     const world = new BindingWorld([itemIDL, itemsIDL]);
     const binding = world.register(realm);
     const item = stamped ? binding.construct(ItemImpl) : new ItemImpl();
-    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.promises));
+    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.Promise));
     const iterator = call(owner, 'values') as object;
     const methodRealm = borrowed ? new Realm() : realm;
     const methodOwner = borrowed ? call(world.register(methodRealm).project(
-      ItemsImpl, new ItemsImpl(item, realm.promises),
+      ItemsImpl, new ItemsImpl(item, realm.Promise),
     ), 'values') as object : iterator;
     const pending = Reflect.apply(
       Reflect.get(methodOwner, 'next') as CallableFunction, iterator, [],
@@ -184,7 +184,7 @@ describe('Web IDL promise member binding', () => {
       members: [asyncIter(childType, { create: 'createIterator' })],
     });
     const binding = new BindingWorld([definition, promiseChildIDL]).register(new Realm());
-    const implementation = new OrdinaryPromiseOwnerImpl();
+    const implementation = new OrdinaryPromiseOwnerImpl(binding.Promise);
     const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation);
     const iterator = call(owner, 'values') as object;
     const child = new PromiseChildImpl();
@@ -360,27 +360,33 @@ function createOrdinaryPromiseFixture() {
   const secondBinding = bindings.register(second);
   firstBinding.install(first.global);
   secondBinding.install(second.global);
-  const implementation = new OrdinaryPromiseOwnerImpl();
+  const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.Promise);
   const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation);
   const foreignConstructor = Reflect.get(second.global, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
 }
 
 class OrdinaryPromiseOwnerImpl {
-  pending = Promise.withResolvers<PromiseChildImpl>();
+  pending: InternalPromiseWithResolvers<PromiseChildImpl>;
+  #Promise: typeof InternalPromise;
   received: PromiseChildImpl | undefined;
   returned: unknown;
 
-  get result(): Promise<PromiseChildImpl> { return this.pending.promise; }
-  read(): Promise<PromiseChildImpl> { return this.pending.promise; }
-  readRecord(): Promise<{ value: PromiseChildImpl; done: boolean; optional: undefined; }> {
-    return this.pending.promise.then((value) => ({ value, done: false, optional: undefined }));
+  constructor(P: typeof InternalPromise) {
+    this.#Promise = P;
+    this.pending = P.withResolvers(childType);
+  }
+
+  get result(): InternalPromise<PromiseChildImpl> { return this.pending.promise; }
+  read(): InternalPromise<PromiseChildImpl> { return this.pending.promise; }
+  readRecord(): InternalPromise<{ value: PromiseChildImpl; done: boolean; optional: undefined; }> {
+    return this.pending.promise.then((value) => ({ value, done: false, optional: undefined }), undefined, implementationType<{ value: PromiseChildImpl; done: boolean; optional: undefined; } | { value: PromiseChildImpl; done: false; optional: undefined; }>(reference('PromiseResult')));
   }
   createIterator(): OrdinaryPromiseIterator {
     let visited = false;
     return {
       next: () => {
-        if (visited) return Promise.resolve(endOfIteration);
+        if (visited) return this.#Promise.resolve(endOfIteration, internalType<typeof endOfIteration>('endOfIteration'));
         visited = true;
         return this.pending.promise;
       },
@@ -388,20 +394,19 @@ class OrdinaryPromiseOwnerImpl {
     };
   }
 
-  close(value: unknown): Promise<void> {
+  close(value: unknown): InternalPromise<void> {
     this.returned = value;
-    return Promise.resolve();
+    return this.#Promise.resolve(undefined, idlType.undefined);
   }
-  reject(reason: unknown): Promise<never> {
-    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- author rejection values retain their identity
-    return Promise.reject(reason);
+  reject(reason: unknown): InternalPromise<PromiseChildImpl> {
+    return this.#Promise.reject(reason, childType);
   }
 
   consume(value: InternalPromise<PromiseChildImpl>): InternalPromise<number> {
     return value.then((child) => {
       this.received = child;
       return child.value;
-    });
+    }, undefined, idlType.long);
   }
 
   invoke(callback: () => InternalPromise<PromiseChildImpl>): InternalPromise<number> {
@@ -414,11 +419,11 @@ class PromiseChildImpl {
 }
 
 type OrdinaryPromiseIterator = {
-  next(): Promise<PromiseChildImpl | typeof endOfIteration>;
-  return(value: unknown): Promise<void>;
+  next(): InternalPromise<PromiseChildImpl | typeof endOfIteration>;
+  return(value: unknown): InternalPromise<void>;
 };
 
-const childType = reference('PromiseChild');
+const childType = implementationType<PromiseChildImpl>(reference('PromiseChild'));
 const promiseChildIDL = defineInterface({
   name: 'PromiseChild', exposed: '*', implementation: impl(PromiseChildImpl),
   members: [roAttr('value', idlType.long)],

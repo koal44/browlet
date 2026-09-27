@@ -1,4 +1,5 @@
-import type { InternalPromise } from '../infra/promises';
+import { idlType } from '../web-idl/index';
+import { internalType, type InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 
 /** Encoding Standard §3 — A persistent end marker, distinct from an empty open queue. */
@@ -101,8 +102,8 @@ export class IOQueue<T extends QueueChunk> {
 
   /** Wait only at a chunk boundary, using the caller's execution owner. */
   waitFor(count: number, env: JSEnvironment): InternalPromise<void> {
-    if (this.#canRead(count)) return env.exec.promises.try(() => undefined);
-    const result = env.exec.promises.withResolvers<void>();
+    if (this.#canRead(count)) return env.exec.Promise.try(() => undefined, idlType.undefined);
+    const result = env.exec.Promise.withResolvers(idlType.undefined);
     (this.#waiters ??= []).push({ count, resolve: () => { result.resolve(); } });
     return result.promise;
   }
@@ -212,11 +213,12 @@ export function processQueue<T extends QueueChunk, Error>(
   steps: () => QueueResult<Error>,
   env: JSEnvironment,
 ): InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> {
+  const resultType = internalType<Exclude<QueueResult<Error>, 'waiting'>>('QueueResult');
   const run = (): Exclude<QueueResult<Error>, 'waiting'> | InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> => {
     const result = steps();
-    return result === 'waiting' ? input.waitFor(1, env).then(run) : result;
+    return result === 'waiting' ? input.waitFor(1, env).then(run, undefined, resultType) : result;
   };
-  return env.exec.promises.try(run);
+  return env.exec.Promise.try(run, resultType);
 }
 
 function sliceChunk<T extends QueueChunk>(chunk: T, start: number): T {

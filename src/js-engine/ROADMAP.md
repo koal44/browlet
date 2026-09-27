@@ -84,7 +84,7 @@ Implement these with their consuming feature, rather than adding inert hooks:
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
 | `HostSystemUTCEpochNanoseconds` | Temporal's relevant-settings clock; the current host clock does not install this engine hook |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
-| Exact Promise primitives | Observation without an unused derived Promise, direct handled-state updates, and removal of constructor/species fallbacks |
+| Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
 | Buffer and exotic internal slots | Non-destructive detach-key checks, detached-view length, and exact exotic/Error state needed by structured data |
 
 For the last two rows, preserve the tests and replacement conditions in the

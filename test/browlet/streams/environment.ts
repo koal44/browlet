@@ -7,7 +7,7 @@ import { TestRealm } from '../../web-idl/test-realm';
 
 export function createTestContext(): BindingContext {
   const realm = new TestRealm();
-  const realmBindings = new BindingWorld(testDefinitions).register(realm, () => createEnvironment(realm));
+  const realmBindings = new BindingWorld(testDefinitions).register(realm, (ctx) => createEnvironment(realm, ctx));
   realmBindings.projectGlobalObject(realm.global, testGlobalIDL.name);
   return realmBindings;
 }

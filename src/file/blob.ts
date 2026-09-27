@@ -5,7 +5,7 @@ import { type JSEnvironment, getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
-  allocateIn, dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
+  dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, union, xattr,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
@@ -86,13 +86,15 @@ export class BlobImpl {
     return this.#data.stream(this.#env);
   }
 
+  // https://w3c.github.io/FileAPI/#text-method-algo
   text(): InternalPromise<string> {
-    return this.#read().then(utf8Decode);
+    return this.#read().then(utf8Decode, undefined, idlType.USVString);
   }
 
-  /** File API §3.3.4; the binding allocates the result ArrayBuffer from these bytes. */
-  arrayBuffer(): InternalPromise<Uint8Array> {
-    return this.#read();
+  // https://w3c.github.io/FileAPI/#arraybuffer-method-algo
+  /** Read into a new ArrayBuffer in the owning realm. */
+  arrayBuffer(): InternalPromise<ArrayBuffer> {
+    return this.#read().then((bytes) => this.#env.exec.buffers.copyArrayBuffer(bytes), undefined, idlType.ArrayBuffer);
   }
 
   /** File API §3.3.6, pipe through the decoder's associated transform. */
@@ -104,13 +106,14 @@ export class BlobImpl {
     return stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
 
+  // https://w3c.github.io/FileAPI/#bytes-method-algo
   bytes(): InternalPromise<Uint8Array> {
-    return this.#read();
+    return this.#read().then((bytes) => this.#env.exec.buffers.copyUint8Array(bytes));
   }
 
   /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
   #read(): InternalPromise<Uint8Array> {
-    const result = this.#env.exec.promises.withResolvers<Uint8Array>();
+    const result = this.#env.exec.Promise.withResolvers(idlType.Uint8Array);
     const reader = this.stream().getDefaultReader();
     reader.readAllBytes(result.resolve, result.reject);
     return result.promise;
@@ -281,7 +284,7 @@ export const blobIDL = defineInterface({
     ),
     op('arrayBuffer', promise(idlType.ArrayBuffer),
       [],
-      { ...xattr('NewObject'), ...allocateIn('receiver') },
+      xattr('NewObject'),
     ),
     op('textStream', reference('ReadableStream'),
       [],
@@ -289,7 +292,7 @@ export const blobIDL = defineInterface({
     ),
     op('bytes', promise(idlType.Uint8Array),
       [],
-      { ...xattr('NewObject'), ...allocateIn('receiver') },
+      xattr('NewObject'),
     ),
   ],
 });

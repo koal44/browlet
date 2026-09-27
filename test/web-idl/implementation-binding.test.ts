@@ -9,7 +9,7 @@ import {
   arg, atArg, attr, attrFn, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, definePartialDictionary, defineTypedef, dictMember, idlType,
-  impl, indexedGetter, iter, namedGetter, nullable, op, staticOp,
+  impl, implementationType, indexedGetter, iter, namedGetter, nullable, op, staticOp,
   promise as promiseType, roAttr, record, reference, unwrapArg, sequence,
   stringifier,
   union, invokeWith,
@@ -576,7 +576,7 @@ describe('Web IDL implementation bindings', () => {
       implementation: impl(NestedResultImpl),
       members: [roAttr('label', idlType.DOMString)],
     });
-    const resultType = reference(nestedResultIDL.name);
+    const resultType = implementationType<unknown>(reference(nestedResultIDL.name));
     const nestedResultCallbackIDL = defineCallbackFunction({
       name: 'NestedResultCallback',
       returns: idlType.undefined,
@@ -641,7 +641,7 @@ describe('Web IDL implementation bindings', () => {
           [],
           {
             invoke(context) {
-              return context.promises.resolve(createResult('created promise'));
+              return context.Promise.resolve(createResult('created promise'), resultType);
             },
           },
         ),
@@ -649,7 +649,7 @@ describe('Web IDL implementation bindings', () => {
           [],
           {
             invoke(context) {
-              const result = context.promises.withResolvers<NestedResultImpl>();
+              const result = context.Promise.withResolvers(resultType);
               result.resolve(createResult('resolved promise'));
               return result.promise;
             },
@@ -659,7 +659,7 @@ describe('Web IDL implementation bindings', () => {
           [],
           {
             invoke(context) {
-              return context.promises.resolve().then(() => createResult('reacted promise'));
+              return context.Promise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
             },
           },
         ),

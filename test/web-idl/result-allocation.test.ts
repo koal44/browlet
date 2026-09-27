@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   allocateIn, arg, BindingWorld, defineDictionary, defineInterface, defineTypedef, dictMember,
-  idlType, impl, nullable, op, promise, record, reference, sequence, staticOp, union,
+  idlType, impl, implementationType, nullable, op, promise, record, reference, sequence, staticOp, union,
   type OperationMember, type WebIDLType,
 } from '../../src/web-idl/index';
-import {
-  getBufferSourceCopy, getBufferSourceUnderlyingBuffer, writeArrayBuffer,
-} from '../../src/js-engine/index';
 import { TestRealm } from './test-realm';
+import { createEnvironment } from '../js-engine/execution-fixture';
+import { getBufferSourceCopy, getBufferSourceUnderlyingBuffer, writeArrayBuffer, type JSEnvironment } from '../../src/js-engine/index';
+import type { InternalPromise } from '../../src/infra/promises';
 
 describe('Web IDL result allocation', () => {
   it.each([undefined, 'receiver', 'method'] as const)('allocates sequence results with allocateIn = %s', (allocation) => {
@@ -109,7 +109,7 @@ describe('Web IDL result allocation', () => {
     expect(call('overloaded', 'value')).toBeInstanceOf(methodRealm.intrinsics.array);
   });
 
-  it.each(['receiver', 'method'] as const)('allocates promised bytes in the %s realm without changing existing results', async (allocation) => {
+  it.each(['receiver', 'method'] as const)('retains promised bytes allocated in the %s realm without changing existing results', async (allocation) => {
     const { call, value, realm, methodRealm } = createFixture(idlType.Uint8Array, allocation);
     const target = allocation === 'method' ? methodRealm : realm;
     const result = call('createAsync') as Promise<Uint8Array>;
@@ -192,10 +192,13 @@ function createFixture(
   ]);
   const realm = new TestRealm();
   const methodRealm = new TestRealm();
-  const context = bindings.register(realm);
+  const context = bindings.register(realm, (ctx) => createEnvironment(realm, ctx));
   context.install(realm.global);
-  bindings.register(methodRealm).install(methodRealm.global);
-  const receiver = context.project(ResultImpl, new ResultImpl(value));
+  const methodContext = bindings.register(methodRealm, (ctx) => createEnvironment(methodRealm, ctx));
+  methodContext.install(methodRealm.global);
+  const owner = allocation === 'method' ? methodContext : context;
+  const other = allocation === 'method' ? context : methodContext;
+  const receiver = context.project(ResultImpl, new ResultImpl(value, type, owner.getEnvironment(), other.getEnvironment()));
   const MethodConstructor = Reflect.get(methodRealm.global, definition.name) as {
     prototype: object;
   };
@@ -210,27 +213,31 @@ function createFixture(
 }
 
 class ResultImpl {
-  pending: Promise<unknown>;
+  pending: InternalPromise<unknown> | undefined;
+  otherPending: InternalPromise<unknown> | undefined;
 
-  constructor(public value: unknown) {
-    this.pending = Promise.resolve(value);
-  }
+  constructor(public value: unknown, public type: WebIDLType, public env: JSEnvironment, public otherEnv: JSEnvironment) {}
 
   create(): unknown { return this.value; }
 
   existing(value: Uint8Array): Uint8Array { return value; }
 
-  createAsync(): Promise<unknown> { return this.pending; }
+  createAsync(): InternalPromise<unknown> { return this.pending ??= this.createPromise(this.env); }
 
-  otherAsync(): Promise<unknown> { return this.pending; }
+  otherAsync(): InternalPromise<unknown> { return this.otherPending ??= this.createPromise(this.otherEnv); }
 
-  existingAsync(): Promise<unknown> { return this.pending; }
+  existingAsync(): InternalPromise<unknown> { return this.env.exec.Promise.resolve(this.value, implementationType<unknown>(this.type)); }
 
   failAsync(): never { throw new Error('Failed to create result'); }
 
   overloaded(): string[] { return ['overloaded']; }
 
   static createStatic(): string[] { return ['static']; }
+
+  private createPromise(env: JSEnvironment): InternalPromise<unknown> {
+    const value = this.value instanceof Uint8Array ? env.exec.buffers.copyUint8Array(this.value) : this.value;
+    return env.exec.Promise.resolve(value, implementationType<unknown>(this.type));
+  }
 }
 
 class ItemImpl {}

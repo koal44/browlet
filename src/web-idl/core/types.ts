@@ -1,71 +1,4 @@
-// Shared members and arguments
-
-export type ConstantMember = {
-  kind: 'constant';
-  name: string;
-  type: WebIDLType;
-  value: ConstantValue;
-  exposed?: Exposure;
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-export type AttributeMember<Realm = unknown> = {
-  kind: 'attribute';
-  name: string;
-  type: WebIDLType;
-
-  readonly?: boolean;
-  static?: boolean;
-  inherit?: boolean;
-  stringifier?: boolean;
-  exposed?: Exposure;
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: member steps, returned function creation, and callback exception policy.
-  get?: DeclarationCallback<'attribute-get', Realm>;
-  set?: DeclarationCallback<'attribute-set', Realm>;
-  attributeFunction?: DeclarationCallback<'attribute-function', Realm>;
-  callbackExceptionBehavior?: CallbackExceptionBehavior;
-};
-
-export type OperationMember<Realm = unknown> = {
-  kind: 'operation';
-  returns: WebIDLType;
-  arguments: ArgumentDefinition[];
-
-  name?: string;
-  static?: boolean;
-  special?: 'getter' | 'setter' | 'deleter';
-  exposed?: Exposure;
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: invocation, argument injection, result allocation, and legacy property support.
-  invoke?: DeclarationCallback<'operation-invoke', Realm>;
-  invokeWith?: InjectedArgument<Realm>[];
-  allocateIn?: 'receiver' | 'method';
-  indexedGetter?: IndexedGetterDeclaration;
-  getSupportedPropertyNames?: SupportedPropertyNamesSteps;
-};
-
-export type StringifierMember = {
-  kind: 'stringifier';
-  exposed?: Exposure;
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-export type ArgumentDefinition = {
-  name: string;
-  type: WebIDLType;
-  optional?: boolean;
-  variadic?: boolean;
-  default?: DefaultValue;
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: implementation resolution and callback adaptation.
-  implClasses?: ImplementationClass[];
-  callbackDictionary?: string;
-  callbackExceptionBehavior?: CallbackExceptionBehavior;
-};
+import type { ResultValue } from '../../infra/promises';
 
 // Type expressions
 
@@ -123,6 +56,8 @@ export type WebIDLType =
   | ObservableArrayType
   | AnnotatedType<WebIDLType>;
 
+export type ImplementationType<T> = WebIDLType & ResultValue<T>;
+
 export type SimpleType = {
   kind: 'simple';
   name: SimpleTypeName;
@@ -175,7 +110,7 @@ export type RecordType = {
 };
 
 // An interface keeps the recursive WebIDLType relationship lazy.
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+
 export interface AnnotatedType<Type> {
   kind: 'annotated';
   type: Type;
@@ -383,7 +318,19 @@ export type RawExtendedAttribute = {
   value: string;
 };
 
-// Implementation identity and contextual callbacks
+export type ArgumentDefinition = {
+  name: string;
+  type: WebIDLType;
+  optional?: boolean;
+  variadic?: boolean;
+  default?: DefaultValue;
+  extendedAttributes?: ExtendedAttribute[];
+
+  // Project metadata: implementation resolution and callback adaptation.
+  implClasses?: ImplementationClass[];
+  callbackDictionary?: string;
+  callbackExceptionBehavior?: CallbackExceptionBehavior;
+};
 
 /**
  * An implementation class known to the Web IDL binding.
@@ -395,19 +342,76 @@ export type ImplementationClass<T extends object = object> = {
   prototype: T;
 };
 
+export type CallbackExceptionBehavior = 'report' | 'rethrow';
+
+// Shared members and arguments
+
+export type ConstantMember = {
+  kind: 'constant';
+  name: string;
+  type: WebIDLType;
+  value: ConstantValue;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+};
+
+export type AttributeMember<Realm = unknown> = {
+  kind: 'attribute';
+  name: string;
+  type: WebIDLType;
+
+  readonly?: boolean;
+  static?: boolean;
+  inherit?: boolean;
+  stringifier?: boolean;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+
+  // Project metadata: member steps, returned function creation, and callback exception policy.
+  get?: DeclarationCallback<'attribute-get', Realm>;
+  set?: DeclarationCallback<'attribute-set', Realm>;
+  attributeFunction?: DeclarationCallback<'attribute-function', Realm>;
+  callbackExceptionBehavior?: CallbackExceptionBehavior;
+};
+
+export type OperationMember<Realm = unknown> = {
+  kind: 'operation';
+  returns: WebIDLType;
+  arguments: ArgumentDefinition[];
+
+  name?: string;
+  static?: boolean;
+  special?: 'getter' | 'setter' | 'deleter';
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+
+  // Project metadata: invocation, argument injection, result allocation, and legacy property support.
+  invoke?: DeclarationCallback<'operation-invoke', Realm>;
+  invokeWith?: InjectedArgument<Realm>[];
+  allocateIn?: 'receiver' | 'method';
+  indexedGetter?: IndexedGetterDeclaration;
+  getSupportedPropertyNames?: SupportedPropertyNamesSteps;
+};
+
+export type StringifierMember = {
+  kind: 'stringifier';
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+};
+
+// Implementation identity and contextual callbacks
+
 export type InjectedArgument<Realm = unknown> = {
   index: number;
   resolve: DeclarationCallback<'argument-resolve', Realm>;
 };
-
-export type CallbackExceptionBehavior = 'report' | 'rethrow';
 
 /*
  * Project typing: the full Web IDL entry supplies contextual callback signatures by augmenting
  * this interface. Declarations alone leave these callbacks unavailable.
  * The declaration records own the surrounding fields.
  */
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions, @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
 export interface DeclarationCallbacks<Realm = unknown> {}
 
 export type DeclarationCallback<Name extends PropertyKey, Realm = unknown> =
@@ -443,9 +447,21 @@ export type SupportedPropertyNamesSteps = (
   context: unknown,
 ) => ReadonlySet<string>;
 
+type SimpleValue<N extends SimpleTypeName> =
+  N extends 'any' ? unknown
+    : N extends 'undefined' ? void
+      : N extends 'boolean' ? boolean
+        : N extends 'bigint' ? bigint
+          : N extends 'symbol' ? symbol
+            : N extends 'object' ? object
+              : N extends 'DOMString' | 'ByteString' | 'USVString' ? string
+                : N extends keyof typeof globalThis
+                  ? typeof globalThis[N] extends abstract new (...args: never[]) => infer T ? T : never
+                  : number;
+
 // Project helper: construct a named built-in type record for Web IDL §2.13 Types.
 function simpleType<const Name extends SimpleTypeName>(
   name: Name,
-): { kind: 'simple'; name: Name; } {
-  return { kind: 'simple', name };
+): { kind: 'simple'; name: Name; } & ResultValue<SimpleValue<Name>> {
+  return { kind: 'simple', name } as { kind: 'simple'; name: Name; } & ResultValue<SimpleValue<Name>>;
 }

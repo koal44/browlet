@@ -658,11 +658,11 @@ export function adaptIDLToImpl(
         realmBinding.defaultConversionContext,
         (item) => item === endOfIteration ? item :
           adaptIDLToImpl(item, value.elementType, {}, context, realmBinding),
-        context.promises,
+        context.Promise,
       ),
       return: (reason: unknown) => toImplementationPromise(
         closeAsyncIterator(iterator, reason, realmBinding.realm), realmBinding.defaultConversionContext, (result) => result,
-        context.promises,
+        context.Promise,
       ),
     };
   }
@@ -670,7 +670,7 @@ export function adaptIDLToImpl(
     return toImplementationPromise(value, realmBinding.defaultConversionContext, (result) =>
       adaptIDLToImpl(
         result, value.type, options, context, realmBinding,
-      ), context.promises);
+      ), context.Promise);
   }
   for (const implClass of options.implClasses ?? []) {
     const resolved = context.unwrap(value, implClass);

@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
-import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
+import { TestRealm } from '../web-idl/test-realm';
 import { getBufferSourceCopy } from '../../src/js-engine/buffers';
 
 describe('TextEncoderStream byte production', () => {
@@ -46,12 +46,12 @@ describe('TextEncoderStream byte production', () => {
     ['symbol conversion result', { [Symbol.toPrimitive]: () => Symbol('chunk') }],
     ['no primitive result', { toString: () => ({}), valueOf: () => ({}) }],
   ])('rejects %s', async (_label, chunk) => {
-    const { reader, writer } = createEncoder();
+    const { reader, writer, realm } = createEncoder();
     const failure = observe(reader.read()).catch((error: unknown) => error);
     const writing = observe(writer.write(chunk)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
-    expect(InternalTypeError.is(error)).toBe(true);
+    expect(error).toBeInstanceOf(realm.intrinsics.typeError);
     expect(await failure).toBe(error);
   });
 
@@ -118,6 +118,7 @@ describe('TextEncoderStream byte production', () => {
 });
 
 function createEncoder() {
-  const encoder = new TextEncoderStreamImpl(createEnvironment());
-  return { reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
+  const realm = new TestRealm();
+  const encoder = new TextEncoderStreamImpl(createEnvironment(realm));
+  return { realm, reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
 }

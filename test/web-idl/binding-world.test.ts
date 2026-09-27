@@ -17,6 +17,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const compose = vi.fn((context: BindingContext) => {
       expect(context.realm).toBe(realm);
       expect(world.forRealm(realm)).toBeUndefined();
+      env.exec.Promise = context.Promise;
       return env;
     });
     const first = world.register(realm, compose);
@@ -27,7 +28,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(compose).toHaveBeenCalledOnce();
     expect(compose.mock.calls[0]![0]).toBe(first);
     expect(first.getEnvironment()).toBe(env);
-    expect(first.getEnvironment().exec.promises).toBe(first.promises);
+    expect(first.getEnvironment().exec.Promise).toBe(first.Promise);
   });
 
   it('allows registration to retry after environment composition fails', () => {

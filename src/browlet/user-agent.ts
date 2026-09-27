@@ -5,7 +5,7 @@ import type { Environment } from './scripting/environment';
 import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
 import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { hostPromises, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
+import { HostPromise, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
 import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
 import { determineRequestReferrer, setRequestReferrerPolicyOnRedirect } from './browsing/policy/referrer-policy';
 import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
@@ -30,7 +30,7 @@ import {
   type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { InternalError } from '../infra/internal-error';
-import type { InternalPromise } from '../infra/promises';
+import { internalType, type InternalPromise } from '../infra/promises';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -42,7 +42,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   eventLoopOptions: EventLoopOptions | null;
   /** Background Fetch continuations outlive their initiating environments. */
-  hostPromises = hostPromises;
+  HostPromise = HostPromise;
   /** Background steps remain distinct from task delivery to a global. */
   runInParallel = runInParallel;
 
@@ -171,7 +171,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null> {
     // PROVISIONAL(Service Workers): no registrations or active workers exist yet.
     // Return without preparing an unused request/body branch.
-    return this.hostPromises.try(() => null);
+    return this.HostPromise.try(() => null, internalType<FetchResponse | ServiceWorkerTimingInfo | null>('ServiceWorkerResult'));
   }
 
   /** Select internal network scheduling state for a request. */
@@ -228,7 +228,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     // Bytes need no stream or execution owner from the retiring Window.
     request.body = ReportImpl.serialize(reports);
     for (const report of reports) report.attempts++;
-    const result = hostPromises.withResolvers<ReportDeliveryResult>();
+    const result = HostPromise.withResolvers(internalType<ReportDeliveryResult>('ReportDeliveryResult'));
     // This clientless request has no Window to receive response callbacks.
     // The sandbox owns stream execution; the request retains the report's
     // original origin and remains clientless.

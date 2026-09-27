@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
+import { idlType } from '../../web-idl/index';
 import type { WindowRealm } from '../scripting/realm';
 import { createTaskSource } from '../scripting/event-loop';
 import type { QueuedTaskHandle } from '../scripting/tasks';
@@ -52,7 +53,7 @@ export class PageEvaluation {
             result = Reflect.apply(result as (...args: unknown[]) => unknown,
               undefined, [copyEvaluationValue(input, this.#realm)]);
           }
-          this.#realm.promises.resolve(result).observe(
+          this.#realm.Promise.fromValue(result, this.#realm.intrinsics.promise.constructor, idlType.any).observe(
             (value) => complete(value), (error) => complete(error, true),
           );
         } catch (error) { complete(error, true); }

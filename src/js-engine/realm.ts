@@ -5,7 +5,7 @@ import {
   type ByteSequence, type JSBufferView, type JSBufferViewName,
   type RuntimeBuffers,
 } from './buffers';
-import { Promises } from '../infra/promises';
+import { InternalPromise } from '../infra/promises';
 import { isObject } from './abstract-operations';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm,
@@ -24,7 +24,7 @@ export class JSRealm {
   globalPrototypeChain: object[] | undefined;
   allocatedGlobalObject: GlobalObject | undefined;
   intrinsics: JSIntrinsics;
-  promises: Promises;
+  Promise: typeof InternalPromise;
   #callableFunctionFactory: RealmFunctionFactory;
   #context: NodeContext;
   #constructibleFunctionFactory: RealmFunctionFactory;
@@ -231,10 +231,13 @@ export class JSRealm {
       ) as typeof TypeError,
       uriError: URIError_,
     };
-    this.promises = new Promises(
-      this.intrinsics.promise.constructor,
-      (promise, fulfilled, rejected) => { this.observePromise(promise, fulfilled, rejected); },
-    );
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Capture the realm, not the subclass constructor.
+    const realm = this;
+    this.Promise = class RealmPromise<T> extends InternalPromise<T> {
+      protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
+        realm.observePromise(this.backing, fulfilled, rejected);
+      }
+    };
     this.#callableFunctionFactory = runInContext(
       callableFunctionFactorySource,
       this.#context,

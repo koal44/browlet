@@ -21,15 +21,14 @@ import {
 import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
-  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute,
+  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute, ImplementationType,
   RecordType, SimpleTypeName, UnionType, WebIDLType,
 } from './core/types';
 import type { WebIDLRealmHost } from './realm-host';
 import type { RealmBinding } from './realm-binding';
 import { getPlatformRecord, type StampedPlatformObject } from './platform-object';
 import {
-  convertJavaScriptValueToPromise, createIDLPromiseRecord, isIDLPromiseRecord,
-  PromiseProjectionStamper, type PromiseSource,
+  convertJavaScriptValueToPromise, isIDLPromiseRecord,
 } from './promise-record';
 import { defineDataProperty } from './property';
 import {
@@ -73,53 +72,6 @@ export function convertToJavaScript(
   allocateBuffers = false,
 ): unknown {
   return convertIDLValue(value, type, context, [], allocateBuffers);
-}
-
-// Project adapter: preserve projected promise identity and convert fulfillment values into the target realm.
-/** Project an implementation promise into its declared result type and realm. */
-export function projectPromise(
-  value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-  allocateBuffers = false,
-): Promise<unknown> {
-  // Web IDL §3.2.24 — an existing capability converts to its Promise field.
-  if (isIDLPromiseRecord(value)) return value.promise;
-  const source = value as PromiseSource;
-  let projections = PromiseProjectionStamper.get(source);
-  const existing = projections?.find((entry) =>
-    entry.world === context.binding.world &&
-    entry.record.realm === context.realm && entry.record.type === type &&
-    entry.allocateBuffers === allocateBuffers);
-  if (existing) return existing.record.promise;
-
-  const record = createIDLPromiseRecord(type, context.realm, context.binding.realizeException);
-  if (!projections) {
-    projections = [];
-    void PromiseProjectionStamper.stamp(source, projections);
-  }
-  projections.push({ world: context.binding.world, record, allocateBuffers });
-  // These callbacks adapt implementation state; author reactions still run
-  // through the projected promise's own realm and queue.
-  const onFulfilled = (result: unknown): void => {
-    try {
-      record.resolve(isIDLPromiseRecord(result)
-        ? result.promise
-        : convertToJavaScript(result, type, context, allocateBuffers));
-    } catch (error) {
-      record.reject(error);
-    }
-  };
-  try {
-    if (source instanceof InternalPromise) {
-      context.realm.promises.import(source).observe(onFulfilled, record.reject);
-    } else {
-      context.realm.observePromise(source, onFulfilled, record.reject);
-    }
-  } catch (error) {
-    record.reject(error);
-  }
-  return record.promise;
 }
 
 // Web IDL §3.2.21.1 Creating a sequence from an iterable.
@@ -430,7 +382,16 @@ function convertIDLValueByEffectiveType(
     case 'frozen-array':
       return value;
     case 'promise':
-      return projectPromise(value, type.type, context, allocateBuffers);
+      // https://webidl.spec.whatwg.org/#es-promise — expose the capability's Promise.
+      if (isIDLPromiseRecord(value)) return value.promise;
+      if (value instanceof InternalPromise) {
+        if (value.type.kind === 'implementation' ||
+          typeSignature(value.type as ImplementationType<unknown>, context.binding.definitions) !== typeSignature(type.type, context.binding.definitions)) {
+          throw new InternalError('Promise result type does not match its Web IDL declaration');
+        }
+        return value.backing;
+      }
+      throw new InternalError('Expected a declared Promise result');
     case 'async-sequence':
       return convertAsyncSequenceToJavaScript(value);
     case 'observable-array':
@@ -1170,6 +1131,20 @@ function resolveEffectiveType(
       type: resolved,
     };
   }
+}
+
+// Compare resolved result descriptors, including conversion attributes and nested types.
+function typeSignature(type: WebIDLType, definitions: DefinitionAssembly): string {
+  const { type: effective, extendedAttributes } = resolveEffectiveType(type, definitions, []);
+  let parts: string[];
+  switch (effective.kind) {
+    case 'simple':
+    case 'reference': parts = [effective.name]; break;
+    case 'union': parts = effective.types.map((member) => typeSignature(member, definitions)).sort(); break;
+    case 'record': parts = [typeSignature(effective.key, definitions), typeSignature(effective.value, definitions)]; break;
+    default: parts = [typeSignature(effective.type, definitions)];
+  }
+  return JSON.stringify([effective.kind, parts, extendedAttributes.map((attribute) => JSON.stringify(attribute)).sort()]);
 }
 
 // Project helper: flatten union members while retaining conversion attributes.

@@ -1,6 +1,6 @@
 import type { TaskScheduling } from '../infra/scheduling';
 import type { RuntimeBuffers } from './buffers';
-import type { Promises } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from './realm';
 
 /** Persistent execution and allocation facilities for one owning realm/global. */
@@ -8,7 +8,10 @@ export type RealmExecution = {
   /** The owning global object, including when selected as an HTML task destination. */
   global: GlobalObject;
   nativeLineEnding: '\n' | '\r\n';
-  promises: Promises;
+  /** Internal Promise constructor for this execution owner. */
+  Promise: typeof InternalPromise;
+  /** Captured JavaScript constructor for native Promise resolution. */
+  NativePromise: PromiseConstructor;
   buffers: RuntimeBuffers;
   fileReading: TaskScheduling;
   networking: NetworkingTasks;

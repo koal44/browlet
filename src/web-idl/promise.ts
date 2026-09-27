@@ -1,12 +1,40 @@
-import type { InternalPromise, Promises } from '../infra/promises';
+import { InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType } from '../infra/promises';
+import type { BindingContext } from './binding-context';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { idlType, sequence, type WebIDLType } from './core/index';
+import { idlType, implementationType, sequence, type ImplementationType, type WebIDLType } from './core/index';
 import {
   createIDLPromiseRecord, isIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
 import { getUnannotatedType } from './types';
+
+/** Add this binding's result conversion to the realm's implementation Promise constructor. */
+export function createWebIDLPromiseConstructor(context: BindingContext): typeof InternalPromise {
+  return class WebIDLPromise<T> extends context.realm.Promise<T> {
+    static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
+      if (type.kind === 'implementation') return super.withResolvers(type);
+      const resultType = type as ImplementationType<T>;
+      const record = createIDLPromiseRecord(resultType, context.realm, (value) => context.realizeException(value));
+      const promise = new this(record.promise, type, (value) => context.convertToImpl(value, resultType) as T);
+      return {
+        promise,
+        get isResolved() { return record.resolved; },
+        resolve(value) {
+          try {
+            if (value instanceof InternalPromise) {
+              record.resolve(value.backing);
+            } else {
+              // Conversion precedes the native resolving function, including reentrant resolution.
+              record.resolve(context.convertToJavaScript(value, resultType));
+            }
+          } catch (error) { record.reject(error); }
+        },
+        reject: record.reject,
+      };
+    }
+  };
+}
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — create a new promise.
 export function createPromise(
@@ -17,16 +45,16 @@ export function createPromise(
 }
 
 // Project adapter: convert author fulfillment values for an implementation's promise queue.
-/** Convert author fulfillment values before supplying an implementation promise. */
+/** Convert fulfillment values inside the implementation's native reaction. */
 export function toImplementationPromise(
   promise: IDLPromiseRecord,
   context: ConversionContext,
   convertValue: (value: unknown) => unknown,
-  promises: Promises,
+  P: typeof InternalPromise,
 ): InternalPromise<unknown> {
   const conversionContext = { binding: context.binding, realm: promise.realm };
-  return promises.import(promise.promise, (value) =>
-    convertValue(convertToIDL(value, promise.type, conversionContext)));
+  return P.fromNative(promise.promise, (value) =>
+    convertValue(convertToIDL(value, promise.type, conversionContext)), implementationType<unknown>(promise.type));
 }
 
 // Web IDL §3.2.24.1 Creating and manipulating Promises — create a resolved promise.

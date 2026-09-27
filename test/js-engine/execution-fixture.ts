@@ -4,18 +4,23 @@ import {
   queueNetworkingTask, type AbortControllerCapability, type JSEnvironment, type RealmExecution,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
+import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
+import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
+import { streamsIDLDefinitions } from '../../src/streams/index';
 
 /** A standalone realm environment with facilities supplied by the unit host. */
-export function createEnvironment(realm = new TestRealm()): JSEnvironment {
-  return { exec: createExecution(realm), queueNetworkingTask };
+export function createEnvironment(realm = new TestRealm(), binding?: BindingContext): JSEnvironment {
+  return { exec: createExecution(realm, binding), queueNetworkingTask };
 }
 
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
-export function createExecution(realm = new TestRealm()): RealmExecution {
+export function createExecution(realm = new TestRealm(), binding?: BindingContext): RealmExecution {
+  binding ??= new BindingWorld([...webIDLCommonDefinitions, ...streamsIDLDefinitions]).register(realm);
   return {
     global: realm.global,
     nativeLineEnding: '\n',
-    promises: realm.promises,
+    Promise: binding.Promise,
+    NativePromise: realm.intrinsics.promise.constructor,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel: (steps) => { setImmediate(steps); },

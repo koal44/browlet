@@ -1,7 +1,8 @@
+import type { PromiseResult, ResultValue } from '../../infra/promises';
 import type {
   AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
   ConstantMember, ConstantValue, DecimalLiteral, ExtendedAttribute, FrozenArrayType,
-  ImplementationClass, InjectedArgument, IntegerLiteral, NullableType, ObservableArrayType,
+  ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, NullableType, ObservableArrayType,
   OperationMember, PromiseType, RecordType, ReferenceType, SequenceType,
   StringifierMember, StringType, UnionType, WebIDLType,
 } from './types';
@@ -198,25 +199,30 @@ export function namedGetter<Implementation extends object>(
 // Type expressions
 
 // Project helper: refer to a named IDL type by identifier.
-export function reference(name: string): ReferenceType {
+export function reference<const Name extends string>(name: Name): ReferenceType & { name: Name; } {
   return { kind: 'reference', name };
 }
 
+/** Associate a named IDL result with its implementation value. */
+export function implementationType<T>(type: WebIDLType): ImplementationType<T> {
+  return type as ImplementationType<T>;
+}
+
 // Project builder for Web IDL §2.13.27 Nullable types — T?.
-export function nullable(type: WebIDLType): NullableType {
-  return { kind: 'nullable', type };
+export function nullable<Type extends WebIDLType>(type: Type): NullableType & ResultValue<PromiseResult<Type> | null> {
+  return { kind: 'nullable', type } as NullableType & ResultValue<PromiseResult<Type> | null>;
 }
 
 // Project builder for Web IDL §2.13.32 Union types.
-export function union(
-  ...types: [WebIDLType, WebIDLType, ...WebIDLType[]]
-): UnionType {
-  return { kind: 'union', types };
+export function union<const Types extends [WebIDLType, WebIDLType, ...WebIDLType[]]>(
+  ...types: Types
+): UnionType & ResultValue<PromiseResult<Types[number]>> {
+  return { kind: 'union', types } as unknown as UnionType & ResultValue<PromiseResult<Types[number]>>;
 }
 
 // Project builder for Web IDL §2.13.28 Sequence types — sequence<T>.
-export function sequence(type: WebIDLType): SequenceType {
-  return { kind: 'sequence', type };
+export function sequence<Type extends WebIDLType>(type: Type): SequenceType & ResultValue<PromiseResult<Type>[]> {
+  return { kind: 'sequence', type } as SequenceType & ResultValue<PromiseResult<Type>[]>;
 }
 
 // Project builder for Web IDL §2.13.29 Async sequence types — async_sequence<T>.
@@ -225,11 +231,11 @@ export function asyncSequence(type: WebIDLType): AsyncSequenceType {
 }
 
 // Project builder for Web IDL §2.13.30 Record types — record<K, V>.
-export function record(
-  key: StringType,
-  value: WebIDLType,
-): RecordType {
-  return { kind: 'record', key, value };
+export function record<Key extends StringType, Value extends WebIDLType>(
+  key: Key,
+  value: Value,
+): RecordType & ResultValue<Record<string, PromiseResult<Value>>> {
+  return { kind: 'record', key, value } as RecordType & ResultValue<Record<string, PromiseResult<Value>>>;
 }
 
 // Project builder for Web IDL §2.13.31 Promise types — Promise<T>.
@@ -238,8 +244,8 @@ export function promise(type: WebIDLType): PromiseType {
 }
 
 // Project builder for Web IDL §2.13.35 Frozen array types — FrozenArray<T>.
-export function frozenArray(type: WebIDLType): FrozenArrayType {
-  return { kind: 'frozen-array', type };
+export function frozenArray<Type extends WebIDLType>(type: Type): FrozenArrayType & ResultValue<PromiseResult<Type>[]> {
+  return { kind: 'frozen-array', type } as FrozenArrayType & ResultValue<PromiseResult<Type>[]>;
 }
 
 // Project builder for Web IDL §2.13.36 Observable array types — ObservableArray<T>.
@@ -251,8 +257,8 @@ export function observableArray(type: WebIDLType): ObservableArrayType {
 export function annotated<Type extends WebIDLType>(
   type: Type,
   { extendedAttributes }: ExtendedAttributeOptions,
-): AnnotatedType<Type> {
-  return { kind: 'annotated', extendedAttributes, type };
+): AnnotatedType<Type> & ResultValue<PromiseResult<Type>> {
+  return { kind: 'annotated', extendedAttributes, type } as AnnotatedType<Type> & ResultValue<PromiseResult<Type>>;
 }
 
 // Numeric literals

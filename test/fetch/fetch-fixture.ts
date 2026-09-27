@@ -37,7 +37,7 @@ export function createFetchRequest(
 export function createFetchFixture(world?: BindingWorld) {
   const bindings = world ?? new BindingWorld(fetchDefinitions);
   const realm = new TestRealm();
-  const context = bindings.register(realm, () => createEnvironment(realm));
+  const context = bindings.register(realm, (ctx) => createEnvironment(realm, ctx));
   const env = context.getEnvironment();
   // This fixture allocates implementations without installing the browser API.
   return {

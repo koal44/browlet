@@ -34,7 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { asciiLower } from '../infra/ascii';
 import { RangeError } from '../infra/exceptions';
-import type { InternalPromise } from '../infra/promises';
+import { internalType, type InternalPromise } from '../infra/promises';
 import { surroundingASCIIWhitespacePattern } from '../infra/patterns';
 import type { JSEnvironment } from '../js-engine/index';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
@@ -246,8 +246,8 @@ export function decodeQueue(
     const bom = bomSniff(input);
     if (bom) input.readAvailable(bom === 'UTF-8' ? 3 : 2);
     const decoder = getDecoder(bom ?? encoding);
-    return processQueue(input, () => decoder.decode(input, output, 'replacement'), env).then(() => output);
-  });
+    return processQueue(input, () => decoder.decode(input, output, 'replacement'), env).then(() => output, undefined, internalType<IOQueue<string>>('CodePointQueue'));
+  }, undefined, internalType<IOQueue<string>>('CodePointQueue'));
 }
 
 /** §6.1 — BOM sniff; undefined requests more input, without consuming it. */
@@ -269,7 +269,7 @@ export function encodeQueue(
   input: IOQueue<string>, encoding: Encoding, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), env: JSEnvironment,
 ): InternalPromise<IOQueue<Uint8Array>> {
   const encoder = getEncoder(encoding);
-  return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output);
+  return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output, undefined, internalType<IOQueue<Uint8Array>>('ByteQueue'));
 }
 
 /** §6.1 — Encode or fail for complete input, as used by synchronous URL parsing. */
@@ -286,7 +286,7 @@ export function encodeOrFail(
   return processQueue(input, () => encoder.encode(input, output, 'fatal'), env).then((result) => {
     output.push(endOfQueue);
     return typeof result === 'object' ? result.error : null;
-  });
+  }, undefined, internalType<number | null>('EncodingError'));
 }
 
 type BOMEncoding = 'UTF-8' | 'UTF-16BE' | 'UTF-16LE';

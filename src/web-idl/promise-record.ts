@@ -1,6 +1,3 @@
-import { Stamper } from '../infra/stamper';
-import type { InternalPromise } from '../infra/promises';
-import type { BindingWorld } from './binding-world';
 import type { WebIDLType } from './core/index';
 import type { WebIDLRealmHost } from './realm-host';
 import { InternalError } from '../infra/internal-error';
@@ -74,37 +71,6 @@ export type IDLPromiseRecord = {
   resolved: boolean;
   type: WebIDLType;
 };
-
-/** The projection retained for one source, world, realm, type, and allocation policy. */
-export type PromiseProjectionRecord = {
-  world: BindingWorld;
-  record: IDLPromiseRecord;
-  allocateBuffers: boolean;
-};
-
-/** Privately retain the source promise's author-facing projections. */
-export class PromiseProjectionStamper extends Stamper {
-  #projections: PromiseProjectionRecord[];
-
-  private constructor(source: PromiseSource, projections: PromiseProjectionRecord[]) {
-    super(source);
-    this.#projections = projections;
-  }
-
-  static stamp<T extends PromiseSource>(
-    source: T,
-    projections: PromiseProjectionRecord[],
-  ): T & PromiseProjectionStamper {
-    new PromiseProjectionStamper(source, projections);
-    return source as T & PromiseProjectionStamper;
-  }
-
-  static get(source: PromiseSource): PromiseProjectionRecord[] | undefined {
-    return #projections in source ? source.#projections : undefined;
-  }
-}
-
-export type PromiseSource = Promise<unknown> | InternalPromise<unknown>;
 
 type PromiseSettlement = (value?: unknown) => void;
 

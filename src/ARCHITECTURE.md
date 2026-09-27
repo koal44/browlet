@@ -126,16 +126,22 @@ callback and job hooks consumed by HTML. The addon bridges the engine APIs;
 HTML supplies the scheduling policy. Availability is checked per capability,
 so an explicit microtask queue does not imply support for job interception.
 
-Infra's `InternalPromise` retains its `Promises` facility through continuations.
-Import another owner's result into the consumer's facility when ownership must
-change. Native async/await belongs at host boundaries; returning or projecting
-a Promise cannot repair work already scheduled on the wrong queue.
+Infra's `InternalPromise` retains its result descriptor without interpreting its
+contents; Web IDL owns IDL descriptors. The Promise constructor selects creation
+and observation. `env.exec.Promise` supplies the owner's
+constructor with static creation methods, taking the descriptor last. `then()`
+keeps that descriptor unless given a new one. JS Engine specializes observation;
+Web IDL extends that constructor with declared-result conversion and checks the
+descriptor at exposure. Importing changes the view's constructor while retaining
+the native backing and source conversion; subsequent results use the destination.
+Native async/await belongs at host boundaries; returning a Promise cannot repair work
+already scheduled on the wrong queue.
 
 `runInParallel()` schedules background steps. Completion enters the selected
 owner task before changing realm-owned streams or delivering author callbacks.
 `env.queueNetworkingTask()` accepts an explicit global or parallel queue, so
 it works for both full settings and sandbox execution. Host-owned continuations
-use `hostPromises` without pretending to belong to a retired Document.
+use `HostPromise` without pretending to belong to a retired Document.
 
 ## Choosing a dependency
 

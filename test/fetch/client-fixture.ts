@@ -1,4 +1,6 @@
-import { hostPromises, runInParallel } from '../../src/browlet/integration/scripting';
+import { idlType } from '../../src/web-idl/core/index';
+import { internalType } from '../../src/infra/promises';
+import { HostPromise, runInParallel } from '../../src/browlet/integration/scripting';
 import type {
   FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/environment';
@@ -50,7 +52,7 @@ interface ClientEnvironment extends FetchEnvironment {
 
 export function createFetchUserAgent(): FetchUserAgent {
   return {
-    hostPromises,
+    HostPromise,
     httpTransport: {
       dispatch() { throw new Error('This fixture has no network transport'); },
       async close() {},
@@ -62,7 +64,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     determineRequestReferrer: () => null,
     setRequestReferrerPolicyOnRedirect() {},
     potentiallyOverrideResponse: () => null,
-    handleFetch: () => hostPromises.try(() => null),
+    handleFetch: () => HostPromise.try(() => null, internalType<null>('Result')),
     determineFetchPriority: () => ({ update() {} }),
     supportsMIMEType: () => false,
     defaultUserAgentValue: 'Browlet',
@@ -83,8 +85,8 @@ export function createFetchUserAgent(): FetchUserAgent {
       find: () => null,
       invalidate() {},
       applyProxyAuthentication() {},
-      prompt: () => hostPromises.resolve(null),
-      promptProxy: () => hostPromises.resolve(false),
+      prompt: () => HostPromise.fromValue(null, Promise, internalType<null>('Result')),
+      promptProxy: () => HostPromise.resolve(false, idlType.boolean),
       store() {},
     },
     httpCache: new HTTPCacheStore(),

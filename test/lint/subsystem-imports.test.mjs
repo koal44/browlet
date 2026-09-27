@@ -20,7 +20,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
-    { filename, options, code: "import { Promises } from '../infra/promises';" },
+    { filename, options, code: "import { InternalPromise } from '../infra/promises';" },
     { filename, options, code: "import type { InternalPromise } from '../infra/promises';" },
     { filename, options, code: "export { TypeError } from '../infra/exceptions';" },
     { filename, options, code: "import { fetch } from 'another-package/fetch/private';" },

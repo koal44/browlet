@@ -1,5 +1,5 @@
 import { isomorphicDecode } from '../js-engine/index';
-import type { InternalPromise } from '../infra/promises';
+import { internalType, type InternalPromise } from '../infra/promises';
 import { RangeError } from '../infra/exceptions';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
@@ -107,7 +107,7 @@ export function readResourceHeader(
         offset += chunk.length;
       }
       return header;
-    });
+    }, undefined, internalType<Uint8Array>('ResourceHeader'));
   }
 }
 

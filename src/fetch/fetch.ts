@@ -6,7 +6,7 @@ import {
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
-import type { InternalPromise, InternalPromiseCapability } from '../infra/promises';
+import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
 import { coarsenTime } from '../infra/time';
 import { getBufferSourceCopy, getBufferTypeName, type JSEnvironment } from '../js-engine/index';
 import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
@@ -15,7 +15,7 @@ import {
   areSameOrigin, copyURL, obtainURLOrigin, percentDecodeString, serializeURL, setURLPassword, setURLUsername,
   urlsEqual, type URLRecord,
 } from '../url/index';
-import { isDOMException } from '../web-idl/index';
+import { idlType, isDOMException } from '../web-idl/index';
 import { FetchBody } from './body';
 import type { HTTPCacheEntry, HTTPCachePartition } from './cache-http';
 import { deserializeAbortReason, type FetchController } from './controller';
@@ -72,7 +72,7 @@ export function fetch(
     if (request.origin === undefined || !areSameOrigin(request.origin, client.origin)) {
       throw new InternalError('Preload consumption requires the client origin');
     }
-    const pending = userAgent.hostPromises.withResolvers<FetchResponse>();
+    const pending = userAgent.HostPromise.withResolvers(responseType);
     const found = client.consumePreloadedResource(
       request.url, request.destination, request.mode, request.credentialsMode, request.integrityMetadata,
       (response: FetchResponse) => {
@@ -156,9 +156,9 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
   // TODO: consume HTTPS RR results in the transport; an upgrade must never retry HTTP.
 
   const getResponse = () => response ?? dispatchFetch(params);
-  if (recursive) return userAgent.hostPromises.try(getResponse);
+  if (recursive) return userAgent.HostPromise.try(getResponse, responseType);
   userAgent.runInParallel(() => {
-    userAgent.hostPromises.try(getResponse).observe(
+    userAgent.HostPromise.try(getResponse, responseType).observe(
       // Body/Streams operations must enter their owner's task and checkpoint.
       (result) => params.env.queueNetworkingTask(() => processFetchResponse(params, result), params.env.exec.global),
       (error) => params.env.queueNetworkingTask(() => { throw error; }, params.env.exec.global),
@@ -171,7 +171,7 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
 // The internal Promise carries the response produced by downstream dispatch.
 function overrideFetch(params: FetchParams, type: 'scheme-fetch' | 'http-fetch', makeCORSPreflight = false): InternalPromise<FetchResponse> {
   const { request, env } = params;
-  return request.userAgent.hostPromises.try(() => {
+  return request.userAgent.HostPromise.try(() => {
     const response = request.userAgent.potentiallyOverrideResponse(request, env);
     if (response !== null) return response;
 
@@ -179,13 +179,13 @@ function overrideFetch(params: FetchParams, type: 'scheme-fetch' | 'http-fetch',
       case 'scheme-fetch': return schemeFetch(params);
       case 'http-fetch': return httpFetch(params, makeCORSPreflight);
     }
-  });
+  }, responseType);
 }
 
 /** Obtain a response from the request's current URL scheme. */
 // https://fetch.spec.whatwg.org/#concept-scheme-fetch
 function schemeFetch(params: FetchParams): InternalPromise<FetchResponse> {
-  return params.request.userAgent.hostPromises.try(() => {
+  return params.request.userAgent.HostPromise.try(() => {
     if (params.canceled) return FetchResponse.appropriateNetworkError(params);
     const url = params.request.currentURL;
     switch (url.scheme) {
@@ -212,7 +212,7 @@ function schemeFetch(params: FetchParams): InternalPromise<FetchResponse> {
       case 'http': case 'https': return httpFetch(params);
     }
     return FetchResponse.networkError();
-  });
+  }, responseType);
 }
 
 /** Obtain an HTTP response, performing a CORS preflight when requested. */
@@ -220,10 +220,10 @@ function schemeFetch(params: FetchParams): InternalPromise<FetchResponse> {
 function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalPromise<FetchResponse> {
   const { request } = params;
   const { userAgent } = request;
-  return userAgent.hostPromises.try(() => request.allowServiceWorkerInterception
-    ? fetchFromServiceWorker(params) : null).then((response) => {
+  return userAgent.HostPromise.try(() => request.allowServiceWorkerInterception
+    ? fetchFromServiceWorker(params) : null, optionalResponseType).then((response) => {
     return response ?? fetchFromNetwork(params, makeCORSPreflight);
-  }).then((response) => {
+  }, undefined, responseType).then((response) => {
     if (response.type === 'error') return response;
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
     if (request.responseTainting === 'opaque' || response.type === 'opaque') {
@@ -264,7 +264,7 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
         return httpRedirectFetch(params, response).then((result) => {
           if (result === undefined) throw new InternalError('An automatic redirect must return a response');
           return result;
-        });
+        }, undefined, responseType);
     }
   });
 }
@@ -275,7 +275,7 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
 function httpRedirectFetch(params: FetchParams, response: FetchResponse): InternalPromise<FetchResponse | undefined> {
   const { request, timingInfo, env } = params;
   const { userAgent } = request;
-  return userAgent.hostPromises.try(() => {
+  return userAgent.HostPromise.try(() => {
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
     const location = internalResponse.getLocationURL(request.currentURL.fragment, userAgent);
     if (location === undefined) return response;
@@ -323,8 +323,8 @@ function httpRedirectFetch(params: FetchParams, response: FetchResponse): Intern
     if (source === null) throw new InternalError('Redirect body replay requires a retained source');
     return runBodySteps(params, () => {
       request.body = FetchBody.fromSource(source, env);
-    }).then(follow);
-  });
+    }, idlType.undefined).then(follow, undefined, redirectResponseType);
+  }, redirectResponseType);
 }
 
 /** Prepare an HTTP attempt, consult the cache, and handle authentication or connection retries. */
@@ -411,7 +411,7 @@ function httpNetworkOrCacheFetch(
       authentication.applyProxyAuthentication(httpRequest);
       userAgent.webDriverBiDiBeforeRequestSent(request);
       return { httpParams, httpRequest, includeCredentials, sentEntry };
-    }).then((prepared) => {
+    }, attemptType).then((prepared) => {
       if (prepared instanceof FetchResponse) return prepared;
       if (params.canceled) return FetchResponse.appropriateNetworkError(params);
       const { httpParams, httpRequest, includeCredentials, sentEntry } = prepared;
@@ -446,10 +446,10 @@ function httpNetworkOrCacheFetch(
               if (request.body instanceof FetchBody && request.body.source !== null) {
                 request.body = FetchBody.fromSource(request.body.source, env);
               }
-            }).then(() => attempt(needsOriginAuthentication, isNewConnectionFetch));
+            }, idlType.undefined).then(() => attempt(needsOriginAuthentication, isNewConnectionFetch), undefined, responseType);
           };
           if (response.status === 407) {
-            return authentication.promptProxy(request, response).then((accepted) => accepted ? retry() : response);
+            return authentication.promptProxy(request, response).then((accepted) => accepted ? retry() : response, undefined, responseType);
           }
           if (challenge === null) return response;
           const url = request.currentURL;
@@ -468,7 +468,7 @@ function httpNetworkOrCacheFetch(
           const cachedValue = candidate === null ? null : encodeBasicCredentials(candidate.username, candidate.password);
           // Rejected credentials cannot retry automatically; a fresh prompt may still supply them.
           const answer = candidate !== null && cachedValue !== null && !rejected?.has(cachedValue)
-          ? userAgent.hostPromises.resolve(candidate)
+          ? userAgent.HostPromise.resolve(candidate, internalType<AuthenticationEntry>('AuthenticationEntry'))
           : authentication.prompt(request, challenge.realm, sentEntry, params.controller).then((entry) => {
             if (entry !== null && !params.canceled && generation === authentication.generation) {
               setURLUsername(url, entry.username);
@@ -486,7 +486,7 @@ function httpNetworkOrCacheFetch(
           }, () => {
             response.discardBody?.();
             return params.canceled ? FetchResponse.appropriateNetworkError(params) : FetchResponse.networkError();
-          });
+          }, responseType);
         }
         if (response.status === 421 && !isNewConnectionFetch &&
           (request.body === null || (request.body instanceof FetchBody && request.body.source !== null))) {
@@ -495,14 +495,14 @@ function httpNetworkOrCacheFetch(
             if (request.body instanceof FetchBody && request.body.source !== null) {
               request.body = FetchBody.fromSource(request.body.source, env);
             }
-          }).then(() => attempt(isAuthenticationFetch, true));
+          }, idlType.undefined).then(() => attempt(isAuthenticationFetch, true), undefined, responseType);
         }
         if (isAuthenticationFetch && sentEntry !== null && response.status !== 401 && response.status !== 407 && response.status !== 421) {
           authentication.store(request.currentURL, sentEntry, generation);
         }
         return response;
       });
-    });
+    }, undefined, responseType);
   }
 }
 
@@ -513,7 +513,7 @@ function httpNetworkFetch(
 ): InternalPromise<FetchResponse> {
   const { request, env, controller, timingInfo } = params;
   const generation = cache?.generation;
-  const result = request.userAgent.hostPromises.withResolvers<FetchResponse>();
+  const result = request.userAgent.HostPromise.withResolvers(responseType);
   if (params.canceled) {
     result.resolve(FetchResponse.appropriateNetworkError(params));
     return result.promise;
@@ -574,7 +574,7 @@ function httpNetworkFetch(
       body.fail(() => params.aborted
         ? deserializeAbortReason(controller.serializedAbortReason, env)
         : new TypeError('Network request was terminated'));
-      if (result.pending) result.resolve(FetchResponse.appropriateNetworkError(params));
+      if (!result.isResolved) result.resolve(FetchResponse.appropriateNetworkError(params));
     };
     removeCancellation = controller.addCancellationSteps(cancel);
     const requestTime = Date.now();
@@ -896,7 +896,7 @@ function fetchFromServiceWorker(params: FetchParams): InternalPromise<FetchRespo
     return copy;
   };
   // Call once, after selecting interception and before consuming or changing the request.
-  const prepareRequest = () => request.body === null ? userAgent.hostPromises.try(prepare) : runBodySteps(params, prepare);
+  const prepareRequest = () => request.body === null ? userAgent.HostPromise.try(prepare, requestType) : runBodySteps(params, prepare, requestType);
   const startTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
   return userAgent.handleFetch(request, controller, params.crossOriginIsolatedCapability, prepareRequest).then(
     (result: FetchResponse | ServiceWorkerTimingInfo | null) => {
@@ -923,8 +923,8 @@ function fetchFromServiceWorker(params: FetchParams): InternalPromise<FetchRespo
         // Cancellation does not wait for the source's cancellation promise.
         request.body.stream.cancelInternal(undefined).observe(() => {}, () => {});
         return validate();
-      });
-    },
+      }, responseType);
+    }, undefined, optionalResponseType,
   );
 }
 
@@ -932,12 +932,13 @@ function fetchFromServiceWorker(params: FetchParams): InternalPromise<FetchRespo
 // https://fetch.spec.whatwg.org/#concept-http-fetch
 function fetchFromNetwork(params: FetchParams, makeCORSPreflight: boolean): InternalPromise<FetchResponse> {
   const { request } = params;
-  const { hostPromises, corsPreflightCache } = request.userAgent;
+  const { HostPromise, corsPreflightCache } = request.userAgent;
   const needsPreflight = makeCORSPreflight &&
     ((!corsPreflightCache.matchesMethod(request.method, request) &&
       (!isCORSSafelistedMethod(request.method) || request.useCORSPreflight)) ||
       request.headerList.getCORSUnsafeRequestHeaderNames().some((name) => !corsPreflightCache.matchesHeaderName(name, request)));
-  const preflight = needsPreflight ? corsPreflightFetch(params) : hostPromises.try(() => null);
+  const preflight: InternalPromise<FetchResponse | null> = needsPreflight
+    ? corsPreflightFetch(params) : HostPromise.resolve(null, optionalResponseType);
   return preflight.then((preflightResponse: FetchResponse | null) => {
     if (preflightResponse?.type === 'error') return preflightResponse;
     preflightResponse?.discardBody?.();
@@ -950,7 +951,7 @@ function fetchFromNetwork(params: FetchParams, makeCORSPreflight: boolean): Inte
       if (response.isTimingBlocked(request)) request.timingAllowFailed = true;
       return response;
     });
-  });
+  }, undefined, responseType);
 }
 
 // Main fetch's response selection, beginning with the preloaded-response check.
@@ -1073,8 +1074,8 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
 }
 
 // Stream operations enter the body's task/checkpoint owner.
-function runBodySteps<T>(params: FetchParams, steps: () => T): InternalPromise<T> {
-  const result = params.request.userAgent.hostPromises.withResolvers<T>();
+function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: PromiseResultType<T>): InternalPromise<T> {
+  const result = params.request.userAgent.HostPromise.withResolvers(type);
   params.env.queueNetworkingTask(() => {
     try { result.resolve(steps()); }
     catch (error) { result.reject(error); }
@@ -1096,7 +1097,7 @@ function fetchWithCache(
 ): InternalPromise<FetchResponse> {
   const { request, env } = params;
   const { userAgent } = request;
-  const result = userAgent.hostPromises.withResolvers<FetchResponse>();
+  const result = userAgent.HostPromise.withResolvers(responseType);
   const cache = userAgent.httpCache.determine(request);
   const generation = cache?.generation;
   if (cache === null) request.cacheMode = 'no-store';
@@ -1159,7 +1160,7 @@ function fetchWithCache(
         } else {
           result.resolve(response);
         }
-      }).observe(() => {}, (error: unknown) => result.reject(error));
+      }, undefined, idlType.undefined).observe(() => {}, (error: unknown) => result.reject(error));
   });
   return result.promise;
 
@@ -1214,7 +1215,7 @@ class NetworkUpload implements HTTPUploadSource {
   #params: FetchParams;
   #reader: ReadableStreamDefaultReaderImpl | undefined;
   #finished = false;
-  #pending: InternalPromiseCapability<Uint8Array | null> | undefined;
+  #pending: InternalPromiseWithResolvers<Uint8Array | null> | undefined;
 
   constructor(body: FetchBody, params: FetchParams) {
     this.#body = body;
@@ -1224,7 +1225,7 @@ class NetworkUpload implements HTTPUploadSource {
   read(): InternalPromise<Uint8Array | null> {
     if (this.#pending) throw new InternalError('HTTP transport requested concurrent upload reads');
     const { env, request } = this.#params;
-    const result = request.userAgent.hostPromises.withResolvers<Uint8Array | null>();
+    const result = request.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>('UploadChunk'));
     this.#pending = result;
     env.queueNetworkingTask(() => {
       if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
@@ -1298,7 +1299,7 @@ class NetworkBody {
   #ended = false;
   #finished = false;
   #failure: (() => unknown) | undefined;
-  #pull: InternalPromiseCapability<void> | undefined;
+  #pull: InternalPromiseWithResolvers<void> | undefined;
   #taskQueued = false;
 
   constructor(params: FetchParams, finish: () => void) {
@@ -1306,7 +1307,7 @@ class NetworkBody {
     this.#finish = finish;
     this.stream = ReadableStreamImpl.createWithByteReadingSupport(
       () => {
-        this.#pull = params.env.exec.promises.withResolvers<void>();
+        this.#pull = params.env.exec.Promise.withResolvers(idlType.undefined);
         this.#scheduleDelivery();
         return this.#pull.promise;
       },
@@ -1405,3 +1406,16 @@ class NetworkBody {
 // A received transport chunk can overshoot the upper limit; paused delivery cannot accumulate tasks.
 const upperBufferLimit = 64 * 1024;
 const lowerBufferLimit = 32 * 1024;
+
+const responseType = internalType<FetchResponse>('FetchResponse');
+const optionalResponseType = internalType<FetchResponse | null>('FetchResponse?');
+const redirectResponseType = internalType<FetchResponse | undefined>('RedirectResponse');
+const requestType = internalType<FetchRequest>('FetchRequest');
+
+type HTTPAttempt = {
+  httpParams: FetchParams;
+  httpRequest: FetchRequest;
+  includeCredentials: boolean;
+  sentEntry: AuthenticationEntry | null;
+};
+const attemptType = internalType<HTTPAttempt | FetchResponse>('HTTPAttempt');

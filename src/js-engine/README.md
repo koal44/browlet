@@ -90,18 +90,25 @@ can differ from a handlerless reaction's null specification realm. Returning
 false preserves the original V8 queue. Generic/timeout enqueue hooks transfer
 all scheduling and have no per-job fallback. HTML chooses settings and task policy.
 
-Each realm's `Promises` facility supplies allocation, adoption, and observation.
-Infra's [`InternalPromise`](../infra/promises.ts) retains that facility through
-`then`, `catch`, and terminal `observe`. `Promises.import()` brings another
-owner's result into the consumer's destination. Internal payloads are boxed to
-avoid thenable adoption. Resolver-maintained `pending` describes boxed internal
-settlement, not the resolution state of an adopted author Promise.
+Each realm supplies a `Promise` constructor extending
+Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation
+methods and instance chaining retain that constructor. `Promise.fromInternal()`
+selects the consumer's reaction destination while sharing the existing native
+backing and source conversion. Private payloads
+are boxed to avoid thenable adoption. The `withResolvers()` result's `isResolved`
+becomes true when the first `resolve()` or `reject()` call is accepted, even while
+waiting for another Promise's outcome; it does not inspect native settlement.
+
+Binding extends the realm's constructor with declared-result conversion.
+[Declared results](../web-idl/README.md#promises-iteration-and-exceptions) share
+one native Promise between implementation and author code. JS Engine's own
+constructor has no binding conversion and continues to serve private work.
 
 Native observation installs reactions in the observer's realm; plain Node uses
 the captured `then` intrinsic. Their constructor/species differences and the
 discarded derived Promise are documented under
 [Promise observation](../LIMITATIONS.md#promise-observation). Web IDL retains
-typed fulfillment conversion and promise projection.
+typed fulfillment conversion.
 
 `bindAsyncContext(steps)` preserves Node scheduling-time AsyncLocalStorage state
 across explicit task handoff. It does not choose a Promise queue or establish

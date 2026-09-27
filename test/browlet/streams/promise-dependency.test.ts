@@ -1,3 +1,4 @@
+import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
@@ -8,10 +9,10 @@ describe('Streams Promise dependencies', () => {
   itPassesWith('explicitQueues')('reads an iterator result in the consuming stream destination', () => {
     const a = createOwner();
     const b = createOwner();
-    const next = b.promises.withResolvers<string>();
+    const next = b.Promise.withResolvers(idlType.DOMString);
     const stream = ReadableStreamImpl.from({
       next: () => next.promise,
-      return: () => b.promises.resolve(),
+      return: () => b.Promise.resolve(undefined, idlType.undefined),
     }, a.env);
     const chunks: unknown[] = [];
     stream.getReader({}).read().observe((value) => { chunks.push(value); }, (error) => { throw error; });
@@ -54,5 +55,5 @@ function createOwner() {
   const { window } = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(window);
   const env = getBindingContext(realm).getEnvironment();
-  return { queue: realm.agent.eventLoop, promises: env.exec.promises, env };
+  return { queue: realm.agent.eventLoop, Promise: env.exec.Promise, env };
 }

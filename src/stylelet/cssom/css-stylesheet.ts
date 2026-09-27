@@ -1,3 +1,4 @@
+import { internalType } from '../../infra/promises';
 import {
   interpretStylesheet, parseStylesheet,
   type InterpretedRule, type InterpretedStyleSheet,
@@ -165,15 +166,15 @@ export class CSSStyleSheetImpl
 
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return this.exec.promises.reject(this.exec.createDOMException(
+      return this.exec.Promise.reject(this.exec.createDOMException(
         'NotAllowedError',
         'This stylesheet cannot be replaced.',
-      ));
+      ), internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
     }
 
     this.#disallowModification = true;
 
-    const result = this.exec.promises.withResolvers<CSSStyleSheetImpl>();
+    const result = this.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);

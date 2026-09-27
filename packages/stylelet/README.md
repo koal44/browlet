@@ -42,8 +42,9 @@ Declaration and media-list constructors take execution capabilities last.
 `InternalPromise<CSSStyleSheetImpl>`; use `.observe(fulfilled, rejected)` when consuming
 it directly. Platform promise and exception projection belong to the host binding.
 
-The exported `Promises` facility accepts a Promise constructor and a native
-settlement observer. Custom hosts can select their continuation queue without
+The exported `InternalPromise` class supplies static creation and instance
+observation. Custom hosts can subclass it, override `observeNative()`, and supply
+the constructor as `exec.Promise` to select their continuation queue without
 loading JSRealm, JSRuntime, Node VM integration, or the compatibility add-on.
 
 Stylelet is under active development. Its public surface and implemented specification coverage are not yet complete.

@@ -21,7 +21,7 @@ export type {
 export {
   ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
   iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
-  reference, nullable, union, sequence, asyncSequence, record, promise,
+  reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated,
   integer, decimal, xattr,
   impl, atArg, invokeWith, allocateIn, unwrapArg, cbDict, onError,
@@ -37,7 +37,7 @@ export type {
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposure, ExtendedAttribute, NamedArgumentsExtendedAttribute,
-  ImplementationClass, InjectedArgument, CallbackExceptionBehavior,
+  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
   IndexedGetterDeclaration, SupportedPropertyNamesSteps,
 } from './types';
 

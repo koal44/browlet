@@ -1,3 +1,4 @@
+import { idlType } from '../../../web-idl/index';
 import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
@@ -135,7 +136,7 @@ export class BrowletParser {
   // -- Private ----------------------------------------------------------
 
   private startParsing(start: () => void): InternalPromise<void> {
-    const complete = this.#env.exec.promises.withResolvers<void>();
+    const complete = this.#env.exec.Promise.withResolvers(idlType.undefined);
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#stream, (error) => {
       cleanup();

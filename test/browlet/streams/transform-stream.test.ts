@@ -1,4 +1,5 @@
-import { createPromises, createTransformStream, observe } from './implementation-fixture';
+import { idlType } from '../../../src/web-idl/core/index';
+import { createPromiseConstructor, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
@@ -86,17 +87,17 @@ describe('transform-stream implementation', () => {
   });
 
   it('runs custom transform and flush algorithms', async () => {
-    const promises = createPromises();
+    const P = createPromiseConstructor();
     const transform = vi.fn((
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
       controller.enqueue(String(chunk).toUpperCase());
-      return promises.resolve(undefined);
+      return P.resolve(undefined, idlType.undefined);
     });
     const flush = vi.fn((controller: TransformStreamDefaultControllerImpl) => {
       controller.enqueue('DONE');
-      return promises.resolve(undefined);
+      return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ flush, transform });
     const writer = stream.writable.getWriter();
@@ -116,13 +117,13 @@ describe('transform-stream implementation', () => {
   });
 
   it('holds writes until the readable side pulls', async () => {
-    const promises = createPromises();
+    const P = createPromiseConstructor();
     const transform = vi.fn((
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
       controller.enqueue(chunk);
-      return promises.resolve(undefined);
+      return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ transform });
     const writer = stream.writable.getWriter();
@@ -144,11 +145,11 @@ describe('transform-stream implementation', () => {
   });
 
   it('waits for start before invoking a transform', async () => {
-    const promises = createPromises();
-    const start = promises.withResolvers<void>();
+    const P = createPromiseConstructor();
+    const start = P.withResolvers(idlType.undefined);
     const transform = vi.fn((chunk: unknown, controller: TransformStreamDefaultControllerImpl) => {
       controller.enqueue(chunk);
-      return promises.resolve();
+      return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ start: () => start.promise, transform });
     const reader = stream.readable.getReader();
@@ -165,10 +166,10 @@ describe('transform-stream implementation', () => {
   });
 
   it('errors both sides when transform rejects', async () => {
-    const promises = createPromises();
+    const P = createPromiseConstructor();
     const failure = new Error('transform failed');
     const stream = createTransformStream({
-      transform: () => promises.reject(failure),
+      transform: () => P.reject(failure, idlType.undefined),
     });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
@@ -182,9 +183,9 @@ describe('transform-stream implementation', () => {
   });
 
   it('runs the transformer cancel algorithm from either side', async () => {
-    const promises = createPromises();
+    const P = createPromiseConstructor();
     const readableReason = new Error('readable cancelled');
-    const readableCancel = vi.fn(() => promises.resolve(undefined));
+    const readableCancel = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const readable = createTransformStream({ cancel: readableCancel });
 
     await expect(observe(readable.readable.cancel(readableReason)))
@@ -192,7 +193,7 @@ describe('transform-stream implementation', () => {
     expect(readableCancel).toHaveBeenCalledWith(readableReason);
 
     const writableReason = new Error('writable aborted');
-    const writableCancel = vi.fn(() => promises.resolve(undefined));
+    const writableCancel = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const writable = createTransformStream({ cancel: writableCancel });
 
     await expect(observe(writable.writable.abort(writableReason)))
@@ -215,7 +216,7 @@ describe('transform-stream implementation', () => {
     await expect(observe(reader.read())).resolves
       .toEqual(readResult(undefined, true));
     await expect(observe(writer.closed)).rejects
-      .toBeInstanceOf(TypeError);
+      .toBeInstanceOf(Reflect.get(stream.readable.env.exec.global, 'TypeError'));
   });
 });
 

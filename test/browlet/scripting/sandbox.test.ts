@@ -1,3 +1,4 @@
+import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect, it, vi } from 'vitest';
 import { getBindingContext } from '../../../src/browlet/bindings';
 import { SandboxAgent } from '../../../src/browlet/scripting/agents';
@@ -29,7 +30,7 @@ describe('Browser-owned sandbox execution', () => {
   it('runs owner tasks and their Promise continuations without manual checkpoints', async () => {
     const env = new UserAgent().sandbox;
     const realm = Realm.getAssociatedRealm(env.exec.global)!;
-    const pending = env.exec.promises.withResolvers<number>();
+    const pending = env.exec.Promise.withResolvers(idlType.double);
     const done = Promise.withResolvers<number>();
     const trace: string[] = [];
     pending.promise.observe((value) => {

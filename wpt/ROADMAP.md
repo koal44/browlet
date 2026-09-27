@@ -8,18 +8,16 @@ its failures; broader coverage should accompany implementation milestones in
 
 ## A. Investigate the selected tests
 
-The FileReader/event-loop fix is retained. Promise redesigns are parked on
-`explore/promise-binding`; main keeps the earlier Promise and binding machinery.
-The restored custom/compat baseline passes 77 of 82 selected documents. Outstanding
-failures are readable-stream bad-source, readable-byte-stream
-general/patched-global/read-min, and writable-stream count-queuing-strategy.
-Unhandled rejections remain part of the investigation.
+The FileReader/event-loop repair and typed native Promise views clear the selected
+WPT failures without changing expectations. All 82 selected documents now pass.
 
-Public regressions in `test/browlet/streams/read-result.test.ts` and
-`promise-errors.test.ts` also capture borrowed released-read allocation and shared
-write/close failures. Three assertions fail consistently across all six Node
-configurations; the shared byte-controller close case passes. Continue the
-reduced Promise/binding experiment before choosing a production repair.
+The Promise migration's second stage remains: invocation-selected environments
+for borrowed stream methods. Five ordinary regressions in
+`test/browlet/streams/read-result.test.ts`, `promise-errors.test.ts`, and
+`readable-stream.test.ts` fail across all six Node configurations. They cover
+released default/BYOB read allocation and shared write/close/enqueue failures.
+The first stage settles declared results earlier; it does not yet select the
+invoking method's environment for these allocations.
 Distinguish implementation defects from runner limitations and disputed tests.
 Keep focused regressions for fixes; changing an expectation requires review.
 The empty multipart FormData result is already recorded as contested in the

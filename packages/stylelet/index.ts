@@ -1,8 +1,7 @@
 export {
   CSSStyleDeclarationImpl, CSSStyleSheetImpl, defaultExecutionCaps, MediaListImpl,
-  Promises, Stylelet, StyleletContext, styleletIDLDefinitions, TreeScope,
+  InternalPromise, Stylelet, StyleletContext, styleletIDLDefinitions, TreeScope,
 } from '../../src/stylelet/index';
 export type {
-  DocumentCaps, DOMExceptionName, ElementCaps, NativePromiseObserver,
-  InternalPromise, ExecutionCaps, StyleletOptions, TreeCaps,
+  DocumentCaps, DOMExceptionName, ElementCaps, ExecutionCaps, StyleletOptions, TreeCaps,
 } from '../../src/stylelet/index';

@@ -1,11 +1,11 @@
-import type { Promises } from '../infra/promises';
+import type { InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
 import type { Capability } from './capability';
 import type { ImplementationClass, WebIDLType } from './core/types';
 import type { InterfaceDefinition } from './core/declarations';
-import { convertToIDL } from './conversion';
+import { convertToIDL, convertToJavaScript } from './conversion';
 import type { WebIDLRealmHost } from './realm-host';
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
@@ -15,11 +15,12 @@ import {
   adaptIDLToImpl, constructImplementationObject, resolveImplementationArguments,
 } from './implementation-binding';
 import { InternalError } from '../infra/internal-error';
+import { createWebIDLPromiseConstructor } from './promise';
 
 /** A realm's Web IDL operations and environment within one binding world. */
 export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   realm: Realm;
-  promises: Promises;
+  Promise: typeof InternalPromise;
   #binding: RealmBinding<Realm>;
   #env: JSEnvironment | undefined;
 
@@ -29,8 +30,8 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     createEnvironment?: (ctx: BindingContext<Realm>) => JSEnvironment,
   ) {
     this.realm = binding.realm;
-    this.promises = binding.realm.promises;
     this.#binding = binding;
+    this.Promise = createWebIDLPromiseConstructor(this);
     this.#env = createEnvironment?.(this);
   }
 
@@ -64,6 +65,11 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
       this,
       this.#binding,
     );
+  }
+
+  /** Convert a declared implementation result to its platform representation. */
+  convertToJavaScript(value: unknown, type: WebIDLType): unknown {
+    return convertToJavaScript(value, type, this.#binding.defaultConversionContext);
   }
 
   // Project helper: delegate exception realization to this realm binding.

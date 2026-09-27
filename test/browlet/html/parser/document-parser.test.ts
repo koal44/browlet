@@ -1,3 +1,4 @@
+import { idlType } from '../../../../src/web-idl/core/index';
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../../src/browlet/bindings';
 import { createNewTopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
@@ -155,7 +156,7 @@ describe('BrowletParser', () => {
 
   it.each([false, true])('waits for an internal script result (rejection: %s)', async (reject) => {
     const { document, realm, env, drain } = createParserDocument();
-    const ready = env.exec.promises.withResolvers<void>();
+    const ready = env.exec.Promise.withResolvers(idlType.undefined);
     const failure = new Error('script preparation failed');
     let complete = false;
     const errors: unknown[] = [];
@@ -230,7 +231,7 @@ describe('BrowletParser response bytes', () => {
 
   it.each(['input', 'script'])('cancels its response reader and stops parsing while waiting for %s', async (waiting) => {
     const { document, realm, env, drain } = createParserDocument();
-    const ready = env.exec.promises.withResolvers<void>();
+    const ready = env.exec.Promise.withResolvers(idlType.undefined);
     let canceled = 0;
     const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
     stream.enqueueChunk(utf8Encode(waiting === 'script'

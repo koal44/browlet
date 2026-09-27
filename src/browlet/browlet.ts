@@ -4,7 +4,7 @@ import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
-import type { InternalPromise } from '../infra/promises';
+import { internalType, type InternalPromise } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getRelevantRealm } from './bindings';
 import type { Environment } from './scripting/environment';
@@ -178,7 +178,7 @@ export class Browlet {
     return parser.parse(source).then(() => {
       document.finishLoading();
       return this.window;
-    });
+    }, undefined, internalType<Window>('Window'));
   }
 
   private executeScript(
