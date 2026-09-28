@@ -55,6 +55,9 @@ author arguments fill the remaining positions. Both public construction and
 `ctx.construct()` use the declaration. Operation-specific dependencies use
 `invokeWith()`. Keep implementation-only arguments last when translating a spec
 signature. Ordinary implementations receive `env`, never the Binding Context.
+An `atArg()` resolver receives `(receiver, method)` contexts. Select
+`receiver.getEnvironment()` for owner dependencies or `method.getEnvironment()`
+for allocations belonging to the invoked member's realm.
 
 For automatically bound legacy getters, `indexedGetter()` and `namedGetter()`
 declare their live supported-property algorithms. Do not infer dense indices
@@ -135,7 +138,7 @@ Add worlds for actual isolation/runtime lifetimes, not merely for new Agent type
 | Boundary | Owner |
 | --- | --- |
 | Arguments, overloads, synchronous invocation errors | Executing member's realm |
-| Implementation receiver and its injected dependencies | Recognized receiver's realm binding |
+| Implementation receiver | Recognized receiver's realm binding; argument injection can also select the method's environment |
 | Fresh implementation returned as a declared interface | Receiver owner; an already stamped implementation keeps its owner |
 | Ordinary result containers | Receiver by default; `allocateIn('method' \| 'receiver')` can select allocation |
 | Declared implementation Promise | Its creation environment selects allocation and conversion; returning it preserves the native Promise |
@@ -202,7 +205,10 @@ rather than projecting an intermediate `Promise<any>` that could adopt values.
 Infra exception requests and Core DOMException requests are realm-neutral.
 Realize a failure once, at its first realm-owned observable boundary; the private
 realization record preserves identity on later delivery. Author-thrown values
-retain their identity. `InternalError` diagnoses an implementation contract failure.
+retain their identity. When an algorithm stores or shares a newly created error
+before returning, allocate it through the selected `env.exec.TypeError` or
+`RangeError` constructor. Later Promise delivery must not decide that error's realm.
+`InternalError` diagnoses an implementation contract failure.
 DOMException's engine Error allocation and legacy/global exotic behavior are
 explicit special cases, not reasons to merge ordinary platform and implementation
 identities. WindowProxy remains HTML-owned and distinct from WindowImpl.

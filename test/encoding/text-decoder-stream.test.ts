@@ -21,12 +21,12 @@ describe('TextDecoderStream chunk conversion', () => {
       return view.subarray(1, 2);
     }],
   ])('decodes a %s', async (_label, createChunk) => {
-    const { reader, writer } = createDecoder();
-    const read = observe(reader.read());
-    await observe(writer.write(createChunk()));
+    const { reader, writer, env } = createDecoder();
+    const read = observe(reader.read(env));
+    await observe(writer.write(createChunk(), env));
     expect(await read).toEqual({ done: false, value: 'A' });
     await observe(writer.close());
-    expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
+    expect(await observe(reader.read(env))).toEqual({ done: true, value: undefined });
   });
 
   it.each([
@@ -39,9 +39,9 @@ describe('TextDecoderStream chunk conversion', () => {
     ['growable shared buffer', () => new SharedArrayBuffer(1, { maxByteLength: 2 })],
     ['growable shared view', () => new Uint8Array(new SharedArrayBuffer(1, { maxByteLength: 2 }))],
   ])('rejects a %s', async (_label, createChunk) => {
-    const { reader, writer, realm } = createDecoder();
-    const reading = observe(reader.read()).catch((error: unknown) => error);
-    const writing = observe(writer.write(createChunk())).catch((error: unknown) => error);
+    const { reader, writer, realm, env } = createDecoder();
+    const reading = observe(reader.read(env)).catch((error: unknown) => error);
+    const writing = observe(writer.write(createChunk(), env)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
     expect(error).toBeInstanceOf(realm.intrinsics.typeError);
@@ -49,12 +49,12 @@ describe('TextDecoderStream chunk conversion', () => {
   });
 
   it('retains a split UTF-8 sequence while copying the consumed input', async () => {
-    const { reader, writer } = createDecoder();
-    const read = observe(reader.read());
+    const { reader, writer, env } = createDecoder();
+    const read = observe(reader.read(env));
     const first = Uint8Array.of(0xF0, 0x9F);
-    await observe(writer.write(first));
+    await observe(writer.write(first, env));
     first.fill(0);
-    await observe(writer.write(Uint8Array.of(0x98, 0x80)));
+    await observe(writer.write(Uint8Array.of(0x98, 0x80), env));
     expect(await read).toEqual({ done: false, value: '😀' });
     await observe(writer.close());
   });
@@ -62,8 +62,9 @@ describe('TextDecoderStream chunk conversion', () => {
 
 function createDecoder() {
   const realm = new TestRealm();
+  const env = createEnvironment(realm);
   const decoder = new TextDecoderStreamImpl(
-    'utf-8', { fatal: false, ignoreBOM: false }, createEnvironment(realm),
+    'utf-8', { fatal: false, ignoreBOM: false }, env,
   );
-  return { realm, reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
+  return { realm, env, reader: decoder.readable.getReader(), writer: decoder.writable.getWriter() };
 }

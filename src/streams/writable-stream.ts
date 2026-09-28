@@ -4,7 +4,7 @@ import type {
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
-  defineInterface, dictMember, emptyDictionary, idlType, impl, nullable, op, promise,
+  defineInterface, dictMember, emptyDictionary, idlType, impl, invokeWith, nullable, op, promise,
   roAttr, reference, xattr,
 } from '../web-idl/index';
 import { RangeError, TypeError } from '../infra/exceptions';
@@ -644,7 +644,7 @@ export class WritableStreamDefaultControllerImpl {
   /** WritableStreamDefaultControllerClose. */
   close(): void {
     const controllerState = this.state;
-    controllerState.queue.enqueue(closeSentinel, 0);
+    controllerState.queue.enqueue(closeSentinel, 0, controllerState.stream.env);
     this.advanceQueueIfNeeded();
   }
 
@@ -716,10 +716,10 @@ export class WritableStreamDefaultControllerImpl {
   }
 
   /** WritableStreamDefaultControllerWrite. */
-  write(chunk: unknown, chunkSize: number): void {
+  write(chunk: unknown, chunkSize: number, env: JSEnvironment): void {
     const controllerState = this.state;
     try {
-      controllerState.queue.enqueue(chunk, chunkSize);
+      controllerState.queue.enqueue(chunk, chunkSize, env);
     } catch (error) {
       this.error(error);
       return;
@@ -846,17 +846,17 @@ export class WritableStreamDefaultWriterImpl {
     return this.closeInternal();
   }
 
-  releaseLock(): void {
+  releaseLock(env: JSEnvironment): void {
     if (!this.state.stream) return;
-    this.release();
+    this.release(env);
   }
 
   /** Streams §5.3.3, write(chunk). */
-  write(chunk?: unknown): InternalPromise<void> {
+  write(chunk: unknown, env: JSEnvironment): InternalPromise<void> {
     if (!this.state.stream) {
       return this.state.Promise.reject(defaultWriterLockException('write to'), idlType.undefined);
     }
-    return this.writeInternal(chunk);
+    return this.writeInternal(chunk, env);
   }
 
   // -- Internal algorithms ------------------------------------------------
@@ -931,7 +931,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** WritableStreamDefaultWriterRelease. */
-  release(): void {
+  release(env: JSEnvironment): void {
     const writerState = this.state;
     const stream = this.stream;
     const streamState = stream.state;
@@ -939,7 +939,7 @@ export class WritableStreamDefaultWriterImpl {
       throw new InternalError('Writable stream is locked by another writer');
     }
 
-    const releasedError = new TypeError(
+    const releasedError = new env.exec.TypeError(
       'Writer was released and can no longer monitor the stream',
     );
     this.ensureReadyPromiseRejected(releasedError);
@@ -949,7 +949,7 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   /** Streams §5.5.3, WritableStreamDefaultWriterWrite. */
-  writeInternal(chunk: unknown): InternalPromise<void> {
+  writeInternal(chunk: unknown, env: JSEnvironment): InternalPromise<void> {
     const stream = this.stream;
     const { state: streamState } = stream;
     const controller = stream.controller;
@@ -975,7 +975,7 @@ export class WritableStreamDefaultWriterImpl {
 
     const promise = this.state.Promise.withResolvers(idlType.undefined);
     streamState.writeRequests.push(promise);
-    controller.write(chunk, chunkSize);
+    controller.write(chunk, chunkSize, env);
     return promise.promise;
   }
 
@@ -1018,10 +1018,13 @@ export const writableStreamDefaultWriterIDL = defineInterface({
       arg('reason', idlType.any, { optional: true }),
     ]),
     op('close', promise(idlType.undefined)),
-    op('releaseLock', idlType.undefined),
-    op('write', promise(idlType.undefined), [
-      arg('chunk', idlType.any, { optional: true }),
-    ]),
+    op('releaseLock', idlType.undefined,
+      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+    ),
+    op('write', promise(idlType.undefined),
+      [arg('chunk', idlType.any, { optional: true })],
+      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+    ),
   ],
 });
 

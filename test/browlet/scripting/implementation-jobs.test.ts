@@ -4,10 +4,10 @@ import { setImmediate } from 'node:timers/promises';
 import { promiseHooks } from 'node:v8';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
+import { createSiblingWindow } from '../../support/windows';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createDocument, getRelevantRealm, createWindowEnvironment } from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { runInParallel } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
@@ -187,23 +187,6 @@ function createFixture(sharedAgent = false) {
     return { expose, realm, object, implementation, callbackEnv };
   });
   return { a: entries[0]!, b: entries[1]!, trace, pending };
-}
-
-// Compose a second Window on the existing agent without requiring iframe navigation.
-function createSiblingWindow(first: Browlet): Window {
-  const firstRealm = getRelevantRealm(first.window);
-  const { agent, env } = firstRealm;
-  if (!(agent instanceof WindowAgent)) throw new Error('Expected a Window agent');
-  const siblingEnv = createWindowEnvironment({
-    agent, userAgent: env.userAgent, creationURL: env.creationURL,
-    origin: env.origin, parent: null,
-    topLevelCreationURL: env.creationURL, topLevelOrigin: env.origin,
-  });
-  const { window } = siblingEnv;
-  const { realm } = siblingEnv;
-  const document = createDocument(realm);
-  window.setAssociatedDocument(document);
-  return realm.globalThis as Window;
 }
 
 class OwnershipProbeImpl {

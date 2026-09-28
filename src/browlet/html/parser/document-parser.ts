@@ -107,7 +107,7 @@ export class BrowletParser {
           },
           closeSteps: () => {
             if (this.#stream.destroyed) return;
-            this.#bodyReader!.release();
+            this.#bodyReader!.release(this.#env);
             this.#bodyReader = undefined;
             this.#body = undefined;
             this.queueInput(() => consume());
@@ -159,7 +159,7 @@ export class BrowletParser {
     this.#bodyReader = undefined;
     this.queueBodyTask(() => {
       body.stream.cancelInternal(undefined).observe(() => {}, () => {});
-      reader?.release();
+      reader?.release(this.#env);
     });
     this.#body = undefined;
   }

@@ -42,6 +42,12 @@ sink, or transformer as the callback receiver. Binding also projects controllers
 adapts Promise results, and realizes exceptions. Strategy `size` functions use
 `attrFn()` and Binding's existing per-realm identity cache.
 
+Borrowed reads receive the method's environment for immediate validation failures.
+Enqueue, write, byte-controller close, reader/writer release, termination, and
+piping pass the invoking environment to errors shared across stream state,
+callbacks, and Promise rejections. Retained read/write, `ready`, and `closed`
+Promises keep their creation owner; error allocation does not move them.
+
 `ReadableStreamIterator` owns its reader and `preventCancel` state. Its Web IDL
 declaration names `createAsyncIterator` as the factory and exposes `return()`.
 Binding handles the author iterator's identity, overlapping calls, completion,
@@ -72,6 +78,25 @@ object does not by itself make the timing of its reactions unobservable.
 The local `copyDataBlockBytes` copies between ArrayBuffer backing stores, which
 represent the specification's Data Blocks. Pipe shutdown retains an explicit
 error-presence flag because rejection with `undefined` is still a failure.
+
+Two borrowed-operation choices retain browser-disagreement markers:
+
+- `SPEC_CLASH(stream-reader-release-errors)`: Browlet follows Web IDL's
+  [current-realm exception creation](https://webidl.spec.whatwg.org/#js-creating-throwing-exceptions)
+  for [reader release](https://streams.spec.whatwg.org/#readable-stream-reader-generic-release).
+  Chromium agrees; Gecko uses the receiver realm; WebKit varies by reader/state
+  and gives separate errors to pending BYOB reads.
+- `SPEC_CLASH(stream-pipe-through-error-realm)`: for
+  [a closed pipe destination](https://streams.spec.whatwg.org/#readable-stream-pipe-to),
+  Browlet retains the invoking environment and passes a method-realm error to
+  source cancellation, matching Chromium/WebKit. Gecko uses the receiver realm;
+  the algorithm also acknowledges ambiguity around its "in parallel" steps.
+
+The [browser probe](../../node-compat/experimental/promise-constructors/release-realms.mjs)
+records Chromium 149, Firefox 151, and Playwright WebKit 26.5. All three agree
+on method-realm errors for writer release and transform termination. Replacement
+and failed-write Promise realms differ, so these error fixes retain the existing
+Promise allocation rules.
 
 ## Tests
 

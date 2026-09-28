@@ -12,6 +12,9 @@ export type RealmExecution = {
   Promise: typeof InternalPromise;
   /** Captured JavaScript constructor for native Promise resolution. */
   NativePromise: PromiseConstructor;
+  /** Captured constructors for errors whose realm must be fixed before delivery. */
+  TypeError: TypeErrorConstructor;
+  RangeError: RangeErrorConstructor;
   buffers: RuntimeBuffers;
   fileReading: TaskScheduling;
   networking: NetworkingTasks;

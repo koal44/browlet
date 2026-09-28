@@ -118,7 +118,7 @@ export class ReadableStreamImpl {
       () => P.fromInternal(iterator.next()).then((result) => {
         const controller = stream.defaultController;
         if (result === endOfIteration) controller.closeInternal();
-        else controller.enqueueInternal(result);
+        else controller.enqueueInternal(result, env);
       }, (reason: unknown) => {
         stream.defaultController.error(reason);
       }),
@@ -216,6 +216,7 @@ export class ReadableStreamImpl {
   pipeThrough(
     transform: ReadableWritablePair,
     options: StreamPipeOptions,
+    env: JSEnvironment,
   ): ReadableStreamImpl {
     if (this.locked) {
       throw new TypeError(
@@ -234,6 +235,7 @@ export class ReadableStreamImpl {
       options.preventAbort,
       options.preventCancel,
       options.signal,
+      env,
     );
     void promise.then(undefined, () => {});
     return transform.readable;
@@ -243,6 +245,7 @@ export class ReadableStreamImpl {
   pipeTo(
     destination: WritableStreamImpl,
     options: StreamPipeOptions,
+    env: JSEnvironment,
   ): InternalPromise<void> {
     if (this.locked) {
       return this.env.exec.Promise.reject(new TypeError(
@@ -261,6 +264,7 @@ export class ReadableStreamImpl {
       options.preventAbort,
       options.preventCancel,
       options.signal,
+      env,
     );
   }
 
@@ -419,7 +423,8 @@ export class ReadableStreamImpl {
     preventClose: boolean,
     preventAbort: boolean,
     preventCancel: boolean,
-    signal?: AbortSignalCapability,
+    signal: AbortSignalCapability | undefined,
+    env: JSEnvironment,
   ): InternalPromise<void> {
     const reader = this.getDefaultReader();
     const writer = destination.getWriter();
@@ -456,7 +461,7 @@ export class ReadableStreamImpl {
         const read = this.env.exec.Promise.withResolvers(idlType.boolean);
         reader.readChunk({
           chunkSteps: (chunk) => {
-            const write = this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => writer.writeInternal(chunk));
+            const write = this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => writer.writeInternal(chunk, this.env));
             currentWrite = write.then(undefined, () => undefined);
             read.resolve(false);
           },
@@ -534,8 +539,8 @@ export class ReadableStreamImpl {
 
     /** Streams §4.9.1, Finalize (within ReadableStreamPipeTo). */
     const finalize = (error: unknown, isError: boolean): void => {
-      writer.release();
-      reader.release();
+      writer.release(env);
+      reader.release(env);
       abortAlgorithmHandle?.remove();
       if (isError) result.reject(error);
       else result.resolve(undefined);
@@ -613,7 +618,8 @@ export class ReadableStreamImpl {
 
     if (destination.closeQueuedOrInFlight ||
       destinationState.state === 'closed') {
-      const error = new TypeError(
+      // SPEC_CLASH(stream-pipe-through-error-realm): Use the invoking realm, as Chromium/WebKit do; Gecko uses the receiver's.
+      const error = new env.exec.TypeError(
         'The destination WritableStream closed before all data could be piped to it',
       );
       if (!preventCancel) {
@@ -670,10 +676,10 @@ export class ReadableStreamImpl {
               }
             }
             if (!canceled1) {
-              branch1.defaultController.enqueueInternal(chunk);
+              branch1.defaultController.enqueueInternal(chunk, this.env);
             }
             if (!canceled2) {
-              branch2.defaultController.enqueueInternal(chunk2);
+              branch2.defaultController.enqueueInternal(chunk2, this.env);
             }
             reading = false;
             // Enqueuing can synchronously reenter a branch pull algorithm.
@@ -849,7 +855,7 @@ export class ReadableStreamImpl {
     const pullWithDefaultReader = (): void => {
       if (ReadableStreamBYOBReaderImpl.is(reader)) {
         assert(reader.readIntoRequests.length === 0);
-        reader.release();
+        reader.release(this.env);
         reader = new ReadableStreamDefaultReaderImpl();
         reader.setUp(this);
         forwardReaderError(reader);
@@ -889,8 +895,8 @@ export class ReadableStreamImpl {
           reading = false;
           const controller1 = branch1.byteController;
           const controller2 = branch2.byteController;
-          if (!canceled1) controller1.closeInternal();
-          if (!canceled2) controller2.closeInternal();
+          if (!canceled1) controller1.closeInternal(this.env);
+          if (!canceled2) controller2.closeInternal(this.env);
           if (controller1.state.pendingPullIntos.length > 0) {
             controller1.respond(0);
           }
@@ -913,7 +919,7 @@ export class ReadableStreamImpl {
     ): void => {
       if (ReadableStreamDefaultReaderImpl.is(reader)) {
         assert(reader.readRequests.length === 0);
-        reader.release();
+        reader.release(this.env);
         reader = this.getBYOBReader();
         forwardReaderError(reader);
       }
@@ -960,8 +966,8 @@ export class ReadableStreamImpl {
             const otherCanceled = forBranch2 ? canceled1 : canceled2;
             const byobController = byobBranch.byteController;
             const otherController = otherBranch.byteController;
-            if (!byobCanceled) byobController.closeInternal();
-            if (!otherCanceled) otherController.closeInternal();
+            if (!byobCanceled) byobController.closeInternal(this.env);
+            if (!otherCanceled) otherController.closeInternal(this.env);
             if (chunk !== undefined) {
               assert(getBufferSourceByteLength(chunk) === 0);
               if (!byobCanceled) {
@@ -1098,7 +1104,7 @@ export class ReadableStreamImpl {
   /** Streams §9.1, close a ReadableStream from another specification. */
   close(): void {
     const controller = this.controller;
-    controller.closeInternal();
+    controller.closeInternal(this.env);
     if (ReadableByteStreamControllerImpl.is(controller) &&
       controller.state.pendingPullIntos.length > 0) {
       controller.respond(0);
@@ -1139,7 +1145,7 @@ export class ReadableStreamImpl {
       }
       controller.enqueueInternal(chunk);
     } else {
-      controller.enqueueInternal(chunk);
+      controller.enqueueInternal(chunk, this.env);
     }
   }
 
@@ -1192,6 +1198,7 @@ export class ReadableStreamImpl {
       options.preventAbort ?? false,
       options.preventCancel ?? false,
       options.signal,
+      this.env,
     );
   }
 
@@ -1320,20 +1327,26 @@ export const readableStreamIDL = defineInterface({
         optional: true,
       }),
     ]),
-    op('pipeThrough', reference('ReadableStream'), [
-      arg('transform', reference('ReadableWritablePair')),
-      arg('options', reference('StreamPipeOptions'), {
-        default: emptyDictionary,
-        optional: true,
-      }),
-    ]),
-    op('pipeTo', promise(idlType.undefined), [
-      arg('destination', reference('WritableStream')),
-      arg('options', reference('StreamPipeOptions'), {
-        default: emptyDictionary,
-        optional: true,
-      }),
-    ]),
+    op('pipeThrough', reference('ReadableStream'),
+      [
+        arg('transform', reference('ReadableWritablePair')),
+        arg('options', reference('StreamPipeOptions'), {
+          default: emptyDictionary,
+          optional: true,
+        }),
+      ],
+      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+    ),
+    op('pipeTo', promise(idlType.undefined),
+      [
+        arg('destination', reference('WritableStream')),
+        arg('options', reference('StreamPipeOptions'), {
+          default: emptyDictionary,
+          optional: true,
+        }),
+      ],
+      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+    ),
     op('tee', sequence(reference('ReadableStream'))),
     asyncIter(idlType.any, {
       arguments: [arg(
@@ -1472,16 +1485,17 @@ class ReadableStreamIterator {
   /** Streams §4.2.5, get the next iteration result. */
   next(): InternalPromise<unknown> {
     const reader = this.#reader;
+    const env = this.#env;
     const P = reader.genericReaderMixin.state.Promise;
     const promise = P.withResolvers(idlType.any);
     reader.readChunk({
-      chunkSteps: (chunk) => P.fromValue(chunk, this.#env.exec.NativePromise, idlType.any).observe(promise.resolve, promise.reject),
+      chunkSteps: (chunk) => P.fromValue(chunk, env.exec.NativePromise, idlType.any).observe(promise.resolve, promise.reject),
       closeSteps() {
-        reader.release();
+        reader.release(env);
         promise.resolve(endOfIteration);
       },
       errorSteps(reason) {
-        reader.release();
+        reader.release(env);
         promise.reject(reason);
       },
     });
@@ -1495,7 +1509,7 @@ class ReadableStreamIterator {
     const result = this.#preventCancel
       ? generic.state.Promise.resolve(undefined, idlType.undefined)
       : generic.cancelInternal(value);
-    reader.release();
+    reader.release(this.#env);
     return result;
   }
 }
@@ -1562,13 +1576,13 @@ export class ReadableStreamDefaultControllerImpl {
     this.closeInternal();
   }
 
-  enqueue(chunk?: unknown): void {
+  enqueue(chunk: unknown, env: JSEnvironment): void {
     if (!this.canCloseOrEnqueue) {
       throw new TypeError(
         'The stream is not in a state that permits enqueue',
       );
     }
-    this.enqueueInternal(chunk);
+    this.enqueueInternal(chunk, env);
   }
 
   /** ReadableStreamDefaultControllerError. */
@@ -1666,7 +1680,7 @@ export class ReadableStreamDefaultControllerImpl {
   }
 
   /** ReadableStreamDefaultControllerEnqueue. */
-  enqueueInternal(chunk: unknown): void {
+  enqueueInternal(chunk: unknown, env: JSEnvironment): void {
     if (!this.canCloseOrEnqueue) return;
     const state = this.state;
     const streamState = state.stream.state;
@@ -1687,7 +1701,7 @@ export class ReadableStreamDefaultControllerImpl {
       }
 
       try {
-        state.queue.enqueue(chunk, chunkSize);
+        state.queue.enqueue(chunk, chunkSize, env);
       } catch (error) {
         this.error(error);
         throw error;
@@ -1793,9 +1807,10 @@ export const readableStreamDefaultControllerIDL = defineInterface({
   members: [
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
     op('close', idlType.undefined),
-    op('enqueue', idlType.undefined, [
-      arg('chunk', idlType.any, { optional: true }),
-    ]),
+    op('enqueue', idlType.undefined,
+      [arg('chunk', idlType.any, { optional: true })],
+      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+    ),
     op('error', idlType.undefined, [
       arg('e', idlType.any, { optional: true }),
     ]),
@@ -1879,7 +1894,7 @@ export class ReadableByteStreamControllerImpl {
     return state.strategyHighWaterMark - state.queueTotalSize;
   }
 
-  close(): void {
+  close(env: JSEnvironment): void {
     const state = this.state;
     if (state.closeRequested) {
       throw new TypeError(
@@ -1892,7 +1907,7 @@ export class ReadableByteStreamControllerImpl {
         `A stream in the ${streamState} state cannot be closed`,
       );
     }
-    this.closeInternal();
+    this.closeInternal(env);
   }
 
   enqueue(chunk: object): void {
@@ -2103,7 +2118,7 @@ export class ReadableByteStreamControllerImpl {
   }
 
   /** ReadableByteStreamControllerClose. */
-  closeInternal(): void {
+  closeInternal(env: JSEnvironment): void {
     const state = this.state;
     const streamState = state.stream.state;
     if (state.closeRequested || streamState.state !== 'readable') return;
@@ -2114,7 +2129,7 @@ export class ReadableByteStreamControllerImpl {
 
     const first = state.pendingPullIntos[0];
     if (first && first.bytesFilled % first.elementSize !== 0) {
-      const error = new TypeError(
+      const error = new env.exec.TypeError(
         'Insufficient bytes to fill elements in the supplied buffer',
       );
       this.error(error);
@@ -2577,7 +2592,7 @@ export const readableByteStreamControllerIDL = defineInterface({
   members: [
     roAttr('byobRequest', nullable(reference('ReadableStreamBYOBRequest'))),
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
-    op('close', idlType.undefined),
+    op('close', idlType.undefined, [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment()))),
     op('enqueue', idlType.undefined, [
       arg('chunk', reference('ArrayBufferView')),
     ]),
@@ -2655,7 +2670,7 @@ export class ReadableStreamGenericReaderMixin {
   }
 
   /** ReadableStreamReaderGenericRelease. */
-  release(reader: NonNullable<ReadableStreamState['reader']>): void {
+  release(reader: NonNullable<ReadableStreamState['reader']>, env: JSEnvironment): void {
     const genericState = this.state;
     const stream = genericState.stream;
     if (!stream) throw new InternalError('Cannot release an already released reader');
@@ -2664,7 +2679,8 @@ export class ReadableStreamGenericReaderMixin {
     if (streamState.reader !== reader) {
       throw new InternalError('Readable stream is locked by a different reader');
     }
-    const error = new TypeError(
+    // SPEC_CLASH(stream-reader-release-errors): Use current-realm errors; Gecko/WebKit differ on borrowed release. See README.
+    const error = new env.exec.TypeError(
       'Reader was released and can no longer monitor the stream\'s closedness',
     );
     if (streamState.state === 'readable') {
@@ -2743,17 +2759,16 @@ export class ReadableStreamDefaultReaderImpl {
   }
 
   /** Streams §4.4.3, read(). */
-  read(): InternalPromise<ReadableStreamReadResult> {
+  read(env: JSEnvironment): InternalPromise<ReadableStreamReadResult> {
     const generic = this.genericReaderMixin;
     const state = generic.state;
-    const promise = state.Promise.withResolvers(readResultType);
     if (!state.stream) {
-      promise.reject(new TypeError(
+      return env.exec.Promise.reject(new env.exec.TypeError(
         'Cannot read from a stream using a released reader',
-      ));
-      return promise.promise;
+      ), readResultType);
     }
 
+    const promise = state.Promise.withResolvers(readResultType);
     this.readChunk({
       chunkSteps(chunk) {
         promise.resolve({ value: chunk, done: false });
@@ -2768,10 +2783,10 @@ export class ReadableStreamDefaultReaderImpl {
     return promise.promise;
   }
 
-  releaseLock(): void {
+  releaseLock(env: JSEnvironment): void {
     const generic = this.genericReaderMixin;
     if (!generic.state.stream) return;
-    this.release();
+    this.release(env);
   }
 
   // -- Internal algorithms ------------------------------------------------
@@ -2815,11 +2830,11 @@ export class ReadableStreamDefaultReaderImpl {
   }
 
   /** ReadableStreamDefaultReaderRelease. */
-  release(): void {
+  release(env: JSEnvironment): void {
     const generic = this.genericReaderMixin;
-    generic.release(this);
+    generic.release(this, env);
 
-    this.errorReadRequests(new TypeError('Reader was released'));
+    this.errorReadRequests(new env.exec.TypeError('Reader was released'));
   }
 
   /** ReadableStreamDefaultReaderErrorReadRequests. */
@@ -2933,8 +2948,12 @@ export const readableStreamDefaultReaderIDL = defineInterface({
   implementation: impl(ReadableStreamDefaultReaderImpl),
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),
-    op('read', promise(reference('ReadableStreamReadResult'))),
-    op('releaseLock', idlType.undefined),
+    op('read', promise(reference('ReadableStreamReadResult')),
+      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+    ),
+    op('releaseLock', idlType.undefined,
+      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+    ),
   ],
 });
 
@@ -2997,24 +3016,25 @@ export class ReadableStreamBYOBReaderImpl {
   read(
     view: ArrayBufferView,
     options: ReadableStreamBYOBReaderReadOptions,
+    env: JSEnvironment,
   ): InternalPromise<ReadableStreamReadResult> {
     const generic = this.genericReaderMixin;
     const state = generic.state;
     const viewByteLength = getBufferSourceByteLength(view);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     if (viewByteLength === 0) {
-      return state.Promise.reject(new TypeError('view must have non-zero byteLength'), readResultType);
+      return env.exec.Promise.reject(new env.exec.TypeError('view must have non-zero byteLength'), readResultType);
     }
     if (getBufferSourceByteLength(buffer) === 0) {
-      return state.Promise.reject(new TypeError(
+      return env.exec.Promise.reject(new env.exec.TypeError(
         'view\'s buffer must have non-zero byteLength',
       ), readResultType);
     }
     if (isBufferSourceDetached(buffer)) {
-      return state.Promise.reject(new TypeError('view\'s buffer is detached'), readResultType);
+      return env.exec.Promise.reject(new env.exec.TypeError('view\'s buffer is detached'), readResultType);
     }
     if (options.min === 0) {
-      return state.Promise.reject(new TypeError('options.min must be greater than 0'), readResultType);
+      return env.exec.Promise.reject(new env.exec.TypeError('options.min must be greater than 0'), readResultType);
     }
 
     const type = requireBufferViewType(view);
@@ -3023,14 +3043,14 @@ export class ReadableStreamBYOBReaderImpl {
       ? viewByteLength
       : viewByteLength / elementSize;
     if (options.min > viewLength) {
-      return state.Promise.reject(new RangeError(
+      return env.exec.Promise.reject(new env.exec.RangeError(
         `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
         }`,
       ), readResultType);
     }
     if (!state.stream) {
-      return state.Promise.reject(new TypeError(
+      return env.exec.Promise.reject(new env.exec.TypeError(
         'Cannot read from a stream using a released reader',
       ), readResultType);
     }
@@ -3048,10 +3068,10 @@ export class ReadableStreamBYOBReaderImpl {
     return promise.promise;
   }
 
-  releaseLock(): void {
+  releaseLock(env: JSEnvironment): void {
     const generic = this.genericReaderMixin;
     if (!generic.state.stream) return;
-    this.release();
+    this.release(env);
   }
 
   // -- Internal algorithms ------------------------------------------------
@@ -3104,10 +3124,10 @@ export class ReadableStreamBYOBReaderImpl {
   }
 
   /** ReadableStreamBYOBReaderRelease. */
-  release(): void {
+  release(env: JSEnvironment): void {
     const generic = this.genericReaderMixin;
-    generic.release(this);
-    this.errorReadIntoRequests(new TypeError('Reader was released'));
+    generic.release(this, env);
+    this.errorReadIntoRequests(new env.exec.TypeError('Reader was released'));
   }
 
   /** ErrorReadIntoRequests. */
@@ -3143,14 +3163,19 @@ export const readableStreamBYOBReaderIDL = defineInterface({
   implementation: impl(ReadableStreamBYOBReaderImpl),
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),
-    op('read', promise(reference('ReadableStreamReadResult')), [
-      arg('view', reference('ArrayBufferView')),
-      arg('options', reference('ReadableStreamBYOBReaderReadOptions'), {
-        default: emptyDictionary,
-        optional: true,
-      }),
-    ]),
-    op('releaseLock', idlType.undefined),
+    op('read', promise(reference('ReadableStreamReadResult')),
+      [
+        arg('view', reference('ArrayBufferView')),
+        arg('options', reference('ReadableStreamBYOBReaderReadOptions'), {
+          default: emptyDictionary,
+          optional: true,
+        }),
+      ],
+      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+    ),
+    op('releaseLock', idlType.undefined,
+      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+    ),
   ],
 });
 

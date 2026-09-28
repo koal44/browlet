@@ -29,7 +29,7 @@ export {
 // Project typing: the full Web IDL entry supplies contextual callback types for declarations.
 declare module './core/types' {
   interface DeclarationCallbacks<Realm> {
-    'argument-resolve': BindingCallback<Realm, void, [], unknown>;
+    'argument-resolve': BindingCallback<Realm, void, [method: BindingContext<Realm & WebIDLRealmHost>], unknown>;
     'allocate-platform-object': BindingCallback<Realm, undefined, [prototype: object], object>;
     'initialize-implementation': BindingCallback<Realm, undefined, [value: object], void>;
     'constructor-create': BindingCallback<Realm, undefined, unknown[], object>;

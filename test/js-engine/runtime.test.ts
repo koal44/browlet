@@ -4,6 +4,7 @@ import {
   JSRealm, addon, createMicrotaskQueue, getAssociatedRealm,
 } from '../../src/js-engine/index';
 import { itPassesWith } from '../test-runtime';
+import { runInHostTask } from '../support/tasks';
 
 describe('JavaScript runtime', () => {
   itPassesWith('explicitQueues')(
@@ -139,18 +140,3 @@ describe('JavaScript runtime', () => {
     });
   });
 });
-
-function runInHostTask(steps: () => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setImmediate(() => {
-      try {
-        steps();
-        resolve();
-      } catch (error) {
-        reject(error instanceof Error
-          ? error
-          : new Error('Host task failed', { cause: error }));
-      }
-    });
-  });
-}

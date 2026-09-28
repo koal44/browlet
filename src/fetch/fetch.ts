@@ -1245,7 +1245,7 @@ class NetworkUpload implements HTTPUploadSource {
           },
           closeSteps: () => {
             this.#finished = true;
-            this.#reader!.release();
+            this.#reader!.release(env);
             this.#reader = undefined;
             this.#settle(null);
           },
@@ -1264,7 +1264,7 @@ class NetworkUpload implements HTTPUploadSource {
     env.queueNetworkingTask(() => {
       const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
       pending.observe(() => {}, () => {});
-      this.#reader?.release();
+      this.#reader?.release(env);
       this.#reader = undefined;
     }, env.exec.global);
   }

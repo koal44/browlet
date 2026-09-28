@@ -27,9 +27,9 @@ describe('writable-stream implementation', () => {
     });
     const writer = stream.getWriter();
 
-    await expect(observe(writer.write('first'))).resolves
+    await expect(observe(writer.write('first', stream.env))).resolves
       .toBeUndefined();
-    await expect(observe(writer.write('second'))).resolves
+    await expect(observe(writer.write('second', stream.env))).resolves
       .toBeUndefined();
     await expect(observe(writer.close())).resolves.toBeUndefined();
 
@@ -48,7 +48,7 @@ describe('writable-stream implementation', () => {
     expect(stream.locked).toBe(true);
     expect(() => stream.getWriter()).toThrow(/already been locked/u);
 
-    writer.releaseLock();
+    writer.releaseLock(stream.env);
     expect(stream.locked).toBe(false);
     expect(() => stream.getWriter()).not.toThrow();
   });
@@ -77,7 +77,7 @@ describe('writable-stream implementation', () => {
       write: () => finishWrite.promise,
     }, { highWaterMark: 1 });
     const writer = stream.getWriter();
-    const write = writer.write('chunk');
+    const write = writer.write('chunk', stream.env);
 
     expect(writer.desiredSize).toBe(0);
     const ready = writer.ready;
@@ -110,7 +110,7 @@ describe('writable-stream implementation', () => {
       abort,
     }, {}, env);
     const writer = stream.getWriter();
-    const writing = writer.write('chunk');
+    const writing = writer.write('chunk', stream.env);
     await observe(writeStarted.promise);
 
     const aborting = writer.abort('stop');
@@ -141,7 +141,7 @@ describe('writable-stream implementation', () => {
     if (!controller) throw new Error('Writable stream did not start');
     controller.error(failure);
 
-    const writing = writer.write('late');
+    const writing = writer.write('late', stream.env);
     await expect(observe(writing)).rejects.toBeInstanceOf(
       Reflect.get(stream.env.exec.global, 'TypeError'),
     );

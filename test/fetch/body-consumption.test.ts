@@ -25,7 +25,7 @@ describe('Body mixin state', () => {
     expect(response.bodyUsed).toBe(false);
     reader.readChunk({ chunkSteps() {}, closeSteps() {}, errorSteps() {} });
     expect(response.bodyUsed).toBe(true);
-    reader.release();
+    reader.release(fixture.env);
     const second = fixture.createBody();
     record.body = second;
     expect(response.body).toBe(second.stream);
@@ -166,7 +166,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const api = projectBody(fixture, kind, body);
     await expect(api[method]()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
     expect(api.bodyUsed).toBe(false);
-    reader.release();
+    reader.release(fixture.env);
     body.stream.close();
     expect(await api.text()).toBe('');
   });

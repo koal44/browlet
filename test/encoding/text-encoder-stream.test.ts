@@ -13,26 +13,26 @@ describe('TextEncoderStream byte production', () => {
     [undefined, 'undefined'],
     [true, 'true'],
   ])('coerces %s to a DOMString', async (chunk, expected) => {
-    const { reader, writer } = createEncoder();
-    const read = observe(reader.read());
-    await observe(writer.write(chunk));
+    const { reader, writer, env } = createEncoder();
+    const read = observe(reader.read(env));
+    await observe(writer.write(chunk, env));
     expect(getBufferSourceCopy((await read).value as object)).toEqual(new TextEncoder().encode(expected));
     await observe(writer.close());
   });
 
   it('converts at transformation time with the string hint and original receiver', async () => {
-    const { reader, writer } = createEncoder();
+    const { reader, writer, env } = createEncoder();
     const convert = vi.fn(function(this: object, hint: string) {
       expect(this).toBe(chunk);
       expect(hint).toBe('string');
       return 'A';
     });
     const chunk = { [Symbol.toPrimitive]: convert };
-    const write = writer.write(chunk);
+    const write = writer.write(chunk, env);
     await Promise.resolve();
     expect(convert).not.toHaveBeenCalled();
 
-    const read = observe(reader.read());
+    const read = observe(reader.read(env));
     await observe(write);
     expect(getBufferSourceCopy((await read).value as object)).toEqual(Uint8Array.of(65));
     expect(convert).toHaveBeenCalledOnce();
@@ -46,9 +46,9 @@ describe('TextEncoderStream byte production', () => {
     ['symbol conversion result', { [Symbol.toPrimitive]: () => Symbol('chunk') }],
     ['no primitive result', { toString: () => ({}), valueOf: () => ({}) }],
   ])('rejects %s', async (_label, chunk) => {
-    const { reader, writer, realm } = createEncoder();
-    const failure = observe(reader.read()).catch((error: unknown) => error);
-    const writing = observe(writer.write(chunk)).catch((error: unknown) => error);
+    const { reader, writer, realm, env } = createEncoder();
+    const failure = observe(reader.read(env)).catch((error: unknown) => error);
+    const writing = observe(writer.write(chunk, env)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
     expect(error).toBeInstanceOf(realm.intrinsics.typeError);
@@ -56,23 +56,23 @@ describe('TextEncoderStream byte production', () => {
   });
 
   it('preserves an exception thrown by author conversion', async () => {
-    const { reader, writer } = createEncoder();
+    const { reader, writer, env } = createEncoder();
     const error = new TypeError('author failure');
-    const failure = observe(reader.read()).catch((reason: unknown) => reason);
-    await expect(observe(writer.write({ toString() { throw error; } }))).rejects.toBe(error);
+    const failure = observe(reader.read(env)).catch((reason: unknown) => reason);
+    await expect(observe(writer.write({ toString() { throw error; } }, env))).rejects.toBe(error);
     expect(await failure).toBe(error);
   });
 
   it('rejoins split surrogate pairs and keeps earlier chunk storage independent', async () => {
-    const { reader, writer } = createEncoder();
-    const firstRead = observe(reader.read());
-    await observe(writer.write('A\uD83D'));
+    const { reader, writer, env } = createEncoder();
+    const firstRead = observe(reader.read(env));
+    await observe(writer.write('A\uD83D', env));
     const first = await firstRead;
     expect(first.done).toBe(false);
     expect(getBufferSourceCopy(first.value as object)).toEqual(Uint8Array.of(65));
 
-    const secondRead = observe(reader.read());
-    await observe(writer.write('\uDE00'));
+    const secondRead = observe(reader.read(env));
+    await observe(writer.write('\uDE00', env));
     const second = await secondRead;
     expect(second.done).toBe(false);
     expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
@@ -80,19 +80,19 @@ describe('TextEncoderStream byte production', () => {
     (first.value as Uint8Array).fill(0);
     expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
     await observe(writer.close());
-    expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
+    expect(await observe(reader.read(env))).toEqual({ done: true, value: undefined });
   });
 
   it('flushes a trailing surrogate into replacement-character bytes', async () => {
-    const { reader, writer } = createEncoder();
-    const read = observe(reader.read());
-    await observe(writer.write('\uD83D'));
+    const { reader, writer, env } = createEncoder();
+    const read = observe(reader.read(env));
+    await observe(writer.write('\uD83D', env));
     await observe(writer.close());
 
     const result = await read;
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(239, 191, 189));
-    expect(await observe(reader.read())).toEqual({ done: true, value: undefined });
+    expect(await observe(reader.read(env))).toEqual({ done: true, value: undefined });
   });
 
   it.each([
@@ -101,16 +101,16 @@ describe('TextEncoderStream byte production', () => {
     [['\uDC00', '\uD800', '\uD800', '\uDC00'], '\ufffd\ufffd\u{10000}'],
     [['A\uD800', ''], 'A\ufffd'],
   ] as const)('encodes code-unit chunks %j with replacement and flush handling', async (chunks, text) => {
-    const { reader, writer } = createEncoder();
+    const { reader, writer, env } = createEncoder();
     const bytes: number[] = [];
     const reading = (async () => {
       for (;;) {
-        const result = await observe(reader.read());
+        const result = await observe(reader.read(env));
         if (result.done) return;
         bytes.push(...getBufferSourceCopy(result.value as object));
       }
     })();
-    for (const chunk of chunks) await observe(writer.write(chunk));
+    for (const chunk of chunks) await observe(writer.write(chunk, env));
     await observe(writer.close());
     await reading;
     expect(bytes).toEqual(Array.from(new TextEncoder().encode(text)));
@@ -119,6 +119,7 @@ describe('TextEncoderStream byte production', () => {
 
 function createEncoder() {
   const realm = new TestRealm();
-  const encoder = new TextEncoderStreamImpl(createEnvironment(realm));
-  return { realm, reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
+  const env = createEnvironment(realm);
+  const encoder = new TextEncoderStreamImpl(env);
+  return { realm, env, reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
 }

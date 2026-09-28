@@ -75,14 +75,14 @@ describe('transform-stream implementation', () => {
     const stream = createTransformStream({});
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = observe(reader.read());
+    const read = observe(reader.read(stream.env));
 
-    await expect(observe(writer.write('chunk'))).resolves
+    await expect(observe(writer.write('chunk', stream.env))).resolves
       .toBeUndefined();
     await expect(read).resolves.toEqual(readResult('chunk', false));
 
     await expect(observe(writer.close())).resolves.toBeUndefined();
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -92,23 +92,23 @@ describe('transform-stream implementation', () => {
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
-      controller.enqueue(String(chunk).toUpperCase());
+      controller.enqueue(String(chunk).toUpperCase(), stream.env);
       return P.resolve(undefined, idlType.undefined);
     });
     const flush = vi.fn((controller: TransformStreamDefaultControllerImpl) => {
-      controller.enqueue('DONE');
+      controller.enqueue('DONE', stream.env);
       return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ flush, transform });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const firstRead = observe(reader.read());
+    const firstRead = observe(reader.read(stream.env));
 
-    await expect(observe(writer.write('hello'))).resolves
+    await expect(observe(writer.write('hello', stream.env))).resolves
       .toBeUndefined();
     await expect(firstRead).resolves.toEqual(readResult('HELLO', false));
 
-    const flushRead = observe(reader.read());
+    const flushRead = observe(reader.read(stream.env));
     const close = writer.close();
     await expect(flushRead).resolves.toEqual(readResult('DONE', false));
     await expect(observe(close)).resolves.toBeUndefined();
@@ -122,12 +122,12 @@ describe('transform-stream implementation', () => {
       chunk: unknown,
       controller: TransformStreamDefaultControllerImpl,
     ) => {
-      controller.enqueue(chunk);
+      controller.enqueue(chunk, stream.env);
       return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ transform });
     const writer = stream.writable.getWriter();
-    const write = writer.write('waiting');
+    const write = writer.write('waiting', stream.env);
     let settled = false;
     void observe(write).then(() => {
       settled = true;
@@ -138,7 +138,7 @@ describe('transform-stream implementation', () => {
     expect(settled).toBe(false);
     expect(transform).not.toHaveBeenCalled();
 
-    const read = observe(stream.readable.getReader({}).read());
+    const read = observe(stream.readable.getReader({}).read(stream.env));
     await expect(observe(write)).resolves.toBeUndefined();
     await expect(read).resolves.toEqual(readResult('waiting', false));
     expect(transform).toHaveBeenCalledOnce();
@@ -148,14 +148,14 @@ describe('transform-stream implementation', () => {
     const P = createPromiseConstructor();
     const start = P.withResolvers(idlType.undefined);
     const transform = vi.fn((chunk: unknown, controller: TransformStreamDefaultControllerImpl) => {
-      controller.enqueue(chunk);
+      controller.enqueue(chunk, stream.env);
       return P.resolve(undefined, idlType.undefined);
     });
     const stream = createTransformStream({ start: () => start.promise, transform });
     const reader = stream.readable.getReader();
     const writer = stream.writable.getWriter();
-    const reading = observe(reader.read());
-    const writing = writer.write('after start');
+    const reading = observe(reader.read(stream.env));
+    const writing = writer.write('after start', stream.env);
 
     await Promise.resolve();
     expect(transform).not.toHaveBeenCalled();
@@ -173,9 +173,9 @@ describe('transform-stream implementation', () => {
     });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = observe(reader.read());
+    const read = observe(reader.read(stream.env));
 
-    await expect(observe(writer.write('chunk'))).rejects
+    await expect(observe(writer.write('chunk', stream.env))).rejects
       .toBe(failure);
     await expect(read).rejects.toBe(failure);
     await expect(observe(writer.closed)).rejects.toBe(failure);
@@ -211,9 +211,9 @@ describe('transform-stream implementation', () => {
     const reader = stream.readable.getReader({});
     const writer = stream.writable.getWriter();
 
-    requireController(controller).terminate();
+    requireController(controller).terminate(stream.env);
 
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
     await expect(observe(writer.closed)).rejects
       .toBeInstanceOf(Reflect.get(stream.readable.env.exec.global, 'TypeError'));

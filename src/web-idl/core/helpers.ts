@@ -308,7 +308,10 @@ export function impl<Realm = unknown>(
   return { ...options, implClass };
 }
 
-/** Project helper: supply an injected value at a final constructor or operation argument index. */
+/**
+ * Supply an injected value at a final constructor or operation argument index.
+ * Resolvers receive receiver and method contexts; constructors use the same context for both.
+ */
 export function atArg<Realm = unknown>(
   index: number,
   resolve: InjectedArgument<Realm>['resolve'],
@@ -327,11 +330,13 @@ export function invokeWith<Realm = unknown>(
 }
 
 /**
- * Select the realm for result containers and promises. Without a receiver, use the method realm.
- * Buffer results, including promised buffers, allocate from returned bytes;
+ * Select the realm for returned containers. Without a receiver, use the method realm.
+ * Buffer results allocate from returned bytes;
  * without this declaration they retain their JavaScript identity.
  * Existing objects inside containers keep their identity and ownership.
+ * A returned internal Promise retains its creation realm and conversion.
  */
+// UNUSED: No production declarations currently select result allocation explicitly.
 export function allocateIn(
   realm: NonNullable<OperationOptions['allocateIn']>,
 ): Pick<OperationOptions, 'allocateIn'> {

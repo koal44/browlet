@@ -517,6 +517,7 @@ function registerOperation(
         adaptArguments(values, member.arguments, operationContext, realmBinding),
         injectedArguments,
         operationContext,
+        context,
       ),
       realmBinding,
     );
@@ -528,6 +529,7 @@ export function resolveImplementationArguments(
   argumentsList: unknown[],
   injectedArguments: InjectedArgument[],
   context: BindingContext,
+  methodContext = context,
 ): unknown[] {
   if (injectedArguments.length === 0) return argumentsList;
 
@@ -536,7 +538,7 @@ export function resolveImplementationArguments(
     if (Object.hasOwn(result, index)) {
       throw new InternalError(`Injected argument ${index} is declared more than once`);
     }
-    result[index] = resolve(context);
+    result[index] = resolve(context, methodContext);
   }
 
   let index = 0;

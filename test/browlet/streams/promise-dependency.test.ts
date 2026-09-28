@@ -15,7 +15,7 @@ describe('Streams Promise dependencies', () => {
       return: () => b.Promise.resolve(undefined, idlType.undefined),
     }, a.env);
     const chunks: unknown[] = [];
-    stream.getReader({}).read().observe((value) => { chunks.push(value); }, (error) => { throw error; });
+    stream.getReader({}).read(a.env).observe((value) => { chunks.push(value); }, (error) => { throw error; });
     next.resolve('chunk');
     a.queue.performMicrotaskCheckpoint();
     expect(chunks).toEqual([{ value: 'chunk', done: false }]);
@@ -36,7 +36,7 @@ describe('Streams Promise dependencies', () => {
     let finished = false;
     source.pipeTo(destination, {
       preventAbort: false, preventCancel: false, preventClose: false,
-    }).observe(() => { finished = true; }, (error) => { throw error; });
+    }, a.env).observe(() => { finished = true; }, (error) => { throw error; });
 
     a.queue.performMicrotaskCheckpoint();
     expect(chunks).toEqual(['chunk']);

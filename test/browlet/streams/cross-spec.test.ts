@@ -86,7 +86,7 @@ describe('Streams operations for other specifications', () => {
     await expect(chunk).resolves.toBe('chunk');
     expect(stream.disturbed).toBe(true);
     expect(stream.isClosed).toBe(true);
-    reader.release();
+    reader.release(stream.env);
     expect(stream.locked).toBe(false);
   });
 
@@ -107,7 +107,7 @@ describe('Streams operations for other specifications', () => {
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
 
-    const result = await observe(reader.read(destination, { min: 1 }));
+    const result = await observe(reader.read(destination, { min: 1 }, stream.env));
 
     expect(result.done).toBe(false);
     expect(getBufferSourceCopy(requireObject(result.value)))
@@ -129,7 +129,7 @@ describe('Streams operations for other specifications', () => {
     const reader = stream.getReader({ mode: 'byob' });
     const destination = new Uint8Array([0, 0, 0, 0]);
 
-    const result = await observe(reader.read(destination, { min: 1 }));
+    const result = await observe(reader.read(destination, { min: 1 }, stream.env));
 
     expect(offset).toBe(4);
     expect(getBufferSourceCopy(requireObject(result.value)))
@@ -143,7 +143,7 @@ describe('Streams operations for other specifications', () => {
     const write = vi.fn(() => finishWrite.promise);
     const stream = WritableStreamImpl.createDefault(write, undefined, undefined, 1, () => 1, env);
     const writer = stream.getWriter();
-    const writing = writer.writeInternal('chunk');
+    const writing = writer.writeInternal('chunk', env);
     let settled = false;
     void observe(writing).then(() => { settled = true; });
 
@@ -154,7 +154,7 @@ describe('Streams operations for other specifications', () => {
     await expect(observe(writing)).resolves.toBeUndefined();
     await expect(observe(stream.closeInternal()))
       .resolves.toBeUndefined();
-    writer.release();
+    writer.release(stream.env);
     expect(write).toHaveBeenCalledWith('chunk');
   });
 
@@ -176,7 +176,7 @@ describe('Streams operations for other specifications', () => {
     const proxy = createReadableStreamProxy(source, source.env);
     expect(source.locked).toBe(true);
     expect(source.disturbed).toBe(true);
-    const reading = observe(proxy.getReader({}).read());
+    const reading = observe(proxy.getReader({}).read(proxy.env));
     source.enqueueChunk('proxied');
     source.close();
     await expect(reading).resolves.toEqual({
@@ -211,7 +211,7 @@ describe('Readable-stream completion steps', () => {
     expect(events).toEqual(['closed', 'read']);
     expect(closed).toHaveBeenCalledOnce();
     expect(errored).not.toHaveBeenCalled();
-    reader.release();
+    reader.release(env);
   });
 
   it.each(['close', 'error', 'cancel'] as const)('observes %s once despite reader release, including late registrations', async (mode) => {
@@ -223,7 +223,7 @@ describe('Readable-stream completion steps', () => {
     stream.onCompletion(second, second);
     const reader = stream.getDefaultReader();
     reader.closed.observe(() => {}, () => {});
-    reader.release();
+    reader.release(stream.env);
     expect(closed).not.toHaveBeenCalled();
     expect(errored).not.toHaveBeenCalled();
     if (mode === 'close') stream.close();

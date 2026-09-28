@@ -35,7 +35,7 @@ describe('Fetch byte sequences as bodies', () => {
     const reader = body.stream.getReader({ mode: 'byob' });
     const view = fixture.context.realm.createArrayBufferView('Uint8Array', [0, 0, 0, 0]);
     const buffer = getBufferSourceUnderlyingBuffer(view);
-    const reading = reader.read(view, { min: 1 });
+    const reading = reader.read(view, { min: 1 }, fixture.env);
     fixture.runTask();
     const result = await observe(reading);
     expect(result.done).toBe(false);

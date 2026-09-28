@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
+import { createSiblingWindow } from '../../support/windows';
+import { runInHostTask } from '../../support/tasks';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import type { InternalPromise } from '../../../src/infra/promises';
@@ -18,7 +20,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('stream read Promise boundaries', () => {
   itPassesWith('explicitQueues').each(['chunk', 'close', 'error'] as const)(
-    'projects a borrowed read on %s in the receiver queue', (mode) => {
+    'projects a borrowed read on %s in the receiver queue', (mode) => runInHostTask(() => {
       const { first, second } = createFixture();
       const read = Reflect.get(second.reader, 'read') as CallableFunction;
       const result = Reflect.apply(read, first.reader, []) as Promise<unknown>;
@@ -31,14 +33,13 @@ describe('stream read Promise boundaries', () => {
       first.realm.agent.eventLoop.performMicrotaskCheckpoint();
       expect(trace).toHaveLength(1);
       expectResult(first, trace[0], mode);
-    },
+    }),
   );
 
   it.each(['default', 'byob'] as const)(
     'allocates a borrowed released %s read rejection in the method realm', async (kind) => {
       const browlet = new Browlet({ route: () => '' });
-      const foreign = new Browlet({ route: () => '' });
-      Reflect.set(browlet.window, 'foreignStreamRealm', foreign.window);
+      Reflect.set(browlet.window, 'foreignStreamRealm', createSiblingWindow(browlet));
       const result = await browlet.evaluate(async (kind) => {
         const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;
         let reading: Promise<ReadableStreamReadResult<unknown>>;
@@ -59,7 +60,7 @@ describe('stream read Promise boundaries', () => {
   );
 
   itPassesWith('explicitQueues').each(['consume', 'invoke'] as const)(
-    'imports a real stream read through %s without crossing independent queues', (method) => {
+    'imports a real stream read through %s without crossing independent queues', (method) => runInHostTask(() => {
       const { first, second } = createFixture();
       const bindings = new BindingWorld([consumerIDL, callbackIDL, readableStreamReadResultIDL]);
       const entries = [first, second].map((fixture) => {
@@ -87,7 +88,7 @@ describe('stream read Promise boundaries', () => {
       expectResult(first, a.trace[0], 'chunk');
       expect(a.consumer.received).toEqual({ value: 'chunk', done: false });
       expect(a.consumer.received).not.toBe(a.trace[0]);
-    },
+    }),
   );
 });
 
@@ -106,7 +107,7 @@ function createReader() {
   const implementation = stream.getReader();
   const reader = getBindingContext(realm).project(ReadableStreamDefaultReaderImpl, implementation);
   const failure = new realm.intrinsics.typeError('source failed');
-  return { browlet, realm, controller, implementation, reader, failure };
+  return { browlet, realm, stream, controller, implementation, reader, failure };
 }
 
 type ReaderFixture = ReturnType<typeof createReader>;
@@ -122,7 +123,7 @@ function observe(fixture: ReaderFixture, result: Promise<unknown>): unknown[] {
 }
 
 function settle(fixture: ReaderFixture, mode: 'chunk' | 'close' | 'error' | 'released'): void {
-  if (mode === 'chunk') fixture.controller.enqueue('chunk');
+  if (mode === 'chunk') fixture.controller.enqueue('chunk', fixture.stream.env);
   else if (mode === 'close') fixture.controller.close();
   else if (mode === 'error') fixture.controller.error(fixture.failure);
 }

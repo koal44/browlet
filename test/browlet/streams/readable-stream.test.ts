@@ -23,11 +23,11 @@ describe('ordinary readable-stream implementation', () => {
     }, env);
     const reader = stream.getReader({});
 
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult('first', false));
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult('second', false));
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -35,12 +35,12 @@ describe('ordinary readable-stream implementation', () => {
     const { controller, stream } = createReadableStream();
     const reader = stream.getReader({});
 
-    const chunk = observe(reader.read());
-    controller.enqueue('chunk');
+    const chunk = observe(reader.read(stream.env));
+    controller.enqueue('chunk', stream.env);
     await expect(chunk).resolves.toEqual(readResult('chunk', false));
 
     controller.close();
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
     await expect(observe(reader.closed)).resolves.toBeUndefined();
   });
@@ -51,7 +51,7 @@ describe('ordinary readable-stream implementation', () => {
 
     stream.enqueueChunk('chunk');
 
-    await expect(observe(reader.read())).resolves
+    await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult('chunk', false));
   });
 
@@ -62,7 +62,7 @@ describe('ordinary readable-stream implementation', () => {
     expect(stream.locked).toBe(true);
     expect(() => stream.getReader({})).toThrow(/already been locked/u);
 
-    reader.releaseLock();
+    reader.releaseLock(stream.env);
     expect(stream.locked).toBe(false);
     expect(() => stream.getReader({})).not.toThrow();
   });
@@ -88,10 +88,10 @@ describe('ordinary readable-stream implementation', () => {
     const write = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const close = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const destination = createWritableStream({ close, write });
-    const piping = source.pipeTo(destination, defaultPipeOptions);
+    const piping = source.pipeTo(destination, defaultPipeOptions, source.env);
 
-    controller.enqueue('first');
-    controller.enqueue('second');
+    controller.enqueue('first', source.env);
+    controller.enqueue('second', source.env);
     controller.close();
 
     await expect(observe(piping)).resolves.toBeUndefined();
@@ -115,7 +115,7 @@ describe('ordinary readable-stream implementation', () => {
     const piping = source.pipeTo(destination, {
       ...defaultPipeOptions,
       signal,
-    });
+    }, env);
 
     signal.abort('stop');
 
@@ -135,7 +135,7 @@ describe('ordinary readable-stream implementation', () => {
     );
     const abort = vi.fn(() => P.resolve(undefined, idlType.undefined));
     const destination = createWritableStream({ abort });
-    const piping = source.pipeTo(destination, defaultPipeOptions);
+    const piping = source.pipeTo(destination, defaultPipeOptions, source.env);
     const error = new Error('source failed');
 
     controller.error(error);
@@ -151,17 +151,17 @@ describe('ordinary readable-stream implementation', () => {
     const [branch1, branch2] = stream.tee();
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
-    const read1 = observe(reader1.read());
-    const read2 = observe(reader2.read());
+    const read1 = observe(reader1.read(stream.env));
+    const read2 = observe(reader2.read(stream.env));
 
-    controller.enqueue('shared');
+    controller.enqueue('shared', stream.env);
     controller.close();
 
     await expect(read1).resolves.toEqual(readResult('shared', false));
     await expect(read2).resolves.toEqual(readResult('shared', false));
-    await expect(observe(reader1.read())).resolves
+    await expect(observe(reader1.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
-    await expect(observe(reader2.read())).resolves
+    await expect(observe(reader2.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
   });
 
@@ -170,11 +170,11 @@ describe('ordinary readable-stream implementation', () => {
     const [branch1, branch2] = stream.teeDefault(true);
     const reader1 = branch1.getReader({});
     const reader2 = branch2.getReader({});
-    const read1 = observe(reader1.read());
-    const read2 = observe(reader2.read());
+    const read1 = observe(reader1.read(stream.env));
+    const read2 = observe(reader2.read(stream.env));
     const chunk = { nested: { value: 'chunk' } };
 
-    controller.enqueue(chunk);
+    controller.enqueue(chunk, stream.env);
 
     const [result1, result2] = await Promise.all([read1, read2]);
     const value1 = result1.value;
@@ -196,10 +196,10 @@ describe('ordinary readable-stream implementation', () => {
     );
     vi.spyOn(env.exec, 'clone').mockImplementation(() => { throw error; });
     const [branch1, branch2] = stream.teeDefault(true);
-    const read1 = observe(branch1.getReader({}).read());
-    const read2 = observe(branch2.getReader({}).read());
+    const read1 = observe(branch1.getReader({}).read(stream.env));
+    const read2 = observe(branch2.getReader({}).read(stream.env));
 
-    controller.enqueue(() => undefined);
+    controller.enqueue(() => undefined, stream.env);
 
     await expect(read1).rejects.toBe(error);
     await expect(read2).rejects.toBe(error);
@@ -350,7 +350,7 @@ describe('readable-stream projection', () => {
       stream.state.controller,
     );
 
-    controller.enqueue(() => undefined);
+    controller.enqueue(() => undefined, stream.env);
     performTestMicrotaskCheckpoint(window);
 
     const [error1, error2] = await Promise.all([
@@ -646,7 +646,7 @@ describe('readable byte-stream implementation', () => {
     const supplied = new Uint8Array(2);
     const transfer = vi.fn(() => { throw new Error('Author transfer must not run'); });
     Object.defineProperty(supplied.buffer, 'transfer', { value: transfer });
-    const reading = reader.read(supplied, { min: 1 });
+    const reading = reader.read(supplied, { min: 1 }, stream.env);
     void observe(reading).catch(() => {});
 
     expect(transfer).not.toHaveBeenCalled();
@@ -668,8 +668,8 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     }, {}, createEnvironment());
     const [branch1, branch2] = stream.tee();
-    const read1 = observe(branch1.getReader({}).read());
-    const read2 = observe(branch2.getReader({}).read());
+    const read1 = observe(branch1.getReader({}).read(stream.env));
+    const read2 = observe(branch2.getReader({}).read(stream.env));
 
     requireByteController(controller).enqueue(Uint8Array.from([3, 4, 5]));
 
@@ -695,9 +695,9 @@ describe('readable byte-stream implementation', () => {
     const [byobBranch, defaultBranch] = stream.tee();
     const byobRead = byobBranch.getReader({ mode: 'byob' }).read(
       new Uint8Array(4),
-      { min: 1 },
+      { min: 1 }, stream.env,
     );
-    const defaultRead = observe(defaultBranch.getReader({}).read());
+    const defaultRead = observe(defaultBranch.getReader({}).read(stream.env));
 
     requireByteController(controller).enqueue(Uint8Array.from([6, 7]));
 
@@ -716,7 +716,7 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     }, {}, createEnvironment());
     const reader = stream.getReader({});
-    const read = observe(reader.read());
+    const read = observe(reader.read(stream.env));
     const chunk = Uint8Array.from([1, 2, 3]);
 
     requireByteController(controller).enqueue(chunk);
@@ -737,7 +737,7 @@ describe('readable byte-stream implementation', () => {
     }, {}, createEnvironment());
     const reader = stream.getReader({ mode: 'byob' });
     const supplied = new Uint16Array(4);
-    const read = reader.read(supplied, { min: 2 });
+    const read = reader.read(supplied, { min: 2 }, stream.env);
     const request = requireByteController(controller).byobRequest;
     if (!request?.view) throw new Error('Missing BYOB request');
     (request.view as Uint8Array).set([1, 0, 2, 0]);
@@ -765,7 +765,7 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     }, {}, env);
 
-    const result = await observe(stream.getReader({}).read());
+    const result = await observe(stream.getReader({}).read(stream.env));
 
     expect(Array.from(result.value as Uint8Array)).toEqual([7, 8]);
   });
@@ -779,10 +779,10 @@ describe('readable byte-stream implementation', () => {
       type: 'bytes',
     }, {}, createEnvironment());
     const reader = stream.getReader({ mode: 'byob' });
-    const read = reader.read(new Uint8Array(2), { min: 1 });
+    const read = reader.read(new Uint8Array(2), { min: 1 }, stream.env);
     const byteController = requireByteController(controller);
 
-    byteController.close();
+    byteController.close(stream.env);
     const request = byteController.byobRequest;
     if (!request) throw new Error('Missing closing BYOB request');
     request.respond(0);

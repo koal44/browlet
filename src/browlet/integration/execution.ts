@@ -22,6 +22,8 @@ export function createExecution(context: BindingContext<Realm>): RealmExecution 
     nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
     Promise: context.Promise,
     NativePromise: realm.intrinsics.promise.constructor,
+    TypeError: realm.intrinsics.typeError,
+    RangeError: realm.intrinsics.rangeError,
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel,

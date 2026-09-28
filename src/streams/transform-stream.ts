@@ -2,7 +2,7 @@ import type { JSEnvironment } from '../js-engine/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
-  defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl,
+  defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, invokeWith,
   nullable, op, promise, roAttr, reference, xattr,
 } from '../web-idl/index';
 import { RangeError, TypeError } from '../infra/exceptions';
@@ -112,12 +112,12 @@ export class TransformStreamImpl {
 
   /** Streams §9.3, enqueue into a stream initialized by setUp. */
   enqueue(chunk: unknown): void {
-    this.#controller.enqueue(chunk);
+    this.#controller.enqueue(chunk, this.env);
   }
 
   /** Streams §9.3, terminate a stream initialized by setUp. */
   terminate(): void {
-    this.#controller.terminate();
+    this.#controller.terminate(this.env);
   }
 
   /** Streams §9.3, error a stream initialized by setUp. */
@@ -422,14 +422,14 @@ export class TransformStreamDefaultControllerImpl {
     return this.state.stream.readableController.desiredSize;
   }
 
-  enqueue(chunk?: unknown): void {
+  enqueue(chunk: unknown, env: JSEnvironment): void {
     const { stream } = this.state;
     const controller = stream.readableController;
     if (!controller.canCloseOrEnqueue) {
       throw new TypeError('Readable side is not in a state that permits enqueue');
     }
     try {
-      controller.enqueueInternal(chunk);
+      controller.enqueueInternal(chunk, env);
     } catch (error) {
       stream.errorWritableAndUnblockWrite(error);
       throw stream.readable.state.storedError;
@@ -445,10 +445,10 @@ export class TransformStreamDefaultControllerImpl {
     this.state.stream.error(reason);
   }
 
-  terminate(): void {
+  terminate(env: JSEnvironment): void {
     const { stream } = this.state;
     stream.readableController.closeInternal();
-    stream.errorWritableAndUnblockWrite(new TypeError('TransformStream terminated'));
+    stream.errorWritableAndUnblockWrite(new env.exec.TypeError('TransformStream terminated'));
   }
 
   setUp(
@@ -470,7 +470,7 @@ export class TransformStreamDefaultControllerImpl {
     const { transform, flush, cancel } = transformer;
     this.setUp(
       stream,
-      (chunk) => stream.env.exec.Promise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk), idlType.any),
+      (chunk) => stream.env.exec.Promise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk, stream.env), idlType.any),
       () => stream.env.exec.Promise.try(() => flush?.call(transformer, this), idlType.any),
       (reason) => stream.env.exec.Promise.try(() => cancel?.call(transformer, reason), idlType.any),
     );
@@ -514,13 +514,16 @@ export const transformStreamDefaultControllerIDL = defineInterface({
   implementation: impl(TransformStreamDefaultControllerImpl),
   members: [
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
-    op('enqueue', idlType.undefined, [
-      arg('chunk', idlType.any, { optional: true }),
-    ]),
+    op('enqueue', idlType.undefined,
+      [arg('chunk', idlType.any, { optional: true })],
+      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+    ),
     op('error', idlType.undefined, [
       arg('reason', idlType.any, { optional: true }),
     ]),
-    op('terminate', idlType.undefined),
+    op('terminate', idlType.undefined,
+      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+    ),
   ],
 });
 

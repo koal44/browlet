@@ -1,4 +1,4 @@
-import { RangeError } from '../infra/exceptions';
+import type { JSEnvironment } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 
 /** Streams §8.1, a queue that tracks the total size of its values. */
@@ -25,9 +25,9 @@ export class QueueWithSizes<Value> {
   }
 
   /** EnqueueValueWithSize. */
-  enqueue(value: Value, size: number): void {
+  enqueue(value: Value, size: number, env: JSEnvironment): void {
     if (!isNonNegativeNumber(size) || size === Infinity) {
-      throw new RangeError('Size must be a finite, non-NaN, non-negative number.');
+      throw new env.exec.RangeError('Size must be a finite, non-NaN, non-negative number.');
     }
     this.#entries.push({ size, value });
     this.#totalSize += size;

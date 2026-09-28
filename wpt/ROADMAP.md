@@ -11,13 +11,9 @@ its failures; broader coverage should accompany implementation milestones in
 The FileReader/event-loop repair and typed native Promise views clear the selected
 WPT failures without changing expectations. All 82 selected documents now pass.
 
-The Promise migration's second stage remains: invocation-selected environments
-for borrowed stream methods. Five ordinary regressions in
-`test/browlet/streams/read-result.test.ts`, `promise-errors.test.ts`, and
-`readable-stream.test.ts` fail across all six Node configurations. They cover
-released default/BYOB read allocation and shared write/close/enqueue failures.
-The first stage settles declared results earlier; it does not yet select the
-invoking method's environment for these allocations.
+The borrowed-stream regressions, including the recovered release, termination,
+and piping cases, are fixed. Browser disagreements remain recorded in
+[Streams](../src/streams/README.md#specification-correspondence).
 Distinguish implementation defects from runner limitations and disputed tests.
 Keep focused regressions for fixes; changing an expectation requires review.
 The empty multipart FormData result is already recorded as contested in the
