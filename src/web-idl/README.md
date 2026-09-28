@@ -40,9 +40,21 @@ attribute may also expose a stored implementation field. Use explicit bindings
 for boundary adaptation or forwarding to an existing primitive, not to move
 independently meaningful specification behavior out of the implementation.
 
-The [TextEncoder declaration](../encoding/text-encoder.ts) illustrates environment
-injection, dictionary results, and a declaration-only mixin. Its constructor
-dependency is declared once:
+Declarations take one environment type, which also determines their realm type.
+For example, `defineInterface<DOMEnvironment>()` gives its callbacks both
+`ctx.getEnvironment().exec.createEvent()` and `ctx.realm.eventTimeStamp()`.
+The host's binding world must supply that environment contract.
+
+Custom operation and constructor bindings infer converted argument types from
+`arg()` declarations, including optional, defaulted, and variadic arguments.
+`reference(BlobImpl)` identifies the interface through its registered implementation
+class and infers `BlobImpl` for converted arguments and Promise results. It takes
+no interface declaration or separate type assertion. `reference('Name')` covers
+named IDL types such as dictionaries, callbacks, and typedefs, and forward references.
+The interface declaration continues to specify only its environment type.
+
+The [TextEncoder declaration](../encoding/text-encoder.ts) uses `JSEnvironment`.
+Its constructor dependency is declared once:
 
 ```ts
 implementation: impl(TextEncoderImpl, {
@@ -71,16 +83,21 @@ includer explicitly exposes it. Binding must not manufacture missing state.
 
 ## Registration and environment composition
 
-`new BindingWorld(definitions, options)` assembles the definitions and optional
-capabilities/host-defined interfaces. `world.register(realm, createEnvironment?)`
-returns one Binding Context per realm in that world. Repeated registration
-returns the existing context; `world.forRealm(realm)` only looks it up.
+`new BindingWorld<Env>(definitions, options)` assembles definitions requiring
+that environment, plus optional capabilities/host-defined interfaces.
+`world.register(env)` returns one Binding Context per realm in that world.
+Repeated registration returns the existing context; `world.forRealm(realm)`
+only looks it up.
 
-The optional factory receives the newly created context so the composition root
-can assemble execution facilities and return its actual `JSEnvironment`.
-`ctx.getEnvironment()` retains that same object and throws when no factory
-supplied one. Pure conversion tests need no environment. Declaration setup must
-succeed before the realm binding is published in the world's index.
+Every registration supplies an environment. Its minimum shape is `{ realm }`;
+pure conversion hosts need no execution facilities. Declarations requiring more
+name their environment type explicitly. `ctx.realm` has type `Env['realm']`,
+and `ctx.getEnvironment()` returns the actual registered object as `Env`.
+
+Use `world.register(realm, createEnvironment)` when execution composition needs
+the new context. The factory must return an environment for that same realm;
+the environment getter is unavailable until the factory returns. Composition
+and declaration setup must succeed before the realm binding is published.
 
 Registration and global installation are distinct. `ctx.install(target)` installs
 exposed definitions; `ctx.projectGlobalObject()` can project into an engine
@@ -102,7 +119,7 @@ implementation constructor's `newTarget`.
 
 Creating the record runs inherited implementation initializers before stamping.
 That establishes dependencies needed before projection, such as an EventTarget's
-event factory. Failed initialization leaves the implementation unstamped and can
+event execution. Failed initialization leaves the implementation unstamped and can
 be retried. Private stamping works on frozen objects without adding public keys;
 stamping a Proxy does not stamp its target.
 
@@ -160,8 +177,9 @@ Later conversions explicitly required by an algorithm remain at that later step.
 
 Every `InternalPromise<T>` stores its runtime result descriptor in `type`.
 Select its owner's constructor: `env.exec.Promise.withResolvers(idlType.Uint8Array)`.
-The descriptor determines the resolver's TypeScript payload too; named IDL
-results associate that payload once with `implementationType<BarImpl>(reference('Bar'))`.
+The descriptor determines the resolver's TypeScript payload too:
+`reference(BarImpl)` supplies both the interface identity and its implementation type.
+Named dictionary results can use `implementationType<MyRecord>(reference('MyRecord'))`.
 Web IDL owns those descriptors and their payload mappings; Infra retains them
 through a generic result-type contract. `all(values, sequence(idlType.long))`
 takes the complete array result descriptor.

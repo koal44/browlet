@@ -1,4 +1,4 @@
-import { getAssociatedRealm, isObject, type JSFunction, type JSEnvironment } from '../js-engine/index';
+import { getAssociatedRealm, isObject, type JSFunction } from '../js-engine/index';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
@@ -30,7 +30,7 @@ import {
   type PlatformObjectAllocationSteps,
 } from './definition-binding';
 import { SynchronousIterableBinding } from './iterable';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLEnvironment } from './realm';
 import { BindingContext } from './binding-context';
 import {
   LegacyPlatformObjectBinding, type LegacyPropertyMetadata,
@@ -48,13 +48,13 @@ import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
 import { InternalError } from '../infra/internal-error';
 
-export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
+export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   definitions: DefinitionAssembly;
   hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   world: BindingWorld;
   realizeException: (value: unknown) => unknown;
-  realm: Realm;
-  context: BindingContext<Realm>;
+  realm: Env['realm'];
+  context: BindingContext<Env>;
   defaultConversionContext: ConversionContext;
   #collections: CollectionBinding;
   #asyncIterables: AsynchronousIterableBinding;
@@ -69,9 +69,9 @@ export class RealmBinding<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   // Project helper: compose this realm's definition records and binding machinery.
   constructor(
     definitions: DefinitionAssembly,
-    realm: Realm,
+    realm: Env['realm'],
     world: BindingWorld,
-    createEnvironment?: (ctx: BindingContext<Realm>) => JSEnvironment,
+    createEnvironment: (ctx: BindingContext<Env>) => Env,
   ) {
     this.definitions = definitions;
     this.hostDefinedInterfaces = world.hostDefinedInterfaces;

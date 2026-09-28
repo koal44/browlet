@@ -1,5 +1,5 @@
+import type { BrowletEnvironment } from '../../scripting/environment';
 import { withDocumentFragmentStub } from '../../stubs';
-import type { Realm, WindowRealm } from '../../scripting/realm';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
 } from '../../../web-idl/index';
@@ -57,7 +57,7 @@ export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const documentFragmentIDL = defineInterface<Realm>({
+export const documentFragmentIDL = defineInterface<BrowletEnvironment>({
   name: 'DocumentFragment',
   inherits: 'Node',
   exposed: 'Window',
@@ -65,8 +65,7 @@ export const documentFragmentIDL = defineInterface<Realm>({
   members: [
     ctor(
       [],
-      // Exposed=Window narrows the realm; the shared declaration registry also serves other globals.
-      { constructWith: [atArg(0, (ctx) => (ctx.realm as WindowRealm).getAssociatedDocument())] },
+      { constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())] },
     ),
   ],
 });

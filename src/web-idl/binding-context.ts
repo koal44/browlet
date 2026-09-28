@@ -1,12 +1,11 @@
 import type { InternalPromise } from '../infra/promises';
-import type { JSEnvironment } from '../js-engine/index';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
 import type { Capability } from './capability';
 import type { ImplementationClass, WebIDLType } from './core/types';
 import type { InterfaceDefinition } from './core/declarations';
 import { convertToIDL, convertToJavaScript } from './conversion';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLEnvironment } from './realm';
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
   type StampedPlatformObject, type PlatformRecord,
@@ -18,21 +17,24 @@ import { InternalError } from '../infra/internal-error';
 import { createWebIDLPromiseConstructor } from './promise';
 
 /** A realm's Web IDL operations and environment within one binding world. */
-export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
-  realm: Realm;
+export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
+  realm: Env['realm'];
   Promise: typeof InternalPromise;
-  #binding: RealmBinding<Realm>;
-  #env: JSEnvironment | undefined;
+  #binding: RealmBinding<Env>;
+  #env: Env | undefined;
 
   // Project helper: retain a realm binding and compose its environment.
   constructor(
-    binding: RealmBinding<Realm>,
-    createEnvironment?: (ctx: BindingContext<Realm>) => JSEnvironment,
+    binding: RealmBinding<Env>,
+    createEnvironment: (ctx: BindingContext<Env>) => Env,
   ) {
     this.realm = binding.realm;
     this.#binding = binding;
     this.Promise = createWebIDLPromiseConstructor(this);
-    this.#env = createEnvironment?.(this);
+    this.#env = createEnvironment(this);
+    if (this.#env.realm !== this.realm) {
+      throw new InternalError('The binding environment belongs to a different realm');
+    }
   }
 
   /** The realm's original DOMException constructor, independent of its global property. */
@@ -56,8 +58,8 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   /** Owning environment supplied by this realm's composition root. */
-  getEnvironment(): JSEnvironment {
-    if (!this.#env) throw new InternalError('The binding realm has no environment');
+  getEnvironment(): Env {
+    if (!this.#env) throw new InternalError('The binding environment is still being composed');
     return this.#env;
   }
 

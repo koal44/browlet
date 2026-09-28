@@ -82,7 +82,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
   it.each(['next', 'return'] as const)('accepts %s borrowed from another realm in the same binding world', async (operation) => {
     const { binding, declaration, definition } = createPairBinding();
     const otherBinding = new RealmBinding(
-      binding.definitions, new Realm(), binding.world,
+      binding.definitions, new Realm(), binding.world, (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(declaration).asyncIteratorSteps = {
       create: () => ({}),
@@ -111,7 +111,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const { binding, declaration, definition } = createPairBinding();
     const otherRealm = new Realm();
     const otherBinding = new RealmBinding(
-      binding.definitions, otherRealm, new BindingWorld([]),
+      binding.definitions, otherRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(declaration).asyncIteratorSteps = {
       create: () => ({}),
@@ -184,7 +184,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       },
     };
     const otherBinding = borrowed ? new RealmBinding(
-      binding.definitions, new Realm(), binding.world,
+      binding.definitions, new Realm(), binding.world, (ctx) => ({ realm: ctx.realm }),
     ) : binding;
     const original = binding.getDefinitionBinding(definition);
     const other = otherBinding.getDefinitionBinding(definition);
@@ -257,6 +257,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       new DefinitionAssembly([...webIDLCommonDefinitions, definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).createImplementation = () => new AsyncValuesImpl();
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(declaration).asyncIteratorSteps = {
@@ -308,7 +309,7 @@ function createPairBinding(): {
   });
   const realm = new Realm();
   const binding = new RealmBinding(
-    new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]),
+    new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
   binding.getDefinitionBinding(definition).createImplementation = () => new AsyncPairsImpl();
   return { binding, definition, declaration, realm };

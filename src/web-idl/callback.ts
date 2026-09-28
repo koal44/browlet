@@ -101,7 +101,7 @@ export function invokeCallbackFunction(
       );
     }
     if (exceptionBehavior === 'rethrow') throw exception;
-    callable.realm.callbacks.reportException(exception);
+    callable.realm.reportException(exception);
     return undefined;
   }
 }

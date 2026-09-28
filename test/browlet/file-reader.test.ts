@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { Browlet } from '../../src/browlet/browlet';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import {
   FileReaderImpl, fileReaderIDL,
 } from '../../src/browlet/integration/file/file-reader';
-import {
-  EventTargetImpl, fireEvent,
-} from '../../src/browlet/dom/events/event-target';
+import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
 import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
 import {
@@ -42,7 +41,7 @@ describe('File API FileReader foundation', () => {
 
     reader.onload = load;
     reader.onprogress = progress;
-    fireEvent('load', reader);
+    reader.fireEvent('load');
 
     expect(load).toHaveBeenCalledOnce();
     expect(progress).not.toHaveBeenCalled();
@@ -50,7 +49,7 @@ describe('File API FileReader foundation', () => {
     expect(reader.onprogress).toBe(progress);
 
     reader.onload = null;
-    fireEvent('load', reader);
+    reader.fireEvent('load');
     expect(load).toHaveBeenCalledOnce();
     expect(reader.onload).toBeNull();
     expect(reader.onprogress).toBe(progress);
@@ -365,6 +364,7 @@ describe('File API §6.2: FileReader reads', () => {
     const clock = vi.spyOn(monotonicClock, 'unsafeCurrentTime')
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
+      realm: env.realm,
       queueNetworkingTask,
       exec: {
         ...env.exec,
@@ -606,12 +606,12 @@ function createReader(context = getContext(createWindow())): FileReaderImpl {
   return new FileReaderImpl(context.getEnvironment());
 }
 
-function getContext(window: object): BindingContext {
+function getContext(window: object): BindingContext<BrowletEnvironment> {
   return getBindingContext(getRelevantRealm(window));
 }
 
 async function read(
-  context: BindingContext,
+  context: BindingContext<BrowletEnvironment>,
   blob: BlobImpl,
   start: (reader: FileReaderImpl) => void,
 ): Promise<FileReaderImpl> {

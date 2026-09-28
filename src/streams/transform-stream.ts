@@ -314,7 +314,7 @@ export type TransformerRecord = {
   writableType?: unknown;
 };
 
-export const transformStreamIDL = defineInterface({
+export const transformStreamIDL = defineInterface<JSEnvironment>({
   name: 'TransformStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -508,7 +508,7 @@ type TransformStreamDefaultControllerState = {
   transformAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
 };
 
-export const transformStreamDefaultControllerIDL = defineInterface({
+export const transformStreamDefaultControllerIDL = defineInterface<JSEnvironment>({
   name: 'TransformStreamDefaultController',
   exposed: '*',
   implementation: impl(TransformStreamDefaultControllerImpl),

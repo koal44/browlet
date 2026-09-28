@@ -1,3 +1,4 @@
+import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
 import { headersIDL, headersInitIDL } from './headers';
 import { bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from './body';
@@ -42,7 +43,7 @@ export {
 export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 
-export const fetchIDLDefinitions: Definition[] = [
+export const fetchIDLDefinitions: Definition<JSEnvironment>[] = [
   headersInitIDL,
   headersIDL,
   xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,

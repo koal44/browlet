@@ -3,7 +3,7 @@ import {
   emptyDictionary, idlType, impl, integer, reference, roAttr,
 } from '../../../../web-idl/index';
 import { EventImpl } from '../../../dom/events/event';
-import type { Realm } from '../../../scripting/realm';
+import type { DOMEnvironment } from '../../../dom/environment';
 import type { CSPDisposition } from './policy';
 
 /** Author-visible details of a Content Security Policy violation. */
@@ -115,7 +115,7 @@ export const securityPolicyViolationEventDispositionIDL = defineEnumeration({
   values: ['enforce', 'report'] satisfies CSPDisposition[],
 });
 
-export const securityPolicyViolationEventIDL = defineInterface<Realm>({
+export const securityPolicyViolationEventIDL = defineInterface<DOMEnvironment>({
   name: 'SecurityPolicyViolationEvent',
   inherits: 'Event',
   exposed: ['Window', 'Worker'],

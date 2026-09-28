@@ -81,7 +81,7 @@ function enqueuePromiseJob(
         if (env !== undefined) env.responsibleEventLoop.cleanUpAfterRunningScript(env);
       }
     } catch (exception) {
-      destination.callbacks.reportException(exception);
+      destination.reportException(exception);
     }
   });
 }

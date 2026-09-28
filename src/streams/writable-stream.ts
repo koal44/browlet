@@ -416,7 +416,7 @@ export type UnderlyingSink = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const writableStreamIDL = defineInterface({
+export const writableStreamIDL = defineInterface<JSEnvironment>({
   name: 'WritableStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -1005,7 +1005,7 @@ type WritableStreamDefaultWriterState = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const writableStreamDefaultWriterIDL = defineInterface({
+export const writableStreamDefaultWriterIDL = defineInterface<JSEnvironment>({
   name: 'WritableStreamDefaultWriter',
   exposed: '*',
   implementation: impl(WritableStreamDefaultWriterImpl),

@@ -4,7 +4,6 @@ import {
   Browlet,
 } from '../../src/browlet/browlet';
 import { getRelevantRealm, unwrap } from '../../src/browlet/bindings';
-import { fireEvent } from '../../src/browlet/dom/events/event-target';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
@@ -282,10 +281,7 @@ describe('Browlet', () => {
       received = event;
     });
 
-    expect(fireEvent(
-      'ready',
-      unwrap<DocumentImpl>(browlet.document),
-    )).toBe(true);
+    expect(unwrap<DocumentImpl>(browlet.document).fireEvent('ready')).toBe(true);
     expect(received).toBeInstanceOf(EventConstructor);
     expect(received?.isTrusted).toBe(true);
   });

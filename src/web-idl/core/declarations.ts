@@ -6,152 +6,231 @@ import type {
 
 // Interfaces
 
-export type InterfaceDefinition<Realm = unknown> = {
+/** An interface's author-facing members and implementation binding. */
+export type InterfaceDefinition<Env = unknown, Impl extends object = object> = {
+  /** Declaration discriminator supplied by `defineInterface()`. */
   kind: 'interface';
+  /** IDL identifier used by references and the interface object. */
   name: string;
-  members: InterfaceMember<Realm>[];
+  /** Members declared directly on this interface. */
+  members: InterfaceMember<Env>[];
+  /** Name of the inherited interface. */
   inherits?: string;
+  /** Global exposure names, or `'*'` for every global. */
   exposed?: Exposure;
+  /** Extended attributes applying to this interface. */
   extendedAttributes?: ExtendedAttribute[];
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
+  /** Implementation class and hooks used when constructing or projecting its instances. */
   implementation?: {
-    implClass: ImplementationClass;
-    constructWith?: InjectedArgument<Realm>[];
-    allocatePlatformObject?: DeclarationCallback<'allocate-platform-object', Realm>;
-    initializeImplementation?: DeclarationCallback<'initialize-implementation', Realm>;
+    /** Class identity used for construction, automatic member binding, and unwrapping. */
+    implClass: ImplementationClass<Impl>;
+    /** Injected arguments for internal construction and automatically bound constructors. */
+    constructWith?: InjectedArgument<Env>[];
+    /** Create the platform backing object using the supplied context and selected prototype. */
+    allocatePlatformObject?: DeclarationCallback<'allocate-platform-object', Env>;
+    /** Initialize the implementation before stamping or projection; inherited hooks run first. */
+    initializeImplementation?: DeclarationCallback<'initialize-implementation', Env, Impl>;
   };
 };
 
-// Project builder for Web IDL §2.2 Interfaces.
-export function defineInterface<Realm = unknown>(
-  definition: Omit<InterfaceDefinition<Realm>, 'kind'>,
-): InterfaceDefinition<Realm> {
+/** Declare an interface; `Env` describes the environment required by its binding hooks. */
+// https://webidl.spec.whatwg.org/#idl-interfaces
+export function defineInterface<Env = unknown>(
+  definition: Omit<InterfaceDefinition<Env>, 'kind'>,
+): InterfaceDefinition<Env> {
   return { kind: 'interface', ...definition };
 }
 
-export type PartialInterfaceDefinition<Realm = unknown> = {
+/** Additional members of an existing interface. */
+export type PartialInterfaceDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `definePartialInterface()`. */
   kind: 'partial-interface';
+  /** Name of the primary interface being amended. */
   name: string;
-  members: PartialInterfaceMember<Realm>[];
+  /** Members contributed to the primary interface. */
+  members: PartialInterfaceMember<Env>[];
+  /** Global exposure names for this contribution, or `'*'` for every global. */
   exposed?: Exposure;
+  /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.2 Interfaces — partial interface definitions.
-export function definePartialInterface<Realm = unknown>(
-  definition: Omit<PartialInterfaceDefinition<Realm>, 'kind'>,
-): PartialInterfaceDefinition<Realm> {
+/** Add members to an existing interface without creating a separate implementation. */
+// https://webidl.spec.whatwg.org/#idl-interfaces
+export function definePartialInterface<Env = unknown>(
+  definition: Omit<PartialInterfaceDefinition<Env>, 'kind'>,
+): PartialInterfaceDefinition<Env> {
   return { kind: 'partial-interface', ...definition };
 }
 
-export type InterfaceMember<Realm = unknown> = PartialInterfaceMember<Realm> | ConstructorMember<Realm>;
+/** Any member accepted by a primary interface declaration. */
+export type InterfaceMember<Env = unknown> = PartialInterfaceMember<Env> | ConstructorMember<Env>;
 
-export type PartialInterfaceMember<Realm = unknown> =
+/** Interface members that may also be contributed by a partial declaration. */
+export type PartialInterfaceMember<Env = unknown> =
   | ConstantMember
-  | AttributeMember<Realm>
-  | OperationMember<Realm>
+  | AttributeMember<Env>
+  | OperationMember<Env>
   | StringifierMember
   | IterableMember
   | AsyncIterableMember
   | MaplikeMember
   | SetlikeMember;
 
-export type ConstructorMember<Realm = unknown> = {
+/** An author-facing constructor overload and its implementation creation steps. */
+export type ConstructorMember<Env = unknown> = {
+  /** Member discriminator supplied by `ctor()`. */
   kind: 'constructor';
+  /** Author arguments in declaration order. */
   arguments: ArgumentDefinition[];
+  /** Global exposure names for this overload. */
   exposed?: Exposure;
+  /** Extended attributes applying to this constructor. */
   extendedAttributes?: ExtendedAttribute[];
 
   // Project metadata: implementation construction and argument injection.
-  construct?: DeclarationCallback<'constructor-create', Realm>;
-  constructWith?: InjectedArgument<Realm>[];
-  invoke?: DeclarationCallback<'constructor-invoke', Realm>;
+  /** Return a new implementation from the binding context and converted arguments. */
+  construct?: DeclarationCallback<'constructor-create', Env>;
+  /** Injected arguments for automatic construction; overrides the interface's `constructWith`. */
+  constructWith?: InjectedArgument<Env>[];
+  /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
+  invoke?: DeclarationCallback<'constructor-invoke', Env>;
 };
 
+/** Synchronous iteration over values or key/value pairs. */
 export type IterableMember = {
+  /** Member discriminator supplied by `iter()`. */
   kind: 'iterable';
+  /** Type of each iterated value. */
   value: WebIDLType;
+  /** Type of each key; omit for value-only iteration. */
   key?: WebIDLType;
+  /** Global exposure names for the generated iteration members. */
   exposed?: Exposure;
+  /** Extended attributes applying to this iterable declaration. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
+/** Asynchronous iteration backed by an implementation iterator factory. */
 export type AsyncIterableMember = {
+  /** Member discriminator supplied by `asyncIter()`. */
   kind: 'async-iterable';
+  /** Type of each iterated value. */
   value: WebIDLType;
+  /** Type of each key; omit for value-only iteration. */
   key?: WebIDLType;
+  /** Author arguments accepted by the iteration methods. */
   arguments?: ArgumentDefinition[];
+  /** Global exposure names for the generated iteration members. */
   exposed?: Exposure;
+  /** Extended attributes applying to this iterable declaration. */
   extendedAttributes?: ExtendedAttribute[];
 
   // Project metadata: the iterator implementation factory and optional return operation.
+  /** Name of the implementation method creating the iterator; required for automatic binding. */
   create?: string;
+  /** Whether the iterator supports an author-visible `return()` operation. */
   return?: boolean;
 };
 
+/** Map-shaped collection members generated from declared key and value types. */
 export type MaplikeMember = {
+  /** Member discriminator supplied by `maplike()`. */
   kind: 'maplike';
+  /** Type accepted and returned as a collection key. */
   key: WebIDLType;
+  /** Type accepted and returned as a collection value. */
   value: WebIDLType;
+  /** Omit the author-facing mutation methods. */
   readonly?: boolean;
+  /** Global exposure names for the generated collection members. */
   exposed?: Exposure;
+  /** Extended attributes applying to this maplike declaration. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
+/** Set-shaped collection members generated from a declared value type. */
 export type SetlikeMember = {
+  /** Member discriminator supplied by `setlike()`. */
   kind: 'setlike';
+  /** Type accepted and returned as a collection value. */
   value: WebIDLType;
+  /** Omit the author-facing mutation methods. */
   readonly?: boolean;
+  /** Global exposure names for the generated collection members. */
   exposed?: Exposure;
+  /** Extended attributes applying to this setlike declaration. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
 // Interface mixins and includes
 
-export type InterfaceMixinDefinition<Realm = unknown> = {
+/** Members contributed to interfaces through includes declarations. */
+export type InterfaceMixinDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `defineInterfaceMixin()`. */
   kind: 'interface-mixin';
+  /** IDL identifier used by includes declarations. */
   name: string;
-  members: MixinMember<Realm>[];
+  /** Members supplied to each including interface. */
+  members: MixinMember<Env>[];
+  /** Global exposure names for these members. */
   exposed?: Exposure;
+  /** Extended attributes applying to this mixin. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.3 Interface mixins.
-export function defineInterfaceMixin<Realm = unknown>(
-  definition: Omit<InterfaceMixinDefinition<Realm>, 'kind'>,
-): InterfaceMixinDefinition<Realm> {
+/** Declare reusable interface members; implementation state remains with the includer. */
+// https://webidl.spec.whatwg.org/#idl-interface-mixins
+export function defineInterfaceMixin<Env = unknown>(
+  definition: Omit<InterfaceMixinDefinition<Env>, 'kind'>,
+): InterfaceMixinDefinition<Env> {
   return { kind: 'interface-mixin', ...definition };
 }
 
-export type PartialInterfaceMixinDefinition<Realm = unknown> = {
+/** Additional members of an existing interface mixin. */
+export type PartialInterfaceMixinDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `definePartialInterfaceMixin()`. */
   kind: 'partial-interface-mixin';
+  /** Name of the primary mixin being amended. */
   name: string;
-  members: MixinMember<Realm>[];
+  /** Members contributed to the primary mixin. */
+  members: MixinMember<Env>[];
+  /** Global exposure names for this contribution. */
   exposed?: Exposure;
+  /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.3 Interface mixins — partial interface mixin definitions.
-export function definePartialInterfaceMixin<Realm = unknown>(
-  definition: Omit<PartialInterfaceMixinDefinition<Realm>, 'kind'>,
-): PartialInterfaceMixinDefinition<Realm> {
+/** Add members to an existing interface mixin. */
+// https://webidl.spec.whatwg.org/#idl-interface-mixins
+export function definePartialInterfaceMixin<Env = unknown>(
+  definition: Omit<PartialInterfaceMixinDefinition<Env>, 'kind'>,
+): PartialInterfaceMixinDefinition<Env> {
   return { kind: 'partial-interface-mixin', ...definition };
 }
 
-export type MixinMember<Realm = unknown> =
+/** Constants, attributes, operations, and stringifiers contributed by a mixin. */
+export type MixinMember<Env = unknown> =
   | ConstantMember
-  | AttributeMember<Realm>
-  | OperationMember<Realm>
+  | AttributeMember<Env>
+  | OperationMember<Env>
   | StringifierMember;
 
+/** Applies a named mixin's members to a named interface. */
 export type IncludesDefinition = {
+  /** Declaration discriminator supplied by `defineIncludes()`. */
   kind: 'includes';
+  /** Interface receiving the mixin's members. */
   interface: string;
+  /** Mixin contributing the members. */
   mixin: string;
+  /** Extended attributes applying to this includes declaration. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.3 Interface mixins — includes statements.
+/** Apply an interface mixin to an interface. */
+// https://webidl.spec.whatwg.org/#idl-interface-mixins
 export function defineIncludes(
   definition: Omit<IncludesDefinition, 'kind'>,
 ): IncludesDefinition {
@@ -160,109 +239,163 @@ export function defineIncludes(
 
 // Dictionaries
 
+/** Named dictionary members and defaults used during conversion. */
 export type DictionaryDefinition = {
+  /** Declaration discriminator supplied by `defineDictionary()`. */
   kind: 'dictionary';
+  /** IDL identifier used to refer to this dictionary. */
   name: string;
+  /** Members declared directly on this dictionary. */
   members: DictionaryMember[];
+  /** Name of the inherited dictionary. */
   inherits?: string;
+  /** Extended attributes applying to this dictionary. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.7 Dictionaries.
+/** Declare dictionary conversion, including member types, required fields, and defaults. */
+// https://webidl.spec.whatwg.org/#idl-dictionaries
 export function defineDictionary(
   definition: Omit<DictionaryDefinition, 'kind'>,
 ): DictionaryDefinition {
   return { kind: 'dictionary', ...definition };
 }
 
+/** Additional members of an existing dictionary. */
 export type PartialDictionaryDefinition = {
+  /** Declaration discriminator supplied by `definePartialDictionary()`. */
   kind: 'partial-dictionary';
+  /** Name of the primary dictionary being amended. */
   name: string;
+  /** Members contributed to the primary dictionary. */
   members: DictionaryMember[];
+  /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.7 Dictionaries — partial dictionary definitions.
+/** Add members to an existing dictionary. */
+// https://webidl.spec.whatwg.org/#idl-dictionaries
 export function definePartialDictionary(
   definition: Omit<PartialDictionaryDefinition, 'kind'>,
 ): PartialDictionaryDefinition {
   return { kind: 'partial-dictionary', ...definition };
 }
 
+/** One dictionary property and its conversion requirements. */
 export type DictionaryMember = {
+  /** Property name read from the author-supplied dictionary. */
   name: string;
+  /** IDL type used to convert this property's value. */
   type: WebIDLType;
+  /** Reject a missing or undefined value instead of leaving the member absent. */
   required?: boolean;
+  /** IDL default used when the supplied value is undefined. */
   default?: DefaultValue;
+  /** Extended attributes applying to this member. */
   extendedAttributes?: ExtendedAttribute[];
   // Project metadata: exception policy for a callback-valued member.
+  /** Report or rethrow author callback exceptions when this member is invoked. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
 };
 
 // Namespaces
 
-export type NamespaceDefinition<Realm = unknown> = {
+/** Members exposed together on a named namespace object. */
+export type NamespaceDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `defineNamespace()`. */
   kind: 'namespace';
+  /** IDL identifier and name of the exposed namespace object. */
   name: string;
-  members: NamespaceMember<Realm>[];
+  /** Constants, attributes, and operations supplied by this namespace. */
+  members: NamespaceMember<Env>[];
+  /** Global exposure names, or `'*'` for every global. */
   exposed?: Exposure;
+  /** Extended attributes applying to this namespace. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.6 Namespaces.
-export function defineNamespace<Realm = unknown>(
-  definition: Omit<NamespaceDefinition<Realm>, 'kind'>,
-): NamespaceDefinition<Realm> {
+/** Declare a namespace object and its members. */
+// https://webidl.spec.whatwg.org/#idl-namespaces
+export function defineNamespace<Env = unknown>(
+  definition: Omit<NamespaceDefinition<Env>, 'kind'>,
+): NamespaceDefinition<Env> {
   return { kind: 'namespace', ...definition };
 }
 
-export type PartialNamespaceDefinition<Realm = unknown> = {
+/** Additional members of an existing namespace. */
+export type PartialNamespaceDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `definePartialNamespace()`. */
   kind: 'partial-namespace';
+  /** Name of the primary namespace being amended. */
   name: string;
-  members: NamespaceMember<Realm>[];
+  /** Members contributed to the primary namespace. */
+  members: NamespaceMember<Env>[];
+  /** Global exposure names for this contribution. */
   exposed?: Exposure;
+  /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.6 Namespaces — partial namespace definitions.
-export function definePartialNamespace<Realm = unknown>(
-  definition: Omit<PartialNamespaceDefinition<Realm>, 'kind'>,
-): PartialNamespaceDefinition<Realm> {
+/** Add members to an existing namespace object. */
+// https://webidl.spec.whatwg.org/#idl-namespaces
+export function definePartialNamespace<Env = unknown>(
+  definition: Omit<PartialNamespaceDefinition<Env>, 'kind'>,
+): PartialNamespaceDefinition<Env> {
   return { kind: 'partial-namespace', ...definition };
 }
 
-export type NamespaceMember<Realm = unknown> = ConstantMember | AttributeMember<Realm> | OperationMember<Realm>;
+/** Constants, attributes, and operations exposed on a namespace object. */
+export type NamespaceMember<Env = unknown> = ConstantMember | AttributeMember<Env> | OperationMember<Env>;
 
 // Callbacks
 
-export type CallbackInterfaceDefinition<Realm = unknown> = {
+/** Declared operations on an author-supplied callback object. */
+export type CallbackInterfaceDefinition<Env = unknown> = {
+  /** Declaration discriminator supplied by `defineCallbackInterface()`. */
   kind: 'callback-interface';
+  /** IDL identifier used by callback-interface arguments and attributes. */
   name: string;
-  members: CallbackInterfaceMember<Realm>[];
+  /** Operations and constants defined by this callback interface. */
+  members: CallbackInterfaceMember<Env>[];
+  /** Global exposure names for the callback interface object. */
   exposed?: Exposure;
+  /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
   // Project metadata: adapt the converted callback interface for implementation code.
-  adapt?: DeclarationCallback<'callback-interface-adapt', Realm>;
+  /**
+   * Turn a converted callback interface into the value received by implementation code.
+   * The callback retains its original object, associated realm, and IDL invocation steps.
+   */
+  adapt?: DeclarationCallback<'callback-interface-adapt', Env>;
 };
 
-// Project builder for Web IDL §2.4 Callback interfaces.
-export function defineCallbackInterface<Realm = unknown>(
-  definition: Omit<CallbackInterfaceDefinition<Realm>, 'kind'>,
-): CallbackInterfaceDefinition<Realm> {
+/** Declare an author callback object's operations and optional implementation adapter. */
+// https://webidl.spec.whatwg.org/#idl-callback-interfaces
+export function defineCallbackInterface<Env = unknown>(
+  definition: Omit<CallbackInterfaceDefinition<Env>, 'kind'>,
+): CallbackInterfaceDefinition<Env> {
   return { kind: 'callback-interface', ...definition };
 }
 
-export type CallbackInterfaceMember<Realm = unknown> = ConstantMember | OperationMember<Realm>;
+/** Constants and operations accepted by a callback-interface declaration. */
+export type CallbackInterfaceMember<Env = unknown> = ConstantMember | OperationMember<Env>;
 
+/** The arguments and result conversion of an author-supplied callback function. */
 export type CallbackFunctionDefinition = {
+  /** Declaration discriminator supplied by `defineCallbackFunction()`. */
   kind: 'callback-function';
+  /** IDL identifier used to refer to this callback type. */
   name: string;
+  /** IDL type used to convert the author's return value. */
   returns: WebIDLType;
+  /** Callback arguments in declaration order. */
   arguments: ArgumentDefinition[];
+  /** Extended attributes applying to this callback function. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.10 Callback functions.
+/** Declare conversion for calls into an author-supplied function. */
+// https://webidl.spec.whatwg.org/#idl-callback-functions
 export function defineCallbackFunction(
   definition: Omit<CallbackFunctionDefinition, 'kind'>,
 ): CallbackFunctionDefinition {
@@ -271,28 +404,40 @@ export function defineCallbackFunction(
 
 // Enumerations and typedefs
 
+/** A named set of accepted string values. */
 export type EnumerationDefinition = {
+  /** Declaration discriminator supplied by `defineEnumeration()`. */
   kind: 'enumeration';
+  /** IDL identifier used to refer to this enumeration. */
   name: string;
+  /** Accepted strings, compared exactly after string conversion. */
   values: string[];
+  /** Extended attributes applying to this enumeration. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.9 Enumerations.
+/** Declare a named set of accepted string values. */
+// https://webidl.spec.whatwg.org/#idl-enums
 export function defineEnumeration(
   definition: Omit<EnumerationDefinition, 'kind'>,
 ): EnumerationDefinition {
   return { kind: 'enumeration', ...definition };
 }
 
+/** A named alias for an IDL type expression. */
 export type TypedefDefinition = {
+  /** Declaration discriminator supplied by `defineTypedef()`. */
   kind: 'typedef';
+  /** IDL identifier introduced by this alias. */
   name: string;
+  /** Type expression to which references to this alias resolve. */
   type: WebIDLType;
+  /** Extended attributes applying to this typedef. */
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Project builder for Web IDL §2.11 Typedefs.
+/** Give an IDL type expression a reusable name. */
+// https://webidl.spec.whatwg.org/#idl-typedefs
 export function defineTypedef(
   definition: Omit<TypedefDefinition, 'kind'>,
 ): TypedefDefinition {
@@ -301,15 +446,16 @@ export function defineTypedef(
 
 // All definition kinds
 
-// Project declaration records for Web IDL §2 Interface definition language.
-export type Definition<Realm = unknown> =
-  | InterfaceDefinition<Realm>
-  | PartialInterfaceDefinition<Realm>
-  | InterfaceMixinDefinition<Realm>
-  | PartialInterfaceMixinDefinition<Realm>
-  | CallbackInterfaceDefinition<Realm>
-  | NamespaceDefinition<Realm>
-  | PartialNamespaceDefinition<Realm>
+/** Any declaration accepted by definition assembly; `Env` carries binding-hook requirements. */
+// https://webidl.spec.whatwg.org/#idl
+export type Definition<Env = unknown> =
+  | InterfaceDefinition<Env>
+  | PartialInterfaceDefinition<Env>
+  | InterfaceMixinDefinition<Env>
+  | PartialInterfaceMixinDefinition<Env>
+  | CallbackInterfaceDefinition<Env>
+  | NamespaceDefinition<Env>
+  | PartialNamespaceDefinition<Env>
   | DictionaryDefinition
   | PartialDictionaryDefinition
   | EnumerationDefinition

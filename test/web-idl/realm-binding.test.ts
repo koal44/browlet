@@ -14,7 +14,7 @@ import {
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
-import type { SecurityCheckType } from '../../src/web-idl/realm-host';
+import type { SecurityCheckType } from '../../src/web-idl/realm';
 import { getPlatformRecord } from '../../src/web-idl/platform-object';
 
 describe('Web IDL realm interface bindings', () => {
@@ -93,6 +93,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([partial, include, derived, mixin, base]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(derived);
     interfaceBinding.createImplementation = () => new ProjectionDerivedImpl();
@@ -193,6 +194,7 @@ describe('Web IDL realm interface bindings', () => {
       ]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const firstBinding = binding.getDefinitionBinding(first);
     firstBinding.createImplementation = () => new FirstHostImpl();
@@ -287,6 +289,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([constants]),
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const Constants = getInstalledInterface(binding.install(), 'ConstantValues');
 
@@ -320,6 +323,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       firstRealm,
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     const firstInterfaceBinding = first.getDefinitionBinding(interfaceIDL);
     firstInterfaceBinding.createImplementation = () => new CrossRealmImpl();
@@ -332,6 +336,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       secondRealm,
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     const secondInterfaceBinding = second.getDefinitionBinding(interfaceIDL);
     secondInterfaceBinding.createImplementation = () => new CrossRealmImpl();
@@ -379,6 +384,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(interfaceIDL).getOrCreateMemberRecord(read).operationSteps = function(receiver) {
       const implInst = receiver?.implInst;
@@ -452,6 +458,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([derived, base]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(derived);
     interfaceBinding.createImplementation = () => new JSONDerivedImpl();
@@ -507,6 +514,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       new Realm(),
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     local.getDefinitionBinding(point).createImplementation = () => new JSONPointImpl();
     local.getDefinitionBinding(holder).createImplementation = () => new JSONHolderImpl();
@@ -514,6 +522,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       new Realm(),
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     foreign.getDefinitionBinding(point).createImplementation = () => new JSONPointImpl();
     foreign.getDefinitionBinding(holder).createImplementation = () => new JSONHolderImpl();
@@ -560,6 +569,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
     interfaceBinding.createImplementation = () => new FrozenArrayImpl();
@@ -607,6 +617,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
     interfaceBinding.createImplementation = () => new BufferSourceImpl();
@@ -670,6 +681,7 @@ describe('Web IDL realm interface bindings', () => {
       new DefinitionAssembly([enumeration, interfaceIDL]),
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
     interfaceBinding.createImplementation = () => new ExtendedInterfaceImpl();
@@ -792,6 +804,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const insecureInstalled = insecure.install();
     const insecurePrototype = getPrototype(
@@ -808,6 +821,7 @@ describe('Web IDL realm interface bindings', () => {
       definitions,
       new Realm({ crossOriginIsolated: true, secureContext: true }),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const privilegedInstalled = privileged.install();
     const privilegedPrototype = getPrototype(
@@ -843,6 +857,7 @@ describe('Web IDL realm interface bindings', () => {
       ]),
       new Realm({ globalNames: ['Worker', 'Worklet'] }),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
 
     expect([...binding.install().keys()]).toEqual([

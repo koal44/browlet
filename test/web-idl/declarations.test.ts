@@ -7,7 +7,7 @@ import {
   defineIncludes, defineInterface, defineInterfaceMixin,
   defineNamespace, definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
-  emptyDictionary, emptySequence, frozenArray, idlType, integer, iter,
+  emptyDictionary, emptySequence, frozenArray, idlType, impl, integer, iter,
   maplike, nullable, observableArray, op, staticOp, promise, roAttr, record,
   reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
 } from '../../src/web-idl/core/index';
@@ -17,6 +17,23 @@ import {
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL declarations and serialization', () => {
+  it('serializes implementation references using their declared IDL names', () => {
+    class ExampleImpl {}
+    class ConsumerImpl {}
+    const definition = defineInterface({
+      name: 'RenamedExample', implementation: impl(ExampleImpl), members: [],
+    });
+    const consumer = defineInterface({
+      name: 'Consumer', implementation: impl(ConsumerImpl),
+      members: [op('read', promise(nullable(reference(ExampleImpl))), [arg('values', sequence(reference(ExampleImpl)))])],
+    });
+
+    expect(serializeDefinitions([consumer, definition])).toContain(
+      'Promise<RenamedExample?> read(sequence<RenamedExample> values);',
+    );
+    expect(() => serializeDefinitions([consumer])).toThrow('No interface declares the referenced implementation class');
+  });
+
   it('represents the EventTarget fragment as structurally lossless data', () => {
     const definitions = [
       defineInterface({
@@ -127,7 +144,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       defineIncludes({ interface: 'Interface', mixin: 'Mixin' }),
     ];
 
-    expect(definitions.map(serializeDefinition)).toEqual([
+    expect(definitions.map((definition) => serializeDefinition(definition))).toEqual([
       '[Exposed=(Window, Worker)]\ninterface Interface : Parent {\n};',
       'partial interface Interface {\n};',
       'interface mixin Mixin {\n};',
@@ -189,7 +206,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
   });
 
   it('serializes the complete type vocabulary and type composition', () => {
-    expect(Object.values(idlType).map(serializeType)).toEqual([
+    expect(Object.values(idlType).map((type) => serializeType(type))).toEqual([
       'any', 'undefined', 'boolean', 'byte', 'octet', 'short',
       'unsigned short', 'long', 'unsigned long', 'long long',
       'unsigned long long', 'float', 'unrestricted float', 'double',
@@ -209,7 +226,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       frozenArray(idlType.long),
       observableArray(idlType.long),
       annotated(idlType.long, xattr('Clamp')),
-    ].map(serializeType)).toEqual([
+    ].map((type) => serializeType(type))).toEqual([
       'Thing?',
       '(DOMString or long)',
       'sequence<long>',
@@ -240,7 +257,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       { kind: 'raw', value: 'Future={balanced(tokens)}' },
     );
 
-    expect(attributes.map(serializeExtendedAttribute)).toEqual([
+    expect(attributes.map((attribute) => serializeExtendedAttribute(attribute))).toEqual([
       'SameObject',
       'Constructor()',
       'PutForwards=value',

@@ -1,3 +1,37 @@
+/** Iterates live objects in insertion order without keeping them alive. */
+export class WeakOrderedSet<T extends object>
+{
+  #references = new Set<WeakRef<T>>();
+
+  /** Reuse one WeakRef per object to deduplicate and remove by identity. */
+  add(reference: WeakRef<T>): void {
+    this.#references.add(reference);
+  }
+
+  clear(): void {
+    this.#references.clear();
+  }
+
+  delete(reference: WeakRef<T>): void {
+    this.#references.delete(reference);
+  }
+
+  /** Whether any reference still points to a live object. */
+  hasValue(): boolean {
+    for (const _value of this.values()) return true;
+    return false;
+  }
+
+  /** Yield live objects, discarding references to collected objects. */
+  *values(): IterableIterator<T> {
+    for (const reference of this.#references) {
+      const value = reference.deref();
+      if (value) yield value;
+      else this.#references.delete(reference);
+    }
+  }
+}
+
 export function iterableToArray<T>(items: Iterable<T>): T[] {
   if (Array.isArray(items)) return items as T[];
 

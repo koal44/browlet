@@ -13,6 +13,7 @@ export function createBodyFixture() {
     queueGlobalTask: vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); }),
   };
   const env = {
+    realm: context.realm,
     queueNetworkingTask,
     exec: {
       ...context.getEnvironment().exec,

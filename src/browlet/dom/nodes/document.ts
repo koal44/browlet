@@ -6,7 +6,7 @@ import type { InternalPromise, InternalPromiseWithResolvers } from '../../../inf
 import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
 import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
-import { fireEvent, type EventTargetImpl } from '../events/event-target';
+import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
@@ -14,14 +14,13 @@ import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
 import type { NavigationParams } from '../../browsing/navigation/navigation';
-import type { Environment } from '../../scripting/environment';
+import type { BrowletEnvironment, Environment } from '../../scripting/environment';
 import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
 import { CSPList } from '../../browsing/policy/csp/list';
 import type { FetchRequest, FetchResponse } from '../../../fetch/index';
 import type { NavigationTimingRecord } from '../../performance/navigation';
 import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
-import type { Realm } from '../../scripting/realm';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import {
   createPolicyContainer, type PolicyContainer,
@@ -478,7 +477,7 @@ export class DocumentImpl extends NodeImpl {
     timing.loadEventStartTime = now;
     this.currentDocumentReadiness = 'complete';
     this.readyForPostLoadTasks = true;
-    fireEvent('load', window);
+    window.fireEvent('load');
     timing.loadEventEndTime = env.timing.currentHighResolutionTime().toTimestamp();
     this.completelyFinishLoading();
   }
@@ -871,7 +870,7 @@ export class DocumentImpl extends NodeImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const documentIDL = defineInterface({
+export const documentIDL = defineInterface<BrowletEnvironment>({
   name: 'Document',
   inherits: 'Node',
   exposed: 'Window',
@@ -885,7 +884,7 @@ export const documentIDL = defineInterface({
           return ctx.construct(implClass, ...argumentsList);
         },
       })),
-      atArg<Realm>(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getEnvironment())),
+      atArg(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getEnvironment())),
     ],
   }),
   members: [

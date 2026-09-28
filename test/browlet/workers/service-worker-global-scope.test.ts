@@ -57,7 +57,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
     const worker = new TestServiceWorkerGlobalScope();
     const first = () => {};
     const ignored = () => {};
-    const second = { handleEvent: () => {} };
+    const second = () => {};
 
     worker.addEventListener('fetch', first);
     worker.addEventListener('install', ignored);

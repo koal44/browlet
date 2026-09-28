@@ -301,7 +301,7 @@ export class FileReaderImpl extends EventTargetImpl {
 
 // -- Web IDL ------------------------------------------------------------
 // BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
-export const fileReaderIDL = defineInterface({
+export const fileReaderIDL = defineInterface<JSEnvironment>({
   name: 'FileReader',
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],

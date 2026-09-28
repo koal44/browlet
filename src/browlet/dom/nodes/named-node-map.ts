@@ -167,10 +167,6 @@ export const namedNodeMapIDL = defineInterface({
       ],
       xattr('CEReactions'),
     ),
-    roAttr('length', idlType.unsignedLong, {
-      get() {
-        return (this as NamedNodeMapImpl).length;
-      },
-    }),
+    roAttr('length', idlType.unsignedLong),
   ],
 });

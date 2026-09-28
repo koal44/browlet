@@ -289,7 +289,7 @@ describe('Web IDL promises', () => {
 
 function createContext(world = new BindingWorld([])) {
   const realm = new Realm();
-  world.register(realm);
+  world.register({ realm });
   return world.getRealmBinding(realm)!.defaultConversionContext;
 }
 

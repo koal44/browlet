@@ -5,7 +5,6 @@ import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/i
 import { defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr } from '../../../../web-idl/index';
 import type { ElementImpl } from '../../../dom/nodes/element';
 import type { DocumentImpl } from '../../../dom/nodes/document';
-import { fireEvent } from '../../../dom/events/event-target';
 import { ReportBodyImpl } from '../../../reporting/report';
 import type { Environment } from '../../../scripting/environment';
 import { domManipulationTaskSource } from '../../../scripting/tasks';
@@ -76,7 +75,7 @@ export class CSPViolation {
       const document = this.#document;
       if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
       const body = new CSPViolationReportBodyImpl(this);
-      fireEvent('securitypolicyviolation', target ?? document, SecurityPolicyViolationEventImpl, (event) => {
+      (target ?? document).fireEvent('securitypolicyviolation', SecurityPolicyViolationEventImpl, (event) => {
         (event as SecurityPolicyViolationEventImpl).initialize({
           documentURI: body.documentURL, referrer: body.referrer ?? '', blockedURI: body.blockedURL ?? '',
           effectiveDirective: body.effectiveDirective, violatedDirective: body.effectiveDirective,

@@ -1,3 +1,4 @@
+import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
@@ -82,14 +83,14 @@ export function createFetchWindow(userAgent = new UserAgent()) {
 export function createIsolatedFetchRealm() {
   const realm = new Realm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = new BindingWorld<Realm>([], {
+  const registration = new BindingWorld<BrowletEnvironment>([], {
     capabilities: domExceptionCapabilities,
-  }).register(realm, (context) => ({ exec: createExecution(context), queueNetworkingTask }));
+  }).register(realm, (context) => ({ realm: context.realm, exec: createExecution(context), queueNetworkingTask }));
   registration.install(realm.global);
   return createFetchRealmFixture(registration);
 }
 
-function createFetchRealmFixture(context: BindingContext<Realm>) {
+function createFetchRealmFixture(context: BindingContext<BrowletEnvironment>) {
   return {
     ...createControllerFixture(context.getEnvironment()),
     context,

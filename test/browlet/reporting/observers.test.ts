@@ -227,7 +227,7 @@ describe('ReportingObserver', () => {
   it('reports callback exceptions without preventing another observer from receiving its batch', () => {
     const { window, realm, env, runTask } = createWindow();
     const error = new window.Error('observer failed');
-    const reported = vi.spyOn(realm.callbacks, 'reportException').mockImplementation(() => {});
+    const reported = vi.spyOn(realm, 'reportException').mockImplementation(() => {});
     const first = new window.ReportingObserver(() => { throw error; });
     const secondCallback = vi.fn();
     const second = new window.ReportingObserver(secondCallback);

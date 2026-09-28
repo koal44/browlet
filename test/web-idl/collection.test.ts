@@ -208,6 +208,7 @@ describe('Web IDL maplike declarations', () => {
       definitions,
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     class CollectionImplementation {}
     const implementation = new CollectionImplementation();
@@ -370,6 +371,7 @@ describe('Web IDL setlike declarations', () => {
       new DefinitionAssembly([readonlyMap, readonlySet]),
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(readonlyMap).createImplementation = () => new ReadonlyMapImpl();
     binding.getDefinitionBinding(readonlySet).createImplementation = () => new ReadonlySetImpl();
@@ -436,8 +438,8 @@ describe('Web IDL collection result ownership', () => {
           : setlike(reference('Value'))],
       }),
     ]);
-    const owner = world.register(new Realm());
-    const other = world.register(new Realm());
+    const owner = world.register({ realm: new Realm() });
+    const other = world.register({ realm: new Realm() });
     const object = owner.project(CollectionImpl, new CollectionImpl());
     const foreign = other.project(CollectionImpl, new CollectionImpl());
     const value = new ValueImpl();
@@ -524,6 +526,7 @@ function createBinding(
     new DefinitionAssembly([definition]),
     realm,
     new BindingWorld([]),
+    (ctx) => ({ realm: ctx.realm }),
   );
   binding.getDefinitionBinding(definition).createImplementation = () => new CollectionImpl();
   return binding;

@@ -1,12 +1,12 @@
 import type { WebIDLType } from './core/index';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
 
 // Project helper: retain a PromiseCapability with its type, realm, and settlement state.
 // Web IDL §3.2.24 Promise types — Promise<T>.
 export function createIDLPromiseRecord(
   type: WebIDLType,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   realizeException?: ExceptionRealizer,
 ): IDLPromiseRecord {
   let resolve: PromiseSettlement | undefined;
@@ -46,7 +46,7 @@ export function createIDLPromiseRecord(
 export function convertJavaScriptValueToPromise(
   value: unknown,
   type: WebIDLType,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   realizeException?: ExceptionRealizer,
 ): IDLPromiseRecord {
   const promise = createIDLPromiseRecord(type, realm, realizeException);
@@ -64,7 +64,7 @@ export function isIDLPromiseRecord(value: unknown): value is IDLPromiseRecord {
 export type IDLPromiseRecord = {
   [promiseRecordBrand]: true;
   promise: Promise<unknown>;
-  realm: WebIDLRealmHost;
+  realm: WebIDLRealm;
   reject: PromiseSettlement;
   resolve: PromiseSettlement;
   // True once either resolving function has been accepted.

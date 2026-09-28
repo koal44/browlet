@@ -21,6 +21,7 @@ describe('Web IDL initial objects', () => {
       new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(interfaceIDL).overriddenConstructor = (argumentsList, newTarget, activeFunction) => ({
       activeFunction,
@@ -56,6 +57,7 @@ describe('Web IDL initial objects', () => {
       new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
 
     binding.install();
@@ -85,6 +87,7 @@ describe('Web IDL initial objects', () => {
       new DefinitionAssembly([interfaceIDL]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new HiddenImpl();
 
@@ -124,7 +127,7 @@ describe('Web IDL initial objects', () => {
     });
     const realm = new Realm();
     const world = new BindingWorld([definition]);
-    const ctx = world.register(realm);
+    const ctx = world.register({ realm });
     const binding = world.getRealmBinding(realm)!;
 
     ctx.install(realm.global);
@@ -171,11 +174,13 @@ describe('Web IDL initial objects', () => {
       definitions,
       windowRealm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const workerBinding = new RealmBinding(
       definitions,
       workerRealm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
 
     windowBinding.install();
@@ -205,6 +210,7 @@ describe('Web IDL initial objects', () => {
       definitions,
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
     interfaceBinding.createImplementation = () => new WidgetImpl();
@@ -267,6 +273,7 @@ describe('Web IDL initial objects', () => {
       new DefinitionAssembly([interfaceIDL, partial]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
     interfaceBinding.createImplementation = () => new PartialWidgetImpl();
@@ -317,6 +324,7 @@ describe('Web IDL initial objects', () => {
       definitions,
       realm,
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.install();
     const firstInterface = requireFunction(Reflect.get(realm.global, 'Thing'));
@@ -345,6 +353,7 @@ describe('Web IDL initial objects', () => {
       definitions,
       new Realm(),
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     foreign.install();
     expect(Reflect.get(foreign.realm.global, 'Thing')).not.toBe(firstInterface);
@@ -378,6 +387,7 @@ describe('Web IDL initial objects', () => {
       definitions,
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(declaredIDL).getOrCreateMemberRecord(stringifier).stringificationBehavior = function() {
       return Reflect.get(this, 'text');

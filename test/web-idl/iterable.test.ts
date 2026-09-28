@@ -30,7 +30,7 @@ describe('Web IDL synchronous iterable declarations', () => {
         implementation: impl(PairsImpl),
         members: [iter(idlType.long, { key: idlType.DOMString })],
       });
-      const context = new BindingWorld([...webIDLCommonDefinitions, definition]).register(new Realm());
+      const context = new BindingWorld([...webIDLCommonDefinitions, definition]).register({ realm: new Realm() });
       const object = context.project(PairsImpl, context.construct(PairsImpl));
       if (method === 'forEach') {
         const seen: unknown[][] = [];
@@ -168,6 +168,7 @@ describe('Web IDL synchronous iterable declarations', () => {
       definitions,
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(collectionInterface).createImplementation = () => new PairCollectionImpl();
     const assembledValue = definitions.getInterface('PairValue');
@@ -216,8 +217,8 @@ describe('Web IDL synchronous iterable declarations', () => {
         defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
         defineInterface({ name: 'Pairs', implementation: impl(PairsImpl), members: [iter(reference('Value'), { key: idlType.DOMString })] }),
       ]);
-      const owner = bindings.register(new Realm());
-      const other = bindings.register(new Realm());
+      const owner = bindings.register({ realm: new Realm() });
+      const other = bindings.register({ realm: new Realm() });
       const implInst = owner.construct(PairsImpl);
       const object = owner.project(PairsImpl, implInst);
       const foreign = other.project(PairsImpl, other.construct(PairsImpl));
@@ -255,6 +256,7 @@ describe('Web IDL synchronous iterable declarations', () => {
       new DefinitionAssembly([...webIDLCommonDefinitions, hidden]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const hiddenPrototype = binding.getInterfacePrototypeObject(binding.resolveInterface(hidden.name));
     expect(Object.hasOwn(hiddenPrototype, 'entries')).toBe(false);
@@ -275,7 +277,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const { binding, iterable, definition } = createPairBinding();
     const otherRealm = new Realm();
     const otherBinding = new RealmBinding(
-      binding.definitions, otherRealm, new BindingWorld([]),
+      binding.definitions, otherRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(iterable).valuePairsSteps = () => [];
     const original = binding.getDefinitionBinding(definition);
@@ -338,7 +340,7 @@ function createPairBinding(): {
   });
   const realm = new Realm();
   const binding = new RealmBinding(
-    new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]),
+    new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
   binding.getDefinitionBinding(definition).createImplementation = () => new PairCollectionImpl();
   return { binding, definition, iterable, realm };

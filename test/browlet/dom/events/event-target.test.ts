@@ -31,13 +31,13 @@ describe('EventTargetImpl', () => {
     abortedSignal.signalAbort();
 
     target.addEventListener('null', null, {
-      signal: liveSignal,
+      capture: false, once: false, signal: liveSignal,
     });
     target.addEventListener('aborted', () => {}, {
-      signal: abortedSignal,
+      capture: false, once: false, signal: abortedSignal,
     });
     target.addEventListener('aborted', callback, {
-      signal: abortedSignal,
+      capture: false, once: false, signal: abortedSignal,
     });
     target.dispatchEvent(new EventImpl('null'));
     target.dispatchEvent(new EventImpl('aborted'));
@@ -53,10 +53,10 @@ describe('EventTargetImpl', () => {
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
-      signal: firstSignal,
+      capture: false, once: false, signal: firstSignal,
     });
     target.addEventListener('ready', callback, {
-      signal: duplicateSignal,
+      capture: false, once: false, signal: duplicateSignal,
     });
     duplicateSignal.signalAbort();
     target.dispatchEvent(new EventImpl('ready'));
@@ -101,7 +101,7 @@ describe('EventTargetImpl', () => {
 
     target.addEventListener('ready', (received) => {
       received.preventDefault();
-    }, { passive: true });
+    }, { capture: false, once: false, passive: true });
 
     expect(target.dispatchEvent(event)).toBe(true);
     expect(event.defaultPrevented).toBe(false);
@@ -240,7 +240,7 @@ describe('EventTargetImpl', () => {
       target.dispatchEvent(new EventImpl('ready'));
     });
 
-    target.addEventListener('ready', callback, { once: true });
+    target.addEventListener('ready', callback, { capture: false, once: true });
     target.dispatchEvent(new EventImpl('ready'));
 
     expect(callback).toHaveBeenCalledOnce();
@@ -252,7 +252,7 @@ describe('EventTargetImpl', () => {
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
-      signal,
+      capture: false, once: false, signal,
     });
     signal.signalAbort();
     target.dispatchEvent(new EventImpl('ready'));

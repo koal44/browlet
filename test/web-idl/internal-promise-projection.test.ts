@@ -46,8 +46,8 @@ describe('InternalPromise result projection', () => {
     const bindings = new BindingWorld([ownerIDL, childIDL]);
     const first = new TestRealm();
     const second = new TestRealm();
-    const firstBinding = bindings.register(first);
-    const secondBinding = bindings.register(second);
+    const firstBinding = bindings.register({ realm: first });
+    const secondBinding = bindings.register({ realm: second });
     const implementation = new ResultOwnerImpl(firstBinding.Promise);
     const owner = firstBinding.project(ResultOwnerImpl, implementation);
     const foreign = secondBinding.project(ResultOwnerImpl, new ResultOwnerImpl(secondBinding.Promise));
@@ -82,7 +82,7 @@ class ResultChildImpl {
 function createFixture() {
   const bindings = new BindingWorld([ownerIDL, childIDL]);
   const realm = new TestRealm();
-  const binding = bindings.register(realm);
+  const binding = bindings.register({ realm });
   const implementation = new ResultOwnerImpl(binding.Promise);
   const owner = binding.project(ResultOwnerImpl, implementation);
   return { binding, implementation, owner };

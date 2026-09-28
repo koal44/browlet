@@ -1,3 +1,4 @@
+import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
 import {
   blobIDL, blobPartIDL, blobPropertyBagIDL, endingTypeIDL,
@@ -22,7 +23,7 @@ export {
 export { fileListIDL, FileListImpl } from './file-list';
 export { packageData, type FileReadType } from './package-data';
 
-export const fileIDLDefinitions: Definition[] = [
+export const fileIDLDefinitions: Definition<JSEnvironment>[] = [
   endingTypeIDL,
   blobPropertyBagIDL,
   blobPartIDL,

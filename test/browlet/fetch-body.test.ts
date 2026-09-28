@@ -1,5 +1,6 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
+import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { itPassesWith } from '../test-runtime';
 import { FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
@@ -119,7 +120,7 @@ describe('Fetch body delivery through HTML', () => {
   it.each(['Request', 'Response'])('delivers borrowed %s consumption to the receiver Window even when the body stream belongs elsewhere', async (kind) => {
     const owner = createFetchWindow();
     const source = createFetchWindow();
-    const bindings = new BindingWorld(fetchDefinitions);
+    const bindings = new BindingWorld<BrowletEnvironment>(fetchDefinitions);
     const ownerBinding = bindings.register(owner.realm, () => owner.context.getEnvironment());
     const otherBinding = bindings.register(source.realm, () => source.context.getEnvironment());
     const create = (context: typeof ownerBinding, body: FetchBody | null) => {
@@ -171,8 +172,8 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     else stream.error(authorError);
 
     const bindings = new BindingWorld([bodyConsumerIDL]);
-    const ownerBinding = bindings.register(owner.realm);
-    bindings.register(other.realm).install(other.realm.global);
+    const ownerBinding = bindings.register({ realm: owner.realm });
+    bindings.register({ realm: other.realm }).install(other.realm.global);
     const consumer = ownerBinding.project(
       BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, env),
     );

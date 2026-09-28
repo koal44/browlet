@@ -39,7 +39,7 @@ describe('Web IDL effective overload sets', () => {
 
     expect(overloads.map(({ callable, optionality, types }) => [
       names.get(callable),
-      types.map(serializeType),
+      types.map((type) => serializeType(type)),
       optionality,
     ])).toEqual([
       ['f1', ['DOMString'], ['required']],
@@ -238,7 +238,7 @@ function createBinding(
   return new RealmBinding(
     new DefinitionAssembly(definitions),
     new Realm(),
-    new BindingWorld([], { hostDefinedInterfaces }),
+    new BindingWorld([], { hostDefinedInterfaces }), (ctx) => ({ realm: ctx.realm }),
   );
 }
 

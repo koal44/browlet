@@ -5,6 +5,7 @@ import {
 } from '../../../web-idl/index';
 import { AbortSignalImpl } from './abort-signal';
 
+/** Controls cancellation through an associated signal. */
 // https://dom.spec.whatwg.org/#interface-abortcontroller
 export class AbortControllerImpl
 {
@@ -14,17 +15,17 @@ export class AbortControllerImpl
     this.#signal = signal;
   }
 
+  /** The signal notified when this controller aborts. */
   get signal(): AbortSignalImpl {
     return this.#signal;
   }
 
+  /** Default errors use env, or the signal's owner for internal calls. */
   // https://dom.spec.whatwg.org/#dom-abortcontroller-abort
   abort(reason: unknown = undefined, env?: JSEnvironment): void {
     this.#signal.signalAbort(reason, env);
   }
 }
-
-// -- Web IDL ------------------------------------------------------------
 
 /*
  * [Exposed=*]
@@ -36,7 +37,7 @@ export class AbortControllerImpl
  *   undefined abort(optional any reason);
  * };
  */
-export const abortControllerIDL = defineInterface({
+export const abortControllerIDL = defineInterface<JSEnvironment>({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {

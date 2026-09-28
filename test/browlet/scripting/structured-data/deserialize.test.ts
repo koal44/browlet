@@ -6,6 +6,7 @@ import {
 } from '../../../../src/web-idl/index';
 import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   structuredDeserialize,
@@ -411,11 +412,11 @@ describe('HTML structured deserialization', () => {
         );
       },
     })];
-    const bindings = new BindingWorld<Realm>([containerIDL], { capabilities });
+    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL], { capabilities });
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
-    const source = bindings.register(sourceRealm);
-    const target = bindings.register(targetRealm);
+    const source = bindings.register({ realm: sourceRealm });
+    const target = bindings.register({ realm: targetRealm });
     const original = source.createPlatformRecord(containerIDL);
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
@@ -444,18 +445,18 @@ describe('HTML structured deserialization', () => {
 function createContexts(options: {
   agentCluster?: AgentCluster;
 } = {}): {
-  source: BindingContext<Realm>;
+  source: BindingContext<ScriptingEnvironment>;
   sourceRealm: Realm;
-  target: BindingContext<Realm>;
+  target: BindingContext<ScriptingEnvironment>;
   targetRealm: Realm;
 } {
-  const bindings = new BindingWorld<Realm>([], {
+  const bindings = new BindingWorld<ScriptingEnvironment>([], {
     capabilities: domExceptionCapabilities,
   });
   const sourceRealm = new Realm({ crossOriginIsolated: true });
   const targetRealm = new Realm({ crossOriginIsolated: true });
-  const source = bindings.register(sourceRealm);
-  const target = bindings.register(targetRealm);
+  const source = bindings.register({ realm: sourceRealm });
+  const target = bindings.register({ realm: targetRealm });
   source.install(sourceRealm.global);
   target.install(targetRealm.global);
   const agentCluster = options.agentCluster ?? new AgentCluster('concrete');
@@ -471,8 +472,8 @@ function createContexts(options: {
 
 function cloneValue(
   value: unknown,
-  source: BindingContext<Realm>,
-  target: BindingContext<Realm>,
+  source: BindingContext<ScriptingEnvironment>,
+  target: BindingContext<ScriptingEnvironment>,
 ): unknown {
   return structuredDeserialize(structuredSerialize(value, source), target);
 }

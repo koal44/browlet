@@ -21,10 +21,10 @@ import {
 import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
-  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute, ImplementationType,
+  BufferTypeName, DefaultValue, ExtendedAttribute, ImplementationType,
   RecordType, SimpleTypeName, UnionType, WebIDLType,
 } from './core/types';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLRealm } from './realm';
 import type { RealmBinding } from './realm-binding';
 import { getPlatformRecord, type StampedPlatformObject } from './platform-object';
 import {
@@ -33,7 +33,7 @@ import {
 import { defineDataProperty } from './property';
 import {
   getTypeWithApplicableExtendedAttributes, includesNullableType,
-  includesUndefined,
+  includesUndefined, resolveInterfaceType,
 } from './types';
 import { InternalError } from '../infra/internal-error';
 
@@ -182,7 +182,7 @@ export type ConversionContext = {
   /** Definitions, implementation identity, projection, and internal failures. */
   binding: RealmBinding;
   /** JavaScript allocation and conversion errors; may differ from binding.realm. */
-  realm: WebIDLRealmHost;
+  realm: WebIDLRealm;
 };
 
 export type HostDefinedInterface = {
@@ -1119,6 +1119,7 @@ function resolveEffectiveType(
       resolved = resolved.type;
       continue;
     }
+    if (resolved.kind === 'interface') resolved = resolveInterfaceType(resolved, definitions);
     if (resolved.kind === 'reference') {
       const definition = definitions.getDefinition(resolved.name);
       if (definition?.kind === 'typedef') {
@@ -1255,7 +1256,7 @@ function isNullableLegacyCallback(
 function getCallbackRealm(
   value: object,
   context: ConversionContext,
-): WebIDLRealmHost {
+): WebIDLRealm {
   return getPlatformRecord(value)?.realm ??
     context.realm.callbacks.getAssociatedRealm(value);
 }
@@ -1324,7 +1325,7 @@ type EffectiveType = {
   type: EffectiveBaseType;
 };
 
-type EffectiveBaseType = Exclude<WebIDLType, AnnotatedType<WebIDLType>>;
+type EffectiveBaseType = Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }>;
 
 // Web IDL §3.2.4 Integer types — bit lengths and signedness supplied to ConvertToInt.
 const integerTypes: Partial<Record<

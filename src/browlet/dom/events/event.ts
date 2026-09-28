@@ -1,9 +1,9 @@
+import type { DOMEnvironment } from '../environment';
 import {
   arg, atArg, attr, constant, ctor, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl,
   integer, nullable, op, roAttr, reference, sequence, xattr,
 } from '../../../web-idl/index';
-import type { Realm } from '../../scripting/realm';
 import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
@@ -52,6 +52,13 @@ export class EventImpl {
 
   static is(value: unknown): value is EventImpl {
     return typeof value === 'object' && value !== null && #initialized in value;
+  }
+
+  /** Create a trusted event implementation without a binding owner. */
+  static create(this: void, EventConstructor: typeof EventImpl = EventImpl): EventImpl {
+    const event = new EventConstructor('', {}, unsafeSharedCurrentTime().milliseconds);
+    event.setTrusted(true);
+    return event;
   }
 
   static get NONE(): 0 { return 0; }
@@ -270,12 +277,9 @@ export class EventImpl {
     touchTargetList: (EventTargetImpl | null)[],
     slotInClosedTree: boolean,
   ): void {
-    const root = invocationTarget.getTreeRoot();
-
     this.#path.push({
       invocationTarget,
-      invocationTargetInShadowTree: root !== null &&
-        root.getShadowRootHost() !== null,
+      invocationTargetInShadowTree: invocationTarget.isNodeInShadowTree(),
       shadowAdjustedTarget,
       relatedTarget,
       touchTargetList,
@@ -416,7 +420,7 @@ export class EventImpl {
  *   boolean composed = false;
  * };
  */
-export const eventIDL = defineInterface<Realm>({
+export const eventIDL = defineInterface<DOMEnvironment>({
   name: 'Event',
   exposed: '*',
   implementation: impl(EventImpl, {
@@ -525,7 +529,7 @@ export class CustomEventImpl<T = unknown>
  *   any detail = null;
  * };
  */
-export const customEventIDL = defineInterface<Realm>({
+export const customEventIDL = defineInterface<DOMEnvironment>({
   name: 'CustomEvent',
   inherits: 'Event',
   exposed: '*',

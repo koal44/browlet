@@ -133,7 +133,7 @@ export const filePropertyBagIDL = defineDictionary({
   ],
 });
 
-export const fileIDL = defineInterface({
+export const fileIDL = defineInterface<JSEnvironment>({
   name: 'File',
   inherits: 'Blob',
   exposed: ['Window', 'Worker'],

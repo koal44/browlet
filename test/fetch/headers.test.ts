@@ -18,7 +18,7 @@ import {
 } from '../../src/http/index';
 import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld, type BindingContext } from '../../src/web-idl/index';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment } from './client-fixture';
@@ -691,7 +691,7 @@ describe('Headers realm allocation', () => {
     const fixture = createFetchFixture();
     const foreignRealm = new TestRealm();
     const foreign = fixture.bindings.register(foreignRealm, () => createEnvironment(foreignRealm));
-    const createObject = (context: BindingContext) => name === 'Request'
+    const createObject = (context: BindingContext<TestEnvironment>) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
         RequestImpl, createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal,
       ))
@@ -722,9 +722,9 @@ describe('Headers realm allocation', () => {
     const world = new BindingWorld([headersInitIDL, definition]);
     const receiverRealm = new TestRealm();
     const methodRealm = new TestRealm();
-    const context = world.register(receiverRealm);
+    const context = world.register({ realm: receiverRealm });
     context.install(receiverRealm.global);
-    world.register(methodRealm).install(methodRealm.global);
+    world.register({ realm: methodRealm }).install(methodRealm.global);
     const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
     const method = Reflect.get(Constructor.prototype, 'getSetCookie');
     const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));

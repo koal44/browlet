@@ -1,8 +1,8 @@
 import type { PromiseResult, ResultValue } from '../../infra/promises';
 import type {
   AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
-  ConstantMember, ConstantValue, DecimalLiteral, ExtendedAttribute, FrozenArrayType,
-  ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, NullableType, ObservableArrayType,
+  ConstantMember, ConstantValue, DecimalLiteral, DeclarationCallback, DefaultValue, ExtendedAttribute, FrozenArrayType,
+  ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType, NullableType, ObservableArrayType,
   OperationMember, PromiseType, RecordType, ReferenceType, SequenceType,
   StringifierMember, StringType, UnionType, WebIDLType,
 } from './types';
@@ -14,49 +14,63 @@ import { InternalError } from '../../infra/internal-error';
 
 // Members and arguments
 
-// Project builder for Web IDL §2.5.4 Constructor operations.
-export function ctor<Realm = unknown>(
+/** Declare an author-facing constructor overload and optional implementation binding. */
+// https://webidl.spec.whatwg.org/#idl-constructors
+export function ctor<Env = unknown, const Args extends ArgumentDefinition[] = ArgumentDefinition[]>(
+  argumentsList?: Args,
+  options?: ConstructorOptions<Env, ArgumentValues<Args>>,
+): ConstructorMember<Env>;
+export function ctor<Env = unknown>(
   argumentsList: ArgumentDefinition[] = [],
-  options: ConstructorOptions<Realm> = {},
-): ConstructorMember<Realm> {
+  options: ConstructorOptions<Env> = {},
+): ConstructorMember<Env> {
   return { ...options, kind: 'constructor', arguments: argumentsList };
 }
 
-// Project builder for Web IDL §2.5.2 Attributes.
-export function attr<Realm = unknown>(
+/** Declare an attribute with automatic property binding or explicit getter and setter hooks. */
+// https://webidl.spec.whatwg.org/#idl-attributes
+export function attr<Env = unknown>(
   name: string,
   type: WebIDLType,
-  options: AttributeOptions<Realm> = {},
-): AttributeMember<Realm> {
+  options: AttributeOptions<Env> = {},
+): AttributeMember<Env> {
   return { ...options, kind: 'attribute', name, type };
 }
 
-// Project builder for Web IDL §2.5.2 Attributes — read only attributes.
-export function roAttr<Realm = unknown>(
+/** Declare a read-only attribute. */
+// https://webidl.spec.whatwg.org/#idl-attributes
+export function roAttr<Env = unknown>(
   name: string,
   type: WebIDLType,
-  options: ReadonlyAttributeOptions<Realm> = {},
-): AttributeMember<Realm> {
+  options: ReadonlyAttributeOptions<Env> = {},
+): AttributeMember<Env> {
   return attr(name, type, { ...options, readonly: true });
 }
 
 /**
- * Project helper: return one built-in function per attribute and receiver realm, named after the attribute.
+ * Return one built-in function per attribute and receiver realm, named after the attribute.
  * The factory receives the owning binding context; its callback supplies the function's length.
  */
-export function attrFn<Realm = unknown>(
-  createCallback: NonNullable<AttributeOptions<Realm>['attributeFunction']>,
-): Pick<AttributeOptions<Realm>, 'attributeFunction'> {
+export function attrFn<Env = unknown>(
+  createCallback: NonNullable<AttributeOptions<Env>['attributeFunction']>,
+): Pick<AttributeOptions<Env>, 'attributeFunction'> {
   return { attributeFunction: createCallback };
 }
 
-// Project builder for Web IDL §2.5.3 Operations.
-export function op<Realm = unknown>(
+/** Declare an operation overload; automatic binding calls the implementation method of the same name. */
+// https://webidl.spec.whatwg.org/#idl-operations
+export function op<Env = unknown, const Args extends ArgumentDefinition[] = ArgumentDefinition[]>(
+  name: string | undefined,
+  returns: WebIDLType,
+  argumentsList?: Args,
+  options?: OperationOptions<Env, ArgumentValues<Args>>,
+): OperationMember<Env>;
+export function op<Env = unknown>(
   name: string | undefined,
   returns: WebIDLType,
   argumentsList: ArgumentDefinition[] = [],
-  options: OperationOptions<Realm> = {},
-): OperationMember<Realm> {
+  options: OperationOptions<Env> = {},
+): OperationMember<Env> {
   return {
     ...options,
     arguments: argumentsList,
@@ -66,17 +80,31 @@ export function op<Realm = unknown>(
   };
 }
 
-// Project builder for Web IDL §2.5.7 Static attributes and operations — static operations.
-export function staticOp<Realm = unknown>(
+/** Declare an operation on the interface object, automatically bound to the implementation class. */
+// https://webidl.spec.whatwg.org/#idl-static-attributes-and-operations
+export function staticOp<Env = unknown, const Args extends ArgumentDefinition[] = ArgumentDefinition[]>(
+  name: string | undefined,
+  returns: WebIDLType,
+  argumentsList?: Args,
+  options?: StaticOperationOptions<Env, ArgumentValues<Args>>,
+): OperationMember<Env>;
+export function staticOp<Env = unknown>(
   name: string | undefined,
   returns: WebIDLType,
   argumentsList: ArgumentDefinition[] = [],
-  options: StaticOperationOptions<Realm> = {},
-): OperationMember<Realm> {
+  options: StaticOperationOptions<Env> = {},
+): OperationMember<Env> {
   return op(name, returns, argumentsList, { ...options, static: true });
 }
 
-// Project builder for Web IDL §2.5.3 Operations — argument declarations.
+/** Declare an author argument's IDL conversion, optionality, and default. */
+// https://webidl.spec.whatwg.org/#idl-operations
+export function arg<Type extends WebIDLType>(name: string, type: Type): { name: string; type: Type; };
+export function arg<Type extends WebIDLType, const Options extends ArgumentOptions>(
+  name: string,
+  type: Type,
+  options: Options,
+): { name: string; type: Type; } & Options;
 export function arg(
   name: string,
   type: WebIDLType,
@@ -85,7 +113,8 @@ export function arg(
   return { ...options, name, type };
 }
 
-// Project builder for Web IDL §2.7 Dictionaries — dictionary members.
+/** Declare a dictionary property's IDL type, required status, and default. */
+// https://webidl.spec.whatwg.org/#idl-dictionaries
 export function dictMember(
   name: string,
   type: WebIDLType,
@@ -94,7 +123,8 @@ export function dictMember(
   return { ...options, name, type };
 }
 
-// Project builder for Web IDL §2.5.1 Constants.
+/** Declare a named constant with an IDL type and literal value. */
+// https://webidl.spec.whatwg.org/#idl-constants
 export function constant(
   name: string,
   type: WebIDLType,
@@ -104,7 +134,8 @@ export function constant(
   return { ...options, kind: 'constant', name, type, value };
 }
 
-// Project builder for Web IDL §2.5.5 Stringifiers.
+/** Declare string conversion through the implementation's stringification method. */
+// https://webidl.spec.whatwg.org/#idl-stringifiers
 export function stringifier(
   options: StringifierOptions = {},
 ): StringifierMember {
@@ -113,7 +144,8 @@ export function stringifier(
 
 // Iteration, collections, and legacy properties
 
-// Project builder for Web IDL §2.5.9 Iterable declarations.
+/** Declare value iteration, or pair iteration when the options include a key type. */
+// https://webidl.spec.whatwg.org/#idl-iterable
 export function iter(
   value: WebIDLType,
   options: IterableOptions = {},
@@ -121,7 +153,8 @@ export function iter(
   return { ...options, kind: 'iterable', value };
 }
 
-// Project builder for Web IDL §2.5.10 Asynchronously iterable declarations.
+/** Declare asynchronous iteration and its implementation iterator factory. */
+// https://webidl.spec.whatwg.org/#idl-async-iterable-declaration
 export function asyncIter(
   value: WebIDLType,
   options: AsyncIterableOptions = {},
@@ -129,7 +162,8 @@ export function asyncIter(
   return { ...options, kind: 'async-iterable', value };
 }
 
-// Project builder for Web IDL §2.5.11 Maplike declarations.
+/** Declare Map-shaped collection members for the given key and value types. */
+// https://webidl.spec.whatwg.org/#idl-maplike
 export function maplike(
   key: WebIDLType,
   value: WebIDLType,
@@ -138,7 +172,8 @@ export function maplike(
   return { ...options, key, kind: 'maplike', value };
 }
 
-// Project builder for Web IDL §2.5.12 Setlike declarations.
+/** Declare Set-shaped collection members for the given value type. */
+// https://webidl.spec.whatwg.org/#idl-setlike
 export function setlike(
   value: WebIDLType,
   options: SetlikeOptions = {},
@@ -147,12 +182,11 @@ export function setlike(
 }
 
 /**
- * Project helper: declare indexed-property enumeration separately from membership.
+ * Declare indexed-property enumeration separately from membership.
  * An unsupportedValue allows the getter itself to answer support checks;
  * otherwise supportsIndex tests membership without invoking the getter.
- *
- * Web IDL §2.5.6.1 Indexed properties — supported property indices.
  */
+// https://webidl.spec.whatwg.org/#idl-indexed-properties
 export function indexedGetter<Implementation extends object>(
   getSupportedPropertyIndices: (
     implementation: Implementation,
@@ -177,11 +211,10 @@ export function indexedGetter<Implementation extends object>(
 }
 
 /**
- * Project helper: declare a named getter whose implementation supplies the supported property
+ * Declare a named getter whose implementation supplies the supported property
  * names while ordinary operation binding supplies invocation.
- *
- * Web IDL §2.5.6.2 Named properties — supported property names.
  */
+// https://webidl.spec.whatwg.org/#idl-named-properties
 export function namedGetter<Implementation extends object>(
   getSupportedPropertyNames: (
     implementation: Implementation,
@@ -198,39 +231,49 @@ export function namedGetter<Implementation extends object>(
 
 // Type expressions
 
-// Project helper: refer to a named IDL type by identifier.
-export function reference<const Name extends string>(name: Name): ReferenceType & { name: Name; } {
-  return { kind: 'reference', name };
+/** Refer to an interface by implementation class, retaining its converted argument type. */
+export function reference<Class extends ImplementationClass>(implClass: Class): InterfaceType & ResultValue<Class['prototype']>;
+/** Refer to a named IDL type without an implementation-class association. */
+export function reference<const Name extends string>(name: Name): ReferenceType & { name: Name; };
+export function reference(value: string | ImplementationClass): ReferenceType | InterfaceType {
+  return typeof value === 'string'
+    ? { kind: 'reference', name: value }
+    : { kind: 'interface', implClass: value };
 }
 
-/** Associate a named IDL result with its implementation value. */
+/** Associate an IDL type with its implementation value. */
 export function implementationType<T>(type: WebIDLType): ImplementationType<T> {
   return type as ImplementationType<T>;
 }
 
-// Project builder for Web IDL §2.13.27 Nullable types — T?.
+/** Permit null in addition to the supplied IDL type. */
+// https://webidl.spec.whatwg.org/#idl-nullable-type
 export function nullable<Type extends WebIDLType>(type: Type): NullableType & ResultValue<PromiseResult<Type> | null> {
   return { kind: 'nullable', type } as NullableType & ResultValue<PromiseResult<Type> | null>;
 }
 
-// Project builder for Web IDL §2.13.32 Union types.
+/** Declare a value selected from two or more IDL types. */
+// https://webidl.spec.whatwg.org/#idl-union
 export function union<const Types extends [WebIDLType, WebIDLType, ...WebIDLType[]]>(
   ...types: Types
 ): UnionType & ResultValue<PromiseResult<Types[number]>> {
   return { kind: 'union', types } as unknown as UnionType & ResultValue<PromiseResult<Types[number]>>;
 }
 
-// Project builder for Web IDL §2.13.28 Sequence types — sequence<T>.
+/** Declare an ordered sequence of values converted to the supplied element type. */
+// https://webidl.spec.whatwg.org/#idl-sequence
 export function sequence<Type extends WebIDLType>(type: Type): SequenceType & ResultValue<PromiseResult<Type>[]> {
   return { kind: 'sequence', type } as SequenceType & ResultValue<PromiseResult<Type>[]>;
 }
 
-// Project builder for Web IDL §2.13.29 Async sequence types — async_sequence<T>.
+/** Declare an asynchronous sequence of values with the supplied element type. */
+// https://webidl.spec.whatwg.org/#idl-async-iterable-type
 export function asyncSequence(type: WebIDLType): AsyncSequenceType {
   return { kind: 'async-sequence', type };
 }
 
-// Project builder for Web IDL §2.13.30 Record types — record<K, V>.
+/** Declare string-keyed entries with the supplied key and value conversions. */
+// https://webidl.spec.whatwg.org/#idl-record
 export function record<Key extends StringType, Value extends WebIDLType>(
   key: Key,
   value: Value,
@@ -238,22 +281,26 @@ export function record<Key extends StringType, Value extends WebIDLType>(
   return { kind: 'record', key, value } as RecordType & ResultValue<Record<string, PromiseResult<Value>>>;
 }
 
-// Project builder for Web IDL §2.13.31 Promise types — Promise<T>.
+/** Declare a Promise whose fulfillment uses the supplied IDL type. */
+// https://webidl.spec.whatwg.org/#idl-promise
 export function promise(type: WebIDLType): PromiseType {
   return { kind: 'promise', type };
 }
 
-// Project builder for Web IDL §2.13.35 Frozen array types — FrozenArray<T>.
+/** Declare values exposed as a frozen JavaScript array. */
+// https://webidl.spec.whatwg.org/#idl-frozen-array
 export function frozenArray<Type extends WebIDLType>(type: Type): FrozenArrayType & ResultValue<PromiseResult<Type>[]> {
   return { kind: 'frozen-array', type } as FrozenArrayType & ResultValue<PromiseResult<Type>[]>;
 }
 
-// Project builder for Web IDL §2.13.36 Observable array types — ObservableArray<T>.
+/** Declare an array whose author mutations invoke the interface's observable-array steps. */
+// https://webidl.spec.whatwg.org/#idl-observable-array
 export function observableArray(type: WebIDLType): ObservableArrayType {
   return { kind: 'observable-array', type };
 }
 
-// Project builder for Web IDL §2.13.33 Annotated types.
+/** Attach extended attributes to a type expression. */
+// https://webidl.spec.whatwg.org/#idl-annotated-types
 export function annotated<Type extends WebIDLType>(
   type: Type,
   { extendedAttributes }: ExtendedAttributeOptions,
@@ -263,26 +310,27 @@ export function annotated<Type extends WebIDLType>(
 
 // Numeric literals
 
-// Project helper: retain an integer token's text (Web IDL, IDL grammar).
+/** Represent an integer literal, accepting text to preserve values beyond JavaScript's safe range. */
 export function integer(value: number | string): IntegerLiteral {
   return { kind: 'integer', value: String(value) };
 }
 
-// Project helper: retain a decimal token's text (Web IDL, IDL grammar).
+/** Represent a decimal literal, preserving its spelling when supplied as text. */
 export function decimal(value: number | string): DecimalLiteral {
   return { kind: 'decimal', value: String(value) };
 }
 
 // Extended attributes
 
-// Project builder for Web IDL §2.14 Extended attributes.
+/** Supply extended attributes using names, name/value pairs, or complete attribute records. */
+// https://webidl.spec.whatwg.org/#idl-extended-attributes
 export function xattr(
   ...attributes: ExtendedAttributeInit[]
 ): ExtendedAttributeOptions {
   return { extendedAttributes: attributes.map(normalizeExtendedAttribute) };
 }
 
-// Project helper: find an extended attribute by its declared name.
+/** Check for a structured extended attribute with the supplied name. */
 export function hasExtendedAttribute(
   attributes: ExtendedAttribute[] | undefined,
   name: string,
@@ -295,16 +343,17 @@ export function hasExtendedAttribute(
 // Implementation construction, invocation, and result allocation
 
 /**
- * Project helper: declare an interface's implementation, dependencies, and projection hooks.
+ * Declare an interface's implementation, dependencies, and projection hooks.
  *
  * Interface construction dependencies apply both when the binding creates an
  * implementation internally and when an automatically bound IDL constructor
  * constructs it. Constructor-level `constructWith` metadata overrides them.
+ * The initializer receives the supplied class's instance type.
  */
-export function impl<Realm = unknown>(
-  implClass: ImplementationClass,
-  options: ImplementationOptions<Realm> = {},
-): NonNullable<InterfaceDefinition<Realm>['implementation']> {
+export function impl<Env = unknown, Class extends ImplementationClass = ImplementationClass>(
+  implClass: Class,
+  options: ImplementationOptions<Env, Class['prototype']> = {},
+): ImplementationOptions<Env> & { implClass: Class; } {
   return { ...options, implClass };
 }
 
@@ -312,20 +361,20 @@ export function impl<Realm = unknown>(
  * Supply an injected value at a final constructor or operation argument index.
  * Resolvers receive receiver and method contexts; constructors use the same context for both.
  */
-export function atArg<Realm = unknown>(
+export function atArg<Env = unknown>(
   index: number,
-  resolve: InjectedArgument<Realm>['resolve'],
-): InjectedArgument<Realm> {
+  resolve: InjectedArgument<Env>['resolve'],
+): InjectedArgument<Env> {
   if (!Number.isSafeInteger(index) || index < 0) {
     throw new InternalError('An injected argument index must be a nonnegative integer');
   }
   return { index, resolve };
 }
 
-/** Project helper: supply hidden arguments to an automatically bound operation. */
-export function invokeWith<Realm = unknown>(
-  ...argumentsList: InjectedArgument<Realm>[]
-): Pick<OperationOptions<Realm>, 'invokeWith'> {
+/** Supply implementation-only arguments to an automatically bound operation. */
+export function invokeWith<Env = unknown>(
+  ...argumentsList: InjectedArgument<Env>[]
+): Pick<OperationOptions<Env>, 'invokeWith'> {
   return { invokeWith: argumentsList };
 }
 
@@ -346,7 +395,7 @@ export function allocateIn(
 // Argument adaptation and callback errors
 
 /**
- * Project helper: unwrap an argument as an instance of one of the listed classes, while
+ * Unwrap an argument as an instance of one of the listed classes, while
  * preserving values which implement none of them.
  */
 export function unwrapArg(
@@ -356,7 +405,7 @@ export function unwrapArg(
 }
 
 /**
- * Project helper: convert an object argument to a dictionary after ordinary IDL argument conversion.
+ * Convert an object argument to a dictionary after ordinary IDL argument conversion.
  * Its callback-function members use the original input object as their receiver.
  */
 export function cbDict(name: string): Pick<ArgumentOptions, 'callbackDictionary'> {
@@ -364,11 +413,10 @@ export function cbDict(name: string): Pick<ArgumentOptions, 'callbackDictionary'
 }
 
 /**
- * Project helper: select the Web IDL exception behavior for a callback passed to an
+ * Select the Web IDL exception behavior for a callback passed to an
  * automatically bound implementation member.
- *
- * Web IDL §3.12 Invoking callback functions.
  */
+// https://webidl.spec.whatwg.org/#js-invoking-callback-functions
 export function onError(
   exceptionBehavior: CallbackExceptionBehavior,
 ): Pick<ArgumentOptions, 'callbackExceptionBehavior'> {
@@ -379,17 +427,42 @@ export function onError(
 
 // Helper options derived from declaration members
 
-type ConstructorOptions<Realm = unknown> = Omit<ConstructorMember<Realm>, 'kind' | 'arguments'>;
+type ConstructorOptions<Env = unknown, Values extends unknown[] = unknown[]> =
+  Omit<ConstructorMember<Env>, 'kind' | 'arguments' | 'construct' | 'invoke'> & {
+    construct?: DeclarationCallback<'constructor-create', Env, object, Values>;
+    invoke?: DeclarationCallback<'constructor-invoke', Env, object, Values>;
+  };
 
-type AttributeOptions<Realm = unknown> = Omit<AttributeMember<Realm>, 'kind' | 'name' | 'type'>;
+type AttributeOptions<Env = unknown> = Omit<AttributeMember<Env>, 'kind' | 'name' | 'type'>;
 
-type ReadonlyAttributeOptions<Realm = unknown> = Omit<AttributeOptions<Realm>, 'readonly'>;
+type ReadonlyAttributeOptions<Env = unknown> = Omit<AttributeOptions<Env>, 'readonly'>;
 
-type OperationOptions<Realm = unknown> = Omit<OperationMember<Realm>, 'kind' | 'name' | 'returns' | 'arguments'>;
+type OperationOptions<Env = unknown, Values extends unknown[] = unknown[]> =
+  Omit<OperationMember<Env>, 'kind' | 'name' | 'returns' | 'arguments' | 'invoke'> & {
+    invoke?: DeclarationCallback<'operation-invoke', Env, object, Values>;
+  };
 
-type StaticOperationOptions<Realm = unknown> = Omit<OperationOptions<Realm>, 'static'>;
+type StaticOperationOptions<Env = unknown, Values extends unknown[] = unknown[]> = Omit<OperationOptions<Env, Values>, 'static'>;
 
 type ArgumentOptions = Omit<ArgumentDefinition, 'name' | 'type'>;
+
+// Custom bindings receive converted arguments; optional arguments without defaults remain undefined.
+type ArgumentValues<Args extends ArgumentDefinition[]> =
+  Args extends [infer First extends ArgumentDefinition, ...infer Rest extends ArgumentDefinition[]]
+    ? First extends { variadic: true; }
+      ? ArgumentValue<First>[]
+      : [
+        First extends { optional: true; }
+          ? First extends { default: DefaultValue; } ? ArgumentValue<First> : ArgumentValue<First> | undefined
+          : ArgumentValue<First>,
+        ...ArgumentValues<Rest>,
+      ]
+    : Args extends [] ? [] : unknown[];
+
+type ArgumentValue<Arg extends ArgumentDefinition> =
+  Extract<keyof Arg, 'callbackDictionary' | 'implClasses'> extends never
+    ? PromiseResult<Arg['type']>
+    : unknown;
 
 type DictionaryMemberOptions = Omit<DictionaryMember, 'name' | 'type'>;
 
@@ -410,8 +483,12 @@ type SetlikeOptions = Omit<SetlikeMember, 'kind' | 'value'>;
  * be safe to invoke for membership checks as well as reads.
  */
 type IndexedPropertySupport<Implementation extends object> =
-  | { unsupportedValue: null | undefined; }
   | {
+    /** Getter result reserved for missing indices; permits getter calls during membership checks. */
+    unsupportedValue: null | undefined;
+  }
+  | {
+    /** Test whether an index is supported without invoking the getter. */
     supportsIndex: (implementation: Implementation, index: number) => boolean;
   };
 
@@ -421,11 +498,12 @@ type ExtendedAttributeInit =
   | ExtendedAttribute;
 
 type ExtendedAttributeOptions = {
+  /** Extended attributes applying to this declaration or type expression. */
   extendedAttributes: ExtendedAttribute[];
 };
 
-type ImplementationOptions<Realm = unknown> = Omit<
-  NonNullable<InterfaceDefinition<Realm>['implementation']>,
+type ImplementationOptions<Env = unknown, Impl extends object = object> = Omit<
+  NonNullable<InterfaceDefinition<Env, Impl>['implementation']>,
   'implClass'
 >;
 

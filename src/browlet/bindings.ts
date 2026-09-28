@@ -49,7 +49,7 @@ import {
 import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
 import { SandboxAgent, type WindowAgent } from './scripting/agents';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { EnvironmentRecord, WindowEnvironment } from './scripting/environment';
+import { EnvironmentRecord, WindowEnvironment, type BrowletEnvironment } from './scripting/environment';
 import type { UserAgent } from './user-agent';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
@@ -112,21 +112,21 @@ export function unwrap<Value extends object>(value: object): StampedImplInstance
 
 export function registerRealm(
   realm: Realm,
-  createEnvironment?: (context: BindingContext<Realm>) => JSEnvironment,
-): BindingContext<Realm> {
+  createEnvironment?: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment,
+): BindingContext<BrowletEnvironment> {
   return browletBindings.register(realm, createEnvironment);
 }
 
 /** Retrieve the realm's context in Browlet's main binding world. */
-export function getBindingContext(realm: Realm): BindingContext<Realm> {
+export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
   return browletBindings.forRealm(realm);
 }
 
 class BrowletBindings {
-  #world: BindingWorld<Realm>;
+  #world: BindingWorld<BrowletEnvironment>;
 
   constructor() {
-    this.#world = new BindingWorld<Realm>(
+    this.#world = new BindingWorld<BrowletEnvironment>(
       browletDefinitions,
       {
         capabilities: browletCapabilities,
@@ -137,13 +137,13 @@ class BrowletBindings {
 
   register(
     realm: Realm,
-    createEnvironment: (context: BindingContext<Realm>) => JSEnvironment =
-      (context) => ({ exec: createExecution(context), queueNetworkingTask }),
-  ): BindingContext<Realm> {
+    createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
+      (context) => ({ realm: context.realm, exec: createExecution(context), queueNetworkingTask }),
+  ): BindingContext<BrowletEnvironment> {
     return this.#world.register(realm, createEnvironment);
   }
 
-  forRealm(realm: Realm): BindingContext<Realm> {
+  forRealm(realm: Realm): BindingContext<BrowletEnvironment> {
     const context = this.#world.forRealm(realm);
     if (!context) throw new InternalError('Realm has no Browlet binding');
     return context;
@@ -182,7 +182,7 @@ class BrowletBindings {
     });
     // This new realm is registered exactly once; composition runs synchronously.
     let env!: WindowEnvironment;
-    const context = this.#world.register(realm, (binding) => {
+    const context = this.register(realm, (binding) => {
       // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
       // Execution reads the installed global lazily; all consumers retain this environment.
       env = new WindowEnvironment(realm, envRecord, createExecution(binding));
@@ -272,7 +272,7 @@ type WindowEnvironmentInit = {
 };
 
 function projectWindow(
-  context: BindingContext<Realm>,
+  context: BindingContext<BrowletEnvironment>,
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
 ): StampedPlatformObject<Window> {

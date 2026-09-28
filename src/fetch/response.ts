@@ -425,7 +425,7 @@ export const responseTypeIDL = defineEnumeration({
   values: ['basic', 'cors', 'default', 'error', 'opaque', 'opaqueredirect'],
 });
 
-export const responseIDL = defineInterface({
+export const responseIDL = defineInterface<JSEnvironment>({
   name: 'Response',
   exposed: ['Window', 'Worker'],
   implementation: impl(ResponseImpl, {

@@ -25,7 +25,7 @@ describe('Web IDL types', () => {
     );
 
     expect(
-      getFlattenedMemberTypes(type, definitions).map(serializeType),
+      getFlattenedMemberTypes(type, definitions).map((member) => serializeType(member)),
     ).toEqual([
       'Node',
       'sequence<long>',

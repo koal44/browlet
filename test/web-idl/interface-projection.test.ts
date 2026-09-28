@@ -105,8 +105,8 @@ function setup() {
   });
   const realmA = new TestRealm();
   const realmB = new TestRealm();
-  const a = world.register(realmA);
-  const b = world.register(realmB);
+  const a = world.register({ realm: realmA });
+  const b = world.register({ realm: realmB });
   a.install(realmA.global);
   b.install(realmB.global);
   return {

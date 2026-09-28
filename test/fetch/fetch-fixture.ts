@@ -1,4 +1,4 @@
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import {
@@ -34,8 +34,8 @@ export function createFetchRequest(
   return new FetchRequest(parsed, client, client?.userAgent ?? createFetchUserAgent());
 }
 
-export function createFetchFixture(world?: BindingWorld) {
-  const bindings = world ?? new BindingWorld(fetchDefinitions);
+export function createFetchFixture(world?: BindingWorld<TestEnvironment>) {
+  const bindings = world ?? new BindingWorld<TestEnvironment>(fetchDefinitions);
   const realm = new TestRealm();
   const context = bindings.register(realm, (ctx) => createEnvironment(realm, ctx));
   const env = context.getEnvironment();

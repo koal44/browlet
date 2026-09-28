@@ -1,6 +1,6 @@
-import type { BlobImpl } from '../../../file/index';
+import type { BrowletEnvironment } from '../../scripting/environment';
+import { BlobImpl } from '../../../file/index';
 import { arg, definePartialInterface, idlType, reference, staticOp } from '../../../web-idl/index';
-import type { Realm } from '../../scripting/realm';
 
 /*
  * File API §8.4:
@@ -10,17 +10,17 @@ import type { Realm } from '../../scripting/realm';
  *   static undefined revokeObjectURL(DOMString url);
  * };
  */
-export const objectURLIDL = definePartialInterface<Realm>({
+export const objectURLIDL = definePartialInterface<BrowletEnvironment>({
   name: 'URL',
   exposed: ['Window', 'DedicatedWorker', 'SharedWorker'],
   members: [
     // PROVISIONAL: accept Blob until the real MediaSource implementation is available.
     staticOp('createObjectURL', idlType.DOMString,
-      [arg('obj', reference('Blob'))],
+      [arg('obj', reference(BlobImpl))],
       {
         invoke(context, object) {
           const env = context.realm.env;
-          return env.userAgent.blobURLStore.add(object as BlobImpl, env);
+          return env.userAgent.blobURLStore.add(object, env);
         },
       },
     ),
@@ -29,7 +29,7 @@ export const objectURLIDL = definePartialInterface<Realm>({
       {
         invoke(context, url) {
           const env = context.realm.env;
-          env.userAgent.blobURLStore.revoke(url as string, env);
+          env.userAgent.blobURLStore.revoke(url, env);
         },
       },
     ),

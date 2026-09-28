@@ -4,7 +4,7 @@ import { Stamper } from '../infra/stamper';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { RealmBinding } from './realm-binding';
 import type { AttributeMember } from './core/index';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
 
 /** An implementation instance stamped with its private platform record. */
@@ -45,7 +45,7 @@ export class PlatformRecord<T extends object = object> {
     this.implInst = ImplementationStamper.stamp(implInst, this);
   }
 
-  get realm(): WebIDLRealmHost { return this.binding.realm; }
+  get realm(): WebIDLRealm { return this.binding.realm; }
 
   project(): StampedPlatformObject {
     return this.platformObject ??

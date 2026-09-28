@@ -39,6 +39,7 @@ callback VoidFunction = undefined();`);
       new DefinitionAssembly(webIDLCommonDefinitions),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const function_ = convertToIDL(
       realm.evaluate(

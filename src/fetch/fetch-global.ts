@@ -2,7 +2,7 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
-  arg, definePartialInterfaceMixin, emptyDictionary, implementationType, op, promise, reference, xattr,
+  arg, definePartialInterfaceMixin, emptyDictionary, op, promise, reference, xattr,
 } from '../web-idl/index';
 import { FetchBody } from './body';
 import { deserializeAbortReason, type FetchController } from './controller';
@@ -21,7 +21,7 @@ export function fetchForGlobal(
   const requestObject = RequestImpl.create(input, init, env);
   // SPEC_CLASH(fetch-borrowed-realm): Blink/Gecko use the receiver realm for
   // successful promises and Responses; WebKit uses the method realm. Keep the receiver.
-  const result = env.exec.Promise.withResolvers(implementationType<ResponseImpl>(reference('Response')));
+  const result = env.exec.Promise.withResolvers(reference(ResponseImpl));
   const request = requestObject.getRequest();
   const signal = requestObject.signal;
   if (signal.aborted) {

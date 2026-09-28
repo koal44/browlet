@@ -12,6 +12,21 @@
   before the signal's public `abort` event.
 - `ui-event.ts`: the currently required UI Events specializations.
 
+[`EventRealm` and `WindowEventRealm`](../environment.ts) describe timing and
+Window event state.
+HTML's realms implement these alongside Web IDL's independent realm contract.
+`EventExecution` independently describes event allocation. Browlet composes it
+with `RealmExecution` on `env.exec`; targets share that execution object.
+`DOMEnvironment` ties these realm and execution contracts together for event
+declarations, so their Binding Context retains both types.
+Binding supplies the listener's associated realm, which can differ from the
+event target's realm.
+The listener adapter handles author invocation and exception reporting;
+dispatch manages event state around that call.
+
+The inherited initializer still attaches event execution before projection,
+including for Window, which is constructed before its execution exists.
+
 The public Browlet tests already cover realm-specific constructors, trusted
 event creation, callback-interface identity, legacy `Window.event`, exception
 reporting, and Web IDL dictionary access order. Lower-level tests cover the

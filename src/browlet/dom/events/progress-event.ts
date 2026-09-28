@@ -1,10 +1,10 @@
+import type { DOMEnvironment } from '../environment';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
 } from '../../../web-idl/index';
 import { EventImpl } from './event';
-import type { Realm } from '../../scripting/realm';
-import { type EventTargetImpl, fireEvent } from './event-target';
+import type { EventTargetImpl } from './event-target';
 
 /*
  * XMLHttpRequest Standard §5 — Interface ProgressEvent
@@ -66,7 +66,7 @@ export function fireProgressEvent(
   transmitted: number,
   length: number,
 ): boolean {
-  return fireEvent(name, target, ProgressEventImpl, (event) => {
+  return target.fireEvent(name, ProgressEventImpl, (event) => {
     (event as ProgressEventImpl).initialize(
       length === 0
         ? { loaded: transmitted }
@@ -81,7 +81,7 @@ export function fireProgressEvent(
 
 // -- Web IDL ------------------------------------------------------------
 
-export const progressEventIDL = defineInterface<Realm>({
+export const progressEventIDL = defineInterface<DOMEnvironment>({
   name: 'ProgressEvent',
   inherits: 'Event',
   exposed: ['Window', 'Worker'],

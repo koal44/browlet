@@ -1295,7 +1295,7 @@ type UnderlyingSourceSteps<Controller> = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const readableStreamIDL = defineInterface({
+export const readableStreamIDL = defineInterface<JSEnvironment>({
   name: 'ReadableStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -1800,7 +1800,7 @@ type ReadableStreamDefaultControllerState = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const readableStreamDefaultControllerIDL = defineInterface({
+export const readableStreamDefaultControllerIDL = defineInterface<JSEnvironment>({
   name: 'ReadableStreamDefaultController',
   exposed: '*',
   implementation: impl(ReadableStreamDefaultControllerImpl),
@@ -2585,7 +2585,7 @@ type PullIntoDescriptor = {
   viewType: JSBufferViewName;
 };
 
-export const readableByteStreamControllerIDL = defineInterface({
+export const readableByteStreamControllerIDL = defineInterface<JSEnvironment>({
   name: 'ReadableByteStreamController',
   exposed: '*',
   implementation: impl(ReadableByteStreamControllerImpl),
@@ -2942,7 +2942,7 @@ export type ReadRequest = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const readableStreamDefaultReaderIDL = defineInterface({
+export const readableStreamDefaultReaderIDL = defineInterface<JSEnvironment>({
   name: 'ReadableStreamDefaultReader',
   exposed: '*',
   implementation: impl(ReadableStreamDefaultReaderImpl),
@@ -3157,7 +3157,7 @@ export type ReadableStreamBYOBReaderReadOptions = {
   min: number;
 };
 
-export const readableStreamBYOBReaderIDL = defineInterface({
+export const readableStreamBYOBReaderIDL = defineInterface<JSEnvironment>({
   name: 'ReadableStreamBYOBReader',
   exposed: '*',
   implementation: impl(ReadableStreamBYOBReaderImpl),

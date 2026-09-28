@@ -46,7 +46,9 @@ views of existing owners, not a new environment object for each subsystem.
 | [`StorageEnvironment`](storage/environment.ts) | UserAgent, creation URL, and an origin when available; usable before realm creation |
 | [`FetchEnvironmentRecord`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
 | HTML [`EnvironmentRecord`](browlet/scripting/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
-| [`JSEnvironment`](js-engine/environment.ts) | `exec: RealmExecution` and `queueNetworkingTask(steps, destination)` for a JavaScript execution owner |
+| [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `exec: RealmExecution`, and `queueNetworkingTask(steps, destination)` for a JavaScript execution owner |
+| [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
+| [`BrowletEnvironment`](browlet/scripting/environment.ts) | Common HTML realm and composed execution view for full settings and sandboxes; `ScriptingEnvironment` is its realm-only view |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends both FetchEnvironmentRecord and JSEnvironment with the client settings Fetch consumes |
 | HTML [`Environment`](browlet/scripting/environment.ts) | Extends EnvironmentRecord and implements FetchEnvironment; adds the realm, execution, timing, policies, and Fetch group |
 | `WindowEnvironment` | Specializes Environment with its Window and live queries of the associated Document |
@@ -72,6 +74,11 @@ contract; [Browlet's execution integration](browlet/integration/execution.ts)
 composes the engine operations with HTML and DOM behavior. Defining a contract
 below HTML does not transfer ownership of HTML algorithms to JS Engine.
 
+Subsystems can declare independent execution contracts, such as DOM's
+[`EventExecution`](browlet/dom/environment.ts). `BrowletExecution` combines it
+with `RealmExecution` on the same `env.exec` object; neither base contract depends
+on the other.
+
 Implementations use `env.exec`. It exposes no Binding Context, realm object,
 callback adapter, conversion API, or projection registry. Supply lifetime
 dependencies last to constructors and pass the same environment to derived
@@ -90,9 +97,13 @@ by the [style integration](browlet/style/ROADMAP.md), without requiring HTML set
 [`createWindowEnvironment()`](browlet/bindings.ts) assembles the Window, early
 record, WindowRealm, binding, execution, and full settings. Binding registration
 accepts an environment factory because execution composition needs the new
-Binding Context. The factory returns the actual environment; declarations
-subsequently obtain it through `ctx.getEnvironment()`. Global projection and
-global-scope mixin setup finish before consumers receive the Window environment.
+Binding Context. Declarations and their binding world name one environment type;
+that type supplies the realm type too. The factory returns the actual environment;
+declarations subsequently obtain it through `ctx.getEnvironment()`. A standalone
+binding needing only a realm can register `{ realm }` directly.
+Event construction captures
+the binding in an execution facility, without attaching it to Realm. Global projection
+and global-scope mixin setup finish before consumers receive the Window environment.
 Document creation retains its own HTML initialization steps.
 
 `Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires

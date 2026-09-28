@@ -25,8 +25,8 @@ describe('HTML structured-data platform contracts', () => {
     });
     const firstRealm = new Realm();
     const secondRealm = new Realm();
-    const first = domain.register(firstRealm);
-    const second = domain.register(secondRealm);
+    const first = domain.register({ realm: firstRealm });
+    const second = domain.register({ realm: secondRealm });
     first.install(firstRealm.global);
     second.install(secondRealm.global);
     const FirstDOMException = Reflect.get(
@@ -79,7 +79,7 @@ describe('HTML structured-data platform contracts', () => {
       capabilities: domExceptionCapabilities,
     });
     const realm = new Realm();
-    const registration = domain.register(realm);
+    const registration = domain.register({ realm });
     registration.install(realm.global);
     const QuotaExceededError = Reflect.get(
       realm.global,

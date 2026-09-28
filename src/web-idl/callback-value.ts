@@ -3,12 +3,12 @@ import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
 } from './core/index';
 import type { ConversionContext } from './conversion';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLRealm } from './realm';
 
 /** Callback identity, realm, and invocation supplied to a declaration's adapter. */
-export type CallbackInterfaceValue = {
+export type CallbackInterfaceValue<Realm extends WebIDLRealm = WebIDLRealm> = {
   object: object;
-  realm: WebIDLRealmHost;
+  realm: Realm;
   callUserObjectOperation(
     operationName: string,
     argumentsList: unknown[],
@@ -21,7 +21,7 @@ export type CallbackInterfaceValue = {
 export function createCallbackFunctionValue(
   definition: CallbackFunctionDefinition,
   object: object,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   callbackContext: object,
   conversionContext: ConversionContext,
 ): CallbackFunctionValue {
@@ -41,7 +41,7 @@ export function createCallbackFunctionValue(
 export function createCallbackInterfaceRecord(
   definition: CallbackInterfaceDefinition,
   object: object,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   callbackContext: object,
   conversionContext: ConversionContext,
 ): CallbackInterfaceRecord {
@@ -89,7 +89,7 @@ type CallbackValueRecord = {
   callbackContext: object;
   conversionContext: ConversionContext;
   object: object;
-  realm: WebIDLRealmHost;
+  realm: WebIDLRealm;
 };
 
 // Project helper: check the private brand on a retained callback value.

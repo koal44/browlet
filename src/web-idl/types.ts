@@ -2,6 +2,8 @@ import type { DefinitionAssembly } from './assembly';
 import type {
   AnnotatedType, ExtendedAttribute, UnionType, WebIDLType,
 } from './core/index';
+import type { InterfaceType, ReferenceType } from './core/types';
+import { InternalError } from '../infra/internal-error';
 
 // Project helper for Web IDL §2.13.33 Annotated types — associate argument and dictionary-member attributes.
 export function getTypeWithApplicableExtendedAttributes(
@@ -112,13 +114,14 @@ export function includesUndefined(
 export function getUnannotatedType(
   type: WebIDLType,
   definitions: DefinitionAssembly,
-): Exclude<WebIDLType, { kind: 'annotated'; }> {
+): Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }> {
   let innerType = type;
   while (true) {
     if (innerType.kind === 'annotated') {
       innerType = innerType.type;
       continue;
     }
+    if (innerType.kind === 'interface') return resolveInterfaceType(innerType, definitions);
     if (innerType.kind === 'reference') {
       const definition = definitions.getDefinition(innerType.name);
       if (definition?.kind === 'typedef') {
@@ -128,6 +131,13 @@ export function getUnannotatedType(
     }
     return innerType;
   }
+}
+
+/** Resolve a class reference through this assembly's declared implementation identity. */
+export function resolveInterfaceType(type: InterfaceType, definitions: DefinitionAssembly): ReferenceType {
+  const primaryInterface = definitions.getInterfaceForImplClass(type.implClass);
+  if (!primaryInterface) throw new InternalError('No interface declares the referenced implementation class');
+  return { kind: 'reference', name: primaryInterface.definition.name };
 }
 
 type AnnotatedUnionType = AnnotatedType<UnionType>;

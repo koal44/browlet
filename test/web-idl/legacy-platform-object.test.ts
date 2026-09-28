@@ -206,6 +206,7 @@ describe('Web IDL legacy platform objects', () => {
       new DefinitionAssembly([derived, base]),
       new Realm(),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(derived);
     interfaceBinding.createImplementation = () => new IndexedDerivedImpl();
@@ -313,6 +314,7 @@ describe('Web IDL legacy platform objects', () => {
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const globalBindingInterfaceBinding = globalBinding.getDefinitionBinding(legacy);
     globalBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
@@ -332,6 +334,7 @@ describe('Web IDL legacy platform objects', () => {
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const legacyBindingInterfaceBinding = legacyBinding.getDefinitionBinding(legacy);
     legacyBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
@@ -614,7 +617,7 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceIDL = legacyInterface('SharedLegacy', [constructor, indexGetter, nameGetter]);
     const definitions = new DefinitionAssembly([interfaceIDL]);
     const objects = ['first', 'second'].map((name, index) => {
-      const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]));
+      const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
       const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
       interfaceBinding.createImplementation = () => new SharedLegacyImpl();
       interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
@@ -734,7 +737,7 @@ function createBinding(
   class LegacyCollectionImpl {}
   const realm = new Realm();
   const binding = new RealmBinding(
-    new DefinitionAssembly([interfaceIDL]), realm, new BindingWorld([]),
+    new DefinitionAssembly([interfaceIDL]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
   binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new LegacyCollectionImpl();
   return { binding, realm };

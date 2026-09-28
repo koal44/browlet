@@ -2,8 +2,7 @@ import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
 } from '../../web-idl/index';
-import type { Realm } from '../scripting/realm';
-import type { Environment } from '../scripting/environment';
+import type { BrowletEnvironment, Environment } from '../scripting/environment';
 import type { WindowOrWorkerGlobalScopeMixin } from '../scripting/global-scope';
 import type { ReportImpl } from './report';
 
@@ -120,7 +119,7 @@ const visibleReportTypes = new Set(['coep', 'integrity-violation', 'csp-violatio
  * };
  * typedef sequence<Report> ReportList;
  */
-export const reportingObserverIDL = defineInterface<Realm>({
+export const reportingObserverIDL = defineInterface<BrowletEnvironment>({
   name: 'ReportingObserver',
   exposed: ['Window', 'Worker'],
   implementation: impl(ReportingObserverImpl),

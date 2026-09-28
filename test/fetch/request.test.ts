@@ -16,7 +16,7 @@ describe('Fetch request state', () => {
     const request = createFetchRequest(undefined, client);
     expect(request).toMatchObject({
       method: 'GET', localURLsOnly: false, headerList: new FetchHeaders(), unsafeRequest: false, body: null,
-      client, reservedClient: null, replacesClientId: '', traversableForUserPrompts: undefined,
+      reservedClient: null, replacesClientId: '', traversableForUserPrompts: undefined,
       keepalive: false, initiatorType: null, allowServiceWorkerInterception: true, initiator: '', destination: '',
       priority: 'auto', internalPriority: null, origin: undefined, topLevelNavigationInitiatorOrigin: null,
       policyContainer: undefined, referrer: undefined, referrerPolicy: '', mode: 'no-cors',

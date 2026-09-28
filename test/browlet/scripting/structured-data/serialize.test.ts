@@ -6,6 +6,7 @@ import {
 } from '../../../../src/web-idl/index';
 import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   domExceptionCapabilities,
@@ -519,9 +520,9 @@ describe('HTML structured serialization', () => {
       },
       deserializationSteps() {},
     })];
-    const bindings = new BindingWorld<Realm>([containerIDL], { capabilities });
+    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL], { capabilities });
     const realm = new Realm();
-    const ctx = bindings.register(realm);
+    const ctx = bindings.register({ realm });
     const container = ctx.createPlatformRecord(containerIDL);
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
     implInst.child = container.platformObject;
@@ -563,8 +564,8 @@ describe('HTML structured serialization', () => {
 function createContext(options: {
   agentCluster?: AgentCluster;
   crossOriginIsolated?: boolean;
-} = {}): BindingContext<Realm> {
-  const bindings = new BindingWorld<Realm>([], {
+} = {}): BindingContext<ScriptingEnvironment> {
+  const bindings = new BindingWorld<ScriptingEnvironment>([], {
     capabilities: domExceptionCapabilities,
   });
   const realm = new Realm({
@@ -574,7 +575,7 @@ function createContext(options: {
     options.crossOriginIsolated ? 'concrete' : 'none',
   );
   agentCluster.add(realm.agent);
-  const ctx = bindings.register(realm);
+  const ctx = bindings.register({ realm });
   ctx.install(realm.global);
   return ctx;
 }

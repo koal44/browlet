@@ -17,7 +17,7 @@ import { registerDefinitionBindings } from '../../src/web-idl/implementation-bin
 describe('Web IDL platform-object identity and state', () => {
   it('reads the shared stamped record without a registry', () => {
     const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
-    const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]));
+    const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
     const primaryInterface = binding.resolveInterface('Example');
     const implInst = stampImplementation({}, primaryInterface, binding);
     const record = getImplementationRecord(implInst);
@@ -50,11 +50,13 @@ describe('Web IDL platform-object identity and state', () => {
       firstDefinitions,
       new Realm(),
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     const second = new RealmBinding(
       secondDefinitions,
       new Realm(),
       world,
+      (ctx) => ({ realm: ctx.realm }),
     );
     const object = {};
     const implInst = {};
@@ -107,6 +109,7 @@ describe('Web IDL platform-object identity and state', () => {
       new DefinitionAssembly([choice, callback, alias]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
 
     expect(binding.install()).toEqual(new Map());
@@ -120,7 +123,7 @@ describe('Web IDL platform-object identity and state', () => {
     const primaryInterface = definitions.getInterface('Example');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world);
+    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const value = Object.freeze({ count: 1 });
 
     expect(isStampedImplInstance(value)).toBe(false);
@@ -148,7 +151,7 @@ describe('Web IDL platform-object identity and state', () => {
     const primaryInterface = definitions.getInterface('ProxyExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world);
+    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const trap = (): never => { throw new Error('Proxy trap invoked'); };
     const { proxy, revoke } = Proxy.revocable({}, {
       get: trap, getPrototypeOf: trap, defineProperty: trap, has: trap,
@@ -170,7 +173,7 @@ describe('Web IDL platform-object identity and state', () => {
     const primaryInterface = definitions.getInterface('FrozenExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world);
+    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const implInst = Object.freeze({ count: 1 });
     const platformObject = Object.freeze({ authorProperty: true });
     const keys = Reflect.ownKeys(platformObject);
@@ -202,7 +205,7 @@ describe('Web IDL platform-object identity and state', () => {
     const primaryInterface = definitions.getInterface('Example');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world);
+    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const implInst = {};
     if (stamped) stampImplementation(implInst, primaryInterface, binding);
 
@@ -217,7 +220,7 @@ describe('Web IDL platform-object identity and state', () => {
     const primaryInterface = definitions.getInterface('ProxyExample');
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world);
+    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const target = {};
     const trap = (): never => { throw new Error('Proxy trap invoked'); };
     const { proxy, revoke } = Proxy.revocable(target, {
@@ -242,8 +245,8 @@ describe('Web IDL platform-object identity and state', () => {
     if (!primaryInterface) throw new Error('Missing assembled interface');
     const firstWorld = new BindingWorld([]);
     const secondWorld = new BindingWorld([]);
-    const first = new RealmBinding(definitions, new Realm(), firstWorld);
-    const second = new RealmBinding(definitions, new Realm(), secondWorld);
+    const first = new RealmBinding(definitions, new Realm(), firstWorld, (ctx) => ({ realm: ctx.realm }));
+    const second = new RealmBinding(definitions, new Realm(), secondWorld, (ctx) => ({ realm: ctx.realm }));
     const platformObject = {};
     const implInst = {};
     const record = first.initializePlatformObject(platformObject, primaryInterface, implInst);
@@ -333,8 +336,8 @@ function createRealmBindings(
   class RealmTestImpl {}
   const world = new BindingWorld([]);
   const definitions = new DefinitionAssembly([interfaceIDL]);
-  const first = new RealmBinding(definitions, new Realm(), world);
-  const second = new RealmBinding(definitions, new Realm(), world);
+  const first = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+  const second = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
   for (const binding of [first, second]) {
     binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new RealmTestImpl();
   }

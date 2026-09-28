@@ -21,7 +21,7 @@ describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm).install(realm.global);
+    new BindingWorld([initializationIDL]).register({ realm }).install(realm.global);
     const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
     const unrelated = new AsyncLocalStorage<string>();
     let reported: string | undefined;
@@ -43,7 +43,7 @@ describe('implementation Promise delivery', () => {
   itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm).install(realm.global);
+    new BindingWorld([initializationIDL]).register({ realm }).install(realm.global);
     const trace: string[] = [];
     Reflect.set(realm.globalObject, 'record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
@@ -171,7 +171,7 @@ function createFixture(sharedAgent = false) {
     const expose = (key: string, value: unknown) => {
       Object.defineProperty(window, key, { configurable: true, value });
     };
-    const binding = bindings.register(realm);
+    const binding = bindings.register({ realm });
     const implementation = new OwnershipProbeImpl(
       name, binding.Promise.fromNative(pending.promise, String, idlType.DOMString), trace, binding.Promise,
     );

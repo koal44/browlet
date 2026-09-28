@@ -243,7 +243,7 @@ export const blobPartIDL = defineTypedef({
   ),
 });
 
-export const blobIDL = defineInterface({
+export const blobIDL = defineInterface<JSEnvironment>({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),

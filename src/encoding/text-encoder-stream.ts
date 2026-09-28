@@ -67,7 +67,7 @@ export class TextEncoderStreamImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const textEncoderStreamIDL = defineInterface({
+export const textEncoderStreamIDL = defineInterface<JSEnvironment>({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {

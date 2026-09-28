@@ -5,7 +5,7 @@ import {
   type OperationMember, type WebIDLType,
 } from '../../src/web-idl/index';
 import { TestRealm } from './test-realm';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
 import { getBufferSourceCopy, getBufferSourceUnderlyingBuffer, writeArrayBuffer, type JSEnvironment } from '../../src/js-engine/index';
 import type { InternalPromise } from '../../src/infra/promises';
 
@@ -182,7 +182,7 @@ function createFixture(
       ),
     ],
   });
-  const bindings = new BindingWorld([
+  const bindings = new BindingWorld<TestEnvironment>([
     definition,
     defineTypedef({ name: 'ResultBytes', type: idlType.Uint8Array }),
     defineDictionary({

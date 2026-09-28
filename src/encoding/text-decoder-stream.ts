@@ -74,7 +74,7 @@ export class TextDecoderStreamImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const textDecoderStreamIDL = defineInterface({
+export const textDecoderStreamIDL = defineInterface<JSEnvironment>({
   name: 'TextDecoderStream',
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {

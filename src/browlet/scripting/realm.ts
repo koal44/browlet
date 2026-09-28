@@ -1,9 +1,10 @@
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm, type GlobalObject, type JSRealmOptions,
 } from '../../js-engine/index';
-import type { WebIDLRealmHost } from '../../web-idl/index';
+import type { CallbackHooks, SecurityCheckType, WebIDLRealm } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
+import type { EventRealm, WindowEventRealm } from '../dom/environment';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentRecord, Environment } from './environment';
 import type { TaskCreationOptions, TaskSource } from './event-loop';
@@ -31,9 +32,9 @@ export function createRealm(
   return realm;
 }
 
-export class Realm extends JSRealm implements WebIDLRealmHost {
+export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   agent: Agent;
-  callbacks: WebIDLRealmHost['callbacks'];
+  callbacks: CallbackHooks;
   crossOriginIsolated: boolean;
   globalNames: ReadonlySet<string>;
   isGlobalPrototypeChainMutable: boolean;
@@ -87,11 +88,6 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
           env.responsibleEventLoop.prepareToRunScript(env);
         }
       },
-      reportException: (exception) => {
-        // TODO(HTML section 8.1.5): Report through the realm's error-reporting
-        // machinery once Browlet implements it.
-        console.error(exception);
-      },
     };
   }
 
@@ -136,6 +132,17 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
       return coarsenedSharedCurrentTime().milliseconds;
     }
     return env.timing.currentHighResolutionTime().toTimestamp();
+  }
+
+  isWindow(): this is WindowRealm {
+    return false;
+  }
+
+  /** Report an uncaught exception for this realm's global. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#report-an-exception
+  reportException(exception: unknown): void {
+    // TODO: Implement HTML error reporting, including ErrorEvent dispatch.
+    console.error(exception);
   }
 
   /** Document used for HTML task activity checks; non-Window globals have none. */
@@ -205,7 +212,7 @@ export class Realm extends JSRealm implements WebIDLRealmHost {
 }
 
 /** HTML realm whose global is a Window, known before platform-object installation. */
-export class WindowRealm extends Realm {
+export class WindowRealm extends Realm implements WindowEventRealm {
   declare agent: WindowAgent;
   /** Window implementation retained across global projection. */
   windowImplementation: WindowImpl;
@@ -219,16 +226,19 @@ export class WindowRealm extends Realm {
     return this.windowImplementation.getAssociatedDocument();
   }
 
-  getCurrentEvent(_global: object): EventImpl | undefined {
+  override isWindow(): this is WindowRealm {
+    return true;
+  }
+
+  getCurrentEvent(): EventImpl | undefined {
     return this.windowImplementation.getCurrentEvent();
   }
 
-  setCurrentEvent(_global: object, event: EventImpl | undefined): void {
+  setCurrentEvent(event: EventImpl | undefined): void {
     this.windowImplementation.setCurrentEvent(event);
   }
 
-  recordTimingInfo(
-    _global: object,
+  recordEventListenerTiming(
     _event: EventImpl,
     _callback: object,
   ): void {
@@ -263,7 +273,3 @@ export type WindowRealmOptions = Omit<RealmOptions, 'globalNames' | 'isGlobalPro
   agent: WindowAgent;
   envRecord: EnvironmentRecord;
 };
-
-type SecurityCheckType = Parameters<
-  WebIDLRealmHost['performSecurityCheck']
->[2];

@@ -5,32 +5,33 @@ import { webIDLCommonDefinitions } from './common-definitions';
 import type { CapabilityRegistration } from './capability';
 import type { Definition } from './core/index';
 import type { HostDefinedInterface } from './conversion';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLEnvironment, WebIDLRealm } from './realm';
 import {
   getImplementationRecord, getPlatformRecord,
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
 import { registerDefinitionBindings } from './implementation-binding';
-import type { JSEnvironment, JSRealm } from '../js-engine/index';
+import type { JSRealm } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
  * Each realm binding owns its initial objects and implementation steps.
  */
-export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
+// A weaker world type would permit registrations its declarations cannot use.
+export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironment> {
   hostDefinedInterfaces: Map<string, HostDefinedInterface>;
   #definitions: DefinitionAssembly;
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
   // Project helper: compose definitions and capabilities shared across realm bindings.
   constructor(
-    definitions: Definition<Realm>[],
+    definitions: Definition<Env>[],
     options: BindingWorldOptions = {},
   ) {
     this.#definitions = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
-      // BindingWorld restricts registration to the realm required by these callbacks.
+      // BindingWorld restricts registration to the environment required by these callbacks.
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
     ], options.capabilities);
@@ -40,30 +41,38 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   /**
-   * Register a realm in this world, returning its shared binding context.
-   * Supply an environment factory when its implementations need host facilities.
+   * Register an environment, returning its realm's shared binding context.
+   * Use a factory when composing execution requires the new context.
    */
+  register(env: Env): BindingContext<Env>;
   register(
-    realm: Realm,
-    createEnvironment?: (context: BindingContext<Realm>) => JSEnvironment,
-  ): BindingContext<Realm> {
+    realm: Env['realm'], createEnvironment: (context: BindingContext<Env>) => Env,
+  ): BindingContext<Env>;
+  register(
+    envOrRealm: Env | Env['realm'],
+    createEnvironment?: (context: BindingContext<Env>) => Env,
+  ): BindingContext<Env> {
+    const realm = createEnvironment ? envOrRealm as Env['realm'] : (envOrRealm as Env).realm;
+    const compose = createEnvironment ?? (() => envOrRealm as Env);
     const registered = this.forRealm(realm);
     if (registered) return registered;
 
-    const binding = new RealmBinding(
+    const binding = new RealmBinding<Env>(
       this.#definitions,
       realm,
-      this,
-      createEnvironment,
+      // Realm bindings retain world identity and registry operations. Registration
+      // above is the boundary that checks the declaration's environment contract.
+      this as unknown as BindingWorld,
+      compose,
     );
     registerDefinitionBindings(binding);
     return binding.context;
   }
 
   /** Find a realm's binding context in this world without registering it. */
-  forRealm(realm: Realm): BindingContext<Realm> | undefined {
-    // The key is the binding's own realm, retaining this host type.
-    return this.#realmBindings.get(realm)?.context as BindingContext<Realm> | undefined;
+  forRealm(realm: Env['realm']): BindingContext<Env> | undefined {
+    // Registration checked the environment retained by this realm's context.
+    return this.#realmBindings.get(realm)?.context as BindingContext<Env> | undefined;
   }
 
   /** Publish a realm binding after its declaration setup succeeds. */
@@ -92,7 +101,7 @@ export class BindingWorld<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
   }
 
   // Project helper: retrieve the owning realm from either object identity.
-  getRealm(value: object): WebIDLRealmHost | undefined {
+  getRealm(value: object): WebIDLRealm | undefined {
     const record = getPlatformRecord(value) ?? getImplementationRecord(value);
     return record?.binding.world === this ? record.realm : undefined;
   }

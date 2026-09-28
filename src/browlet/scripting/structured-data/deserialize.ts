@@ -1,3 +1,4 @@
+import type { ScriptingEnvironment } from '../environment';
 import {
   appendMapData, appendSetData, getBufferTypeName, isObject, writeErrorStack,
 } from '../../../js-engine/index';
@@ -16,7 +17,7 @@ import { InternalError } from '../../../infra/internal-error';
 // BINDING_INTEGRATION: reconstruct platform objects in the destination realm.
 export function structuredDeserialize(
   serialized: SerializedRecord,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredDeserializeMemory = new Map(),
 ): unknown {
   if (memory.has(serialized)) return memory.get(serialized);
@@ -234,7 +235,7 @@ function deserializeProperties(
     type: 'Array' | 'Object';
   }>['properties'],
   value: object,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredDeserializeMemory,
 ): void {
   for (const entry of properties) {
@@ -266,7 +267,7 @@ function deserializeError(
 function deserializeErrorCause(
   serialized: ErrorSerializedRecord,
   value: object,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredDeserializeMemory,
 ): void {
   if (serialized.cause === undefined) return;

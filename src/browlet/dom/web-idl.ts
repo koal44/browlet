@@ -1,5 +1,5 @@
+import type { BrowletEnvironment } from '../scripting/environment';
 import type { Definition } from '../../web-idl/index';
-import type { Realm } from '../scripting/realm';
 import { abortControllerIDL } from './abort/abort-controller';
 import { abortSignalIDL } from './abort/abort-signal';
 import {
@@ -47,7 +47,7 @@ import {
 } from './nodes/shadow-root';
 import { textIDL } from './nodes/text';
 
-export const domIDLDefinitions: Definition<Realm>[] = [
+export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   eventIDL,
   eventInitIDL,
   customEventIDL,

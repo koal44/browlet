@@ -1,7 +1,7 @@
 import type { BindingContext } from './binding-context';
 import type { AttributeFunctionCallback } from './realm-binding';
 import type { CallbackInterfaceValue } from './callback-value';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLEnvironment, WebIDLRealm } from './realm';
 
 export * from './core/index';
 
@@ -19,7 +19,8 @@ export {
 export {
   BindingWorld, type BindingWorldOptions,
 } from './binding-world';
-export type { WebIDLRealmHost };
+export type { WebIDLEnvironment, WebIDLRealm };
+export type { CallbackHooks, SecurityCheckType } from './realm';
 export type { GlobalObjectAllocation } from './realm-binding';
 export {
   isStampedImplInstance, isStampedPlatformObject,
@@ -28,24 +29,25 @@ export {
 
 // Project typing: the full Web IDL entry supplies contextual callback types for declarations.
 declare module './core/types' {
-  interface DeclarationCallbacks<Realm> {
-    'argument-resolve': BindingCallback<Realm, void, [method: BindingContext<Realm & WebIDLRealmHost>], unknown>;
-    'allocate-platform-object': BindingCallback<Realm, undefined, [prototype: object], object>;
-    'initialize-implementation': BindingCallback<Realm, undefined, [value: object], void>;
-    'constructor-create': BindingCallback<Realm, undefined, unknown[], object>;
-    'constructor-invoke': BindingCallback<Realm, object, unknown[], void>;
-    'attribute-get': BindingCallback<Realm, object | null, [], unknown>;
-    'attribute-set': BindingCallback<Realm, object | null, [value: unknown], void>;
-    'attribute-function': BindingCallback<Realm, undefined, [], AttributeFunctionCallback>;
-    'operation-invoke': BindingCallback<Realm, object | null, unknown[], unknown>;
+  interface DeclarationCallbacks<Env, Impl extends object, Values extends unknown[]> {
+    'argument-resolve': BindingCallback<Env, void, [method: BindingContext<Env & WebIDLEnvironment>], unknown>;
+    'allocate-platform-object': BindingCallback<Env, undefined, [prototype: object], object>;
+    'initialize-implementation': BindingCallback<Env, undefined, [value: Impl], void>;
+    'constructor-create': BindingCallback<Env, undefined, Values, object>;
+    'constructor-invoke': BindingCallback<Env, object, Values, void>;
+    'attribute-get': BindingCallback<Env, object | null, [], unknown>;
+    'attribute-set': BindingCallback<Env, object | null, [value: unknown], void>;
+    'attribute-function': BindingCallback<Env, undefined, [], AttributeFunctionCallback>;
+    'operation-invoke': BindingCallback<Env, object | null, Values, unknown>;
     'callback-interface-adapt': BindingCallback<
-      Realm, undefined, [value: CallbackInterfaceValue], unknown
+      Env, undefined, [value: CallbackInterfaceValue<(Env & WebIDLEnvironment)['realm']>], unknown
     >;
   }
 }
 
-type BindingCallback<Realm, This, Values extends unknown[], Result> = (
+/** A declaration hook receiving its typed Binding Context before the hook-specific arguments. */
+type BindingCallback<Env, This, Values extends unknown[], Result> = (
   this: This,
-  ctx: BindingContext<Realm & WebIDLRealmHost>,
+  ctx: BindingContext<Env & WebIDLEnvironment>,
   ...values: Values
 ) => Result;

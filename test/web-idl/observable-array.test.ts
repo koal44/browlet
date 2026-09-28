@@ -44,8 +44,8 @@ describe('Web IDL observable arrays', () => {
       defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
       defineInterface({ name: 'Values', implementation: impl(ValuesImpl), members: [attribute] }),
     ]);
-    const owner = world.register(new Realm());
-    const other = world.register(new Realm());
+    const owner = world.register({ realm: new Realm() });
+    const other = world.register({ realm: new Realm() });
     const object = owner.project(ValuesImpl, new ValuesImpl());
     const foreign = other.project(ValuesImpl, new ValuesImpl());
     // eslint-disable-next-line @typescript-eslint/unbound-method -- explicitly apply the borrowed getter to the owner
@@ -245,6 +245,7 @@ describe('Web IDL observable arrays', () => {
       new DefinitionAssembly([employee, building]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(employee).createImplementation = () => new EmployeeImpl();
     binding.getDefinitionBinding(building).createImplementation = () => new BuildingImpl();
@@ -282,6 +283,7 @@ function createNumberArrayBinding(): NumberArrayFixture {
     new DefinitionAssembly([definition]),
     realm,
     new BindingWorld([]),
+    (ctx) => ({ realm: ctx.realm }),
   );
   binding.getDefinitionBinding(definition).createImplementation = () => new NumberArraysImpl();
   return {

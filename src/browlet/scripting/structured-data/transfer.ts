@@ -1,3 +1,4 @@
+import type { ScriptingEnvironment } from '../environment';
 import {
   getArrayBufferMaxByteLength, getBufferSourceByteLength, getBufferTypeName,
   isBufferSourceDetached, isObject,
@@ -6,7 +7,6 @@ import {
   throwDOMException,
   type BindingContext, type StampedImplInstance,
 } from '../../../web-idl/index';
-import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
   type StructuredDeserializeMemory, type StructuredSerializeMemory,
@@ -24,7 +24,7 @@ import { InternalError } from '../../../infra/internal-error';
 export function structuredSerializeWithTransfer(
   value: unknown,
   transferList: unknown[],
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): StructuredSerializeWithTransferResult {
   const memory: StructuredSerializeMemory = new Map();
   const preparedTransfers: PreparedTransfer[] = [];
@@ -55,7 +55,7 @@ export function structuredSerializeWithTransfer(
 /** HTML §2.7.8, StructuredDeserializeWithTransfer. */
 export function structuredDeserializeWithTransfer(
   result: StructuredSerializeWithTransferResult,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): StructuredDeserializeWithTransferResult {
   const memory: StructuredDeserializeMemory = new Map();
   const transferredValues: unknown[] = [];
@@ -79,7 +79,7 @@ export function structuredDeserializeWithTransfer(
 // BINDING_INTEGRATION: resolve the source instance and its transferable capability.
 function prepareTransfer(
   value: unknown,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): PreparedTransfer {
   if (!isObject(value)) return throwDOMException('DataCloneError');
   const bufferType = getBufferTypeName(value);
@@ -114,7 +114,7 @@ function prepareTransfer(
 
 function performTransfer(
   prepared: PreparedTransfer,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
     if (isBufferSourceDetached(prepared.value)) return throwDOMException('DataCloneError');
@@ -148,7 +148,7 @@ function performTransfer(
 // BINDING_INTEGRATION: construct and initialize the destination platform object.
 function receiveTransfer(
   dataHolder: TransferDataHolder,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
     const definition = ctx.getInterface(

@@ -62,6 +62,7 @@ describe('Web IDL namespace objects', () => {
       definitions,
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(namespace).getOrCreateMemberRecord(version).attributeSteps = {
       get(receiver) {

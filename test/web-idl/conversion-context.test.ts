@@ -84,9 +84,9 @@ function fixture() {
   const first = new TestRealm();
   const second = new TestRealm();
   const world = new BindingWorld(definitions);
-  const context = world.register(first);
+  const context = world.register({ realm: first });
   context.install(first.global);
-  world.register(second).install(second.global);
+  world.register({ realm: second }).install(second.global);
   const owner = context.project(SourceImpl, new SourceImpl(context.Promise));
   return { first, second, owner };
 }

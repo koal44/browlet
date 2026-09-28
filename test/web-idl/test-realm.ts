@@ -1,15 +1,15 @@
 import { type JSFunction, type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
 import type {
-  SecurityCheckType, WebIDLRealmHost,
-} from '../../src/web-idl/realm-host';
+  CallbackHooks, SecurityCheckType, WebIDLRealm,
+} from '../../src/web-idl/realm';
 
 /*
  * Web IDL's unit tests need a JavaScript realm, not Browlet's HTML callback
  * lifecycle. Keep the boundary honest with the smallest host that satisfies
  * Web IDL while JSRealm supplies realm identity and JavaScript execution.
  */
-export class TestRealm extends JSRealm implements WebIDLRealmHost {
-  callbacks: WebIDLRealmHost['callbacks'];
+export class TestRealm extends JSRealm implements WebIDLRealm {
+  callbacks: CallbackHooks;
   crossOriginIsolated: boolean;
   globalNames: ReadonlySet<string>;
   isGlobalPrototypeChainMutable: boolean;
@@ -33,7 +33,6 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
       },
       prepareToRunCallback: () => {},
       prepareToRunScript: () => {},
-      reportException: () => {},
     };
   }
 
@@ -46,6 +45,8 @@ export class TestRealm extends JSRealm implements WebIDLRealmHost {
   queueMicrotask(steps: () => void): void {
     this.enqueueMicrotask(steps);
   }
+
+  reportException(_exception: unknown): void {}
 }
 
 export function getInstalledInterface(

@@ -331,7 +331,7 @@ export const windowIDL = defineInterface({
         invoke(context, name) {
           return context.project(
             ElementImpl,
-            (this as WindowImpl).getNamedProperty(name as string),
+            (this as WindowImpl).getNamedProperty(name),
           );
         },
       },

@@ -9,7 +9,7 @@ import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
 import {
-  defineInterfaceMixin, defineTypedef, idlType, implementationType, nullable, op, promise, reference, roAttr, union, xattr,
+  defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
 import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
@@ -224,7 +224,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-blob
   blob(): InternalPromise<BlobImpl> {
-    return this.#consume(implementationType<BlobImpl>(reference('Blob')), (bytes) => {
+    return this.#consume(reference(BlobImpl), (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       const data = BlobData.fromOwnedBytes(bytes);
       return BlobImpl.create(data, type === null ? '' : serializeMIMEType(type), undefined, this.#env);
@@ -238,7 +238,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-formdata
   formData(): InternalPromise<FormDataImpl> {
-    return this.#consume(implementationType<FormDataImpl>(reference('FormData')), (bytes) => {
+    return this.#consume(reference(FormDataImpl), (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       if (type?.type === 'multipart' && type.subtype === 'form-data') {
         return FormDataImpl.fromEntries(

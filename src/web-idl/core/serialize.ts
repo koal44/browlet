@@ -1,19 +1,23 @@
 import type {
-  ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, WebIDLType,
+  ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass, WebIDLType,
 } from './types';
 import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
 import { InternalError } from '../../infra/internal-error';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
-export function serializeDefinitions<Realm>(
-  definitions: Definition<Realm>[],
+export function serializeDefinitions<Env>(
+  definitions: Definition<Env>[],
 ): string {
-  return definitions.map(serializeDefinition).join('\n\n');
+  const interfaces = collectInterfaceNames(definitions);
+  return definitions.map((definition) => serializeDefinition(definition, interfaces)).join('\n\n');
 }
 
 // Project formatter for Web IDL §2 Interface definition language — definition syntax.
-export function serializeDefinition<Realm>(definition: Definition<Realm>): string {
-  const attributes = serializeAttributes(definition);
+export function serializeDefinition<Env>(
+  definition: Definition<Env>,
+  interfaces: InterfaceNames = collectInterfaceNames([definition]),
+): string {
+  const attributes = serializeAttributes(definition, interfaces);
   const prefix = attributes === '' ? '' : `${attributes}\n`;
 
   switch (definition.kind) {
@@ -21,48 +25,48 @@ export function serializeDefinition<Realm>(definition: Definition<Realm>): strin
       return prefix + serializeBlock(
         `interface ${serializeIdentifier(definition.name)}`
         + serializeInheritance(definition.inherits),
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'partial-interface':
       return prefix + serializeBlock(
         `partial interface ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'interface-mixin':
       return prefix + serializeBlock(
         `interface mixin ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'partial-interface-mixin':
       return prefix + serializeBlock(
         `partial interface mixin ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'callback-interface':
       return prefix + serializeBlock(
         `callback interface ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'namespace':
       return prefix + serializeBlock(
         `namespace ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'partial-namespace':
       return prefix + serializeBlock(
         `partial namespace ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeMember),
+        definition.members.map((member) => serializeMember(member, interfaces)),
       );
     case 'dictionary':
       return prefix + serializeBlock(
         `dictionary ${serializeIdentifier(definition.name)}`
         + serializeInheritance(definition.inherits),
-        definition.members.map(serializeDictionaryMember),
+        definition.members.map((member) => serializeDictionaryMember(member, interfaces)),
       );
     case 'partial-dictionary':
       return prefix + serializeBlock(
         `partial dictionary ${serializeIdentifier(definition.name)}`,
-        definition.members.map(serializeDictionaryMember),
+        definition.members.map((member) => serializeDictionaryMember(member, interfaces)),
       );
     case 'enumeration':
       return prefix + `enum ${serializeIdentifier(definition.name)} { `
@@ -70,10 +74,10 @@ export function serializeDefinition<Realm>(definition: Definition<Realm>): strin
         + ' };';
     case 'callback-function':
       return prefix + `callback ${serializeIdentifier(definition.name)} = `
-        + `${serializeType(definition.returns)}(`
-        + `${definition.arguments.map(serializeArgument).join(', ')});`;
+        + `${serializeType(definition.returns, interfaces)}(`
+        + `${definition.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')});`;
     case 'typedef':
-      return prefix + `typedef ${serializeType(definition.type)} `
+      return prefix + `typedef ${serializeType(definition.type, interfaces)} `
         + `${serializeIdentifier(definition.name)};`;
     case 'includes':
       return prefix + `${serializeIdentifier(definition.interface)} includes `
@@ -82,18 +86,19 @@ export function serializeDefinition<Realm>(definition: Definition<Realm>): strin
 }
 
 // Project formatter for Web IDL §2.5 Members — member syntax.
-export function serializeMember<Realm>(
-  member: InterfaceMember<Realm>,
+export function serializeMember<Env>(
+  member: InterfaceMember<Env>,
+  interfaces?: InterfaceNames,
 ): string {
-  const prefix = serializeInlineAttributes(member);
+  const prefix = serializeInlineAttributes(member, interfaces);
 
   switch (member.kind) {
     case 'constant':
-      return prefix + `const ${serializeType(member.type)} `
+      return prefix + `const ${serializeType(member.type, interfaces)} `
         + `${serializeIdentifier(member.name)} = `
         + `${serializeConstantValue(member.value)};`;
     case 'attribute':
-      return prefix + serializeAttribute(member);
+      return prefix + serializeAttribute(member, interfaces);
     case 'operation': {
       const modifier = member.static
         ? 'static '
@@ -101,68 +106,74 @@ export function serializeMember<Realm>(
       const name = member.name === undefined
         ? ''
         : ` ${serializeIdentifier(member.name, operationNameKeywords)}`;
-      return prefix + modifier + serializeType(member.returns) + name
-        + `(${member.arguments.map(serializeArgument).join(', ')});`;
+      return prefix + modifier + serializeType(member.returns, interfaces) + name
+        + `(${member.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')});`;
     }
     case 'constructor':
       return prefix + `constructor(`
-        + `${member.arguments.map(serializeArgument).join(', ')});`;
+        + `${member.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')});`;
     case 'stringifier':
       return `${prefix}stringifier;`;
     case 'iterable':
-      return prefix + `iterable<${serializeOptionalKey(member.key)}`
-        + `${serializeType(member.value)}>;`;
+      return prefix + `iterable<${serializeOptionalKey(member.key, interfaces)}`
+        + `${serializeType(member.value, interfaces)}>;`;
     case 'async-iterable':
-      return prefix + serializeAsyncIterable(member);
+      return prefix + serializeAsyncIterable(member, interfaces);
     case 'maplike':
       return prefix + (member.readonly ? 'readonly ' : '')
-        + `maplike<${serializeType(member.key)}, `
-        + `${serializeType(member.value)}>;`;
+        + `maplike<${serializeType(member.key, interfaces)}, `
+        + `${serializeType(member.value, interfaces)}>;`;
     case 'setlike':
       return prefix + (member.readonly ? 'readonly ' : '')
-        + `setlike<${serializeType(member.value)}>;`;
+        + `setlike<${serializeType(member.value, interfaces)}>;`;
   }
 }
 
 // Project formatter for Web IDL §2.13 Types — type syntax.
-export function serializeType(type: WebIDLType): string {
+export function serializeType(type: WebIDLType, interfaces?: InterfaceNames): string {
   switch (type.kind) {
     case 'simple':
       return type.name;
     case 'reference':
       return serializeIdentifier(type.name);
+    case 'interface': {
+      const name = interfaces?.get(type.implClass);
+      if (name === undefined) throw new InternalError('No interface declares the referenced implementation class');
+      return serializeIdentifier(name);
+    }
     case 'nullable':
-      return `${serializeType(type.type)}?`;
+      return `${serializeType(type.type, interfaces)}?`;
     case 'union':
-      return `(${type.types.map(serializeType).join(' or ')})`;
+      return `(${type.types.map((member) => serializeType(member, interfaces)).join(' or ')})`;
     case 'sequence':
-      return `sequence<${serializeType(type.type)}>`;
+      return `sequence<${serializeType(type.type, interfaces)}>`;
     case 'async-sequence':
-      return `async_sequence<${serializeType(type.type)}>`;
+      return `async_sequence<${serializeType(type.type, interfaces)}>`;
     case 'record':
-      return `record<${serializeType(type.key)}, ${serializeType(type.value)}>`;
+      return `record<${serializeType(type.key, interfaces)}, ${serializeType(type.value, interfaces)}>`;
     case 'promise':
-      return `Promise<${serializeType(type.type)}>`;
+      return `Promise<${serializeType(type.type, interfaces)}>`;
     case 'frozen-array':
-      return `FrozenArray<${serializeType(type.type)}>`;
+      return `FrozenArray<${serializeType(type.type, interfaces)}>`;
     case 'observable-array':
-      return `ObservableArray<${serializeType(type.type)}>`;
+      return `ObservableArray<${serializeType(type.type, interfaces)}>`;
     case 'annotated':
-      return `[${type.extendedAttributes.map(serializeExtendedAttribute)
-        .join(', ')}] ${serializeType(type.type)}`;
+      return `[${type.extendedAttributes.map((attribute) => serializeExtendedAttribute(attribute, interfaces))
+        .join(', ')}] ${serializeType(type.type, interfaces)}`;
   }
 }
 
 // Project formatter for Web IDL §2.14 Extended attributes — extended attribute syntax.
 export function serializeExtendedAttribute(
   attribute: ExtendedAttribute,
+  interfaces?: InterfaceNames,
 ): string {
   switch (attribute.kind) {
     case 'no-arguments':
       return serializeIdentifier(attribute.name);
     case 'arguments':
       return `${serializeIdentifier(attribute.name)}(`
-        + `${attribute.arguments.map(serializeArgument).join(', ')})`;
+        + `${attribute.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')})`;
     case 'identifier':
       return `${serializeIdentifier(attribute.name)}=`
         + serializeIdentifier(attribute.value);
@@ -183,7 +194,7 @@ export function serializeExtendedAttribute(
     case 'named-arguments':
       return `${serializeIdentifier(attribute.name)}=`
         + `${serializeIdentifier(attribute.value)}(`
-        + `${attribute.arguments.map(serializeArgument).join(', ')})`;
+        + `${attribute.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')})`;
     case 'raw':
       return attribute.value;
   }
@@ -194,10 +205,23 @@ type AttributedDefinition = {
   extendedAttributes?: ExtendedAttribute[];
 };
 
+type InterfaceNames = ReadonlyMap<ImplementationClass, string>;
+
+function collectInterfaceNames<Env>(definitions: Definition<Env>[]): InterfaceNames {
+  const interfaces = new Map<ImplementationClass, string>();
+  for (const definition of definitions) {
+    if (definition.kind === 'interface' && definition.implementation) {
+      interfaces.set(definition.implementation.implClass, definition.name);
+    }
+  }
+  return interfaces;
+}
+
 // Project formatter for Web IDL §2.5.2 Attributes, §2.5.5 Stringifiers, and §2.5.7 Static attributes and
 // operations.
-function serializeAttribute<Realm>(
-  member: Extract<InterfaceMember<Realm>, { kind: 'attribute'; }>,
+function serializeAttribute<Env>(
+  member: Extract<InterfaceMember<Env>, { kind: 'attribute'; }>,
+  interfaces: InterfaceNames | undefined,
 ): string {
   const modifier = member.stringifier
     ? 'stringifier '
@@ -205,44 +229,44 @@ function serializeAttribute<Realm>(
       ? 'static '
       : member.inherit ? 'inherit ' : '';
   const readonly = member.readonly ? 'readonly ' : '';
-  return modifier + readonly + `attribute ${serializeType(member.type)} `
+  return modifier + readonly + `attribute ${serializeType(member.type, interfaces)} `
     + `${serializeIdentifier(member.name, attributeNameKeywords)};`;
 }
 
 // Project formatter for Web IDL §2.5.10 Asynchronously iterable declarations.
-function serializeAsyncIterable(member: AsyncIterableMember): string {
+function serializeAsyncIterable(member: AsyncIterableMember, interfaces: InterfaceNames | undefined): string {
   const argumentsList = member.arguments === undefined
     ? ''
-    : `(${member.arguments.map(serializeArgument).join(', ')})`;
-  return `async_iterable<${serializeOptionalKey(member.key)}`
-    + `${serializeType(member.value)}>${argumentsList};`;
+    : `(${member.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')})`;
+  return `async_iterable<${serializeOptionalKey(member.key, interfaces)}`
+    + `${serializeType(member.value, interfaces)}>${argumentsList};`;
 }
 
 // Project helper: format an optional key type before an iterable's value type.
-function serializeOptionalKey(key: WebIDLType | undefined): string {
-  return key === undefined ? '' : `${serializeType(key)}, `;
+function serializeOptionalKey(key: WebIDLType | undefined, interfaces: InterfaceNames | undefined): string {
+  return key === undefined ? '' : `${serializeType(key, interfaces)}, `;
 }
 
 // Project formatter for Web IDL §2.7 Dictionaries — dictionary member syntax.
-function serializeDictionaryMember(member: DictionaryMember): string {
-  const prefix = serializeInlineAttributes(member);
+function serializeDictionaryMember(member: DictionaryMember, interfaces: InterfaceNames | undefined): string {
+  const prefix = serializeInlineAttributes(member, interfaces);
   const required = member.required ? 'required ' : '';
   const defaultValue = 'default' in member
     ? ` = ${serializeDefaultValue(member.default as DefaultValue)}`
     : '';
-  return prefix + required + serializeType(member.type) + ' '
+  return prefix + required + serializeType(member.type, interfaces) + ' '
     + serializeIdentifier(member.name) + defaultValue + ';';
 }
 
 // Project formatter for Web IDL §2.5.3 Operations — Argument grammar.
-function serializeArgument(argument: ArgumentDefinition): string {
-  const prefix = serializeInlineAttributes(argument);
+function serializeArgument(argument: ArgumentDefinition, interfaces: InterfaceNames | undefined): string {
+  const prefix = serializeInlineAttributes(argument, interfaces);
   const optional = argument.optional ? 'optional ' : '';
   const variadic = argument.variadic ? '...' : '';
   const defaultValue = 'default' in argument
     ? ` = ${serializeDefaultValue(argument.default as DefaultValue)}`
     : '';
-  return prefix + optional + serializeType(argument.type) + variadic + ' '
+  return prefix + optional + serializeType(argument.type, interfaces) + variadic + ' '
     + serializeIdentifier(argument.name, argumentNameKeywords) + defaultValue;
 }
 
@@ -289,26 +313,26 @@ function serializeConstantValue(value: ConstantValue): string {
 }
 
 // Project formatter for Web IDL §2.14 Extended attributes — ExtendedAttributeList grammar.
-function serializeAttributes(value: AttributedDefinition): string {
-  const attributes = collectAttributes(value);
+function serializeAttributes(value: AttributedDefinition, interfaces: InterfaceNames | undefined): string {
+  const attributes = collectAttributes(value, interfaces);
   return attributes.length === 0 ? '' : `[${attributes.join(', ')}]`;
 }
 
 // Project helper: place an extended attribute list before a member or argument.
-function serializeInlineAttributes(value: AttributedDefinition): string {
-  const attributes = serializeAttributes(value);
+function serializeInlineAttributes(value: AttributedDefinition, interfaces: InterfaceNames | undefined): string {
+  const attributes = serializeAttributes(value, interfaces);
   return attributes === '' ? '' : `${attributes} `;
 }
 
 // Project helper: combine the exposed field with explicit extended attribute records.
-function collectAttributes(value: AttributedDefinition): string[] {
+function collectAttributes(value: AttributedDefinition, interfaces: InterfaceNames | undefined): string[] {
   const attributes: string[] = [];
 
   if (value.exposed !== undefined) {
     attributes.push(`Exposed=${serializeExposure(value.exposed)}`);
   }
   for (const attribute of value.extendedAttributes ?? []) {
-    attributes.push(serializeExtendedAttribute(attribute));
+    attributes.push(serializeExtendedAttribute(attribute, interfaces));
   }
   return attributes;
 }

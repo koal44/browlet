@@ -8,6 +8,7 @@ import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
@@ -207,11 +208,11 @@ describe('HTML structured transfer', () => {
         (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
       },
     })];
-    const bindings = new BindingWorld<Realm>([transferBoxIDL], { capabilities });
+    const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL], { capabilities });
     const sourceRealm = new Realm({ globalNames: ['TransferTest'] });
     const targetRealm = new Realm({ globalNames: ['TransferTest'] });
-    const source = bindings.register(sourceRealm);
-    const target = bindings.register(targetRealm);
+    const source = bindings.register({ realm: sourceRealm });
+    const target = bindings.register({ realm: targetRealm });
     const original = source.createPlatformRecord(transferBoxIDL);
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
     Object.freeze(original.implInst);
@@ -259,7 +260,7 @@ describe('HTML structured transfer', () => {
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = new Realm();
-    const hiddenTarget = bindings.register(hiddenRealm);
+    const hiddenTarget = bindings.register({ realm: hiddenRealm });
     const hiddenOriginal = source.createPlatformRecord(transferBoxIDL);
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
@@ -274,16 +275,16 @@ describe('HTML structured transfer', () => {
 });
 
 function createContexts(): {
-  source: BindingContext<Realm>;
+  source: BindingContext<ScriptingEnvironment>;
   sourceRealm: Realm;
-  target: BindingContext<Realm>;
+  target: BindingContext<ScriptingEnvironment>;
   targetRealm: Realm;
 } {
-  const bindings = new BindingWorld<Realm>([]);
+  const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = new Realm();
   const targetRealm = new Realm();
-  const source = bindings.register(sourceRealm);
-  const target = bindings.register(targetRealm);
+  const source = bindings.register({ realm: sourceRealm });
+  const target = bindings.register({ realm: targetRealm });
   return {
     source,
     sourceRealm,

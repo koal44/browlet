@@ -19,7 +19,9 @@ import {
 import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
-import { queueNetworkingTask, type RealmExecution } from '../../js-engine/index';
+import { queueNetworkingTask, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
+import type { DOMEnvironment } from '../dom/environment';
+import type { BrowletExecution } from '../integration/execution';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import { ReportImpl, ReportBodyImpl } from '../reporting/report';
 import { TestReportBodyImpl } from '../reporting/test-report';
@@ -98,10 +100,21 @@ export interface EnvironmentInit {
   isSecureContext: boolean;
 }
 
+/** Environment view for algorithms requiring an HTML realm. */
+export interface ScriptingEnvironment {
+  realm: Realm;
+}
+
+/** Realm and execution shared by browser settings and sandbox environments. */
+export interface BrowletEnvironment extends ScriptingEnvironment, JSEnvironment, DOMEnvironment {
+  realm: Realm;
+  exec: BrowletExecution;
+}
+
 /** Browser state and operations associated with one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
 // its realm component is retained directly here.
-export abstract class Environment extends EnvironmentRecord implements FetchEnvironment {
+export abstract class Environment extends EnvironmentRecord implements FetchEnvironment, BrowletEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
@@ -111,10 +124,10 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
   /** JavaScript realm associated with this browser environment. */
   realm: Realm;
   /** Allocation, execution, and owner task delivery for this realm. */
-  exec: RealmExecution;
+  exec: BrowletExecution;
   queueNetworkingTask = queueNetworkingTask;
 
-  constructor(realm: Realm, record: EnvironmentRecord, exec: RealmExecution) {
+  constructor(realm: Realm, record: EnvironmentRecord, exec: BrowletExecution) {
     super(record);
     this.exec = exec;
     this.timing = new EnvironmentTiming(this);
@@ -252,7 +265,7 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
 export class WindowEnvironment extends Environment {
   declare realm: WindowRealm;
 
-  constructor(realm: WindowRealm, record: EnvironmentRecord, exec: RealmExecution) {
+  constructor(realm: WindowRealm, record: EnvironmentRecord, exec: BrowletExecution) {
     super(realm, record, exec);
   }
 

@@ -3,7 +3,6 @@ import { FetchController } from '../../src/fetch/controller';
 import { FetchParams } from '../../src/fetch/params';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
-import { queueNetworkingTask } from '../../src/js-engine/index';
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { createControllerFixture } from './controller-fixture';
 import { createClientEnvironment } from './client-fixture';
@@ -23,10 +22,11 @@ describe('Fetch controller lifecycle', () => {
   it('sets aborted before serialization and retains only the serialized record', () => {
     const error = {};
     const record = {};
+    const env = createEnvironment();
     const { controller, abort } = createControllerFixture({
-      queueNetworkingTask,
+      ...env,
       exec: {
-        ...createEnvironment().exec,
+        ...env.exec,
         serialize(value) {
           expect(controller.state).toBe('aborted');
           expect(controller.serializedAbortReason).toBeNull();
@@ -68,10 +68,11 @@ describe('Fetch controller lifecycle', () => {
   });
 
   it('does not add a once-only restriction to abort or terminate', () => {
+    const env = createEnvironment();
     const { controller, abort } = createControllerFixture({
-      queueNetworkingTask,
+      ...env,
       exec: {
-        ...createEnvironment().exec,
+        ...env.exec,
         serialize: (value) => ({ value }),
         deserialize: vi.fn(),
       },
@@ -85,8 +86,9 @@ describe('Fetch controller lifecycle', () => {
 
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
+    const env = createEnvironment();
     const { abort } = createControllerFixture({
-      queueNetworkingTask, exec: { ...createEnvironment().exec, serialize, deserialize: vi.fn() },
+      ...env, exec: { ...env.exec, serialize, deserialize: vi.fn() },
     });
 
     abort();
@@ -96,10 +98,11 @@ describe('Fetch controller lifecycle', () => {
   });
 
   it('falls back to AbortError if deserialization throws', () => {
+    const env = createEnvironment();
     const { deserialize } = createControllerFixture({
-      queueNetworkingTask,
+      ...env,
       exec: {
-        ...createEnvironment().exec,
+        ...env.exec,
         serialize: vi.fn(),
         deserialize: () => { throw new Error('Unavailable serialized type'); },
       },

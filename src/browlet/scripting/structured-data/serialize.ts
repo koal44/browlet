@@ -1,3 +1,4 @@
+import type { ScriptingEnvironment } from '../environment';
 import {
   type JSBufferViewName, copyMapData, copySetData, getArrayBufferMaxByteLength,
   getBigIntData, getBooleanData, getBufferSourceByteLength,
@@ -32,7 +33,7 @@ import { InternalError } from '../../../infra/internal-error';
 /** HTML §2.7.4, StructuredSerialize. */
 export function structuredSerialize(
   value: unknown,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): SerializedRecord {
   return structuredSerializeInternal(value, false, ctx);
 }
@@ -40,7 +41,7 @@ export function structuredSerialize(
 /** HTML §2.7.5, StructuredSerializeForStorage. */
 export function structuredSerializeForStorage(
   value: unknown,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): SerializedRecord {
   return structuredSerializeInternal(value, true, ctx);
 }
@@ -50,7 +51,7 @@ export function structuredSerializeForStorage(
 export function structuredSerializeInternal(
   value: unknown,
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredSerializeMemory = new Map(),
 ): SerializedRecord {
   const record = ctx.getObjectRecord(value);
@@ -234,7 +235,7 @@ function serializeBuffer(
   value: object,
   type: 'ArrayBuffer' | 'SharedArrayBuffer',
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
   const byteLength = getBufferSourceByteLength(value);
   const maxByteLength = getArrayBufferMaxByteLength(value);
@@ -278,7 +279,7 @@ function serializeMapData(
   value: object,
   serialized: MapSerializedRecord,
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredSerializeMemory,
 ): void {
   const copiedEntries = copyMapData(value);
@@ -300,7 +301,7 @@ function serializeSetData(
   value: object,
   serialized: SetSerializedRecord,
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredSerializeMemory,
 ): void {
   const copiedEntries = copySetData(value);
@@ -321,7 +322,7 @@ function serializeProperties(
     type: 'Array';
   }>,
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredSerializeMemory,
 ): void {
   const keys = Object.keys(value);
@@ -363,7 +364,7 @@ function serializeErrorCause(
   value: object,
   serialized: ErrorSerializedRecord,
   forStorage: boolean,
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredSerializeMemory,
 ): void {
   const descriptor = Reflect.getOwnPropertyDescriptor(value, 'cause');

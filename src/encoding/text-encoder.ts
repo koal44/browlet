@@ -74,7 +74,7 @@ export const textEncoderCommonIDL = defineInterfaceMixin({
   members: [roAttr('encoding', idlType.DOMString)],
 });
 
-export const textEncoderIDL = defineInterface({
+export const textEncoderIDL = defineInterface<JSEnvironment>({
   name: 'TextEncoder',
   exposed: '*',
   implementation: impl(TextEncoderImpl, {

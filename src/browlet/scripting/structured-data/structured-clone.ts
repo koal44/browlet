@@ -1,5 +1,5 @@
+import type { ScriptingEnvironment } from '../environment';
 import type { BindingContext } from '../../../web-idl/index';
-import type { Realm } from '../realm';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from './transfer';
@@ -8,7 +8,7 @@ import {
 export function structuredClone(
   value: unknown,
   transferList: unknown[],
-  ctx: BindingContext<Realm>,
+  ctx: BindingContext<ScriptingEnvironment>,
 ): unknown {
   const serialized = structuredSerializeWithTransfer(
     value,

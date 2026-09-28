@@ -4,7 +4,7 @@ import type { InternalPromise } from '../infra/promises';
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './core/index';
-import type { WebIDLRealmHost } from './realm-host';
+import type { WebIDLRealm } from './realm';
 import {
   createIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
@@ -38,7 +38,7 @@ export function createIDLAsyncSequence(
 export function convertJavaScriptValueToAsyncSequence(
   value: unknown,
   type: AsyncSequenceType,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLAsyncSequence {
   if (!isObject(value)) {
     throw new realm.intrinsics.typeError(
@@ -68,7 +68,7 @@ export function convertAsyncSequenceToJavaScript(value: unknown): object {
 // Web IDL §3.2.22.1 Iterating async sequences — open an async sequence.
 export function openAsyncSequence(
   sequence: IDLAsyncSequence,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLAsyncIterator {
   let record = getIteratorFromMethod(sequence.object, sequence.method, realm);
   if (sequence.iteratorType === 'sync') {
@@ -80,7 +80,7 @@ export function openAsyncSequence(
 // Web IDL §3.2.22.1 Iterating async sequences — get the next value.
 export function getAsyncIteratorNextValue(
   iterator: IDLAsyncIterator,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   convert: (value: unknown, type: WebIDLType) => unknown,
 ): IDLPromiseRecord {
   let nextResult: unknown;
@@ -114,7 +114,7 @@ export function getAsyncIteratorNextValue(
 export function closeAsyncIterator(
   iterator: IDLAsyncIterator,
   reason: unknown,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLPromiseRecord {
   let returnMethod: JSMethod | undefined;
   try {
@@ -182,7 +182,7 @@ type IteratorRecord = {
 function getIteratorFromMethod(
   object: object,
   method: JSMethod,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IteratorRecord {
   const iterator = Reflect.apply(method, object, []);
   if (!isObject(iterator)) {
@@ -198,7 +198,7 @@ function getIteratorFromMethod(
 // Project adapter for ECMAScript §27.1.5.1 CreateAsyncFromSyncIterator, supplying next and return.
 function createAsyncFromSyncIterator(
   sync: IteratorRecord,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IteratorRecord {
   const iterator = realm.createOrdinaryObject(
     realm.intrinsics.iteration.asyncIteratorPrototype,
@@ -232,7 +232,7 @@ function adaptSyncIteratorResult(
   sync: IteratorRecord,
   operation: 'next' | 'return',
   argumentsList: unknown[],
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLPromiseRecord {
   let method: JSMethod | undefined;
   try {
@@ -266,7 +266,7 @@ function adaptSyncIteratorResult(
 // Web IDL §3.2.24.1 Creating and manipulating Promises — react.
 function reactToPromise(
   promise: IDLPromiseRecord,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
   fulfilled: (value: unknown) => unknown,
 ): IDLPromiseRecord {
   const result = createIDLPromiseRecord(idlType.any, realm);
@@ -295,7 +295,7 @@ function reactToPromise(
 // Web IDL §3.2.24.1 Creating and manipulating Promises — create a resolved Promise<any>.
 function createResolvedPromise(
   value: unknown,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLPromiseRecord {
   const promise = createIDLPromiseRecord(idlType.any, realm);
   promise.resolve(value);
@@ -305,7 +305,7 @@ function createResolvedPromise(
 // Web IDL §3.2.24.1 Creating and manipulating Promises — create a rejected Promise<any>.
 function createRejectedPromise(
   reason: unknown,
-  realm: WebIDLRealmHost,
+  realm: WebIDLRealm,
 ): IDLPromiseRecord {
   const promise = createIDLPromiseRecord(idlType.any, realm);
   promise.reject(reason);

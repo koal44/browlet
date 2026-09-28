@@ -1,3 +1,4 @@
+import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
 import {
   textDecodeOptionsIDL, textDecoderCommonIDL, textDecoderIDL,
@@ -31,7 +32,7 @@ export {
 } from './codecs/utf-8';
 export { TextDecoderStreamImpl } from './text-decoder-stream';
 
-export const encodingIDLDefinitions: Definition[] = [
+export const encodingIDLDefinitions: Definition<JSEnvironment>[] = [
   textDecoderCommonIDL,
   textDecoderOptionsIDL,
   textDecodeOptionsIDL,

@@ -108,8 +108,8 @@ function createBindings() {
     }),
   ]);
   const world = new BindingWorld([]);
-  const first = new RealmBinding(definitions, new TestRealm(), world);
-  const second = new RealmBinding(definitions, new TestRealm(), world);
+  const first = new RealmBinding(definitions, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
+  const second = new RealmBinding(definitions, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
   registerDefinitionBindings(first);
   registerDefinitionBindings(second);
   const target = second.realm.evaluate('(function Target() {})', 'target.js') as JSFunction;

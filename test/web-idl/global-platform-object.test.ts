@@ -32,7 +32,7 @@ describe('Web IDL global platform objects', () => {
       implementation: impl(TestGlobalImpl),
       members: [operation('read', idlType.long)],
     });
-    const binding = new BindingWorld([definition]).register(new Realm());
+    const binding = new BindingWorld([definition]).register({ realm: new Realm() });
     const global = binding.projectGlobalObject(new TestGlobalImpl(), 'TestGlobal');
 
     expect(call(global, 'read', global)).toBe(1);
@@ -62,7 +62,7 @@ describe('Web IDL global platform objects', () => {
     });
     const realm = new Realm({ isGlobalPrototypeChainMutable: true });
     const world = new BindingWorld([definition]);
-    const ctx = world.register(realm);
+    const ctx = world.register({ realm });
     const binding = world.getRealmBinding(realm)!;
     const installed = binding.getExposedGlobalProperties();
     const prototype = binding.getInterfacePrototypeObject(binding.resolveInterface('TestGlobal'));
@@ -130,6 +130,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([widget, window, base]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseMethod).operationSteps = () => 'base';
     const interfaceBinding = binding.getDefinitionBinding(window);
@@ -233,6 +234,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([window, base]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(base).getOrCreateMemberRecord(namedItem).operationSteps = () => 'named value';
     binding.getDefinitionBinding(base).getOrCreateMemberRecord(namedItem).namedPropertySteps = {
@@ -279,6 +281,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(definition);
     interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
@@ -330,6 +333,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(stringifier).stringificationBehavior = () => 'global stringifier';
     const global = binding.projectGlobalObject(
@@ -388,6 +392,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([globalIDL, base]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
@@ -417,6 +422,7 @@ describe('Web IDL global platform objects', () => {
       new DefinitionAssembly([definition, partial]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(getter).operationSteps = (_receiver, name) =>
       name === 'answer' ? 'named answer' : undefined;
@@ -467,7 +473,10 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
     members: [getter],
   });
   const realm = new Realm({ isGlobalPrototypeChainMutable });
-  const binding = new RealmBinding(new DefinitionAssembly([definition]), realm, new BindingWorld([]));
+  const binding = new RealmBinding(
+    new DefinitionAssembly([definition]), realm, new BindingWorld([]),
+    (ctx) => ({ realm: ctx.realm }),
+  );
   const memberBinding = binding.getDefinitionBinding(definition).getOrCreateMemberRecord(getter);
   memberBinding.operationSteps = () => undefined;
   memberBinding.namedPropertySteps = { getSupportedPropertyNames: () => new Set() };

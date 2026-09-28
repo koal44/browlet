@@ -1,37 +1,42 @@
+import type { BrowletEnvironment } from '../../scripting/environment';
 import { Stamper } from '../../../infra/stamper';
+import { WeakOrderedSet } from '../../../infra/collections';
 import type { JSEnvironment } from '../../../js-engine/index';
 import {
-  arg, atArg, defineInterface, idlType, op, staticOp, roAttr, reference,
-  sequence, invokeWith, xattr,
-  impl,
-  DOMExceptionNames,
+  arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
+  sequence, staticOp, xattr, DOMExceptionNames,
 } from '../../../web-idl/index';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
 import { timerTaskSource } from '../../scripting/timers';
-import type { Realm } from '../../scripting/realm';
-import { EventTargetImpl, fireEvent } from '../events/event-target';
+import { EventTargetImpl } from '../events/event-target';
 
 export type AbortAlgorithmHandle = {
   remove(): void;
 };
 
+/** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal
 export class AbortSignalImpl extends EventTargetImpl
 {
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
+  /** True once this signal is configured to follow other signals. */
   #dependent = false;
+  /** Signals to abort with this signal, in registration order. */
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
   #env: JSEnvironment;
   #eventHandlers = new EventHandlerMap(this, [{
     name: 'onabort',
     type: 'abort',
   }]);
+  /** Undefined until aborted; then shared with dependent signals. */
   #reason: unknown = undefined;
   // A shared WeakRef lets every source/dependent set deduplicate by identity.
   #reference = new WeakRef(this);
+  /** Pending dependents this global keeps alive for listeners or algorithms. */
   #retainedSignals: Set<AbortSignalImpl>;
+  /** Nondependent signals whose abort can trigger this signal. */
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
   constructor(env: JSEnvironment) {
@@ -46,6 +51,7 @@ export class AbortSignalImpl extends EventTargetImpl
     this.#retainedSignals = retainedSignals;
   }
 
+  /** Initialize a freshly allocated signal with an abort reason. */
   // Binding supplies each static factory with a fresh signal in its realm.
   // https://dom.spec.whatwg.org/#dom-abortsignal-abort
   static abort(
@@ -58,6 +64,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return signal;
   }
 
+  /** Schedule a TimeoutError abort through the caller's active-time timer. */
   // https://dom.spec.whatwg.org/#dom-abortsignal-timeout
   static timeout(
     signal: AbortSignalImpl,
@@ -71,6 +78,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return signal;
   }
 
+  /** Make a freshly allocated signal follow the first source that aborts. */
   // https://dom.spec.whatwg.org/#dom-abortsignal-any
   static any(
     signal: AbortSignalImpl,
@@ -103,6 +111,7 @@ export class AbortSignalImpl extends EventTargetImpl
 
   // -- Internal methods -------------------------------------------------
 
+  /** Register cancellation steps; returns null if already aborted. */
   // https://dom.spec.whatwg.org/#abortsignal-add
   addAlgorithm(
     algorithm: () => void,
@@ -123,6 +132,7 @@ export class AbortSignalImpl extends EventTargetImpl
     this.updateRetention();
   }
 
+  /** Update this global's strong retention of a pending dependent signal. */
   updateRetention(): void {
     if (this.#shouldRetain()) this.#retainedSignals.add(this);
     else this.#retainedSignals.delete(this);
@@ -192,7 +202,7 @@ export class AbortSignalImpl extends EventTargetImpl
     for (const handle of this.#abortAlgorithms) handle.detach();
     this.#abortAlgorithms.clear();
     this.#settle();
-    fireEvent('abort', this);
+    this.fireEvent('abort');
   }
 
   #setAbortReason(reason: unknown): void {
@@ -221,8 +231,6 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
 /*
  * [Exposed=*]
  * interface AbortSignal : EventTarget {
@@ -237,7 +245,7 @@ export class AbortSignalImpl extends EventTargetImpl
  *   attribute EventHandler onabort;
  * };
  */
-export const abortSignalIDL = defineInterface<Realm>({
+export const abortSignalIDL = defineInterface<BrowletEnvironment>({
   name: 'AbortSignal',
   inherits: 'EventTarget',
   exposed: '*',
@@ -284,6 +292,7 @@ export const abortSignalIDL = defineInterface<Realm>({
   ],
 });
 
+/** A removable abort step with a weak link to its signal. */
 class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
 {
   #algorithm: (() => void) | null;
@@ -310,6 +319,7 @@ class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
   }
 }
 
+/** Stores the retained dependent signals on their owning global. */
 class AbortSignalRetentionStamper extends Stamper {
   #signals: Set<AbortSignalImpl>;
 
@@ -328,35 +338,5 @@ class AbortSignalRetentionStamper extends Stamper {
 
   static get(global: object): Set<AbortSignalImpl> | undefined {
     return #signals in global ? global.#signals : undefined;
-  }
-}
-
-class WeakOrderedSet<T extends object>
-{
-  #references = new Set<WeakRef<T>>();
-
-  add(reference: WeakRef<T>): void {
-    this.#references.add(reference);
-  }
-
-  clear(): void {
-    this.#references.clear();
-  }
-
-  delete(reference: WeakRef<T>): void {
-    this.#references.delete(reference);
-  }
-
-  hasValue(): boolean {
-    for (const _value of this.values()) return true;
-    return false;
-  }
-
-  *values(): IterableIterator<T> {
-    for (const reference of this.#references) {
-      const value = reference.deref();
-      if (value) yield value;
-      else this.#references.delete(reference);
-    }
   }
 }

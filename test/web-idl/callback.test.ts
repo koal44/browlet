@@ -202,7 +202,7 @@ describe('Web IDL callbacks', () => {
     if (!isCallbackFunctionValue(value)) {
       throw new Error('Notification did not convert to a callback value');
     }
-    const report = vi.spyOn(callbackRealm.callbacks, 'reportException')
+    const report = vi.spyOn(callbackRealm, 'reportException')
       .mockImplementation(() => {});
 
     expect(invokeCallbackFunction(
@@ -389,6 +389,7 @@ describe('Web IDL callbacks', () => {
       new DefinitionAssembly([callback, definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).createImplementation = () => new CallbackOwnerImpl();
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(attribute).attributeSteps = {
@@ -543,6 +544,7 @@ function createCallbackBinding(): {
       definitions,
       targetRealm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     ),
     callbackRealm,
     targetRealm,

@@ -1,3 +1,4 @@
+import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
 import {
   byteLengthQueuingStrategyIDL, countQueuingStrategyIDL, queuingStrategyIDL,
@@ -41,7 +42,7 @@ export {
   WritableStreamImpl, type UnderlyingSink, type WritableStreamDefaultControllerImpl,
 } from './writable-stream';
 
-export const streamsIDLDefinitions: Definition[] = [
+export const streamsIDLDefinitions: Definition<JSEnvironment>[] = [
   queuingStrategySizeIDL,
   queuingStrategyIDL,
   queuingStrategyInitIDL,

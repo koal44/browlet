@@ -11,8 +11,8 @@ describe('tree scope', () => {
     const { document, scope } = createTreeScope();
     const firstOwner = document.createElement('i');
     const secondOwner = document.createElement('i');
-    document.appendChild(firstOwner);
-    document.appendChild(secondOwner);
+    document.body.appendChild(firstOwner);
+    document.body.appendChild(secondOwner);
     const first = createStyleSheet(scope, { ownerNode: firstOwner });
     const second = createStyleSheet(scope, { ownerNode: secondOwner });
     const firstHeader = createStyleSheet(scope);

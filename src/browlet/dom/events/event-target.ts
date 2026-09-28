@@ -4,19 +4,20 @@ import {
   DOMExceptionNames, throwDOMException,
 } from '../../../web-idl/index';
 import { EventImpl, type EventPathItem } from './event';
+import type { DOMEnvironment, EventExecution, EventImplConstructor, EventRealm } from '../environment';
 import { MouseEventImpl } from './ui-event';
-import {
-  unsafeSharedCurrentTime,
-} from '../../performance/high-resolution-time';
 import {
   type AbortAlgorithmHandle, type AbortSignalImpl,
 } from '../abort/abort-signal';
 import { InternalError } from '../../../infra/internal-error';
 
+/** Owns listener registrations and delivers events through the dispatch path. */
 // https://dom.spec.whatwg.org/#interface-eventtarget
 export class EventTargetImpl {
+  /** Registrations in insertion order, including their signal cleanup handles. */
   #eventListenerList: EventListenerRecord[] = [];
-  #createEvent: EventFactory = createStandaloneEvent;
+  /** Event allocation facilities; absent for unbound implementations. */
+  eventExecution: EventExecution | undefined;
 
   static is(value: unknown): value is EventTargetImpl {
     return typeof value === 'object' &&
@@ -24,19 +25,20 @@ export class EventTargetImpl {
       #eventListenerList in value;
   }
 
+  /** Register a listener unless its type, callback, and capture already match. */
   // https://dom.spec.whatwg.org/#dom-eventtarget-addeventlistener
   addEventListener(
     type: string,
-    callback: EventListenerInput | null,
-    options: AddEventListenerOptionsRecord | boolean | null = {},
+    callback: EventListenerValue | EventListenerCallback | null,
+    options: AddListenerOptionsRecord | boolean = { capture: false, once: false },
   ): void {
-    const { capture, passive, once, signal } = flattenMore(options);
+    // https://dom.spec.whatwg.org/#event-flatten-more
+    if (typeof options === 'boolean') options = { capture: options, once: false };
+    const { capture, passive = null, once, signal = null } = options;
     const listener: EventListenerRecord = {
       abortAlgorithm: null,
       type,
-      callback: callback === null
-        ? null
-        : EventListenerValue.from(callback),
+      callback: callback === null ? null : EventListenerValue.from(callback),
       capture,
       passive,
       once,
@@ -47,24 +49,27 @@ export class EventTargetImpl {
     this.#addListener(listener);
   }
 
+  /** Remove the registration matching type, callback, and capture. */
   // https://dom.spec.whatwg.org/#dom-eventtarget-removeeventlistener
   removeEventListener(
     type: string,
-    callback: EventListenerInput | null,
-    options: EventListenerOptionsRecord | boolean | null = {},
+    callback: EventListenerValue | EventListenerCallback | null,
+    options: ListenerOptionsRecord | boolean = { capture: false },
   ): void {
-    const capture = flatten(options);
+    // https://dom.spec.whatwg.org/#concept-flatten-options
+    const capture = typeof options === 'boolean' ? options : options.capture;
     const callbackValue = callback === null
       ? null
       : EventListenerValue.from(callback);
     const listener = this.#eventListenerList.find((candidate) =>
       candidate.type === type &&
-      sameEventListener(candidate.callback, callbackValue) &&
+      EventListenerValue.same(candidate.callback, callbackValue) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
   }
 
+  /** Dispatch synchronously, returning false if the event was canceled. */
   // https://dom.spec.whatwg.org/#dom-eventtarget-dispatchevent
   dispatchEvent(event: EventImpl): boolean {
     if (event.isDispatching() || !event.isInitialized()) {
@@ -72,17 +77,30 @@ export class EventTargetImpl {
     }
 
     event.setTrusted(false);
-    return dispatch(event, this);
+    return this.#dispatch(event);
   }
 
   // -- Internal methods -------------------------------------------------
 
-  setEventFactory(createEvent: EventFactory): void {
-    this.#createEvent = createEvent;
+  /** Create and dispatch a trusted event, returning false if canceled. */
+  // https://dom.spec.whatwg.org/#concept-event-fire
+  fireEvent(
+    name: string,
+    eventConstructor?: EventImplConstructor,
+    initialize?: (event: EventImpl) => void,
+    legacyTargetOverride = false,
+  ): boolean {
+    const event = this.createEvent(eventConstructor);
+    event.setType(name);
+    initialize?.(event);
+    return this.#dispatch(event, legacyTargetOverride);
   }
 
+  /** Create a trusted event in this target's realm when bound. */
   createEvent(eventConstructor?: EventImplConstructor): EventImpl {
-    return this.#createEvent(eventConstructor);
+    return this.eventExecution === undefined
+      ? EventImpl.create(eventConstructor)
+      : this.eventExecution.createEvent(eventConstructor);
   }
 
   // https://dom.spec.whatwg.org/#remove-all-event-listeners
@@ -92,18 +110,18 @@ export class EventTargetImpl {
     }
   }
 
+  /** The next dispatch target; subclasses define their event ancestry. */
   getEventParent(_event: EventImpl): EventTargetImpl | null {
     return null;
   }
 
+  /** Return the original callback objects for Service Worker's legacy lookup. */
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
   getEventListenerCallbacks(type: string): EventListenerOrEventListenerObject[] {
     const callbacks: EventListenerOrEventListenerObject[] = [];
 
     for (const listener of this.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
-        // This legacy algorithm returns the original author callback objects,
-        // not EventTarget or EventListener implementation objects.
         callbacks.push(
           listener.callback.object as EventListenerOrEventListenerObject,
         );
@@ -139,10 +157,19 @@ export class EventTargetImpl {
     return false;
   }
 
+  /** Whether this target is a node rooted in a shadow tree. */
+  isNodeInShadowTree(): boolean {
+    if (!this.isNode()) return false;
+
+    const root = this.getTreeRoot();
+    return root !== null && root.getShadowRootHost() !== null;
+  }
+
   isWindow(): boolean {
     return false;
   }
 
+  /** The exposed target for legacy dispatch, overridden by Window with its Document. */
   getLegacyTargetOverride(): EventTargetImpl {
     return this;
   }
@@ -151,8 +178,193 @@ export class EventTargetImpl {
     return false;
   }
 
+  hasActivationBehavior(): boolean {
+    // Dispatch selects the first target with an activation override.
+    return this.runActivationBehavior !== EventTargetImpl.prototype.runActivationBehavior;
+  }
+
+  runActivationBehavior(_event: EventImpl): void {}
+
+  hasLegacyPreActivationBehavior(): boolean {
+    return this.runLegacyPreActivationBehavior !== EventTargetImpl.prototype.runLegacyPreActivationBehavior;
+  }
+
+  runLegacyPreActivationBehavior(): void {}
+
+  hasLegacyCanceledActivationBehavior(): boolean {
+    return this.runLegacyCanceledActivationBehavior !== EventTargetImpl.prototype.runLegacyCanceledActivationBehavior;
+  }
+
+  runLegacyCanceledActivationBehavior(): void {}
+
+  protected isDefaultPassiveTarget(): boolean {
+    return false;
+  }
+
+  protected addingEventListener(_type: string): void {}
+
+  protected removingEventListener(_type: string): void {}
+
+  protected eventListenerListChanged(_type: string): void {}
+
+  // -- Private ----------------------------------------------------------
+
+  // https://dom.spec.whatwg.org/#concept-event-dispatch
+  #dispatch(
+    event: EventImpl,
+    legacyTargetOverride = false,
+  ): boolean {
+    event.beginDispatch();
+
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Track the target as dispatch crosses shadow boundaries.
+    let target: EventTargetImpl = this;
+    const targetOverride = legacyTargetOverride
+      ? target.getLegacyTargetOverride()
+      : target;
+    let activationTarget: EventTargetImpl | null = null;
+    let relatedTarget = retarget(event.getRelatedTarget(), target);
+    let clearTargets = false;
+
+    if (
+      target !== relatedTarget ||
+      target === event.getRelatedTarget()
+    ) {
+      let touchTargets = event.getTouchTargetList()
+        .map((touchTarget) => retarget(touchTarget, target));
+      event.appendToPath(target, targetOverride, relatedTarget, touchTargets, false);
+
+      const isActivationEvent = MouseEventImpl.is(event) &&
+        event.type === 'click';
+
+      if (
+        isActivationEvent &&
+        target.hasActivationBehavior()
+      ) {
+        activationTarget = target;
+      }
+
+      let slottable = target.getAssignedSlot() === null
+        ? null
+        : target;
+      let slotInClosedTree = false;
+      let parent = target.getEventParent(event);
+
+      while (parent !== null) {
+        if (slottable !== null) {
+          slottable = null;
+          const parentRoot = parent.getTreeRoot();
+          if (
+            parentRoot !== null &&
+            parentRoot.getShadowRootMode() === 'closed'
+          ) {
+            slotInClosedTree = true;
+          }
+        }
+
+        if (parent.getAssignedSlot() !== null) {
+          slottable = parent;
+        }
+
+        relatedTarget = retarget(event.getRelatedTarget(), parent);
+        const parentForRetarget = parent;
+        touchTargets = event.getTouchTargetList()
+          .map((touchTarget) => retarget(touchTarget, parentForRetarget));
+
+        const targetRoot = target.getTreeRoot();
+        const sameShadowIncludingTree = parent.isWindow() || (
+          targetRoot !== null &&
+          parent.isNode() &&
+          parent.hasShadowIncludingInclusiveAncestor(targetRoot)
+        );
+
+        if (sameShadowIncludingTree) {
+          if (
+            isActivationEvent &&
+            event.bubbles &&
+            activationTarget === null &&
+            parent.hasActivationBehavior()
+          ) {
+            activationTarget = parent;
+          }
+
+          event.appendToPath(parent, null, relatedTarget, touchTargets, slotInClosedTree);
+        } else if (parent === relatedTarget) {
+          parent = null;
+        } else {
+          target = parent;
+
+          if (
+            isActivationEvent &&
+            activationTarget === null &&
+            target.hasActivationBehavior()
+          ) {
+            activationTarget = target;
+          }
+
+          event.appendToPath(parent, target, relatedTarget, touchTargets, slotInClosedTree);
+        }
+
+        if (parent !== null) {
+          parent = parent.getEventParent(event);
+        }
+        slotInClosedTree = false;
+      }
+
+      const clearTargetsItem = event.getPath()
+        .findLast((item) => item.shadowAdjustedTarget !== null);
+
+      if (clearTargetsItem) {
+        clearTargets = clearTargetsItem.shadowAdjustedTarget?.isNodeInShadowTree() ||
+          clearTargetsItem.relatedTarget?.isNodeInShadowTree() ||
+          clearTargetsItem.touchTargetList.some((target) => target?.isNodeInShadowTree());
+      }
+
+      if (
+        activationTarget !== null &&
+        activationTarget.hasLegacyPreActivationBehavior()
+      ) {
+        activationTarget.runLegacyPreActivationBehavior();
+      }
+
+      for (const item of [...event.getPath()].reverse()) {
+        event.setPhase(
+          item.shadowAdjustedTarget === null
+            ? EventImpl.CAPTURING_PHASE
+            : EventImpl.AT_TARGET,
+        );
+        item.invocationTarget.#invoke(item, event, 'capturing');
+      }
+
+      for (const item of event.getPath()) {
+        if (item.shadowAdjustedTarget !== null) {
+          event.setPhase(EventImpl.AT_TARGET);
+        } else {
+          if (!event.bubbles) continue;
+          event.setPhase(EventImpl.BUBBLING_PHASE);
+        }
+
+        item.invocationTarget.#invoke(item, event, 'bubbling');
+      }
+    }
+
+    event.finishDispatch(clearTargets);
+
+    if (activationTarget !== null) {
+      if (!event.defaultPrevented) {
+        activationTarget.runActivationBehavior(event);
+      } else if (
+        activationTarget.hasLegacyCanceledActivationBehavior()
+      ) {
+        activationTarget.runLegacyCanceledActivationBehavior();
+      }
+    }
+
+    return !event.defaultPrevented;
+  }
+
+  /** Invoke this target's listeners for one entry in the event's dispatch path. */
   // https://dom.spec.whatwg.org/#concept-event-listener-invoke
-  invoke(
+  #invoke(
     pathItem: EventPathItem,
     event: EventImpl,
     phase: EventPhase,
@@ -198,37 +410,6 @@ export class EventTargetImpl {
     event.setType(originalType);
   }
 
-  hasActivationBehavior(): boolean {
-    // Dispatch selects the first target with an activation override.
-    return this.runActivationBehavior !== EventTargetImpl.prototype.runActivationBehavior;
-  }
-
-  runActivationBehavior(_event: EventImpl): void {}
-
-  hasLegacyPreActivationBehavior(): boolean {
-    return this.runLegacyPreActivationBehavior !== EventTargetImpl.prototype.runLegacyPreActivationBehavior;
-  }
-
-  runLegacyPreActivationBehavior(): void {}
-
-  hasLegacyCanceledActivationBehavior(): boolean {
-    return this.runLegacyCanceledActivationBehavior !== EventTargetImpl.prototype.runLegacyCanceledActivationBehavior;
-  }
-
-  runLegacyCanceledActivationBehavior(): void {}
-
-  protected isDefaultPassiveTarget(): boolean {
-    return false;
-  }
-
-  protected addingEventListener(_type: string): void {}
-
-  protected removingEventListener(_type: string): void {}
-
-  protected eventListenerListChanged(_type: string): void {}
-
-  // -- Private ----------------------------------------------------------
-
   // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
   #innerInvoke(
     event: EventImpl,
@@ -251,39 +432,22 @@ export class EventTargetImpl {
       if (listener.once) this.#removeListener(listener);
 
       const callbackRealm = callback.realm;
-      const global = callbackRealm?.global;
-      const windowRealm = callbackRealm?.globalNames.has('Window')
-        ? callbackRealm as WindowEventListenerRealm
+      const windowRealm = callbackRealm?.isWindow()
+        ? callbackRealm
         : undefined;
-      const currentEvent = windowRealm && global
-        ? windowRealm.getCurrentEvent(global)
-        : undefined;
+      const currentEvent = windowRealm?.getCurrentEvent();
 
-      if (windowRealm && global && !invocationTargetInShadowTree) {
-        windowRealm.setCurrentEvent(global, event);
+      if (windowRealm && !invocationTargetInShadowTree) {
+        windowRealm.setCurrentEvent(event);
       }
       if (listener.passive) event.setInPassiveListener(true);
-      if (windowRealm && global) {
-        windowRealm.recordTimingInfo(
-          global,
-          event,
-          callback.object,
-        );
-      }
+      windowRealm?.recordEventListenerTiming(event, callback.object);
 
       try {
         callback.invoke(event, this);
-      } catch (exception) {
-        if (callbackRealm) {
-          callbackRealm.callbacks.reportException(exception);
-        } else {
-          console.error(exception);
-        }
       } finally {
         event.setInPassiveListener(false);
-        if (windowRealm && global) {
-          windowRealm.setCurrentEvent(global, currentEvent);
-        }
+        windowRealm?.setCurrentEvent(currentEvent);
       }
 
       if (event.immediatePropagationStopped()) break;
@@ -311,7 +475,7 @@ export class EventTargetImpl {
 
     const duplicate = this.#eventListenerList.some((candidate) =>
       candidate.type === listener.type &&
-      sameEventListener(candidate.callback, listener.callback) &&
+      EventListenerValue.same(candidate.callback, listener.callback) &&
       candidate.capture === listener.capture);
 
     if (duplicate) return;
@@ -341,8 +505,6 @@ export class EventTargetImpl {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
 /*
  * [Exposed=*]
  * interface EventTarget {
@@ -367,18 +529,13 @@ export class EventTargetImpl {
  *   AbortSignal signal;
  * };
  */
-export const eventTargetIDL = defineInterface({
+export const eventTargetIDL = defineInterface<DOMEnvironment>({
   name: 'EventTarget',
   exposed: '*',
-  // Record creation supplies the owning realm's trusted-event factory to every
-  // implementation whose primary interface inherits EventTarget.
+  // Record creation establishes event ownership before platform projection.
   implementation: impl(EventTargetImpl, {
     initializeImplementation(context, value) {
-      (value as EventTargetImpl).setEventFactory((EventConstructor = EventImpl) => {
-        const event = context.construct(EventConstructor, '', {});
-        event.setTrusted(true);
-        return event;
-      });
+      value.eventExecution = context.getEnvironment().exec;
     },
   }),
   members: [
@@ -413,7 +570,7 @@ export const eventTargetIDL = defineInterface({
   ],
 });
 
-export const eventListenerIDL = defineCallbackInterface({
+export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
@@ -422,11 +579,16 @@ export const eventListenerIDL = defineCallbackInterface({
       callback.object,
       callback.realm,
       (event, currentTarget) => {
-        callback.callUserObjectOperation(
-          'handleEvent',
-          [event],
-          currentTarget,
-        );
+        // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
+        try {
+          callback.callUserObjectOperation(
+            'handleEvent',
+            [event],
+            currentTarget,
+          );
+        } catch (exception) {
+          callback.realm.reportException(exception);
+        }
       },
     );
   },
@@ -450,174 +612,7 @@ export const addEventListenerOptionsIDL = defineDictionary({
   ],
 });
 
-// https://dom.spec.whatwg.org/#concept-event-fire
-export function fireEvent(
-  name: string,
-  target: EventTargetImpl,
-  eventConstructor?: EventImplConstructor,
-  initialize?: (event: EventImpl) => void,
-  legacyTargetOverride = false,
-): boolean {
-  const event = target.createEvent(eventConstructor);
-
-  event.setType(name);
-  initialize?.(event);
-  return dispatch(event, target, legacyTargetOverride);
-}
-
-// https://dom.spec.whatwg.org/#concept-event-dispatch
-function dispatch(
-  event: EventImpl,
-  initialTarget: EventTargetImpl,
-  legacyTargetOverride = false,
-): boolean {
-  event.beginDispatch();
-
-  let target = initialTarget;
-  const targetOverride = legacyTargetOverride
-    ? target.getLegacyTargetOverride()
-    : target;
-  let activationTarget: EventTargetImpl | null = null;
-  let relatedTarget = retarget(event.getRelatedTarget(), target);
-  let clearTargets = false;
-
-  if (
-    target !== relatedTarget ||
-    target === event.getRelatedTarget()
-  ) {
-    let touchTargets = event.getTouchTargetList()
-      .map((touchTarget) => retarget(touchTarget, target));
-    event.appendToPath(target, targetOverride, relatedTarget, touchTargets, false);
-
-    const isActivationEvent = MouseEventImpl.is(event) &&
-      event.type === 'click';
-
-    if (
-      isActivationEvent &&
-      target.hasActivationBehavior()
-    ) {
-      activationTarget = target;
-    }
-
-    let slottable = target.getAssignedSlot() === null
-      ? null
-      : target;
-    let slotInClosedTree = false;
-    let parent = target.getEventParent(event);
-
-    while (parent !== null) {
-      if (slottable !== null) {
-        slottable = null;
-        const parentRoot = parent.getTreeRoot();
-        if (
-          parentRoot !== null &&
-          parentRoot.getShadowRootMode() === 'closed'
-        ) {
-          slotInClosedTree = true;
-        }
-      }
-
-      if (parent.getAssignedSlot() !== null) {
-        slottable = parent;
-      }
-
-      relatedTarget = retarget(event.getRelatedTarget(), parent);
-      const parentForRetarget = parent;
-      touchTargets = event.getTouchTargetList()
-        .map((touchTarget) => retarget(touchTarget, parentForRetarget));
-
-      const targetRoot = target.getTreeRoot();
-      const sameShadowIncludingTree = parent.isWindow() || (
-        targetRoot !== null &&
-        parent.isNode() &&
-        parent.hasShadowIncludingInclusiveAncestor(targetRoot)
-      );
-
-      if (sameShadowIncludingTree) {
-        if (
-          isActivationEvent &&
-          event.bubbles &&
-          activationTarget === null &&
-          parent.hasActivationBehavior()
-        ) {
-          activationTarget = parent;
-        }
-
-        event.appendToPath(parent, null, relatedTarget, touchTargets, slotInClosedTree);
-      } else if (parent === relatedTarget) {
-        parent = null;
-      } else {
-        target = parent;
-
-        if (
-          isActivationEvent &&
-          activationTarget === null &&
-          target.hasActivationBehavior()
-        ) {
-          activationTarget = target;
-        }
-
-        event.appendToPath(parent, target, relatedTarget, touchTargets, slotInClosedTree);
-      }
-
-      if (parent !== null) {
-        parent = parent.getEventParent(event);
-      }
-      slotInClosedTree = false;
-    }
-
-    const clearTargetsItem = event.getPath()
-      .findLast((item) => item.shadowAdjustedTarget !== null);
-
-    if (clearTargetsItem) {
-      clearTargets = isNodeInShadowTree(clearTargetsItem.shadowAdjustedTarget) ||
-        isNodeInShadowTree(clearTargetsItem.relatedTarget) ||
-        clearTargetsItem.touchTargetList.some(isNodeInShadowTree);
-    }
-
-    if (
-      activationTarget !== null &&
-      activationTarget.hasLegacyPreActivationBehavior()
-    ) {
-      activationTarget.runLegacyPreActivationBehavior();
-    }
-
-    for (const item of [...event.getPath()].reverse()) {
-      event.setPhase(
-        item.shadowAdjustedTarget === null
-          ? EventImpl.CAPTURING_PHASE
-          : EventImpl.AT_TARGET,
-      );
-      item.invocationTarget.invoke(item, event, 'capturing');
-    }
-
-    for (const item of event.getPath()) {
-      if (item.shadowAdjustedTarget !== null) {
-        event.setPhase(EventImpl.AT_TARGET);
-      } else {
-        if (!event.bubbles) continue;
-        event.setPhase(EventImpl.BUBBLING_PHASE);
-      }
-
-      item.invocationTarget.invoke(item, event, 'bubbling');
-    }
-  }
-
-  event.finishDispatch(clearTargets);
-
-  if (activationTarget !== null) {
-    if (!event.defaultPrevented) {
-      activationTarget.runActivationBehavior(event);
-    } else if (
-      activationTarget.hasLegacyCanceledActivationBehavior()
-    ) {
-      activationTarget.runLegacyCanceledActivationBehavior();
-    }
-  }
-
-  return !event.defaultPrevented;
-}
-
+/** Return the visible target across shadow boundaries without modifying either argument. */
 // https://dom.spec.whatwg.org/#retarget
 function retarget(
   initialTarget: EventTargetImpl | null,
@@ -645,103 +640,39 @@ function retarget(
   return target;
 }
 
-function isNodeInShadowTree(target: EventTargetImpl | null): boolean {
-  if (target === null || !target.isNode()) {
-    return false;
-  }
+type EventListenerCallback = (this: EventTargetImpl, event: EventImpl) => void;
 
-  const root = target.getTreeRoot();
-  return root !== null && root.getShadowRootHost() !== null;
-}
-
-type EventListenerInput =
-  | ((this: EventTargetImpl, event: EventImpl) => void)
-  | { handleEvent(event: EventImpl): void; }
-  | EventListenerValue;
-
+// https://dom.spec.whatwg.org/#concept-event-listener
 type EventListenerRecord = {
+  /** Handle for unregistering this listener's signal abort steps. */
   abortAlgorithm: AbortAlgorithmHandle | null;
+  /** Event name matched against event.type. */
   type: string;
+  /** Listener identity and invocation steps; null callbacks are not registered. */
   callback: EventListenerValue | null;
+  /** Selects the capturing pass rather than the bubbling pass. */
   capture: boolean;
+  /** Prevents cancellation; null selects the target's default passive policy. */
   passive: boolean | null;
+  /** Remove the registration before its first invocation. */
   once: boolean;
+  /** Removes the listener when aborted. */
   signal: AbortSignalImpl | null;
+  /** Tracks removal even in a dispatch snapshot of the listener list. */
   removed: boolean;
 };
 
-export type EventImplConstructor = typeof EventImpl;
-
 type EventPhase = 'capturing' | 'bubbling';
 
-type EventFactory = (
-  eventConstructor?: EventImplConstructor,
-) => EventImpl;
-
-type EventListenerRealm = {
-  callbacks: {
-    reportException(exception: unknown): void;
-  };
-  global: object;
-  globalNames: ReadonlySet<string>;
-};
-
-type WindowEventListenerRealm = EventListenerRealm & {
-  getCurrentEvent(global: object): EventImpl | undefined;
-  recordTimingInfo(
-    global: object,
-    event: EventImpl,
-    callback: object,
-  ): void;
-  setCurrentEvent(global: object, event: EventImpl | undefined): void;
-};
-
-// https://dom.spec.whatwg.org/#concept-flatten-options
-function flatten(
-  options: EventListenerOptionsRecord | boolean | null,
-): boolean {
-  return typeof options === 'boolean'
-    ? options
-    : options?.capture ?? false;
-}
-
-// https://dom.spec.whatwg.org/#event-flatten-more
-function flattenMore(
-  options: AddEventListenerOptionsRecord | boolean | null,
-): FlattenedEventListenerOptions {
-  const capture = flatten(options);
-  let passive: boolean | null = null;
-  let once = false;
-  let signal: AbortSignalImpl | null = null;
-
-  if (typeof options === 'object' && options !== null) {
-    once = options.once ?? false;
-    const passiveValue = options.passive;
-    const signalValue = options.signal;
-
-    if (passiveValue !== undefined) passive = passiveValue;
-    if (signalValue !== undefined) signal = signalValue;
-  }
-
-  return { capture, passive, once, signal };
-}
-
-type FlattenedEventListenerOptions = {
+interface ListenerOptionsRecord {
   capture: boolean;
-  passive: boolean | null;
+}
+
+interface AddListenerOptionsRecord extends ListenerOptionsRecord {
   once: boolean;
-  signal: AbortSignalImpl | null;
-};
-
-type EventListenerOptionsRecord = {
-  capture?: boolean;
-};
-
-type AddEventListenerOptionsRecord = EventListenerOptionsRecord & {
-  once?: boolean;
   passive?: boolean;
   signal?: AbortSignalImpl;
-};
+}
 
 const DEFAULT_PASSIVE_EVENT_TYPES = new Set([
   'touchstart',
@@ -757,17 +688,12 @@ const LEGACY_EVENT_TYPES = new Map([
   ['transitionend', 'webkitTransitionEnd'],
 ]);
 
-function createStandaloneEvent(
-  EventConstructor: EventImplConstructor = EventImpl,
-): EventImpl {
-  const event = new EventConstructor('', {}, unsafeSharedCurrentTime().milliseconds);
-  event.setTrusted(true);
-  return event;
-}
-
+/** Retains a listener's identity, callback realm, and invocation steps. */
 class EventListenerValue {
+  /** Original callback object used to match registrations and removals. */
   readonly object: object;
-  readonly realm: EventListenerRealm | undefined;
+  /** Callback realm, absent for direct implementation listeners. */
+  readonly realm: EventRealm | undefined;
   #invoke: (
     event: EventImpl,
     currentTarget: EventTargetImpl,
@@ -775,7 +701,7 @@ class EventListenerValue {
 
   constructor(
     object: object,
-    realm: EventListenerRealm | undefined,
+    realm: EventRealm | undefined,
     invoke: (event: EventImpl, currentTarget: EventTargetImpl) => void,
   ) {
     this.object = object;
@@ -787,27 +713,19 @@ class EventListenerValue {
     this.#invoke(event, currentTarget);
   }
 
-  static from(callback: EventListenerInput): EventListenerValue {
+  static from(callback: EventListenerValue | EventListenerCallback): EventListenerValue {
     if (callback instanceof EventListenerValue) return callback;
 
     return new EventListenerValue(
       callback,
       undefined,
-      (event, currentTarget) => {
-        if (typeof callback === 'function') {
-          callback.call(currentTarget, event);
-        } else {
-          callback.handleEvent.call(callback, event);
-        }
-      },
+      (event, currentTarget) => callback.call(currentTarget, event),
     );
   }
-}
 
-function sameEventListener(
-  left: EventListenerValue | null,
-  right: EventListenerValue | null,
-): boolean {
-  if (left === null || right === null) return left === right;
-  return left.object === right.object;
+  /** Compare the original callback objects retained by listener conversions. */
+  static same(left: EventListenerValue | null, right: EventListenerValue | null): boolean {
+    if (left === null || right === null) return left === right;
+    return left.object === right.object;
+  }
 }

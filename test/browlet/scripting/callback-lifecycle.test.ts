@@ -140,7 +140,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const incumbentContext = new RealmBinding(
       definitions,
       incumbentRealm.realm,
-      new BindingWorld([]),
+      new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     let observation: {
       incumbent: object;
@@ -234,7 +234,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const context = new RealmBinding(
       definitions,
       entry.realm,
-      new BindingWorld([]),
+      new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
       convertToIDL(value, reference('LifecycleCallback'), context.defaultConversionContext));

@@ -155,12 +155,12 @@ describe('Web IDL promise member binding', () => {
     });
     const realm = new Realm();
     const world = new BindingWorld([itemIDL, itemsIDL]);
-    const binding = world.register(realm);
+    const binding = world.register({ realm });
     const item = stamped ? binding.construct(ItemImpl) : new ItemImpl();
     const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.Promise));
     const iterator = call(owner, 'values') as object;
     const methodRealm = borrowed ? new Realm() : realm;
-    const methodOwner = borrowed ? call(world.register(methodRealm).project(
+    const methodOwner = borrowed ? call(world.register({ realm: methodRealm }).project(
       ItemsImpl, new ItemsImpl(item, realm.Promise),
     ), 'values') as object : iterator;
     const pending = Reflect.apply(
@@ -183,7 +183,7 @@ describe('Web IDL promise member binding', () => {
       implementation: impl(OrdinaryPromiseOwnerImpl),
       members: [asyncIter(childType, { create: 'createIterator' })],
     });
-    const binding = new BindingWorld([definition, promiseChildIDL]).register(new Realm());
+    const binding = new BindingWorld([definition, promiseChildIDL]).register({ realm: new Realm() });
     const implementation = new OrdinaryPromiseOwnerImpl(binding.Promise);
     const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation);
     const iterator = call(owner, 'values') as object;
@@ -223,6 +223,7 @@ describe('Web IDL promise member binding', () => {
       new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(definition);
     interfaceBinding.createImplementation = () => new PromiseOwnerImpl();
@@ -271,6 +272,7 @@ describe('Web IDL promise member binding', () => {
       new DefinitionAssembly([definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     binding.getDefinitionBinding(definition).createImplementation = () => new PromiseReceiverImpl();
     binding.getDefinitionBinding(definition).getOrCreateMemberRecord(read).operationSteps = () => {
@@ -302,6 +304,7 @@ describe('Web IDL promise member binding', () => {
       new DefinitionAssembly([...webIDLCommonDefinitions, definition]),
       realm,
       new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
     );
     const interfaceBinding = binding.getDefinitionBinding(definition);
     interfaceBinding.createImplementation = () => new PromiseExceptionSourceImpl();
@@ -356,8 +359,8 @@ function createOrdinaryPromiseFixture() {
   ]);
   const first = new Realm();
   const second = new Realm();
-  const firstBinding = bindings.register(first);
-  const secondBinding = bindings.register(second);
+  const firstBinding = bindings.register({ realm: first });
+  const secondBinding = bindings.register({ realm: second });
   firstBinding.install(first.global);
   secondBinding.install(second.global);
   const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.Promise);
