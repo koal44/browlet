@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseHTMLDocument,
 } from '../../../src/browlet/html/parser/parse';
-import {
-  isHTMLElement,
-} from '../../../src/browlet/html/elements/html-element';
+import { HTMLElementImpl } from '../../../src/browlet/html/elements/html-element';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/infra/index';
@@ -16,7 +14,7 @@ describe('ElementCSSInlineStyle', () => {
       source: '<main id="target" style="opacity: 50%; color: red"></main>',
     });
     const target = document.getElementById('target');
-    if (!target || !isHTMLElement(target)) {
+    if (!HTMLElementImpl.is(target)) {
       throw new Error('Missing HTML target element');
     }
 

@@ -1,6 +1,5 @@
 import type { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
-import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
@@ -225,7 +224,7 @@ function getTextContent(element: ElementImpl): string {
   let content = '';
 
   for (let child = element.firstChild; child; child = child.nextSibling) {
-    if (isText(child)) content += child.data;
+    if (child.isText()) content += child.data;
   }
 
   return content;

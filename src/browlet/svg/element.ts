@@ -17,6 +17,10 @@ import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
  * SVGElement includes HTMLOrSVGElement;
  */
 export class SVGElementImpl extends withSVGElementStub(ElementImpl) {
+  static is(value: unknown): value is SVGElementImpl {
+    return value instanceof SVGElementImpl;
+  }
+
   get style(): CSSStyleDeclarationImpl {
     return this.getInlineStyle();
   }
@@ -43,9 +47,3 @@ export const svgElementInterface = defineElementInterface({
 export const svgElementIncludesElementCSSInlineStyleIDL = defineIncludes({
   interface: 'SVGElement', mixin: 'ElementCSSInlineStyle',
 });
-
-export function isSVGElement(
-  element: ElementImpl,
-): element is SVGElementImpl {
-  return element instanceof SVGElementImpl;
-}

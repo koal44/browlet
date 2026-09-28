@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  isHTMLElement,
-} from '../../../src/browlet/html/elements/html-element';
-import {
-  isHTMLStyleElement, type HTMLStyleElementImpl,
-} from '../../../src/browlet/html/elements/metadata/style';
-import {
-  isSVGStyleElement,
-} from '../../../src/browlet/svg/style-element';
+import { HTMLElementImpl } from '../../../src/browlet/html/elements/html-element';
+import { HTMLStyleElementImpl } from '../../../src/browlet/html/elements/metadata/style';
+import { SVGStyleElementImpl } from '../../../src/browlet/svg/style-element';
 import {
   parseHTMLDocument,
 } from '../../../src/browlet/html/parser/parse';
@@ -35,7 +29,7 @@ describe('stylesheet integration', () => {
       ].join(''),
     });
     const style = document.getElementById('style');
-    if (!style || !isSVGStyleElement(style)) {
+    if (!SVGStyleElementImpl.is(style)) {
       throw new Error('Expected an SVG style element');
     }
 
@@ -110,7 +104,7 @@ describe('stylesheet integration', () => {
     });
     const second = getStyleElement(document, 'second');
     const first = document.createElement('style');
-    if (!isHTMLStyleElement(first)) {
+    if (!HTMLStyleElementImpl.is(first)) {
       throw new Error('Expected an HTML style element');
     }
     first.appendChild(document.createTextNode('main { color: green }'));
@@ -129,14 +123,14 @@ describe('stylesheet integration', () => {
   it('updates both sides of the association across insertion and removal', () => {
     const document = createTestDocument();
     const style = document.createElement('style');
-    if (!isHTMLStyleElement(style)) {
+    if (!HTMLStyleElementImpl.is(style)) {
       throw new Error('Expected an HTML style element');
     }
     style.appendChild(document.createTextNode('main { color: green }'));
 
     expect(style.sheet).toBeNull();
 
-    document.appendChild(style);
+    document.head!.appendChild(style);
     const sheet = style.sheet;
 
     expect(sheet).not.toBeNull();
@@ -208,7 +202,7 @@ describe('stylesheet integration', () => {
       source: '<main id="target" style="opacity: 0.5"></main>',
     });
     const target = document.getElementById('target');
-    if (!target || !isHTMLElement(target)) {
+    if (!HTMLElementImpl.is(target)) {
       throw new Error('Missing HTML target element');
     }
     void target.style;
@@ -320,7 +314,7 @@ function getStyleElement(
   id: string,
 ): HTMLStyleElementImpl {
   const element = document.getElementById(id);
-  if (!element || !isHTMLStyleElement(element)) {
+  if (!HTMLStyleElementImpl.is(element)) {
     throw new Error(`Missing HTML style element: ${id}`);
   }
   return element;

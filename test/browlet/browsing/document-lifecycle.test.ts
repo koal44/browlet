@@ -29,7 +29,6 @@ import {
 } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { isText } from '../../../src/browlet/dom/nodes/node';
 import { InternalError } from '../../../src/infra/internal-error';
 import { FetchBody } from '../../../src/fetch/body';
 import { FetchController } from '../../../src/fetch/controller';
@@ -582,8 +581,8 @@ describe('navigation lifecycle', () => {
     const entry = document.getNodeNavigable()!.activeSessionHistoryEntry;
     expect(entry.documentState.resource).toBe(source);
     const text = document.body!.firstChild!.firstChild;
-    expect(isText(text)).toBe(true);
-    if (!isText(text)) throw new Error('Expected the paragraph text');
+    expect(text?.isText()).toBe(true);
+    if (!text?.isText()) throw new Error('Expected the paragraph text');
     expect(text.data).toBe('Local page');
   });
 });

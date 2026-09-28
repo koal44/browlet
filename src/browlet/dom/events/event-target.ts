@@ -13,38 +13,10 @@ import {
 } from '../abort/abort-signal';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * [Exposed=*]
- * interface EventTarget {
- *   constructor();
- *
- *   undefined addEventListener(DOMString type, EventListener? callback, optional (AddEventListenerOptions or boolean) options = {});
- *   undefined removeEventListener(DOMString type, EventListener? callback, optional (EventListenerOptions or boolean) options = {});
- *   boolean dispatchEvent(Event event);
- * };
- *
- * callback interface EventListener {
- *   undefined handleEvent(Event event);
- * };
- *
- * dictionary EventListenerOptions {
- *   boolean capture = false;
- * };
- *
- * dictionary AddEventListenerOptions : EventListenerOptions {
- *   boolean passive;
- *   boolean once = false;
- *   AbortSignal signal;
- * };
- */
+// https://dom.spec.whatwg.org/#interface-eventtarget
 export class EventTargetImpl {
   #eventListenerList: EventListenerRecord[] = [];
   #createEvent: EventFactory = createStandaloneEvent;
-  #virtuals: EventTargetVirtuals;
-
-  constructor(virtuals: EventTargetVirtuals = {}) {
-    this.#virtuals = virtuals;
-  }
 
   static is(value: unknown): value is EventTargetImpl {
     return typeof value === 'object' &&
@@ -52,6 +24,7 @@ export class EventTargetImpl {
       #eventListenerList in value;
   }
 
+  // https://dom.spec.whatwg.org/#dom-eventtarget-addeventlistener
   addEventListener(
     type: string,
     callback: EventListenerInput | null,
@@ -74,6 +47,7 @@ export class EventTargetImpl {
     this.#addListener(listener);
   }
 
+  // https://dom.spec.whatwg.org/#dom-eventtarget-removeeventlistener
   removeEventListener(
     type: string,
     callback: EventListenerInput | null,
@@ -91,6 +65,7 @@ export class EventTargetImpl {
     if (listener) this.#removeListener(listener);
   }
 
+  // https://dom.spec.whatwg.org/#dom-eventtarget-dispatchevent
   dispatchEvent(event: EventImpl): boolean {
     if (event.isDispatching() || !event.isInitialized()) {
       throwDOMException(DOMExceptionNames.invalidState);
@@ -110,16 +85,18 @@ export class EventTargetImpl {
     return this.#createEvent(eventConstructor);
   }
 
+  // https://dom.spec.whatwg.org/#remove-all-event-listeners
   removeAllEventListeners(): void {
     for (const listener of [...this.#eventListenerList]) {
       this.#removeListener(listener);
     }
   }
 
-  getParent(event: EventImpl): EventTargetImpl | null {
-    return this.#virtuals.getParent?.(this, event) ?? null;
+  getEventParent(_event: EventImpl): EventTargetImpl | null {
+    return null;
   }
 
+  // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
   getEventListenerCallbacks(type: string): EventListenerOrEventListenerObject[] {
     const callbacks: EventListenerOrEventListenerObject[] = [];
 
@@ -143,40 +120,38 @@ export class EventTargetImpl {
   }
 
   getTreeRoot(): EventTargetImpl | null {
-    return this.#virtuals.getTreeRoot?.(this) ?? null;
+    return null;
   }
 
   getShadowRootHost(): EventTargetImpl | null {
-    return this.#virtuals.getShadowRootHost?.(this) ?? null;
+    return null;
   }
 
   getShadowRootMode(): ShadowRootMode | null {
-    return this.#virtuals.getShadowRootMode?.(this) ?? null;
+    return null;
   }
 
   getAssignedSlot(): EventTargetImpl | null {
-    return this.#virtuals.getAssignedSlot?.(this) ?? null;
+    return null;
   }
 
   isNode(): boolean {
-    return this.#virtuals.isNode?.(this) ?? false;
+    return false;
   }
 
   isWindow(): boolean {
-    return this.#virtuals.isWindow?.(this) ?? false;
+    return false;
   }
 
   getLegacyTargetOverride(): EventTargetImpl {
-    return this.#virtuals.getLegacyTargetOverride?.(this) ?? this;
+    return this;
   }
 
-  hasShadowIncludingInclusiveAncestor(ancestor: EventTargetImpl): boolean {
-    return this.#virtuals.isShadowIncludingInclusiveAncestor?.(
-      ancestor,
-      this,
-    ) ?? false;
+  hasShadowIncludingInclusiveAncestor(_ancestor: EventTargetImpl): boolean {
+    return false;
   }
 
+  // https://dom.spec.whatwg.org/#concept-event-listener-invoke
   invoke(
     pathItem: EventPathItem,
     event: EventImpl,
@@ -224,31 +199,37 @@ export class EventTargetImpl {
   }
 
   hasActivationBehavior(): boolean {
-    return this.#virtuals.activationBehavior !== undefined;
+    // Dispatch selects the first target with an activation override.
+    return this.runActivationBehavior !== EventTargetImpl.prototype.runActivationBehavior;
   }
 
-  runActivationBehavior(event: EventImpl): void {
-    this.#virtuals.activationBehavior?.(this, event);
-  }
+  runActivationBehavior(_event: EventImpl): void {}
 
   hasLegacyPreActivationBehavior(): boolean {
-    return this.#virtuals.legacyPreActivationBehavior !== undefined;
+    return this.runLegacyPreActivationBehavior !== EventTargetImpl.prototype.runLegacyPreActivationBehavior;
   }
 
-  runLegacyPreActivationBehavior(): void {
-    this.#virtuals.legacyPreActivationBehavior?.(this);
-  }
+  runLegacyPreActivationBehavior(): void {}
 
   hasLegacyCanceledActivationBehavior(): boolean {
-    return this.#virtuals.legacyCanceledActivationBehavior !== undefined;
+    return this.runLegacyCanceledActivationBehavior !== EventTargetImpl.prototype.runLegacyCanceledActivationBehavior;
   }
 
-  runLegacyCanceledActivationBehavior(): void {
-    this.#virtuals.legacyCanceledActivationBehavior?.(this);
+  runLegacyCanceledActivationBehavior(): void {}
+
+  protected isDefaultPassiveTarget(): boolean {
+    return false;
   }
+
+  protected addingEventListener(_type: string): void {}
+
+  protected removingEventListener(_type: string): void {}
+
+  protected eventListenerListChanged(_type: string): void {}
 
   // -- Private ----------------------------------------------------------
 
+  // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
   #innerInvoke(
     event: EventImpl,
     listeners: EventListenerRecord[],
@@ -311,13 +292,15 @@ export class EventTargetImpl {
     return found;
   }
 
+  // https://dom.spec.whatwg.org/#default-passive-value
   #getDefaultPassiveValue(type: string): boolean {
     return DEFAULT_PASSIVE_EVENT_TYPES.has(type) &&
-      (this.#virtuals.isDefaultPassiveTarget?.(this) ?? false);
+      this.isDefaultPassiveTarget();
   }
 
+  // https://dom.spec.whatwg.org/#add-an-event-listener
   #addListener(listener: EventListenerRecord): void {
-    this.#virtuals.addingEventListener?.(this, listener.type);
+    this.addingEventListener(listener.type);
 
     if (
       listener.signal?.aborted ||
@@ -339,13 +322,14 @@ export class EventTargetImpl {
         () => this.#removeListener(listener),
       );
     }
-    this.#virtuals.eventListenerListChanged?.(this, listener.type);
+    this.eventListenerListChanged(listener.type);
   }
 
+  // https://dom.spec.whatwg.org/#remove-an-event-listener
   #removeListener(listener: EventListenerRecord): void {
     if (listener.removed) return;
 
-    this.#virtuals.removingEventListener?.(this, listener.type);
+    this.removingEventListener(listener.type);
 
     listener.removed = true;
     listener.abortAlgorithm?.remove();
@@ -353,12 +337,36 @@ export class EventTargetImpl {
 
     const index = this.#eventListenerList.indexOf(listener);
     if (index !== -1) this.#eventListenerList.splice(index, 1);
-    this.#virtuals.eventListenerListChanged?.(this, listener.type);
+    this.eventListenerListChanged(listener.type);
   }
 }
 
 // -- Web IDL ------------------------------------------------------------
 
+/*
+ * [Exposed=*]
+ * interface EventTarget {
+ *   constructor();
+ *
+ *   undefined addEventListener(DOMString type, EventListener? callback, optional (AddEventListenerOptions or boolean) options = {});
+ *   undefined removeEventListener(DOMString type, EventListener? callback, optional (EventListenerOptions or boolean) options = {});
+ *   boolean dispatchEvent(Event event);
+ * };
+ *
+ * callback interface EventListener {
+ *   undefined handleEvent(Event event);
+ * };
+ *
+ * dictionary EventListenerOptions {
+ *   boolean capture = false;
+ * };
+ *
+ * dictionary AddEventListenerOptions : EventListenerOptions {
+ *   boolean passive;
+ *   boolean once = false;
+ *   AbortSignal signal;
+ * };
+ */
 export const eventTargetIDL = defineInterface({
   name: 'EventTarget',
   exposed: '*',
@@ -442,6 +450,7 @@ export const addEventListenerOptionsIDL = defineDictionary({
   ],
 });
 
+// https://dom.spec.whatwg.org/#concept-event-fire
 export function fireEvent(
   name: string,
   target: EventTargetImpl,
@@ -456,6 +465,7 @@ export function fireEvent(
   return dispatch(event, target, legacyTargetOverride);
 }
 
+// https://dom.spec.whatwg.org/#concept-event-dispatch
 function dispatch(
   event: EventImpl,
   initialTarget: EventTargetImpl,
@@ -493,7 +503,7 @@ function dispatch(
       ? null
       : target;
     let slotInClosedTree = false;
-    let parent = target.getParent(event);
+    let parent = target.getEventParent(event);
 
     while (parent !== null) {
       if (slottable !== null) {
@@ -551,7 +561,7 @@ function dispatch(
       }
 
       if (parent !== null) {
-        parent = parent.getParent(event);
+        parent = parent.getEventParent(event);
       }
       slotInClosedTree = false;
     }
@@ -608,6 +618,7 @@ function dispatch(
   return !event.defaultPrevented;
 }
 
+// https://dom.spec.whatwg.org/#retarget
 function retarget(
   initialTarget: EventTargetImpl | null,
   against: EventTargetImpl,
@@ -642,57 +653,6 @@ function isNodeInShadowTree(target: EventTargetImpl | null): boolean {
   const root = target.getTreeRoot();
   return root !== null && root.getShadowRootHost() !== null;
 }
-
-export type EventTargetVirtuals = {
-  getParent?: (
-    target: EventTargetImpl,
-    event: EventImpl,
-  ) => EventTargetImpl | null;
-  isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
-  isNode?: (target: EventTargetImpl) => boolean;
-  isWindow?: (target: EventTargetImpl) => boolean;
-  getLegacyTargetOverride?: (
-    target: EventTargetImpl,
-  ) => EventTargetImpl;
-  getTreeRoot?: (
-    target: EventTargetImpl,
-  ) => EventTargetImpl | null;
-  getShadowRootHost?: (
-    target: EventTargetImpl,
-  ) => EventTargetImpl | null;
-  getShadowRootMode?: (
-    target: EventTargetImpl,
-  ) => ShadowRootMode | null;
-  getAssignedSlot?: (
-    target: EventTargetImpl,
-  ) => EventTargetImpl | null;
-  isShadowIncludingInclusiveAncestor?: (
-    ancestor: EventTargetImpl,
-    target: EventTargetImpl,
-  ) => boolean;
-  addingEventListener?: (
-    target: EventTargetImpl,
-    type: string,
-  ) => void;
-  removingEventListener?: (
-    target: EventTargetImpl,
-    type: string,
-  ) => void;
-  eventListenerListChanged?: (
-    target: EventTargetImpl,
-    type: string,
-  ) => void;
-  activationBehavior?: (
-    target: EventTargetImpl,
-    event: EventImpl,
-  ) => void;
-  legacyPreActivationBehavior?: (
-    target: EventTargetImpl,
-  ) => void;
-  legacyCanceledActivationBehavior?: (
-    target: EventTargetImpl,
-  ) => void;
-};
 
 type EventListenerInput =
   | ((this: EventTargetImpl, event: EventImpl) => void)
@@ -736,6 +696,7 @@ type WindowEventListenerRealm = EventListenerRealm & {
   setCurrentEvent(global: object, event: EventImpl | undefined): void;
 };
 
+// https://dom.spec.whatwg.org/#concept-flatten-options
 function flatten(
   options: EventListenerOptionsRecord | boolean | null,
 ): boolean {
@@ -744,6 +705,7 @@ function flatten(
     : options?.capture ?? false;
 }
 
+// https://dom.spec.whatwg.org/#event-flatten-more
 function flattenMore(
   options: AddEventListenerOptionsRecord | boolean | null,
 ): FlattenedEventListenerOptions {

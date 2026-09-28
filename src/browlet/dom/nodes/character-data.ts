@@ -2,9 +2,7 @@ import { withCharacterDataStub } from '../../stubs';
 import {
   annotated, attr, defineIncludes, defineInterface, idlType, impl, xattr,
 } from '../../../web-idl/index';
-import {
-  NodeImpl, type NodeOptions, type NodeType,
-} from './node';
+import { NodeImpl, type NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import {
   NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL,
@@ -34,10 +32,13 @@ export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
     nodeType: NodeType,
     data: string,
     ownerDocument: DocumentImpl | null,
-    options: NodeOptions = {},
   ) {
-    super(nodeType, ownerDocument, options);
+    super(nodeType, ownerDocument);
     this.#data = data;
+  }
+
+  static is(value: unknown): value is CharacterDataImpl {
+    return value instanceof CharacterDataImpl;
   }
 
   get data(): string {

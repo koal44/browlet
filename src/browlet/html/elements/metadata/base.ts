@@ -17,6 +17,10 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   /** The URL fixed when this becomes the document's first base with href. */
   frozenBaseURL!: URLRecord;
 
+  static is(value: unknown): value is HTMLBaseElementImpl {
+    return value instanceof HTMLBaseElementImpl;
+  }
+
   /** Resolves this element's href against the document's fallback base URL. */
   // https://html.spec.whatwg.org/multipage/semantics.html#dom-base-href
   get href(): string {

@@ -1,5 +1,5 @@
 import {
-  defineElementInterface, type ElementCreationContext, type ElementImpl,
+  defineElementInterface, type ElementCreationContext,
 } from '../../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
@@ -53,6 +53,10 @@ export class HTMLLinkElementImpl
     );
   }
 
+  static is(value: unknown): value is HTMLLinkElementImpl {
+    return value instanceof HTMLLinkElementImpl;
+  }
+
   get sheet(): CSSStyleSheetImpl | null {
     return this.getStyleSheet();
   }
@@ -77,9 +81,3 @@ export const htmlLinkElementInterface = defineElementInterface({
 export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
   interface: 'HTMLLinkElement', mixin: 'LinkStyle',
 });
-
-export function isHTMLLinkElement(
-  element: ElementImpl,
-): element is HTMLLinkElementImpl {
-  return element instanceof HTMLLinkElementImpl;
-}

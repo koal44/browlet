@@ -10,17 +10,12 @@ import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { utf8Encode } from '../../../../src/encoding/codecs/utf-8';
 import { ReadableStreamImpl } from '../../../../src/streams/index';
-import { isText } from '../../../../src/browlet/dom/nodes/node';
 
 import {
   BrowletParser,
 } from '../../../../src/browlet/html/parser/document-parser';
-import {
-  isHTMLLinkElement,
-} from '../../../../src/browlet/html/elements/metadata/link';
-import {
-  isHTMLStyleElement,
-} from '../../../../src/browlet/html/elements/metadata/style';
+import { HTMLLinkElementImpl } from '../../../../src/browlet/html/elements/metadata/link';
+import { HTMLStyleElementImpl } from '../../../../src/browlet/html/elements/metadata/style';
 
 describe('BrowletParser', () => {
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
@@ -70,7 +65,7 @@ describe('BrowletParser', () => {
     expect(parser.document).toBe(document);
     const first = parser.document.createElement('style');
     const second = parser.document.createElement('link');
-    if (!isHTMLStyleElement(first) || !isHTMLLinkElement(second)) {
+    if (!HTMLStyleElementImpl.is(first) || !HTMLLinkElementImpl.is(second)) {
       throw new Error('Expected stylesheet owner elements');
     }
 
@@ -208,7 +203,7 @@ describe('BrowletParser response bytes', () => {
     });
     await expect.poll(async () => { await inNodeTask(drain); return complete; }).toBe(true);
     const text = document.getElementById('last')?.firstChild;
-    expect(text && isText(text) ? text.data : undefined).toBe('café');
+    expect(text?.isText() ? text.data : undefined).toBe('café');
     expect(firstInputs).toBe(1);
     expect(errors).toEqual([]);
     expect(stream.locked).toBe(false);

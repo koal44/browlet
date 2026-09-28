@@ -1,7 +1,7 @@
 import {
   defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/index';
-import { isElement, type NodeImpl } from './node';
+import type { NodeImpl } from './node';
 import type { ElementImpl } from './element';
 
 /*
@@ -23,7 +23,7 @@ export class NonDocumentTypeChildNodeMixin {
       sibling;
       sibling = sibling.previousSibling
     ) {
-      if (isElement(sibling)) return sibling;
+      if (sibling.isElement()) return sibling;
     }
 
     return null;
@@ -35,7 +35,7 @@ export class NonDocumentTypeChildNodeMixin {
       sibling;
       sibling = sibling.nextSibling
     ) {
-      if (isElement(sibling)) return sibling;
+      if (sibling.isElement()) return sibling;
     }
 
     return null;

@@ -11,7 +11,12 @@ import { HTMLElementImpl } from './html-element';
  * };
  */
 export class HTMLUnknownElementImpl
-  extends withHTMLUnknownElementStub(HTMLElementImpl) {}
+  extends withHTMLUnknownElementStub(HTMLElementImpl)
+{
+  static is(value: unknown): value is HTMLUnknownElementImpl {
+    return value instanceof HTMLUnknownElementImpl;
+  }
+}
 
 // -- Web IDL ------------------------------------------------------------
 

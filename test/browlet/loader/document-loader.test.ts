@@ -7,7 +7,6 @@ import {
 } from '../../../src/browlet/browsing/navigation/navigation';
 import { loadHTMLDocument } from '../../../src/browlet/loader/document-loader';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { isText } from '../../../src/browlet/dom/nodes/node';
 import { fetch } from '../../../src/fetch/fetch';
 import { FetchRequest } from '../../../src/fetch/request';
 import { closeServer, listen } from './http-fixture';
@@ -68,7 +67,7 @@ describe('HTML response loading', () => {
     const document = await loading.promise;
     await expect.poll(() => document.readyState).toBe('complete');
     const text = document.body?.firstChild?.firstChild;
-    expect(text && isText(text) ? text.data : undefined).toBe('café');
+    expect(text?.isText() ? text.data : undefined).toBe('café');
     expect(document.policyContainer.cspList?.policies).toHaveLength(1);
     expect(navigable.activeSessionHistoryEntry.documentState.resource).toBeNull();
     expect(document.navigationTimingEntry?.fetchTimingInfo).toBe(controller.extractFullTimingInfo());

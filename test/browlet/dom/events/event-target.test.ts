@@ -10,6 +10,7 @@ import {
   AbortSignalImpl,
 } from '../../../../src/browlet/dom/abort/abort-signal';
 import { EventImpl } from '../../../../src/browlet/dom/events/event';
+import { MouseEventImpl } from '../../../../src/browlet/dom/events/ui-event';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 
 describe('EventTargetImpl', () => {
@@ -106,29 +107,33 @@ describe('EventTargetImpl', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it('exposes dispatch topology and activation through internal hooks', () => {
-    const parent = new EventTargetImpl();
-    const event = new EventImpl('click');
-    const activation: string[] = [];
-    const target = new EventTargetImpl({
-      getParent: () => parent,
-      activationBehavior: () => activation.push('activation'),
-      legacyPreActivationBehavior: () => activation.push('pre'),
-      legacyCanceledActivationBehavior: () => activation.push('canceled'),
-    });
+  it.each([false, true])(
+    'runs ancestor activation around listeners when cancellation is %s',
+    (cancel) => {
+      const calls: string[] = [];
+      class ActivatingTarget extends EventTargetImpl {
+        override runActivationBehavior(): void { calls.push('activation'); }
+        override runLegacyPreActivationBehavior(): void { calls.push('pre'); }
+        override runLegacyCanceledActivationBehavior(): void { calls.push('canceled'); }
+      }
+      const parent = new ActivatingTarget();
+      class ChildTarget extends EventTargetImpl {
+        override getEventParent(): EventTargetImpl { return parent; }
+      }
+      class ClickEvent extends MouseEventImpl {}
+      const target = new ChildTarget();
+      target.addEventListener('click', (event) => {
+        calls.push('listener');
+        if (cancel) event.preventDefault();
+      });
 
-    expect(target.getParent(event)).toBe(parent);
-    expect(target.hasActivationBehavior()).toBe(true);
-    expect(target.hasLegacyPreActivationBehavior()).toBe(true);
-    expect(target.hasLegacyCanceledActivationBehavior())
-      .toBe(true);
-
-    target.runLegacyPreActivationBehavior();
-    target.runActivationBehavior(event);
-    target.runLegacyCanceledActivationBehavior();
-
-    expect(activation).toEqual(['pre', 'activation', 'canceled']);
-  });
+      expect(target.dispatchEvent(new ClickEvent('click', {
+        bubbles: true,
+        cancelable: true,
+      }))).toBe(!cancel);
+      expect(calls).toEqual(['pre', 'listener', cancel ? 'canceled' : 'activation']);
+    },
+  );
 
   it('dispatches through node ancestors in capture and bubble order', () => {
     const document = parseHTMLDocument(

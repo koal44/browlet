@@ -7,9 +7,7 @@ import type { DocumentTypeImpl } from '../../dom/nodes/document-type';
 import type { DocumentFragmentImpl } from '../../dom/nodes/document-fragment';
 import type { ElementImpl } from '../../dom/nodes/element';
 import type { TextImpl } from '../../dom/nodes/text';
-import {
-  isComment, isDocumentType, isElement, isText, type NodeImpl,
-} from '../../dom/nodes/node';
+import type { NodeImpl } from '../../dom/nodes/node';
 import { InternalError } from '../../../infra/internal-error';
 
 export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
@@ -81,7 +79,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   appendChild(parentNode: NodeImpl, newNode: NodeImpl): void {
     this.#finishPendingUnpushedElement();
     parentNode.appendTreeChild(newNode);
-    if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
+    if (newNode.isElement()) this.#pendingUnpushedElement = newNode;
   }
 
   insertBefore(
@@ -91,7 +89,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   ): void {
     this.#finishPendingUnpushedElement();
     referenceNode.insertTreeSiblingBefore(newNode);
-    if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
+    if (newNode.isElement()) this.#pendingUnpushedElement = newNode;
   }
 
   detachNode(node: NodeImpl): void {
@@ -102,7 +100,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     this.#finishPendingUnpushedElement();
     const lastChild = parentNode.lastChild;
 
-    if (isText(lastChild)) {
+    if (lastChild?.isText()) {
       lastChild.data += text;
     } else {
       parentNode.appendTreeChild(this.#document.createTextNode(text));
@@ -234,19 +232,19 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   isElementNode(node: NodeImpl): node is ElementImpl {
-    return isElement(node);
+    return node.isElement();
   }
 
   isTextNode(node: NodeImpl): node is TextImpl {
-    return isText(node);
+    return node.isText();
   }
 
   isCommentNode(node: NodeImpl): node is CommentImpl {
-    return isComment(node);
+    return node.isComment();
   }
 
   isDocumentTypeNode(node: NodeImpl): node is DocumentTypeImpl {
-    return isDocumentType(node);
+    return node.isDocumentType();
   }
 
   setNodeSourceCodeLocation(

@@ -1,5 +1,5 @@
 import type { ElementImpl } from '../dom/nodes/element';
-import { isText, type NodeImpl } from '../dom/nodes/node';
+import type { NodeImpl } from '../dom/nodes/node';
 import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
   type ExecutionCaps as StyleletExecutionCaps,
@@ -133,7 +133,7 @@ export class LinkStyleMixin {
       child;
       child = child.nextSibling
     ) {
-      if (isText(child)) source += child.data;
+      if (child.isText()) source += child.data;
     }
 
     const sheet = scope.createStyleElementStyleSheet(

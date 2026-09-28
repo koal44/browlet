@@ -1,4 +1,3 @@
-import { isElement } from './node';
 import { HTMLCollectionImpl } from './collections';
 import type { ElementImpl } from './element';
 import type { NodeImpl } from './node';
@@ -88,7 +87,7 @@ function walkElements(
   visit: (element: ElementImpl) => boolean,
 ): boolean {
   for (let child = root.firstChild; child; child = child.nextSibling) {
-    if (isElement(child) && !visit(child)) return false;
+    if (child.isElement() && !visit(child)) return false;
     if (!walkElements(child, visit)) return false;
   }
 

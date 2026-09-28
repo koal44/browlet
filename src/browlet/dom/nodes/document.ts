@@ -51,9 +51,7 @@ import type { ElementImpl } from './element';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../infra/index';
-import {
-  isDocument, isDocumentType, isElement, NodeImpl, NodeType,
-} from './node';
+import { NodeImpl, NodeType } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
@@ -65,8 +63,8 @@ import {
 } from './lookups';
 import { resolveElementInterface } from '../../element-interfaces';
 import { HTMLBaseElementImpl } from '../../html/elements/metadata/base';
-import { isHTMLElement, type HTMLElementImpl } from '../../html/elements/html-element';
-import { isHTMLHeadElement, type HTMLHeadElementImpl } from '../../html/elements/metadata/head';
+import { HTMLElementImpl } from '../../html/elements/html-element';
+import { HTMLHeadElementImpl } from '../../html/elements/metadata/head';
 import { InternalError } from '../../../infra/internal-error';
 
 export function createDocument(
@@ -229,23 +227,11 @@ export class DocumentImpl extends NodeImpl {
   #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
-  static #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
-    getParent: (target, event) => NodeImpl.is(target) && isDocument(target)
-      ? target.getEventParent(event)
-      : null,
-  });
-
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
     styleletExec: StyleletExecutionCaps = defaultStyleletExecutionCaps,
   ) {
-    super(
-      NodeType.Document,
-      null,
-      {
-        eventTargetVirtuals: DocumentImpl.#eventTargetVirtuals,
-      },
-    );
+    super(NodeType.Document);
     this.setNodeDocument(this);
     this.#nodeFactory = nodeFactory;
     this.styleletExec = styleletExec;
@@ -255,6 +241,10 @@ export class DocumentImpl extends NodeImpl {
       getStyleScope: () => this.getCSSEngine().documentScope,
     });
     this.#parentNodeMixin = new ParentNodeMixin(this);
+  }
+
+  static is(value: unknown): value is DocumentImpl {
+    return value instanceof DocumentImpl;
   }
 
   get URL(): string {
@@ -297,7 +287,7 @@ export class DocumentImpl extends NodeImpl {
 
   get doctype(): DocumentTypeImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (isDocumentType(child)) return child;
+      if (child.isDocumentType()) return child;
     }
 
     return null;
@@ -305,7 +295,7 @@ export class DocumentImpl extends NodeImpl {
 
   get documentElement(): ElementImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (isElement(child)) return child;
+      if (child.isElement()) return child;
     }
 
     return null;
@@ -313,12 +303,12 @@ export class DocumentImpl extends NodeImpl {
 
   get head(): HTMLHeadElementImpl | null {
     const html = this.documentElement;
-    if (!html || !isHTMLElement(html) || html.localName !== 'html') {
+    if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
       return null;
     }
 
     for (let child = html.firstChild; child; child = child.nextSibling) {
-      if (isElement(child) && isHTMLHeadElement(child)) return child;
+      if (HTMLHeadElementImpl.is(child)) return child;
     }
 
     return null;
@@ -326,14 +316,13 @@ export class DocumentImpl extends NodeImpl {
 
   get body(): HTMLElementImpl | null {
     const html = this.documentElement;
-    if (!html || !isHTMLElement(html) || html.localName !== 'html') {
+    if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
       return null;
     }
 
     for (let child = html.firstChild; child; child = child.nextSibling) {
       if (
-        isElement(child) &&
-        isHTMLElement(child) &&
+        HTMLElementImpl.is(child) &&
         (child.localName === 'body' || child.localName === 'frameset')
       ) {
         return child;
@@ -699,7 +688,7 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/semantics.html#frozen-base-url
   updateBaseElement(changedHref?: HTMLBaseElementImpl): void {
     const first = findElement(this, (element) =>
-      element instanceof HTMLBaseElementImpl && element.hasAttributeNS(null, 'href')
+      HTMLBaseElementImpl.is(element) && element.hasAttributeNS(null, 'href')
     ) as HTMLBaseElementImpl | null;
     if (first === this.#firstBaseElement && first !== changedHref) return;
     this.#firstBaseElement = first;

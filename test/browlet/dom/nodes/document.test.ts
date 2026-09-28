@@ -5,9 +5,7 @@ import {
 } from '../../../../src/browlet/dom/nodes/document';
 import { DocumentFragmentImpl } from '../../../../src/browlet/dom/nodes/document-fragment';
 import { DocumentTypeImpl } from '../../../../src/browlet/dom/nodes/document-type';
-import {
-  isComment, isDocument, isDocumentType, isElement, isText, NodeType,
-} from '../../../../src/browlet/dom/nodes/node';
+import { NodeType } from '../../../../src/browlet/dom/nodes/node';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import { EventImpl } from '../../../../src/browlet/dom/events/event';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
@@ -121,14 +119,14 @@ describe('Document', () => {
     const window = new WindowImpl(new URL('about:blank'));
     window.setAssociatedDocument(document);
 
-    expect(document.getParent(new EventImpl('ready')))
+    expect(document.getEventParent(new EventImpl('ready')))
       .toBeNull();
 
     document.browsingContext = new BrowsingContext();
 
-    expect(document.getParent(new EventImpl('ready')))
+    expect(document.getEventParent(new EventImpl('ready')))
       .toBe(window);
-    expect(document.getParent(new EventImpl('load')))
+    expect(document.getEventParent(new EventImpl('load')))
       .toBeNull();
   });
 
@@ -144,9 +142,9 @@ describe('Document', () => {
     window.setAssociatedDocument(second);
 
     expect(window.getAssociatedDocument()).toBe(second);
-    expect(first.getParent(new EventImpl('ready')))
+    expect(first.getEventParent(new EventImpl('ready')))
       .toBe(window);
-    expect(second.getParent(new EventImpl('ready')))
+    expect(second.getEventParent(new EventImpl('ready')))
       .toBe(window);
   });
 
@@ -163,7 +161,7 @@ describe('Document', () => {
     expect(root.mode).toBe('closed');
     expect(root.getRootNode()).toBe(root);
     expect(root.getRootNode({ composed: true })).toBe(host);
-    expect(root.getParent(new EventImpl('ready', { composed: true }))).toBe(host);
+    expect(root.getEventParent(new EventImpl('ready', { composed: true }))).toBe(host);
   });
 
   it('uses an assigned slot before a node tree parent', () => {
@@ -175,28 +173,28 @@ describe('Document', () => {
     parent.appendChild(element);
     parent.appendChild(text);
 
-    expect(element.getParent(new EventImpl('ready')))
+    expect(element.getEventParent(new EventImpl('ready')))
       .toBe(parent);
-    expect(text.getParent(new EventImpl('ready')))
+    expect(text.getEventParent(new EventImpl('ready')))
       .toBe(parent);
 
     element.setAssignedSlot(slot);
     text.setAssignedSlot(slot);
 
-    expect(element.getParent(new EventImpl('ready')))
+    expect(element.getEventParent(new EventImpl('ready')))
       .toBe(slot);
-    expect(text.getParent(new EventImpl('ready')))
+    expect(text.getEventParent(new EventImpl('ready')))
       .toBe(slot);
   });
 
   it('is the tree root and exposes its first element child', () => {
     const document = new DocumentImpl();
-    const text = document.createTextNode('before');
+    const comment = document.createComment('before');
     const element = document.createElement('html');
 
     expect(document.documentElement).toBeNull();
 
-    document.appendChild(text);
+    document.appendChild(comment);
     document.appendChild(element);
 
     expect(document.nodeType).toBe(NodeType.Document);
@@ -271,12 +269,12 @@ describe('Document', () => {
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
 
-    expect(isDocument(document)).toBe(true);
-    expect(isDocumentType(doctype)).toBe(true);
-    expect(isElement(element)).toBe(true);
-    expect(isText(text)).toBe(true);
-    expect(isComment(comment)).toBe(true);
-    expect(isElement(text)).toBe(false);
+    expect(document.isDocument()).toBe(true);
+    expect(doctype.isDocumentType()).toBe(true);
+    expect(element.isElement()).toBe(true);
+    expect(text.isText()).toBe(true);
+    expect(comment.isComment()).toBe(true);
+    expect(text.isElement()).toBe(false);
   });
 
   it('rejects document.write without an active parser', () => {

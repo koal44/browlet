@@ -1,9 +1,7 @@
 import { withTextStub } from '../../stubs';
 import type { EventImpl } from '../events/event';
 import { arg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
-import {
-  isText, NodeImpl, type NodeOptions, NodeType,
-} from './node';
+import { type NodeImpl, NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
@@ -21,19 +19,12 @@ import { SlottableMixin } from './slottable';
 export class TextImpl extends withTextStub(CharacterDataImpl) {
   #slottableMixin = new SlottableMixin();
 
-  static #nodeOptions: NodeOptions = {
-    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
-      getParent: (target, event) => NodeImpl.is(target) && isText(target)
-        ? target.getEventParent(event)
-        : null,
-      getAssignedSlot: (target) => NodeImpl.is(target) && isText(target)
-        ? target.getAssignedSlot()
-        : null,
-    }),
-  };
-
   constructor(data: string, ownerDocument: DocumentImpl | null = null) {
-    super(NodeType.Text, data, ownerDocument, TextImpl.#nodeOptions);
+    super(NodeType.Text, data, ownerDocument);
+  }
+
+  static is(value: unknown): value is TextImpl {
+    return value instanceof TextImpl;
   }
 
   // -- Internal ---------------------------------------------------------

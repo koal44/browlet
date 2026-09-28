@@ -30,6 +30,10 @@ export class DocumentTypeImpl extends withDocumentTypeStub(NodeImpl) {
     this.#systemId = systemId;
   }
 
+  static is(value: unknown): value is DocumentTypeImpl {
+    return value instanceof DocumentTypeImpl;
+  }
+
   get name(): string {
     return this.#name;
   }

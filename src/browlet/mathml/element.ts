@@ -12,6 +12,10 @@ import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
 export class MathMLElementImpl
   extends withMathMLElementStub(ElementImpl)
 {
+  static is(value: unknown): value is MathMLElementImpl {
+    return value instanceof MathMLElementImpl;
+  }
+
   get style(): CSSStyleDeclarationImpl {
     return this.getInlineStyle();
   }
@@ -38,9 +42,3 @@ export const mathMLElementInterface = defineElementInterface({
 export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
   interface: 'MathMLElement', mixin: 'ElementCSSInlineStyle',
 });
-
-export function isMathMLElement(
-  element: ElementImpl,
-): element is MathMLElementImpl {
-  return element instanceof MathMLElementImpl;
-}

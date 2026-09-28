@@ -1,5 +1,4 @@
 import { withDocumentFragmentStub } from '../../stubs';
-import type { EventTargetVirtuals } from '../events/event-target';
 import type { Realm, WindowRealm } from '../../scripting/realm';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
@@ -24,14 +23,13 @@ export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
   constructor(
     ownerDocument: DocumentImpl,
     host: ElementImpl | null = null,
-    eventTargetVirtuals?: EventTargetVirtuals,
   ) {
-    super(
-      NodeType.DocumentFragment,
-      ownerDocument,
-      { eventTargetVirtuals },
-    );
+    super(NodeType.DocumentFragment, ownerDocument);
     this.#host = host;
+  }
+
+  static is(value: unknown): value is DocumentFragmentImpl {
+    return value instanceof DocumentFragmentImpl;
   }
 
   get children(): HTMLCollectionImpl<ElementImpl> {

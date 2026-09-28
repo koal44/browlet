@@ -42,7 +42,7 @@ export class AttrImpl extends withAttrStub(NodeImpl) {
   }
 
   static is(value: unknown): value is AttrImpl {
-    return NodeImpl.is(value) && #localName in value;
+    return value instanceof AttrImpl;
   }
 
   get localName(): string {

@@ -11,28 +11,13 @@ import {
 } from '../../scripting/event-handlers';
 import { timerTaskSource } from '../../scripting/timers';
 import type { Realm } from '../../scripting/realm';
-import {
-  EventTargetImpl, type EventTargetVirtuals, fireEvent,
-} from '../events/event-target';
+import { EventTargetImpl, fireEvent } from '../events/event-target';
 
 export type AbortAlgorithmHandle = {
   remove(): void;
 };
 
-/*
- * [Exposed=*]
- * interface AbortSignal : EventTarget {
- *   [NewObject] static AbortSignal abort(optional any reason);
- *   [Exposed=(Window,Worker), NewObject] static AbortSignal timeout([EnforceRange] unsigned long long milliseconds);
- *   [NewObject] static AbortSignal any(sequence<AbortSignal> signals);
- *
- *   readonly attribute boolean aborted;
- *   readonly attribute any reason;
- *   undefined throwIfAborted();
- *
- *   attribute EventHandler onabort;
- * };
- */
+// https://dom.spec.whatwg.org/#interface-AbortSignal
 export class AbortSignalImpl extends EventTargetImpl
 {
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
@@ -50,7 +35,7 @@ export class AbortSignalImpl extends EventTargetImpl
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
   constructor(env: JSEnvironment) {
-    super(abortSignalEventTargetVirtuals);
+    super();
     this.#env = env;
     const global = env.exec.global;
     let retainedSignals = AbortSignalRetentionStamper.get(global);
@@ -62,6 +47,7 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   // Binding supplies each static factory with a fresh signal in its realm.
+  // https://dom.spec.whatwg.org/#dom-abortsignal-abort
   static abort(
     signal: AbortSignalImpl,
     reason: unknown = undefined,
@@ -72,6 +58,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return signal;
   }
 
+  // https://dom.spec.whatwg.org/#dom-abortsignal-timeout
   static timeout(
     signal: AbortSignalImpl,
     milliseconds: number,
@@ -84,6 +71,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return signal;
   }
 
+  // https://dom.spec.whatwg.org/#dom-abortsignal-any
   static any(
     signal: AbortSignalImpl,
     signals: AbortSignalImpl[],
@@ -108,12 +96,14 @@ export class AbortSignalImpl extends EventTargetImpl
     this.#eventHandlers.set('onabort', callback);
   }
 
+  // https://dom.spec.whatwg.org/#dom-abortsignal-throwifaborted
   throwIfAborted(): void {
     if (this.aborted) throw this.#reason;
   }
 
   // -- Internal methods -------------------------------------------------
 
+  // https://dom.spec.whatwg.org/#abortsignal-add
   addAlgorithm(
     algorithm: () => void,
   ): AbortAlgorithmHandle | null {
@@ -125,6 +115,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return handle;
   }
 
+  // https://dom.spec.whatwg.org/#abortsignal-remove
   removeAlgorithm(handle: AbortAlgorithmHandleImpl): void {
     if (!this.#abortAlgorithms.delete(handle)) return;
 
@@ -138,6 +129,7 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   /** Default errors use env, or this signal's owner for internal calls. */
+  // https://dom.spec.whatwg.org/#abortsignal-signal-abort
   signalAbort(reason: unknown = undefined, env = this.#env): void {
     if (this.aborted) return;
 
@@ -158,8 +150,14 @@ export class AbortSignalImpl extends EventTargetImpl
     for (const dependent of dependents) dependent.#runAbortSteps();
   }
 
+  protected override eventListenerListChanged(type: string): void {
+    if (type === 'abort') this.updateRetention();
+  }
+
   // -- Private ----------------------------------------------------------
 
+  // Binding has already allocated the result signal.
+  // https://dom.spec.whatwg.org/#create-a-dependent-abort-signal
   #initializeDependent(signals: AbortSignalImpl[]): void {
     for (const signal of signals) {
       if (signal.aborted) {
@@ -186,6 +184,7 @@ export class AbortSignalImpl extends EventTargetImpl
     source.#dependentSignals.add(this.#reference);
   }
 
+  // https://dom.spec.whatwg.org/#run-the-abort-steps
   #runAbortSteps(): void {
     for (const handle of [...this.#abortAlgorithms]) {
       if (this.#abortAlgorithms.has(handle)) handle.run();
@@ -210,6 +209,7 @@ export class AbortSignalImpl extends EventTargetImpl
     this.updateRetention();
   }
 
+  // https://dom.spec.whatwg.org/#abort-signal-garbage-collection
   #shouldRetain(): boolean {
     return !this.aborted &&
       this.#dependent &&
@@ -223,6 +223,20 @@ export class AbortSignalImpl extends EventTargetImpl
 
 // -- Web IDL ------------------------------------------------------------
 
+/*
+ * [Exposed=*]
+ * interface AbortSignal : EventTarget {
+ *   [NewObject] static AbortSignal abort(optional any reason);
+ *   [Exposed=(Window,Worker), NewObject] static AbortSignal timeout([EnforceRange] unsigned long long milliseconds);
+ *   [NewObject] static AbortSignal any(sequence<AbortSignal> signals);
+ *
+ *   readonly attribute boolean aborted;
+ *   readonly attribute any reason;
+ *   undefined throwIfAborted();
+ *
+ *   attribute EventHandler onabort;
+ * };
+ */
 export const abortSignalIDL = defineInterface<Realm>({
   name: 'AbortSignal',
   inherits: 'EventTarget',
@@ -346,11 +360,3 @@ class WeakOrderedSet<T extends object>
     }
   }
 }
-
-const abortSignalEventTargetVirtuals: EventTargetVirtuals = {
-  eventListenerListChanged(target, type) {
-    if (type === 'abort') {
-      (target as AbortSignalImpl).updateRetention();
-    }
-  },
-};

@@ -7,7 +7,7 @@ describe('CSP base-uri', () => {
     const { window, scope, runTask } = createCSPWindow("base-uri 'self'; report-to base");
     const base = window.document.createElement('base');
     base.href = 'https://other.test/';
-    window.document.appendChild(base);
+    window.document.head.appendChild(base);
     expect(window.document.baseURI).toBe('https://protected.test/page#section');
     runTask();
     expect(scope.reports).toHaveLength(1);
@@ -20,7 +20,7 @@ describe('CSP base-uri', () => {
     const { window, scope, runTask } = createCSPWindow("base-uri 'none'; report-to base", 'report');
     const base = window.document.createElement('base');
     base.href = 'https://other.test/';
-    window.document.appendChild(base);
+    window.document.head.appendChild(base);
     expect(window.document.baseURI).toBe('https://other.test/');
     runTask();
     expect(scope.reports[0]!.data).toMatchObject({ disposition: 'report', effectiveDirective: 'base-uri' });
@@ -30,7 +30,7 @@ describe('CSP base-uri', () => {
     const { window } = createCSPWindow("default-src 'none'");
     const base = window.document.createElement('base');
     base.href = 'https://other.test/';
-    window.document.appendChild(base);
+    window.document.head.appendChild(base);
     expect(window.document.baseURI).toBe('https://other.test/');
   });
 
@@ -39,7 +39,7 @@ describe('CSP base-uri', () => {
     document.origin = createOpaqueOrigin();
     const base = window.document.createElement('base');
     base.href = '/allowed/';
-    window.document.appendChild(base);
+    window.document.head.appendChild(base);
     expect(window.document.baseURI).toBe('https://protected.test/allowed/');
   });
 
@@ -47,7 +47,7 @@ describe('CSP base-uri', () => {
     const { window, scope, runTask } = createCSPWindow("base-uri 'none'; report-to base");
     const base = window.document.createElement('base');
     base.href = 'javascript:alert(1)';
-    window.document.appendChild(base);
+    window.document.head.appendChild(base);
     expect(window.document.baseURI).toBe('https://protected.test/page#section');
     expect(runTask()).toBe(false);
     expect(scope.reports).toHaveLength(0);

@@ -1,8 +1,6 @@
 import { withElementStub } from '../../stubs';
 import type { EventImpl } from '../events/event';
-import {
-  isElement, NodeImpl, type NodeOptions, NodeType,
-} from './node';
+import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
@@ -94,33 +92,11 @@ export class ElementImpl extends withElementStub(NodeImpl) {
   #namespaceURI: string;
   #slottableMixin = new SlottableMixin();
 
-  static #nodeOptions: NodeOptions = {
-    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
-      getParent: (target, event) => NodeImpl.is(target) && isElement(target)
-        ? target.getEventParent(event)
-        : null,
-      getAssignedSlot: (target) => NodeImpl.is(target) && isElement(target)
-        ? target.getAssignedSlot()
-        : null,
-    }),
-    treeVirtuals: {
-      insertedInto: (node) => {
-        (node as ElementImpl).insertedInto();
-      },
-      removedFrom: (node) => {
-        (node as ElementImpl).removedFrom();
-      },
-      childrenChanged: (node) => {
-        (node as ElementImpl).#linkStyleMixin?.childrenChanged();
-      },
-    },
-  };
-
   constructor(
     context: ElementCreationContext,
     linkStyle?: LinkStyleInit,
   ) {
-    super(NodeType.Element, context.document, ElementImpl.#nodeOptions);
+    super(NodeType.Element, context.document);
     this.#attributes = new NamedNodeMapImpl();
     this.#attributes.associateElement(this);
     this.#localName = context.localName;
@@ -132,6 +108,10 @@ export class ElementImpl extends withElementStub(NodeImpl) {
         linkStyle.treeScopeResolver,
       )
       : undefined;
+  }
+
+  static is(value: unknown): value is ElementImpl {
+    return value instanceof ElementImpl;
   }
 
   get attributes(): NamedNodeMapImpl {
@@ -330,12 +310,16 @@ export class ElementImpl extends withElementStub(NodeImpl) {
     return this.#linkStyleMixin?.sheet ?? null;
   }
 
-  protected insertedInto(): void {
+  protected override insertedInto(): void {
     this.#linkStyleMixin?.update();
   }
 
-  protected removedFrom(): void {
+  protected override removedFrom(): void {
     this.#linkStyleMixin?.update();
+  }
+
+  protected override childrenChanged(): void {
+    this.#linkStyleMixin?.childrenChanged();
   }
 
   // -- Private ----------------------------------------------------------

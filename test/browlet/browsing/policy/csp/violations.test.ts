@@ -86,7 +86,7 @@ describe('CSP violation delivery', () => {
   it.each([false, true])('targets a connected element, falling back after removal=%s', (remove) => {
     const { env, window, policy, runTask } = createCSPWindow("script-src 'none'");
     const target = window.document.createElement('div');
-    window.document.appendChild(target);
+    window.document.body.appendChild(target);
     const events: Event[] = [];
     window.document.addEventListener('securitypolicyviolation', (event) => events.push(event));
     const violation = new CSPViolation(policy, 'script-src-elem', 'inline', env);

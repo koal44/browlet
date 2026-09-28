@@ -48,6 +48,10 @@ import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
 export class HTMLElementImpl
   extends withHTMLElementStub(ElementImpl)
 {
+  static is(value: unknown): value is HTMLElementImpl {
+    return value instanceof HTMLElementImpl;
+  }
+
   get style(): CSSStyleDeclarationImpl {
     return this.getInlineStyle();
   }
@@ -74,9 +78,3 @@ export const htmlElementInterface = defineElementInterface({
 export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
   interface: 'HTMLElement', mixin: 'ElementCSSInlineStyle',
 });
-
-export function isHTMLElement(
-  element: ElementImpl,
-): element is HTMLElementImpl {
-  return element instanceof HTMLElementImpl;
-}

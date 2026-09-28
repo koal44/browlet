@@ -2,7 +2,7 @@ import {
   defineInterfaceMixin, idlType, nullable, roAttr, reference, xattr,
 } from '../../../web-idl/index';
 import { HTMLCollectionImpl } from './collections';
-import { isElement, type NodeImpl } from './node';
+import type { NodeImpl } from './node';
 import type { ElementImpl } from './element';
 
 /*
@@ -42,7 +42,7 @@ export class ParentNodeMixin {
       child;
       child = child.nextSibling
     ) {
-      if (isElement(child)) return child;
+      if (child.isElement()) return child;
     }
 
     return null;
@@ -54,7 +54,7 @@ export class ParentNodeMixin {
       child;
       child = child.previousSibling
     ) {
-      if (isElement(child)) return child;
+      if (child.isElement()) return child;
     }
 
     return null;
@@ -94,7 +94,7 @@ export const parentNodeIDL = defineInterfaceMixin({
 function collectChildren(node: NodeImpl): ElementImpl[] {
   const children: ElementImpl[] = [];
   for (let child = node.firstChild; child; child = child.nextSibling) {
-    if (isElement(child)) children.push(child);
+    if (child.isElement()) children.push(child);
   }
   return children;
 }

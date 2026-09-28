@@ -17,6 +17,10 @@ export class CommentImpl extends withCommentStub(CharacterDataImpl) {
   ) {
     super(NodeType.Comment, data, ownerDocument);
   }
+
+  static is(value: unknown): value is CommentImpl {
+    return value instanceof CommentImpl;
+  }
 }
 
 // -- Web IDL ------------------------------------------------------------

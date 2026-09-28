@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
-import { defineElementInterface, type ElementImpl } from '../../../dom/nodes/element';
+import { defineElementInterface } from '../../../dom/nodes/element';
 import { defineInterface, impl } from '../../../../web-idl/index';
 import { withHTMLHeadElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
@@ -11,7 +11,12 @@ import { HTMLElementImpl } from '../html-element';
  * };
  */
 export class HTMLHeadElementImpl
-  extends withHTMLHeadElementStub(HTMLElementImpl) {}
+  extends withHTMLHeadElementStub(HTMLElementImpl)
+{
+  static is(value: unknown): value is HTMLHeadElementImpl {
+    return value instanceof HTMLHeadElementImpl;
+  }
+}
 
 // -- Web IDL ------------------------------------------------------------
 
@@ -28,9 +33,3 @@ export const htmlHeadElementInterface = defineElementInterface({
   localNames: ['head'],
   namespaceURI: HTML_NAMESPACE,
 });
-
-export function isHTMLHeadElement(
-  element: ElementImpl,
-): element is HTMLHeadElementImpl {
-  return element instanceof HTMLHeadElementImpl;
-}

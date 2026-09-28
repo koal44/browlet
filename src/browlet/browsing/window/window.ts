@@ -1,9 +1,7 @@
 import type { DocumentImpl } from '../../dom/nodes/document';
 import { ElementImpl } from '../../dom/nodes/element';
 import type { EventImpl } from '../../dom/events/event';
-import {
-  EventTargetImpl, type EventTargetVirtuals,
-} from '../../dom/events/event-target';
+import { EventTargetImpl } from '../../dom/events/event-target';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
   impl, roAttr, reference, union, xattr,
@@ -89,7 +87,7 @@ export class WindowImpl
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
   constructor(url: URL) {
-    super(windowEventTargetVirtuals);
+    super();
     this.#location = new LocationImpl(url);
   }
 
@@ -263,6 +261,18 @@ export class WindowImpl
     this.#currentEvent = event;
   }
 
+  override isWindow(): boolean {
+    return true;
+  }
+
+  override getLegacyTargetOverride(): DocumentImpl {
+    return this.getAssociatedDocument();
+  }
+
+  protected override isDefaultPassiveTarget(): boolean {
+    return true;
+  }
+
   // -- Private ----------------------------------------------------------
 
   #createTimerAction(handler: TimerHandler): (argumentsList: unknown[]) => void {
@@ -346,13 +356,3 @@ export const windowIncludesWindowOrWorkerGlobalScopeIDL = defineIncludes({
   interface: windowIDL.name,
   mixin: 'WindowOrWorkerGlobalScope',
 });
-
-// -- Virtual ------------------------------------------------------------
-
-const windowEventTargetVirtuals: EventTargetVirtuals = {
-  isDefaultPassiveTarget: () => true,
-  isWindow: () => true,
-  getLegacyTargetOverride: (target) => WindowImpl.is(target)
-    ? target.getAssociatedDocument()
-    : target,
-};

@@ -7,7 +7,6 @@ import {
 import {
   DocumentFragmentImpl,
 } from '../../../../src/browlet/dom/nodes/document-fragment';
-import { isComment } from '../../../../src/browlet/dom/nodes/node';
 import {
   getSourceCodeLocation, HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from '../../../../src/browlet/html/parser/tree-adapter';
@@ -41,8 +40,8 @@ describe('Parser tree adapter', () => {
     const document = createParser().parse('<!--note--><main></main>');
     const comment = document.firstChild;
 
-    expect(isComment(comment)).toBe(true);
-    if (!isComment(comment)) throw new Error('Expected a comment node');
+    expect(comment?.isComment()).toBe(true);
+    if (!comment?.isComment()) throw new Error('Expected a comment node');
     expect(comment.data).toBe('note');
   });
 

@@ -1,8 +1,8 @@
-import {
-  EventTargetImpl, type EventTargetVirtuals,
-} from '../events/event-target';
+import { EventTargetImpl } from '../events/event-target';
 import { InternalError } from '../../../infra/internal-error';
 
+/** Tree links and raw storage operations. */
+// https://dom.spec.whatwg.org/#trees
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
 {
@@ -17,15 +17,6 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   #previousSibling: TNode | null = null;
   /** @type {TreeNode | null} */
   #nextSibling: TNode | null = null;
-  #virtuals: TreeNodeVirtuals<TNode>;
-
-  constructor(
-    eventTargetVirtuals: EventTargetVirtuals = {},
-    virtuals: TreeNodeVirtuals<TNode> = {},
-  ) {
-    super(eventTargetVirtuals);
-    this.#virtuals = virtuals;
-  }
 
   get parent(): TNode | null {
     return this.#parent;
@@ -47,6 +38,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return this.#nextSibling;
   }
 
+  // https://dom.spec.whatwg.org/#concept-tree-root
   getRoot(): TNode {
     if (!this.#parent) return this.#asNode();
 
@@ -59,6 +51,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return this.#firstChild !== null;
   }
 
+  // https://dom.spec.whatwg.org/#concept-tree-inclusive-descendant
   contains(other: TNode | null): boolean {
     if (!other) return false;
     if (other === this.#asNode()) return true;
@@ -70,6 +63,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return false;
   }
 
+  // https://dom.spec.whatwg.org/#concept-tree-order
   comparePosition(other: TNode): -1 | 0 | 1 | null {
     if (other === this.#asNode()) return 0;
 
@@ -159,13 +153,19 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     this.#nextSibling = null;
 
     this.#notifyRemovedSubtree(parent);
-    parent.#virtuals.childrenChanged?.(parent);
+    parent.childrenChanged();
   }
 
   notifyParentChildrenChanged(): void {
     const parent = this.#parent;
-    if (parent) parent.#virtuals.childrenChanged?.(parent);
+    parent?.childrenChanged();
   }
+
+  protected insertedInto(_parent: TNode): void {}
+
+  protected removedFrom(_parent: TNode): void {}
+
+  protected childrenChanged(): void {}
 
   // -- Private ----------------------------------------------------------
 
@@ -208,11 +208,11 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     }
 
     node.#notifyInsertedSubtree(this.#asNode());
-    this.#virtuals.childrenChanged?.(this.#asNode());
+    this.childrenChanged();
   }
 
   #notifyInsertedSubtree(parent: TNode): void {
-    this.#virtuals.insertedInto?.(this.#asNode(), parent);
+    this.insertedInto(parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
       child.#notifyInsertedSubtree(this.#asNode());
@@ -220,7 +220,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   }
 
   #notifyRemovedSubtree(parent: TNode): void {
-    this.#virtuals.removedFrom?.(this.#asNode(), parent);
+    this.removedFrom(parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
       child.#notifyRemovedSubtree(this.#asNode());
@@ -232,9 +232,3 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return this as unknown as TNode;
   }
 }
-
-export type TreeNodeVirtuals<TNode> = {
-  insertedInto?: (node: TNode, parent: TNode) => void;
-  removedFrom?: (node: TNode, parent: TNode) => void;
-  childrenChanged?: (node: TNode) => void;
-};

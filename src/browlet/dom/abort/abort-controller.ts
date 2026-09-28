@@ -5,16 +5,7 @@ import {
 } from '../../../web-idl/index';
 import { AbortSignalImpl } from './abort-signal';
 
-/*
- * [Exposed=*]
- * interface AbortController {
- *   constructor();
- *
- *   [SameObject] readonly attribute AbortSignal signal;
- *
- *   undefined abort(optional any reason);
- * };
- */
+// https://dom.spec.whatwg.org/#interface-abortcontroller
 export class AbortControllerImpl
 {
   #signal: AbortSignalImpl;
@@ -27,6 +18,7 @@ export class AbortControllerImpl
     return this.#signal;
   }
 
+  // https://dom.spec.whatwg.org/#dom-abortcontroller-abort
   abort(reason: unknown = undefined, env?: JSEnvironment): void {
     this.#signal.signalAbort(reason, env);
   }
@@ -34,6 +26,16 @@ export class AbortControllerImpl
 
 // -- Web IDL ------------------------------------------------------------
 
+/*
+ * [Exposed=*]
+ * interface AbortController {
+ *   constructor();
+ *
+ *   [SameObject] readonly attribute AbortSignal signal;
+ *
+ *   undefined abort(optional any reason);
+ * };
+ */
 export const abortControllerIDL = defineInterface({
   name: 'AbortController',
   exposed: '*',

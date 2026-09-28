@@ -10,46 +10,7 @@ import {
 import type { EventTargetImpl } from './event-target';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * [Exposed=*]
- * interface Event {
- *   constructor(DOMString type, optional EventInit eventInitDict = {});
- *
- *   readonly attribute DOMString type;
- *   readonly attribute EventTarget? target;
- *   readonly attribute EventTarget? srcElement; // legacy
- *   readonly attribute EventTarget? currentTarget;
- *   sequence<EventTarget> composedPath();
- *
- *   const unsigned short NONE = 0;
- *   const unsigned short CAPTURING_PHASE = 1;
- *   const unsigned short AT_TARGET = 2;
- *   const unsigned short BUBBLING_PHASE = 3;
- *   readonly attribute unsigned short eventPhase;
- *
- *   undefined stopPropagation();
- *            attribute boolean cancelBubble; // legacy alias of .stopPropagation()
- *   undefined stopImmediatePropagation();
- *
- *   readonly attribute boolean bubbles;
- *   readonly attribute boolean cancelable;
- *            attribute boolean returnValue;  // legacy
- *   undefined preventDefault();
- *   readonly attribute boolean defaultPrevented;
- *   readonly attribute boolean composed;
- *
- *   [LegacyUnforgeable] readonly attribute boolean isTrusted;
- *   readonly attribute DOMHighResTimeStamp timeStamp;
- *
- *   undefined initEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false); // legacy
- * };
- *
- * dictionary EventInit {
- *   boolean bubbles = false;
- *   boolean cancelable = false;
- *   boolean composed = false;
- * };
- */
+// https://dom.spec.whatwg.org/#interface-event
 export class EventImpl {
   #type = '';
   #target: EventTargetImpl | null = null;
@@ -72,6 +33,7 @@ export class EventImpl {
   #isTrusted = false;
   #timeStamp: DOMHighResTimeStamp;
 
+  // https://dom.spec.whatwg.org/#dom-event-event
   constructor(
     type: string,
     eventInitDict: EventInit | null = {},
@@ -114,6 +76,7 @@ export class EventImpl {
     return this.#currentTarget;
   }
 
+  // https://dom.spec.whatwg.org/#dom-event-composedpath
   composedPath(): EventTargetImpl[] {
     const composedPath: EventTargetImpl[] = [];
     const path = this.#path;
@@ -203,6 +166,7 @@ export class EventImpl {
     return this.#eventPhase;
   }
 
+  // https://dom.spec.whatwg.org/#dom-event-stoppropagation
   stopPropagation(): void {
     this.#stopPropagation = true;
   }
@@ -216,6 +180,7 @@ export class EventImpl {
     if (value) this.#stopPropagation = true;
   }
 
+  // https://dom.spec.whatwg.org/#dom-event-stopimmediatepropagation
   stopImmediatePropagation(): void {
     this.#stopPropagation = true;
     this.#stopImmediatePropagation = true;
@@ -238,6 +203,7 @@ export class EventImpl {
     if (!value) this.#setCanceled();
   }
 
+  // https://dom.spec.whatwg.org/#dom-event-preventdefault
   preventDefault(): void {
     this.#setCanceled();
   }
@@ -259,6 +225,7 @@ export class EventImpl {
   }
 
   /** @deprecated */
+  // https://dom.spec.whatwg.org/#dom-event-initevent
   initEvent(type: string, bubbles = false, cancelable = false): void {
     if (this.#dispatching) return;
 
@@ -295,6 +262,7 @@ export class EventImpl {
     return this.#path;
   }
 
+  // https://dom.spec.whatwg.org/#concept-event-path-append
   appendToPath(
     invocationTarget: EventTargetImpl,
     shadowAdjustedTarget: EventTargetImpl | null,
@@ -359,6 +327,7 @@ export class EventImpl {
     this.#composed = init.composed ?? false;
   }
 
+  // Final cleanup from https://dom.spec.whatwg.org/#concept-event-dispatch
   finishDispatch(clearTargets: boolean): void {
     this.#eventPhase = EventImpl.NONE;
     this.#currentTarget = null;
@@ -380,6 +349,7 @@ export class EventImpl {
 
   // -- Private ----------------------------------------------------------
 
+  // https://dom.spec.whatwg.org/#concept-event-initialize
   #initialize(
     type: string,
     bubbles: boolean,
@@ -396,6 +366,7 @@ export class EventImpl {
     this.#cancelable = cancelable;
   }
 
+  // https://dom.spec.whatwg.org/#set-the-canceled-flag
   #setCanceled(): void {
     if (this.#cancelable && !this.#inPassiveListener) {
       this.#canceled = true;
@@ -405,6 +376,46 @@ export class EventImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
+/*
+ * [Exposed=*]
+ * interface Event {
+ *   constructor(DOMString type, optional EventInit eventInitDict = {});
+ *
+ *   readonly attribute DOMString type;
+ *   readonly attribute EventTarget? target;
+ *   readonly attribute EventTarget? srcElement; // legacy
+ *   readonly attribute EventTarget? currentTarget;
+ *   sequence<EventTarget> composedPath();
+ *
+ *   const unsigned short NONE = 0;
+ *   const unsigned short CAPTURING_PHASE = 1;
+ *   const unsigned short AT_TARGET = 2;
+ *   const unsigned short BUBBLING_PHASE = 3;
+ *   readonly attribute unsigned short eventPhase;
+ *
+ *   undefined stopPropagation();
+ *            attribute boolean cancelBubble; // legacy alias of .stopPropagation()
+ *   undefined stopImmediatePropagation();
+ *
+ *   readonly attribute boolean bubbles;
+ *   readonly attribute boolean cancelable;
+ *            attribute boolean returnValue;  // legacy
+ *   undefined preventDefault();
+ *   readonly attribute boolean defaultPrevented;
+ *   readonly attribute boolean composed;
+ *
+ *   [LegacyUnforgeable] readonly attribute boolean isTrusted;
+ *   readonly attribute DOMHighResTimeStamp timeStamp;
+ *
+ *   undefined initEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false); // legacy
+ * };
+ *
+ * dictionary EventInit {
+ *   boolean bubbles = false;
+ *   boolean cancelable = false;
+ *   boolean composed = false;
+ * };
+ */
 export const eventIDL = defineInterface<Realm>({
   name: 'Event',
   exposed: '*',
@@ -460,25 +471,13 @@ export const eventInitIDL = defineDictionary({
   ],
 });
 
-/*
- * [Exposed=*]
- * interface CustomEvent : Event {
- *   constructor(DOMString type, optional CustomEventInit eventInitDict = {});
- *
- *   readonly attribute any detail;
- *
- *   undefined initCustomEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false, optional any detail = null); // legacy
- * };
- *
- * dictionary CustomEventInit : EventInit {
- *   any detail = null;
- * };
- */
+// https://dom.spec.whatwg.org/#interface-customevent
 export class CustomEventImpl<T = unknown>
   extends EventImpl
 {
   #detail: T;
 
+  // https://dom.spec.whatwg.org/#dom-customevent-customevent
   constructor(
     type: string,
     eventInitDict: CustomEventInit<T> | null = {},
@@ -495,6 +494,7 @@ export class CustomEventImpl<T = unknown>
   }
 
   /** @deprecated */
+  // https://dom.spec.whatwg.org/#dom-customevent-initcustomevent
   initCustomEvent(
     type: string,
     bubbles = false,
@@ -511,6 +511,20 @@ export class CustomEventImpl<T = unknown>
 
 // -- Web IDL ------------------------------------------------------------
 
+/*
+ * [Exposed=*]
+ * interface CustomEvent : Event {
+ *   constructor(DOMString type, optional CustomEventInit eventInitDict = {});
+ *
+ *   readonly attribute any detail;
+ *
+ *   undefined initCustomEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false, optional any detail = null); // legacy
+ * };
+ *
+ * dictionary CustomEventInit : EventInit {
+ *   any detail = null;
+ * };
+ */
 export const customEventIDL = defineInterface<Realm>({
   name: 'CustomEvent',
   inherits: 'Event',

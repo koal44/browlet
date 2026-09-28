@@ -14,9 +14,33 @@ reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 The existing `dom/infra/tree.ts` is useful pointer storage, but direct writes
 through it do not yet provide that contract.
 
+## Section 4 slices
+
+Follow the dependency order below. Each slice uses public behavioral tests where
+the interface exists; implementations receive already-converted values.
+
+| Slice | Scope | Completion proof |
+| --- | --- | --- |
+| 4A. Tree validity | Pre-insert checks for parent/node kinds, host-including cycles, reference children, fragments, and Document hierarchy | `appendChild()` and `insertBefore()` reject invalid operations before changing either tree |
+| 4B. Insert, remove, and adopt | One structural path, fragment splicing, node-document updates, and parser entry points | Public and parser mutations preserve topology, ownership, and ordering |
+| 4C. Complete structural mutation | Replace, replace-all, move, and live Range/NodeIterator participation | Atomic failure, boundary-point adjustment, and iterator pre-removal through actual consumers |
+| 4D. Attributes | Qualified names, namespaces, Attr, NamedNodeMap, and one attribute-change path | All attribute entry points preserve identity and notify the same participants |
+| 4E. Character data | Replace-data, Text splitting, normalization, and text content | UTF-16 offsets, live ranges, and node-specific getters/setters behave consistently |
+| 4F. Collections and tree mixins | Live/static NodeList and HTMLCollection, convenience mutation, and Selectlet-backed query APIs | Stable live views, static query results, scope matching, and shared mutation behavior |
+| 4G. Mutation observers | Registered/transient observers, records, and agent-backed microtask delivery | Correct record contents, batching, reentrancy, and callback ordering |
+| 4H. Shadow trees | ShadowRoot, attachment, slottables, assignment, and slotchange delivery | Shadow topology and slot changes use the same mutation and checkpoint machinery |
+| 4I. Node and Document completion | Clone/import, equality, namespace lookup, document factories, DOMImplementation, XML leaf nodes, and remaining declared members | Public interface coverage followed by an ordered §4 audit |
+
+4A is complete: `mutation.ts` validates both public insertion entry points,
+including host-including cycles and Document hierarchy. The regressions are in
+[`mutation.test.ts`](../../../../test/browlet/dom/nodes/mutation.test.ts).
+Fragment splicing, adoption, and mutation participants remain 4B/4C work.
+Range and traversal state belongs to those owners. Observer, slot, and
+custom-element delivery must join HTML's existing checkpoint, not a new scheduler.
+
 ## Foundational mutation spine
 
-| Planned source | Contract | Specification |
+| Source | Contract | Specification |
 | --- | --- | --- |
 | `mutation.ts` | Ensure pre-insert validity, pre-insert, insert, append, move, replace, replace-all, pre-remove, remove, adoption, and their specified extension points | DOM §4.2.3, `#mutation-algorithms` |
 | `slots.ts` if the algorithms outgrow `slottable.ts` | Finding, assigning, and signaling slots and slottables; the concrete `HTMLSlotElement` remains owned by HTML | DOM §4.2.2, `#shadow-trees` |
@@ -111,11 +135,11 @@ undefined for a parsed paragraph's text; its own parser check uses the existing
 `Text.data` contract. Complete text content's node-specific getter and mutation
 behavior with the Node interface work above.
 
-Review existing direct-implementation tests before refactoring. In particular,
-tests must not preserve structurally invalid conveniences such as appending a
-`Text` child to a `Document`. Establish public Browlet coverage for:
+The insertion tests cover hierarchy rejection without partial mutation. Existing
+Document, stylesheet, and CSP fixtures now build valid trees. Continue public
+Browlet coverage for:
 
-- document hierarchy validation and all-or-nothing failure;
+- all-or-nothing failure in replacement and movement;
 - `DocumentFragment` splicing, cross-document adoption, and connection state;
 - exact insertion/removal/reaction/observer ordering;
 - live collection identity and updates;

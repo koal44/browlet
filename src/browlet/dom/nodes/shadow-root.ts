@@ -47,27 +47,11 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   #mode: ShadowRootMode;
 
-  static #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
-    getParent: (target, event) => ShadowRootImpl.is(target)
-      ? target.getEventParent(event)
-      : null,
-    getShadowRootHost: (target) => ShadowRootImpl.is(target)
-      ? target.host
-      : null,
-    getShadowRootMode: (target) => ShadowRootImpl.is(target)
-      ? target.mode
-      : null,
-  });
-
   constructor(host: ElementImpl, mode: ShadowRootMode) {
     const document = host.getNodeDocument();
     if (!document) throw new InternalError('A shadow host must have a node document');
 
-    super(
-      document,
-      host,
-      ShadowRootImpl.#eventTargetVirtuals,
-    );
+    super(document, host);
     this.#mode = mode;
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => null,
@@ -78,7 +62,7 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
   }
 
   static is(value: unknown): value is ShadowRootImpl {
-    return NodeImpl.is(value) && #mode in value;
+    return value instanceof ShadowRootImpl;
   }
 
   get mode(): ShadowRootMode {
@@ -124,6 +108,14 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
   }
 
   // -- Internal ---------------------------------------------------------
+
+  override getShadowRootHost(): ElementImpl {
+    return this.host;
+  }
+
+  override getShadowRootMode(): ShadowRootMode {
+    return this.mode;
+  }
 
   override getEventParent(event: EventImpl): EventTargetImpl | null {
     const firstTarget = event.getFirstPathInvocationTarget();

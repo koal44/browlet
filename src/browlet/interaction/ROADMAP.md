@@ -32,9 +32,9 @@ should be connected while completing lifecycle. User activation enters before
 activation-gated navigation or popup behavior; cross-document focus enters
 with nested browsing. The rest of this chapter can wait for interaction work.
 
-DOM event dispatch already exposes activation and legacy-pre-activation
-virtuals. Preserve that neutral hook; Section 6 work supplies the HTML element
-behaviors, commands, and user-activation consequences on top of it.
+DOM event dispatch already provides overridable activation methods.
+Section 6 work supplies the HTML element behaviors, commands, and
+user-activation consequences.
 
 ## Planned ownership
 

@@ -40,9 +40,9 @@ not add a generic `listener-observation.ts` registry in advance.
 | `performance/` | Record event-listener timing when the Event Timing and Long Animation Frames producers exist | DOM §2.9; Event Timing; Long Animation Frames |
 | workers/service workers | Apply the late-listener warning and legacy fetch-listener inspection at their specified globals | DOM §§2.7–2.8; Service Workers |
 
-The test which directly exercises activation virtuals is useful only as a
-temporary integration seam. Replace it with observable element activation
-coverage when the first HTML activation consumer lands.
+The activation dispatch test uses an implementation subclass until HTML
+supplies a concrete consumer. Add observable element activation coverage
+when that consumer lands.
 
 The legacy Window event extensions in DOM §2.3 belong with Window projection,
 not in the generic event implementation. Blink similarly separates generic
