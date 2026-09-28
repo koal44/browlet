@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createEnvironment } from '../../../js-engine/execution-fixture';
 import {
   parseHTMLDocument,
 } from '../../../../src/browlet/html/parser/parse';
@@ -22,8 +23,9 @@ describe('EventTargetImpl', () => {
 
   it('does not register null callbacks or listeners with aborted signals', () => {
     const target = new EventTargetImpl();
-    const liveSignal = new AbortSignalImpl(globalThis);
-    const abortedSignal = new AbortSignalImpl(globalThis);
+    const env = createEnvironment();
+    const liveSignal = new AbortSignalImpl(env);
+    const abortedSignal = new AbortSignalImpl(env);
     const callback = vi.fn();
     abortedSignal.signalAbort();
 
@@ -44,8 +46,9 @@ describe('EventTargetImpl', () => {
 
   it('does not let a duplicate listener signal remove the original', () => {
     const target = new EventTargetImpl();
-    const firstSignal = new AbortSignalImpl(globalThis);
-    const duplicateSignal = new AbortSignalImpl(globalThis);
+    const env = createEnvironment();
+    const firstSignal = new AbortSignalImpl(env);
+    const duplicateSignal = new AbortSignalImpl(env);
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
@@ -240,7 +243,7 @@ describe('EventTargetImpl', () => {
 
   it('removes signal-bound listeners when their signal aborts', () => {
     const target = new EventTargetImpl();
-    const signal = new AbortSignalImpl(globalThis);
+    const signal = new AbortSignalImpl(createEnvironment());
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {

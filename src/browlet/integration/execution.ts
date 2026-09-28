@@ -24,6 +24,8 @@ export function createExecution(context: BindingContext<Realm>): RealmExecution 
     NativePromise: realm.intrinsics.promise.constructor,
     TypeError: realm.intrinsics.typeError,
     RangeError: realm.intrinsics.rangeError,
+    // Execution is composed before interface binding registration finishes.
+    get DOMException() { return context.DOMException; },
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel,

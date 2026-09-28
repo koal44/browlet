@@ -1,9 +1,9 @@
 # Abort roadmap
 
-DOM [§3](https://dom.spec.whatwg.org/#aborting-ongoing-activities) is implemented
-for the current Window host: controller/signal projection, composition,
-EventTarget integration, onabort, and active-time timeout delivery.
-Worker exposure and nondeterministic retention evidence remain below.
+DOM [§3](https://dom.spec.whatwg.org/#aborting-ongoing-activities) has
+controller/signal projection, composition, EventTarget integration, onabort,
+and active-time timeout delivery. Worker exposure and retention evidence remain
+below.
 
 ## Current contract
 
@@ -14,13 +14,29 @@ Consumers reject with that stored reason and own their own cancellation/cleanup.
 
 AbortController retains its same-object signal and aborts idempotently.
 AbortSignal.any preserves the first already-aborted source's reason and flattens
-dependent sources. Default AbortError and TimeoutError objects use the required
-binding/relevant realm.
+dependent sources. Default errors use `env.exec.DOMException`, supplied by
+Binding's original interface constructor independently of the writable global
+property. Borrowed `abort()` methods select their invoking environment for the
+default error; internal calls default to the signal's owning environment.
 
 EventTarget's converted signal registers listener removal as an internal abort
 algorithm and removes it when listener cleanup no longer needs it. Removal
 precedes the public abort event. Streams and Fetch consume the same internal
 contract; their cancellation algorithms do not belong to DOM.
+
+## Realm choice
+
+`SPEC_CLASH(abort-default-reason-realm)`: [DOM's signal-abort algorithm](https://dom.spec.whatwg.org/#abortsignal-signal-abort)
+creates a default AbortError; [Web IDL](https://webidl.spec.whatwg.org/#js-creating-throwing-exceptions)
+creates it in the current realm. For `otherWindow.AbortController.prototype.abort.call(controller)`,
+that is the method's realm, while the controller and signal keep their own realm.
+Playwright checks on 2026-09-28 found Chromium 149.0.7827.55 follows the method
+realm; Firefox 151.0 and WebKit 26.5 use the signal's realm. Borrowing the reason
+getter does not change those results.
+
+Browlet follows Web IDL/Chromium. Binding supplies the method's environment to
+the abort algorithm, which creates one reason shared by the source and its
+dependents. Explicit reasons keep their original identity.
 
 ## HTML delivery and retention
 

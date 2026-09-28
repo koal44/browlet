@@ -26,6 +26,7 @@ test calls Selectlet directly. Browlet does not yet expose `querySelector()`,
 `webkitMatchesSelector()`. Add one narrow scope-match adapter rather than a
 second selector implementation. The DOM §4 callers then own first-result,
 static-`NodeList`, and inclusive-ancestor behavior.
+This integration is deferred to those §4 API slices, not blocked on Selectlet.
 
 Behavioral coverage must include the scoping root, matching from the tree
 root, a detached subtree, selector-list ordering where observable, and the

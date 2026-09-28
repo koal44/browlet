@@ -250,8 +250,6 @@ export class EventImpl {
     return this.#composed;
   }
 
-  // TODO(Web IDL [LegacyUnforgeable]): Install this as a non-configurable own
-  // property when Event is bound into a realm.
   get isTrusted(): boolean {
     return this.#isTrusted;
   }

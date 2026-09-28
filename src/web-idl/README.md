@@ -206,8 +206,10 @@ Infra exception requests and Core DOMException requests are realm-neutral.
 Realize a failure once, at its first realm-owned observable boundary; the private
 realization record preserves identity on later delivery. Author-thrown values
 retain their identity. When an algorithm stores or shares a newly created error
-before returning, allocate it through the selected `env.exec.TypeError` or
-`RangeError` constructor. Later Promise delivery must not decide that error's realm.
+before returning, allocate it through the selected `env.exec.TypeError`,
+`RangeError`, or `DOMException` constructor. Binding supplies the original
+`DOMException` independently of its writable global property.
+Later Promise delivery must not decide that error's realm.
 `InternalError` diagnoses an implementation contract failure.
 DOMException's engine Error allocation and legacy/global exotic behavior are
 explicit special cases, not reasons to merge ordinary platform and implementation

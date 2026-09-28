@@ -35,6 +35,11 @@ export class BindingContext<Realm extends WebIDLRealmHost = WebIDLRealmHost> {
     this.#env = createEnvironment?.(this);
   }
 
+  /** The realm's original DOMException constructor, independent of its global property. */
+  get DOMException(): typeof DOMException {
+    return this.#binding.DOMException;
+  }
+
   /** Install this realm's exposed definitions on the supplied global object. */
   install(target: object): void {
     this.#binding.install(target);

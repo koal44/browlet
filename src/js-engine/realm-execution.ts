@@ -15,6 +15,8 @@ export type RealmExecution = {
   /** Captured constructors for errors whose realm must be fixed before delivery. */
   TypeError: TypeErrorConstructor;
   RangeError: RangeErrorConstructor;
+  /** Original DOMException constructor supplied by the owner's Binding. */
+  DOMException: typeof DOMException;
   buffers: RuntimeBuffers;
   fileReading: TaskScheduling;
   networking: NetworkingTasks;

@@ -23,6 +23,7 @@ export function createExecution(realm = new TestRealm(), binding?: BindingContex
     NativePromise: realm.intrinsics.promise.constructor,
     TypeError: realm.intrinsics.typeError,
     RangeError: realm.intrinsics.rangeError,
+    get DOMException() { return binding.DOMException; },
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel: (steps) => { setImmediate(steps); },

@@ -1,9 +1,10 @@
 import { Stamper } from '../../../infra/stamper';
+import type { JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, defineInterface, idlType, op, staticOp, roAttr, reference,
   sequence, invokeWith, xattr,
   impl,
-  createDOMException, DOMExceptionNames, type DOMExceptionName,
+  DOMExceptionNames,
 } from '../../../web-idl/index';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
@@ -37,20 +38,21 @@ export class AbortSignalImpl extends EventTargetImpl
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
   #dependent = false;
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
+  #env: JSEnvironment;
   #eventHandlers = new EventHandlerMap(this, [{
     name: 'onabort',
     type: 'abort',
   }]);
-  #global: object;
   #reason: unknown = undefined;
   // A shared WeakRef lets every source/dependent set deduplicate by identity.
   #reference = new WeakRef(this);
   #retainedSignals: Set<AbortSignalImpl>;
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
-  constructor(global: object) {
+  constructor(env: JSEnvironment) {
     super(abortSignalEventTargetVirtuals);
-    this.#global = global;
+    this.#env = env;
+    const global = env.exec.global;
     let retainedSignals = AbortSignalRetentionStamper.get(global);
     if (!retainedSignals) {
       retainedSignals = new Set<AbortSignalImpl>();
@@ -65,7 +67,7 @@ export class AbortSignalImpl extends EventTargetImpl
     reason: unknown = undefined,
   ): AbortSignalImpl {
     signal.#setAbortReason(
-      reason === undefined ? signal.#createAbortError() : reason,
+      reason === undefined ? new signal.#env.exec.DOMException('', DOMExceptionNames.abort) : reason,
     );
     return signal;
   }
@@ -77,7 +79,7 @@ export class AbortSignalImpl extends EventTargetImpl
   ): AbortSignalImpl {
     queueTimeoutTask(
       milliseconds,
-      () => signal.signalAbort(signal.#createException(DOMExceptionNames.timeout)),
+      () => signal.signalAbort(new signal.#env.exec.DOMException('', DOMExceptionNames.timeout)),
     );
     return signal;
   }
@@ -135,11 +137,14 @@ export class AbortSignalImpl extends EventTargetImpl
     else this.#retainedSignals.delete(this);
   }
 
-  signalAbort(reason: unknown = undefined): void {
+  /** Default errors use env, or this signal's owner for internal calls. */
+  signalAbort(reason: unknown = undefined, env = this.#env): void {
     if (this.aborted) return;
 
+    // SPEC_CLASH(abort-default-reason-realm): Follow Web IDL/Chromium's method realm.
+    // Gecko/WebKit use the signal realm. Binding supplies env for author calls.
     this.#setAbortReason(
-      reason === undefined ? this.#createAbortError() : reason,
+      reason === undefined ? new env.exec.DOMException('', DOMExceptionNames.abort) : reason,
     );
     const dependents: AbortSignalImpl[] = [];
     for (const dependent of this.#dependentSignals.values()) {
@@ -174,20 +179,6 @@ export class AbortSignalImpl extends EventTargetImpl
       }
     }
     this.updateRetention();
-  }
-
-  #createAbortError(): DOMException {
-    return this.#createException(DOMExceptionNames.abort);
-  }
-
-  #createException(
-    name: DOMExceptionName,
-    message = '',
-  ): DOMException {
-    const DOMException_: unknown = Reflect.get(this.#global, 'DOMException');
-    return typeof DOMException_ === 'function'
-      ? Reflect.construct(DOMException_, [message, name]) as DOMException
-      : createDOMException(name, message);
   }
 
   #dependOn(source: AbortSignalImpl): void {
@@ -237,7 +228,7 @@ export const abortSignalIDL = defineInterface<Realm>({
   inherits: 'EventTarget',
   exposed: '*',
   implementation: impl(AbortSignalImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.realm.global)],
+    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     staticOp('abort', reference('AbortSignal'),

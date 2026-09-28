@@ -5,6 +5,11 @@ more focused roadmaps below are the implementation queues.
 
 ## Sections 1-3 audit
 
+The 2026-09-28 audit of the implemented §1–3 algorithms is complete. Default
+abort-reason creation and borrowed-method realm regressions are fixed; see
+`abort/ROADMAP.md` for the browser disagreement. No further gap was found in the
+current Window implementation. Continue at §4; the integration work below remains.
+
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
 | DOM §1, infrastructure | Tree topology, ordered sets, and name validation exist | DOM §1.3 scope matching is not yet exposed through the DOM selector APIs; see `infra/ROADMAP.md` |

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import { createEnvironment } from '../../js-engine/execution-fixture';
 import {
   AbortSignalImpl, type AbortAlgorithmHandle,
 } from '../../../src/browlet/dom/abort/abort-signal';
@@ -118,6 +119,45 @@ describe('AbortController and AbortSignal', () => {
       reason,
     );
   });
+
+  it.each(['controller', 'static', 'timeout'] as const)(
+    'creates the %s abort reason without reading the DOMException global', async (source) => {
+      const browlet = createBrowlet();
+      const result = await browlet.evaluate(async (source) => {
+        const OriginalDOMException = DOMException;
+        let reads = 0;
+        Object.defineProperty(globalThis, 'DOMException', {
+          configurable: true,
+          get() { reads++; return OriginalDOMException; },
+        });
+
+        let signal: AbortSignal;
+        if (source === 'controller') {
+          const controller = new AbortController();
+          controller.abort();
+          signal = controller.signal;
+        } else if (source === 'static') {
+          signal = AbortSignal.abort();
+        } else {
+          signal = AbortSignal.timeout(0);
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => { resolve(); }, { once: true });
+          });
+        }
+
+        return {
+          reads,
+          originalType: signal.reason instanceof OriginalDOMException,
+          name: (signal.reason as DOMException).name,
+        };
+      }, source);
+
+      expect(result).toEqual({
+        reads: 0, originalType: true,
+        name: source === 'timeout' ? 'TimeoutError' : 'AbortError',
+      });
+    },
+  );
 
   it('creates a fresh statically aborted signal', () => {
     const { window } = createBrowlet();
@@ -278,6 +318,43 @@ describe('AbortController and AbortSignal', () => {
     expect(controller.signal.reason).not.toBeInstanceOf(SecondDOMException);
     expect(controller.signal.reason).not.toBeInstanceOf(DOMException);
   });
+
+  it.each(['omitted', 'undefined'] as const)(
+    'creates a borrowed abort method\'s default reason in the method realm (%s)', (argument) => {
+      const first = createBrowlet();
+      const second = createBrowlet();
+      const FirstAbortController = requireInterface<typeof AbortController>(
+        first.window, 'AbortController',
+      );
+      const SecondAbortController = requireInterface<typeof AbortController>(
+        second.window, 'AbortController',
+      );
+      const FirstAbortSignal = requireInterface<typeof AbortSignal>(
+        first.window, 'AbortSignal',
+      );
+      const FirstDOMException = requireInterface<typeof DOMException>(
+        first.window, 'DOMException',
+      );
+      const SecondDOMException = requireInterface<typeof DOMException>(
+        second.window, 'DOMException',
+      );
+      const controller = new FirstAbortController();
+      const signal = controller.signal;
+      const dependent = FirstAbortSignal.any([signal]);
+
+      if (argument === 'omitted') SecondAbortController.prototype.abort.call(controller);
+      else SecondAbortController.prototype.abort.call(controller, undefined);
+
+      const reason: unknown = signal.reason;
+      expect(reason).toBeInstanceOf(SecondDOMException);
+      expect(reason).not.toBeInstanceOf(FirstDOMException);
+      expect(signal).toBeInstanceOf(FirstAbortSignal);
+      expect(dependent.reason).toBe(reason);
+      expect(catchException(() => signal.throwIfAborted())).toBe(reason);
+      controller.abort();
+      expect(signal.reason).toBe(reason);
+    },
+  );
 
   it('keeps a nested signal in its controller realm when borrowed', () => {
     const first = createBrowlet();
@@ -475,10 +552,12 @@ describe('AbortController and AbortSignal', () => {
 describe('AbortSignal internal algorithms', () => {
   it('supports repeated construction on a frozen global without exposing retention state', () => {
     const global = Object.freeze({});
+    const env = createEnvironment();
+    env.exec.global = global;
     const prototype: unknown = Object.getPrototypeOf(global);
-    const source = new AbortSignalImpl(global);
-    const first = AbortSignalImpl.any(new AbortSignalImpl(global), [source]);
-    const second = AbortSignalImpl.any(new AbortSignalImpl(global), [source]);
+    const source = new AbortSignalImpl(env);
+    const first = AbortSignalImpl.any(new AbortSignalImpl(env), [source]);
+    const second = AbortSignalImpl.any(new AbortSignalImpl(env), [source]);
     const calls: string[] = [];
     first.addAlgorithm(() => { calls.push('first'); });
     second.addAlgorithm(() => { calls.push('second'); });
@@ -493,15 +572,16 @@ describe('AbortSignal internal algorithms', () => {
   });
 
   it('removes a settled dependent without removing other dependents of the shared source', () => {
-    const firstSource = new AbortSignalImpl(globalThis);
-    const sharedSource = new AbortSignalImpl(globalThis);
-    const first = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+    const env = createEnvironment();
+    const firstSource = new AbortSignalImpl(env);
+    const sharedSource = new AbortSignalImpl(env);
+    const first = AbortSignalImpl.any(new AbortSignalImpl(env), [
       firstSource, sharedSource,
     ]);
-    const second = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+    const second = AbortSignalImpl.any(new AbortSignalImpl(env), [
       sharedSource, sharedSource,
     ]);
-    const nested = AbortSignalImpl.any(new AbortSignalImpl(globalThis), [
+    const nested = AbortSignalImpl.any(new AbortSignalImpl(env), [
       second, sharedSource,
     ]);
     const calls: string[] = [];
@@ -522,7 +602,7 @@ describe('AbortSignal internal algorithms', () => {
   });
 
   it('runs in order and permits an earlier algorithm to remove a later one', () => {
-    const signal = new AbortSignalImpl(globalThis);
+    const signal = new AbortSignalImpl(createEnvironment());
     const order: string[] = [];
     let later: AbortAlgorithmHandle | null = null;
 
