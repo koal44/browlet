@@ -1,9 +1,8 @@
 import type { TextCursor } from '../infra/text-cursor';
 
-/**
- * Fetch §2.2 — collect an HTTP quoted string, starting at its opening quote.
- * The cursor combines the specification's input string and mutable position.
- */
+/** Consume from the opening quote; return the source text or its unescaped value. */
+// https://fetch.spec.whatwg.org/#collect-an-http-quoted-string
+// The cursor combines the specification's input string and mutable position.
 export function collectHTTPQuotedString(c: TextCursor, extractValue = false): string {
   const positionStart = c.pos();
   c.advance();
@@ -27,12 +26,14 @@ export function collectHTTPQuotedString(c: TextCursor, extractValue = false): st
   return extractValue ? value : c.slice(positionStart);
 }
 
-/** RFC 9110 §5.6.2 — the nonempty token production, also used for methods/names. */
+/** Test a nonempty HTTP token, such as a method or header name. */
+// https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.2
 export function isHTTPToken(value: string): boolean {
   return value !== '' && !invalidTokenCharacterPattern.test(value);
 }
 
-/** Fetch §2.2. These predicates operate on one isomorphically decoded byte. */
+/** Test one decoded byte for an HTTP space, tab, or newline. */
+// https://fetch.spec.whatwg.org/#http-whitespace
 export function isHTTPWhitespace(character: string): boolean {
   return isHTTPNewline(character) || isHTTPTabOrSpace(character);
 }
@@ -41,6 +42,8 @@ function isHTTPNewline(character: string): boolean {
   return character === '\n' || character === '\r';
 }
 
+/** Test one decoded byte for an HTTP tab or space. */
+// https://fetch.spec.whatwg.org/#http-tab-or-space
 export function isHTTPTabOrSpace(character: string): boolean {
   return character === '\t' || character === ' ';
 }

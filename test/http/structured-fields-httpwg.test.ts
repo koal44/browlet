@@ -1,10 +1,65 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-import type {
-  StructuredBareItem, StructuredField, StructuredInnerList, StructuredItem,
-} from '../../../src/http/struct-fields/values';
+import {
+  parseStructuredField, serializeStructuredField, type StructuredBareItem,
+  type StructuredField, type StructuredInnerList, type StructuredItem,
+} from '../../src/http/structured-fields';
 
-export function readFixtures(filename: string): Fixture[] {
+describe('HTTPWG structured-field parsing fixtures', () => {
+  const fixtureDirectory = join(__dirname, './fixtures/httpwg/parsing-tests');
+
+  for (const filename of readdirSync(fixtureDirectory)) {
+    const fixtures = readFixtures(join(fixtureDirectory, filename));
+    describe(filename, () => {
+      for (const fixture of fixtures) {
+        it(fixture.name, () => {
+          const input = new TextEncoder().encode(fixture.raw!.join(', '));
+          const actual = parseStructuredField(input, fixture.header_type);
+          if (fixture.must_fail) {
+            expect(actual).toBeNull();
+          } else if (actual !== null || !fixture.can_fail) {
+            // can_fail is an RFC-permitted outcome in the upstream corpus,
+            // not an expected-failure classification for a known defect.
+            expect(actual).toEqual(fromFixture(fixture));
+          }
+        });
+
+        if (!fixture.must_fail) {
+          it(`serializes the expected value: ${fixture.name}`, () => {
+            // Serialize the independent fixture value, not our parser's result.
+            const actual = serializeStructuredField(fromFixture(fixture));
+            const canonical = fixture.canonical ?? fixture.raw!;
+            expect(actual).toBe(canonical.length === 0 ? undefined : canonical.join(', '));
+          });
+        }
+      }
+    });
+  }
+});
+
+describe('HTTPWG structured-field serialization fixtures', () => {
+  const fixtureDirectory = join(__dirname, './fixtures/httpwg/serialisation-tests');
+
+  for (const filename of readdirSync(fixtureDirectory)) {
+    const fixtures = readFixtures(join(fixtureDirectory, filename));
+    describe(filename, () => {
+      for (const fixture of fixtures) {
+        it(fixture.name, () => {
+          const actual = serializeStructuredField(fromFixture(fixture));
+          if (fixture.must_fail) {
+            expect(actual).toBeNull();
+          } else {
+            expect(actual === undefined ? [] : [actual]).toEqual(fixture.canonical);
+          }
+        });
+      }
+    });
+  }
+});
+
+function readFixtures(filename: string): Fixture[] {
   // The native reviver's source text distinguishes JSON 1.0 from JSON 1.
   return JSON.parse(readFileSync(filename, 'utf8'), (
     _key: string, value: unknown, context?: { source: string; },
@@ -16,7 +71,7 @@ export function readFixtures(filename: string): Fixture[] {
   }) as Fixture[];
 }
 
-export function fromFixture(fixture: Fixture): StructuredField {
+function fromFixture(fixture: Fixture): StructuredField {
   switch (fixture.header_type) {
     case 'item':
       return fromItem(fixture.expected!);
@@ -30,7 +85,7 @@ export function fromFixture(fixture: Fixture): StructuredField {
   }
 }
 
-export type Fixture = {
+type Fixture = {
   name: string;
   raw?: string[];
   canonical?: string[];
@@ -43,7 +98,9 @@ export type Fixture = {
 );
 
 type FixtureItem = [FixtureBareItem, [string, FixtureBareItem][]];
+
 type FixtureMember = [FixtureBareItem | FixtureItem[], [string, FixtureBareItem][]];
+
 type FixtureBareItem = number | string | boolean
   | { __type: 'decimal' | 'date'; value: number; }
   | { __type: 'token' | 'binary' | 'displaystring'; value: string; };

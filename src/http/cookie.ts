@@ -1,15 +1,11 @@
-import { asciiLower } from '../../infra/ascii';
-import { surroundingTabOrSpacePattern } from '../../infra/patterns';
+import { asciiLower } from '../infra/ascii';
+import { surroundingTabOrSpacePattern } from '../infra/patterns';
 import {
   hostsEqual, obtainPublicSuffix, parseHost, type Domain, type IPAddress, type URLPath,
-} from '../../url/index';
-import { parseCookieDate } from './date';
+} from '../url/index';
 
-/* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2 */
-/**
- * One HTTP cookie, before or after storage has established its host.
- * Names and values are byte strings: each U+0000–U+00FF code unit represents one byte.
- */
+/** A cookie with byte-string names and values, before or after storage assigns its host. */
+// https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2
 export class HTTPCookie {
   /** Case-sensitive byte-string name; empty for a nameless cookie. */
   name: string;
@@ -36,28 +32,28 @@ export class HTTPCookie {
   /** Last-access timestamp in Unix milliseconds, refreshed on storage and retrieval. */
   lastAccessTime = this.creationTime;
 
-  /** Initializes a cookie from its name, value, and path without parsing attributes or applying storage policy. */
+  /** Create a cookie without parsing attributes or applying storage policy. */
   constructor(name: string, value: string, path: URLPath) {
     this.name = name;
     this.value = value;
     this.path = path;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1 */
   /** Whether the expiry timestamp is in the past. Session cookies return false. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
   get isExpired(): boolean {
     return this.expiryTime !== null && this.expiryTime < Date.now();
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1 */
   /** Whether the cookie is Secure, host-only, and has an explicit root Path attribute. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
   get isHostPrefixCompatible(): boolean {
     return this.secure && this.hostOnly && this.hasPathAttribute &&
       Array.isArray(this.path) && this.path.length === 1 && this.path[0] === '';
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1 */
   /** Whether both the Secure and HttpOnly flags are set. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
   get isHttpPrefixCompatible(): boolean {
     return this.secure && this.httpOnly;
   }
@@ -78,11 +74,8 @@ export class HTTPCookie {
     return suffix !== null && hostsEqual(host, suffix);
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.2 */
-  /**
-   * Tests exact host equality or a subdomain match against this cookie's host.
-   * Host-only restrictions are applied separately by the store.
-   */
+  /** Test domain scope; the store applies host-only restrictions separately. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.2
   matchesDomain(host: CookieHost): boolean {
     const cookieHost = this.host;
     if (cookieHost === undefined || cookieHost === null) return false;
@@ -91,14 +84,14 @@ export class HTTPCookie {
       host.value.endsWith(cookieHost.value) && host.value[host.value.length - cookieHost.value.length - 1] === '.';
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.3 */
   /** Returns a new default cookie path derived from a non-empty request URL path list. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.3
   static getDefaultPath(path: string[]): string[] {
     return path.length > 1 ? path.slice(0, -1) : [''];
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.4 */
   /** Tests whether the request path falls within this cookie's path scope. Opaque cookie paths never match. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.4
   matchesPath(requestPath: string[]): boolean {
     const cookiePath = this.path;
     if (!Array.isArray(cookiePath)) return false;
@@ -114,16 +107,12 @@ export class HTTPCookie {
     return true;
   }
 
-  /*
-   * https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.2
-   * The draft's isSecure and host arguments are unused until storage.
-   */
   /**
-   * Parses one Set-Cookie byte string, returning null when parsing rejects it.
-   * Storage policy is applied separately.
-   * @param path Non-empty request URL path list used to derive the default cookie path.
-   * @param cookieAgeLimit Maximum cookie lifetime in days.
+   * Parse one Set-Cookie byte string, or return null on failure.
+   * path is a non-empty URL path list; cookieAgeLimit is in days.
    */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.2
+  // The draft's isSecure and host arguments are unused until storage.
   static parse(input: string, path: string[], cookieAgeLimit: number): HTTPCookie | null {
     if (invalidCookieBytePattern.test(input)) return null;
 
@@ -196,11 +185,8 @@ export class HTTPCookie {
     return cookie;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.6 */
-  /**
-   * Serializes the supplied cookies in order as a Cookie header byte string.
-   * Attributes are omitted; names and values are emitted without escaping.
-   */
+  /** Serialize cookies in the supplied order, without attributes or escaping. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.6
   static serialize(cookies: HTTPCookie[]): string {
     let output = '';
     for (const cookie of cookies) {
@@ -212,7 +198,56 @@ export class HTTPCookie {
   }
 }
 
+/** Parses a cookie-date byte string as a Unix timestamp in milliseconds; returns null on failure. */
+// https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.1
+export function parseCookieDate(input: string): number | null {
+  let time: [number, number, number] | undefined;
+  let day: number | undefined;
+  let month: number | undefined;
+  let year: number | undefined;
+
+  for (const token of input.split(dateDelimiterPattern)) {
+    if (time === undefined) {
+      const match = timePattern.exec(token);
+      if (match) {
+        time = [Number(match[1]), Number(match[2]), Number(match[3])];
+        continue;
+      }
+    }
+    if (day === undefined) {
+      const match = dayPattern.exec(token);
+      if (match) {
+        day = Number(match[1]);
+        continue;
+      }
+    }
+    if (month === undefined) {
+      const index = months.indexOf(token.slice(0, 3).toLowerCase());
+      if (index !== -1) {
+        month = index;
+        continue;
+      }
+    }
+    if (year === undefined) {
+      const match = yearPattern.exec(token);
+      if (match) year = Number(match[1]);
+    }
+  }
+
+  if (time === undefined || day === undefined || month === undefined || year === undefined) return null;
+  if (year >= 70 && year <= 99) year += 1900;
+  else if (year <= 69) year += 2000;
+
+  const [hour, minute, second] = time;
+  if (day < 1 || day > 31 || year < 1601 || hour > 23 || minute > 59 || second > 59) return null;
+
+  const date = new Date(Date.UTC(year, month, day, hour, minute, second));
+  if (date.getUTCMonth() !== month || date.getUTCDate() !== day) return null;
+  return date.getTime();
+}
+
 export type CookieHost = Domain | IPAddress;
+
 export type CookieSameSite = 'strict' | 'lax' | 'unset' | 'none';
 
 /** The same cookie after storage has established its host. */
@@ -222,3 +257,8 @@ export type StoredHTTPCookie = HTTPCookie & { host: CookieHost; };
 const invalidCookieBytePattern = /[\x00-\x08\x0a-\x1f\x7f]/;
 const maxAgePattern = /^-?[0-9]+$/;
 const nonASCIIBytePattern = /[\x80-\xff]/;
+const dateDelimiterPattern = /[\t\x20-\x2f\x3b-\x40\x5b-\x60\x7b-\x7e]+/;
+const timePattern = /^([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(?:[^0-9]|$)/;
+const dayPattern = /^([0-9]{1,2})(?:[^0-9]|$)/;
+const yearPattern = /^([0-9]{2,4})(?:[^0-9]|$)/;
+const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];

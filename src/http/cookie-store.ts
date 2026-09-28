@@ -1,8 +1,8 @@
-import { hostsEqual, type URLPath } from '../../url/index';
+import { hostsEqual, type URLPath } from '../url/index';
 import { HTTPCookie, type CookieHost, type CookieSameSite, type StoredHTTPCookie } from './cookie';
 
-/* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.1 */
 /** Stores cookie records, applies caller-supplied access policy, and manages eviction. */
+// https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.1
 export class CookieStore {
   /** Stored cookies in insertion order; retrieval returns these same objects. */
   cookies = new Set<StoredHTTPCookie>();
@@ -13,8 +13,8 @@ export class CookieStore {
   /** Maximum age in days applied when parsing Expires and Max-Age attributes. */
   cookieAgeLimit = 400;
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.1 */
-  /** Removes cookies whose expiry timestamp is in the past and returns the removed records. */
+  /** Remove and return expired cookies. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.1
   removeExpiredCookies(): StoredHTTPCookie[] {
     const expired: StoredHTTPCookie[] = [];
     for (const cookie of this.cookies) {
@@ -25,12 +25,11 @@ export class CookieStore {
     return expired;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.2 */
   /**
-   * Evicts enough cookies for this host to meet the per-host limit.
-   * Removes insecure cookies first, then the oldest access times within each group.
-   * Returns the removed records in eviction order.
+   * Enforce the host limit: insecure cookies first, then oldest access times.
+   * Return removed cookies in eviction order.
    */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.2
   removeExcessCookiesForHost(host: CookieHost): StoredHTTPCookie[] {
     if (this.cookies.size <= this.totalCookiesPerHostLimit) return [];
     const hostCookies: StoredHTTPCookie[] = [];
@@ -46,8 +45,8 @@ export class CookieStore {
     return hostCookies;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.3 */
-  /** Evicts cookies with the oldest access times to meet the total limit; returns them in eviction order. */
+  /** Enforce the total limit, returning cookies in oldest-access order. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.2.3
   removeGlobalExcessCookies(): StoredHTTPCookie[] {
     const excess = this.cookies.size - this.totalCookiesLimit;
     if (excess <= 0) return [];
@@ -58,14 +57,11 @@ export class CookieStore {
     return removed;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.1 */
   /**
-   * Parses and stores one Set-Cookie byte string using this store's age limit.
-   * Applies storeCookie's access policy; garbage collection is a separate caller step.
-   * Returns the stored cookie, or null for rejection or an indistinguishable replacement.
-   * An indistinguishable replacement still installs the new record.
-   * @param path Non-empty request URL path list used to derive the default cookie path.
+   * Parse using this store's age limit, then apply storeCookie's policy and return contract.
+   * path must be a non-empty URL path list; garbage collection remains a separate step.
    */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.1
   parseAndStoreCookie(
     input: string, isSecure: boolean, host: CookieHost, path: string[],
     httpOnlyAllowed: boolean, allowNonHostOnlyCookieForPublicSuffix: boolean, sameSiteStrictOrLaxAllowed: boolean,
@@ -78,18 +74,11 @@ export class CookieStore {
     );
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.3 */
   /**
-   * Applies caller policy and stores the supplied object, replacing a cookie with the same name and scope.
-   * Refreshes access time and preserves the existing creation time on replacement.
-   * Returns the stored cookie, or null on rejection or an indistinguishable replacement.
-   * An indistinguishable replacement still installs the supplied object.
-   * @param isSecure Whether the caller considers the connection secure.
-   * @param host Host against which the cookie's Domain scope is checked or assigned.
-   * @param httpOnlyAllowed Whether this access may set or replace HttpOnly cookies.
-   * @param allowNonHostOnlyCookieForPublicSuffix Whether a Domain cookie may span a public suffix.
-   * @param sameSiteStrictOrLaxAllowed Whether this context may store Strict, Lax, or unset SameSite cookies.
+   * Apply caller policy and store the supplied object, preserving creation time on replacement.
+   * Return null on rejection or an indistinguishable replacement, which still installs the object.
    */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.3
   storeCookie(
     cookie: HTTPCookie, isSecure: boolean, host: CookieHost,
     httpOnlyAllowed: boolean, allowNonHostOnlyCookieForPublicSuffix: boolean, sameSiteStrictOrLaxAllowed: boolean,
@@ -147,8 +136,8 @@ export class CookieStore {
     return changed ? storedCookie : null;
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.4 */
-  /** Removes expired cookies, then host excess, then global excess; returns the removed records in that order. */
+  /** Remove and return expired cookies, host excess, then global excess, in that order. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.4
   garbageCollectCookies(host: CookieHost): StoredHTTPCookie[] {
     return [
       ...this.removeExpiredCookies(),
@@ -157,14 +146,11 @@ export class CookieStore {
     ];
   }
 
-  /* https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.5 */
   /**
-   * Returns eligible stored cookies, longest serialized path first, then oldest creation time.
-   * Updates access times on the returned objects without removing expired records.
-   * Opaque request paths return an empty list.
-   * @param maximumUnsetAge Maximum age in milliseconds for unset-SameSite cookies when
-   * selecting unset-or-less; other retrieval modes do not apply this limit.
+   * Select cookies by longest path then oldest creation time, updating their access times.
+   * Opaque paths return []; maximumUnsetAge is in milliseconds and only limits unset-or-less.
    */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.4.5
   retrieveCookies(
     isSecure: boolean, host: CookieHost, path: URLPath, httpOnlyAllowed: boolean, sameSite: CookieSameSiteMode,
     maximumUnsetAge = Infinity,

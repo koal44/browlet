@@ -44,7 +44,7 @@ The store and transactions are implemented; these extensions remain open:
   Content-Range checks, and encoded-length validation. Multipart/form-data is not
   a multipart/byteranges parser. Keep trailers separate from response headers.
 - Do not turn stale-if-error into an unconditional network-error fallback.
-  Reusable field/freshness rules remain with the [HTTP cache owner](../http/cache/ROADMAP.md).
+  Reusable field/freshness rules remain with the [HTTP cache owner](../http/ROADMAP.md#cache).
 
 Undici's cache stores hide candidate selection and cannot simply replace ours:
 [the comparison probe](../../test/fetch/probes/undici-cache-selection.mjs) found
@@ -113,7 +113,7 @@ kept as pending mismatch flags.
 - **`cookie-samesite-context`:** sending and storage use distinct browser
   decisions rather than Fetch's shared SameSite mode. The approved navigation,
   client, and redirect choices and evidence stay in the
-  [cookie roadmap](../http/cookies/ROADMAP.md#implementation-order).
+  [HTTP roadmap](../http/ROADMAP.md#cookies).
 - **`corp-clientless-policy`:** [CORP](https://fetch.spec.whatwg.org/#cross-origin-resource-policy-check)
   assumes settings, but clientless requests retain origin and embedder policy.
   Enforce those fields without a reporting recipient. Blink/Gecko/WebKit retain

@@ -36,7 +36,7 @@ domains; narrower roadmaps carry their actual status and remaining contracts.
 Fetch's planned delivery slices and independent preflight are complete within
 their recorded scope. Reuse the implemented HTTP transport/cache/authentication,
 CORS, policy checks, Reporting delivery, Storage keys, and Blob URLs. Their
-remaining audits and owner gates are in the [Fetch roadmap](../fetch/ROADMAP.md).
+deferred features and owner gates are in the [Fetch roadmap](../fetch/ROADMAP.md).
 They no longer need to be scheduled as missing foundations for HTML.
 
 Full browser navigation, script loading/execution, nested contexts, element-driven

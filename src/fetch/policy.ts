@@ -101,7 +101,7 @@ export function getSerializedCookieDefaultPath(url: URLRecord): string {
 /** Select sending restrictions, including Lax-by-default for unspecified SameSite. */
 // https://fetch.spec.whatwg.org/#determine-the-same-site-mode
 // SPEC_CLASH(cookie-samesite-context): Use browser classification instead of Fetch's navigation/client/redirect rules.
-// Approved sending and storage choices: ../http/cookies/ROADMAP.md#implementation-order.
+// Approved sending and storage choices: ../http/ROADMAP.md#cookies.
 function determineSameSiteMode(request: FetchRequest): CookieSameSiteMode {
   if (isSameSiteForCookies(request)) return 'strict-or-less';
   if (request.destination !== 'document') return 'none';

@@ -2,8 +2,8 @@
 
 The [README](README.md) owns installation, suite configuration, and result
 interpretation. Selection, reviewed exceptions, the pinned manifest, and the
-local Window adapter are established. Keep the current selection while resolving
-its failures; broader coverage should accompany implementation milestones in
+local Window adapter are established, and the selected unexpected failures are
+resolved. Broader coverage should accompany implementation milestones in
 [project priority](../src/PRIORITY.md).
 
 ## A. Investigate the selected tests

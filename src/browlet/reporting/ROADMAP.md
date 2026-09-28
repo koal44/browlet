@@ -17,7 +17,7 @@ Automatic collection, periodic retirement, and other global lifecycles remain be
 | `UserAgent` | Delivery preferences, age/failure limits, host scheduling, sandbox execution, and Fetch attempts |
 
 Document creation initializes endpoints from its actual Fetch response.
-`Reporting-Endpoints` parsing uses [Structured Fields](../../http/struct-fields/README.md),
+`Reporting-Endpoints` parsing uses [Structured Fields](../../http/README.md#structured-fields),
 the final response URL, and the UserAgent's trust policy. Malformed dictionary
 syntax rejects the configuration; valid non-string members are ignored.
 Relative references resolve against the complete response URL. Empty or aborted

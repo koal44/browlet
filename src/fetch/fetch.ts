@@ -1,6 +1,6 @@
 import { utf8DecodeWithoutBOM } from '../encoding/index';
 import {
-  encodeBasicCredentials, evaluateCacheRequest, isHTTPToken, parseAuthenticationChallenges, parseCacheControl,
+  CacheControl, encodeBasicCredentials, evaluateCacheRequest, isHTTPToken, parseAuthenticationChallenges,
   parseDeltaSeconds, selectBasicChallenge, shouldInvalidateCache,
 } from '../http/index';
 import { TypeError } from '../infra/exceptions';
@@ -1132,7 +1132,7 @@ function fetchWithCache(
     }
     if (mode === 'only-if-cached') { result.resolve(FetchResponse.networkError()); return; }
     // RFC 9111 §5.2.1.7 is an HTTP response, unlike Fetch's cache-mode network error.
-    if (parseCacheControl(requestControl)?.some(({ name }) => name === 'only-if-cached')) {
+    if (CacheControl.parse(requestControl)?.has('only-if-cached')) {
       const response = new FetchResponse();
       response.status = 504;
       result.resolve(response);

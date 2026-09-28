@@ -1,61 +1,25 @@
 export {
-  collectHTTPQuotedString,
-  isHTTPToken,
-  isHTTPWhitespace,
-  isHTTPTabOrSpace,
+  collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace, isHTTPTabOrSpace,
 } from './syntax';
-export { parseHTTPDate, serializeHTTPDate } from './date';
-export { parseRetryAfter, type RetryAfter } from './retry-after';
 export {
-  EntityTag,
-  parseEntityTagList,
-  serializeEntityTagList,
-  isStrongLastModified,
-  selectIfRangeValidator,
-  parseIfRange,
-  matchesIfRange,
-  type EntityTagList,
-  type IfRangeValidator,
-} from './validators';
-export { parseContentRange, type ContentRange } from './content-range';
-export { parseAuthenticationChallenges, type AuthenticationChallenge } from './authentication';
-export { encodeBasicCredentials, selectBasicChallenge, type BasicChallenge } from './basic-authentication';
-
-export { parseStructuredField } from './struct-fields/parse';
-export { serializeStructuredField } from './struct-fields/serialize';
-export type {
-  StructuredBareItem,
-  StructuredDictionary,
-  StructuredField,
-  StructuredInnerList,
-  StructuredItem,
-  StructuredList,
-  StructuredParameters,
-} from './struct-fields/values';
-
+  EntityTag, parseHTTPDate, serializeHTTPDate, parseEntityTagList, serializeEntityTagList,
+  isStrongLastModified, selectIfRangeValidator, parseIfRange, matchesIfRange,
+  parseContentRange, parseRetryAfter,
+  type EntityTagList, type IfRangeValidator, type ContentRange, type RetryAfter,
+} from './headers';
 export {
-  parseCacheControl,
-  parseDeltaSeconds,
-  parseVary,
-  type CacheDirective,
-} from './cache/fields';
+  parseAuthenticationChallenges, selectBasicChallenge, encodeBasicCredentials,
+  type AuthenticationChallenge, type BasicChallenge,
+} from './authentication';
 export {
-  calculateCacheFreshness,
-  type CacheFields,
-  type CacheFreshness,
-  type CacheTiming,
-} from './cache/freshness';
+  parseStructuredField, serializeStructuredField,
+  type StructuredField, type StructuredList, type StructuredDictionary, type StructuredItem,
+  type StructuredInnerList, type StructuredBareItem, type StructuredParameters,
+} from './structured-fields';
 export {
-  canStoreResponse,
-  evaluateCacheRequest,
-  shouldInvalidateCache,
-  type CacheRequestPolicy,
-} from './cache/policy';
-
-export {
-  HTTPCookie,
-  type CookieHost,
-  type CookieSameSite,
-  type StoredHTTPCookie,
-} from './cookies/cookie';
-export { CookieStore, type CookieSameSiteMode } from './cookies/store';
+  CacheControl, calculateCacheFreshness, canStoreResponse, evaluateCacheRequest,
+  shouldInvalidateCache, parseDeltaSeconds, parseVary,
+  type CacheDirective, type CacheHeaderValues, type CacheFreshness, type CacheTiming, type CacheRequestPolicy,
+} from './cache';
+export { HTTPCookie, type CookieHost, type CookieSameSite, type StoredHTTPCookie } from './cookie';
+export { CookieStore, type CookieSameSiteMode } from './cookie-store';

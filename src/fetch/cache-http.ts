@@ -1,7 +1,7 @@
 import { BlobData } from '../file/index';
 import {
   calculateCacheFreshness, canStoreResponse, EntityTag, parseHTTPDate, parseVary, serializeHTTPDate,
-  type CacheFields, type CacheFreshness,
+  type CacheHeaderValues, type CacheFreshness,
 } from '../http/index';
 import { InternalError } from '../infra/internal-error';
 import type { JSEnvironment } from '../js-engine/index';
@@ -98,7 +98,7 @@ export class HTTPCachePartition {
   /** Start retaining a cacheable response before the transport delivers any body bytes. */
   begin(request: FetchRequest, response: FetchResponse, requestTime: number, responseTime: number): HTTPCacheEntry | undefined {
     if (request.cacheMode === 'no-store' || request.headerList.has('Range') ||
-      !canStoreResponse(request.method, response.status, cacheFields(response.headerList), request.headerList.get('Cache-Control') ?? '')) {
+      !canStoreResponse(request.method, response.status, cacheHeaderValues(response.headerList), request.headerList.get('Cache-Control') ?? '')) {
       return undefined;
     }
     const entry = new HTTPCacheEntry(this, request, response, requestTime, responseTime);
@@ -237,7 +237,7 @@ export class HTTPCacheEntry {
   freshness(now: number): CacheFreshness {
     // Clamp a backwards clock before calculating elapsed age.
     const responseTime = Math.max(this.requestTime, this.responseTime);
-    return calculateCacheFreshness(cacheFields(this.response.headerList), this.response.status,
+    return calculateCacheFreshness(cacheHeaderValues(this.response.headerList), this.response.status,
       { requestTime: this.requestTime, responseTime, now: Math.max(responseTime, now) });
   }
 
@@ -269,7 +269,7 @@ export class HTTPCacheEntry {
     this.requestTime = requestTime;
     this.responseTime = responseTime;
     this.vary = parseVary(this.response.headerList.get('Vary') ?? '') ?? ['*'];
-    if (!canStoreResponse(this.method, this.response.status, cacheFields(this.response.headerList))) {
+    if (!canStoreResponse(this.method, this.response.status, cacheHeaderValues(this.response.headerList))) {
       this.cache.owner.remove(this);
     }
   }
@@ -289,7 +289,7 @@ function cacheURL(request: FetchRequest): string {
   return serializeURL(request.currentURL, true);
 }
 
-function cacheFields(headers: FetchHeaders): CacheFields {
+function cacheHeaderValues(headers: FetchHeaders): CacheHeaderValues {
   return {
     cacheControl: headers.get('Cache-Control') ?? undefined,
     date: headers.get('Date') ?? undefined,

@@ -34,8 +34,8 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
-The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. Investigate the
-selected suite's failures now; add reports and bounded CI with the project
+The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. The selected suite's
+unexpected failures are resolved; add reports and bounded CI with the project
 presentation pass. Broaden test coverage as each owning subsystem becomes ready,
 rather than postponing all conformance work until the browser is complete.
 

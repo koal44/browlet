@@ -84,7 +84,7 @@ pending writes and stored validators. Set-Cookie runs on network receipt only.
 CORS cache entries retain partition keys, serialized origins/URLs, permissions,
 and monotonic expiry deadlines. They retain no client or body. Cache transactions
 remain in `fetch.ts`; reusable RFC field and freshness rules belong to
-[HTTP](../http/ROADMAP.md) and its [cache module](../http/cache/ROADMAP.md).
+[HTTP's cache rules](../http/README.md#cache-values-and-rules).
 
 ## Tests
 
