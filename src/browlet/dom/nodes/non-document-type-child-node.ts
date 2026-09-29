@@ -4,19 +4,18 @@ import {
 import type { NodeImpl } from './node';
 import type { ElementImpl } from './element';
 
-/*
- * interface mixin NonDocumentTypeChildNode {
- *   readonly attribute Element? previousElementSibling;
- *   readonly attribute Element? nextElementSibling;
- * };
- */
+/** Element-sibling navigation shared by elements and character-data nodes. */
+// https://dom.spec.whatwg.org/#interface-nondocumenttypechildnode
 export class NonDocumentTypeChildNodeMixin {
+  /** Node whose sibling chain is searched. */
   #node: NodeImpl;
 
   constructor(node: NodeImpl) {
     this.#node = node;
   }
 
+  /** Nearest preceding element sibling, skipping other node kinds. */
+  // https://dom.spec.whatwg.org/#dom-nondocumenttypechildnode-previouselementsibling
   get previousElementSibling(): ElementImpl | null {
     for (
       let sibling = this.#node.previousSibling;
@@ -29,6 +28,8 @@ export class NonDocumentTypeChildNodeMixin {
     return null;
   }
 
+  /** Nearest following element sibling, skipping other node kinds. */
+  // https://dom.spec.whatwg.org/#dom-nondocumenttypechildnode-nextelementsibling
   get nextElementSibling(): ElementImpl | null {
     for (
       let sibling = this.#node.nextSibling;
@@ -42,8 +43,12 @@ export class NonDocumentTypeChildNodeMixin {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * interface mixin NonDocumentTypeChildNode {
+ *   readonly attribute Element? previousElementSibling;
+ *   readonly attribute Element? nextElementSibling;
+ * };
+ */
 export const nonDocumentTypeChildNodeIDL = defineInterfaceMixin({
   name: 'NonDocumentTypeChildNode',
   members: [

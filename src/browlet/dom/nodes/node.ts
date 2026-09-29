@@ -1,5 +1,6 @@
 import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
+import type { DOMEnvironment } from '../environment';
 import { TreeNode } from '../infra/tree';
 import {
   arg, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
@@ -14,52 +15,63 @@ import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
 import { ensurePreInsertValidity } from './mutation';
 
+/** Base tree node with document ownership, navigation, and event ancestry. */
 // https://dom.spec.whatwg.org/#interface-node
 export abstract class NodeImpl extends TreeNode<NodeImpl> {
-  #nodeType: NodeType;
-  #document: DocumentImpl | null;
+  /** Node kind used by the DOM's type-specific algorithms. */
+  nodeType: NodeType;
+  /** Associated document; a document node refers to itself. */
+  // https://dom.spec.whatwg.org/#concept-node-document
+  nodeDocument: DocumentImpl | null;
 
   constructor(
     nodeType: NodeType,
-    ownerDocument: DocumentImpl | null = null,
+    ownerDoc: DocumentImpl | null,
+    env: DOMEnvironment,
   ) {
-    super();
-    this.#nodeType = nodeType;
-    this.#document = ownerDocument;
+    super(env);
+    this.nodeType = nodeType;
+    this.nodeDocument = ownerDoc;
   }
 
   static is(value: unknown): value is NodeImpl {
     return value instanceof NodeImpl;
   }
 
-  get nodeType(): NodeType {
-    return this.#nodeType;
-  }
-
+  /** Serialized base URL used to resolve relative URLs for this node. */
+  // https://dom.spec.whatwg.org/#dom-node-baseuri
   get baseURI(): string {
-    return this.#document?.baseURI ?? 'about:blank';
+    return this.nodeDocument?.baseURI ?? 'about:blank';
   }
 
+  /** Owning document exposed to JavaScript; null for document nodes. */
+  // https://dom.spec.whatwg.org/#dom-node-ownerdocument
   get ownerDocument(): DocumentImpl | null {
     if (this.isDocument()) return null;
 
     const root = super.getRoot();
-    return root.isDocument() ? root : this.#document;
+    return root.isDocument() ? root : this.nodeDocument;
   }
 
+  // https://dom.spec.whatwg.org/#dom-node-parentnode
   get parentNode(): NodeImpl | null {
     return super.parent;
   }
 
+  /** Immediate parent when it is an element; does not search ancestors. */
+  // https://dom.spec.whatwg.org/#dom-node-parentelement
   get parentElement(): ElementImpl | null {
     const parent = super.parent;
     return parent?.isElement() ? parent : null;
   }
 
+  /** Whether the node belongs to a document, including through shadow hosts. */
+  // https://dom.spec.whatwg.org/#dom-node-isconnected
   get isConnected(): boolean {
     return this.getShadowIncludingRoot().isDocument();
   }
 
+  /** Return the tree root, crossing shadow hosts when composed is true. */
   // https://dom.spec.whatwg.org/#dom-node-getrootnode
   getRootNode(options?: GetRootNodeOptions): NodeImpl {
     return options?.composed ? this.getShadowIncludingRoot() : super.getRoot();
@@ -84,6 +96,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return node;
   }
 
+  /** Describe the other node's position relative to this node as DOM flags. */
   // https://dom.spec.whatwg.org/#dom-node-comparedocumentposition
   compareDocumentPosition(other: NodeImpl): number {
     const position = super.comparePosition(other);
@@ -139,7 +152,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
 
   protected override isDefaultPassiveTarget(this: NodeImpl): boolean {
     const root = this.getRoot();
-    const document = root.isDocument() ? root : this.#document;
+    const document = root.isDocument() ? root : this.nodeDocument;
 
     return document !== null && (
       this === document ||
@@ -164,14 +177,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return NodeImpl.is(ancestor) && ancestor.isShadowIncludingInclusiveAncestor(this);
   }
 
-  getNodeDocument(): DocumentImpl | null {
-    return this.#document;
-  }
-
-  setNodeDocument(document: DocumentImpl): void {
-    this.#document = document;
-  }
-
+  /** Find the outermost tree root by following shadow hosts. */
   // https://dom.spec.whatwg.org/#concept-shadow-including-root
   getShadowIncludingRoot(): NodeImpl {
     let root = this.getRoot();
@@ -185,6 +191,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return root;
   }
 
+  /** Test ancestry including this node and any intervening shadow hosts. */
   // https://dom.spec.whatwg.org/#concept-shadow-including-inclusive-ancestor
   isShadowIncludingInclusiveAncestor(node: NodeImpl): boolean {
     let current = node;
@@ -198,8 +205,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
   }
 }
-
-// -- Web IDL ------------------------------------------------------------
 
 /*
  * [Exposed=Window]
@@ -259,10 +264,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
  *   [CEReactions] Node replaceChild(Node node, Node child);
  *   [CEReactions] Node removeChild(Node child);
  * };
- *
- * dictionary GetRootNodeOptions {
- *   boolean composed = false;
- * };
  */
 export const nodeIDL = defineInterface({
   name: 'Node',
@@ -301,11 +302,18 @@ export const nodeIDL = defineInterface({
   ],
 });
 
+/*
+ * dictionary GetRootNodeOptions {
+ *   boolean composed = false;
+ * };
+ */
 export const getRootNodeOptionsIDL = defineDictionary({
   name: 'GetRootNodeOptions',
   members: [dictMember('composed', idlType.boolean, { default: false })],
 });
 
+/** Numeric DOM node kinds used by implementation guards and platform constants. */
+// https://dom.spec.whatwg.org/#dom-node-nodetype
 export enum NodeType {
   Element = 1,
   Attribute = 2,

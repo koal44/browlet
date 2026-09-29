@@ -73,8 +73,6 @@ export interface SecurityPolicyViolationEventInitRecord extends EventInit {
   columnNumber?: number;
 }
 
-// -- Web IDL ------------------------------------------------------------
-
 /*
  * enum SecurityPolicyViolationEventDisposition { "enforce", "report" };
  *

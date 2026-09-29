@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../support/dom';
 
 import {
   BrowsingContext,
@@ -28,7 +29,7 @@ import {
   type WindowProxy as InternalWindowProxy,
 } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { InternalError } from '../../../src/infra/internal-error';
 import { FetchBody } from '../../../src/fetch/body';
 import { FetchController } from '../../../src/fetch/controller';
@@ -73,8 +74,9 @@ describe('browsing context groups', () => {
     expect(context.virtualBrowsingContextGroupID).toBe(0);
     expect(context.navigable).toBeNull();
 
-    const document = new DocumentImpl();
-    const window = new WindowImpl(new URL('about:blank'));
+    const document = createTestDocument();
+    const env = document.env;
+    const window = unwrap<WindowImpl>(env.global);
     const windowObject = { addEventListener() {} } as unknown as Window;
     window.setAssociatedDocument(document);
     setWindowProxyWindow(context.windowProxy, window, windowObject);
@@ -114,21 +116,20 @@ describe('browsing context groups', () => {
     expect(agent.windowObjects).toEqual(new Set([window]));
   });
 
-  it('retains its Window before installation and rejects premature environment access', () => {
-    const window = new WindowImpl(new URL('about:blank'));
-    const document = new DocumentImpl();
-    window.setAssociatedDocument(document);
-    const realm = new WindowRealm(window, {
+  it('creates a Window realm from its early record before attaching settings or Window', () => {
+    const creationURL = requireURL('about:blank');
+    const origin = createOpaqueOrigin();
+    const realm = new WindowRealm({
       agent: new WindowAgent(),
       envRecord: new EnvironmentRecord({
-        userAgent: new UserAgent(), creationURL: document.url,
-        topLevelCreationURL: document.url, topLevelOrigin: document.origin,
+        userAgent: new UserAgent(), creationURL,
+        topLevelCreationURL: creationURL, topLevelOrigin: origin,
         targetBrowsingContext: null, isSecureContext: false,
       }),
     });
 
-    expect(realm.windowImplementation).toBe(window);
-    expect(realm.getAssociatedDocument()).toBe(document);
+    expect(realm.envRecord?.creationURL).toBe(creationURL);
+    expect(realm.windowImplementation).toBeUndefined();
     expect(realm.hostDefined).toBeUndefined();
     expect(() => realm.env).toThrow('Realm has no environment');
   });
@@ -160,7 +161,7 @@ describe('browsing context groups', () => {
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     const { window, realm } = env;
-    window.setAssociatedDocument(new DocumentImpl());
+    window.setAssociatedDocument(createTestDocument(env));
 
     expect(Reflect.has(realm.globalObject, 'SharedArrayBuffer')).toBe(false);
     expect(realm.intrinsics.bufferSource.sharedArrayBuffer)
@@ -191,7 +192,7 @@ describe('browsing context groups', () => {
 
 describe('navigables', () => {
   it('constructs one pending current and active history entry', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.browsingContext = new BrowsingContext();
     document.url = requireURL('https://example.test/page');
     const documentState = createDocumentState(document);
@@ -223,7 +224,7 @@ describe('navigables', () => {
     if (firstDocument === null || browsingContext === null) {
       throw new Error('Expected a complete initial navigable');
     }
-    const secondDocument = new DocumentImpl();
+    const secondDocument = createTestDocument(firstDocument.env);
     secondDocument.browsingContext = browsingContext;
 
     expect(firstDocument.getNodeNavigable()).toBe(traversable);
@@ -242,7 +243,7 @@ describe('navigables', () => {
   });
 
   it('allows an active history entry whose Document is absent', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.browsingContext = new BrowsingContext();
     const traversable = new TopLevelTraversable(createDocumentState(document));
     const initialEntry = traversable.activeSessionHistoryEntry;
@@ -275,7 +276,7 @@ describe('navigables', () => {
     if (parentDocument === null) {
       throw new Error('Expected a complete parent navigable');
     }
-    const childDocument = new DocumentImpl();
+    const childDocument = createTestDocument();
     const childContext = new BrowsingContext();
     childDocument.browsingContext = childContext;
     const child = new Navigable(createDocumentState(childDocument), parent);
@@ -397,7 +398,7 @@ describe('environment settings objects', () => {
     });
     const { realm, window } = env;
     const bindingEnv = getBindingContext(realm).getEnvironment();
-    const document = new DocumentImpl();
+    const document = createTestDocument(env);
     document.origin = origin;
     document.url = creationURL;
     window.setAssociatedDocument(document);

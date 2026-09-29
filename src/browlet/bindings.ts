@@ -1,7 +1,7 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon, createMicrotaskQueue, queueNetworkingTask, type JSEnvironment } from '../js-engine/index';
+import { addon, createMicrotaskQueue, queueNetworkingTask } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -32,6 +32,7 @@ import {
   resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
 } from './browsing/window/window-proxy';
 import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
+import { ElementImpl } from './dom/nodes/element';
 import type { NodeImpl } from './dom/nodes/node';
 import { domIDLDefinitions } from './dom/web-idl';
 import { htmlIDLDefinitions } from './html/web-idl';
@@ -61,14 +62,12 @@ import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-i
 import { svgIDLDefinitions } from './svg/web-idl';
 import { InternalError } from '../infra/internal-error';
 
-/*
- * The browser environment owns the final Web IDL assembly for its realm.
- * Defining specifications contribute declarations and implementation steps;
- * Browlet decides which contributions coexist and which initial objects are
- * installed on its Window environment. One main binding world spans the realms
- * hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
- * These named entry points forward to the module's main BrowletBindings instance.
- */
+// The browser environment owns the final Web IDL assembly for its realm.
+// Defining specifications contribute declarations and implementation steps;
+// Browlet decides which contributions coexist and which initial objects are
+// installed on its Window environment. One main binding world spans the realms
+// hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
+// These named entry points forward to the module's main BrowletBindings instance.
 export function createWindowEnvironment(
   initialization: WindowEnvironmentInit,
 ): WindowEnvironment {
@@ -80,7 +79,7 @@ export function createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
   createMicrotaskQueue,
   requestEventLoopTurn: requestNodeEventLoopTurn,
   unsafeSharedCurrentTime,
-}): JSEnvironment {
+}): BrowletEnvironment {
   const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
   // Reuse the main binding world for internal allocations without installing
   // author-facing interfaces on the sandbox's global.
@@ -122,6 +121,7 @@ export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironme
   return browletBindings.forRealm(realm);
 }
 
+/** Assembles Browlet declarations and retains their shared platform-identity world. */
 class BrowletBindings {
   #world: BindingWorld<BrowletEnvironment>;
 
@@ -149,7 +149,7 @@ class BrowletBindings {
     return context;
   }
 
-  /* Compose the Window, its realm and bindings, and its browser environment. */
+  /** Compose a Window, its realm binding, and the existing browser environment owner. */
   createWindowEnvironment(
     initialization: WindowEnvironmentInit,
   ): WindowEnvironment {
@@ -167,13 +167,12 @@ class BrowletBindings {
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
         (parent === null || parent.isSecureContext),
     });
-    const window = new WindowImpl(new URL(serializeURL(creationURL)));
     const useAddonGlobals = !!(
       addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
       addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
     );
     if (useAddonGlobals) previousRealm?.detachGlobal();
-    const realm = new WindowRealm(window, {
+    const realm = new WindowRealm({
       agent,
       envRecord,
       reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
@@ -191,6 +190,8 @@ class BrowletBindings {
       env.topLevelOrigin = topLevelOrigin;
       return env;
     });
+    const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
+    realm.windowImplementation = window;
     const chain = realm.globalPrototypeChain;
     let globalObject: Window;
     if (chain) {
@@ -277,13 +278,20 @@ function projectWindow(
   allocation?: GlobalObjectAllocation,
 ): StampedPlatformObject<Window> {
   const object = context.projectGlobalObject(window, 'Window', allocation) as StampedPlatformObject<Window>;
-  // Preserve the provisional CSSOM operation until Stylelet supplies its
-  // Window partial and CSSStyleDeclaration projection (see WindowImpl).
+  // PROVISIONAL: bypasses Web IDL until Stylelet supplies its CSSOM Window
+  // partial and CSSStyleDeclaration projection (see style/ROADMAP.md).
   Object.defineProperty(object, 'getComputedStyle', {
     configurable: true,
     enumerable: true,
     writable: true,
-    value: window.getComputedStyle,
+    value: (element: unknown, pseudoElement?: string | null) => {
+      const implementation = context.unwrap(element, ElementImpl);
+      if (!implementation) {
+        const { exec } = context.getEnvironment();
+        throw new exec.TypeError('getComputedStyle requires an Element.');
+      }
+      return window.getComputedStyle(implementation, pseudoElement);
+    },
   });
   return object;
 }

@@ -64,12 +64,10 @@ type MediaInParens =
   | MediaFeatureBlock
   | GeneralEnclosedValue;
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface MediaConditionBlock extends ParensBlock<MediaCondition> {
   value: MediaCondition;
 }
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface MediaFeatureBlock extends ParensBlock<MediaFeature> {
   value: MediaFeature;
 }

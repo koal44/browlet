@@ -63,8 +63,6 @@ export class ReportImpl {
 // https://w3c.github.io/reporting/#reportbody
 export class ReportBodyImpl {}
 
-// -- Web IDL ------------------------------------------------------------
-
 // The draft's dictionaries leave polymorphic body initialization unresolved.
 // Follow the browsers' interface inheritance; default toJSON projects the
 // declared attributes without adding serialization behavior to implementations.
@@ -74,11 +72,6 @@ export class ReportBodyImpl {}
  *   readonly attribute DOMString type;
  *   readonly attribute DOMString url;
  *   readonly attribute ReportBody? body;
- *   [Default] object toJSON();
- * };
- *
- * [Exposed=(Window,Worker)]
- * interface ReportBody {
  *   [Default] object toJSON();
  * };
  */
@@ -95,6 +88,12 @@ export const reportIDL = defineInterface({
   ],
 });
 
+/*
+ * [Exposed=(Window,Worker)]
+ * interface ReportBody {
+ *   [Default] object toJSON();
+ * };
+ */
 export const reportBodyIDL = defineInterface({
   name: 'ReportBody',
   exposed: ['Window', 'Worker'],

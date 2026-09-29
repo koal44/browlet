@@ -1,3 +1,4 @@
+import type { DOMOperations, DOMNode as Document, DOMNode as Element, DOMNode as Node } from '../../infra/index';
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
@@ -15,15 +16,15 @@ export class TreeScope {
   #preferredStyleSheetSetName = '';
 
   constructor(
-    readonly root: Document | ShadowRoot,
+    readonly root: Document,
     readonly cascade: CascadeEngine,
   ) {
-    const document = root.ownerDocument ?? root;
+    const document = this.cascade.context.dom.ownerDocument(root) ?? root;
     this.#adoptedStyleSheets = createObservableArray({
       convert: toCSSStyleSheet,
       set(styleSheet) {
         if (styleSheet.isConstructedFor(document)) return;
-        throw cascade.context.exec.createDOMException(
+        throw cascade.context.env.exec.createDOMException(
           'NotAllowedError',
           'The stylesheet was not constructed for this document.',
         );
@@ -58,7 +59,7 @@ export class TreeScope {
     const ownerNode = styleSheet.ownerNode;
     const index = ownerNode === null
       ? this.#styleSheets.length
-      : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode);
+      : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode, this.cascade.context.dom);
 
     this.#styleSheets.insert(index, styleSheet);
     this.#configureAddedStyleSheet(styleSheet);
@@ -87,7 +88,7 @@ export class TreeScope {
         originClean: true,
       },
       parseStylesheet(source, {
-        baseUrl: new URL((this.root.ownerDocument ?? this.root).baseURI),
+        baseUrl: new URL(this.cascade.context.dom.baseURI(this.cascade.context.dom.ownerDocument(this.root) ?? this.root)),
       }),
     );
     this.addTreeStyleSheet(styleSheet);
@@ -170,7 +171,7 @@ export type StyleElementStyleSheetOptions = {
 
 function findStyleSheetInsertionIndex(
   styleSheets: StyleSheetListImpl<CSSStyleSheetImpl>,
-  ownerNode: Node,
+  ownerNode: Node, dom: DOMOperations,
 ): number {
   let index = 0;
 
@@ -178,7 +179,7 @@ function findStyleSheetInsertionIndex(
     const currentOwner = styleSheet.ownerNode;
     if (
       currentOwner !== null &&
-      (ownerNode.compareDocumentPosition(currentOwner) &
+      (dom.compareDocumentPosition(ownerNode, currentOwner) &
         DOCUMENT_POSITION_FOLLOWING)
     ) {
       return index;

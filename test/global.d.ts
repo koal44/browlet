@@ -1,7 +1,6 @@
-import type { Snapshot as _Snapshot } from '../src/selectlet/snapshot';
 import type {
   createSelectlet as _createSelectlet, Selectlet as _Selectlet,
-  QueryContext as _QueryContext,
+  QuerySource as _QuerySource,
 } from '../src/selectlet/selectlet';
 import type {
   Stylelet as _Stylelet,
@@ -14,15 +13,13 @@ export {};
 declare global {
   type Selectlet = _Selectlet;
   type Stylelet = _Stylelet;
-  type Snapshot = _Snapshot;
-  type QueryContext = _QueryContext;
+  type QuerySource = _QuerySource;
 
-  var selectlet: undefined | (Selectlet & { snapshot: Snapshot; });
+  var selectlet: undefined | Selectlet;
   var stylelet: undefined | Stylelet;
   var createSelectlet: typeof _createSelectlet;
   var Stylelet: typeof _Stylelet;
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Window {
     __pwHelpers: PwHelpers;
     __pwXml: XMLDocument;

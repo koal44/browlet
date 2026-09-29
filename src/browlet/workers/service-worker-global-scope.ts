@@ -1,11 +1,13 @@
 import { EventTargetImpl } from '../dom/events/event-target';
 
-// Service Workers §4.7 and DOM §2.7. This is the event-listener portion of a
-// future ServiceWorkerGlobalScope host, kept abstract until Browlet implements
-// service-worker registration, script resources, and worker event types.
+// Registration, script resources, and worker event types await the worker host.
+/** Applies service-worker listener rules before a complete worker global is available. */
+// https://w3c.github.io/ServiceWorker/#serviceworkerglobalscope
 export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
 {
+  /** Whether the worker's script has completed its initial evaluation. */
   protected abstract scriptResourceHasEverBeenEvaluated: boolean;
+  /** Event types recorded as handled by this service worker. */
   protected abstract eventTypesToHandle: ReadonlySet<string>;
 
   protected abstract isServiceWorkerEventType(type: string): boolean;

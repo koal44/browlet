@@ -82,6 +82,21 @@ describe('Browlet DOM binding', () => {
     expect(Object.hasOwn(Event_.prototype, 'isTrusted')).toBe(false);
   });
 
+  it('defines every event phase constant on the constructor and prototype', () => {
+    const browlet = createBrowlet();
+    const Event_ = getGlobal<typeof Event>(browlet, 'Event');
+    const event = new Event_('phase');
+
+    expect(Event_.NONE).toBe(0);
+    expect(Event_.CAPTURING_PHASE).toBe(1);
+    expect(Event_.AT_TARGET).toBe(2);
+    expect(Event_.BUBBLING_PHASE).toBe(3);
+    expect(event.NONE).toBe(Event_.NONE);
+    expect(event.CAPTURING_PHASE).toBe(Event_.CAPTURING_PHASE);
+    expect(event.AT_TARGET).toBe(Event_.AT_TARGET);
+    expect(event.BUBBLING_PHASE).toBe(Event_.BUBBLING_PHASE);
+  });
+
   it('accepts EventTarget implementations across Browlet realms', () => {
     const first = createBrowlet();
     const second = createBrowlet();
@@ -207,7 +222,8 @@ describe('Browlet DOM binding', () => {
       '',
       null,
       null,
-      elementImpl.ownerDocument,
+      unwrap<DocumentImpl>(document),
+      elementImpl.env,
     );
     const plain = document.createAttribute('plain');
 
@@ -461,7 +477,7 @@ describe('Browlet DOM binding', () => {
     const fragment = document.createDocumentFragment();
 
     expect(fragment.ownerDocument).toBe(document);
-    expect(fragment.getHost()).toBeNull();
+    expect(fragment.host).toBeNull();
     expect(getRelevantRealm(fragment)).toBe(getRelevantRealm(object));
   });
 

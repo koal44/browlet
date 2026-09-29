@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CustomEventImpl, EventImpl,
+  CustomEventImpl, EventImpl, EventPhase,
 } from '../../../../src/browlet/dom/events/event';
 
 describe('EventImpl', () => {
@@ -18,7 +18,7 @@ describe('EventImpl', () => {
     expect(event.srcElement).toBeNull();
     expect(event.currentTarget).toBeNull();
     expect(event.composedPath()).toEqual([]);
-    expect(event.eventPhase).toBe(EventImpl.NONE);
+    expect(event.eventPhase).toBe(EventPhase.None);
     expect(event.bubbles).toBe(true);
     expect(event.cancelable).toBe(true);
     expect(event.composed).toBe(true);
@@ -26,19 +26,6 @@ describe('EventImpl', () => {
     expect(event.isTrusted).toBe(false);
     expect(event.timeStamp).toBeGreaterThanOrEqual(before);
     expect(event.timeStamp).toBeLessThanOrEqual(after);
-  });
-
-  it('defines every event phase constant', () => {
-    const event = new EventImpl('phase');
-
-    expect(EventImpl.NONE).toBe(0);
-    expect(EventImpl.CAPTURING_PHASE).toBe(1);
-    expect(EventImpl.AT_TARGET).toBe(2);
-    expect(EventImpl.BUBBLING_PHASE).toBe(3);
-    expect(event.NONE).toBe(EventImpl.NONE);
-    expect(event.CAPTURING_PHASE).toBe(EventImpl.CAPTURING_PHASE);
-    expect(event.AT_TARGET).toBe(EventImpl.AT_TARGET);
-    expect(event.BUBBLING_PHASE).toBe(EventImpl.BUBBLING_PHASE);
   });
 
   it('sets propagation flags without allowing cancelBubble to clear them', () => {

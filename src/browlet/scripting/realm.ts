@@ -13,10 +13,8 @@ import type { WindowImpl } from '../browsing/window/window';
 import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
- * task routing. JSRealm supplies the lower JS Engine backend.
- */
+/** Create an HTML realm and install the host-selected global and global-this identities. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
 export function createRealm(
   agent: Agent,
   customizations: RealmCustomizations,
@@ -32,11 +30,18 @@ export function createRealm(
   return realm;
 }
 
+/** Adds HTML ownership, callback lifecycle, and task routing to an engine realm. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#realms-settings-objects-global-objects
 export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
+  /** Agent whose event loop serves this realm. */
   agent: Agent;
+  /** Binding hooks for HTML script and callback entry and cleanup. */
   callbacks: CallbackHooks;
+  /** Whether the realm was created with cross-origin isolation enabled. */
   crossOriginIsolated: boolean;
+  /** Web IDL global names controlling interface exposure. */
   globalNames: ReadonlySet<string>;
+  /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
   #envRecord: EnvironmentRecord | undefined;
   #hostDefined: Environment | undefined;
@@ -54,7 +59,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
       options.isGlobalPrototypeChainMutable ?? false;
     this.#envRecord = options.envRecord;
     this.callbacks = {
-      /* Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3. */
+      // Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3.
       captureContext: () => {
         const env = this.#hostDefined;
         if (env === undefined) return this;
@@ -109,6 +114,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
     return this.#hostDefined;
   }
 
+  /** Early security owner, replaced by full settings when the environment is attached. */
   get envRecord(): EnvironmentRecord | undefined {
     return this.#envRecord;
   }
@@ -159,7 +165,8 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
     // checks once Browlet has WindowProxy and Location security machinery.
   }
 
-  /** HTML §8.1.7.2, queue a global task, with this Realm supplying the global. */
+  /** Queue a task for this realm's global and its associated document. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#queue-a-global-task
   queueGlobalTask(
     source: TaskSource,
     steps: () => void,
@@ -211,15 +218,14 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   }
 }
 
-/** HTML realm whose global is a Window, known before platform-object installation. */
+/** HTML realm whose Window is linked during composition, before global installation. */
 export class WindowRealm extends Realm implements WindowEventRealm {
   declare agent: WindowAgent;
-  /** Window implementation retained across global projection. */
-  windowImplementation: WindowImpl;
+  /** Window linked after its environment is composed and before global projection. */
+  windowImplementation!: WindowImpl;
 
-  constructor(window: WindowImpl, options: WindowRealmOptions) {
+  constructor(options: WindowRealmOptions) {
     super({ ...options, globalNames: ['Window'], isGlobalPrototypeChainMutable: false });
-    this.windowImplementation = window;
   }
 
   override getAssociatedDocument(): DocumentImpl {
@@ -231,11 +237,11 @@ export class WindowRealm extends Realm implements WindowEventRealm {
   }
 
   getCurrentEvent(): EventImpl | undefined {
-    return this.windowImplementation.getCurrentEvent();
+    return this.windowImplementation.event;
   }
 
   setCurrentEvent(event: EventImpl | undefined): void {
-    this.windowImplementation.setCurrentEvent(event);
+    this.windowImplementation.event = event;
   }
 
   recordEventListenerTiming(

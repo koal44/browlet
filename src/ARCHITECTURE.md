@@ -33,6 +33,8 @@ concrete implementations, converted dictionaries with defaults, and adapted
 callbacks. Genuine Web IDL `object`/`any` and host-neutral DOM contracts remain
 appropriate where specified. Do not widen an implementation to an ambient DOM
 interface merely to make a direct test resemble author code.
+Implementation classes need not satisfy their platform interfaces in `lib.dom`;
+check author-facing types at the projected API boundary.
 
 ## Environments and execution
 
@@ -88,22 +90,45 @@ Realm-neutral backing storage such as `BlobData` needs no retained environment.
 
 An environment may forward a useful operation such as `parseURL()` to its
 UserAgent. Do not put ordinary imports behind environment properties or copy
-another owner's complete API into a facade. Stylelet remains host-neutral:
-its existing `ExecutionCaps` and DOM access contracts are composed explicitly
-by the [style integration](browlet/style/ROADMAP.md), without requiring HTML settings.
+another owner's complete API into a facade. Stylelet consumes the existing
+`StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations and
+`exec` supplies execution. `RealmExecution` and `StyleletExecution` both extend
+Infra's `AsyncExecution` for Promise creation and background work; the stylesheet
+task destination uses Infra's `TaskScheduling`. Browlet composes these on the
+same `env.exec` object.
+Its provisional CSSOM exception factory preserves requests for method-realm
+realization rather than eagerly allocating in the receiver's realm.
+Standalone Stylelet composes native facilities without requiring HTML settings
+or loading the engine runtime. `SelectletEnvironment` uses the same `userAgent.dom`
+owner and currently needs no execution facilities. `SelectletContext` retains
+that environment alongside its query state and caches. Stylelet and Selectlet share Infra's
+[`DOMOperations`](infra/dom-operations.ts); standalone engines accept a `dom`
+option and Browlet supplies its UserAgent's provider. Engines retain the host's
+node identities and access their trees,
+attributes, and live HTML state only through those operations. The standard
+provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts)
+uses implementations, including class checks for HTML elements. There are no
+per-node adapters or required fields on host nodes.
 
 ### Construction and lifetime
 
-[`createWindowEnvironment()`](browlet/bindings.ts) assembles the Window, early
-record, WindowRealm, binding, execution, and full settings. Binding registration
+[`createWindowEnvironment()`](browlet/bindings.ts) assembles the early record,
+WindowRealm, binding, execution, and full settings before constructing Window
+with that environment. Binding registration
 accepts an environment factory because execution composition needs the new
 Binding Context. Declarations and their binding world name one environment type;
 that type supplies the realm type too. The factory returns the actual environment;
 declarations subsequently obtain it through `ctx.getEnvironment()`. A standalone
 binding needing only a realm can register `{ realm }` directly.
-Event construction captures
-the binding in an execution facility, without attaching it to Realm. Global projection
-and global-scope mixin setup finish before consumers receive the Window environment.
+Event construction captures the binding in an execution facility, without
+attaching it to Realm. Event targets require that facility through their constructor's
+environment; document factories pass their environment explicitly to node constructors,
+which forward it through the inheritance chain. Standalone
+EventTarget implementation tests can supply a real sandbox environment; Document
+tests need browser settings for its HTML operations. Every target retains one
+`env` field. Derived implementations can narrow its declared type to the stronger
+contract their constructor requires, without adding another field or owner lookup.
+Global projection and global-scope mixin setup finish before consumers receive the Window environment.
 Document creation retains its own HTML initialization steps.
 
 `Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires

@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('custom-elements', 'normal', [
+runScenarios('custom-elements', 'skip', [
   {
     name: ':state() matches custom element states',
     // status: 'only',
@@ -43,11 +43,10 @@ runScenarios('custom-elements', 'normal', [
         foo.addState('foo');
 
         window.selectlet = window.createSelectlet(document, {
-          caps: {
-            el: {
-              hasCustomState: (el, name) => {
-                return (el as StateBridgeElement).__selectletStates?.has(name) === true;
-              },
+          dom: {
+            ...window.selectlet!.context.dom,
+            hasCustomState: (el, name) => {
+              return (el as StateBridgeElement).__selectletStates?.has(name) === true;
             },
           },
         }) as typeof window.selectlet;

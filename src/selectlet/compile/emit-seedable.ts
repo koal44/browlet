@@ -13,7 +13,7 @@ const FALSE_PREDICATE: CandidateElementPredicate = () => false;
 // id
 export function emitIdTest(id: IdSelector): CandidateTest {
   const value = cssIdentUnescape(id.raw);
-  return { buildElement: (s) => (e) => checkId(e, value, s), cost: id.cost };
+  return { buildElement: (ctx) => (e) => checkId(e, value, ctx), cost: id.cost };
 }
 
 // class
@@ -24,7 +24,7 @@ export function emitClassTest(cls: ClassSelector): CandidateTest {
     return { buildElement: () => FALSE_PREDICATE, cost: 0 };
   }
 
-  return { buildElement: (s) => (e) => checkClass(e, value, s), cost: cls.cost };
+  return { buildElement: (ctx) => (e) => checkClass(e, value, ctx), cost: cls.cost };
 }
 
 // tag
@@ -37,17 +37,17 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
   } else {
     const lower = asciiLower(local);
     build = local === lower
-      ? (s) => (e) => s.getLocalName(e) === local
-      : (s) => (e) => checkTag(e, lower, local, s);
+      ? (ctx) => (e) => ctx.dom.getLocalName(e) === local
+      : (ctx) => (e) => checkTag(e, lower, local, ctx);
   }
 
   if (tag.prefixRaw === '*') return { buildElement: build, cost: tag.cost };
 
   if (tag.prefixRaw === '') {
     return {
-      buildElement: (s) => {
-        const test = build(s);
-        return (e, rc) => !s.getNamespaceURI(e) && test(e, rc);
+      buildElement: (ctx) => {
+        const test = build(ctx);
+        return (e, rc) => !ctx.dom.getNamespaceURI(e) && test(e, rc);
       },
       cost: tag.cost,
     };

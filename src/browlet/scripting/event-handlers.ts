@@ -6,16 +6,12 @@ import type { EventTargetImpl } from '../dom/events/event-target';
 import type { EventImpl } from '../dom/events/event';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * [LegacyTreatNonObjectAsNull]
- * callback EventHandlerNonNull = any (Event event);
- * typedef EventHandlerNonNull? EventHandler;
- *
- * This module currently implements only event-handler IDL attributes. Content
- * attribute compilation, special error and beforeunload handlers, and the
- * body/frameset Window-target rules remain separate HTML integrations.
- */
+// Content attributes, special error/beforeunload handlers, and body/frameset
+// Window-target rules await their HTML integrations.
+/** Retains event-handler attributes and activates their corresponding listeners. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers
 export class EventHandlerMap {
+  /** Attribute names mapped to callbacks and their registered listeners. */
   #handlers = new Map<string, EventHandlerRecord>();
   #target: EventTargetImpl;
 
@@ -75,6 +71,7 @@ export class EventHandlerMap {
   }
 }
 
+/** Declare an event-handler attribute with Web IDL's exception-reporting policy. */
 export function eventHandlerAttr(
   name: string,
 ): AttributeMember {
@@ -85,8 +82,10 @@ export function eventHandlerAttr(
   );
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [LegacyTreatNonObjectAsNull]
+ * callback EventHandlerNonNull = any (Event event);
+ */
 export const eventHandlerNonNullIDL = defineCallbackFunction({
   name: 'EventHandlerNonNull',
   ...xattr('LegacyTreatNonObjectAsNull'),
@@ -94,19 +93,27 @@ export const eventHandlerNonNullIDL = defineCallbackFunction({
   arguments: [arg('event', reference('Event'))],
 });
 
+/*
+ * typedef EventHandlerNonNull? EventHandler;
+ */
 export const eventHandlerIDL = defineTypedef({
   name: 'EventHandler',
   type: nullable(reference(eventHandlerNonNullIDL.name)),
 });
 
 type EventHandlerDefinition = {
+  /** IDL attribute name, such as onload. */
   name: string;
+  /** Event type dispatched to this handler, such as load. */
   type: string;
 };
 
 type EventHandlerRecord = {
+  /** Converted callback currently stored in the event-handler attribute. */
   callback: EventHandlerCallback | null;
+  /** Stable listener registered while the attribute has a callback. */
   listener: ((this: EventTargetImpl, event: EventImpl) => void) | null;
+  /** Event type used to register and remove the listener. */
   type: string;
 };
 

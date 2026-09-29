@@ -1,7 +1,7 @@
 import { runScenarios } from '../../../../../../scenario/dispatch';
-import type { ContextRef } from '../../../../../../scenario/harness';
+import type { QuerySourceRef } from '../../../../../../scenario/harness';
 
-const box: ContextRef = { by: 'id', id: 'box' };
+const box: QuerySourceRef = { by: 'id', id: 'box' };
 
 runScenarios('an+b selector parsing', 'normal', [
   {

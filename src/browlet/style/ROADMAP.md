@@ -8,14 +8,29 @@
 - Stylelet exports those mixins' neutral declarations through
   `styleletIDLDefinitions`; Browlet contributes only their host behavior and
   assembles the declarations into its Web IDL bindings.
-- Documents supply Stylelet's `ExecutionCaps` at construction; `StyleletContext`
-  retains them as `exec` alongside its normalized DOM access hooks. CSSOM replacement uses the
-  owner's Promise facility and HTML's cooperative parallel scheduling; all
-  Stylelet DOM exceptions use the host's factory. The standalone host uses
-  native scheduling and DOMException without loading Browlet's engine runtime.
+- Documents and CSSOM implementations retain their existing environment through
+  `StyleletEnvironment`. UserAgent supplies `dom`; `env.exec` supplies the shared
+  Promise and background scheduling plus the stylesheet task destination.
+  There is no separate document execution adapter. Standalone Stylelet uses
+  native scheduling without loading Browlet's engine runtime.
+- The CSSOM exception factory remains provisional: Browlet supplies requests
+  for method-realm realization by Binding, while standalone hosts supply their
+  own DOMExceptions. It must not become eager receiver-realm allocation merely
+  because `env.exec.DOMException` is available.
+- Stylelet and Selectlet share Infra's `DOMOperations` through the `dom` option.
+  Browlet supplies [implementation operations](../integration/dom.ts), including
+  fast HTML class checks and access to existing inline-style state. Engines never
+  read host node fields directly. Tests cover Browlet, jsdom, and opaque nodes
+  that reject property access while preserving node identity.
 
 ## Next boundary change
 
+- [x] Share DOM operations with Selectlet, retaining original node identities
+  without requiring host nodes to implement either engine's structural types.
+- [ ] Connect focus, editing, custom-element upgrade state, and form/media state
+  as Browlet implements those HTML features. Its operations currently report
+  the missing feature when requested. Do not synthesize
+  checkedness, validity, or focus from attributes to satisfy Stylelet.
 - [x] Move host-neutral Web IDL declaration contributions for Stylelet-owned
   CSSOM objects and mixins into the Stylelet package.
 - [x] Let Browlet bind those declarations to Browlet-specific implementation
@@ -28,6 +43,9 @@
   state and mutation behavior. Verify the declared API surface as well as
   behavior: ambient `implements` clauses do not check the implementation's
   converted values, and declarations alone do not establish conformance.
+- [ ] Replace the provisional `projectWindow()` installation of `getComputedStyle`
+  with Stylelet's CSSOM Window partial and projected style results. Its current
+  adapter only unwraps the Element; it does not complete Web IDL conversion.
 - [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets` once
   those platform objects exist. Web IDL already supports observable arrays;
   `TreeScope` should retain only the backing collection and CSSOM mutation

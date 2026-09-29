@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseHTMLDocument,
-} from '../../../src/browlet/html/parser/parse';
+import { parseTestDocument } from '../../support/dom';
 import { HTMLElementImpl } from '../../../src/browlet/html/elements/html-element';
+import { SVGElementImpl } from '../../../src/browlet/svg/element';
+import { MathMLElementImpl } from '../../../src/browlet/mathml/element';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/infra/index';
@@ -19,30 +19,33 @@ describe('ElementCSSInlineStyle', () => {
     }
 
     expect(target.style).toBe(target.style);
-    expect(target.style.opacity).toBe('0.5');
-    expect(target.style.color).toBe('red');
+    expect(target.style.getPropertyValue('opacity')).toBe('0.5');
+    expect(target.style.getPropertyValue('color')).toBe('red');
     expect([...target.style]).toEqual(['opacity', 'color']);
   });
 
   it('synchronizes declaration and attribute mutations without recursion', () => {
     const document = createTestDocument();
     const target = document.createElement('main');
+    if (!HTMLElementImpl.is(target)) {
+      throw new Error('Expected an HTML element');
+    }
     const style = target.style;
 
-    Reflect.set(style, 'opacity', 0.75);
+    style.setProperty('opacity', '0.75');
 
-    expect(style.opacity).toBe('0.75');
+    expect(style.getPropertyValue('opacity')).toBe('0.75');
     expect(target.getAttribute('style')).toBe('opacity: 0.75;');
 
     target.setAttribute('style', 'opacity: 1; color: blue');
 
     expect(target.style).toBe(style);
-    expect(style.opacity).toBe('1');
-    expect(style.color).toBe('blue');
+    expect(style.getPropertyValue('opacity')).toBe('1');
+    expect(style.getPropertyValue('color')).toBe('blue');
 
-    Reflect.set(style, 'opacity', null);
+    style.removeProperty('opacity');
 
-    expect(style.opacity).toBe('');
+    expect(style.getPropertyValue('opacity')).toBe('');
     expect(target.getAttribute('style')).toBe('color: blue;');
   });
 
@@ -51,6 +54,9 @@ describe('ElementCSSInlineStyle', () => {
     const html = document.createElement('main');
     const svg = document.createElementNS(SVG_NAMESPACE, 'circle');
     const math = document.createElementNS(MATHML_NAMESPACE, 'math');
+    if (!HTMLElementImpl.is(html) || !SVGElementImpl.is(svg) || !MathMLElementImpl.is(math)) {
+      throw new Error('Expected HTML, SVG, and MathML element implementations');
+    }
 
     html.style.setProperty('opacity', '0.1');
     svg.style.setProperty('opacity', '0.2');
@@ -63,5 +69,5 @@ describe('ElementCSSInlineStyle', () => {
 });
 
 function createTestDocument(config: { source?: string; } = {}) {
-  return parseHTMLDocument(config.source);
+  return parseTestDocument(config.source);
 }

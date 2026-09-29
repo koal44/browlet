@@ -43,24 +43,22 @@ describe('cascade engine', () => {
       }
     `);
 
-    expect(engine.getCascadedProperty('color', scope)).toMatchObject({
-      declaration: {
-        type: 'property-declaration',
-        custom: false,
-        name: 'color',
-        value: { type: 'substitution-value' },
-      },
-      styleSheet,
-      scope,
+    const color = engine.getCascadedProperty('color', scope)!;
+    expect(color.styleSheet).toBe(styleSheet);
+    expect(color.scope).toBe(scope);
+    expect(color.declaration).toMatchObject({
+      type: 'property-declaration',
+      custom: false,
+      name: 'color',
+      value: { type: 'substitution-value' },
     });
-    expect(engine.getCascadedProperty('--accent', scope)).toMatchObject({
-      declaration: {
-        type: 'property-declaration',
-        custom: true,
-        name: '--accent',
-      },
-      styleSheet,
-      scope,
+    const accent = engine.getCascadedProperty('--accent', scope)!;
+    expect(accent.styleSheet).toBe(styleSheet);
+    expect(accent.scope).toBe(scope);
+    expect(accent.declaration).toMatchObject({
+      type: 'property-declaration',
+      custom: true,
+      name: '--accent',
     });
   });
 
@@ -94,7 +92,7 @@ describe('cascade engine', () => {
     Object.defineProperty(document, 'baseURI', { value: location.href });
     const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
-      context: new StyleletContext(document),
+      context: new StyleletContext(document, document.env),
     });
     const styleSheet = engine.createStyleSheet();
     styleSheet.replaceSync('* { color: red }');
@@ -111,7 +109,7 @@ describe('cascade engine', () => {
     Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
     const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
-      context: new StyleletContext(document),
+      context: new StyleletContext(document, document.env),
     });
     const ownerNode = document.createElement('style');
     scope.createStyleElementStyleSheet(ownerNode, '* { color: red }');
@@ -180,7 +178,7 @@ describe('cascade engine', () => {
     );
     const target = document.getElementById('target')!;
     const { engine, scope } = createCascade({
-      context: new StyleletContext(document),
+      context: new StyleletContext(document, document.env),
     });
     addStyleSheet(scope, `
       .target { color: red !important }
@@ -203,7 +201,11 @@ describe('cascade engine', () => {
 });
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const context = options.context ?? new StyleletContext(createBrowletDocument());
+  let context = options.context;
+  if (context === undefined) {
+    const document = createBrowletDocument();
+    context = new StyleletContext(document, document.env);
+  }
   const engine = new CascadeEngine({ ...options, context });
 
   return {

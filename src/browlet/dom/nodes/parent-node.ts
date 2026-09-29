@@ -5,6 +5,68 @@ import { HTMLCollectionImpl } from './collections';
 import type { NodeImpl } from './node';
 import type { ElementImpl } from './element';
 
+/** Live child collections and element-child navigation for parent nodes. */
+// https://dom.spec.whatwg.org/#interface-parentnode
+export class ParentNodeMixin {
+  /** Stable collection object refreshed from the node's children. */
+  #children: HTMLCollectionImpl<ElementImpl>;
+  /** Parent whose children the mixin exposes. */
+  #node: NodeImpl;
+
+  constructor(node: NodeImpl) {
+    this.#node = node;
+    this.#children = new HTMLCollectionImpl(() => collectChildren(node));
+  }
+
+  /** Live collection of immediate element children in tree order. */
+  // https://dom.spec.whatwg.org/#dom-parentnode-children
+  get children(): HTMLCollectionImpl<ElementImpl> {
+    this.#children.refresh();
+    return this.#children;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-parentnode-firstelementchild
+  get firstElementChild(): ElementImpl | null {
+    for (
+      let child = this.#node.firstChild;
+      child;
+      child = child.nextSibling
+    ) {
+      if (child.isElement()) return child;
+    }
+
+    return null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-parentnode-lastelementchild
+  get lastElementChild(): ElementImpl | null {
+    for (
+      let child = this.#node.lastChild;
+      child;
+      child = child.previousSibling
+    ) {
+      if (child.isElement()) return child;
+    }
+
+    return null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-parentnode-childelementcount
+  get childElementCount(): number {
+    let count = 0;
+
+    for (
+      let child = this.firstElementChild;
+      child;
+      child = child.nextElementSibling
+    ) {
+      count++;
+    }
+
+    return count;
+  }
+}
+
 /*
  * interface mixin ParentNode {
  *   [SameObject] readonly attribute HTMLCollection children;
@@ -22,61 +84,6 @@ import type { ElementImpl } from './element';
  *   [NewObject] NodeList querySelectorAll(DOMString selectors);
  * };
  */
-export class ParentNodeMixin {
-  #children: HTMLCollectionImpl<ElementImpl>;
-  #node: NodeImpl;
-
-  constructor(node: NodeImpl) {
-    this.#node = node;
-    this.#children = new HTMLCollectionImpl(() => collectChildren(node));
-  }
-
-  get children(): HTMLCollectionImpl<ElementImpl> {
-    this.#children.refresh();
-    return this.#children;
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    for (
-      let child = this.#node.firstChild;
-      child;
-      child = child.nextSibling
-    ) {
-      if (child.isElement()) return child;
-    }
-
-    return null;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    for (
-      let child = this.#node.lastChild;
-      child;
-      child = child.previousSibling
-    ) {
-      if (child.isElement()) return child;
-    }
-
-    return null;
-  }
-
-  get childElementCount(): number {
-    let count = 0;
-
-    for (
-      let child = this.firstElementChild;
-      child;
-      child = child.nextElementSibling
-    ) {
-      count++;
-    }
-
-    return count;
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const parentNodeIDL = defineInterfaceMixin({
   name: 'ParentNode',
   members: [

@@ -1,6 +1,5 @@
 import type { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
-import { withShadowRootStub } from '../../stubs';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
 } from '../../../web-idl/index';
@@ -13,46 +12,30 @@ import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
 import { InternalError } from '../../../infra/internal-error';
+import type { DOMEnvironment } from '../environment';
 
-/*
- * enum ShadowRootMode { "open", "closed" };
- * enum SlotAssignmentMode { "manual", "named" };
- */
+/** Root of an element's shadow tree and its event propagation boundary. */
+// https://dom.spec.whatwg.org/#interface-shadowroot
+export class ShadowRootImpl extends DocumentFragmentImpl {
+  /** Host element whose shadow tree this root contains. */
+  declare host: ElementImpl;
+  /** Whether the host exposes this root through its shadowRoot attribute. */
+  mode: ShadowRootMode;
+  /** Whether focusing the host delegates focus into its shadow tree. */
+  delegatesFocus = false;
+  /** Whether slots receive nodes by name or by explicit assignment. */
+  slotAssignment: SlotAssignmentMode = 'named';
+  /** Whether cloning the host also clones this shadow root. */
+  clonable = false;
+  /** Whether markup serialization may include this shadow root. */
+  serializable = false;
 
-export const shadowRootModeIDL = defineEnumeration({
-  name: 'ShadowRootMode',
-  values: ['open', 'closed'],
-});
-
-export const slotAssignmentModeIDL = defineEnumeration({
-  name: 'SlotAssignmentMode',
-  values: ['manual', 'named'],
-});
-
-/*
- * [Exposed=Window]
- * interface ShadowRoot : DocumentFragment {
- *   readonly attribute ShadowRootMode mode;
- *   readonly attribute boolean delegatesFocus;
- *   readonly attribute SlotAssignmentMode slotAssignment;
- *   readonly attribute boolean clonable;
- *   readonly attribute boolean serializable;
- *   readonly attribute Element host;
- *
- *   attribute EventHandler onslotchange;
- * };
- * ShadowRoot includes DocumentOrShadowRoot;
- */
-export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
+  /** Registry and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
-  #mode: ShadowRootMode;
 
-  constructor(host: ElementImpl, mode: ShadowRootMode) {
-    const document = host.getNodeDocument();
-    if (!document) throw new InternalError('A shadow host must have a node document');
-
-    super(document, host);
-    this.#mode = mode;
+  constructor(host: ElementImpl, mode: ShadowRootMode, env: DOMEnvironment) {
+    super(host.nodeDocument, host, env);
+    this.mode = mode;
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => null,
       getStyleScope() {
@@ -63,32 +46,6 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
 
   static is(value: unknown): value is ShadowRootImpl {
     return value instanceof ShadowRootImpl;
-  }
-
-  get mode(): ShadowRootMode {
-    return this.#mode;
-  }
-
-  get delegatesFocus(): boolean {
-    return false;
-  }
-
-  get slotAssignment(): SlotAssignmentMode {
-    return 'named';
-  }
-
-  get clonable(): boolean {
-    return false;
-  }
-
-  get serializable(): boolean {
-    return false;
-  }
-
-  get host(): ElementImpl {
-    const host = super.getHost();
-    if (!host) throw new InternalError('A shadow root must have a host');
-    return host;
   }
 
   get customElementRegistry(): CustomElementRegistryImpl | null {
@@ -117,8 +74,10 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
     return this.mode;
   }
 
+  /** Cross to the host unless this root bounds an uncomposed event's path. */
+  // https://dom.spec.whatwg.org/#interface-shadowroot
   override getEventParent(event: EventImpl): EventTargetImpl | null {
-    const firstTarget = event.getFirstPathInvocationTarget();
+    const firstTarget = event.path[0]?.invocationTarget ?? null;
 
     if (
       !event.composed &&
@@ -132,8 +91,35 @@ export class ShadowRootImpl extends withShadowRootStub(DocumentFragmentImpl) {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
+/*
+ * enum ShadowRootMode { "open", "closed" };
+ */
+export const shadowRootModeIDL = defineEnumeration({
+  name: 'ShadowRootMode',
+  values: ['open', 'closed'],
+});
 
+/*
+ * enum SlotAssignmentMode { "manual", "named" };
+ */
+export const slotAssignmentModeIDL = defineEnumeration({
+  name: 'SlotAssignmentMode',
+  values: ['manual', 'named'],
+});
+
+/*
+ * [Exposed=Window]
+ * interface ShadowRoot : DocumentFragment {
+ *   readonly attribute ShadowRootMode mode;
+ *   readonly attribute boolean delegatesFocus;
+ *   readonly attribute SlotAssignmentMode slotAssignment;
+ *   readonly attribute boolean clonable;
+ *   readonly attribute boolean serializable;
+ *   readonly attribute Element host;
+ *
+ *   attribute EventHandler onslotchange;
+ * };
+ */
 export const shadowRootIDL = defineInterface({
   name: 'ShadowRoot',
   inherits: 'DocumentFragment',
@@ -150,6 +136,9 @@ export const shadowRootIDL = defineInterface({
   ],
 });
 
+/*
+ * ShadowRoot includes DocumentOrShadowRoot;
+ */
 export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({
   interface: 'ShadowRoot',
   mixin: documentOrShadowRootIDL.name,

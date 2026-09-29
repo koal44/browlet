@@ -8,10 +8,8 @@ import {
 } from '../scripting/structured-data/serializable';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * Web IDL owns DOMException's implementation state. This HTML integration owns the
- * Serializable capability contract and its realm-independent record fields.
- */
+// Web IDL owns DOMException's implementation state. This HTML integration owns the
+// Serializable capability contract and its realm-independent record fields.
 const domExceptionSerializable = {
   serializationSteps(value: DOMExceptionImpl, serialized) {
     serialized.set('Name', value.name);

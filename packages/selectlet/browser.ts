@@ -1,1 +1,1 @@
-export { createSelectlet as default } from '../../src/selectlet/selectlet';
+export { createSelectlet as default } from '../../src/selectlet/index';

@@ -1,3 +1,4 @@
+import type { DOMNode as QuerySource, DOMNode as Element } from '../../infra/index';
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
@@ -10,73 +11,72 @@ import {
 import { describeComplex, describeElement } from '../debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_VIEW } from '../constants';
-import type { Snapshot } from '../snapshot';
-import type { QueryContext } from '../selectlet';
+import type { SelectletContext } from '../context';
 
-export function buildFrontierFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
+export function buildFrontierFirst(list: SelectorList, ctx: SelectletContext): FirstRunFn {
   const arms = list.arms;
   const firsts: ArmFirstFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i]!;
 
-    const first = buildArmFn(arm, i, snap);
+    const first = buildArmFn(arm, i, ctx);
     firsts[i] = first;
 
-    if (snap.isDebug) {
-      updateDebugBuild(snap, i, arm);
+    if (ctx.isDebug) {
+      updateDebugBuild(ctx, i, arm);
     }
   }
 
-  const first: FirstRunFn = (ctx, rc) => {
-    return runFirst(firsts, ctx, rc);
+  const first: FirstRunFn = (source, rc) => {
+    return runFirst(firsts, source, rc);
   };
 
   return first;
 }
 
-function runFirst(firsts: ArmFirstFn[], ctx: QueryContext, rc: RuntimeCache | null): Element | null {
+function runFirst(firsts: ArmFirstFn[], source: QuerySource, rc: RuntimeCache | null): Element | null {
   let best: Element | null = null;
 
   for (let i = 0; i < firsts.length; i++) {
     const first = firsts[i]!;
-    const result = first(ctx, rc, best);
+    const result = first(source, rc, best);
     if (result) best = result;
   }
 
   return best;
 }
 
-type ArmFirstFn = (ctx: QueryContext, rc: RuntimeCache | null, best: Element | null) => Element | null;
+type ArmFirstFn = (source: QuerySource, rc: RuntimeCache | null, best: Element | null) => Element | null;
 
-function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot): ArmFirstFn {
+function buildArmFn(complex: ComplexSelector, armIndex: number, ctx: SelectletContext): ArmFirstFn {
   const chain = buildChain(complex);
-  const program = buildFrontierProgram(chain, snap);
+  const program = buildFrontierProgram(chain, ctx);
 
-  return function First(ctx, rc, best) {
-    const result = runFrontierFirstProgram(program, ctx, rc, best, snap);
+  return function First(source, rc, best) {
+    const result = runFrontierFirstProgram(program, source, rc, best, ctx);
 
-    if (snap.isDebug) {
-      updateDebugRun(snap, armIndex, complex, program, result);
+    if (ctx.isDebug) {
+      updateDebugRun(ctx, armIndex, complex, program, result);
     }
 
     return result;
   };
 }
 
-function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, best: Element | null, snap: Snapshot): Element | null {
-  const isDebug = snap.isDebug;
+function runFrontierFirstProgram(program: FrontierProgram, source: QuerySource, rc: RuntimeCache | null, best: Element | null, ctx: SelectletContext): Element | null {
+  const isDebug = ctx.isDebug;
   if (isDebug) resetFrontierDebug(program);
 
   const state: FrontierState = {
-    root: ctx,
+    root: source,
     frontier: null,
   };
 
   const last = program.steps.length - 1;
 
   if (program.start.to === last) {
-    const found = runFirstBridgeMove(state, program.start, LOOKUP_VIEW, rc, best);
+    const found = runFirstBridgeMove(state, program.start, LOOKUP_VIEW, rc, best, ctx.dom);
     if (isDebug) program.start.count = found ? 1 : 0;
     return found;
   }
@@ -96,17 +96,17 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
     const step = program.steps[from]!;
 
     if (canAdvance(state)) {
-      const advance = getAdvanceMove(program, from, snap);
+      const advance = getAdvanceMove(program, from, ctx);
 
       if (advance) {
         if (isDebug) step.lookupRoot = state.root;
 
         if (advance.to === last) {
-          const found = runFirstAdvanceMove(state, advance, rc);
+          const found = runFirstAdvanceMove(state, advance, rc, ctx.dom);
           if (isDebug) step.count = found ? 1 : 0;
 
           if (!found) return null;
-          if (!best || precedesByDocPosition(found, best)) return found;
+          if (!best || precedesByDocPosition(found, best, ctx.dom)) return found;
           return null;
         }
 
@@ -122,8 +122,8 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
     }
 
     if (isDebug) step.lookupRoot = state.root;
-    const bridge = getBridgeToEndMove(program, from, snap);
-    const found = runFirstBridgeMove(state, bridge, LOOKUP_VIEW, rc, best);
+    const bridge = getBridgeToEndMove(program, from, ctx);
+    const found = runFirstBridgeMove(state, bridge, LOOKUP_VIEW, rc, best, ctx.dom);
 
     if (isDebug) step.count = found ? 1 : 0;
 
@@ -134,27 +134,27 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
 }
 
 function updateDebugRun(
-  snap: Snapshot,
+  ctx: SelectletContext,
   armIndex: number,
   arm: ComplexSelector,
   program: FrontierProgram,
   result: Element | null,
 ): void {
-  snap.debugFirst?.run.push({
+  ctx.debugFirst?.run.push({
     engine: 'frontier',
     armIndex,
     arm: describeComplex(arm),
-    program: describeFrontierProgram(program),
-    result: result ? describeElement(result) : null,
+    program: describeFrontierProgram(program, ctx.dom),
+    result: result ? describeElement(result, ctx.dom) : null,
   });
 }
 
 function updateDebugBuild(
-  snap: Snapshot,
+  ctx: SelectletContext,
   armIndex: number,
   arm: ComplexSelector,
 ): void {
-  snap.debugFirst?.build.push({
+  ctx.debugFirst?.build.push({
     engine: 'frontier',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
@@ -162,5 +162,5 @@ function updateDebugBuild(
     arm: describeComplex(arm),
   });
 
-  snap.debugCompile = undefined;
+  ctx.debugCompile = undefined;
 }

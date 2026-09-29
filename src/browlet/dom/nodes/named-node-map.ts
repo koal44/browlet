@@ -7,14 +7,19 @@ import { HTML_NAMESPACE } from '../../../infra/index';
 import type { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
 
+/** An element's ordered attributes, with lookup and mutation by name or namespace. */
+// https://dom.spec.whatwg.org/#interface-namednodemap
 export class NamedNodeMapImpl extends Array<AttrImpl> {
+  /** Element whose attribute list this map exposes, set during element construction. */
   #element: ElementImpl | null = null;
 
+  // https://dom.spec.whatwg.org/#dom-namednodemap-getnameditem
   getNamedItem(qualifiedName: string): AttrImpl | null {
     qualifiedName = this.#normalizeQualifiedName(qualifiedName);
     return this.find((attribute) => attribute.name === qualifiedName) ?? null;
   }
 
+  // https://dom.spec.whatwg.org/#dom-namednodemap-getnameditemns
   getNamedItemNS(namespaceURI: string | null, localName: string): AttrImpl | null {
     if (namespaceURI === '') namespaceURI = null;
     return this.find((attribute) =>
@@ -23,15 +28,19 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     ) ?? null;
   }
 
+  // https://dom.spec.whatwg.org/#dom-namednodemap-item
   item(index: number): AttrImpl | null {
     return this[index] ?? null;
   }
 
+  /** Remove and return the named attribute, throwing NotFoundError when absent. */
+  // https://dom.spec.whatwg.org/#dom-namednodemap-removenameditem
   removeNamedItem(qualifiedName: string): AttrImpl {
     qualifiedName = this.#normalizeQualifiedName(qualifiedName);
     return this.#remove((attribute) => attribute.name === qualifiedName);
   }
 
+  // https://dom.spec.whatwg.org/#dom-namednodemap-removenameditemns
   removeNamedItemNS(namespaceURI: string | null, localName: string): AttrImpl {
     if (namespaceURI === '') namespaceURI = null;
     return this.#remove((attribute) =>
@@ -40,14 +49,18 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     );
   }
 
+  /** Attach the attribute and return the attribute it replaces, if any. */
+  // https://dom.spec.whatwg.org/#dom-namednodemap-setnameditem
   setNamedItem(attribute: AttrImpl): AttrImpl | null {
     return this.#set(attribute);
   }
 
+  // https://dom.spec.whatwg.org/#dom-namednodemap-setnameditemns
   setNamedItemNS(attribute: AttrImpl): AttrImpl | null {
     return this.#set(attribute);
   }
 
+  /** Attribute names eligible for named properties under this element's casing rules. */
   getSupportedPropertyNames(): ReadonlySet<string> {
     const names = new Set(this.map((attribute) => attribute.name));
     if (this.#isForElementInHTMLDocument()) {
@@ -60,10 +73,11 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
 
   // -- Internal ---------------------------------------------------------
 
+  /** Associate the map and any retained attributes with their owning element. */
   associateElement(element: ElementImpl): void {
     this.#element = element;
     for (const attribute of this) {
-      attribute.setOwnerElement(element);
+      attribute.ownerElement = element;
     }
   }
 
@@ -73,11 +87,12 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     const index = this.findIndex(matches);
     if (index < 0) throwDOMException(DOMExceptionNames.notFound);
     const attribute = this.splice(index, 1)[0]!;
-    attribute.setOwnerElement(null);
+    attribute.ownerElement = null;
     this.#element?.attributeChanged(attribute.localName, attribute.value, null, attribute.namespaceURI);
     return attribute;
   }
 
+  // https://dom.spec.whatwg.org/#concept-element-attributes-set
   #set(attribute: AttrImpl): AttrImpl | null {
     if (
       attribute.ownerElement !== null &&
@@ -90,11 +105,11 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     if (previous === attribute) return attribute;
     if (previous) {
       this.splice(this.indexOf(previous), 1, attribute);
-      previous.setOwnerElement(null);
+      previous.ownerElement = null;
     } else {
       this.push(attribute);
     }
-    attribute.setOwnerElement(this.#element);
+    attribute.ownerElement = this.#element;
     this.#element?.attributeChanged(
       attribute.localName, previous?.value ?? null, attribute.value, attribute.namespaceURI,
     );
@@ -103,7 +118,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
 
   #isForElementInHTMLDocument(): boolean {
     return this.#element?.namespaceURI === HTML_NAMESPACE &&
-      this.#element.ownerDocument.type === 'html';
+      this.#element.ownerDocument!.type === 'html';
   }
 
   #normalizeQualifiedName(qualifiedName: string): string {
@@ -112,8 +127,6 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
       : qualifiedName;
   }
 }
-
-// -- Web IDL ------------------------------------------------------------
 
 /*
  * [Exposed=Window, LegacyUnenumerableNamedProperties]

@@ -1,10 +1,8 @@
+import type { DOMNode as QuerySource, DOMOperations, DOMNode as Element } from '../infra/index';
 import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from './parser/parser';
 import { cssIdentUnescape } from './parser/escape';
-import { isDocument, isDocumentFragment } from './dom';
-import { isElement } from '../infra/selector-dom';
-import type { QueryContext } from './selectlet';
 
-export type QueryContextDescription = {
+export type QuerySourceDescription = {
   kind: 'document' | 'fragment' | 'element' | 'unknown';
   summary: string;
   preview?: string;
@@ -105,19 +103,19 @@ function previewText(s: string, max = 240): string {
   return s.length <= max ? s : s.slice(0, max) + '…';
 }
 
-export function describeElement(el: Element | null | undefined): string {
+export function describeElement(el: Element | null | undefined, dom: DOMOperations): string {
   if (!el) return '(missing)';
-  const id = el.getAttribute('id');
-  const cls = el.getAttribute('class');
-  return `<${el.tagName.toLowerCase()}${id ? ` id='${id}'` : ''}${cls ? ` class='${cls}'` : ''}>`;
+  const id = dom.getAttribute(el, 'id');
+  const cls = dom.getAttribute(el, 'class');
+  return `<${dom.getLocalName(el).toLowerCase()}${id ? ` id='${id}'` : ''}${cls ? ` class='${cls}'` : ''}>`;
 }
 
-export function describeElements(els: Iterable<Element>, max = 10): string[] {
+export function describeElements(els: Iterable<Element>, max = 10, dom: DOMOperations): string[] {
   const out: string[] = [];
   let count = 0;
 
   for (const e of els) {
-    if (count < max) out[out.length] = describeElement(e);
+    if (count < max) out[out.length] = describeElement(e, dom);
     count++;
   }
 
@@ -125,21 +123,19 @@ export function describeElements(els: Iterable<Element>, max = 10): string[] {
   return out;
 }
 
-const TEXT_NODE = 3;
-
-type DescribeContextOptions = {
+type DescribeQuerySourceOptions = {
   preview?: boolean;
 };
 
-export function describeContext(ctx: QueryContext, opts?: DescribeContextOptions): QueryContextDescription {
+export function describeQuerySource(source: QuerySource, opts: DescribeQuerySourceOptions | undefined, dom: DOMOperations): QuerySourceDescription {
   const includePreview = opts?.preview !== false;
 
-  if (isDocument(ctx)) {
-    const root = ctx.documentElement;
-    const body = ctx.body as Element | null;
-    const html = body ? body.outerHTML : root.outerHTML || '';
+  if (dom.isDocument(source)) {
+    const root = dom.documentElement(source);
+    const body = dom.body(source);
+    const html = body ? dom.describe(body) : root ? dom.describe(root) : '';
 
-    const desc: QueryContextDescription = {
+    const desc: QuerySourceDescription = {
       kind: 'document',
       summary: '#document',
     };
@@ -148,15 +144,13 @@ export function describeContext(ctx: QueryContext, opts?: DescribeContextOptions
     return desc;
   }
 
-  if (isDocumentFragment(ctx)) {
-    const children = Array.from(ctx.childNodes)
-      .map((n) => {
-        if (isElement(n)) return n.outerHTML;
-        if (n.nodeType === TEXT_NODE) return n.textContent ?? '';
-        return '';
-      }).join('');
+  if (dom.isDocumentFragment(source)) {
+    let children = '';
+    for (let node = dom.firstChild(source); node; node = dom.nextSibling(node)) {
+      if (dom.isElement(node) || dom.isText(node)) children += dom.describe(node);
+    }
 
-    const desc: QueryContextDescription = {
+    const desc: QuerySourceDescription = {
       kind: 'fragment',
       summary: '#document-fragment',
     };
@@ -165,19 +159,19 @@ export function describeContext(ctx: QueryContext, opts?: DescribeContextOptions
     return desc;
   }
 
-  if (isElement(ctx)) {
-    const desc: QueryContextDescription = {
+  if (dom.isElement(source)) {
+    const desc: QuerySourceDescription = {
       kind: 'element',
-      summary: describeElement(ctx),
+      summary: describeElement(source, dom),
     };
 
-    if (includePreview) desc.preview = previewText(ctx.outerHTML);
+    if (includePreview) desc.preview = previewText(dom.describe(source));
     return desc;
   }
 
   return {
     kind: 'unknown',
-    summary: '(unknown context)',
+    summary: '(unknown query source)',
   };
 }
 

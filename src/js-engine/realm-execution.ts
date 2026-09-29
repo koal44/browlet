@@ -1,15 +1,12 @@
-import type { TaskScheduling } from '../infra/scheduling';
+import type { AsyncExecution, TaskScheduling } from '../infra/scheduling';
 import type { RuntimeBuffers } from './buffers';
-import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from './realm';
 
 /** Persistent execution and allocation facilities for one owning realm/global. */
-export type RealmExecution = {
+export interface RealmExecution extends AsyncExecution {
   /** The owning global object, including when selected as an HTML task destination. */
   global: GlobalObject;
   nativeLineEnding: '\n' | '\r\n';
-  /** Internal Promise constructor for this execution owner. */
-  Promise: typeof InternalPromise;
   /** Captured JavaScript constructor for native Promise resolution. */
   NativePromise: PromiseConstructor;
   /** Captured constructors for errors whose realm must be fixed before delivery. */
@@ -22,8 +19,6 @@ export type RealmExecution = {
   networking: NetworkingTasks;
 
   queueMicrotask(steps: () => void): void;
-  /** Schedule background steps without invoking them inline or entering an owner task. */
-  runInParallel: (steps: () => void) => void;
   createAbortController(): AbortControllerCapability;
   /** Create a DOM dependent signal in the owner's realm. */
   createDependentAbortSignal(signals: AbortSignalCapability[]): AbortSignalCapability;
@@ -37,7 +32,7 @@ export type RealmExecution = {
   serialize(value: unknown): object;
   /** Reconstruct a serialized record in the owner's realm. */
   deserialize(record: object): unknown;
-};
+}
 
 export type NetworkingTasks = {
   queueGlobalTask: (global: GlobalObject, steps: () => void) => void;

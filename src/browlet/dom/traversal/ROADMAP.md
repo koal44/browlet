@@ -56,8 +56,7 @@ rather than the traversal contract.
    existing TreeWalker-capable path a real Browlet consumer.
 3. Implement `NodeIterator` together with the mutation spine's pre-remove
    registration and in-flight-candidate behavior.
-4. Project both factories and interfaces through Web IDL, then remove the
-   corresponding type-only stubs.
+4. Project both factories and interfaces through Web IDL.
 
 ## Removal condition
 

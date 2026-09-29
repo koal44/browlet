@@ -30,6 +30,7 @@ export function isValidDoctypeName(value: string): boolean {
   return !INVALID_DOCTYPE_NAME_RE.test(value);
 }
 
+/** Validate a qualified name and return its namespace, prefix, and local name. */
 // https://dom.spec.whatwg.org/#validate-and-extract
 export function validateAndExtract(
   namespace: string | null,

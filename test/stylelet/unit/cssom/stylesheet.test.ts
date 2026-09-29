@@ -1,11 +1,12 @@
+import { browletDOM } from '../../../../src/browlet/integration/dom';
 import { describe, expect, it } from 'vitest';
 
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import {
-  defaultExecutionCaps, Stylelet, type InternalPromise,
-} from '../../../../src/stylelet/stylelet';
+  defaultStyleletEnvironment, Stylelet, type InternalPromise,
+} from '../../../../src/stylelet/index';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('StyleSheetImpl', () => {
@@ -19,7 +20,7 @@ describe('StyleSheetImpl', () => {
 
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
-    const media = new MediaListImpl('screen', defaultExecutionCaps);
+    const media = new MediaListImpl('screen', defaultStyleletEnvironment);
     const sheet = createStyleSheet({
       baseURL: 'https://example.com/css/',
       media,
@@ -47,7 +48,7 @@ describe('CSSStyleSheetImpl', () => {
 
   it('creates a stylesheet from specified properties', () => {
     const document = createBrowletDocument();
-    const stylelet = new Stylelet(document);
+    const stylelet = new Stylelet(document, { dom: browletDOM });
     const sheet = CSSStyleSheetImpl.create(stylelet.context, {
       location: 'https://example.com/style.css',
       parentStyleSheet: null,
@@ -198,7 +199,7 @@ function createStyleSheet(
     value: 'https://example.com/document/',
   });
 
-  return new Stylelet(document).createStyleSheet(options);
+  return new Stylelet(document, { dom: browletDOM }).createStyleSheet(options);
 }
 
 function observe<T>(value: InternalPromise<T>): Promise<T> {

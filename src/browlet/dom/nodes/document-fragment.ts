@@ -1,5 +1,4 @@
 import type { BrowletEnvironment } from '../../scripting/environment';
-import { withDocumentFragmentStub } from '../../stubs';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
 } from '../../../web-idl/index';
@@ -8,24 +7,25 @@ import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import type { HTMLCollectionImpl } from './collections';
+import type { DOMEnvironment } from '../environment';
 
-/*
- * [Exposed=Window]
- * interface DocumentFragment : Node {
- *   constructor();
- * };
- * DocumentFragment includes ParentNode;
- */
-export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
-  #host: ElementImpl | null;
+/** A parent node for a detached subtree, optionally associated with a host element. */
+// https://dom.spec.whatwg.org/#interface-documentfragment
+export class DocumentFragmentImpl extends NodeImpl {
+  /** Associated host for shadow roots or template contents; otherwise null. */
+  // https://dom.spec.whatwg.org/#concept-documentfragment-host
+  host: ElementImpl | null;
+
+  /** Live child collection and element-child navigation. */
   #parentNodeMixin = new ParentNodeMixin(this);
 
   constructor(
-    ownerDocument: DocumentImpl,
+    ownerDoc: DocumentImpl,
     host: ElementImpl | null = null,
+    env: DOMEnvironment,
   ) {
-    super(NodeType.DocumentFragment, ownerDocument);
-    this.#host = host;
+    super(NodeType.DocumentFragment, ownerDoc, env);
+    this.host = host;
   }
 
   static is(value: unknown): value is DocumentFragmentImpl {
@@ -47,16 +47,14 @@ export class DocumentFragmentImpl extends withDocumentFragmentStub(NodeImpl) {
   get childElementCount(): number {
     return this.#parentNodeMixin.childElementCount;
   }
-
-  // -- Internal ---------------------------------------------------------
-
-  getHost(): ElementImpl | null {
-    return this.#host;
-  }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface DocumentFragment : Node {
+ *   constructor();
+ * };
+ */
 export const documentFragmentIDL = defineInterface<BrowletEnvironment>({
   name: 'DocumentFragment',
   inherits: 'Node',
@@ -65,11 +63,19 @@ export const documentFragmentIDL = defineInterface<BrowletEnvironment>({
   members: [
     ctor(
       [],
-      { constructWith: [atArg(0, (ctx) => ctx.realm.getAssociatedDocument())] },
+      {
+        constructWith: [
+          atArg(0, (ctx) => ctx.realm.getAssociatedDocument()),
+          atArg(2, (ctx) => ctx.getEnvironment()),
+        ],
+      },
     ),
   ],
 });
 
+/*
+ * DocumentFragment includes ParentNode;
+ */
 export const documentFragmentIncludesParentNodeIDL = defineIncludes({
   interface: 'DocumentFragment',
   mixin: parentNodeIDL.name,

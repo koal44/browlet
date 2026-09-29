@@ -2,7 +2,7 @@ import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,
 } from '../values/media-query';
-import type { ExecutionCaps } from '../stylelet';
+import type { StyleletEnvironment } from '../environment';
 import type { CSSOMString } from './string';
 
 /*
@@ -15,15 +15,15 @@ import type { CSSOMString } from './string';
  *   undefined deleteMedium(CSSOMString medium);
  * };
  */
-export class MediaListImpl implements MediaList {
+export class MediaListImpl {
   [index: number]: CSSOMString;
 
   #queries: MediaQuery[] = [];
   #indexedLength = 0;
-  #exec: ExecutionCaps;
+  #env: StyleletEnvironment;
 
-  constructor(text: CSSOMString | null, exec: ExecutionCaps) {
-    this.#exec = exec;
+  constructor(text: CSSOMString | null, env: StyleletEnvironment) {
+    this.#env = env;
     this.mediaText = text;
   }
 
@@ -65,7 +65,7 @@ export class MediaListImpl implements MediaList {
     this.#queries = this.#queries.filter((item) => !mediaQueriesEqual(item, query));
 
     if (this.#queries.length === length) {
-      throw this.#exec.createDOMException(
+      throw this.#env.exec.createDOMException(
         'NotFoundError',
         `"${medium}" was not found in the media list.`,
       );

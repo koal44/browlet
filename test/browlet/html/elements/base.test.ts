@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../../src/browlet/bindings';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { HTMLBaseElementImpl } from '../../../../src/browlet/html/elements/metadata/base';
 import { parseURL } from '../../../../src/url/url';
 
 describe('HTMLBaseElement', () => {
@@ -34,9 +36,9 @@ describe('HTMLBaseElement', () => {
 
   it('uses the first base with href and updates on attribute changes', () => {
     const { document, root } = createDocument();
-    const first = document.createElement('base');
+    const first = createBase(document);
     first.target = 'frame';
-    const second = document.createElement('base');
+    const second = createBase(document);
     second.href = '/second/';
     root.appendChild(first);
     root.appendChild(second);
@@ -56,10 +58,10 @@ describe('HTMLBaseElement', () => {
   it('updates when bases or their containing subtrees are inserted, removed, and reordered', () => {
     const { document, root } = createDocument();
     const container = document.createElement('div');
-    const first = document.createElement('base');
+    const first = createBase(document);
     first.href = '/first/';
     container.appendChild(first);
-    const second = document.createElement('base');
+    const second = createBase(document);
     second.href = '/second/';
     root.appendChild(second);
     expect(document.baseURI).toBe('https://example.test/second/');
@@ -99,9 +101,9 @@ describe('HTMLBaseElement', () => {
 
   it.each(['https://[', 'data:text/plain,content', 'javascript:1'])('falls back for %s without selecting a later base', (href) => {
     const { document, root } = createDocument();
-    const first = document.createElement('base');
+    const first = createBase(document);
     first.href = href;
-    const second = document.createElement('base');
+    const second = createBase(document);
     second.href = '/second/';
     root.appendChild(first);
     root.appendChild(second);
@@ -116,7 +118,7 @@ describe('HTMLBaseElement', () => {
     const foreign = document.createElementNS('urn:example', 'base');
     foreign.setAttribute('href', '/foreign/');
     root.appendChild(foreign);
-    const base = document.createElement('base');
+    const base = createBase(document);
     const namespaced = document.createAttributeNode('href', '/namespaced/', 'urn:example', null);
     base.attributes.setNamedItemNS(namespaced);
     root.appendChild(base);
@@ -133,9 +135,9 @@ describe('HTMLBaseElement', () => {
 
   it('ignores bases in detached and shadow trees', () => {
     const { document, root } = createDocument();
-    const base = document.createElement('base');
+    const base = createBase(document);
     base.href = '/shadow/';
-    const shadow = new ShadowRootImpl(root, 'open');
+    const shadow = new ShadowRootImpl(root, 'open', document.env);
     shadow.appendChild(base);
     expect(base.isConnected).toBe(true);
     expect(document.baseURI).toBe(document.URL);
@@ -149,7 +151,7 @@ describe('HTMLBaseElement', () => {
 describe('Frozen base URLs', () => {
   it('retains the selected URL when the document URL changes while href resolves against the new fallback', () => {
     const { document, root } = createDocument();
-    const base = document.createElement('base');
+    const base = createBase(document);
     base.href = 'relative/';
     root.appendChild(base);
     document.url = parseURL('https://example.test/new/page').url!;
@@ -162,11 +164,11 @@ describe('Frozen base URLs', () => {
 
   it('does not refresh the first base when later bases or unrelated attributes change', () => {
     const { document, root } = createDocument();
-    const first = document.createElement('base');
+    const first = createBase(document);
     first.href = 'first/';
     root.appendChild(first);
     document.url = parseURL('https://example.test/new/page').url!;
-    const second = document.createElement('base');
+    const second = createBase(document);
     second.href = 'second/';
     root.appendChild(second);
     second.href = 'changed/';
@@ -183,7 +185,7 @@ describe('Frozen base URLs', () => {
 
   it('freezes an invalid base to the fallback at selection time', () => {
     const { document, root } = createDocument();
-    const base = document.createElement('base');
+    const base = createBase(document);
     base.href = 'https://[';
     root.appendChild(base);
     document.url = parseURL('https://example.test/new/page').url!;
@@ -199,4 +201,10 @@ function createDocument() {
   document.url = parseURL('https://example.test/dir/page').url!;
   const root = document.documentElement!;
   return { document, root };
+}
+
+function createBase(document: DocumentImpl): HTMLBaseElementImpl {
+  const element = document.createElement('base');
+  if (!HTMLBaseElementImpl.is(element)) throw new Error('Expected an HTML base element');
+  return element;
 }

@@ -1,15 +1,9 @@
 import type { ElementImpl } from './element';
 
-// DOM section 4.2.2. Element and Text own one of these; other Node types do
-// not have slottable state.
+/** Slot assignment state shared by element and text nodes. */
+// https://dom.spec.whatwg.org/#concept-slotable
 export class SlottableMixin {
-  #assignedSlot: ElementImpl | null = null;
-
-  get assignedSlot(): ElementImpl | null {
-    return this.#assignedSlot;
-  }
-
-  setAssignedSlot(slot: ElementImpl | null): void {
-    this.#assignedSlot = slot;
-  }
+  /** Slot receiving this node, or null while unassigned. */
+  // https://dom.spec.whatwg.org/#slotable-assigned-slot
+  assignedSlot: ElementImpl | null = null;
 }

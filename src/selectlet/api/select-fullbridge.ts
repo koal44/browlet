@@ -1,3 +1,4 @@
+import type { DOMNode as QuerySource, DOMNode as Element } from '../../infra/index';
 import type { SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
@@ -6,39 +7,38 @@ import { describeElements } from '../debug';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_COPY } from '../constants';
-import type { Snapshot } from '../snapshot';
-import type { QueryContext } from '../selectlet';
+import type { SelectletContext } from '../context';
 
-export function buildFullBridgeSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
+export function buildFullBridgeSelect(list: SelectorList, ctx: SelectletContext): SelectRunFn {
   const arms = list.arms;
-  const groups = buildFullBridgeGroups(arms, snap);
+  const groups = buildFullBridgeGroups(arms, ctx);
 
-  if (snap.isDebug) {
+  if (ctx.isDebug) {
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
-      updateDebugBuild(snap, group);
+      updateDebugBuild(ctx, group);
     }
   }
 
-  return function FullBridgeSelect(ctx, rc) {
-    return runFullBridgeSelect(groups, ctx, rc, snap);
+  return function FullBridgeSelect(source, rc) {
+    return runFullBridgeSelect(groups, source, rc, ctx);
   };
 }
 
 function runFullBridgeSelect(
   groups: FullBridgeGroup[],
-  ctx: QueryContext,
+  source: QuerySource,
   rc: RuntimeCache | null,
-  snap: Snapshot,
+  ctx: SelectletContext,
 ): Element[] {
-  const isDebug = snap.isDebug;
+  const isDebug = ctx.isDebug;
 
   if (groups.length === 1) {
     const group = groups[0]!;
-    const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
+    const candidates = group.bridge.lookup(source, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 
-    if (isDebug) updateDebugRun(snap, group, candidates, results);
+    if (isDebug) updateDebugRun(ctx, group, candidates, results);
 
     return results;
   }
@@ -48,37 +48,37 @@ function runFullBridgeSelect(
 
   for (let k = 0; k < groups.length; k++) {
     const group = groups[k]!;
-    const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
+    const candidates = group.bridge.lookup(source, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 
     if (results.length) lists[i++] = results;
-    if (isDebug) updateDebugRun(snap, group, candidates, results);
+    if (isDebug) updateDebugRun(ctx, group, candidates, results);
   }
 
-  return mergeDocumentOrderLists(lists);
+  return mergeDocumentOrderLists(lists, ctx.dom);
 }
 
 function updateDebugRun(
-  snap: Snapshot,
+  ctx: SelectletContext,
   group: FullBridgeGroup,
   candidates: Iterable<Element>,
   results: Element[],
 ): void {
-  snap.debugSelect?.run.push({
+  ctx.debugSelect?.run.push({
     engine: 'full-bridge',
     lookupStrategy: group.lookup.strategy,
     lookupQuery: group.lookup.lookupQuery,
     bridge: group.bridge.debug,
-    candidates: describeElements(candidates),
-    results: describeElements(results),
+    candidates: describeElements(candidates, undefined, ctx.dom),
+    results: describeElements(results, undefined, ctx.dom),
   });
 }
 
 function updateDebugBuild(
-  snap: Snapshot,
+  ctx: SelectletContext,
   group: FullBridgeGroup,
 ): void {
-  snap.debugSelect?.build.push({
+  ctx.debugSelect?.build.push({
     engine: 'full-bridge',
     usesScope: group.usesScope,
     usesCache: group.usesCache,
@@ -89,5 +89,5 @@ function updateDebugBuild(
     bridge: group.bridge.debug,
   });
 
-  snap.debugCompile = undefined;
+  ctx.debugCompile = undefined;
 }

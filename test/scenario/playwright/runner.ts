@@ -2,7 +2,7 @@ import { test, chromium, expect, firefox, webkit } from '@playwright/test';
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { assertNever, type Permutations } from '../../../src/infra/util';
 import {
-  BROWSER_NAMES, type BrowserName, type ContextRef, type Engine,
+  BROWSER_NAMES, type BrowserName, type QuerySourceRef, type Engine,
   type Expectation, type RunScenariosOptions, type Scenario,
   type ScenariosStatus, type ScenarioStatus, type ScenarioStep,
   type TestCase,
@@ -224,25 +224,25 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     const sxlt = selectlet;
     if (!sxlt) throw new Error('selectlet is not available');
     if (c.debug) {
-      sxlt.snapshot.setDebug(true);
-      sxlt.snapshot.clearDebug();
+      sxlt.context.setDebug(true);
+      sxlt.context.clearDebug();
     }
 
     const query = pw.getCaseQuery(c);
-    const ctx = pw.resolveContext(doc, c.ref);
-    const ctxErrorMsg = ctx ? undefined : `Could not resolve context from ref: ${pw.stringify(c.ref)}`;
+    const source = pw.resolveQuerySource(doc, c.ref);
+    const sourceErrorMsg = source ? undefined : `Could not resolve query source from ref: ${pw.stringify(c.ref)}`;
 
     const equivCase = c.expect?.equivalentCase;
     const equivQuery = equivCase ? pw.getCaseQuery(equivCase) : undefined;
-    const equivCtx = equivCase ? pw.resolveContext(doc, equivCase.ref) : null;
-    const equivCtxErrorMsg = equivCase && !equivCtx
-      ? `Could not resolve equivalent context from ref: ${pw.stringify(equivCase.ref)}`
+    const equivSource = equivCase ? pw.resolveQuerySource(doc, equivCase.ref) : null;
+    const equivSourceErrorMsg = equivCase && !equivSource
+      ? `Could not resolve equivalent query source from ref: ${pw.stringify(equivCase.ref)}`
       : undefined;
     let equivMismatchMsg = equivCase && (pw.isRehomed(c.ref) || pw.isRehomed(equivCase.ref))
-      ? `Equivalent-case assertion unsupported because one or more contexts were rehomed.\n` +
-      `Identity-based equivalence is only supported for document-backed contexts.\n` +
-      `  case context: ${pw.stringify(c.ref)}${pw.isRehomed(c.ref) ? ' (rehomed)' : ''}\n` +
-      `  equivalent case context: ${pw.stringify(equivCase.ref)}${pw.isRehomed(equivCase.ref) ? ' (rehomed)' : ''}`
+      ? `Equivalent-case assertion unsupported because one or more sources were rehomed.\n` +
+      `Identity-based equivalence is only supported for document-backed sources.\n` +
+      `  case source: ${pw.stringify(c.ref)}${pw.isRehomed(c.ref) ? ' (rehomed)' : ''}\n` +
+      `  equivalent case source: ${pw.stringify(equivCase.ref)}${pw.isRehomed(equivCase.ref) ? ' (rehomed)' : ''}`
       : undefined;
 
     const allEngines: Permutations<Engine> = ['native', 'selectlet'];
@@ -256,7 +256,7 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
 
     for (const engine of engines) {
       const fn = pw.getEngineQuery(c, engine);
-      const res = pw.getResults(fn, query, ctx, ctxErrorMsg);
+      const res = pw.getResults(fn, query, source, sourceErrorMsg);
       engineResults[engine] = res;
 
       const namedQr = makeNamedQr(c, engine, res);
@@ -267,7 +267,7 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
 
       if (!equivMismatchMsg && equivCase && equivQuery) {
         const equivFn = pw.getEngineQuery(equivCase, engine);
-        const equivRes = pw.getResults(equivFn, equivQuery, equivCtx, equivCtxErrorMsg);
+        const equivRes = pw.getResults(equivFn, equivQuery, equivSource, equivSourceErrorMsg);
         equivMismatchMsg ??= pw.compareQueryResults(
           namedQr,
           makeNamedQr(equivCase, engine, equivRes, 'Equiv')
@@ -276,8 +276,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     }
 
     if (c.debug) {
-      const debugText = sxlt.snapshot.printDebug();
-      sxlt.snapshot.setDebug(false);
+      const debugText = sxlt.context.printDebug();
+      sxlt.context.setDebug(false);
       throw new Error(debugText);
     }
 
@@ -387,7 +387,7 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
 
   if (!state.hasSxlt || !state.hasStlt) {
     await page.evaluate(() => {
-      window.selectlet = window.createSelectlet(document) as typeof selectlet;
+      window.selectlet = window.createSelectlet(document);
       window.stylelet = new window.Stylelet(document);
     });
   }
@@ -439,7 +439,7 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
   const header = `${s.name}\nStep #${stepIndex + 1}, Case #${caseIndex + 1} · Browser=${browser}`;
   const msg =
     `\nQuery: ${result.info}` +
-    `\nContext: ${formatContextRef(caseInfo.case.ref)}` +
+    `\nContext: ${formatQuerySourceRef(caseInfo.case.ref)}` +
     `${result.mismatchMsg ? `\n\n${result.mismatchMsg}` : ''}`;
 
   runEngineChecks(result, msg, 'threw', (r, nglabel) => {
@@ -544,7 +544,7 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
   }
 }
 
-function formatContextRef(ref?: ContextRef): string {
+function formatQuerySourceRef(ref?: QuerySourceRef): string {
   if (!ref) return 'document';
   let base: string;
   switch (ref.by) {
@@ -558,7 +558,7 @@ function formatContextRef(ref?: ContextRef): string {
     default: assertNever(ref);
   }
   if ('home' in ref && ref.home) base += `:${ref.home}`;
-  if ('within' in ref && ref.within) base = `${formatContextRef(ref.within)} > ${base}`;
+  if ('within' in ref && ref.within) base = `${formatQuerySourceRef(ref.within)} > ${base}`;
   return base;
 }
 

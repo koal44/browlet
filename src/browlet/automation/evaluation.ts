@@ -9,7 +9,9 @@ import { copyEvaluationValue } from './evaluation-value';
 /** One page execution context and its outstanding host commands. */
 export class PageEvaluation {
   #realm: WindowRealm;
+  /** Host commands to reject if navigation destroys this evaluation context. */
   #pending = new Set<(reason: Error) => void>();
+  /** Queued evaluation and callback-delivery tasks awaiting execution. */
   #tasks = new Set<QueuedTaskHandle>();
   #disposed = false;
 
@@ -17,6 +19,7 @@ export class PageEvaluation {
     this.#realm = realm;
   }
 
+  /** Run page source as an HTML task and copy its eventual result back to the host. */
   evaluate(expression: string, isFunction: boolean, argument: unknown): Promise<unknown> {
     return new HostPromise((resolve, reject) => {
       if (isFunction) {
@@ -61,6 +64,7 @@ export class PageEvaluation {
     });
   }
 
+  /** Install a page function that copies arguments and results across the host boundary. */
   exposeFunction(name: string, callback: (args: unknown[]) => unknown): void {
     const realm = this.#realm;
     const function_ = realm.createFunction((_receiver, args) => {
@@ -80,6 +84,7 @@ export class PageEvaluation {
     });
   }
 
+  /** Cancel queued delivery and reject outstanding commands after navigation. */
   dispose(): void {
     this.#disposed = true;
     for (const task of this.#tasks) task.remove();

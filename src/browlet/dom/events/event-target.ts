@@ -1,10 +1,10 @@
 import {
-  arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
+  arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
   DOMExceptionNames, throwDOMException,
 } from '../../../web-idl/index';
-import { EventImpl, type EventPathItem } from './event';
-import type { DOMEnvironment, EventExecution, EventImplConstructor, EventRealm } from '../environment';
+import { EventPhase, type EventImpl, type EventPathItem } from './event';
+import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
 import { MouseEventImpl } from './ui-event';
 import {
   type AbortAlgorithmHandle, type AbortSignalImpl,
@@ -16,8 +16,12 @@ import { InternalError } from '../../../infra/internal-error';
 export class EventTargetImpl {
   /** Registrations in insertion order, including their signal cleanup handles. */
   #eventListenerList: EventListenerRecord[] = [];
-  /** Event allocation facilities; absent for unbound implementations. */
-  eventExecution: EventExecution | undefined;
+  /** Environment that owns this target's event allocations. */
+  env: DOMEnvironment;
+
+  constructor(env: DOMEnvironment) {
+    this.env = env;
+  }
 
   static is(value: unknown): value is EventTargetImpl {
     return typeof value === 'object' &&
@@ -72,11 +76,11 @@ export class EventTargetImpl {
   /** Dispatch synchronously, returning false if the event was canceled. */
   // https://dom.spec.whatwg.org/#dom-eventtarget-dispatchevent
   dispatchEvent(event: EventImpl): boolean {
-    if (event.isDispatching() || !event.isInitialized()) {
+    if (event.dispatching || !event.initialized) {
       throwDOMException(DOMExceptionNames.invalidState);
     }
 
-    event.setTrusted(false);
+    event.isTrusted = false;
     return this.#dispatch(event);
   }
 
@@ -91,16 +95,14 @@ export class EventTargetImpl {
     legacyTargetOverride = false,
   ): boolean {
     const event = this.createEvent(eventConstructor);
-    event.setType(name);
+    event.type = name;
     initialize?.(event);
     return this.#dispatch(event, legacyTargetOverride);
   }
 
-  /** Create a trusted event in this target's realm when bound. */
+  /** Create a trusted event in the environment supplied at construction. */
   createEvent(eventConstructor?: EventImplConstructor): EventImpl {
-    return this.eventExecution === undefined
-      ? EventImpl.create(eventConstructor)
-      : this.eventExecution.createEvent(eventConstructor);
+    return this.env.exec.createEvent(eventConstructor);
   }
 
   // https://dom.spec.whatwg.org/#remove-all-event-listeners
@@ -214,7 +216,7 @@ export class EventTargetImpl {
     event: EventImpl,
     legacyTargetOverride = false,
   ): boolean {
-    event.beginDispatch();
+    event.dispatching = true;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- Track the target as dispatch crosses shadow boundaries.
     let target: EventTargetImpl = this;
@@ -222,14 +224,14 @@ export class EventTargetImpl {
       ? target.getLegacyTargetOverride()
       : target;
     let activationTarget: EventTargetImpl | null = null;
-    let relatedTarget = retarget(event.getRelatedTarget(), target);
+    let relatedTarget = retarget(event.relatedTarget, target);
     let clearTargets = false;
 
     if (
       target !== relatedTarget ||
-      target === event.getRelatedTarget()
+      target === event.relatedTarget
     ) {
-      let touchTargets = event.getTouchTargetList()
+      let touchTargets = event.touchTargetList
         .map((touchTarget) => retarget(touchTarget, target));
       event.appendToPath(target, targetOverride, relatedTarget, touchTargets, false);
 
@@ -265,9 +267,9 @@ export class EventTargetImpl {
           slottable = parent;
         }
 
-        relatedTarget = retarget(event.getRelatedTarget(), parent);
+        relatedTarget = retarget(event.relatedTarget, parent);
         const parentForRetarget = parent;
-        touchTargets = event.getTouchTargetList()
+        touchTargets = event.touchTargetList
           .map((touchTarget) => retarget(touchTarget, parentForRetarget));
 
         const targetRoot = target.getTreeRoot();
@@ -310,7 +312,7 @@ export class EventTargetImpl {
         slotInClosedTree = false;
       }
 
-      const clearTargetsItem = event.getPath()
+      const clearTargetsItem = event.path
         .findLast((item) => item.shadowAdjustedTarget !== null);
 
       if (clearTargetsItem) {
@@ -326,21 +328,19 @@ export class EventTargetImpl {
         activationTarget.runLegacyPreActivationBehavior();
       }
 
-      for (const item of [...event.getPath()].reverse()) {
-        event.setPhase(
-          item.shadowAdjustedTarget === null
-            ? EventImpl.CAPTURING_PHASE
-            : EventImpl.AT_TARGET,
-        );
+      for (const item of [...event.path].reverse()) {
+        event.eventPhase = item.shadowAdjustedTarget === null
+          ? EventPhase.Capturing
+          : EventPhase.AtTarget;
         item.invocationTarget.#invoke(item, event, 'capturing');
       }
 
-      for (const item of event.getPath()) {
+      for (const item of event.path) {
         if (item.shadowAdjustedTarget !== null) {
-          event.setPhase(EventImpl.AT_TARGET);
+          event.eventPhase = EventPhase.AtTarget;
         } else {
           if (!event.bubbles) continue;
-          event.setPhase(EventImpl.BUBBLING_PHASE);
+          event.eventPhase = EventPhase.Bubbling;
         }
 
         item.invocationTarget.#invoke(item, event, 'bubbling');
@@ -367,9 +367,9 @@ export class EventTargetImpl {
   #invoke(
     pathItem: EventPathItem,
     event: EventImpl,
-    phase: EventPhase,
+    phase: InvocationPhase,
   ): void {
-    const path = event.getPath();
+    const path = event.path;
     let targetItemIndex = path.indexOf(pathItem);
 
     while (path[targetItemIndex]?.shadowAdjustedTarget === null) {
@@ -379,13 +379,13 @@ export class EventTargetImpl {
     const targetItem = path[targetItemIndex];
     if (!targetItem) throw new InternalError('An event path has no adjusted target');
 
-    event.setTarget(targetItem.shadowAdjustedTarget);
-    event.setRelatedTarget(pathItem.relatedTarget);
-    event.setTouchTargetList(pathItem.touchTargetList);
+    event.target = targetItem.shadowAdjustedTarget;
+    event.relatedTarget = pathItem.relatedTarget;
+    event.touchTargetList = [...pathItem.touchTargetList];
 
-    if (event.propagationStopped()) return;
+    if (event.propagationStopped) return;
 
-    event.setCurrentTarget(this);
+    event.currentTarget = this;
     const listeners = [...this.#eventListenerList];
     const found = this.#innerInvoke(
       event,
@@ -400,21 +400,21 @@ export class EventTargetImpl {
     if (!legacyType) return;
 
     const originalType = event.type;
-    event.setType(legacyType);
+    event.type = legacyType;
     this.#innerInvoke(
       event,
       listeners,
       phase,
       pathItem.invocationTargetInShadowTree,
     );
-    event.setType(originalType);
+    event.type = originalType;
   }
 
   // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
   #innerInvoke(
     event: EventImpl,
     listeners: EventListenerRecord[],
-    phase: EventPhase,
+    phase: InvocationPhase,
     invocationTargetInShadowTree: boolean,
   ): boolean {
     let found = false;
@@ -440,17 +440,17 @@ export class EventTargetImpl {
       if (windowRealm && !invocationTargetInShadowTree) {
         windowRealm.setCurrentEvent(event);
       }
-      if (listener.passive) event.setInPassiveListener(true);
+      if (listener.passive) event.inPassiveListener = true;
       windowRealm?.recordEventListenerTiming(event, callback.object);
 
       try {
         callback.invoke(event, this);
       } finally {
-        event.setInPassiveListener(false);
+        event.inPassiveListener = false;
         windowRealm?.setCurrentEvent(currentEvent);
       }
 
-      if (event.immediatePropagationStopped()) break;
+      if (event.immediatePropagationStopped) break;
     }
 
     return found;
@@ -532,11 +532,8 @@ export class EventTargetImpl {
 export const eventTargetIDL = defineInterface<DOMEnvironment>({
   name: 'EventTarget',
   exposed: '*',
-  // Record creation establishes event ownership before platform projection.
   implementation: impl(EventTargetImpl, {
-    initializeImplementation(context, value) {
-      value.eventExecution = context.getEnvironment().exec;
-    },
+    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
   }),
   members: [
     ctor(),
@@ -662,7 +659,7 @@ type EventListenerRecord = {
   removed: boolean;
 };
 
-type EventPhase = 'capturing' | 'bubbling';
+type InvocationPhase = 'capturing' | 'bubbling';
 
 interface ListenerOptionsRecord {
   capture: boolean;

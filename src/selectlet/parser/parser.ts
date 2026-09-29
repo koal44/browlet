@@ -1,3 +1,4 @@
+import type { DOMNode as Element } from '../../infra/index';
 import type { CustomPseudoPredicate } from '../selectlet';
 import { cssIdentUnescape } from './escape';
 import { TextCursor } from '../../infra/text-cursor';
@@ -27,7 +28,7 @@ import { combinatorCost } from '../planner/cost';
 import { emitIdTest } from '../compile/emit-seedable';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SubjectKind } from '../constants';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
 export type SelectorList = {
   arms: ComplexSelector[];
@@ -92,8 +93,8 @@ export type TagSelector = {
   seed?: boolean;
 };
 
-export type BuildElementPredicate = (snap: Snapshot) => CandidateElementPredicate;
-export type BuildSubjectPredicate = (snap: Snapshot) => CandidateSubjectPredicate;
+export type BuildElementPredicate = (ctx: SelectletContext) => CandidateElementPredicate;
+export type BuildSubjectPredicate = (ctx: SelectletContext) => CandidateSubjectPredicate;
 
 export type CandidateTest = {
   buildElement: BuildElementPredicate;

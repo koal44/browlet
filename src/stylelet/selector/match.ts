@@ -1,4 +1,5 @@
-import { StyleletContext } from '../context';
+import type { DOMNode as Element } from '../../infra/index';
+import type { StyleletContext } from '../context';
 import { assertNever } from '../../infra/util';
 import {
   PseudoArgumentKind, SelectorKind,
@@ -29,7 +30,7 @@ type MatchSelector = ComplexSelector | ComplexRealSelector;
 export function matchSelectorList(
   selectors: SelectorList,
   element: Element,
-  context: StyleletContext = new StyleletContext(element.ownerDocument),
+  context: StyleletContext,
 ): Specificity | null {
   const compiled = compileSelectorList(selectors, context);
   const runtimeCache = compiled.usesCache
@@ -119,7 +120,7 @@ function compileComplexSelector(
       : compileCompound(part.compound, context),
   }));
 
-  return buildComplexMatcher(parts, costComplex(selector.parts));
+  return buildComplexMatcher(parts, costComplex(selector.parts), context.dom);
 }
 
 function compileComplexUnit(
@@ -230,7 +231,7 @@ function compileRelativeSelectorList(
 
   return buildRelativeSelectorMatcher(
     arms,
-    costRelativeSelectorList(selectors),
+    costRelativeSelectorList(selectors), context.dom,
   );
 }
 

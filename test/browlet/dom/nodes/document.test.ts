@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../../support/dom';
 
-import {
-  DocumentImpl, DocumentMode,
-} from '../../../../src/browlet/dom/nodes/document';
+import { DocumentMode } from '../../../../src/browlet/dom/nodes/document';
 import { DocumentFragmentImpl } from '../../../../src/browlet/dom/nodes/document-fragment';
 import { DocumentTypeImpl } from '../../../../src/browlet/dom/nodes/document-type';
 import { NodeType } from '../../../../src/browlet/dom/nodes/node';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import { EventImpl } from '../../../../src/browlet/dom/events/event';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
-import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
+import type { WindowImpl } from '../../../../src/browlet/browsing/window/window';
+import { unwrap } from '../../../../src/browlet/bindings';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../src/url/url';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
 
 describe('Document', () => {
   it('uses the DOM document defaults', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
 
     expect(document.URL).toBe('about:blank');
     expect(document.documentURI).toBe('about:blank');
@@ -48,7 +48,7 @@ describe('Document', () => {
   });
 
   it('initializes an empty CSP list once the document origin is known', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.origin = obtainURLOrigin(documentURL('https://example.test/'));
     document.initializeCSP();
     expect(document.policyContainer.cspList).toEqual(new CSPList(document.origin));
@@ -56,7 +56,7 @@ describe('Document', () => {
   });
 
   it('preserves an inherited CSP list and its origin during document initialization', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const origin = obtainURLOrigin(documentURL('https://creator.test/'));
     const inherited = new CSPList(origin);
     document.policyContainer.cspList = inherited;
@@ -67,32 +67,32 @@ describe('Document', () => {
   });
 
   it('always has a base URI', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.url = documentURL('https://example.com/');
     const text = document.createTextNode('content');
 
-    expect(new DocumentImpl().baseURI).toBe('about:blank');
+    expect(createTestDocument().baseURI).toBe('about:blank');
     expect(document.baseURI).toBe('https://example.com/');
     expect(text.baseURI).toBe(document.baseURI);
-    expect(document.getNodeDocument()).toBe(document);
-    expect(text.getNodeDocument()).toBe(document);
+    expect(document.nodeDocument).toBe(document);
+    expect(text.nodeDocument).toBe(document);
   });
 
   it('can update a node document during a future adoption operation', () => {
-    const first = new DocumentImpl();
-    const second = new DocumentImpl();
+    const first = createTestDocument();
+    const second = createTestDocument();
     first.url = documentURL('https://first.example/');
     second.url = documentURL('https://second.example/');
     const text = first.createTextNode('content');
 
-    text.setNodeDocument(second);
+    text.nodeDocument = second;
 
     expect(text.ownerDocument).toBe(second);
     expect(text.baseURI).toBe(second.baseURI);
   });
 
   it('inherits the about base URL only for about:blank, including a query or fragment', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.aboutBaseURL = documentURL('https://example.test/parent/');
     for (const url of ['about:blank', 'about:blank?query#fragment']) {
       document.url = documentURL(url);
@@ -105,7 +105,7 @@ describe('Document', () => {
   });
 
   it('uses an iframe srcdoc document\'s inherited base independently of its current URL', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.aboutBaseURL = documentURL('https://example.test/parent/');
     document.isIframeSrcdocDocument = true;
     for (const url of ['about:srcdoc', 'about:srcdoc#fragment']) {
@@ -115,8 +115,9 @@ describe('Document', () => {
   });
 
   it('uses its relevant Window as its event parent while it has a browsing context', () => {
-    const document = new DocumentImpl();
-    const window = new WindowImpl(new URL('about:blank'));
+    const document = createTestDocument();
+    const env = document.env;
+    const window = unwrap<WindowImpl>(env.global);
     window.setAssociatedDocument(document);
 
     expect(document.getEventParent(new EventImpl('ready')))
@@ -132,9 +133,10 @@ describe('Document', () => {
 
   it('retains the relevant Window when that Window presents a second Document', () => {
     const browsingContext = new BrowsingContext();
-    const first = new DocumentImpl();
-    const second = new DocumentImpl();
-    const window = new WindowImpl(new URL('about:blank'));
+    const first = createTestDocument();
+    const env = first.env;
+    const second = createTestDocument(env);
+    const window = unwrap<WindowImpl>(env.global);
     first.browsingContext = browsingContext;
     second.browsingContext = browsingContext;
 
@@ -149,13 +151,13 @@ describe('Document', () => {
   });
 
   it('represents document fragments and shadow-root event topology', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const host = document.createElementNode('main', HTML_NAMESPACE);
-    const fragment = new DocumentFragmentImpl(document);
-    const root = new ShadowRootImpl(host, 'closed');
+    const fragment = new DocumentFragmentImpl(document, null, document.env);
+    const root = new ShadowRootImpl(host, 'closed', document.env);
 
     expect(fragment.nodeType).toBe(NodeType.DocumentFragment);
-    expect(fragment.getHost()).toBeNull();
+    expect(fragment.host).toBeNull();
     expect(root.nodeType).toBe(NodeType.DocumentFragment);
     expect(root.host).toBe(host);
     expect(root.mode).toBe('closed');
@@ -165,7 +167,7 @@ describe('Document', () => {
   });
 
   it('uses an assigned slot before a node tree parent', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const parent = document.createElementNode('main', HTML_NAMESPACE);
     const slot = document.createElementNode('slot', HTML_NAMESPACE);
     const element = document.createElementNode('span', HTML_NAMESPACE);
@@ -188,7 +190,7 @@ describe('Document', () => {
   });
 
   it('is the tree root and exposes its first element child', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const comment = document.createComment('before');
     const element = document.createElement('html');
 
@@ -204,8 +206,8 @@ describe('Document', () => {
   });
 
   it('exposes its doctype separately from its document element', () => {
-    const document = new DocumentImpl();
-    const doctype = new DocumentTypeImpl('html', '', '');
+    const document = createTestDocument();
+    const doctype = new DocumentTypeImpl('html', '', '', document, document.env);
     const element = document.createElement('html');
 
     document.appendChild(doctype);
@@ -217,7 +219,7 @@ describe('Document', () => {
   });
 
   it('derives its head from the HTML document tree', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const html = document.createElement('html');
     const head = document.createElement('head');
 
@@ -231,7 +233,7 @@ describe('Document', () => {
   });
 
   it('creates HTML elements and text nodes', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.type = 'html';
     document.contentType = 'text/html';
     const element = document.createElement('MaIn');
@@ -250,7 +252,7 @@ describe('Document', () => {
   });
 
   it('identifies HTML and compatibility mode', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     document.type = 'html';
     document.contentType = 'text/html';
 
@@ -263,8 +265,8 @@ describe('Document', () => {
   });
 
   it('discriminates its node types without constructor identity', () => {
-    const document = new DocumentImpl();
-    const doctype = new DocumentTypeImpl('html', '', '');
+    const document = createTestDocument();
+    const doctype = new DocumentTypeImpl('html', '', '', document, document.env);
     const element = document.createElementNode('main', HTML_NAMESPACE);
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -278,7 +280,7 @@ describe('Document', () => {
   });
 
   it('rejects document.write without an active parser', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
 
     expect(() => document.write('<main></main>')).toThrow(
       'Document has no active parser',
@@ -286,7 +288,7 @@ describe('Document', () => {
   });
 
   it('limits document.write to the active writer scope', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const writes: string[] = [];
 
     document.withWriter((markup) => writes.push(markup), () => {

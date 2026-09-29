@@ -10,8 +10,11 @@ import type { TextImpl } from '../../dom/nodes/text';
 import type { NodeImpl } from '../../dom/nodes/node';
 import { InternalError } from '../../../infra/internal-error';
 
+/** Connects parse5 tree construction directly to Browlet node implementations. */
+// https://html.spec.whatwg.org/multipage/parsing.html#tree-construction
 export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   #document: DocumentImpl;
+  /** Parser-created element awaiting a stack callback or explicit completion. */
   #pendingUnpushedElement: ElementImpl | null = null;
 
   constructor(document: DocumentImpl) {
@@ -192,7 +195,9 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     const doctype = document.doctype;
 
     if (doctype) {
-      doctype.setIdentifiers(name, publicId, systemId);
+      doctype.name = name;
+      doctype.publicId = publicId;
+      doctype.systemId = systemId;
       return;
     }
 
@@ -298,6 +303,7 @@ export type HTMLTreeAdapterMap = {
   documentType: DocumentTypeImpl;
 };
 
+/** Attaches parser source locations without adding platform-visible properties. */
 class SourceCodeLocationStamper extends Stamper {
   #location: Token.ElementLocation | null;
 

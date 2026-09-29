@@ -1,3 +1,4 @@
+import type { DOMNode as Document, DOMNode } from '../../infra/index';
 import { internalType } from '../../infra/promises';
 import {
   interpretStylesheet, parseStylesheet,
@@ -7,7 +8,8 @@ import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
 import type { StyleletContext } from '../context';
-import type { InternalPromise, ExecutionCaps } from '../stylelet';
+import type { InternalPromise } from '../stylelet';
+import type { StyleletEnvironment } from '../environment';
 import { CSSRuleListImpl } from './rule-list';
 import { CSSStyleRuleImpl } from './rules';
 import { StyleSheetImpl } from './stylesheet';
@@ -53,10 +55,10 @@ export class CSSStyleSheetImpl
     context: StyleletContext,
     options: CSSStyleSheetInit = {},
   ) {
-    super(context.exec);
+    super(context.env);
 
     const document = context.document;
-    const location = new URL(document.baseURI);
+    const location = new URL(context.dom.baseURI(document));
     this.#rules = new CSSRuleListImpl();
     this.#interpretedStyleSheet = { location, rules: [] };
 
@@ -121,7 +123,7 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index > this.#rules.length) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'IndexSizeError',
         `Index ${index} exceeds the rule-list length.`,
       );
@@ -129,16 +131,16 @@ export class CSSStyleSheetImpl
 
     const parsedRule = parseRule(rule);
     if (parsedRule === null || isImportRule(parsedRule)) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'SyntaxError',
         `Failed to parse the rule: ${rule}`,
       );
     }
 
-    const rulePair = createCSSRule(parsedRule, this.exec);
+    const rulePair = createCSSRule(parsedRule, this.env);
     if (rulePair === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'NotSupportedError',
         `The parsed rule is not supported: ${rule}`,
       );
@@ -154,7 +156,7 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index >= this.#rules.length) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'IndexSizeError',
         `Index ${index} does not identify a rule.`,
       );
@@ -166,7 +168,7 @@ export class CSSStyleSheetImpl
 
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return this.exec.Promise.reject(this.exec.createDOMException(
+      return this.env.exec.Promise.reject(this.env.exec.createDOMException(
         'NotAllowedError',
         'This stylesheet cannot be replaced.',
       ), internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
@@ -174,17 +176,17 @@ export class CSSStyleSheetImpl
 
     this.#disallowModification = true;
 
-    const result = this.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
+    const result = this.env.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);
     };
     // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
     // Parse in parallel; return to the owner before changing rules or settling the promise.
-    this.exec.runInParallel(() => {
+    this.env.exec.runInParallel(() => {
       try {
         const rules = this.parseRules(text);
-        this.exec.queueTask(() => {
+        this.env.exec.style.queueTask(() => {
           try {
             this.replaceInterpretedStyleSheet(rules);
             this.#disallowModification = false;
@@ -194,7 +196,7 @@ export class CSSStyleSheetImpl
           }
         });
       } catch (error) {
-        this.exec.queueTask(() => { reject(error); });
+        this.env.exec.style.queueTask(() => { reject(error); });
       }
     });
     return result.promise;
@@ -202,7 +204,7 @@ export class CSSStyleSheetImpl
 
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'NotAllowedError',
         'This stylesheet cannot be replaced.',
       );
@@ -279,12 +281,12 @@ export class CSSStyleSheetImpl
     styleSheet: InterpretedStyleSheet,
   ): void {
     this.#interpretedStyleSheet = styleSheet;
-    this.#rules.replace(buildCSSRules(styleSheet, this.exec));
+    this.#rules.replace(buildCSSRules(styleSheet, this.env));
   }
 
   private assertOriginClean(): void {
     if (!this.#originClean) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'SecurityError',
         'The stylesheet is not origin-clean.',
       );
@@ -293,7 +295,7 @@ export class CSSStyleSheetImpl
 
   private assertModificationAllowed(): void {
     if (this.#disallowModification) {
-      throw this.exec.createDOMException(
+      throw this.env.exec.createDOMException(
         'NotAllowedError',
         'The stylesheet cannot currently be modified.',
       );
@@ -304,7 +306,7 @@ export class CSSStyleSheetImpl
 type CSSStyleSheetProperties = {
   location: string | null;
   parentStyleSheet: CSSStyleSheetImpl | null;
-  ownerNode: Element | ProcessingInstruction | null;
+  ownerNode: DOMNode | null;
   ownerRule: CSSRule | null;
   media: CSSOMString | MediaList;
   title: string;
@@ -312,25 +314,25 @@ type CSSStyleSheetProperties = {
   originClean: boolean;
 };
 
-function buildCSSRules(sheet: InterpretedStyleSheet, exec: ExecutionCaps): CSSRule[] {
+function buildCSSRules(sheet: InterpretedStyleSheet, env: StyleletEnvironment): CSSRule[] {
   return sheet.rules.flatMap((rule) => {
-    const cssRule = createCSSRuleFromInterpretedRule(rule, exec);
+    const cssRule = createCSSRuleFromInterpretedRule(rule, env);
     return cssRule === null ? [] : [cssRule];
   });
 }
 
-function createCSSRule(rule: SyntaxRule, exec: ExecutionCaps): RulePair | null {
+function createCSSRule(rule: SyntaxRule, env: StyleletEnvironment): RulePair | null {
   const sheet = interpretStylesheet({ rules: [rule] });
   const interpretedRule = sheet.rules[0];
   if (interpretedRule === undefined) return null;
 
-  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, exec);
+  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, env);
   return cssRule === null ? null : { cssRule, interpretedRule };
 }
 
-function createCSSRuleFromInterpretedRule(rule: InterpretedRule, exec: ExecutionCaps): CSSRule | null {
+function createCSSRuleFromInterpretedRule(rule: InterpretedRule, env: StyleletEnvironment): CSSRule | null {
   switch (rule.type) {
-    case 'style-rule': return new CSSStyleRuleImpl(rule, exec);
+    case 'style-rule': return new CSSStyleRuleImpl(rule, env);
     case 'property-rule': return null;
   }
 }

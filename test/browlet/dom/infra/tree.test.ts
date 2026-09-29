@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { createSandboxEnvironment } from '../../../../src/browlet/bindings';
 
 import { TreeNode } from '../../../../src/browlet/dom/infra/tree';
 
 class TestNode extends TreeNode<TestNode> {
   constructor(public name: string) {
-    super();
+    super(createSandboxEnvironment());
   }
 }
 

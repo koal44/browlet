@@ -7,6 +7,7 @@ import {
   FileReaderImpl, fileReaderIDL,
 } from '../../src/browlet/integration/file/file-reader';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
+import type { EventImpl } from '../../src/browlet/dom/events/event';
 import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
 import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
 import {
@@ -53,6 +54,22 @@ describe('File API FileReader foundation', () => {
     expect(load).toHaveBeenCalledOnce();
     expect(reader.onload).toBeNull();
     expect(reader.onprogress).toBe(progress);
+  });
+
+  it('creates events in its environment before the reader is projected', async () => {
+    const context = getContext(createWindow());
+    const reader = createReader(context);
+    const blob = context.construct(BlobImpl, ['content'], {});
+    const events: EventImpl[] = [];
+    reader.addEventListener('load', (event) => { events.push(event); });
+
+    const done = waitForLoadEnd(reader);
+    reader.readAsText(blob);
+    await done;
+
+    expect(events).toHaveLength(1);
+    expect(getRelevantRealm(events[0]!)).toBe(context.realm);
+    expect(events[0]).toMatchObject({ isTrusted: true, loaded: 7 });
   });
 
   it('preserves the complete FileReader declaration for later exposure', () => {

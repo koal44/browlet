@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../support/dom';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
@@ -6,7 +7,6 @@ import {
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 
@@ -131,7 +131,7 @@ function createRelatedWindow(first: Window): WindowProxy {
   const { window } = relatedEnv;
   const { realm } = relatedEnv;
   const proxy = realm.globalThis as WindowProxy;
-  const document = new DocumentImpl();
+  const document = createTestDocument(relatedEnv);
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
   retargetWindowProxy(proxy, window);

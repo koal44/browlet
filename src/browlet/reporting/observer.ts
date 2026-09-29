@@ -102,8 +102,6 @@ export type ReportingObserverCallback = (
 // Other report types remain invisible until their definitions and body interfaces are integrated.
 const visibleReportTypes = new Set(['coep', 'integrity-violation', 'csp-violation', 'test']);
 
-// -- Web IDL ------------------------------------------------------------
-
 /*
  * [Exposed=(Window,Worker)]
  * interface ReportingObserver {

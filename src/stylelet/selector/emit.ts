@@ -1,3 +1,4 @@
+import type { DOMOperations, DOMNode as Element } from '../../infra/index';
 import {
   PseudoArgumentKind, SelectorKind,
   type AttributeSelector, type ClassSelector, type IdSelector,
@@ -88,7 +89,7 @@ function emitTypeTest(
   const element: CandidateElementPredicate = namespaceURI === undefined
     ? (candidate) => testName(candidate, context)
     : (candidate) =>
-      context.getNamespaceURI(candidate) === namespaceURI &&
+      context.dom.getNamespaceURI(candidate) === namespaceURI &&
       testName(candidate, context);
 
   return createMatcher(element, localName === '*' ? 0 : 2);
@@ -115,7 +116,7 @@ function emitPseudoClassTest(
         ? emitHostPseudoTest(compiledArgument)
         : emitNoMatchPseudoTest();
     case 'host-context':
-      return emitHostContextPseudoTest(compiledArgument);
+      return emitHostContextPseudoTest(compiledArgument, context.dom);
     case 'scope': return emitScopePseudoTest(context);
     case 'root': return emitRootPseudoTest(context);
     case 'empty': return emitEmptyPseudoTest(context);
@@ -365,7 +366,7 @@ function emitHostPseudoTest(
 
 // :host-context()
 function emitHostContextPseudoTest(
-  argument?: CompiledMatcher,
+  argument: CompiledMatcher | undefined, dom: DOMOperations,
 ): CompiledMatcher {
   if (argument === undefined) return FALSE_MATCHER;
 
@@ -379,7 +380,7 @@ function emitHostContextPseudoTest(
       for (
         let current: Element | null = element;
         current !== null;
-        current = current.parentElement
+        current = dom.parentElement(current)
       ) {
         if (argumentSubject(
           current,
@@ -717,7 +718,7 @@ function emitStatePseudoTest(
   context: StyleletContext,
 ): CompiledMatcher {
   return createMatcher(
-    (element) => context.hasCustomState(element, state),
+    (element) => context.dom.hasCustomState(element, state),
     1,
   );
 }

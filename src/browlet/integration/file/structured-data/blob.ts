@@ -10,10 +10,8 @@ import {
 } from '../../../scripting/structured-data/serializable';
 import { InternalError } from '../../../../infra/internal-error';
 
-/*
- * File API defines Blob's record fields. HTML owns their registration and
- * execution through the generic Serializable machinery.
- */
+// File API defines Blob's record fields. HTML owns their registration and
+// execution through the generic Serializable machinery.
 export const blobSerializable = {
   serializationSteps(value, serialized, forStorage) {
     if (!BlobImpl.is(value)) {

@@ -1,6 +1,9 @@
+import { browletDOM } from '../../../../src/browlet/integration/dom';
+import { createStyleletEnvironment } from '../../../../src/stylelet/environment';
 import { describe, expect, it, vi } from 'vitest';
 
 import { StyleletContext } from '../../../../src/stylelet/context';
+import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import {
   compileSelectorList, matchSelectorList,
 } from '../../../../src/stylelet/selector/match';
@@ -12,7 +15,7 @@ import { createBrowletDocument } from '../../browlet-document';
 describe('selector matching', () => {
   it('matches a top-level nesting selector like :scope', () => {
     const document = createBrowletDocument('<main id="target"></main>');
-    const root = document.documentElement;
+    const root = document.documentElement!;
     const target = document.getElementById('target')!;
 
     expect(match('&', root)).toEqual({ a: 0, b: 0, c: 0 });
@@ -29,9 +32,9 @@ describe('selector matching', () => {
     const parent = parseSelectorList('.parent')!;
     const nested = parseNestedSelectorList('.child', parent)!;
 
-    expect(matchSelectorList(nested, document.getElementById('target')!))
+    expect(matchSelectorList(nested, document.getElementById('target')!, new StyleletContext(document, document.env)))
       .toEqual({ a: 0, b: 2, c: 0 });
-    expect(matchSelectorList(nested, document.getElementById('other')!))
+    expect(matchSelectorList(nested, document.getElementById('other')!, new StyleletContext(document, document.env)))
       .toBeNull();
   });
 
@@ -42,7 +45,7 @@ describe('selector matching', () => {
     const parent = parseSelectorList('#missing, main')!;
     const nested = parseNestedSelectorList('> .child', parent)!;
 
-    expect(matchSelectorList(nested, document.getElementById('target')!))
+    expect(matchSelectorList(nested, document.getElementById('target')!, new StyleletContext(document, document.env)))
       .toEqual({ a: 1, b: 1, c: 0 });
   });
 
@@ -55,7 +58,7 @@ describe('selector matching', () => {
     const target = document.getElementById('target')!;
     const selectors = parseSelectorList('MAIN.warning > section span#target')!;
 
-    expect(matchSelectorList(selectors, target)).toEqual({
+    expect(matchSelectorList(selectors, target, new StyleletContext(target.nodeDocument, target.env))).toEqual({
       a: 1,
       b: 1,
       c: 3,
@@ -123,8 +126,8 @@ describe('selector matching', () => {
       defaultNamespace: 'http://www.w3.org/2000/svg',
     })!;
 
-    expect(matchSelectorList(selectors, svgCircle)).not.toBeNull();
-    expect(matchSelectorList(selectors, htmlCircle)).toBeNull();
+    expect(matchSelectorList(selectors, svgCircle, new StyleletContext(svgCircle.nodeDocument, svgCircle.env))).not.toBeNull();
+    expect(matchSelectorList(selectors, htmlCircle, new StyleletContext(htmlCircle.nodeDocument, htmlCircle.env))).toBeNull();
   });
 
   it('matches a named type selector by its resolved namespace URI', () => {
@@ -138,7 +141,7 @@ describe('selector matching', () => {
       ]),
     })!;
 
-    expect(matchSelectorList(selectors, target)).not.toBeNull();
+    expect(matchSelectorList(selectors, target, new StyleletContext(target.nodeDocument, target.env))).not.toBeNull();
   });
 
   it('matches a named attribute selector by its resolved namespace URI', () => {
@@ -154,11 +157,11 @@ describe('selector matching', () => {
 
     expect(matchSelectorList(
       parseSelectorList('[link|href]', context)!,
-      target,
+      target, new StyleletContext(target.nodeDocument, target.env),
     )).not.toBeNull();
     expect(matchSelectorList(
       parseSelectorList('[link|href="#icon"]', context)!,
-      target,
+      target, new StyleletContext(target.nodeDocument, target.env),
     )).not.toBeNull();
   });
 
@@ -205,9 +208,7 @@ describe('selector matching', () => {
     const document = createBrowletDocument('<main id="target"></main>');
     const target = document.getElementById('target')!;
     const version = vi.fn(() => 1);
-    const context = new StyleletContext(document, {
-      tree: { version },
-    });
+    const context = new StyleletContext(document, createStyleletEnvironment({ dom: { ...browletDOM, treeVersion: version } }));
     const simpleSelectors = parseSelectorList('#target')!;
     const structuralSelectors = parseSelectorList(':nth-child(1)')!;
     const simple = compileSelectorList(simpleSelectors, context);
@@ -236,7 +237,7 @@ describe('selector matching', () => {
 
   it('uses tri matching only for host and pseudo-element selectors', () => {
     const document = createBrowletDocument('<main></main>');
-    const context = new StyleletContext(document);
+    const context = new StyleletContext(document, document.env);
 
     const simple = compileSelectorList(parseSelectorList('main')!, context);
     const host = compileSelectorList(parseSelectorList(':host')!, context);
@@ -263,6 +264,6 @@ describe('selector matching', () => {
   });
 });
 
-function match(selector: string, element: Element) {
-  return matchSelectorList(parseSelectorList(selector)!, element);
+function match(selector: string, element: ElementImpl) {
+  return matchSelectorList(parseSelectorList(selector)!, element, new StyleletContext(element.nodeDocument, element.env));
 }

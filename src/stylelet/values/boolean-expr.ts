@@ -26,7 +26,6 @@ type BooleanExprTest<Test> = {
 };
 
 // TypeScript requires an interface to terminate this recursive record edge.
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface BooleanExprParens<Test> extends ParensBlock<BooleanExprValue<Test>> {
   value: BooleanExprValue<Test>;
 }

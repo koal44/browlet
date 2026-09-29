@@ -1,3 +1,4 @@
+import type { DOMNode as QuerySource, DOMNode as Element } from '../../infra/index';
 import type { SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
@@ -5,47 +6,46 @@ import { describeElement, describeElements } from '../debug';
 import { findFirstBridgeCandidate } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_VIEW } from '../constants';
-import type { Snapshot } from '../snapshot';
-import type { QueryContext } from '../selectlet';
+import type { SelectletContext } from '../context';
 
-export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
+export function buildFullBridgeFirst(list: SelectorList, ctx: SelectletContext): FirstRunFn {
   const arms = list.arms;
-  const groups = buildFullBridgeGroups(arms, snap);
+  const groups = buildFullBridgeGroups(arms, ctx);
 
-  if (snap.isDebug) {
+  if (ctx.isDebug) {
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
-      updateDebugBuild(snap, group);
+      updateDebugBuild(ctx, group);
     }
   }
 
-  return function FullBridgeFirst(ctx, rc) {
-    return runFullBridgeFirst(groups, ctx, rc, snap);
+  return function FullBridgeFirst(source, rc) {
+    return runFullBridgeFirst(groups, source, rc, ctx);
   };
 }
 
-function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
-  const isDebug = snap.isDebug;
+function runFullBridgeFirst(groups: FullBridgeGroup[], source: QuerySource, rc: RuntimeCache | null, ctx: SelectletContext): Element | null {
+  const isDebug = ctx.isDebug;
 
   const frontier = null;  // frontier is always null for full-bridge
   let best: Element | null = null;
 
   if (groups.length === 1) {
     const group = groups[0]!;
-    const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
-    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
+    const candidates = group.bridge.lookup(source, LOOKUP_VIEW);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best, ctx.dom);
 
-    if (isDebug) updateDebugRun(snap, group, candidates, result);
+    if (isDebug) updateDebugRun(ctx, group, candidates, result);
 
     return result;
   }
 
   for (let k = 0; k < groups.length; k++) {
     const group = groups[k]!;
-    const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
-    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
+    const candidates = group.bridge.lookup(source, LOOKUP_VIEW);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best, ctx.dom);
 
-    if (isDebug) updateDebugRun(snap, group, candidates, result);
+    if (isDebug) updateDebugRun(ctx, group, candidates, result);
 
     if (!result) continue;
     best = result;
@@ -54,19 +54,19 @@ function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: Ru
   return best;
 }
 
-function updateDebugRun(snap: Snapshot, group: FullBridgeGroup, candidates: Iterable<Element>, result: Element | null): void {
-  snap.debugFirst?.run.push({
+function updateDebugRun(ctx: SelectletContext, group: FullBridgeGroup, candidates: Iterable<Element>, result: Element | null): void {
+  ctx.debugFirst?.run.push({
     engine: 'full-bridge',
     lookupStrategy: group.lookup.strategy,
     lookupQuery: group.lookup.lookupQuery,
     bridge: group.bridge.debug,
-    candidates: describeElements(candidates),
-    result: result ? describeElement(result) : null,
+    candidates: describeElements(candidates, undefined, ctx.dom),
+    result: result ? describeElement(result, ctx.dom) : null,
   });
 }
 
-function updateDebugBuild(snap: Snapshot, group: FullBridgeGroup): void {
-  snap.debugFirst?.build.push({
+function updateDebugBuild(ctx: SelectletContext, group: FullBridgeGroup): void {
+  ctx.debugFirst?.build.push({
     engine: 'full-bridge',
     usesScope: group.usesScope,
     usesCache: group.usesCache,
@@ -76,5 +76,5 @@ function updateDebugBuild(snap: Snapshot, group: FullBridgeGroup): void {
     bridge: group.bridge.debug,
   });
 
-  snap.debugCompile = undefined;
+  ctx.debugCompile = undefined;
 }

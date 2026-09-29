@@ -1,10 +1,12 @@
 import type { CSSStyleDeclarationImpl } from './cssom/declaration';
+import type {
+  DOMNode as Document, DOMNode as Element,
+} from '../infra/index';
 import type { CSSStyleSheetImpl } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { StyleletContext } from './context';
-import type { InternalPromise } from '../infra/promises';
-import type { DOMExceptionName } from '../web-idl/core/index';
+import { createStyleletEnvironment, type StyleletOptions } from './environment';
 
 export class Stylelet {
   version = 'stylelet-__VERSION__' as const;
@@ -13,13 +15,11 @@ export class Stylelet {
 
   #cascade: CascadeEngine;
 
-  constructor(
-    document: Document,
-    options: StyleletOptions = {},
-  ) {
-    this.context = new StyleletContext(document, options);
+  constructor(document: Document, options: StyleletOptions = {}) {
+    const env = createStyleletEnvironment(options);
+    this.context = new StyleletContext(document, env);
     this.#cascade = new CascadeEngine({
-      environmentBaseUrl: new URL(document.baseURI),
+      environmentBaseUrl: new URL(this.context.dom.baseURI(document)),
       context: this.context,
     });
     this.documentScope = new TreeScope(document, this.#cascade);
@@ -34,51 +34,6 @@ export class Stylelet {
   }
 }
 
-export type StyleletOptions = {
-  document?: DocumentCaps;
-  element?: ElementCaps;
-  tree?: TreeCaps;
-  exec?: ExecutionCaps;
-};
-
-export type DocumentCaps = {
-  designMode?: (document: Document) => string | undefined;
-};
-
-export type ElementCaps = {
-  getId?: (element: Element) => string;
-  getClass?: (element: Element) => string;
-  getLocalName?: (element: Element) => string;
-  getNamespaceURI?: (element: Element) => string | null;
-  getAttribute?: (element: Element, name: string) => string | null;
-  getAttributeNS?: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => string | null;
-  hasAttribute?: (element: Element, name: string) => boolean;
-  hasAttributeNS?: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => boolean;
-  hasCustomState?: (element: Element, name: string) => boolean;
-};
-
-export type TreeCaps = {
-  version?: (root: Node) => number | undefined;
-};
-
-/** Execution and failure facilities supplied by the embedding host. */
-export type ExecutionCaps = {
-  Promise: typeof InternalPromise;
-  runInParallel(steps: () => void): void;
-  /** Deliver stylesheet updates on the owner's task queue. */
-  queueTask(steps: () => void): void;
-  createDOMException(name: DOMExceptionName, message?: string): DOMException;
-};
-
-// Hosts can specialize the Promise constructor without loading JSRealm or JSRuntime.
-export { defaultExecutionCaps, StyleletContext } from './context';
+export { StyleletContext } from './context';
 export { InternalPromise } from '../infra/promises';
-export type { DOMExceptionName };
+export type { StyleletOptions } from './environment';

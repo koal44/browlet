@@ -1,8 +1,43 @@
-import { withDocumentTypeStub } from '../../stubs';
 import { defineIncludes, defineInterface, idlType, impl, roAttr } from '../../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import type { DocumentImpl } from './document';
+import type { DOMEnvironment } from '../environment';
+
+/** Document type declaration retaining its name and external identifiers. */
+// https://dom.spec.whatwg.org/#interface-documenttype
+export class DocumentTypeImpl extends NodeImpl {
+  /** Declared document type name. */
+  name: string;
+  /** Public identifier, or the empty string when absent. */
+  publicId: string;
+  /** System identifier, or the empty string when absent. */
+  systemId: string;
+
+  /** Child-node mutation behavior shared with other removable nodes. */
+  #childNodeMixin = new ChildNodeMixin(this);
+
+  constructor(
+    name: string,
+    publicId: string,
+    systemId: string,
+    ownerDoc: DocumentImpl,
+    env: DOMEnvironment,
+  ) {
+    super(NodeType.DocumentType, ownerDoc, env);
+    this.name = name;
+    this.publicId = publicId;
+    this.systemId = systemId;
+  }
+
+  static is(value: unknown): value is DocumentTypeImpl {
+    return value instanceof DocumentTypeImpl;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -12,59 +47,6 @@ import type { DocumentImpl } from './document';
  *   readonly attribute DOMString systemId;
  * };
  */
-export class DocumentTypeImpl extends withDocumentTypeStub(NodeImpl) {
-  #childNodeMixin = new ChildNodeMixin(this);
-  #name: string;
-  #publicId: string;
-  #systemId: string;
-
-  constructor(
-    name: string,
-    publicId: string,
-    systemId: string,
-    ownerDocument: DocumentImpl | null = null,
-  ) {
-    super(NodeType.DocumentType, ownerDocument);
-    this.#name = name;
-    this.#publicId = publicId;
-    this.#systemId = systemId;
-  }
-
-  static is(value: unknown): value is DocumentTypeImpl {
-    return value instanceof DocumentTypeImpl;
-  }
-
-  get name(): string {
-    return this.#name;
-  }
-
-  get publicId(): string {
-    return this.#publicId;
-  }
-
-  get systemId(): string {
-    return this.#systemId;
-  }
-
-  remove(): void {
-    this.#childNodeMixin.remove();
-  }
-
-  // -- Internal ---------------------------------------------------------
-
-  setIdentifiers(
-    name: string,
-    publicId: string,
-    systemId: string,
-  ): void {
-    this.#name = name;
-    this.#publicId = publicId;
-    this.#systemId = systemId;
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const documentTypeIDL = defineInterface({
   name: 'DocumentType',
   inherits: 'Node',

@@ -55,40 +55,23 @@ export class IntegrityPolicy implements FetchIntegrityPolicy {
 // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
 export class IntegrityViolationReportBodyImpl extends ReportBodyImpl implements IntegrityViolationReportBody {
   /** Sanitized URL of the document or worker that initiated the request. */
-  #documentURL: string;
+  documentURL: string;
   /** Sanitized original request URL, before redirects. */
-  #blockedURL: string;
+  blockedURL: string;
   /** Intended use of the blocked resource. */
-  #destination: string;
+  destination: string;
   /** Whether the violated policy only reports instead of blocking. */
-  #reportOnly: boolean;
+  reportOnly: boolean;
 
   constructor(body: IntegrityViolationReportBody) {
     super();
-    this.#documentURL = body.documentURL;
-    this.#blockedURL = body.blockedURL;
-    this.#destination = body.destination;
-    this.#reportOnly = body.reportOnly;
+    this.documentURL = body.documentURL;
+    this.blockedURL = body.blockedURL;
+    this.destination = body.destination;
+    this.reportOnly = body.reportOnly;
   }
 
-  get documentURL(): string {
-    return this.#documentURL;
-  }
-
-  get blockedURL(): string {
-    return this.#blockedURL;
-  }
-
-  get destination(): string {
-    return this.#destination;
-  }
-
-  get reportOnly(): boolean {
-    return this.#reportOnly;
-  }
 }
-
-// -- Web IDL ------------------------------------------------------------
 
 // Use the browser interface model shared with Reporting's ReportBody.
 /*

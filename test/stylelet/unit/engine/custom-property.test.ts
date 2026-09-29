@@ -60,15 +60,14 @@ describe('custom property registration', () => {
 
     expect(engine.getCustomPropertyRegistration('--accent', scope))
       .toBe(registered);
-    expect(engine.getCascadedProperty('--accent', scope)).toMatchObject({
-      declaration: {
-        type: 'property-declaration',
-        custom: true,
-        name: '--accent',
-        originalText: '10px',
-      },
-      styleSheet: cssStyleSheet,
-      scope,
+    const accent = engine.getCascadedProperty('--accent', scope)!;
+    expect(accent.styleSheet).toBe(cssStyleSheet);
+    expect(accent.scope).toBe(scope);
+    expect(accent.declaration).toMatchObject({
+      type: 'property-declaration',
+      custom: true,
+      name: '--accent',
+      originalText: '10px',
     });
   });
 
@@ -312,7 +311,11 @@ function styleSheet(
 }
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const context = options.context ?? new StyleletContext(createBrowletDocument());
+  let context = options.context;
+  if (context === undefined) {
+    const document = createBrowletDocument();
+    context = new StyleletContext(document, document.env);
+  }
   const engine = new CascadeEngine({ ...options, context });
 
   return {

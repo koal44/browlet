@@ -1,14 +1,12 @@
 import {
-  type TreeScope, defaultExecutionCaps as defaultStyleletExecutionCaps, Stylelet,
-  type ExecutionCaps as StyleletExecutionCaps, type CSSStyleSheetImpl, type StyleSheetListImpl,
+  Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
 import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
-import { createStyleletExecution, type TreeScopeResolver } from '../../style/integration';
+import type { TreeScopeResolver } from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
 import type { EventImpl } from '../events/event';
-import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
@@ -47,9 +45,7 @@ import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
 import type { ElementImpl } from './element';
-import {
-  HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
-} from '../../../infra/index';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import { NodeImpl, NodeType } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
@@ -66,67 +62,25 @@ import { HTMLElementImpl } from '../../html/elements/html-element';
 import { HTMLHeadElementImpl } from '../../html/elements/metadata/head';
 import { InternalError } from '../../../infra/internal-error';
 
+/** Create a document in env with optional binding-owned node allocation. */
 export function createDocument(
   options: DocumentConstructionOptions = {},
+  env: Environment,
 ): DocumentImpl {
   const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
-  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, options.styleletExec]);
+  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, env]);
 }
 
 export type DocumentConstructionOptions = {
+  /** Allocate this document and its descendants through the selected binding. */
   nodeFactory?: DOMNodeFactory;
-  styleletExec?: StyleletExecutionCaps;
 };
 
-/*
- * [Exposed=Window]
- * interface Document : Node {
- *   constructor();
- *
- *   [SameObject] readonly attribute DOMImplementation implementation;
- *   readonly attribute USVString URL;
- *   readonly attribute USVString documentURI;
- *   readonly attribute DOMString compatMode;
- *   readonly attribute DOMString characterSet;
- *   readonly attribute DOMString charset; // legacy alias of .characterSet
- *   readonly attribute DOMString inputEncoding; // legacy alias of .characterSet
- *   readonly attribute DOMString contentType;
- *
- *   readonly attribute DocumentType? doctype;
- *   readonly attribute Element? documentElement;
- *   HTMLCollection getElementsByTagName(DOMString qualifiedName);
- *   HTMLCollection getElementsByTagNameNS(DOMString? namespace, DOMString localName);
- *   HTMLCollection getElementsByClassName(DOMString classNames);
- *
- *   [CEReactions, NewObject] Element createElement(DOMString localName, optional (DOMString or ElementCreationOptions) options = {});
- *   [CEReactions, NewObject] Element createElementNS(DOMString? namespace, DOMString qualifiedName, optional (DOMString or ElementCreationOptions) options = {});
- *   [NewObject] DocumentFragment createDocumentFragment();
- *   [NewObject] Text createTextNode(DOMString data);
- *   [NewObject] CDATASection createCDATASection(DOMString data);
- *   [NewObject] Comment createComment(DOMString data);
- *   [NewObject] ProcessingInstruction createProcessingInstruction(DOMString target, DOMString data);
- *
- *   [CEReactions, NewObject] Node importNode(Node node, optional (boolean or ImportNodeOptions) options = false);
- *   [CEReactions] Node adoptNode(Node node);
- *
- *   [NewObject] Attr createAttribute(DOMString localName);
- *   [NewObject] Attr createAttributeNS(DOMString? namespace, DOMString qualifiedName);
- *
- *   [NewObject] Event createEvent(DOMString interface); // legacy
- *
- *   [NewObject] Range createRange();
- *
- *   // NodeFilter.SHOW_ALL = 0xFFFFFFFF
- *   [NewObject] NodeIterator createNodeIterator(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
- *   [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
- * };
- *
- * dictionary ElementCreationOptions {
- *   CustomElementRegistry? customElementRegistry;
- *   DOMString is;
- * };
- */
+/** Owns a document tree, node creation, and document loading state. */
+// https://dom.spec.whatwg.org/#interface-document
 export class DocumentImpl extends NodeImpl {
+  /** Browser settings used by this document's loading, policy, and event operations. */
+  declare env: Environment;
   /** The document's URL record, independent of its base URL. */
   // https://dom.spec.whatwg.org/#concept-document-url
   url = parseDocumentURL('about:blank');
@@ -209,31 +163,39 @@ export class DocumentImpl extends NodeImpl {
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
-  /** Execution facilities supplied to the document's Stylelet instance. */
-  styleletExec: StyleletExecutionCaps;
 
+  /** Relevant Window, associated once when the document enters a realm. */
   #relevantGlobalObject: WindowImpl | null = null;
+  /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
+  /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
+  /** Lazily created style engine for this document. */
   #stylelet: Stylelet | undefined;
+  /** Registry and style-sheet access shared with shadow roots. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  /** Live child collection and element-child navigation. */
   #parentNodeMixin: ParentNodeMixin;
+  /** Maps a node's tree root to its owning style scope. */
   #treeScopeResolver: TreeScopeResolver;
 
-  // HTML: a Document's script-blocking style sheet set is an ordered set.
+  /** Ordered set of sheet owners currently blocking script execution. */
+  // https://html.spec.whatwg.org/#script-blocking-style-sheet-set
   #scriptBlockingStyleSheets = new Set<ElementImpl>();
+  /** Shared wait resolved when the blocking style-sheet set becomes empty. */
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
+  /** Node allocator selected when the document is created. */
   #nodeFactory: DOMNodeFactory;
+  /** Parser input callback installed while document.write() is permitted. */
   #writer: DocumentWriter | undefined;
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
-    styleletExec: StyleletExecutionCaps = defaultStyleletExecutionCaps,
+    env: Environment,
   ) {
-    super(NodeType.Document);
-    this.setNodeDocument(this);
+    super(NodeType.Document, null, env);
+    this.nodeDocument = this;
     this.#nodeFactory = nodeFactory;
-    this.styleletExec = styleletExec;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
       getCustomElementRegistry: () => this.customElementRegistry,
@@ -246,44 +208,56 @@ export class DocumentImpl extends NodeImpl {
     return value instanceof DocumentImpl;
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-url
   get URL(): string {
     return serializeURL(this.url);
   }
 
+  /** Legacy alias of the serialized document URL. */
+  // https://dom.spec.whatwg.org/#dom-document-documenturi
   get documentURI(): string {
     return this.URL;
   }
 
+  // https://dom.spec.whatwg.org/#dom-node-baseuri
   override get baseURI(): string {
     return serializeURL(this.getBaseURL());
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-characterset
   get characterSet(): string {
     return this.encoding;
   }
 
+  /** Legacy alias of characterSet. */
   get charset(): string {
     return this.characterSet;
   }
 
+  /** Legacy alias of characterSet. */
   get inputEncoding(): string {
     return this.characterSet;
   }
 
+  /** Associated WindowProxy, or null without a browsing context. */
+  // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): Window | null {
     return this.browsingContext?.windowProxy ?? null;
   }
 
+  // https://html.spec.whatwg.org/#dom-document-readystate
   get readyState(): DocumentReadyState {
     return this.currentDocumentReadiness;
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-compatmode
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
     return this.mode === DocumentMode.Quirks
       ? 'BackCompat'
       : 'CSS1Compat';
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-doctype
   get doctype(): DocumentTypeImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (child.isDocumentType()) return child;
@@ -292,6 +266,8 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
+  /** First element child of the document, or null before one is inserted. */
+  // https://dom.spec.whatwg.org/#dom-document-documentelement
   get documentElement(): ElementImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (child.isElement()) return child;
@@ -300,6 +276,7 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
+  // https://html.spec.whatwg.org/#dom-document-head
   get head(): HTMLHeadElementImpl | null {
     const html = this.documentElement;
     if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
@@ -313,6 +290,8 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
+  /** First body or frameset child of an HTML document element. */
+  // https://html.spec.whatwg.org/#dom-document-body
   get body(): HTMLElementImpl | null {
     const html = this.documentElement;
     if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
@@ -359,40 +338,35 @@ export class DocumentImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
-  createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K] & ElementImpl;
-  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementDeprecatedTagNameMap[K] & ElementImpl;
-  createElement(tagName: string, options?: ElementCreationOptions): HTMLElement & ElementImpl;
+  // https://dom.spec.whatwg.org/#dom-document-createelement
   createElement(
     localName: string,
     _options?: ElementCreationOptions,
-  ): HTMLElement & ElementImpl {
+  ): ElementImpl {
     if (this.type === 'html') localName = asciiLower(localName);
     return this.createElementNode(localName, HTML_NAMESPACE);
   }
 
-  createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement & ElementImpl;
-  createElementNS<K extends keyof SVGElementTagNameMap>(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: K): SVGElementTagNameMap[K] & ElementImpl;
-  createElementNS(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: string): SVGElement & ElementImpl;
-  createElementNS<K extends keyof MathMLElementTagNameMap>(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: K): MathMLElementTagNameMap[K] & ElementImpl;
-  createElementNS(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: string): MathMLElement & ElementImpl;
-  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: ElementCreationOptions): Element & ElementImpl;
-  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: string | ElementCreationOptions): Element & ElementImpl;
+  // https://dom.spec.whatwg.org/#dom-document-createelementns
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
     _options?: string | ElementCreationOptions,
-  ): Element & ElementImpl {
+  ): ElementImpl {
     return this.createElementNode(qualifiedName, namespaceURI ?? '');
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-createtextnode
   createTextNode(data: string): TextImpl {
-    return this.#nodeFactory.constructNode(TextImpl, [data, this]);
+    return this.#nodeFactory.constructNode(TextImpl, [data, this, this.env]);
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-createcomment
   createComment(data: string): CommentImpl {
-    return this.#nodeFactory.constructNode(CommentImpl, [data, this]);
+    return this.#nodeFactory.constructNode(CommentImpl, [data, this, this.env]);
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-createattribute
   createAttribute(localName: string): AttrImpl {
     if (!isValidAttributeLocalName(localName)) {
       throwDOMException(
@@ -404,6 +378,8 @@ export class DocumentImpl extends NodeImpl {
     return this.createAttributeNode(localName, '', null, null);
   }
 
+  /** Feed markup to the currently installed parser writer. */
+  // https://html.spec.whatwg.org/#dom-document-write
   write(...text: string[]): void {
     const writer = this.#writer;
 
@@ -414,46 +390,32 @@ export class DocumentImpl extends NodeImpl {
     writer(text.join(''));
   }
 
+  // https://dom.spec.whatwg.org/#dom-nonelementparentnode-getelementbyid
   getElementById(id: string): ElementImpl | null {
     return findElementById(this, id);
   }
 
-  getElementsByClassName(classNames: string): HTMLCollectionOf<Element> {
+  // https://dom.spec.whatwg.org/#dom-document-getelementsbyclassname
+  getElementsByClassName(classNames: string): HTMLCollectionImpl {
     return findElementsByClassName(this, classNames);
   }
 
-  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof SVGElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<SVGElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
-  /** @deprecated */
-  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
-  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
-  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element> {
+  // https://dom.spec.whatwg.org/#dom-document-getelementsbytagname
+  getElementsByTagName(qualifiedName: string): HTMLCollectionImpl {
     return findElementsByTagName(this, qualifiedName);
   }
 
-  getElementsByTagNameNS(namespaceURI: typeof HTML_NAMESPACE, localName: string): HTMLCollectionOf<HTMLElement>;
-  getElementsByTagNameNS(namespaceURI: typeof SVG_NAMESPACE, localName: string): HTMLCollectionOf<SVGElement>;
-  getElementsByTagNameNS(namespaceURI: typeof MATHML_NAMESPACE, localName: string): HTMLCollectionOf<MathMLElement>;
-  getElementsByTagNameNS(namespaceURI: string | null, localName: string): HTMLCollectionOf<Element>;
+  // https://dom.spec.whatwg.org/#dom-document-getelementsbytagnamens
   getElementsByTagNameNS(
     namespaceURI: string | null,
     localName: string,
-  ): HTMLCollectionOf<Element> {
+  ): HTMLCollectionImpl {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  /* ------------------------------------------------------------------
-   * HTML document lifecycle
-   * ------------------------------------------------------------------ */
-
-  /** Environment of this document's relevant Window, required by HTML lifecycle operations. */
-  get env(): Environment {
-    if (this.#relevantGlobalObject === null) {
-      throw new InternalError('Document lifecycle requires a relevant Window');
-    }
-    return this.#relevantGlobalObject.getWindowOrWorkerGlobalScopeMixin().env;
-  }
+  // ---------------------------------------------------------------------
+  // HTML document lifecycle
+  // ---------------------------------------------------------------------
 
   /** Finish the loading milestones and load event for Browlet's local route. */
   finishLoading(): void {
@@ -684,6 +646,7 @@ export class DocumentImpl extends NodeImpl {
     return url;
   }
 
+  /** Recompute the controlling base element after insertion, removal, or an href change. */
   // https://html.spec.whatwg.org/multipage/semantics.html#frozen-base-url
   updateBaseElement(changedHref?: HTMLBaseElementImpl): void {
     const first = findElement(this, (element) =>
@@ -694,37 +657,33 @@ export class DocumentImpl extends NodeImpl {
     first?.setFrozenBaseURL();
   }
 
-  /*
-   * Return the navigable whose active Document is this one. Inactive
-   * Documents intentionally have no node navigable, even while session
-   * history retains them for possible later reactivation.
-   */
+  /** Navigable whose active document is this one; null for inactive history entries. */
+  // https://html.spec.whatwg.org/#node-navigable
   getNodeNavigable(): Navigable | null {
     const navigable = this.browsingContext?.navigable;
     return navigable?.activeDocument === this ? navigable : null;
   }
 
+  /** Whether this document is active throughout its navigable ancestry. */
+  // https://html.spec.whatwg.org/#fully-active
   isFullyActive(): boolean {
     const navigable = this.getNodeNavigable();
     if (navigable === null) return false;
     if (navigable.isTopLevelTraversable) return true;
 
-    /*
-     * HTML defines a child navigable's answer recursively through its
-     * container element's node Document. Browlet does not yet implement
-     * navigable containers. Its parent navigable is not an equivalent
-     * shortcut: after a parent navigation, the container can remain in the
-     * inactive predecessor Document while parent.activeDocument refers to
-     * its replacement.
-     */
+    // TODO: recurse through the child navigable's container document.
+    // parent.activeDocument is not a substitute: the container can remain
+    // in the inactive predecessor document after its parent navigates.
     return false;
   }
 
+  /** Subscribe to activity changes and return an unsubscribe function. */
   observeFullyActiveState(observer: FullyActiveStateObserver): () => void {
     this.#fullyActiveObservers.add(observer);
     return () => { this.#fullyActiveObservers.delete(observer); };
   }
 
+  /** Notify internal subscribers after navigation or lifecycle state changes. */
   notifyFullyActiveStateChanged(): void {
     const fullyActive = this.isFullyActive();
     for (const observer of this.#fullyActiveObservers) {
@@ -747,6 +706,8 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 
+  /** Propagate events to the relevant Window, except for load events. */
+  // https://dom.spec.whatwg.org/#interface-document
   override getEventParent(event: EventImpl): EventTargetImpl | null {
     if (event.type === 'load' || this.browsingContext === null) {
       return null;
@@ -760,6 +721,7 @@ export class DocumentImpl extends NodeImpl {
     return this.#relevantGlobalObject;
   }
 
+  /** Associate the document with its relevant Window without permitting replacement. */
   setRelevantGlobalObject(window: WindowImpl): void {
     if (
       this.#relevantGlobalObject !== null &&
@@ -770,16 +732,17 @@ export class DocumentImpl extends NodeImpl {
     this.#relevantGlobalObject = window;
   }
 
+  /** Relevant Window, retained even when this document is no longer active. */
   getRelevantGlobalObject(): WindowImpl | null {
     return this.#relevantGlobalObject;
   }
 
+  /** Initialize or retrieve the style engine owned by this document. */
   getCSSEngine(): Stylelet {
-    return this.#stylelet ??= new Stylelet(asDocument(this), {
-      exec: this.styleletExec,
-    });
+    return this.#stylelet ??= new Stylelet(this, { env: this.env });
   }
 
+  /** Temporarily route document.write() to a parser while the callback runs. */
   withWriter<T>(writer: DocumentWriter, callback: () => T): T {
     const previousWriter = this.#writer;
     this.#writer = writer;
@@ -791,8 +754,7 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 
-  createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE): ElementImpl & HTMLElement;
-  createElementNode(localName: string, namespaceURI: string): ElementImpl;
+  /** Allocate the registered element implementation for a namespace and local name. */
   createElementNode(localName: string, namespaceURI: string): ElementImpl {
     const elementInterface = resolveElementInterface(namespaceURI, localName);
     return this.#nodeFactory.constructNode<ElementImpl>(
@@ -802,17 +764,19 @@ export class DocumentImpl extends NodeImpl {
         localName,
         namespaceURI,
         treeScopeResolver: this.#treeScopeResolver,
-      }],
+      }, this.env],
     );
   }
 
+  // https://dom.spec.whatwg.org/#dom-document-createdocumentfragment
   createDocumentFragment(): DocumentFragmentImpl {
     return this.#nodeFactory.constructNode(
       DocumentFragmentImpl,
-      [this],
+      [this, null, this.env],
     );
   }
 
+  /** Allocate an attribute from an already selected name, namespace, and value. */
   createAttributeNode(
     localName: string,
     value: string,
@@ -825,9 +789,11 @@ export class DocumentImpl extends NodeImpl {
       namespaceURI,
       prefix,
       this,
+      this.env,
     ]);
   }
 
+  /** Allocate a doctype associated with this document. */
   createDocumentType(
     name: string,
     publicId: string,
@@ -835,14 +801,16 @@ export class DocumentImpl extends NodeImpl {
   ): DocumentTypeImpl {
     return this.#nodeFactory.constructNode(
       DocumentTypeImpl,
-      [name, publicId, systemId, this],
+      [name, publicId, systemId, this, this.env],
     );
   }
 
+  /** Register a sheet owner that delays script execution. */
   addScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
     this.#scriptBlockingStyleSheets.add(ownerNode);
   }
 
+  /** Release a sheet owner and wake waiters when the blocking set becomes empty. */
   removeScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
     if (!this.#scriptBlockingStyleSheets.delete(ownerNode)) return;
     if (this.#scriptBlockingStyleSheets.size > 0) return;
@@ -856,6 +824,7 @@ export class DocumentImpl extends NodeImpl {
     return this.#scriptBlockingStyleSheets.size > 0;
   }
 
+  /** Wait for the blocking set to empty, rechecking for sheets added before resumption. */
   waitForScriptBlockingStyleSheets(env: JSEnvironment): InternalPromise<void> {
     return env.exec.Promise.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
@@ -868,8 +837,49 @@ export class DocumentImpl extends NodeImpl {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface Document : Node {
+ *   constructor();
+ *
+ *   [SameObject] readonly attribute DOMImplementation implementation;
+ *   readonly attribute USVString URL;
+ *   readonly attribute USVString documentURI;
+ *   readonly attribute DOMString compatMode;
+ *   readonly attribute DOMString characterSet;
+ *   readonly attribute DOMString charset; // legacy alias of .characterSet
+ *   readonly attribute DOMString inputEncoding; // legacy alias of .characterSet
+ *   readonly attribute DOMString contentType;
+ *
+ *   readonly attribute DocumentType? doctype;
+ *   readonly attribute Element? documentElement;
+ *   HTMLCollection getElementsByTagName(DOMString qualifiedName);
+ *   HTMLCollection getElementsByTagNameNS(DOMString? namespace, DOMString localName);
+ *   HTMLCollection getElementsByClassName(DOMString classNames);
+ *
+ *   [CEReactions, NewObject] Element createElement(DOMString localName, optional (DOMString or ElementCreationOptions) options = {});
+ *   [CEReactions, NewObject] Element createElementNS(DOMString? namespace, DOMString qualifiedName, optional (DOMString or ElementCreationOptions) options = {});
+ *   [NewObject] DocumentFragment createDocumentFragment();
+ *   [NewObject] Text createTextNode(DOMString data);
+ *   [NewObject] CDATASection createCDATASection(DOMString data);
+ *   [NewObject] Comment createComment(DOMString data);
+ *   [NewObject] ProcessingInstruction createProcessingInstruction(DOMString target, DOMString data);
+ *
+ *   [CEReactions, NewObject] Node importNode(Node node, optional (boolean or ImportNodeOptions) options = false);
+ *   [CEReactions] Node adoptNode(Node node);
+ *
+ *   [NewObject] Attr createAttribute(DOMString localName);
+ *   [NewObject] Attr createAttributeNS(DOMString? namespace, DOMString qualifiedName);
+ *
+ *   [NewObject] Event createEvent(DOMString interface); // legacy
+ *
+ *   [NewObject] Range createRange();
+ *
+ *   // NodeFilter.SHOW_ALL = 0xFFFFFFFF
+ *   [NewObject] NodeIterator createNodeIterator(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
+ *   [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
+ * };
+ */
 export const documentIDL = defineInterface<BrowletEnvironment>({
   name: 'Document',
   inherits: 'Node',
@@ -884,7 +894,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
           return ctx.construct(implClass, ...argumentsList);
         },
       })),
-      atArg(1, (ctx) => createStyleletExecution(ctx.realm, ctx.getEnvironment())),
+      atArg(1, (ctx) => ctx.realm.env),
     ],
   }),
   members: [
@@ -1019,6 +1029,12 @@ export const htmlDocumentIDL = definePartialInterface({
   ],
 });
 
+/*
+ * dictionary ElementCreationOptions {
+ *   CustomElementRegistry? customElementRegistry;
+ *   DOMString is;
+ * };
+ */
 export const elementCreationOptionsIDL = defineDictionary({
   name: 'ElementCreationOptions',
   members: [dictMember('is', idlType.DOMString)],
@@ -1038,7 +1054,9 @@ export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
   interface: 'Document', mixin: documentOrShadowRootIDL.name,
 });
 
+/** Resolves the document's style scope for nodes in its tree. */
 class DocumentTreeScopeResolver implements TreeScopeResolver {
+  /** Document whose style engine owns the scope. */
   #document: DocumentImpl;
 
   constructor(document: DocumentImpl) {
@@ -1052,13 +1070,16 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
   }
 }
 
+/** Node allocation supplied by the document's composition or binding boundary. */
 export type DOMNodeFactory = {
+  /** Construct an implementation, establishing binding ownership when needed. */
   constructNode<T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
     argumentsList: unknown[],
   ): T;
 };
 
+/** Allocate standalone implementations without establishing platform-object ownership. */
 export const directDOMNodeFactory: DOMNodeFactory = {
   constructNode<T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
@@ -1068,34 +1089,54 @@ export const directDOMNodeFactory: DOMNodeFactory = {
   },
 };
 
+/** Active parser input used by document.write(). */
 export type DocumentWriter = (markup: string) => void;
 
+/** Selects HTML or XML rules for document operations. */
+// https://dom.spec.whatwg.org/#concept-document-type
 export type DocumentType = 'xml' | 'html';
 
+/** Parser-selected compatibility mode for document and CSS behavior. */
+// https://dom.spec.whatwg.org/#concept-document-mode
 export enum DocumentMode {
   NoQuirks = 'no-quirks',
   Quirks = 'quirks',
   LimitedQuirks = 'limited-quirks',
 }
 
+/** Module loading results retained by the document. */
+// https://html.spec.whatwg.org/#module-map
 export type ModuleMap = {
+  /** Entries indexed by request URL and module type. */
   entries: ModuleMapEntry[];
 };
 
+/** Request URL and module type used to identify a module-map entry. */
 export type ModuleMapKey = [URLRecord, string];
 
 export type ModuleMapEntry = {
+  /** Request identity used to find this entry. */
   key: ModuleMapKey;
+  /** Loading state or module result; the module loader's representation is provisional. */
   value: unknown;
 };
 
+/** Absolute loading timestamps, with zero for milestones not yet reached. */
+// https://html.spec.whatwg.org/#document-load-timing-info
 export type DocumentLoadTimingInfo = {
+  /** Start of the navigation that created this document. */
   navigationStartTime: DOMHighResTimeStamp;
+  /** Transition to interactive readiness. */
   domInteractiveTime: DOMHighResTimeStamp;
+  /** Start of DOMContentLoaded dispatch. */
   domContentLoadedEventStartTime: DOMHighResTimeStamp;
+  /** Completion of DOMContentLoaded dispatch. */
   domContentLoadedEventEndTime: DOMHighResTimeStamp;
+  /** Transition to complete readiness. */
   domCompleteTime: DOMHighResTimeStamp;
+  /** Start of Window load-event dispatch. */
   loadEventStartTime: DOMHighResTimeStamp;
+  /** Completion of Window load-event dispatch. */
   loadEventEndTime: DOMHighResTimeStamp;
 };
 

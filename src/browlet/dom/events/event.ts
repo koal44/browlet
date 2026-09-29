@@ -1,37 +1,53 @@
 import type { DOMEnvironment } from '../environment';
 import {
-  arg, atArg, attr, constant, ctor, defineDictionary,
-  defineInterface, dictMember, emptyDictionary, idlType, impl,
-  integer, nullable, op, roAttr, reference, sequence, xattr,
+  arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
+  emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, xattr,
 } from '../../../web-idl/index';
-import {
-  unsafeSharedCurrentTime,
-} from '../../performance/high-resolution-time';
+import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
 import type { EventTargetImpl } from './event-target';
 import { InternalError } from '../../../infra/internal-error';
 
+/** Carries event data and the state used by dispatch and cancellation. */
 // https://dom.spec.whatwg.org/#interface-event
 export class EventImpl {
-  #type = '';
-  #target: EventTargetImpl | null = null;
-  #relatedTarget: EventTargetImpl | null = null;
-  #touchTargetList: (EventTargetImpl | null)[] = [];
-  #currentTarget: EventTargetImpl | null = null;
-  #path: EventPathItem[] = [];
-  #eventPhase: 0 | 1 | 2 | 3 = EventImpl.NONE;
+  /** Name used to select registered listeners. */
+  type = '';
+  /** Dispatch target, retargeted for the current listener. */
+  target: EventTargetImpl | null = null;
+  /** Secondary target, retargeted for the current listener. */
+  relatedTarget: EventTargetImpl | null = null;
+  /** Touch targets, retargeted for the current listener. */
+  touchTargetList: (EventTargetImpl | null)[] = [];
+  /** Target whose listeners are currently being invoked. */
+  currentTarget: EventTargetImpl | null = null;
+  /** Dispatch entries in target-to-root order; cleared after dispatch. */
+  path: EventPathItem[] = [];
+  /** Current dispatch phase; None outside dispatch. */
+  eventPhase: EventPhase = EventPhase.None;
 
-  #stopPropagation = false;
-  #stopImmediatePropagation = false;
-  #canceled = false;
-  #inPassiveListener = false;
-  #bubbles = false;
-  #cancelable = false;
-  #composed = false;
+  /** Prevents dispatch from invoking listeners on further targets. */
+  propagationStopped = false;
+  /** Also prevents the remaining listeners on the current target. */
+  immediatePropagationStopped = false;
+  /** Whether cancellation has been accepted. */
+  defaultPrevented = false;
+  /** Suppresses cancellation while a passive listener is running. */
+  inPassiveListener = false;
+  /** Whether ancestor listeners participate in the bubbling phase. */
+  bubbles = false;
+  /** Whether preventDefault() can cancel this event. */
+  cancelable = false;
+  /** Whether dispatch can cross shadow-root boundaries. */
+  composed = false;
 
-  #initialized = false;
-  #dispatching = false;
-  #isTrusted = false;
-  #timeStamp: DOMHighResTimeStamp;
+  /** Whether initialization has made the event eligible for dispatch. */
+  initialized = false;
+  /** Prevents redispatch and legacy reinitialization during dispatch. */
+  dispatching = false;
+  /** Whether the event was created by the user agent rather than author dispatch. */
+  isTrusted = false;
+  /** Creation time in milliseconds, using the event creator's clock. */
+  timeStamp: DOMHighResTimeStamp;
 
   // https://dom.spec.whatwg.org/#dom-event-event
   constructor(
@@ -41,55 +57,32 @@ export class EventImpl {
   ) {
     const init = eventInitDict ?? {};
 
-    this.#timeStamp = timeStamp;
+    this.timeStamp = timeStamp;
     this.#initialize(
       type,
       init.bubbles ?? false,
       init.cancelable ?? false,
     );
-    this.#composed = init.composed ?? false;
+    this.composed = init.composed ?? false;
   }
 
   static is(value: unknown): value is EventImpl {
-    return typeof value === 'object' && value !== null && #initialized in value;
+    return value instanceof EventImpl;
   }
 
-  /** Create a trusted event implementation without a binding owner. */
-  static create(this: void, EventConstructor: typeof EventImpl = EventImpl): EventImpl {
-    const event = new EventConstructor('', {}, unsafeSharedCurrentTime().milliseconds);
-    event.setTrusted(true);
-    return event;
-  }
-
-  static get NONE(): 0 { return 0; }
-  static get CAPTURING_PHASE(): 1 { return 1; }
-  static get AT_TARGET(): 2 { return 2; }
-  static get BUBBLING_PHASE(): 3 { return 3; }
-
-  get type(): string {
-    return this.#type;
-  }
-
-  get target(): EventTargetImpl | null {
-    return this.#target;
-  }
-
-  /** @deprecated */
+  /** @deprecated Legacy alias of target. */
   get srcElement(): EventTargetImpl | null {
-    return this.#target;
+    return this.target;
   }
 
-  get currentTarget(): EventTargetImpl | null {
-    return this.#currentTarget;
-  }
-
+  /** Return dispatch targets visible from the current listener's shadow-tree position. */
   // https://dom.spec.whatwg.org/#dom-event-composedpath
   composedPath(): EventTargetImpl[] {
     const composedPath: EventTargetImpl[] = [];
-    const path = this.#path;
+    const path = this.path;
     if (path.length === 0) return composedPath;
 
-    const currentTarget = this.#currentTarget;
+    const currentTarget = this.currentTarget;
     if (currentTarget === null) {
       throw new InternalError('An event with a path must have a current target');
     }
@@ -164,46 +157,29 @@ export class EventImpl {
     return composedPath;
   }
 
-  get NONE(): 0 { return EventImpl.NONE; }
-  get CAPTURING_PHASE(): 1 { return EventImpl.CAPTURING_PHASE; }
-  get AT_TARGET(): 2 { return EventImpl.AT_TARGET; }
-  get BUBBLING_PHASE(): 3 { return EventImpl.BUBBLING_PHASE; }
-
-  get eventPhase(): number {
-    return this.#eventPhase;
-  }
-
   // https://dom.spec.whatwg.org/#dom-event-stoppropagation
   stopPropagation(): void {
-    this.#stopPropagation = true;
+    this.propagationStopped = true;
   }
 
-  /** @deprecated */
+  /** @deprecated Legacy propagation flag; assigning false cannot clear it. */
   get cancelBubble(): boolean {
-    return this.#stopPropagation;
+    return this.propagationStopped;
   }
 
   set cancelBubble(value: boolean) {
-    if (value) this.#stopPropagation = true;
+    if (value) this.propagationStopped = true;
   }
 
   // https://dom.spec.whatwg.org/#dom-event-stopimmediatepropagation
   stopImmediatePropagation(): void {
-    this.#stopPropagation = true;
-    this.#stopImmediatePropagation = true;
+    this.propagationStopped = true;
+    this.immediatePropagationStopped = true;
   }
 
-  get bubbles(): boolean {
-    return this.#bubbles;
-  }
-
-  get cancelable(): boolean {
-    return this.#cancelable;
-  }
-
-  /** @deprecated */
+  /** @deprecated False when canceled; assigning false requests cancellation. */
   get returnValue(): boolean {
-    return !this.#canceled;
+    return !this.defaultPrevented;
   }
 
   set returnValue(value: boolean) {
@@ -215,60 +191,17 @@ export class EventImpl {
     this.#setCanceled();
   }
 
-  get defaultPrevented(): boolean {
-    return this.#canceled;
-  }
-
-  get composed(): boolean {
-    return this.#composed;
-  }
-
-  get isTrusted(): boolean {
-    return this.#isTrusted;
-  }
-
-  get timeStamp(): DOMHighResTimeStamp {
-    return this.#timeStamp;
-  }
-
-  /** @deprecated */
+  /** @deprecated Reinitialize an idle event without changing its timestamp or composed flag. */
   // https://dom.spec.whatwg.org/#dom-event-initevent
   initEvent(type: string, bubbles = false, cancelable = false): void {
-    if (this.#dispatching) return;
+    if (this.dispatching) return;
 
     this.#initialize(type, bubbles, cancelable);
   }
 
   // -- Internal methods -------------------------------------------------
 
-  isDispatching(): boolean {
-    return this.#dispatching;
-  }
-
-  isInitialized(): boolean {
-    return this.#initialized;
-  }
-
-  setTrusted(trusted: boolean): void {
-    this.#isTrusted = trusted;
-  }
-
-  beginDispatch(): void {
-    this.#dispatching = true;
-  }
-
-  getRelatedTarget(): EventTargetImpl | null {
-    return this.#relatedTarget;
-  }
-
-  getTouchTargetList(): (EventTargetImpl | null)[] {
-    return this.#touchTargetList;
-  }
-
-  getPath(): EventPathItem[] {
-    return this.#path;
-  }
-
+  /** Append a dispatch target with its retargeted values and shadow-tree visibility flags. */
   // https://dom.spec.whatwg.org/#concept-event-path-append
   appendToPath(
     invocationTarget: EventTargetImpl,
@@ -277,7 +210,7 @@ export class EventImpl {
     touchTargetList: (EventTargetImpl | null)[],
     slotInClosedTree: boolean,
   ): void {
-    this.#path.push({
+    this.path.push({
       invocationTarget,
       invocationTargetInShadowTree: invocationTarget.isNodeInShadowTree(),
       shadowAdjustedTarget,
@@ -288,67 +221,28 @@ export class EventImpl {
     });
   }
 
-  setTarget(target: EventTargetImpl | null): void {
-    this.#target = target;
-  }
-
-  setRelatedTarget(relatedTarget: EventTargetImpl | null): void {
-    this.#relatedTarget = relatedTarget;
-  }
-
-  setTouchTargetList(targets: (EventTargetImpl | null)[]): void {
-    this.#touchTargetList = [...targets];
-  }
-
-  setCurrentTarget(target: EventTargetImpl | null): void {
-    this.#currentTarget = target;
-  }
-
-  setPhase(phase: 0 | 1 | 2 | 3): void {
-    this.#eventPhase = phase;
-  }
-
-  propagationStopped(): boolean {
-    return this.#stopPropagation;
-  }
-
-  immediatePropagationStopped(): boolean {
-    return this.#stopImmediatePropagation;
-  }
-
-  setInPassiveListener(passive: boolean): void {
-    this.#inPassiveListener = passive;
-  }
-
-  setType(type: string): void {
-    this.#type = type;
-  }
-
   /** Set dispatch flags during internal event creation, retaining its trusted status. */
   setFlags(init: EventInit): void {
-    this.#bubbles = init.bubbles ?? false;
-    this.#cancelable = init.cancelable ?? false;
-    this.#composed = init.composed ?? false;
+    this.bubbles = init.bubbles ?? false;
+    this.cancelable = init.cancelable ?? false;
+    this.composed = init.composed ?? false;
   }
 
+  /** Clear transient dispatch state and, when needed, targets hidden by shadow boundaries. */
   // Final cleanup from https://dom.spec.whatwg.org/#concept-event-dispatch
   finishDispatch(clearTargets: boolean): void {
-    this.#eventPhase = EventImpl.NONE;
-    this.#currentTarget = null;
-    this.#path = [];
-    this.#dispatching = false;
-    this.#stopPropagation = false;
-    this.#stopImmediatePropagation = false;
+    this.eventPhase = EventPhase.None;
+    this.currentTarget = null;
+    this.path = [];
+    this.dispatching = false;
+    this.propagationStopped = false;
+    this.immediatePropagationStopped = false;
 
     if (clearTargets) {
-      this.#target = null;
-      this.#relatedTarget = null;
-      this.#touchTargetList = [];
+      this.target = null;
+      this.relatedTarget = null;
+      this.touchTargetList = [];
     }
-  }
-
-  getFirstPathInvocationTarget(): EventTargetImpl | null {
-    return this.#path[0]?.invocationTarget ?? null;
   }
 
   // -- Private ----------------------------------------------------------
@@ -359,26 +253,33 @@ export class EventImpl {
     bubbles: boolean,
     cancelable: boolean,
   ): void {
-    this.#initialized = true;
-    this.#stopPropagation = false;
-    this.#stopImmediatePropagation = false;
-    this.#canceled = false;
-    this.#isTrusted = false;
-    this.#target = null;
-    this.#type = type;
-    this.#bubbles = bubbles;
-    this.#cancelable = cancelable;
+    this.initialized = true;
+    this.propagationStopped = false;
+    this.immediatePropagationStopped = false;
+    this.defaultPrevented = false;
+    this.isTrusted = false;
+    this.target = null;
+    this.type = type;
+    this.bubbles = bubbles;
+    this.cancelable = cancelable;
   }
 
   // https://dom.spec.whatwg.org/#set-the-canceled-flag
   #setCanceled(): void {
-    if (this.#cancelable && !this.#inPassiveListener) {
-      this.#canceled = true;
+    if (this.cancelable && !this.inPassiveListener) {
+      this.defaultPrevented = true;
     }
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
+/** The event's position in the dispatch sequence. */
+// https://dom.spec.whatwg.org/#dom-event-eventphase
+export enum EventPhase {
+  None = 0,
+  Capturing = 1,
+  AtTarget = 2,
+  Bubbling = 3,
+}
 
 /*
  * [Exposed=*]
@@ -439,10 +340,10 @@ export const eventIDL = defineInterface<DOMEnvironment>({
     roAttr('srcElement', nullable(reference('EventTarget'))),
     roAttr('currentTarget', nullable(reference('EventTarget'))),
     op('composedPath', sequence(reference('EventTarget'))),
-    constant('NONE', idlType.unsignedShort, integer(0)),
-    constant('CAPTURING_PHASE', idlType.unsignedShort, integer(1)),
-    constant('AT_TARGET', idlType.unsignedShort, integer(2)),
-    constant('BUBBLING_PHASE', idlType.unsignedShort, integer(3)),
+    constant('NONE', idlType.unsignedShort, integer(EventPhase.None)),
+    constant('CAPTURING_PHASE', idlType.unsignedShort, integer(EventPhase.Capturing)),
+    constant('AT_TARGET', idlType.unsignedShort, integer(EventPhase.AtTarget)),
+    constant('BUBBLING_PHASE', idlType.unsignedShort, integer(EventPhase.Bubbling)),
     roAttr('eventPhase', idlType.unsignedShort),
     op('stopPropagation', idlType.undefined),
     attr('cancelBubble', idlType.boolean),
@@ -475,11 +376,11 @@ export const eventInitIDL = defineDictionary({
   ],
 });
 
+/** An event carrying an arbitrary value supplied by its creator. */
 // https://dom.spec.whatwg.org/#interface-customevent
-export class CustomEventImpl<T = unknown>
-  extends EventImpl
-{
-  #detail: T;
+export class CustomEventImpl<T = unknown> extends EventImpl {
+  /** Payload exposed unchanged to event listeners. */
+  detail: T;
 
   // https://dom.spec.whatwg.org/#dom-customevent-customevent
   constructor(
@@ -490,14 +391,10 @@ export class CustomEventImpl<T = unknown>
     const init = eventInitDict ?? {};
 
     super(type, init, timeStamp);
-    this.#detail = (init.detail === undefined ? null : init.detail) as T;
+    this.detail = (init.detail === undefined ? null : init.detail) as T;
   }
 
-  get detail(): T {
-    return this.#detail;
-  }
-
-  /** @deprecated */
+  /** @deprecated Reinitialize an idle event and replace its detail. */
   // https://dom.spec.whatwg.org/#dom-customevent-initcustomevent
   initCustomEvent(
     type: string,
@@ -505,15 +402,12 @@ export class CustomEventImpl<T = unknown>
     cancelable = false,
     detail: T = null as T,
   ): void {
-    if (this.isDispatching()) return;
+    if (this.dispatching) return;
 
     this.initEvent(type, bubbles, cancelable);
-    this.#detail = detail;
+    this.detail = detail;
   }
-
 }
-
-// -- Web IDL ------------------------------------------------------------
 
 /*
  * [Exposed=*]
@@ -563,12 +457,21 @@ export const customEventInitIDL = defineDictionary({
   members: [dictMember('detail', idlType.any, { default: null })],
 });
 
+/** One dispatch target and the event values visible at that point in the path. */
+// https://dom.spec.whatwg.org/#event-path
 export type EventPathItem = {
+  /** Target whose listeners this entry invokes. */
   invocationTarget: EventTargetImpl;
+  /** Whether that target is a node inside a shadow tree, affecting Window.event. */
   invocationTargetInShadowTree: boolean;
+  /** Target visible from this entry; null retains the preceding entry's target. */
   shadowAdjustedTarget: EventTargetImpl | null;
+  /** Secondary target as seen from this invocation target. */
   relatedTarget: EventTargetImpl | null;
+  /** Touch targets as seen from this invocation target. */
   touchTargetList: (EventTargetImpl | null)[];
+  /** Whether this entry's target is a closed shadow root. */
   rootOfClosedTree: boolean;
+  /** Whether dispatch reached this entry through a slot in a closed shadow tree. */
   slotInClosedTree: boolean;
 };

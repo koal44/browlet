@@ -181,8 +181,6 @@ export class CSPViolationReportBodyImpl extends ReportBodyImpl {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
 // SPEC_CLASH(csp-report-body-interface): The draft declares a dictionary inheriting
 // the ReportBody interface. Use the browser interface model already adopted for Reporting.
 /*

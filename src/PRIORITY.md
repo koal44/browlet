@@ -89,8 +89,8 @@ parents/scoped registries, scripting mode, and foreign content. Then add
 DOMTokenList/classList and [reflection](browlet/html/reflection/ROADMAP.md) for the
 initial html/head/title/base/meta/body/style/template/slot shell.
 
-These passes also retire relevant boundary debt: `asDocument` and ambient
-factory intersections, post-conversion values widened back to platform types,
+These passes also retire relevant boundary debt: incomplete DOM host contracts,
+post-conversion values widened back to platform types,
 Array-backed legacy collection shortcuts, and known interface returns declared
 as `object`/`any`. Prefer ordinary instance operations over obsolete static
 friends. Apply the [shared vocabulary](ARCHITECTURE.md#source-boundaries-and-vocabulary)

@@ -1,37 +1,15 @@
 import {
   arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
 } from '../../../web-idl/index';
-import { withLocationStub } from '../../stubs';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * [Exposed=Window]
- * interface Location { // but see also additional creation steps and overridden internal methods
- *   [LegacyUnforgeable] stringifier attribute USVString href;
- *   [LegacyUnforgeable] readonly attribute USVString origin;
- *   [LegacyUnforgeable] attribute USVString protocol;
- *   [LegacyUnforgeable] attribute USVString host;
- *   [LegacyUnforgeable] attribute USVString hostname;
- *   [LegacyUnforgeable] attribute USVString port;
- *   [LegacyUnforgeable] attribute USVString pathname;
- *   [LegacyUnforgeable] attribute USVString search;
- *   [LegacyUnforgeable] attribute USVString hash;
- *
- *   [LegacyUnforgeable] undefined assign(USVString url);
- *   [LegacyUnforgeable] undefined replace(USVString url);
- *   [LegacyUnforgeable] undefined reload();
- *
- *   [LegacyUnforgeable] readonly attribute DOMStringList ancestorOrigins;
- * };
- */
-export class LocationImpl
-  extends withLocationStub(class {})
-  implements Location
-{
+/** Exposes URL components for a Window; navigation operations remain unimplemented. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-location-interface
+export class LocationImpl {
+  /** URL snapshot exposed by the current provisional Location implementation. */
   #url: URL;
 
   constructor(url: URL) {
-    super();
     this.#url = new URL(url);
   }
 
@@ -120,8 +98,26 @@ export class LocationImpl
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface Location { // but see also additional creation steps and overridden internal methods
+ *   [LegacyUnforgeable] stringifier attribute USVString href;
+ *   [LegacyUnforgeable] readonly attribute USVString origin;
+ *   [LegacyUnforgeable] attribute USVString protocol;
+ *   [LegacyUnforgeable] attribute USVString host;
+ *   [LegacyUnforgeable] attribute USVString hostname;
+ *   [LegacyUnforgeable] attribute USVString port;
+ *   [LegacyUnforgeable] attribute USVString pathname;
+ *   [LegacyUnforgeable] attribute USVString search;
+ *   [LegacyUnforgeable] attribute USVString hash;
+ *
+ *   [LegacyUnforgeable] undefined assign(USVString url);
+ *   [LegacyUnforgeable] undefined replace(USVString url);
+ *   [LegacyUnforgeable] undefined reload();
+ *
+ *   [LegacyUnforgeable] readonly attribute DOMStringList ancestorOrigins;
+ * };
+ */
 export const locationIDL = defineInterface({
   name: 'Location',
   exposed: 'Window',

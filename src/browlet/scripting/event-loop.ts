@@ -4,15 +4,12 @@ import type { UnsafeMoment } from '../performance/clock';
 import type { Environment } from './environment';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * Each agent has a unique event loop. A task source is associated with one
- * task queue per event loop; the association is deliberately private so a
- * future scheduler can coalesce sources without changing callers.
- *
- * https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
- */
+// Task-source/queue associations stay private so scheduling can coalesce
+// sources without changing callers.
+/** Runs an agent's HTML tasks and coordinates its microtask checkpoints. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
-  /* HTML §8.1.3.3 — Backup incumbent settings object stack. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
   #backupIncumbentSettingsObjectStack: Environment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
@@ -26,10 +23,12 @@ export class EventLoop {
 
   constructor(public microtaskQueue: JSMicrotaskQueue) {}
 
+  /** Task executing on this loop, or null outside task execution. */
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
   }
 
+  /** Most recent rendering opportunity reported by the host. */
   get lastRenderOpportunityTime(): UnsafeMoment | null {
     return this.#lastRenderOpportunityTime;
   }
@@ -53,6 +52,8 @@ export class EventLoop {
     );
   }
 
+  /** Run one eligible task and its checkpoint; return false when none is runnable. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
   runTaskTurn(options: EventLoopOptions): boolean {
     if (this.#runningTaskTurn || this.#currentlyRunningTask !== null) {
       throw new InternalError('An event loop cannot run a task reentrantly');
@@ -119,7 +120,8 @@ export class EventLoop {
     return true;
   }
 
-  /* HTML §8.1.3.3 — The incumbent settings object. */
+  /** Find the incumbent settings object for a script or host entry. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#incumbent-settings-object
   getIncumbentSettingsObject(
     hostEntryEnv: Environment,
   ): Environment {
@@ -136,16 +138,15 @@ export class EventLoop {
     const backup = this.#backupIncumbentSettingsObjectStack.at(-1);
     if (backup !== undefined) return backup;
 
-    /*
-     * ACCOMMODATION(node-v8-execution-contexts):
-     * HTML's algorithm asserts here. A call directly from Browlet's embedder
-     * has no engine-visible ScriptOrModule for userland to inspect, so its
-     * binding realm is the explicit entry boundary.
-     */
+    // ACCOMMODATION(node-v8-execution-contexts):
+    // HTML's algorithm asserts here. A call directly from Browlet's embedder
+    // has no engine-visible ScriptOrModule for userland to inspect, so its
+    // binding realm is the explicit entry boundary.
     return hostEntryEnv;
   }
 
-  /* HTML §8.1.3.3 — Prepare to run a callback. */
+  /** Push callback settings and hide the active script from incumbent selection. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#prepare-to-run-a-callback
   prepareToRunCallback(env: Environment): void {
     if (env.responsibleEventLoop !== this) {
       throw new InternalError('A callback context belongs to another event loop');
@@ -158,7 +159,8 @@ export class EventLoop {
     if (context !== undefined) context.skipWhenDeterminingIncumbent++;
   }
 
-  /* HTML §8.1.3.3 — Clean up after running a callback. */
+  /** Restore incumbent selection after the matching callback entry. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-a-callback
   cleanUpAfterRunningCallback(env: Environment): void {
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
@@ -176,20 +178,19 @@ export class EventLoop {
     this.#backupIncumbentSettingsObjectStack.pop();
   }
 
-  /* HTML §8.1.4.4 — Prepare to run script. */
+  /** Enter script execution with this environment and the current task. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#prepare-to-run-script
   prepareToRunScript(env: Environment): void {
     if (env.responsibleEventLoop !== this) {
       throw new InternalError('Script settings belong to another event loop');
     }
 
     const task = this.#currentlyRunningTask;
-    /*
-     * ACCOMMODATION(node-v8-execution-contexts):
-     * HTML §§8.1.4.4 and 8.1.6.6.4 expect an engine-owned Promise job to have
-     * installed its microtask task before this point. The custom engine's
-     * Promise hook does so. Unsupported engines and uncontrolled host entries
-     * still need a nullable task; do not infer that V8's unseen stack is empty.
-     */
+    // ACCOMMODATION(node-v8-execution-contexts):
+    // HTML §§8.1.4.4 and 8.1.6.6.4 expect an engine-owned Promise job to have
+    // installed its microtask task before this point. The custom engine's
+    // Promise hook does so. Unsupported engines and uncontrolled host entries
+    // still need a nullable task; do not infer that V8's unseen stack is empty.
     this.#jsExecutionContextStack.push({
       kind: 'realm',
       env,
@@ -198,7 +199,8 @@ export class EventLoop {
     task?.scriptEvaluationEnvironmentSettingsObjectSet.add(env);
   }
 
-  /* HTML §8.1.4.4 — Clean up after running script. */
+  /** Leave script execution and checkpoint when the execution stack becomes empty. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script
   cleanUpAfterRunningScript(env: Environment): void {
     const entry = this.#jsExecutionContextStack.at(-1);
     if (
@@ -209,11 +211,9 @@ export class EventLoop {
     }
     this.#jsExecutionContextStack.pop();
 
-    /*
-     * ACCOMMODATION(node-v8-execution-contexts): A checkpoint clears the current
-     * task even while its outer task turn continues. Later callbacks in that
-     * turn still have a controlled entry; unrelated engine entries do not.
-     */
+    // ACCOMMODATION(node-v8-execution-contexts): A checkpoint clears the current
+    // task even while its outer task turn continues. Later callbacks in that
+    // turn still have a controlled entry; unrelated engine entries do not.
     if (
       (entry.task !== null || this.#runningTaskTurn) &&
       this.#jsExecutionContextStack.length === 0
@@ -222,13 +222,11 @@ export class EventLoop {
     }
   }
 
-  /*
-   * HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
-   * The settings and skip counter are the host-visible portion needed for
-   * incumbent selection; the eventual Script record remains §8.1.4.1 work.
-   * ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
-   * a temporary task because Node exposes no surrounding execution context.
-   */
+  // HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
+  // The settings and skip counter are the host-visible portion needed for
+  // incumbent selection; the eventual Script record remains §8.1.4.1 work.
+  // ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
+  // a temporary task because Node exposes no surrounding execution context.
   runScriptEvaluation<Result>(
     env: Environment,
     steps: () => Result,
@@ -294,7 +292,8 @@ export class EventLoop {
     );
 
     this.microtaskQueue.enqueueMicrotask(() => {
-      /* HTML §8.1.7.3 — Suppress checkpoints requested by scripted callbacks. */
+      // https://html.spec.whatwg.org/multipage/webappapis.html#perform-a-microtask-checkpoint
+      // Suppress nested checkpoints requested by scripted callbacks.
       const wasPerformingMicrotaskCheckpoint =
         this.#performingMicrotaskCheckpoint;
       this.#performingMicrotaskCheckpoint = true;
@@ -416,11 +415,9 @@ export type EventLoopOptions = {
 };
 
 export type TaskTimingHooks = {
-  /*
-   * Long Animation Frames editor's draft:
-   * https://w3c.github.io/long-animation-frames/#record-task-start-time
-   * https://w3c.github.io/long-animation-frames/#record-task-end-time
-   */
+  // Long Animation Frames editor's draft:
+  // https://w3c.github.io/long-animation-frames/#record-task-start-time
+  // https://w3c.github.io/long-animation-frames/#record-task-end-time
   recordTaskStartTime(
     this: void,
     startTime: UnsafeMoment,
@@ -434,13 +431,11 @@ export type TaskTimingHooks = {
 };
 
 export type LongTaskReporter = {
-  /*
-   * The eventual Long Tasks owner can derive top-level browsing contexts
-   * from the task's script-evaluation settings set. Keep that unimplemented
-   * subsystem behind this seam rather than manufacturing its result here.
-   *
-   * https://w3c.github.io/longtasks/#report-long-tasks
-   */
+  // The eventual Long Tasks owner can derive top-level browsing contexts
+  // from the task's script-evaluation settings set. Keep that unimplemented
+  // subsystem behind this seam rather than manufacturing its result here.
+  //
+  // https://w3c.github.io/longtasks/#report-long-tasks
   reportLongTasks(
     this: void,
     startTime: UnsafeMoment,
@@ -453,11 +448,18 @@ export type TaskQueueSelector = (
   runnableTaskQueues: ReadonlySet<Task>[],
 ) => ReadonlySet<Task>;
 
+/** Queued HTML work with source identity and document-activity gating. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#concept-task
 export class Task {
+  /** Document whose activity gates execution, or null for ungated work. */
   document: DocumentImpl | null;
+  /** Settings objects whose scripts were evaluated while this task ran. */
   scriptEvaluationEnvironmentSettingsObjectSet = new Set<Environment>();
+  /** Fixed source identity used to select the task's queue. */
   readonly source: TaskSource;
+  /** Algorithm steps executed when this task is selected. */
   steps: () => void;
+  /** Nesting level inherited by timer initialization inside this task. */
   timerNestingLevel?: number;
 
   constructor(
@@ -478,11 +480,9 @@ export class Task {
   }
 }
 
-/*
- * A source is an opaque identity, not the queue itself. The diagnostic name
- * does not participate in equality: two specifications can use the same name
- * without accidentally serializing their tasks together.
- */
+// A source is an opaque identity, not the queue itself. The diagnostic name
+// does not participate in equality: two specifications can use the same name
+// without accidentally serializing their tasks together.
 export type TaskSource = { name: string; };
 
 export function createTaskSource(name: string): TaskSource {

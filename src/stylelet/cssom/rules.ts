@@ -1,10 +1,10 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
-import type { ExecutionCaps } from '../stylelet';
+import type { StyleletEnvironment } from '../environment';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 import { InternalError } from '../../infra/internal-error';
 
-export class CSSStyleRuleImpl implements CSSStyleRule {
+export class CSSStyleRuleImpl {
   STYLE_RULE = 1 as const;
   CHARSET_RULE = 2 as const;
   IMPORT_RULE = 3 as const;
@@ -24,14 +24,14 @@ export class CSSStyleRuleImpl implements CSSStyleRule {
   #style: CSSStyleDeclarationImpl;
   #cssRules = new CSSRuleListImpl();
 
-  constructor(rule: StyleRule | undefined, exec: ExecutionCaps) {
+  constructor(rule: StyleRule | undefined, env: StyleletEnvironment) {
     this.#style = new CSSStyleDeclarationImpl({
       declarations: declarationBlock(rule?.block),
       parentRule: this,
       onChange: (declarations) => {
         if (rule) rule.block = [...declarations];
       },
-    }, exec);
+    }, env);
   }
 
   get cssRules(): CSSRuleListImpl {

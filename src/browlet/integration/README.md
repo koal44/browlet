@@ -6,15 +6,17 @@ assembles their capability providers with Web IDL definitions, host-defined
 interfaces, and realm bindings.
 
 The named functions exported by `bindings.ts` forward to its main
-`BrowletBindings` instance. `createWindowEnvironment()` constructs the Window,
-allocates its realm and execution facilities, and installs its platform global.
+`BrowletBindings` instance. `createWindowEnvironment()` allocates the realm and
+execution facilities before constructing Window and installing its platform global.
 The Realm initially reads security from an `EnvironmentRecord` instance.
 Registration constructs the complete `WindowEnvironment` before global projection;
-it inherits the record state and adds `realm`, `exec`, and `window`. The composition
-root then constructs its shared global-scope mixin. The Document lifecycle
+it inherits the record state and adds `realm` and `exec`. The composition root
+then constructs Window with that environment, links it to the realm, and installs
+the shared global-scope mixin. The Document lifecycle
 algorithms retain their own initialization. `createDocument()` obtains the node factory and
-Stylelet execution facilities through Document's existing construction declaration. Record
-creation attaches its event execution without projecting it.
+environment through Document's construction declaration. Stylelet uses that
+same environment, including `userAgent.dom` and `exec`. Event creation is
+available before projection.
 The mixin uses `env.exec.clone()` and derives timer ownership from
 `env.realm`, without retaining a Binding Context or a separate execution
 argument.
@@ -43,7 +45,7 @@ Domain-local behavior still remains with its owning subsystem.
   acquisition to URL and Fetch without exposing store mutation to Fetch.
 - `execution.ts` composes engine facilities, DOM event and AbortController construction,
   HTML task delivery, and structured cloning into `BrowletExecution`, which extends
-  the independent `RealmExecution` and `EventExecution` contracts. The binding's
+  `RealmExecution`, `EventExecution`, and `StyleletExecution` contracts. The binding's
   `getEnvironment()` retains the actual environment as `BrowletEnvironment`;
   portable declarations require only their `JSEnvironment` or `DOMEnvironment`
   view of that same object. Clone and serialization

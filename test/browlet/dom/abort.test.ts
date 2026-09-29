@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { createEnvironment } from '../../js-engine/execution-fixture';
+import { createSandboxEnvironment } from '../../../src/browlet/bindings';
 import {
   AbortSignalImpl, type AbortAlgorithmHandle,
 } from '../../../src/browlet/dom/abort/abort-signal';
@@ -552,8 +552,8 @@ describe('AbortController and AbortSignal', () => {
 describe('AbortSignal internal algorithms', () => {
   it('supports repeated construction on a frozen global without exposing retention state', () => {
     const global = Object.freeze({});
-    const env = createEnvironment();
-    env.exec.global = global;
+    const env = createSandboxEnvironment();
+    Object.defineProperty(env.exec, 'global', { value: global });
     const prototype: unknown = Object.getPrototypeOf(global);
     const source = new AbortSignalImpl(env);
     const first = AbortSignalImpl.any(new AbortSignalImpl(env), [source]);
@@ -572,7 +572,7 @@ describe('AbortSignal internal algorithms', () => {
   });
 
   it('removes a settled dependent without removing other dependents of the shared source', () => {
-    const env = createEnvironment();
+    const env = createSandboxEnvironment();
     const firstSource = new AbortSignalImpl(env);
     const sharedSource = new AbortSignalImpl(env);
     const first = AbortSignalImpl.any(new AbortSignalImpl(env), [
@@ -602,7 +602,7 @@ describe('AbortSignal internal algorithms', () => {
   });
 
   it('runs in order and permits an earlier algorithm to remove a later one', () => {
-    const signal = new AbortSignalImpl(createEnvironment());
+    const signal = new AbortSignalImpl(createSandboxEnvironment());
     const order: string[] = [];
     let later: AbortAlgorithmHandle | null = null;
 

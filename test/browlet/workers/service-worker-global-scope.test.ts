@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createSandboxEnvironment } from '../../../src/browlet/bindings';
 import {
   ServiceWorkerGlobalScopeImpl,
 } from '../../../src/browlet/workers/service-worker-global-scope';
@@ -29,7 +30,7 @@ class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
 
 describe('ServiceWorkerGlobalScopeImpl', () => {
   it('reports late service-worker event registrations', () => {
-    const worker = new TestServiceWorkerGlobalScope();
+    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
     worker.evaluated = true;
 
     worker.addEventListener('fetch', () => {});
@@ -41,7 +42,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
   });
 
   it('reports removal of an event type the worker handles', () => {
-    const worker = new TestServiceWorkerGlobalScope();
+    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
     const listener = () => {};
     worker.handledTypes.add('fetch');
     worker.addEventListener('fetch', listener);
@@ -54,7 +55,7 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
   });
 
   it('obtains fetch callbacks in event listener order', () => {
-    const worker = new TestServiceWorkerGlobalScope();
+    const worker = new TestServiceWorkerGlobalScope(createSandboxEnvironment());
     const first = () => {};
     const ignored = () => {};
     const second = () => {};

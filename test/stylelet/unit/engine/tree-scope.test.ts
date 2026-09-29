@@ -5,14 +5,15 @@ import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
+import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 
 describe('tree scope', () => {
   it('orders header stylesheets before tree-ordered stylesheets', () => {
     const { document, scope } = createTreeScope();
     const firstOwner = document.createElement('i');
     const secondOwner = document.createElement('i');
-    document.body.appendChild(firstOwner);
-    document.body.appendChild(secondOwner);
+    document.body!.appendChild(firstOwner);
+    document.body!.appendChild(secondOwner);
     const first = createStyleSheet(scope, { ownerNode: firstOwner });
     const second = createStyleSheet(scope, { ownerNode: secondOwner });
     const firstHeader = createStyleSheet(scope);
@@ -118,12 +119,9 @@ describe('tree scope', () => {
   });
 });
 
-function createTreeScope(): {
-  document: Document;
-  scope: TreeScope;
-} {
+function createTreeScope() {
   const document = createBrowletDocument();
-  const context = new StyleletContext(document);
+  const context = new StyleletContext(document, document.env);
   const cascade = new CascadeEngine({ context });
   return { document, scope: new TreeScope(document, cascade) };
 }
@@ -158,6 +156,6 @@ function createStyleSheet(
 type StyleSheetOptions = {
   alternate?: boolean;
   disabled?: boolean;
-  ownerNode?: Element | null;
+  ownerNode?: ElementImpl | null;
   title?: string;
 };

@@ -1,13 +1,16 @@
 import { isValidElementLocalName } from '../../dom/infra/name-validation';
 
-// HTML §4.13.3 Valid custom element names
+// https://html.spec.whatwg.org/multipage/custom-elements.html#valid-custom-element-name
 export function isValidCustomElementName(name: string): boolean {
-  return isValidElementLocalName(name) &&
-    /^[a-z]/u.test(name) &&
-    !/[A-Z]/u.test(name) &&
-    name.includes('-') &&
-    !restrictedNames.has(name);
+  return name.includes('-') &&
+    LOWERCASE_START_RE.test(name) &&
+    !UPPERCASE_RE.test(name) &&
+    !restrictedNames.has(name) &&
+    isValidElementLocalName(name);
 }
+
+const LOWERCASE_START_RE = /^[a-z]/;
+const UPPERCASE_RE = /[A-Z]/;
 
 const restrictedNames = new Set([
   'annotation-xml',

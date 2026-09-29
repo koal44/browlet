@@ -25,11 +25,10 @@ import {
 } from '../../performance/high-resolution-time';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * HTML's navigation params struct. Browlet's local route supplies a response
- * that has already been obtained, so the Fetch-owned request/controller slots
- * are present but null on this bounded path.
- */
+// Local routes supply an already-obtained response, leaving the Fetch request
+// and controller slots null on that path.
+/** Carries a navigation response and the state needed to create its document. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigation-params
 export class NavigationParams {
   /** Identifier supplied by the navigation algorithm, when present. */
   id: string | null = null;

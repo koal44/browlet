@@ -1,43 +1,41 @@
+import type { DOMNode as QuerySource, DOMOperations, DOMCollection, DOMNode as Element } from '../../infra/index';
 import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
 import { collectionToArray, concatCollection } from '../collections';
 import { asciiLower } from '../../infra/ascii';
-import { isDocumentFragment, isNamedItemAnElement } from '../dom';
-import { isElement } from '../../infra/selector-dom';
-import type { QueryContext } from '../selectlet';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
-// scoped getElementById for Document, DocumentFragment, and Element contexts
-export function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
-  snap.update(context);
+// scoped getElementById for Document, DocumentFragment, and Element sources
+export function byId(id: string, source: QuerySource, ctx: SelectletContext): Element | null {
+  ctx.update(source);
   if (!id) return null;
 
-  if (!isElement(context)) return context.getElementById(id);
+  if (!ctx.dom.isElement(source)) return ctx.dom.getElementById(source, id);
 
-  if (context.isConnected) {
-    if (snap.hasDocumentAll) return byId_AllFirst(id, context);
-    if (snap.config.MUTATE_IDS) return byId_MutateFirst(id, context);
+  if (ctx.dom.isConnected(source)) {
+    if (ctx.hasDocumentAll) return byId_AllFirst(id, source, ctx.dom);
+    if (ctx.config.MUTATE_IDS) return byId_MutateFirst(id, source, ctx.dom);
   }
 
-  return byId_WalkFirst(id, context);
+  return byId_WalkFirst(id, source, ctx.dom);
 }
 
-function byId_AllFirst(id: string, context: Element): Element | null {
-  if (!context.isConnected) throw new Error('byId_AllFirst cannot be used on a disconnected element');
+function byId_AllFirst(id: string, source: Element, dom: DOMOperations): Element | null {
+  if (!dom.isConnected(source)) throw new Error('byId_AllFirst cannot be used on a disconnected element');
 
-  const item = context.ownerDocument.all.namedItem(id);
+  const item = dom.allNamedItem(dom.ownerDocument(source)!, id);
   if (item === null) {  // null
     return null;
-  } else if (isNamedItemAnElement(item)) {  // Element
+  } else if (dom.isNode(item) && dom.isElement(item)) {  // Element
     const e = item;
-    if (e !== context && sameId(e, id) && context.contains(e)) {
+    if (e !== source && sameId(e, id, dom) && dom.contains(source, e)) {
       return e;
     }
     return null;
   } else {  // HTMLCollection
-    for (let i = 0; i < item.length; i++) {
-      const e = item[i]!;
-      if (e !== context && sameId(e, id) && context.contains(e)) {
+    for (let i = 0; i < (item as DOMCollection).length; i++) {
+      const e = (item as DOMCollection)[i]!;
+      if (e !== source && sameId(e, id, dom) && dom.contains(source, e)) {
         return e;
       }
     }
@@ -45,71 +43,71 @@ function byId_AllFirst(id: string, context: Element): Element | null {
   }
 }
 
-function byId_MutateFirst(id: string, context: Element): Element | null {
-  if (!context.isConnected) throw new Error('byId_MutateFirst cannot be used on a disconnected element');
+function byId_MutateFirst(id: string, source: Element, dom: DOMOperations): Element | null {
+  if (!dom.isConnected(source)) throw new Error('byId_MutateFirst cannot be used on a disconnected element');
 
-  const doc = context.ownerDocument;
+  const doc = dom.ownerDocument(source)!;
   const mutated: Element[] = [];
 
   try {
     for (;;) {
-      const e = doc.getElementById(id);
+      const e = dom.getElementById(doc, id);
       if (!e) return null;
-      if (e !== context && context.contains(e)) return e;
-      e.removeAttribute('id');
+      if (e !== source && dom.contains(source, e)) return e;
+      dom.removeAttribute(e, 'id');
       mutated.push(e);
     }
   } finally {
-    for (const e of mutated) e.setAttribute('id', id);
+    for (const e of mutated) dom.setAttribute(e, 'id', id);
   }
 }
 
-function byId_WalkFirst(id: string, context: Element): Element | null {
-  let node: Element | null = context;
-  let next: Element | null = node.firstElementChild;
+function byId_WalkFirst(id: string, source: Element, dom: DOMOperations): Element | null {
+  let node: Element | null = source;
+  let next: Element | null = dom.firstElementChild(node);
 
   while ((node = next)) {
-    if (sameId(node, id)) return node;
+    if (sameId(node, id, dom)) return node;
 
-    next = node.firstElementChild || node.nextElementSibling;
+    next = dom.firstElementChild(node) || dom.nextElementSibling(node);
     if (next) continue;
 
-    while (!next && (node = node.parentElement) && node !== context) {
-      next = node.nextElementSibling;
+    while (!next && (node = dom.parentElement(node)) && node !== source) {
+      next = dom.nextElementSibling(node);
     }
   }
 
   return null;
 }
 
-export function byClass(cls: string, context: QueryContext, snap: Snapshot): Element[] {
-  snap.update(context);
+export function byClass(cls: string, source: QuerySource, ctx: SelectletContext): Element[] {
+  ctx.update(source);
 
-  if (!isDocumentFragment(context)) {
-    return collectionToArray(context.getElementsByClassName(cls));
+  if (!ctx.dom.isDocumentFragment(source)) {
+    return collectionToArray(ctx.dom.getElementsByClassName(source, cls));
   }
 
   const nodes: Element[] = [];
-  const reCls = snap.getClassRegex(cls);
-  let el = context.firstElementChild;
+  const reCls = ctx.getClassRegex(cls);
+  let el = ctx.dom.firstElementChild(source);
 
   while (el) {
-    if (reCls.test(snap.getClass(el))) nodes.push(el);
-    concatCollection(nodes, el.getElementsByClassName(cls));
-    el = el.nextElementSibling;
+    if (reCls.test(ctx.dom.getClass(el))) nodes.push(el);
+    concatCollection(nodes, ctx.dom.getElementsByClassName(el, cls));
+    el = ctx.dom.nextElementSibling(el);
   }
 
   return nodes;
 }
 
-// context agnostic getElementsByTagName
-export function byTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
-  snap.update(context);
+// source-independent getElementsByTagName
+export function byTag(tag: string, source: QuerySource, ctx: SelectletContext): Element[] {
+  ctx.update(source);
 
   if (!tag) return [];
 
-  if (!isDocumentFragment(context)) {
-    return collectionToArray(context.getElementsByTagName(tag));
+  if (!ctx.dom.isDocumentFragment(source)) {
+    return collectionToArray(ctx.dom.getElementsByTagName(source, tag));
   }
 
   const nodes: Element[] = [];
@@ -117,39 +115,39 @@ export function byTag(tag: string, context: QueryContext, snap: Snapshot): Eleme
   const lowerTag = asciiLower(tag);
   const lowerTagOrNull = tag === lowerTag ? null : lowerTag;
 
-  let el = context.firstElementChild;
+  let el = ctx.dom.firstElementChild(source);
 
   while (el) {
-    if (any || sameSelectorTag(el, tag, lowerTagOrNull, snap)) {
+    if (any || sameSelectorTag(el, tag, lowerTagOrNull, ctx)) {
       nodes.push(el);
     }
 
-    concatCollection(nodes, el.getElementsByTagName(tag));
-    el = el.nextElementSibling;
+    concatCollection(nodes, ctx.dom.getElementsByTagName(el, tag));
+    el = ctx.dom.nextElementSibling(el);
   }
 
   return nodes;
 }
 
-// context agnostic getElementsByTagNameNS
-export function byTagNs(ns: string | null, local: string, context: QueryContext, snap: Snapshot): Element[] {
+// source-independent getElementsByTagNameNS
+export function byTagNs(ns: string | null, local: string, source: QuerySource, ctx: SelectletContext): Element[] {
   if (!local) return [];
 
-  if (!isDocumentFragment(context)) {
-    return collectionToArray(context.getElementsByTagNameNS(ns, local));
+  if (!ctx.dom.isDocumentFragment(source)) {
+    return collectionToArray(ctx.dom.getElementsByTagNameNS(source, ns, local));
   }
 
   const nodes: Element[] = [];
-  let el = context.firstElementChild;
+  let el = ctx.dom.firstElementChild(source);
 
   while (el) {
-    const nsMatch = ns === '*' || snap.getNamespaceURI(el) === ns;
-    const localMatch = local === '*' || snap.getLocalName(el) === local;
+    const nsMatch = ns === '*' || ctx.dom.getNamespaceURI(el) === ns;
+    const localMatch = local === '*' || ctx.dom.getLocalName(el) === local;
 
     if (nsMatch && localMatch) nodes.push(el);
 
-    concatCollection(nodes, el.getElementsByTagNameNS(ns, local));
-    el = el.nextElementSibling;
+    concatCollection(nodes, ctx.dom.getElementsByTagNameNS(el, ns, local));
+    el = ctx.dom.nextElementSibling(el);
   }
 
   return nodes;

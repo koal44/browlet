@@ -1,12 +1,14 @@
 import { EOL } from 'node:os';
 
 import type { RealmExecution } from '../../js-engine/index';
-import type { BindingContext } from '../../web-idl/index';
+import { createDOMException, type BindingContext } from '../../web-idl/index';
+import type { StyleletExecution } from '../../stylelet/index';
 import { AbortControllerImpl } from '../dom/abort/abort-controller';
 import { AbortSignalImpl } from '../dom/abort/abort-signal';
 import { EventImpl } from '../dom/events/event';
 import type { EventExecution } from '../dom/environment';
 import { createTaskSource } from '../scripting/event-loop';
+import { domManipulationTaskSource } from '../scripting/tasks';
 import type { BrowletEnvironment } from '../scripting/environment';
 import { structuredDeserialize } from '../scripting/structured-data/deserialize';
 import type { SerializedRecord } from '../scripting/structured-data/records';
@@ -35,9 +37,14 @@ export function createExecution(context: BindingContext<BrowletEnvironment>): Br
       queueTask: (steps) => realm.queueGlobalTask(fileReadingTaskSource, steps),
     },
     networking: fetchTaskScheduling,
+    style: {
+      // CSSOM leaves the source unspecified; preserve DOM manipulation delivery.
+      queueTask: (steps) => realm.queueGlobalTask(domManipulationTaskSource, steps),
+    },
+    createDOMException,
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, '', {});
-      event.setTrusted(true);
+      event.isTrusted = true;
       return event;
     },
     createAbortController: () => context.construct(AbortControllerImpl),
@@ -59,7 +66,7 @@ export function createExecution(context: BindingContext<BrowletEnvironment>): Br
   };
 }
 
-/** Engine and DOM facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends RealmExecution, EventExecution {}
+/** Engine, DOM, and style facilities composed for one Browlet execution owner. */
+export interface BrowletExecution extends RealmExecution, EventExecution, StyleletExecution {}
 
 const fileReadingTaskSource = createTaskSource('file reading');

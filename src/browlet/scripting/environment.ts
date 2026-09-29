@@ -21,6 +21,8 @@ import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import { queueNetworkingTask, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
 import type { DOMEnvironment } from '../dom/environment';
+import type { StyleletEnvironment } from '../../stylelet/index';
+import type { SelectletEnvironment } from '../../selectlet/index';
 import type { BrowletExecution } from '../integration/execution';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import { ReportImpl, ReportBodyImpl } from '../reporting/report';
@@ -114,7 +116,7 @@ export interface BrowletEnvironment extends ScriptingEnvironment, JSEnvironment,
 /** Browser state and operations associated with one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
 // its realm component is retained directly here.
-export abstract class Environment extends EnvironmentRecord implements FetchEnvironment, BrowletEnvironment {
+export abstract class Environment extends EnvironmentRecord implements FetchEnvironment, BrowletEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
@@ -262,6 +264,8 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
   }
 }
 
+/** HTML settings whose document-dependent values follow the associated Window. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
 export class WindowEnvironment extends Environment {
   declare realm: WindowRealm;
 
@@ -360,7 +364,7 @@ export class WindowEnvironment extends Environment {
     while (document.isIframeSrcdocDocument) {
       const container = document.browsingContext?.navigable?.container ?? null;
       if (container === null) throw new InternalError('A srcdoc document needs a navigable container');
-      document = container.getNodeDocument()!;
+      document = container.nodeDocument;
     }
     return document.url;
   }

@@ -1,6 +1,8 @@
 import { UnsafeMoment, monotonicClock, wallClock } from './clock';
 import type { Clock, Duration, Moment } from './clock';
 
+/** Converts shared clock readings into timestamps for one environment. */
+// https://w3c.github.io/hr-time/#time-origin
 export class EnvironmentTiming {
   #host: EnvironmentTimingHost;
   #estimatedMonotonicTimeOfUnixEpoch: Moment;
@@ -15,6 +17,7 @@ export class EnvironmentTiming {
       estimatedMonotonicTimeOfUnixEpoch;
   }
 
+  /** Current coarsened monotonic time relative to the environment's origin. */
   currentRelativeTimestamp(): Duration {
     return this.#host.timeOrigin.durationUntil(this.currentMonotonicTime());
   }
@@ -31,12 +34,16 @@ export class EnvironmentTiming {
     );
   }
 
+  /** Translate the environment's monotonic origin to an epoch-relative timestamp. */
+  // https://w3c.github.io/hr-time/#get-time-origin-timestamp
   getTimeOriginTimestamp(): Duration {
     return this.#estimatedMonotonicTimeOfUnixEpoch.durationUntil(
       this.#host.timeOrigin,
     );
   }
 
+  /** Coarsen a raw reading and measure it from the environment's origin. */
+  // https://w3c.github.io/hr-time/#dfn-relative-high-resolution-time
   relativeHighResolutionTime(time: UnsafeMoment): Duration {
     return this.relativeHighResolutionCoarseTime(time.coarsen(
       this.#host.crossOriginIsolatedCapability,
@@ -57,6 +64,7 @@ export function currentCoarsenedWallTime(): Moment {
   return wallClock.unsafeCurrentTime().coarsen();
 }
 
+/** Estimate the Unix epoch's position on a monotonic clock. */
 export function initializeEstimatedMonotonicTimeOfUnixEpoch(
   wall: Clock,
   monotonic: Clock,
@@ -77,12 +85,16 @@ export function coarsenedSharedCurrentTime(
   return unsafeSharedCurrentTime().coarsen(crossOriginIsolatedCapability);
 }
 
+/** Read the shared monotonic clock without exposing an uncoarsened author timestamp. */
+// https://w3c.github.io/hr-time/#dfn-unsafe-shared-current-time
 export function unsafeSharedCurrentTime(): UnsafeMoment {
   return monotonicClock.unsafeCurrentTime();
 }
 
 type EnvironmentTimingHost = {
+  /** Whether the owner may use the finer cross-origin-isolated precision. */
   readonly crossOriginIsolatedCapability: boolean;
+  /** Monotonic point from which this environment measures elapsed time. */
   readonly timeOrigin: Moment;
 };
 

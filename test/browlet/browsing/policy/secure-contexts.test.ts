@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
+import type { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import {
   createDocument, createWindowEnvironment, getRelevantRealm,
 } from '../../../../src/browlet/bindings';
-import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { EnvironmentRecord } from '../../../../src/browlet/scripting/environment';
 import { WindowRealm } from '../../../../src/browlet/scripting/realm';
@@ -243,7 +243,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
     });
-    const realm = new WindowRealm(new WindowImpl(new URL(url)), {
+    const realm = new WindowRealm({
       agent: new WindowAgent(), envRecord: record,
     });
     const world = new BindingWorld([

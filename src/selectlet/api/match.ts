@@ -1,27 +1,28 @@
+import type { DOMNode as Element } from '../../infra/index';
 import { type CandidateElementPredicate, parseSelectorList, type SelectorList } from '../parser/parser';
-import { describeContext, type QueryContextDescription } from '../debug';
+import { describeQuerySource, type QuerySourceDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
-export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
-  snap.probe.match++;
-  const isDebug = snap.isDebug;
-  if (isDebug) initDebugMatch(snap, selectors, element);
+export function queryMatches(selectors: string, element: Element, ctx: SelectletContext): boolean {
+  ctx.probe.match++;
+  const isDebug = ctx.isDebug;
+  if (isDebug) initDebugMatch(ctx, selectors, element);
 
-  const resolver = getStrictMatchResolver(selectors, snap);
+  const resolver = getStrictMatchResolver(selectors, ctx);
 
-  if (resolver.usesScope) snap.update(element, true /*updateScope*/);
+  if (resolver.usesScope) ctx.update(element, true /*updateScope*/);
 
   let rc: RuntimeCache | null = null;
-  if (resolver.usesCache && snap.hasTreeVersion) {
-    snap.syncRuntimeCache(element);
-    rc = snap.runtimeCache;
+  if (resolver.usesCache && (ctx.dom.treeVersion !== undefined)) {
+    ctx.syncRuntimeCache(element);
+    rc = ctx.runtimeCache;
   }
 
   const result = resolver.match(element, rc);
 
-  if (isDebug) updateDebugMatch(snap, result);
+  if (isDebug) updateDebugMatch(ctx, result);
 
   return result;
 }
@@ -33,32 +34,32 @@ export type MatchResolver = {
   usesHost: boolean;
 };
 
-export function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
-  let resolver = snap.strictMatchResolvers.get(selectors);
+export function getStrictMatchResolver(selectors: string, ctx: SelectletContext): MatchResolver {
+  let resolver = ctx.strictMatchResolvers.get(selectors);
 
   if (!resolver) {
-    const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
+    const parsed = parseSelectorList(selectors, { pseudos: ctx.pseudos });
 
-    if (snap.isDebug && snap.debugMatch) {
-      updateDebugParse(snap, parsed);
+    if (ctx.isDebug && ctx.debugMatch) {
+      updateDebugParse(ctx, parsed);
     }
 
-    resolver = buildStrictMatchResolver(parsed, snap);
-    snap.strictMatchResolvers.set(selectors, resolver);
-    snap.cacheSize++;
+    resolver = buildStrictMatchResolver(parsed, ctx);
+    ctx.strictMatchResolvers.set(selectors, resolver);
+    ctx.cacheSize++;
   }
 
   return resolver;
 }
 
-function buildStrictMatchResolver(list: SelectorList, snap: Snapshot): MatchResolver {
-  snap.probe.matBuild++;
-  snap.checkCacheWatermark();
+function buildStrictMatchResolver(list: SelectorList, ctx: SelectletContext): MatchResolver {
+  ctx.probe.matBuild++;
+  ctx.checkCacheWatermark();
 
-  const match = buildStrictSelectorListTest(list, snap);
+  const match = buildStrictSelectorListTest(list, ctx);
 
-  if (snap.isDebug && snap.debugMatch) {
-    snap.debugCompile = undefined;
+  if (ctx.isDebug && ctx.debugMatch) {
+    ctx.debugCompile = undefined;
   }
 
   return {
@@ -71,7 +72,7 @@ function buildStrictMatchResolver(list: SelectorList, snap: Snapshot): MatchReso
 
 export type DebugMatch = {
   kind: 'match';
-  element?: QueryContextDescription;
+  element?: QuerySourceDescription;
   selectors?: string;
   parse?: {
     arms: number;
@@ -84,26 +85,26 @@ export type DebugMatch = {
   error?: string;
 };
 
-function initDebugMatch(snap: Snapshot, selectors: string, element: Element): void {
-  snap.debugStack.length = 0;
+function initDebugMatch(ctx: SelectletContext, selectors: string, element: Element): void {
+  ctx.debugStack.length = 0;
   const dbg: DebugMatch = {
     kind: 'match', selectors,
-    element: describeContext(element),
+    element: describeQuerySource(element, undefined, ctx.dom),
   };
 
-  snap.debugMatch = dbg;
-  snap.debugStack.push(dbg);
+  ctx.debugMatch = dbg;
+  ctx.debugStack.push(dbg);
 }
 
-function updateDebugMatch(snap: Snapshot, result: boolean): void {
-  if (snap.debugMatch) {
-    snap.debugMatch.result = result;
+function updateDebugMatch(ctx: SelectletContext, result: boolean): void {
+  if (ctx.debugMatch) {
+    ctx.debugMatch.result = result;
   }
 }
 
-function updateDebugParse(snap: Snapshot, parsed: SelectorList): void {
-  if (snap.debugMatch) {
-    snap.debugMatch.parse = {
+function updateDebugParse(ctx: SelectletContext, parsed: SelectorList): void {
+  if (ctx.debugMatch) {
+    ctx.debugMatch.parse = {
       arms: parsed.arms.length,
       usesScope: parsed.usesScope,
       usesCache: parsed.usesCache,

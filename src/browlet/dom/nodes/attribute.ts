@@ -1,10 +1,68 @@
-import { withAttrStub } from '../../stubs';
 import {
   attr, defineInterface, idlType, impl, nullable, reference, roAttr, xattr,
 } from '../../../web-idl/index';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';
+import type { DOMEnvironment } from '../environment';
+
+/** An attribute's name, namespace, value, and association with an element. */
+// https://dom.spec.whatwg.org/#interface-attr
+export class AttrImpl extends NodeImpl {
+  /** Element carrying this attribute, or null while detached. */
+  ownerElement: ElementImpl | null = null;
+  /** Attribute name without its namespace prefix. */
+  localName: string;
+  /** Namespace URI, or null for an attribute without a namespace. */
+  namespaceURI: string | null;
+  /** Prefix used in the qualified name, or null when absent. */
+  prefix: string | null;
+  /** Stored text; changes through value notify the owning element. */
+  #value: string;
+
+  constructor(
+    localName: string,
+    value: string,
+    namespaceURI: string | null = null,
+    prefix: string | null = null,
+    ownerDoc: DocumentImpl,
+    env: DOMEnvironment,
+  ) {
+    super(NodeType.Attribute, ownerDoc, env);
+    this.localName = localName;
+    this.#value = value;
+    this.namespaceURI = namespaceURI;
+    this.prefix = prefix;
+  }
+
+  static is(value: unknown): value is AttrImpl {
+    return value instanceof AttrImpl;
+  }
+
+  /** Attribute text; assigning it notifies the owning element of the change. */
+  // https://dom.spec.whatwg.org/#dom-attr-value
+  get value(): string {
+    return this.#value;
+  }
+
+  set value(value: string) {
+    const oldValue = this.#value;
+    this.#value = value;
+    this.ownerElement?.attributeChanged(this.localName, oldValue, value, this.namespaceURI);
+  }
+
+  /** Qualified name, including the prefix when present. */
+  // https://dom.spec.whatwg.org/#concept-attribute-qualified-name
+  get name(): string {
+    return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
+  }
+
+  /** Historical flag that always reports true. */
+  // https://dom.spec.whatwg.org/#dom-attr-specified
+  get specified(): boolean {
+    return true;
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -20,74 +78,6 @@ import { NodeImpl, NodeType } from './node';
  *   readonly attribute boolean specified; // historical; always returns true
  * };
  */
-export class AttrImpl extends withAttrStub(NodeImpl) {
-  #element: ElementImpl | null = null;
-  #localName: string;
-  #value: string;
-  #namespaceURI: string | null;
-  #prefix: string | null;
-
-  constructor(
-    localName: string,
-    value: string,
-    namespaceURI: string | null = null,
-    prefix: string | null = null,
-    ownerDocument: DocumentImpl | null = null,
-  ) {
-    super(NodeType.Attribute, ownerDocument);
-    this.#localName = localName;
-    this.#value = value;
-    this.#namespaceURI = namespaceURI;
-    this.#prefix = prefix;
-  }
-
-  static is(value: unknown): value is AttrImpl {
-    return value instanceof AttrImpl;
-  }
-
-  get localName(): string {
-    return this.#localName;
-  }
-
-  get value(): string {
-    return this.#value;
-  }
-
-  set value(value: string) {
-    const oldValue = this.#value;
-    this.#value = value;
-    this.#element?.attributeChanged(this.#localName, oldValue, value, this.#namespaceURI);
-  }
-
-  get namespaceURI(): string | null {
-    return this.#namespaceURI;
-  }
-
-  get prefix(): string | null {
-    return this.#prefix;
-  }
-
-  get name(): string {
-    return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
-  }
-
-  get ownerElement(): ElementImpl | null {
-    return this.#element;
-  }
-
-  get specified(): boolean {
-    return true;
-  }
-
-  // -- Internal ---------------------------------------------------------
-
-  setOwnerElement(element: ElementImpl | null): void {
-    this.#element = element;
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const attrIDL = defineInterface({
   name: 'Attr',
   inherits: 'Node',

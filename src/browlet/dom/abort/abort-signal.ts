@@ -39,8 +39,8 @@ export class AbortSignalImpl extends EventTargetImpl
   /** Nondependent signals whose abort can trigger this signal. */
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
-  constructor(env: JSEnvironment) {
-    super();
+  constructor(env: BrowletEnvironment) {
+    super(env);
     this.#env = env;
     const global = env.exec.global;
     let retainedSignals = AbortSignalRetentionStamper.get(global);

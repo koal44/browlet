@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSelectlet } from '../../../../src/selectlet/selectlet';
-import {
-  parseHTMLDocument,
-} from '../../../../src/browlet/html/parser/parse';
+import { parseTestDocument } from '../../../support/dom';
 
 describe('Selectlet with a Browlet DOM host', () => {
   it('matches ordinary selectors against a parsed DOM document', () => {
-    const document = parseHTMLDocument(`
+    const document = parseTestDocument(`
       <!doctype html>
       <main id="content" class="page">
         <span id="first" class="item"></span>
@@ -15,8 +13,10 @@ describe('Selectlet with a Browlet DOM host', () => {
         <span id="second" class="item selected"></span>
       </main>
     `);
-    const selectlet = createSelectlet(document);
+    const selectlet = createSelectlet(document, { env: document.env });
 
+    expect(selectlet.context.env).toBe(document.env);
+    expect(selectlet.context.dom).toBe(document.env.userAgent.dom);
     expect(selectlet.select('main.page > span.item'))
       .toEqual(document.getElementsByTagName('span'));
     expect(selectlet.first('#content > .selected'))

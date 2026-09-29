@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../../support/dom';
 
 import { AttrImpl } from '../../../../src/browlet/dom/nodes/attribute';
-import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { XML_NAMESPACE } from '../../../../src/infra/index';
 
 describe('Element attributes', () => {
   it('looks up unnamespaced attributes by qualified name', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const element = document.createElement('main');
-    element.attributes.setNamedItem(new AttrImpl('id', 'content'));
-    element.attributes.setNamedItem(new AttrImpl('class', ''));
+    element.attributes.setNamedItem(new AttrImpl('id', 'content', null, null, document, document.env));
+    element.attributes.setNamedItem(new AttrImpl('class', '', null, null, document, document.env));
 
     expect(element.getAttribute('id')).toBe('content');
     expect(element.getAttribute('missing')).toBeNull();
@@ -18,12 +18,12 @@ describe('Element attributes', () => {
   });
 
   it('looks up namespaced attributes by namespace and local name', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const element = document.createElement('main');
     element.attributes.setNamedItemNS(
-      new AttrImpl('lang', 'en', XML_NAMESPACE, 'xml'),
+      new AttrImpl('lang', 'en', XML_NAMESPACE, 'xml', document, document.env),
     );
-    element.attributes.setNamedItem(new AttrImpl('plain', 'value'));
+    element.attributes.setNamedItem(new AttrImpl('plain', 'value', null, null, document, document.env));
 
     expect(element.getAttribute('xml:lang')).toBe('en');
     expect(element.getAttributeNS(XML_NAMESPACE, 'lang')).toBe('en');
@@ -34,7 +34,7 @@ describe('Element attributes', () => {
   });
 
   it('adds, changes, and removes attributes', () => {
-    const element = new DocumentImpl().createElement('main');
+    const element = createTestDocument().createElement('main');
 
     element.setAttribute('DATA-STATE', 'first');
     expect(element.getAttribute('data-state')).toBe('first');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../../support/dom';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { DocumentFragmentImpl } from '../../../../src/browlet/dom/nodes/document-fragment';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 
@@ -185,8 +185,8 @@ describe('DOM insertion validity', () => {
 describe('Document type insertion validity', () => {
   // DOMImplementation.createDocumentType is not projected yet.
   it.each(['element', 'fragment'] as const)('rejects a doctype under a parent of kind %s', (kind) => {
-    const document = new DocumentImpl();
-    const source = new DocumentImpl();
+    const document = createTestDocument();
+    const source = createTestDocument();
     const doctype = source.createDocumentType('html', '', '');
     source.appendChild(doctype);
     const parent = kind === 'element' ? document.createElement('parent') : document.createDocumentFragment();
@@ -197,7 +197,7 @@ describe('Document type insertion validity', () => {
   });
 
   it('rejects a second doctype', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const first = document.createDocumentType('html', '', '');
     const second = document.createDocumentType('html', '', '');
     document.appendChild(first);
@@ -209,7 +209,7 @@ describe('Document type insertion validity', () => {
   });
 
   it.each(['before doctype', 'before preceding comment'] as const)('rejects an element %s', (position) => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const comment = document.createComment('before');
     const doctype = document.createDocumentType('html', '', '');
     const element = document.createElement('root');
@@ -223,7 +223,7 @@ describe('Document type insertion validity', () => {
   });
 
   it.each(['at end', 'before following comment'] as const)('rejects a doctype after the document element %s', (position) => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const element = document.createElement('root');
     const comment = document.createComment('after');
     const doctype = document.createDocumentType('html', '', '');
@@ -237,7 +237,7 @@ describe('Document type insertion validity', () => {
   });
 
   it('rejects children under a doctype', () => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const doctype = document.createDocumentType('html', '', '');
     const comment = document.createComment('comment');
 
@@ -249,9 +249,11 @@ describe('Document type insertion validity', () => {
 
 describe('Host-including insertion cycles', () => {
   it.each(['fragment', 'shadow root'] as const)('rejects inserting a host into its %s subtree', (kind) => {
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const host = document.createElement('host');
-    const root = kind === 'fragment' ? new DocumentFragmentImpl(document, host) : new ShadowRootImpl(host, 'open');
+    const root = kind === 'fragment'
+      ? new DocumentFragmentImpl(document, host, document.env)
+      : new ShadowRootImpl(host, 'open', document.env);
     const child = document.createElement('child');
     root.appendChild(child);
 

@@ -1,17 +1,11 @@
 import { defineElementInterface, ElementImpl } from '../dom/nodes/element';
 import { MATHML_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
-import { withMathMLElementStub } from '../stubs';
 import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
 
-/*
- * [Exposed=Window]
- * interface MathMLElement : Element { };
- * MathMLElement includes GlobalEventHandlers;
- */
-export class MathMLElementImpl
-  extends withMathMLElementStub(ElementImpl)
-{
+/** Base implementation for elements in the MathML namespace. */
+// https://w3c.github.io/mathml-core/#dom-mathmlelement
+export class MathMLElementImpl extends ElementImpl {
   static is(value: unknown): value is MathMLElementImpl {
     return value instanceof MathMLElementImpl;
   }
@@ -21,8 +15,11 @@ export class MathMLElementImpl
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface MathMLElement : Element { };
+ * MathMLElement includes GlobalEventHandlers;
+ */
 export const mathMLElementIDL = defineInterface({
   name: 'MathMLElement',
   inherits: 'Element',

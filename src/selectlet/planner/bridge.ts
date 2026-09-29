@@ -1,3 +1,4 @@
+import type { DOMNode as QuerySource, DOMOperations, DOMNode as Element } from '../../infra/index';
 import type { CompoundSelector } from '../parser/parser';
 import type { Chain, ElementProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';
@@ -6,8 +7,7 @@ import { buildChainProof, buildMultiChainProof } from './chain';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { precedesByDocPosition } from '../collections';
 import { type LookupMode } from '../constants';
-import type { QueryContext } from '../selectlet';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 import { asciiWhitespacePattern } from '../../infra/patterns';
 
 export type BridgeMove = {
@@ -26,22 +26,22 @@ export type MultiBridgeMove = {
   count?: number;
 };
 
-export type LookupFn = (root: QueryContext, mode: LookupMode) => Iterable<Element>;
+export type LookupFn = (source: QuerySource, mode: LookupMode) => Iterable<Element>;
 
-export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Snapshot): BridgeMove {
+export function buildBridgeMove(chain: Chain, from: number, to: number, ctx: SelectletContext): BridgeMove {
   const relation = chain[to]!;
   const compound = relation.right.compound;
-  const lookup = buildLookupPlan(compound, snap);
+  const lookup = buildLookupPlan(compound, ctx);
 
   applyLookupSeed(compound, lookup);
   try {
     const move: BridgeMove = {
       from, to,
       lookup: lookup.lookup,
-      proof: buildChainProof(chain, from, to, snap),
+      proof: buildChainProof(chain, from, to, ctx),
     };
 
-    if (snap.isDebug) {
+    if (ctx.isDebug) {
       move.debug = `${describeBridgeMove(move)} · lookup ${describeLookupPlan(lookup)}`;
     }
 
@@ -51,14 +51,14 @@ export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Sn
   }
 }
 
-export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBridgeMove {
+export function buildMultiBridgeMove(chains: Chain[], ctx: SelectletContext): MultiBridgeMove {
   const compounds: CompoundSelector[] = [];
   const lookups: LookupPlan[] = [];
 
   const baseChain = chains[0]!;
   const baseRelation = baseChain[baseChain.length - 1]!;
   const baseCompound = baseRelation.right.compound;
-  const baseLookup = buildLookupPlan(baseCompound, snap);
+  const baseLookup = buildLookupPlan(baseCompound, ctx);
 
   compounds[0] = baseCompound;
   lookups[0] = baseLookup;
@@ -67,7 +67,7 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
     const chain = chains[i]!;
     const relation = chain[chain.length - 1]!;
     const compound = relation.right.compound;
-    const lookup = buildLookupPlan(compound, snap);
+    const lookup = buildLookupPlan(compound, ctx);
 
     if (!sameLookupPlan(baseLookup, lookup)) {
       throw new Error(
@@ -89,10 +89,10 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   try {
     const move: MultiBridgeMove = {
       lookup: baseLookup.lookup,
-      proof: buildMultiChainProof(chains, snap),
+      proof: buildMultiChainProof(chains, ctx),
     };
 
-    if (snap.isDebug) {
+    if (ctx.isDebug) {
       move.debug = `bridge entry ➝ end · lookup ${describeLookupPlan(baseLookup)}`;
     }
 
@@ -122,10 +122,10 @@ export function findFirstBridgeCandidate(
   proof: ElementProofFn,
   frontier: Element[] | null,
   rc: RuntimeCache | null,
-  best: Element | null,
+  best: Element | null, dom: DOMOperations,
 ): Element | null {
   for (const e of candidates) {
-    if (best && !precedesByDocPosition(e, best)) return null;
+    if (best && !precedesByDocPosition(e, best, dom)) return null;
     if (proof(e, frontier, rc)) return e;
   }
 
@@ -196,14 +196,14 @@ export type LookupPlan = {
   seed: LookupSeed;
 };
 
-export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): LookupPlan {
+export function buildLookupPlan(compound: CompoundSelector, ctx: SelectletContext): LookupPlan {
   if (compound.id) {
     const id = cssIdentUnescape(compound.id.raw);
 
     return {
       strategy: 'id',
       lookupQuery: id,
-      lookup: (root, mode) => snap.seedsById(id, root, mode),
+      lookup: (source, mode) => ctx.seedsById(id, source, mode),
       seed: 'id',
     };
   }
@@ -223,7 +223,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
     return {
       strategy: 'class',
       lookupQuery: classes.join('.'),
-      lookup: (root, mode) => snap.seedsByClass(classes, root, mode),
+      lookup: (source, mode) => ctx.seedsByClass(classes, source, mode),
       seed: 'classes',
     };
   }
@@ -235,7 +235,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
     return {
       strategy: 'tag',
       lookupQuery: query,
-      lookup: (root, mode) => seedsByTag(query, root, mode, snap),
+      lookup: (source, mode) => seedsByTag(query, source, mode, ctx),
       seed: prefixRaw !== '' ? 'tag' : null,
     };
   }
@@ -243,7 +243,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
   return {
     strategy: 'walk',
     lookupQuery: '*',
-    lookup: (root, mode) => seedsByTag('*', root, mode, snap),
+    lookup: (source, mode) => seedsByTag('*', source, mode, ctx),
     seed: null,
   };
 }

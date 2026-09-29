@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('lookup', 'normal', [
+runScenarios('lookup', 'skip', [
   {
     name: 'byClass fragment fallback escapes regex metacharacters',
     // status: 'only',

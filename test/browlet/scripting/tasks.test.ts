@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { setImmediate } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
+import { createTestDocument } from '../../support/dom';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
@@ -18,7 +19,7 @@ import {
   createNewTopLevelTraversable,
 } from '../../../src/browlet/browsing/navigable';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   monotonicClock, UnsafeMoment,
@@ -90,8 +91,8 @@ describe('task queues', () => {
 
   it('removes a destroyed document\'s tasks across sources while preserving other documents and host tasks', () => {
     const eventLoop = createEventLoop();
-    const document = new DocumentImpl();
-    const otherDocument = new DocumentImpl();
+    const document = createTestDocument();
+    const otherDocument = createTestDocument();
     const canceled = vi.fn();
     eventLoop.queueTask(networkingTaskSource, document, canceled);
     eventLoop.queueTask(domManipulationTaskSource, document, canceled);
@@ -151,7 +152,7 @@ describe('task queues', () => {
     });
     const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('turn');
-    const inactiveDocument = new DocumentImpl();
+    const inactiveDocument = createTestDocument();
     const inactiveSteps = vi.fn();
     const order: string[] = [];
     const runnableSteps = vi.fn(() => {
@@ -204,7 +205,7 @@ describe('task queues', () => {
     const steps = vi.fn();
     const eventLoopOptions = createEventLoopOptions();
 
-    eventLoop.queueTask(source, new DocumentImpl(), steps);
+    eventLoop.queueTask(source, createTestDocument(), steps);
 
     expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(false);
     expect(steps).not.toHaveBeenCalled();
@@ -362,7 +363,7 @@ describe('task queues', () => {
     const eventLoopOptions = createEventLoopOptions();
 
     eventLoop.start(eventLoopOptions);
-    eventLoop.queueTask(source, new DocumentImpl(), vi.fn());
+    eventLoop.queueTask(source, createTestDocument(), vi.fn());
 
     expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
   });
@@ -431,7 +432,7 @@ describe('task queues', () => {
     const window = traversable.activeWindow!;
     const realm = getRelevantRealm(window);
     const firstDocument = window.getAssociatedDocument();
-    const replacement = new DocumentImpl();
+    const replacement = createTestDocument(realm.env);
     const source = createTaskSource('document replacement');
 
     realm.queueGlobalTask(source, vi.fn());
@@ -559,7 +560,7 @@ describe('task queues', () => {
     if (activeDocument === null || browsingContext === null) {
       throw new Error('Expected a complete top-level traversable');
     }
-    const inactiveDocument = new DocumentImpl();
+    const inactiveDocument = createTestDocument(activeDocument.env);
     inactiveDocument.browsingContext = browsingContext;
 
     expect(createTask(null).isRunnable).toBe(true);

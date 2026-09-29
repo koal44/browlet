@@ -1,3 +1,4 @@
+import type { DOMOperations, DOMNode as Element } from '../infra/index';
 import { mergeSortedUnique, mergeSortedUniqueLists } from '../infra/collections';
 
 export type ElementCollection = {
@@ -60,9 +61,9 @@ export function collectionToArray(nodes: ElementCollection): Element[] {
 
 export function htmlCollectionSource(
   collection: ElementCollection & Iterable<Element>, copy: boolean,
-  toArray?: (collection: ElementCollection & Iterable<Element>) => Element[] | null,
+  dom: DOMOperations,
 ): Iterable<Element> {
-  const array = toArray?.(collection);
+  const array = dom.collectionArray?.(collection);
   if (array) return array;
 
   return copy
@@ -72,20 +73,20 @@ export function htmlCollectionSource(
 
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
-export function precedesByDocPosition(a: Element, b: Element): boolean {
-  return !!(a.compareDocumentPosition(b) & DOCUMENT_POSITION_FOLLOWING);
+export function precedesByDocPosition(a: Element, b: Element, dom: DOMOperations): boolean {
+  return !!(dom.compareDocumentPosition(a, b) & DOCUMENT_POSITION_FOLLOWING);
 }
 
 /**
  * Merges document-ordered, internally-unique element lists.
  */
-export function mergeDocumentOrder(a: Element[], b: Element[]): Element[] {
-  return mergeSortedUnique(a, b, precedesByDocPosition);
+export function mergeDocumentOrder(a: Element[], b: Element[], dom: DOMOperations): Element[] {
+  return mergeSortedUnique(a, b, (a, b) => precedesByDocPosition(a, b, dom));
 }
 
 /**
  * Merges document-ordered, internally-unique element lists.
  */
-export function mergeDocumentOrderLists(lists: Element[][]): Element[] {
-  return mergeSortedUniqueLists(lists, precedesByDocPosition);
+export function mergeDocumentOrderLists(lists: Element[][], dom: DOMOperations): Element[] {
+  return mergeSortedUniqueLists(lists, (a, b) => precedesByDocPosition(a, b, dom));
 }

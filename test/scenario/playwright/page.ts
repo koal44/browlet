@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import type {
-  Engine, EquivalentCase, ContextRef, ContextHome, CssomProbe,
+  Engine, EquivalentCase, QuerySourceRef, QuerySourceHome, CssomProbe,
 } from '../harness';
 
 export type PwHelpers = {
-  resolveContext(doc: Document, ref?: ContextRef): QueryContext | null;
+  resolveQuerySource(doc: Document, ref?: QuerySourceRef): QuerySource | null;
   runQuery(query: () => QueryOutput): QueryResult;
   compareQueryResults(a: NamedQueryResult, b: NamedQueryResult): string | undefined;
   toEngineResult(res: QueryResult): EngineResult;
-  getResults(queryFn: EngineQuery, query: string, ctx: QueryContext | null, ctxErrorMsg?: string): EngineAndQueryResult;
+  getResults(queryFn: EngineQuery, query: string, source: QuerySource | null, sourceErrorMsg?: string): EngineAndQueryResult;
   getEngineQuery(c: EquivalentCase, n: Engine): EngineQuery;
   getCaseQuery(c: EquivalentCase): string;
   getCaseLabel(c: EquivalentCase, n: Engine): string;
   stringify(obj: unknown): string;
-  isRehomed(ref?: ContextRef): boolean;
+  isRehomed(ref?: QuerySourceRef): boolean;
 }
 
 type EngineResult = {
@@ -29,7 +29,7 @@ type EngineResult = {
 
 type CssomOutput = { kind: 'cssom'; cssom: unknown; };
 type QueryOutput = Element[] | NodeListOf<Element> | string | boolean | CssomOutput;
-type EngineQuery = (query: string, ctx: QueryContext) => () => QueryOutput;
+type EngineQuery = (query: string, source: QuerySource) => () => QueryOutput;
 type EngineAndQueryResult = { queryResult: QueryResult; engineResult: EngineResult; };
 type NamedQueryResult = { name: string; result: QueryResult; };
 type QueryResult = ElementResult | ValueResult | BooleanResult | CssomResult;
@@ -65,7 +65,7 @@ export function installBrowserHelpers(): void {
     return !!el && el.localName === 'template';
   }
 
-  function isRehomed(ref?: ContextRef): boolean {
+  function isRehomed(ref?: QuerySourceRef): boolean {
     if (!ref) return false;
     if ('within' in ref && isRehomed(ref.within)) return true;
     return 'home' in ref && !!ref.home && ref.home !== 'document';
@@ -223,15 +223,15 @@ export function installBrowserHelpers(): void {
     return !!aid && aid === bid;
   }
 
-  function queryId(base: QueryContext, id: string): Element | null {
-    if (isDocument(base) || isDocFrag(base)) return base.getElementById(id);
-    return base.querySelector(`#${CSS.escape(id)}`);
+  function queryId(source: QuerySource, id: string): Element | null {
+    if (isDocument(source) || isDocFrag(source)) return source.getElementById(id);
+    return source.querySelector(`#${CSS.escape(id)}`);
   }
 
-  function resolveContext(doc: Document, ref?: ContextRef): QueryContext | null {
+  function resolveQuerySource(doc: Document, ref?: QuerySourceRef): QuerySource | null {
     if (!ref || ref.by === 'document') return doc;
 
-    const base = 'within' in ref && ref.within ? resolveContext(doc, ref.within) : doc;
+    const base = 'within' in ref && ref.within ? resolveQuerySource(doc, ref.within) : doc;
     if (!base) return null;
 
     if (ref.by === 'iframe') {
@@ -258,7 +258,7 @@ export function installBrowserHelpers(): void {
 
     if (!el) return null;
 
-    const home: ContextHome = ref.home ?? 'document';
+    const home: QuerySourceHome = ref.home ?? 'document';
     if (home === 'document') return el;
 
     const clone = el.cloneNode(true);
@@ -319,10 +319,10 @@ export function installBrowserHelpers(): void {
     };
   }
 
-  function getResults(queryFn: EngineQuery, query: string, ctx: QueryContext | null, ctxErrorMsg?: string): EngineAndQueryResult {
-    const queryResult: QueryResult = ctx
-      ? runQuery(queryFn(query, ctx))
-      : { kind: 'elements', elements: [], error: ctxErrorMsg ?? 'No context provided' };
+  function getResults(queryFn: EngineQuery, query: string, source: QuerySource | null, sourceErrorMsg?: string): EngineAndQueryResult {
+    const queryResult: QueryResult = source
+      ? runQuery(queryFn(query, source))
+      : { kind: 'elements', elements: [], error: sourceErrorMsg ?? 'No query source provided' };
 
     const engineResult = toEngineResult(queryResult);
     return { queryResult, engineResult };
@@ -338,21 +338,21 @@ export function installBrowserHelpers(): void {
 
     switch (true) {
       case 'select' in c: {
-        if (ng === 'native') return (query, ctx) => () => [...ctx.querySelectorAll(query)];
-        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.select(query, ctx));
+        if (ng === 'native') return (query, source) => () => [...source.querySelectorAll(query)];
+        if (ng === 'selectlet') return (query, source) => () => toArr(sxlt.select(query, source));
         break;
       }
 
       case 'first' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            const el = ctx.querySelector(query);
+          return (query, source) => () => {
+            const el = source.querySelector(query);
             return el ? [el] : [];
           };
         }
         if (ng === 'selectlet') {
-          return (query, ctx) => () => {
-            const el = sxlt.first(query, ctx);
+          return (query, source) => () => {
+            const el = sxlt.first(query, source);
             return el ? [el] : [];
           };
         }
@@ -361,27 +361,27 @@ export function installBrowserHelpers(): void {
 
       case 'byTag' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+          return (query, source) => () => {
+            const base = isDocFrag(source) ? fragmentAsElementSource(source) : source;
             return [...base.getElementsByTagName(query)];
           };
         }
-        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byTag(query, ctx));
+        if (ng === 'selectlet') return (query, source) => () => toArr(sxlt.byTag(query, source));
         break;
       }
 
       case 'byTagNs' in c: {
         if (ng === 'native') {
-          return (_query, ctx) => () => {
+          return (_query, source) => () => {
             const { ns, local } = c.byTagNs;
-            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+            const base = isDocFrag(source) ? fragmentAsElementSource(source) : source;
             return [...base.getElementsByTagNameNS(ns, local)];
           };
         }
         if (ng === 'selectlet') {
-          return (_query, ctx) => () => {
+          return (_query, source) => () => {
             const { ns, local } = c.byTagNs;
-            return toArr(sxlt.byTagNs(ns, local, ctx));
+            return toArr(sxlt.byTagNs(ns, local, source));
           };
         }
         break;
@@ -389,25 +389,25 @@ export function installBrowserHelpers(): void {
 
       case 'byClass' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+          return (query, source) => () => {
+            const base = isDocFrag(source) ? fragmentAsElementSource(source) : source;
             return [...base.getElementsByClassName(query)];
           };
         }
-        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byClass(query, ctx));
+        if (ng === 'selectlet') return (query, source) => () => toArr(sxlt.byClass(query, source));
         break;
       }
 
       case 'byId' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            const found = queryId(ctx, query);
+          return (query, source) => () => {
+            const found = queryId(source, query);
             return found ? [found] : [];
           };
         }
         if (ng === 'selectlet') {
-          return (query, ctx) => () => {
-            const found = sxlt.byId(query, ctx);
+          return (query, source) => () => {
+            const found = sxlt.byId(query, source);
             return found ? [found] : [];
           };
         }
@@ -416,16 +416,16 @@ export function installBrowserHelpers(): void {
 
       case 'match' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
-            const el = ctx;
+          return (query, source) => () => {
+            if (!isElement(source)) throw new Error(`Query source for 'match' case must be an Element`);
+            const el = source;
             return el.matches(query) ? [el] : [];
           };
         }
         if (ng === 'selectlet') {
-          return (query, ctx) => () => {
-            if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
-            const el = ctx;
+          return (query, source) => () => {
+            if (!isElement(source)) throw new Error(`Query source for 'match' case must be an Element`);
+            const el = source;
             return sxlt.matches(query, el) ? [el] : [];
           };
         }
@@ -434,17 +434,17 @@ export function installBrowserHelpers(): void {
 
       case 'closest' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            if (!isElement(ctx)) throw new Error(`Context for 'closest' case must be an Element`);
-            const el = ctx;
+          return (query, source) => () => {
+            if (!isElement(source)) throw new Error(`Query source for 'closest' case must be an Element`);
+            const el = source;
             const hit = el.closest(query);
             return hit ? [hit] : [];
           };
         }
         if (ng === 'selectlet') {
-          return (query, ctx) => () => {
-            if (!isElement(ctx)) throw new Error(`Context for 'closest' case must be an Element`);
-            const el = ctx;
+          return (query, source) => () => {
+            if (!isElement(source)) throw new Error(`Query source for 'closest' case must be an Element`);
+            const el = source;
             const hit = sxlt.closest(query, el);
             return hit ? [hit] : [];
           };
@@ -454,11 +454,11 @@ export function installBrowserHelpers(): void {
 
       case 'computedStyle' in c: {
         if (ng === 'native') {
-          return (query, ctx) => () => {
-            if (!isElement(ctx)) {
-              throw new Error(`Context for 'computedStyle' case must be an Element`);
+          return (query, source) => () => {
+            if (!isElement(source)) {
+              throw new Error(`Query source for 'computedStyle' case must be an Element`);
             }
-            return getComputedStyle(ctx, c.pseudo).getPropertyValue(query).trim();
+            return getComputedStyle(source, c.pseudo).getPropertyValue(query).trim();
           };
         }
         throw new Error(`computedStyle cases do not support engine ${ng}`);
@@ -466,20 +466,20 @@ export function installBrowserHelpers(): void {
 
       case 'cssom' in c: {
         if (ng === 'native') {
-          return (_query, ctx) => () => ({
+          return (_query, source) => () => ({
             kind: 'cssom',
-            cssom: readCssom(c.cssom, ctx, { kind: 'sheet' }),
+            cssom: readCssom(c.cssom, source, { kind: 'sheet' }),
           });
         }
 
         if (ng === 'selectlet') {
-          return (_query, ctx) => () => {
+          return (_query, source) => () => {
             const stlt = stylelet;
             if (!stlt) throw new Error('stylelet is not available');
 
             return {
               kind: 'cssom',
-              cssom: readCssom(c.cssom, ctx, {
+              cssom: readCssom(c.cssom, source, {
                 kind: 'styleText',
                 createSheet(source) {
                   const sheet = stlt.createStyleSheet();
@@ -510,14 +510,14 @@ export function installBrowserHelpers(): void {
     assertNever(ng);
   }
 
-  function fragmentAsElementContext(ctx: DocumentFragment): Element {
-    tagFragmentElements(ctx);
+  function fragmentAsElementSource(source: DocumentFragment): Element {
+    tagFragmentElements(source);
 
-    const isHtml = isHtmlDoc(ctx.ownerDocument);
-    const doc = ctx.ownerDocument;
+    const isHtml = isHtmlDoc(source.ownerDocument);
+    const doc = source.ownerDocument;
     const wrapper = isHtml ? doc.createElement('div') : doc.createElementNS(null, 'wrapper');
 
-    wrapper.appendChild(doc.importNode(ctx.cloneNode(true), true));
+    wrapper.appendChild(doc.importNode(source.cloneNode(true), true));
     return wrapper;
   }
 
@@ -526,8 +526,8 @@ export function installBrowserHelpers(): void {
   }
 
   let nextHarnessNodeId = 1;
-  function tagFragmentElements(ctx: DocumentFragment): void {
-    for (const el of ctx.querySelectorAll('*')) {
+  function tagFragmentElements(source: DocumentFragment): void {
+    for (const el of source.querySelectorAll('*')) {
       el.setAttribute(HARNESS_NODE_ID, String(nextHarnessNodeId++));
     }
   }
@@ -622,10 +622,10 @@ export function installBrowserHelpers(): void {
     | { kind: 'sheet'; }
     | { kind: 'styleText'; createSheet: (source: string) => CssomSheet; };
 
-  function readCssom(cssom: CssomProbe, ctx: QueryContext, from: CssomReadFrom): unknown {
+  function readCssom(cssom: CssomProbe, source: QuerySource, from: CssomReadFrom): unknown {
     const sheet = from.kind === 'sheet'
-      ? resolveCssomSheet(ctx, cssom.sheet ?? 0)
-      : createCssomSheetFromStyleText(cssom, ctx, from);
+      ? resolveCssomSheet(source, cssom.sheet ?? 0)
+      : createCssomSheetFromStyleText(cssom, source, from);
 
     return readCssomSheet(cssom, sheet);
   }
@@ -685,39 +685,39 @@ export function installBrowserHelpers(): void {
     return rules;
   }
 
-  function resolveCssomSheet(ctx: QueryContext, index = 0): CssomSheet {
-    if (isDocument(ctx)) {
-      const sheet = ctx.styleSheets[index];
+  function resolveCssomSheet(source: QuerySource, index = 0): CssomSheet {
+    if (isDocument(source)) {
+      const sheet = source.styleSheets[index];
       if (!sheet) throw new Error(`No stylesheet at index ${index}`);
       return sheet;
     }
 
-    if (isHtmlStyle(ctx) || isHtmlLink(ctx)) {
-      const sheet = ctx.sheet;
+    if (isHtmlStyle(source) || isHtmlLink(source)) {
+      const sheet = source.sheet;
       if (!sheet) throw new Error(`Referenced element has no stylesheet`);
       return sheet;
     }
 
-    throw new Error(`Context for 'cssom' sheet read must be a Document, <style>, or <link>`);
+    throw new Error(`Query source for 'cssom' sheet read must be a Document, <style>, or <link>`);
   }
 
-  function createCssomSheetFromStyleText(cssom: CssomProbe, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CssomSheet {
-    const source = resolveCssomStyleText(ctx, cssom.sheet ?? 0);
-    return from.createSheet(source);
+  function createCssomSheetFromStyleText(cssom: CssomProbe, source: QuerySource, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CssomSheet {
+    const styleText = resolveCssomStyleText(source, cssom.sheet ?? 0);
+    return from.createSheet(styleText);
   }
 
-  function resolveCssomStyleText(ctx: QueryContext, index = 0): string {
-    if (isHtmlStyle(ctx)) {
+  function resolveCssomStyleText(source: QuerySource, index = 0): string {
+    if (isHtmlStyle(source)) {
       if (index !== 0) throw new Error(`No <style> element at index ${index}`);
-      return ctx.textContent ?? '';
+      return source.textContent ?? '';
     }
 
-    if (isHtmlLink(ctx)) {
+    if (isHtmlLink(source)) {
       throw new Error(`Cannot read selectlet cssom source from <link>; use inline <style> for now`);
     }
 
-    if (isDocument(ctx) || isDocFrag(ctx) || isElement(ctx)) {
-      const styles = [...ctx.querySelectorAll('style')].filter(isHtmlStyle);
+    if (isDocument(source) || isDocFrag(source) || isElement(source)) {
+      const styles = [...source.querySelectorAll('style')].filter(isHtmlStyle);
       const style = styles[index];
 
       if (!style) throw new Error(`No <style> element at index ${index}`);
@@ -725,7 +725,7 @@ export function installBrowserHelpers(): void {
       return style.textContent ?? '';
     }
 
-    throw new Error(`Context for 'cssom' styleText read must be a Document, DocumentFragment, Element, or <style>`);
+    throw new Error(`Query source for 'cssom' styleText read must be a Document, DocumentFragment, Element, or <style>`);
   }
 
   type JsonRecord = Record<string, unknown>;
@@ -866,7 +866,7 @@ export function installBrowserHelpers(): void {
   }
 
   window.__pwHelpers = {
-    resolveContext,
+    resolveQuerySource,
     runQuery,
     compareQueryResults,
     toEngineResult,

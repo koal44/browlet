@@ -1,22 +1,19 @@
-import { withElementStub } from '../../stubs';
 import type { EventImpl } from '../events/event';
 import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
+import type { Environment } from '../../scripting/environment';
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { HTMLCollectionImpl } from './collections';
 import {
-  ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
-  type TreeScopeResolver,
+  ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver,
 } from '../../style/integration';
 import {
   arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
   type InterfaceDefinition,
 } from '../../../web-idl/index';
-import {
-  HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
-} from '../../../infra/index';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import { asciiLower } from '../../../infra/ascii';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
@@ -30,6 +27,255 @@ import {
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin } from './slottable';
 import { InternalError } from '../../../infra/internal-error';
+
+/** Element names, attributes, child navigation, and composed style behavior. */
+// https://dom.spec.whatwg.org/#interface-element
+export class ElementImpl extends NodeImpl {
+  /** Execution and allocation owner supplied at construction. */
+  declare env: Environment;
+  /** Document supplied at construction, including while this element is detached. */
+  declare nodeDocument: DocumentImpl;
+  /** Ordered attributes owned by this element. */
+  // https://dom.spec.whatwg.org/#concept-element-attribute
+  attributes: NamedNodeMapImpl;
+  /** Element name without a namespace prefix. */
+  localName: string;
+  /** Namespace URI selected when the element is created. */
+  namespaceURI: string;
+
+  /** Child-node mutation behavior shared with text and doctype nodes. */
+  #childNodeMixin = new ChildNodeMixin(this);
+  /** Lazily created inline style declaration. */
+  #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
+  /** Sheet loading and ownership for elements that provide a style sheet. */
+  protected linkStyleMixin: LinkStyleMixin | undefined;
+  /** Navigation among element siblings. */
+  #nonDocumentTypeChildNodeMixin =
+    new NonDocumentTypeChildNodeMixin(this);
+  /** Live child collection and element-child navigation. */
+  #parentNodeMixin = new ParentNodeMixin(this);
+  /** Slot assignment shared with text nodes. */
+  #slottableMixin = new SlottableMixin();
+
+  constructor(context: ElementCreationContext, env: Environment) {
+    super(NodeType.Element, context.document, env);
+    this.attributes = new NamedNodeMapImpl();
+    this.attributes.associateElement(this);
+    this.localName = context.localName;
+    this.namespaceURI = context.namespaceURI;
+  }
+
+  static is(value: unknown): value is ElementImpl {
+    return value instanceof ElementImpl;
+  }
+
+  get children(): HTMLCollectionImpl<ElementImpl> {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
+  }
+
+  get previousElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
+  }
+
+  get nextElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
+  }
+
+  /** Return the attribute value, or null when the name is absent. */
+  // https://dom.spec.whatwg.org/#dom-element-getattribute
+  getAttribute(qualifiedName: string): string | null {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+
+    return this.attributes.find(
+      (attribute) => attribute.name === qualifiedName,
+    )?.value ?? null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-getattributens
+  getAttributeNS(namespaceURI: string | null, localName: string): string | null {
+    namespaceURI = normalizeNamespace(namespaceURI);
+
+    return this.attributes.find(
+      (attribute) =>
+        attribute.namespaceURI === namespaceURI &&
+        attribute.localName === localName,
+    )?.value ?? null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-hasattribute
+  hasAttribute(qualifiedName: string): boolean {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+
+    return this.attributes.some(
+      (attribute) => attribute.name === qualifiedName,
+    );
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-hasattributens
+  hasAttributeNS(namespaceURI: string | null, localName: string): boolean {
+    namespaceURI = normalizeNamespace(namespaceURI);
+
+    return this.attributes.some(
+      (attribute) =>
+        attribute.namespaceURI === namespaceURI &&
+        attribute.localName === localName,
+    );
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-setattribute
+  setAttribute(qualifiedName: string, value: string): void {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+
+    const attribute = this.attributes.find(
+      (candidate) => candidate.name === qualifiedName,
+    );
+    if (attribute) {
+      attribute.value = value;
+    } else {
+      const created = this.nodeDocument.createAttribute(qualifiedName);
+      created.value = value;
+      this.appendAttribute(created);
+    }
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-removeattribute
+  removeAttribute(qualifiedName: string): void {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+
+    if (this.attributes.getNamedItem(qualifiedName)) {
+      this.attributes.removeNamedItem(qualifiedName);
+    }
+  }
+
+  /** Live collection of descendants containing every requested class. */
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbyclassname
+  getElementsByClassName(classNames: string): HTMLCollectionImpl {
+    return findElementsByClassName(this, classNames);
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagname
+  getElementsByTagName(qualifiedName: string): HTMLCollectionImpl {
+    return findElementsByTagName(this, qualifiedName);
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagnamens
+  getElementsByTagNameNS(
+    namespaceURI: string | null,
+    localName: string,
+  ): HTMLCollectionImpl {
+    return findElementsByTagNameNS(this, namespaceURI, localName);
+  }
+
+  // -- Internal ---------------------------------------------------------
+
+  setAssignedSlot(slot: ElementImpl | null): void {
+    this.#slottableMixin.assignedSlot = slot;
+  }
+
+  override getAssignedSlot(): ElementImpl | null {
+    return this.#slottableMixin.assignedSlot;
+  }
+
+  override getEventParent(_event: EventImpl): NodeImpl | null {
+    return this.#slottableMixin.assignedSlot ?? this.parentNode;
+  }
+
+  /** Defer child-dependent style processing while the parser populates this element. */
+  beginParsingChildren(): void {
+    this.linkStyleMixin?.beginParsingChildren();
+  }
+
+  /** Resume style processing once the parser has supplied the element's children. */
+  finishParsingChildren(): void {
+    this.linkStyleMixin?.finishParsingChildren();
+  }
+
+  /** Set an attribute by namespace and local name, creating it when absent. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-set-value
+  setAttributeValue(
+    localName: string, value: string,
+    prefix: string | null = null, namespace: string | null = null,
+  ): void {
+    const attribute = this.attributes.getNamedItemNS(namespace, localName);
+    if (attribute) {
+      attribute.value = value;
+    } else {
+      this.appendAttribute(this.nodeDocument.createAttributeNode(
+        localName, value, namespace, prefix,
+      ));
+    }
+  }
+
+  /** Attach an unowned attribute and notify the element of its value. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-append
+  appendAttribute(attribute: AttrImpl): void {
+    if (attribute.ownerElement !== null) {
+      throw new InternalError('Cannot append an attribute owned by another element');
+    }
+
+    this.attributes.push(attribute);
+    attribute.ownerElement = this;
+    this.attributeChanged(attribute.localName, null, attribute.value, attribute.namespaceURI);
+  }
+
+  /** Apply element-specific reactions to an attribute change. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-change-ext
+  attributeChanged(
+    localName: string, _oldValue: string | null, newValue: string | null,
+    namespace: string | null,
+  ): void {
+    if (namespace !== null) return;
+    if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
+    this.linkStyleMixin?.attributeChanged(localName);
+  }
+
+  /** Return the lazily created declaration reflected by the style attribute. */
+  getInlineStyle(): CSSStyleDeclarationImpl {
+    return (this.#inlineStyleMixin ??=
+      new ElementCSSInlineStyleMixin(this, this.env)).style;
+  }
+
+  /** Style sheet supplied by this element, if its style behavior has one. */
+  getStyleSheet(): CSSStyleSheetImpl | null {
+    return this.linkStyleMixin?.sheet ?? null;
+  }
+
+  protected override insertedInto(): void {
+    this.linkStyleMixin?.update();
+  }
+
+  protected override removedFrom(): void {
+    this.linkStyleMixin?.update();
+  }
+
+  protected override childrenChanged(): void {
+    this.linkStyleMixin?.childrenChanged();
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  #normalizeAttributeName(qualifiedName: string): string {
+    return this.namespaceURI === HTML_NAMESPACE
+      ? asciiLower(qualifiedName)
+      : qualifiedName;
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -80,259 +326,6 @@ import { InternalError } from '../../../infra/internal-error';
  *   undefined insertAdjacentText(DOMString where, DOMString data); // legacy
  * };
  */
-export class ElementImpl extends withElementStub(NodeImpl) {
-  #childNodeMixin = new ChildNodeMixin(this);
-  #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
-  #linkStyleMixin: LinkStyleMixin | undefined;
-  #nonDocumentTypeChildNodeMixin =
-    new NonDocumentTypeChildNodeMixin(this);
-  #parentNodeMixin = new ParentNodeMixin(this);
-  #attributes: NamedNodeMapImpl;
-  #localName: string;
-  #namespaceURI: string;
-  #slottableMixin = new SlottableMixin();
-
-  constructor(
-    context: ElementCreationContext,
-    linkStyle?: LinkStyleInit,
-  ) {
-    super(NodeType.Element, context.document);
-    this.#attributes = new NamedNodeMapImpl();
-    this.#attributes.associateElement(this);
-    this.#localName = context.localName;
-    this.#namespaceURI = context.namespaceURI;
-    this.#linkStyleMixin = linkStyle
-      ? new LinkStyleMixin(
-        this,
-        linkStyle.options,
-        linkStyle.treeScopeResolver,
-      )
-      : undefined;
-  }
-
-  static is(value: unknown): value is ElementImpl {
-    return value instanceof ElementImpl;
-  }
-
-  get attributes(): NamedNodeMapImpl {
-    return this.#attributes;
-  }
-
-  get localName(): string {
-    return this.#localName;
-  }
-
-  get namespaceURI(): string {
-    return this.#namespaceURI;
-  }
-
-  get children(): HTMLCollectionImpl<ElementImpl> {
-    return this.#parentNodeMixin.children;
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.firstElementChild;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.lastElementChild;
-  }
-
-  get childElementCount(): number {
-    return this.#parentNodeMixin.childElementCount;
-  }
-
-  get previousElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
-  }
-
-  get nextElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
-  }
-
-  remove(): void {
-    this.#childNodeMixin.remove();
-  }
-
-  getAttribute(qualifiedName: string): string | null {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    return this.attributes.find(
-      (attribute) => attribute.name === qualifiedName,
-    )?.value ?? null;
-  }
-
-  getAttributeNS(namespaceURI: string | null, localName: string): string | null {
-    namespaceURI = normalizeNamespace(namespaceURI);
-
-    return this.attributes.find(
-      (attribute) =>
-        attribute.namespaceURI === namespaceURI &&
-        attribute.localName === localName,
-    )?.value ?? null;
-  }
-
-  hasAttribute(qualifiedName: string): boolean {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    return this.attributes.some(
-      (attribute) => attribute.name === qualifiedName,
-    );
-  }
-
-  hasAttributeNS(namespaceURI: string | null, localName: string): boolean {
-    namespaceURI = normalizeNamespace(namespaceURI);
-
-    return this.attributes.some(
-      (attribute) =>
-        attribute.namespaceURI === namespaceURI &&
-        attribute.localName === localName,
-    );
-  }
-
-  setAttribute(qualifiedName: string, value: string): void {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    const attribute = this.attributes.find(
-      (candidate) => candidate.name === qualifiedName,
-    );
-    if (attribute) {
-      attribute.value = value;
-    } else {
-      const ownerDocument = this.getNodeDocument();
-      if (!ownerDocument) {
-        throw new InternalError('Element has no node document');
-      }
-      const created = ownerDocument.createAttribute(qualifiedName);
-      created.value = value;
-      this.appendAttribute(created);
-    }
-  }
-
-  removeAttribute(qualifiedName: string): void {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    if (this.attributes.getNamedItem(qualifiedName)) {
-      this.attributes.removeNamedItem(qualifiedName);
-    }
-  }
-
-  getElementsByClassName(classNames: string): HTMLCollectionOf<Element> {
-    return findElementsByClassName(this, classNames);
-  }
-
-  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof SVGElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<SVGElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
-  /** @deprecated */
-  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
-  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
-  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element> {
-    return findElementsByTagName(this, qualifiedName);
-  }
-
-  getElementsByTagNameNS(namespaceURI: typeof HTML_NAMESPACE, localName: string): HTMLCollectionOf<HTMLElement>;
-  getElementsByTagNameNS(namespaceURI: typeof SVG_NAMESPACE, localName: string): HTMLCollectionOf<SVGElement>;
-  getElementsByTagNameNS(namespaceURI: typeof MATHML_NAMESPACE, localName: string): HTMLCollectionOf<MathMLElement>;
-  getElementsByTagNameNS(namespaceURI: string | null, localName: string): HTMLCollectionOf<Element>;
-  getElementsByTagNameNS(
-    namespaceURI: string | null,
-    localName: string,
-  ): HTMLCollectionOf<Element> {
-    return findElementsByTagNameNS(this, namespaceURI, localName);
-  }
-
-  // -- Internal ---------------------------------------------------------
-
-  setAssignedSlot(slot: ElementImpl | null): void {
-    this.#slottableMixin.setAssignedSlot(slot);
-  }
-
-  override getAssignedSlot(): ElementImpl | null {
-    return this.#slottableMixin.assignedSlot;
-  }
-
-  override getEventParent(_event: EventImpl): NodeImpl | null {
-    return this.#slottableMixin.assignedSlot ?? this.parentNode;
-  }
-
-  beginParsingChildren(): void {
-    this.#linkStyleMixin?.beginParsingChildren();
-  }
-
-  finishParsingChildren(): void {
-    this.#linkStyleMixin?.finishParsingChildren();
-  }
-
-  // https://dom.spec.whatwg.org/#concept-element-attributes-set-value
-  setAttributeValue(
-    localName: string, value: string,
-    prefix: string | null = null, namespace: string | null = null,
-  ): void {
-    const attribute = this.attributes.getNamedItemNS(namespace, localName);
-    if (attribute) {
-      attribute.value = value;
-    } else {
-      this.appendAttribute(this.getNodeDocument()!.createAttributeNode(
-        localName, value, namespace, prefix,
-      ));
-    }
-  }
-
-  appendAttribute(attribute: AttrImpl): void {
-    if (attribute.ownerElement !== null) {
-      throw new InternalError('Cannot append an attribute owned by another element');
-    }
-
-    this.#attributes.push(attribute);
-    attribute.setOwnerElement(this);
-    this.attributeChanged(attribute.localName, null, attribute.value, attribute.namespaceURI);
-  }
-
-  // https://dom.spec.whatwg.org/#concept-element-attributes-change-ext
-  attributeChanged(
-    localName: string, _oldValue: string | null, newValue: string | null,
-    namespace: string | null,
-  ): void {
-    if (namespace !== null) return;
-    if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
-    this.#linkStyleMixin?.attributeChanged(localName);
-  }
-
-  getInlineStyle(): CSSStyleDeclarationImpl {
-    return (this.#inlineStyleMixin ??=
-      new ElementCSSInlineStyleMixin(
-        this, this.getNodeDocument()!.styleletExec,
-      )).style;
-  }
-
-  getStyleSheet(): CSSStyleSheetImpl | null {
-    return this.#linkStyleMixin?.sheet ?? null;
-  }
-
-  protected override insertedInto(): void {
-    this.#linkStyleMixin?.update();
-  }
-
-  protected override removedFrom(): void {
-    this.#linkStyleMixin?.update();
-  }
-
-  protected override childrenChanged(): void {
-    this.#linkStyleMixin?.childrenChanged();
-  }
-
-  // -- Private ----------------------------------------------------------
-
-  #normalizeAttributeName(qualifiedName: string): string {
-    return this.namespaceURI === HTML_NAMESPACE
-      ? asciiLower(qualifiedName)
-      : qualifiedName;
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const elementIDL = defineInterface({
   name: 'Element',
   inherits: 'Node',
@@ -376,6 +369,7 @@ export const elementIDL = defineInterface({
   ],
 });
 
+/** Associate an element declaration with its constructor and matching names. */
 export function defineElementInterface(
   options: ElementInterfaceOptions,
 ): ElementInterface {
@@ -424,22 +418,27 @@ function normalizeNamespace(namespaceURI: string | null): string | null {
   return namespaceURI === '' ? null : namespaceURI;
 }
 
-export type LinkStyleInit = {
-  options: LinkStyleOptions;
-  treeScopeResolver: TreeScopeResolver;
-};
-
+/** Inputs shared by document element factories and element constructors. */
 export type ElementCreationContext = {
+  /** Node document assigned to the new element. */
   document: DocumentImpl;
+  /** Name without a namespace prefix. */
   localName: string;
+  /** Namespace used to select the element interface. */
   namespaceURI: string;
+  /** Resolve style ownership after insertion or removal. */
   treeScopeResolver: TreeScopeResolver;
 };
 
+/** Declaration and constructor selected for an element's namespace and name. */
 export type ElementInterface = {
+  /** Platform interface projected for this element implementation. */
   definition: InterfaceDefinition;
+  /** Constructor used by the document's node factory. */
   implementation: ElementImplementation;
+  /** Local names handled by this interface within its namespace. */
   localNames: string[];
+  /** Namespace in which these names select the interface. */
   namespaceURI: string;
 };
 
@@ -451,4 +450,5 @@ type ElementInterfaceOptions = {
 
 type ElementImplementation = abstract new (
   context: ElementCreationContext,
+  env: Environment,
 ) => ElementImpl;

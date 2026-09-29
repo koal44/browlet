@@ -16,45 +16,10 @@ import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 import { createTaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 
-/*
- * typedef (DOMString or Function or TrustedScript) TimerHandler;
- *
- * interface mixin WindowOrWorkerGlobalScope {
- *   [Replaceable] readonly attribute USVString origin;
- *   readonly attribute boolean isSecureContext;
- *   readonly attribute boolean crossOriginIsolated;
- *
- *   undefined reportError(any e);
- *
- *   DOMString btoa(DOMString data);
- *   ByteString atob(DOMString data);
- *
- *   long setTimeout(TimerHandler handler, optional long timeout = 0,
- *     any... arguments);
- *   undefined clearTimeout(optional long id = 0);
- *   long setInterval(TimerHandler handler, optional long timeout = 0,
- *     any... arguments);
- *   undefined clearInterval(optional long id = 0);
- *
- *   undefined queueMicrotask(VoidFunction callback);
- *
- *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
- *     optional ImageBitmapOptions options = {});
- *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
- *     long sx, long sy, long sw, long sh,
- *     optional ImageBitmapOptions options = {});
- *
- *   any structuredClone(any value,
- *     optional StructuredSerializeOptions options = {});
- * };
- *
- * High Resolution Time:
- *
- * partial interface mixin WindowOrWorkerGlobalScope {
- *   [Replaceable] readonly attribute Performance performance;
- * };
- */
+/** Owns timers, performance, reporting, and resource lifetimes for one global. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
 export class WindowOrWorkerGlobalScopeMixin {
+  /** Timer handles and scheduling state retained by this global. */
   timers: GlobalTimers;
   /** Ports whose relevant global is this scope. */
   // PROVISIONAL: MessagePort must register and unregister its global membership.
@@ -78,11 +43,12 @@ export class WindowOrWorkerGlobalScopeMixin {
   reportBuffer: ReportImpl[] = [];
   /** Environment shared by this global's browser facilities. */
   env: Environment;
-  #performance: PerformanceImpl;
+  /** Stable Performance implementation sharing this environment's time origin. */
+  performance: PerformanceImpl;
 
   constructor(env: Environment) {
     this.env = env;
-    this.#performance = new PerformanceImpl(env.timing);
+    this.performance = new PerformanceImpl(env.timing, env);
     const { realm } = env;
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
@@ -91,13 +57,10 @@ export class WindowOrWorkerGlobalScopeMixin {
     });
   }
 
-  /** https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext */
+  /** Security classification of this global's environment. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext
   get isSecureContext(): boolean {
     return this.env.isSecureContext;
-  }
-
-  get performance(): PerformanceImpl {
-    return this.#performance;
   }
 
   setTimeout(
@@ -221,17 +184,43 @@ export class WindowOrWorkerGlobalScopeMixin {
 // Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
 export const reportingTaskSource = createTaskSource('reporting');
 
-// -- Web IDL ------------------------------------------------------------
-
-/*
- * TrustedScript is the third arm of this typedef. Add it when Browlet owns
- * the Trusted Types interface and the timer string-compilation branch.
- */
+// TrustedScript awaits the Trusted Types interface and timer string compilation.
+// typedef (DOMString or Function or TrustedScript) TimerHandler;
 export const timerHandlerIDL = defineTypedef({
   name: 'TimerHandler',
   type: union(idlType.DOMString, reference('Function')),
 });
 
+/*
+ * interface mixin WindowOrWorkerGlobalScope {
+ *   [Replaceable] readonly attribute USVString origin;
+ *   readonly attribute boolean isSecureContext;
+ *   readonly attribute boolean crossOriginIsolated;
+ *
+ *   undefined reportError(any e);
+ *
+ *   DOMString btoa(DOMString data);
+ *   ByteString atob(DOMString data);
+ *
+ *   long setTimeout(TimerHandler handler, optional long timeout = 0,
+ *     any... arguments);
+ *   undefined clearTimeout(optional long id = 0);
+ *   long setInterval(TimerHandler handler, optional long timeout = 0,
+ *     any... arguments);
+ *   undefined clearInterval(optional long id = 0);
+ *
+ *   undefined queueMicrotask(VoidFunction callback);
+ *
+ *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
+ *     optional ImageBitmapOptions options = {});
+ *   Promise<ImageBitmap> createImageBitmap(ImageBitmapSource image,
+ *     long sx, long sy, long sw, long sh,
+ *     optional ImageBitmapOptions options = {});
+ *
+ *   any structuredClone(any value,
+ *     optional StructuredSerializeOptions options = {});
+ * };
+ */
 export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
@@ -268,6 +257,12 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   ],
 });
 
+// High Resolution Time: https://w3c.github.io/hr-time/#extensions-to-windoworworkerglobalscope
+/*
+ * partial interface mixin WindowOrWorkerGlobalScope {
+ *   [Replaceable] readonly attribute Performance performance;
+ * };
+ */
 export const highResolutionTimeWindowOrWorkerGlobalScopeIDL =
   definePartialInterfaceMixin({
     name: windowOrWorkerGlobalScopeIDL.name,

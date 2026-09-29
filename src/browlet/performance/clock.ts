@@ -1,13 +1,8 @@
 import { InternalError } from '../../infra/internal-error';
 import { coarsenTime } from '../../infra/time';
 
-/*
- * A clock tracks the passage of time and reports the unsafe current time at
- * which an algorithm step executes. Clock identity is significant: moments
- * created by different clocks are not comparable.
- *
- * High Resolution Time §2.1, clocks.
- */
+/** Supplies raw timestamps whose clock identity determines whether they can be compared. */
+// https://w3c.github.io/hr-time/#sec-clocks
 export class Clock {
   #readUnsafeCurrentTime: () => number;
 
@@ -15,24 +10,26 @@ export class Clock {
     this.#readUnsafeCurrentTime = readUnsafeCurrentTime;
   }
 
+  /** Read a timestamp before applying the environment's precision limit. */
   unsafeCurrentTime(): UnsafeMoment {
     return new UnsafeMoment(this, this.#readUnsafeCurrentTime());
   }
 }
 
+/** System time measured in milliseconds since the Unix epoch. */
 export const wallClock = new Clock(() => Date.now());
 
+/** Shared monotonic source for elapsed-time measurements. */
 export const monotonicClock = new Clock(() => globalThis.performance.now());
 
-/*
- * Unsafe moments are raw points reported by clocks. Coarsening converts them
- * to Moments before specifications calculate observable durations.
- *
- * High Resolution Time §2.2, moments and durations.
- */
+/** Raw clock reading that must be coarsened before calculating observable durations. */
+// https://w3c.github.io/hr-time/#sec-moments-and-durations
 export class UnsafeMoment {
+  /** Clock whose origin and rate give this reading its meaning. */
   clock: Clock;
+  /** Distinguishes raw readings from precision-limited moments. */
   coarsened = false as const;
+  /** Elapsed milliseconds in the source clock's coordinate system. */
   milliseconds: number;
 
   constructor(clock: Clock, milliseconds: number) {
@@ -40,15 +37,21 @@ export class UnsafeMoment {
     this.milliseconds = milliseconds;
   }
 
-  /** High Resolution Time, coarsen time. */
+  /** Apply the precision limit selected by cross-origin isolation. */
+  // https://w3c.github.io/hr-time/#dfn-coarsen-time
   coarsen(crossOriginIsolatedCapability = false): Moment {
     return new Moment(this.clock, coarsenTime(this.milliseconds, crossOriginIsolatedCapability));
   }
 }
 
+/** Precision-limited point on a particular clock. */
+// https://w3c.github.io/hr-time/#sec-moments-and-durations
 export class Moment {
+  /** Clock shared by moments that may be subtracted from this one. */
   clock: Clock;
+  /** Marks this reading as already precision-limited. */
   coarsened = true as const;
+  /** Coarsened milliseconds in the source clock's coordinate system. */
   milliseconds: number;
 
   constructor(clock: Clock, milliseconds: number) {
@@ -56,7 +59,7 @@ export class Moment {
     this.milliseconds = milliseconds;
   }
 
-  /** High Resolution Time §2.2, the duration from this moment to another. */
+  /** Measure elapsed time to another moment on the same clock. */
   durationUntil(other: Moment): Duration {
     if (this.clock !== other.clock) {
       throw new InternalError('Moments from different clocks are not comparable');
@@ -71,14 +74,17 @@ export class Moment {
   }
 }
 
+/** Millisecond difference between two moments on the same clock. */
+// https://w3c.github.io/hr-time/#sec-moments-and-durations
 export class Duration {
+  /** Signed elapsed time, independent of the source clock's origin. */
   milliseconds: number;
 
   constructor(milliseconds: number) {
     this.milliseconds = milliseconds;
   }
 
-  /** High Resolution Time §2.2, implicitly convert a duration to a timestamp. */
+  /** Expose the measured duration as a DOM timestamp. */
   toTimestamp(): DOMHighResTimeStamp {
     return this.milliseconds;
   }

@@ -1,100 +1,96 @@
+import type {
+  DOMNode as QuerySource, DOMOperations, DOMCollection, DOMNode as Element, DOMNode as Document,
+  DOMNode as DocumentFragment,
+} from '../../infra/index';
 import type { LookupMode } from '../constants';
-import type { QueryContext, SelectletCaps } from '../selectlet';
 import { iterableToArray } from '../../infra/collections';
-import { isDocument, isDocumentFragment, isNamedItemAnElement } from '../dom';
-import { isElement } from '../../infra/selector-dom';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
-export type SeedIdFn = (id: string, context: QueryContext, lookupMode: LookupMode) => Element[];
+export type SeedIdFn = (id: string, source: QuerySource, lookupMode: LookupMode) => Element[];
 
-type IdsCap<R> = ((root: R, id: string) => Iterable<Element>) | null | undefined;
-
-export function buildSeedsById(caps: SelectletCaps | undefined, snap: Snapshot): SeedIdFn {
-  const docCap = caps?.doc?.cachedIds;
-  const fragCap = caps?.frag?.cachedIds;
-
-  return (id, context, _mode) => {
-    return isDocument(context) ? seedsByIdInDocument(id, context, snap, docCap)
-      : isElement(context) ? seedsByIdInElement(id, context, snap, docCap, fragCap)
-      : seedsByIdInFragment(id, context, snap, fragCap);
+export function buildSeedsById(ctx: SelectletContext): SeedIdFn {
+  return (id, source, _mode) => {
+    return ctx.dom.isDocument(source) ? seedsByIdInDocument(id, source, ctx)
+      : ctx.dom.isElement(source) ? seedsByIdInElement(id, source, ctx)
+      : seedsByIdInFragment(id, source, ctx);
   };
 }
 
-function seedsByIdInDocument(id: string, context: Document, snap: Snapshot, cap: IdsCap<Document>): Element[] {
-  if (cap) return iterableToArray(cap(context, id));
+function seedsByIdInDocument(id: string, source: Document, ctx: SelectletContext): Element[] {
+  if (ctx.dom.cachedIds) return iterableToArray(ctx.dom.cachedIds(source, id));
 
-  if (snap.hasDocumentAll) return seedsById_All(id, context);
-  if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
+  if (ctx.hasDocumentAll) return seedsById_All(id, source, ctx.dom);
+  if (ctx.config.MUTATE_IDS) return seedsById_MutateInDoc(id, source, ctx.dom);
 
-  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+  return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
 }
 
-function seedsByIdInElement(id: string, context: Element, snap: Snapshot, docCap: IdsCap<Document>, fragCap: IdsCap<DocumentFragment>): Element[] {
-  const root = context.getRootNode();
+function seedsByIdInElement(id: string, source: Element, ctx: SelectletContext): Element[] {
+  const root = ctx.dom.root(source);
 
-  if (isDocument(root)) {
-    if (docCap) {
-      return containedIdCandidates(docCap(root, id), context);
+  if (ctx.dom.isDocument(root)) {
+    if (ctx.dom.cachedIds) {
+      return containedIdCandidates(ctx.dom.cachedIds(root, id), source, ctx.dom);
     }
 
-    if (snap.hasDocumentAll) return seedsById_All(id, context);
-    if (snap.config.MUTATE_IDS) return seedsById_MutateInEl(id, context);
+    if (ctx.hasDocumentAll) return seedsById_All(id, source, ctx.dom);
+    if (ctx.config.MUTATE_IDS) return seedsById_MutateInEl(id, source, ctx.dom);
 
-    return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+    return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
   }
 
-  if (isDocumentFragment(root)) {
-    if (fragCap) {
-      return containedIdCandidates(fragCap(root, id), context);
+  if (ctx.dom.isDocumentFragment(root)) {
+    if (ctx.dom.cachedIds) {
+      return containedIdCandidates(ctx.dom.cachedIds(root, id), source, ctx.dom);
     }
 
-    if (snap.config.MUTATE_IDS) {
-      return containedIdCandidates(seedsById_MutateInDoc(id, root), context);
+    if (ctx.config.MUTATE_IDS) {
+      return containedIdCandidates(seedsById_MutateInDoc(id, root, ctx.dom), source, ctx.dom);
     }
 
     // No fragment cache/mutate fast path available. Walk only the element subtree, not the whole fragment.
-    return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+    return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
   }
 
   // Detached element/root weirdness. Local traversal is the only safe thing.
-  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+  return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
 }
 
-function seedsByIdInFragment(id: string, context: DocumentFragment, snap: Snapshot, cap: IdsCap<DocumentFragment> ): Element[] {
-  if (cap) return iterableToArray(cap(context, id));
-  if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
+function seedsByIdInFragment(id: string, source: DocumentFragment, ctx: SelectletContext): Element[] {
+  if (ctx.dom.cachedIds) return iterableToArray(ctx.dom.cachedIds(source, id));
+  if (ctx.config.MUTATE_IDS) return seedsById_MutateInDoc(id, source, ctx.dom);
 
-  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+  return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
 }
 
-function seedsById_All(id: string, context: Document | Element): Element[] {
+function seedsById_All(id: string, source: Document, dom: DOMOperations): Element[] {
   // document.all is only a document-root fast path.
   // Element callers must already have been routed through a Document root.
 
-  const isDoc = isDocument(context);
+  const isDoc = dom.isDocument(source);
 
   let doc: Document;
   if (isDoc) {
-    doc = context;
+    doc = source;
   } else {
-    if (!context.isConnected) throw new Error('byId_All cannot be used on a disconnected element or fragment');
-    doc = context.ownerDocument;
+    if (!dom.isConnected(source)) throw new Error('byId_All cannot be used on a disconnected element or fragment');
+    doc = dom.ownerDocument(source)!;
   }
 
-  const item = doc.all.namedItem(id);
+  const item = dom.allNamedItem(doc, id);
 
   const nodes: Element[] = [];
   if (item === null) {  // null
     return nodes;
-  } else if (isNamedItemAnElement(item)) {  // Element
+  } else if (dom.isNode(item) && dom.isElement(item)) {  // Element
     const e = item;
-    if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
+    if (sameId(e, id, dom) && (isDoc || (e !== source && dom.contains(source, e)))) {
       nodes.push(e);
     }
   } else {  // HTMLCollection
-    for (let i = 0; i < item.length; i++) {
-      const e = item[i]!;
-      if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
+    for (let i = 0; i < (item as DOMCollection).length; i++) {
+      const e = (item as DOMCollection)[i]!;
+      if (sameId(e, id, dom) && (isDoc || (e !== source && dom.contains(source, e)))) {
         nodes.push(e);
       }
     }
@@ -103,125 +99,108 @@ function seedsById_All(id: string, context: Document | Element): Element[] {
   return nodes;
 }
 
-function seedsById_MutateInDoc(id: string, context: Document | DocumentFragment): Element[] {
+function seedsById_MutateInDoc(id: string, source: Document, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
 
   try {
     for (;;) {
-      const e = context.getElementById(id);
+      const e = dom.getElementById(source, id);
       if (!e) break;
       nodes.push(e);
-      e.removeAttribute('id');
+      dom.removeAttribute(e, 'id');
     }
   } finally {
-    for (const e of nodes) e.setAttribute('id', id);
+    for (const e of nodes) dom.setAttribute(e, 'id', id);
   }
 
   return nodes;
 }
 
-function seedsById_MutateInEl(id: string, context: Element): Element[] {
-  if (!context.isConnected) {
-    throw new Error('byId_MutateInEl should only be called for element contexts whose root is the owner document');
+function seedsById_MutateInEl(id: string, source: Element, dom: DOMOperations): Element[] {
+  if (!dom.isConnected(source)) {
+    throw new Error('byId_MutateInEl should only be called for element sources whose root is the owner document');
   }
 
-  const doc = context.ownerDocument;
+  const doc = dom.ownerDocument(source)!;
   const nodes: Element[] = [];
   const mutated: Element[] = [];
 
   try {
     for (;;) {
-      const e = doc.getElementById(id);
+      const e = dom.getElementById(doc, id);
       if (!e) break;
 
-      if (e !== context && context.contains(e)) {
+      if (e !== source && dom.contains(source, e)) {
         nodes.push(e);
       }
-      e.removeAttribute('id');
+      dom.removeAttribute(e, 'id');
       mutated.push(e);
     }
   } finally {
-    for (const e of mutated) e.setAttribute('id', id);
+    for (const e of mutated) dom.setAttribute(e, 'id', id);
   }
 
   return nodes;
 }
 
-function seedsById_Walk(id: string, context: QueryContext): Element[] {
+function seedsById_Walk(id: string, source: QuerySource, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
 
-  if (isDocument(context)) {
-    const root = context.documentElement;
-    if (sameId(root, id)) nodes.push(root);
+  if (dom.isDocument(source)) {
+    const root = dom.documentElement(source);
+    if (root === null) return nodes;
+    if (sameId(root, id, dom)) nodes.push(root);
     walk(root);
     return nodes;
-  } else if (isElement(context)) {
-    walk(context);
+  } else if (dom.isElement(source)) {
+    walk(source);
     return nodes;
   } else {  // DocumentFragment
-    for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
-      if (sameId(root, id)) nodes.push(root);
+    for (let root = dom.firstElementChild(source); root; root = dom.nextElementSibling(root)) {
+      if (sameId(root, id, dom)) nodes.push(root);
       walk(root);
     }
     return nodes;
   }
 
-  function walk(context: Element): void {
-    let node: Element | null = context;
-    let next: Element | null = context.firstElementChild;
+  function walk(source: Element): void {
+    let node: Element | null = source;
+    let next: Element | null = dom.firstElementChild(source);
 
     while ((node = next)) {
-      if (sameId(node, id)) nodes.push(node);
+      if (sameId(node, id, dom)) nodes.push(node);
 
-      next = node.firstElementChild || node.nextElementSibling;
+      next = dom.firstElementChild(node) || dom.nextElementSibling(node);
       if (next) continue;
 
-      while (!next && (node = node.parentElement) && node !== context) {
-        next = node.nextElementSibling;
+      while (!next && (node = dom.parentElement(node)) && node !== source) {
+        next = dom.nextElementSibling(node);
       }
     }
   }
 }
 
-const SHOW_ELEMENT = 1;
-
-function seedsById_TreeWalk(id: string, context: QueryContext): Element[] {
+function seedsById_TreeWalk(id: string, source: QuerySource, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
-
-  let root: Element | DocumentFragment;
-  let doc: Document;
-  if (isDocument(context)) {
-    root = context.documentElement;
-    doc = context;
-    if (sameId(root, id)) nodes.push(root);
-  } else {
-    root = context;
-    doc = context.ownerDocument;
+  const root = dom.isDocument(source) ? dom.documentElement(source) : source;
+  if (root === null) return nodes;
+  if (dom.isDocument(source) && sameId(root, id, dom)) nodes.push(root);
+  for (const node of dom.walkElements!(root)) {
+    if (sameId(node, id, dom)) nodes.push(node);
   }
-
-  const walker = doc.createTreeWalker(root, SHOW_ELEMENT, null);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const e = node as Element; // TypeScript doesn't know the filter is effectively applied.
-    if (sameId(e, id)) nodes.push(e);
-  }
-
   return nodes;
 }
 
-export function sameId(e: Element, id: string): boolean {
-  // return e.id === id; // fast but can be wrong
-  // return e.getAttribute('id') === id; // slower but correct
-  // return isHtmlForm(e) ? e.getAttribute('id') === id : e.id === id;  // compromise
-  const v = e.id;
-  return typeof v === 'string' ? v === id : e.getAttribute('id') === id; // best compromise
+export function sameId(e: Element, id: string, dom: DOMOperations): boolean {
+  return dom.getId(e) === id;
 }
 
-function containedIdCandidates(candidates: Iterable<Element>, context: Element): Element[] {
+function containedIdCandidates(candidates: Iterable<Element>, source: Element, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
   let j = 0;
 
   for (const e of candidates) {
-    if (e !== context && context.contains(e)) {
+    if (e !== source && dom.contains(source, e)) {
       nodes[j++] = e;
     }
   }

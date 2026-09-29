@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, vi } from 'vitest';
+import { createTestDocument } from '../../support/dom';
 import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
@@ -6,7 +7,6 @@ import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navi
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { Duration } from '../../../src/browlet/performance/clock';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import { type Task } from '../../../src/browlet/scripting/event-loop';
@@ -60,7 +60,7 @@ describe('HTML generic and timeout jobs', () => {
     advance(400);
 
     const activeEntry = fixture.traversable.activeSessionHistoryEntry;
-    const otherDocument = new DocumentImpl();
+    const otherDocument = createTestDocument(fixture.realm.env);
     otherDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
       createSessionHistoryEntry(createDocumentState(otherDocument));

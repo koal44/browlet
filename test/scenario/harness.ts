@@ -1,17 +1,17 @@
 import type { Page } from '@playwright/test';
 import type { DistributiveOmit } from '../../src/infra/util';
 
-export type SelectCase =  { select: string;  ref?: ContextRef; } & CaseBase;
-export type ByIdCase =    { byId: string;    ref?: ContextRef; } & CaseBase;
-export type ByTagCase =   { byTag: string;   ref?: ContextRef; } & CaseBase;
-export type ByClassCase = { byClass: string; ref?: ContextRef; } & CaseBase;
-export type FirstCase =   { first: string;   ref?: ContextRef; } & CaseBase;
-export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
-export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
-export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
-export type ComputedStyleCase = { computedStyle: string; pseudo?: string; ref: ContextRef; } & CaseBase;
-export type CssomCase = { cssom: CssomProbe; ref?: ContextRef; } & CaseBase;
-export type SupportsCase = { supports: SupportsProbe; ref?: ContextRef; } & CaseBase;
+export type SelectCase =  { select: string;  ref?: QuerySourceRef; } & CaseBase;
+export type ByIdCase =    { byId: string;    ref?: QuerySourceRef; } & CaseBase;
+export type ByTagCase =   { byTag: string;   ref?: QuerySourceRef; } & CaseBase;
+export type ByClassCase = { byClass: string; ref?: QuerySourceRef; } & CaseBase;
+export type FirstCase =   { first: string;   ref?: QuerySourceRef; } & CaseBase;
+export type MatchCase =   { match: string;   ref:  QuerySourceRef; } & CaseBase;
+export type ClosestCase = { closest: string; ref:  QuerySourceRef; } & CaseBase;
+export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: QuerySourceRef; } & CaseBase;
+export type ComputedStyleCase = { computedStyle: string; pseudo?: string; ref: QuerySourceRef; } & CaseBase;
+export type CssomCase = { cssom: CssomProbe; ref?: QuerySourceRef; } & CaseBase;
+export type SupportsCase = { supports: SupportsProbe; ref?: QuerySourceRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -89,16 +89,16 @@ export type CaseStatus = 'normal' | 'skip' | 'fixme' | 'fail' | 'only';
 export const ENGINES = ['native', 'selectlet'] as const;
 export type Engine = typeof ENGINES[number];
 
-export type ContextRef =
+export type QuerySourceRef =
   | { by: 'document'; }
-  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef; }
-  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef; }
-  | { by: 'documentElement'; home?: ContextHome; }
-  | { by: 'iframe'; id: string; within?: ContextRef; }
-  | { by: 'template'; id: string; within?: ContextRef; }
-  | { by: 'shadowRoot'; id: string; within?: ContextRef; };
+  | { by: 'id'; id: string; home?: QuerySourceHome; within?: QuerySourceRef; }
+  | { by: 'first'; selector: string; home?: QuerySourceHome; within?: QuerySourceRef; }
+  | { by: 'documentElement'; home?: QuerySourceHome; }
+  | { by: 'iframe'; id: string; within?: QuerySourceRef; }
+  | { by: 'template'; id: string; within?: QuerySourceRef; }
+  | { by: 'shadowRoot'; id: string; within?: QuerySourceRef; };
 
-export type ContextHome = 'document' | 'detached' | 'fragment';
+export type QuerySourceHome = 'document' | 'detached' | 'fragment';
 
 export type RunScenariosOptions = {
   parallel?: boolean;

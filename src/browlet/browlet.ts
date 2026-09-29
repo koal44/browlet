@@ -28,6 +28,7 @@ import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 import { InternalError } from '../infra/internal-error';
 
+/** Hosts one top-level browsing session with navigation and page evaluation. */
 export class Browlet {
   #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
   #evaluation: PageEvaluation;
@@ -68,6 +69,7 @@ export class Browlet {
     this.#evaluation = new PageEvaluation(getRelevantRealm(this.window));
   }
 
+  /** Platform Document currently active in this session. */
   get document(): Document {
     const document = this.#traversable.activeDocument;
     if (document === null) {
@@ -76,6 +78,7 @@ export class Browlet {
     return project(document) as StampedPlatformObject<Document>;
   }
 
+  /** Stable WindowProxy for the active browsing context. */
   get window(): WindowProxy {
     const browsingContext = this.#traversable.activeBrowsingContext;
     if (browsingContext === null) {
@@ -84,6 +87,7 @@ export class Browlet {
     return browsingContext.windowProxy;
   }
 
+  /** Replace the host callback supplying document sources for navigation. */
   route(route: BrowletRoute): void {
     this.#route = route;
   }
@@ -117,6 +121,7 @@ export class Browlet {
     this.#exposures.set(name, invoke);
   }
 
+  /** Load a document and resolve with its browsing context's WindowProxy. */
   navigate(url: string | URL): Promise<WindowProxy> {
     // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through InternalPromise before this host promise settles.
     return new Promise((resolve, reject) => {

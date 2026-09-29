@@ -70,7 +70,7 @@ function isHostIncludingInclusiveAncestor(ancestor: NodeImpl, node: NodeImpl): b
   while (current !== null) {
     if (ancestor.contains(current)) return true;
     const root = current.getRoot();
-    current = root.isDocumentFragment() ? root.getHost() : null;
+    current = root.isDocumentFragment() ? root.host : null;
   }
   return false;
 }

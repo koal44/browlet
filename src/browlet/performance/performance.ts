@@ -1,14 +1,51 @@
 import { EventTargetImpl } from '../dom/events/event-target';
-import { withPerformanceStub } from '../stubs';
 import {
   defineInterface, defineTypedef, idlType, impl, op, reference, roAttr, xattr,
 } from '../../web-idl/index';
 import type { EnvironmentTiming } from './high-resolution-time';
+import type { DOMEnvironment } from '../dom/environment';
+
+/** Exposes coarsened timestamps relative to its environment time origin. */
+// https://w3c.github.io/hr-time/#the-performance-interface
+export class PerformanceImpl extends EventTargetImpl {
+  /** Environment-owned clock conversion and precision policy. */
+  #timing: EnvironmentTiming;
+
+  constructor(timing: EnvironmentTiming, env: DOMEnvironment) {
+    super(env);
+    this.#timing = timing;
+  }
+
+  /** Elapsed high-resolution time since this environment's origin. */
+  // https://w3c.github.io/hr-time/#dom-performance-now
+  now(): DOMHighResTimeStamp {
+    return this.#timing.currentHighResolutionTime().toTimestamp();
+  }
+
+  /** Environment time origin expressed relative to the Unix epoch. */
+  // https://w3c.github.io/hr-time/#dom-performance-timeorigin
+  get timeOrigin(): DOMHighResTimeStamp {
+    return this.#timing.getTimeOriginTimestamp().toTimestamp();
+  }
+}
 
 /*
  * typedef double DOMHighResTimeStamp;
+ */
+export const domHighResTimeStampIDL = defineTypedef({
+  name: 'DOMHighResTimeStamp',
+  type: idlType.double,
+});
+
+/*
  * typedef unsigned long long EpochTimeStamp;
- *
+ */
+export const epochTimeStampIDL = defineTypedef({
+  name: 'EpochTimeStamp',
+  type: idlType.unsignedLongLong,
+});
+
+/*
  * [Exposed=(Window,Worker)]
  * interface Performance : EventTarget {
  *   DOMHighResTimeStamp now();
@@ -16,37 +53,6 @@ import type { EnvironmentTiming } from './high-resolution-time';
  *   [Default] object toJSON();
  * };
  */
-export class PerformanceImpl
-  extends withPerformanceStub(EventTargetImpl)
-{
-  #timing: EnvironmentTiming;
-
-  constructor(timing: EnvironmentTiming) {
-    super();
-    this.#timing = timing;
-  }
-
-  now(): DOMHighResTimeStamp {
-    return this.#timing.currentHighResolutionTime().toTimestamp();
-  }
-
-  get timeOrigin(): DOMHighResTimeStamp {
-    return this.#timing.getTimeOriginTimestamp().toTimestamp();
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
-export const domHighResTimeStampIDL = defineTypedef({
-  name: 'DOMHighResTimeStamp',
-  type: idlType.double,
-});
-
-export const epochTimeStampIDL = defineTypedef({
-  name: 'EpochTimeStamp',
-  type: idlType.unsignedLongLong,
-});
-
 export const performanceIDL = defineInterface({
   name: 'Performance',
   inherits: 'EventTarget',

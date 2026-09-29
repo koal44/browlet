@@ -1,3 +1,4 @@
+import type { DOMNode as QuerySource, DOMNode as Element } from '../../infra/index';
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
@@ -8,33 +9,32 @@ import {
 import { describeComplex, describeElements } from '../debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_COPY } from '../constants';
-import type { Snapshot } from '../snapshot';
-import type { QueryContext } from '../selectlet';
+import type { SelectletContext } from '../context';
 
-export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
+export function buildFrontierSelect(list: SelectorList, ctx: SelectletContext): SelectRunFn {
   const arms = list.arms;
   const selects: ArmSelectFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i]!;
 
-    const select = buildArmFn(arm, i, snap);
+    const select = buildArmFn(arm, i, ctx);
     selects[i] = select;
 
-    if (snap.isDebug) {
-      updateDebugBuild(snap, i, arm);
+    if (ctx.isDebug) {
+      updateDebugBuild(ctx, i, arm);
     }
   }
 
-  return function Select(ctx, rc) {
-    return runSelect(selects, ctx, rc);
+  return function Select(source, rc) {
+    return runSelect(selects, source, rc, ctx);
   };
 }
 
-function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache | null): Element[] {
+function runSelect(selects: ArmSelectFn[], source: QuerySource, rc: RuntimeCache | null, ctx: SelectletContext): Element[] {
   if (selects.length === 1) {
     const select = selects[0]!;
-    return select(ctx, rc);
+    return select(source, rc);
   }
 
   const lists: Element[][] = [];
@@ -42,36 +42,36 @@ function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache |
 
   for (let k = 0; k < selects.length; k++) {
     const select = selects[k]!;
-    const results = select(ctx, rc);
+    const results = select(source, rc);
     if (results.length) lists[i++] = results;
   }
 
-  return mergeDocumentOrderLists(lists);
+  return mergeDocumentOrderLists(lists, ctx.dom);
 }
 
-type ArmSelectFn = (ctx: QueryContext, rc: RuntimeCache | null) => Element[];
+type ArmSelectFn = (source: QuerySource, rc: RuntimeCache | null) => Element[];
 
-function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot): ArmSelectFn {
+function buildArmFn(complex: ComplexSelector, armIndex: number, ctx: SelectletContext): ArmSelectFn {
   const chain = buildChain(complex);
-  const program = buildFrontierProgram(chain, snap);
+  const program = buildFrontierProgram(chain, ctx);
 
-  return function Select(ctx, rc) {
-    const results = runFrontierProgram(program, ctx, rc, snap);
+  return function Select(source, rc) {
+    const results = runFrontierProgram(program, source, rc, ctx);
 
-    if (snap.isDebug) {
-      updateDebugRun(snap, armIndex, complex, program, results);
+    if (ctx.isDebug) {
+      updateDebugRun(ctx, armIndex, complex, program, results);
     }
 
     return results;
   };
 }
 
-function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
-  const isDebug = snap.isDebug;
+function runFrontierProgram(program: FrontierProgram, source: QuerySource, rc: RuntimeCache | null, ctx: SelectletContext): Element[] {
+  const isDebug = ctx.isDebug;
   if (isDebug) resetFrontierDebug(program);
 
   const state: FrontierState = {
-    root: ctx,
+    root: source,
     frontier: null,
   };
 
@@ -92,7 +92,7 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
     const step = program.steps[from]!;
 
     if (canAdvance(state)) {
-      const advance = getAdvanceMove(program, from, snap);
+      const advance = getAdvanceMove(program, from, ctx);
 
       if (advance) {
         if (isDebug) step.lookupRoot = state.root;
@@ -108,7 +108,7 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
       }
     }
 
-    const bridge = getBridgeMove(program, from, snap);
+    const bridge = getBridgeMove(program, from, ctx);
     if (!bridge) break;
 
     if (isDebug) step.lookupRoot = state.root;
@@ -126,27 +126,27 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
 }
 
 function updateDebugRun(
-  snap: Snapshot,
+  ctx: SelectletContext,
   armIndex: number,
   arm: ComplexSelector,
   program: FrontierProgram,
   results: Element[],
 ): void {
-  snap.debugSelect?.run.push({
+  ctx.debugSelect?.run.push({
     engine: 'frontier',
     armIndex,
     arm: describeComplex(arm),
-    program: describeFrontierProgram(program),
-    results: describeElements(results),
+    program: describeFrontierProgram(program, ctx.dom),
+    results: describeElements(results, undefined, ctx.dom),
   });
 }
 
 function updateDebugBuild(
-  snap: Snapshot,
+  ctx: SelectletContext,
   armIndex: number,
   arm: ComplexSelector,
 ): void {
-  snap.debugSelect?.build.push({
+  ctx.debugSelect?.build.push({
     engine: 'frontier',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
@@ -155,5 +155,5 @@ function updateDebugBuild(
     arm: describeComplex(arm),
   });
 
-  snap.debugCompile = undefined;
+  ctx.debugCompile = undefined;
 }

@@ -1,41 +1,40 @@
+import type { DOMNode as QuerySource, DOMNode as Element } from '../../infra/index';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import { describeContext, describeElement, type QueryContextDescription } from '../debug';
-import { isElement } from '../../infra/selector-dom';
+import { describeQuerySource, describeElement, type QuerySourceDescription } from '../debug';
 import { buildFullBridgeFirst } from './first-fullbridge';
 import { buildFrontierFirst } from './first-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
-import type { QueryContext } from '../selectlet';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
-export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
-  snap.probe.first++;
+export function queryFirst(sel: string, source: QuerySource, ctx: SelectletContext): Element | null {
+  ctx.probe.first++;
 
-  const isDebug = snap.isDebug;
-  if (isDebug) initDebug(snap, sel, ctx);
+  const isDebug = ctx.isDebug;
+  if (isDebug) initDebug(ctx, sel, source);
 
-  let resolver = snap.firstResolvers.get(sel);
+  let resolver = ctx.firstResolvers.get(sel);
   if (!resolver) {
-    const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    resolver = buildFirstResolver(parsed, snap);
-    snap.firstResolvers.set(sel, resolver);
-    snap.cacheSize++;
+    const parsed = parseSelectorList(sel, { pseudos: ctx.pseudos });
+    resolver = buildFirstResolver(parsed, ctx);
+    ctx.firstResolvers.set(sel, resolver);
+    ctx.cacheSize++;
   }
 
-  const first = resolveFirstStrategy(resolver, ctx, snap);
+  const first = resolveFirstStrategy(resolver, source, ctx);
 
-  snap.update(ctx, resolver.usesScope);
+  ctx.update(source, resolver.usesScope);
 
   let rc: RuntimeCache | null = null;
   if (resolver.usesCache) {
-    snap.syncRuntimeCache(ctx);
-    rc = snap.runtimeCache;
+    ctx.syncRuntimeCache(source);
+    rc = ctx.runtimeCache;
   }
 
-  const result = first(ctx, rc);
+  const result = first(source, rc);
 
   if (isDebug) {
-    updateDebugResult(snap, result);
+    updateDebugResult(ctx, result);
   }
 
   return result;
@@ -50,13 +49,13 @@ export type FirstResolver = {
 };
 
 export type FirstRunFn = (
-  ctx: QueryContext,
+  source: QuerySource,
   rc: RuntimeCache | null,
 ) => Element | null;
 
-function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
-  snap.checkCacheWatermark();
-  snap.probe.firstBuild++;
+function buildFirstResolver(list: SelectorList, ctx: SelectletContext): FirstResolver {
+  ctx.checkCacheWatermark();
+  ctx.probe.firstBuild++;
 
   return {
     list,
@@ -65,27 +64,27 @@ function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
   };
 }
 
-function resolveFirstStrategy(resolver: FirstResolver, ctx: QueryContext, snap: Snapshot): FirstRunFn {
-  // Element contexts force full-bridge selection. Although element.querySelector()
-  // feels like a subtree query, the context only constrains returned subjects;
+function resolveFirstStrategy(resolver: FirstResolver, source: QuerySource, ctx: SelectletContext): FirstRunFn {
+  // Element sources force full-bridge selection. Although element.querySelector()
+  // feels like a subtree query, the source only constrains returned subjects;
   // selector proof may still depend on ancestors/siblings outside the subtree.
   // Frontier selection narrows the proof universe while moving through the chain,
-  // so it is not safe for element contexts.
-  if (isElement(ctx)) {
+  // so it is not safe for element sources.
+  if (ctx.dom.isElement(source)) {
     let fullBridge = resolver.fullBridge;
     if (!fullBridge) {
-      fullBridge = buildFullBridgeFirst(resolver.list, snap);
+      fullBridge = buildFullBridgeFirst(resolver.list, ctx);
       resolver.fullBridge = fullBridge;
     }
     return fullBridge;
   }
 
-  // Document and fragment contexts prefer frontier selection: author-written
+  // Document and fragment sources prefer frontier selection: author-written
   // selectors usually encode a left-to-right narrowing path. Full-bridge
   // grouping can still beat frontier for some selector lists.
   let frontier = resolver.frontier;
   if (!frontier) {
-    frontier = buildFrontierFirst(resolver.list, snap);
+    frontier = buildFrontierFirst(resolver.list, ctx);
     resolver.frontier = frontier;
   }
   return frontier;
@@ -94,7 +93,7 @@ function resolveFirstStrategy(resolver: FirstResolver, ctx: QueryContext, snap: 
 export type DebugFirst = {
   kind: 'first';
   selectors: string;
-  context?: QueryContextDescription;
+  source?: QuerySourceDescription;
   build: DebugFirstBuild[];
   run: DebugFirstRun[];
   result?: string | null;
@@ -134,23 +133,23 @@ export type DebugFirstRun = {
   result: string | null;
 };
 
-function initDebug(snap: Snapshot, sel: string, ctx: QueryContext): void {
-  snap.debugStack.length = 0;
+function initDebug(ctx: SelectletContext, sel: string, source: QuerySource): void {
+  ctx.debugStack.length = 0;
 
   const dbgFirst: DebugFirst = {
     kind: 'first',
     selectors: sel,
-    context: describeContext(ctx),
+    source: describeQuerySource(source, undefined, ctx.dom),
     build: [],
     run: [],
   };
 
-  snap.debugFirst = dbgFirst;
-  snap.debugStack.push(dbgFirst);
+  ctx.debugFirst = dbgFirst;
+  ctx.debugStack.push(dbgFirst);
 }
 
-function updateDebugResult(snap: Snapshot, result: Element | null): void {
-  if (snap.debugFirst) {
-    snap.debugFirst.result = result ? describeElement(result) : null;
+function updateDebugResult(ctx: SelectletContext, result: Element | null): void {
+  if (ctx.debugFirst) {
+    ctx.debugFirst.result = result ? describeElement(result, ctx.dom) : null;
   }
 }

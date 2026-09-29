@@ -16,13 +16,18 @@ import {
   HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from './tree-adapter';
 
+/** Feeds response text into parse5 while coordinating scripts and document tasks. */
+// https://html.spec.whatwg.org/multipage/parsing.html#parsing
 export class BrowletParser {
+  /** Document receiving nodes and parser lifecycle changes. */
   document: DocumentImpl;
+  /** Host steps run when the parser encounters a script element. */
   #handleScript: ScriptHandler;
   #eventLoop: EventLoop;
   #stream: ParserStream<HTMLTreeAdapterMap>;
   #treeAdapter: HTMLTreeAdapter;
   #env: JSEnvironment;
+  /** Reader retained while a Fetch response is supplying parser input. */
   #bodyReader?: ReadableStreamDefaultReaderImpl;
   #body?: FetchBody;
 

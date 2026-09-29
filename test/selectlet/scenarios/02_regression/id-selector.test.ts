@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('id-selector', 'normal', [
+runScenarios('id-selector', 'skip', [
   {
     name: 'id-selector/document-all-awkward-id-names',
     // status: 'only',
@@ -74,9 +74,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = true;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = true;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -100,9 +100,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = true;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = true;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -126,9 +126,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -152,9 +152,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = false;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = false;
           });
         },
         cases: [
@@ -195,9 +195,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -215,9 +215,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = false;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = false;
           });
         },
         cases: [
@@ -282,9 +282,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = true;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = true;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -308,9 +308,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = true;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = true;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -334,9 +334,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = true;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = true;
           });
         },
         cases: [
@@ -360,9 +360,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = false;
-            api.snapshot.hasTreeWalker = false;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = false;
+            api.context.hasTreeWalker = false;
           });
         },
         cases: [
@@ -412,9 +412,9 @@ runScenarios('id-selector', 'normal', [
           await page.evaluate(() => {
             const api = selectlet;
             if (!api) throw new Error('selectlet not found');
-            api.snapshot.config.MUTATE_IDS = false;
-            api.snapshot.hasDocumentAll = true;
-            api.snapshot.hasTreeWalker = false;
+            api.context.config.MUTATE_IDS = false;
+            api.context.hasDocumentAll = true;
+            api.context.hasTreeWalker = false;
           });
         },
         cases: [

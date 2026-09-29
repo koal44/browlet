@@ -1227,10 +1227,10 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
-        sxlt.snapshot.hasDocumentAll = true;
-        sxlt.snapshot.hasTreeWalker = true;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
+        sxlt.context.hasDocumentAll = true;
+        sxlt.context.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1268,10 +1268,10 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = true;
-        sxlt.snapshot.hasDocumentAll = false;
-        sxlt.snapshot.hasTreeWalker = true;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = true;
+        sxlt.context.hasDocumentAll = false;
+        sxlt.context.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1309,10 +1309,10 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
-        sxlt.snapshot.hasDocumentAll = false;
-        sxlt.snapshot.hasTreeWalker = true;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
+        sxlt.context.hasDocumentAll = false;
+        sxlt.context.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1350,10 +1350,10 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
-        sxlt.snapshot.hasDocumentAll = false;
-        sxlt.snapshot.hasTreeWalker = false;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
+        sxlt.context.hasDocumentAll = false;
+        sxlt.context.hasTreeWalker = false;
       });
     },
     probeKeys: ['select'],
@@ -1390,12 +1390,12 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = true;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = true;
 
-        // sxlt.snapshot.config.MUTATE_IDS = false;
-        // sxlt.snapshot.hasDocumentAll = false;
-        // sxlt.snapshot.hasTreeWalker = false;
+        // sxlt.context.config.MUTATE_IDS = false;
+        // sxlt.context.hasDocumentAll = false;
+        // sxlt.context.hasTreeWalker = false;
       });
     },
     probeKeys: ['select'],
@@ -1442,9 +1442,9 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
-        sxlt.snapshot.hasDocumentAll = true;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
+        sxlt.context.hasDocumentAll = true;
       });
     },
     probeKeys: [''],
@@ -1480,9 +1480,9 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = true;
-        sxlt.snapshot.hasDocumentAll = false;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = true;
+        sxlt.context.hasDocumentAll = false;
       });
     },
     probeKeys: [''],
@@ -1518,9 +1518,9 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
-        sxlt.snapshot.hasDocumentAll = false;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
+        sxlt.context.hasDocumentAll = false;
       });
     },
     probeKeys: [''],
@@ -1556,8 +1556,8 @@ runPerfScenarios('perf', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
-        if (!sxlt?.snapshot) return;
-        sxlt.snapshot.config.MUTATE_IDS = false;
+        if (!sxlt?.context) return;
+        sxlt.context.config.MUTATE_IDS = false;
       });
     },
     probeKeys: [''],

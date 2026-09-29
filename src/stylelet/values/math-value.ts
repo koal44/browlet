@@ -463,7 +463,6 @@ type VariableLeaf = {
 };
 
 // Interfaces are required to break the recursive CalculationTree alias.
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface CalculationNodeWithChildren<
   Type extends string,
   Children extends CalculationTree[],
@@ -473,7 +472,6 @@ interface CalculationNodeWithChildren<
   hints: MathHints;
 }
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 interface MathFunctionNodeWithArguments<
   Type extends string,
   Arguments extends CalculationTree[],

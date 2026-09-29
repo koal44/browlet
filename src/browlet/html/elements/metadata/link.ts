@@ -3,9 +3,37 @@ import {
 } from '../../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
-import { withHTMLLinkElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
 import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
+import type { Environment } from '../../../scripting/environment';
+import { LinkStyleMixin } from '../../../style/integration';
+
+/** Represents an external resource link and its stylesheet association. */
+// https://html.spec.whatwg.org/multipage/semantics.html#the-link-element
+export class HTMLLinkElementImpl extends HTMLElementImpl {
+  /** Changes that require updating this element's associated stylesheet. */
+  static #linkStyleOptions = {
+    attributes: new Set([
+      'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
+      'rel', 'title', 'type',
+    ]),
+  };
+
+  constructor(context: ElementCreationContext, env: Environment) {
+    super(context, env);
+    this.linkStyleMixin = new LinkStyleMixin(
+      this, HTMLLinkElementImpl.#linkStyleOptions, context.treeScopeResolver,
+    );
+  }
+
+  static is(value: unknown): value is HTMLLinkElementImpl {
+    return value instanceof HTMLLinkElementImpl;
+  }
+
+  get sheet(): CSSStyleSheetImpl | null {
+    return this.getStyleSheet();
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -33,37 +61,6 @@ import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
  * };
  * HTMLLinkElement includes LinkStyle;
  */
-export class HTMLLinkElementImpl
-  extends withHTMLLinkElementStub(HTMLElementImpl)
-{
-  static #linkStyleOptions = {
-    attributes: new Set([
-      'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
-      'rel', 'title', 'type',
-    ]),
-  };
-
-  constructor(context: ElementCreationContext) {
-    super(
-      context,
-      {
-        options: HTMLLinkElementImpl.#linkStyleOptions,
-        treeScopeResolver: context.treeScopeResolver,
-      },
-    );
-  }
-
-  static is(value: unknown): value is HTMLLinkElementImpl {
-    return value instanceof HTMLLinkElementImpl;
-  }
-
-  get sheet(): CSSStyleSheetImpl | null {
-    return this.getStyleSheet();
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const htmlLinkElementIDL = defineInterface({
   name: 'HTMLLinkElement',
   inherits: 'HTMLElement',

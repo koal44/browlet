@@ -1,21 +1,18 @@
-import { withCommentStub } from '../../stubs';
-import { arg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
+import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
 import { NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
+import type { DOMEnvironment } from '../environment';
 
-/*
- * [Exposed=Window]
- * interface Comment : CharacterData {
- *   constructor(optional DOMString data = "");
- * };
- */
-export class CommentImpl extends withCommentStub(CharacterDataImpl) {
+/** Comment text retained as a character-data node in the document tree. */
+// https://dom.spec.whatwg.org/#interface-comment
+export class CommentImpl extends CharacterDataImpl {
   constructor(
     data: string,
-    ownerDocument: DocumentImpl | null = null,
+    ownerDoc: DocumentImpl | null = null,
+    env: DOMEnvironment,
   ) {
-    super(NodeType.Comment, data, ownerDocument);
+    super(NodeType.Comment, data, ownerDoc, env);
   }
 
   static is(value: unknown): value is CommentImpl {
@@ -23,13 +20,19 @@ export class CommentImpl extends withCommentStub(CharacterDataImpl) {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
-export const commentIDL = defineInterface({
+/*
+ * [Exposed=Window]
+ * interface Comment : CharacterData {
+ *   constructor(optional DOMString data = "");
+ * };
+ */
+export const commentIDL = defineInterface<DOMEnvironment>({
   name: 'Comment',
   inherits: 'CharacterData',
   exposed: 'Window',
-  implementation: impl(CommentImpl),
+  implementation: impl(CommentImpl, {
+    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
+  }),
   members: [ctor([
     arg('data', idlType.DOMString, { default: '', optional: true }),
   ])],

@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
-import {
-  fireProgressEvent,
-} from '../../src/browlet/dom/events/progress-event';
+import { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
 
 describe('XMLHttpRequest ProgressEvent projection', () => {
   it('constructs ProgressEvent with inherited and progress initialization', () => {
@@ -63,7 +61,7 @@ describe('XMLHttpRequest ProgressEvent projection', () => {
     const listener = vi.fn();
     call(target, 'addEventListener', ['progress', listener]);
 
-    expect(fireProgressEvent(
+    expect(ProgressEventImpl.fire(
       'progress',
       requireEventTargetImplementation(second, target),
       4,
@@ -89,7 +87,7 @@ describe('XMLHttpRequest ProgressEvent projection', () => {
     const listener = vi.fn();
     call(target, 'addEventListener', ['progress', listener]);
 
-    fireProgressEvent(
+    ProgressEventImpl.fire(
       'progress',
       requireEventTargetImplementation(window, target),
       4,

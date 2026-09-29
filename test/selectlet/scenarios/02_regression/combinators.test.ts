@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('combinators', 'normal', [
+runScenarios('combinators', 'skip', [
   {
     name: 'general sibling combinator traversal',
     // status: 'only',

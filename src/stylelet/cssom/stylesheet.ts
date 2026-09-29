@@ -1,7 +1,8 @@
 import { MediaListImpl } from './media-list';
+import type { DOMNode } from '../../infra/index';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
-import type { ExecutionCaps } from '../stylelet';
+import type { StyleletEnvironment } from '../environment';
 import { TypeError } from '../../infra/exceptions';
 
 /*
@@ -19,25 +20,25 @@ import { TypeError } from '../../infra/exceptions';
 export abstract class StyleSheetImpl {
   #type: CSSOMString;
   #location: string | null;
-  #ownerNode: Element | ProcessingInstruction | null;
+  #ownerNode: DOMNode | null;
   #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
   #media: MediaListImpl;
   #disabled: boolean;
-  protected exec: ExecutionCaps;
+  protected env: StyleletEnvironment;
 
-  protected constructor(exec: ExecutionCaps) {
+  protected constructor(env: StyleletEnvironment) {
     if (new.target === StyleSheetImpl) {
       throw new TypeError('Illegal constructor');
     }
 
-    this.exec = exec;
+    this.env = env;
     this.#type = 'text/css';
     this.#location = null;
     this.#ownerNode = null;
     this.#parentStyleSheet = null;
     this.#title = '';
-    this.#media = new MediaListImpl('', exec);
+    this.#media = new MediaListImpl('', env);
     this.#disabled = false;
   }
 
@@ -49,7 +50,7 @@ export abstract class StyleSheetImpl {
     return this.#location;
   }
 
-  get ownerNode(): Element | ProcessingInstruction | null {
+  get ownerNode(): DOMNode | null {
     return this.#ownerNode;
   }
 
@@ -82,7 +83,7 @@ export abstract class StyleSheetImpl {
   }
 
   protected setOwnerNode(
-    ownerNode: Element | ProcessingInstruction | null,
+    ownerNode: DOMNode | null,
   ): void {
     this.#ownerNode = ownerNode;
   }

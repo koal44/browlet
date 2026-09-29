@@ -1,3 +1,4 @@
+import type { DOMNode as Element } from '../../infra/index';
 import { asciiLower } from '../../infra/ascii';
 import {
   interpretPropertyDeclaration, propertyRegistry,
@@ -6,8 +7,7 @@ import {
 import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
-import type { ExecutionCaps } from '../stylelet';
-import { withCSSStyleDeclaration } from './stubs/extensions';
+import type { StyleletEnvironment } from '../environment';
 
 /*
  * [Exposed=Window]
@@ -31,10 +31,7 @@ import { withCSSStyleDeclaration } from './stubs/extensions';
  *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString cssFloat;
  * };
  */
-export class CSSStyleDeclarationImpl
-  extends withCSSStyleDeclaration(class {})
-  implements CSSStyleDeclaration
-{
+export class CSSStyleDeclarationImpl {
   [index: number]: string;
 
   #declarations: PropertyDeclaration[] = [];
@@ -44,7 +41,7 @@ export class CSSStyleDeclarationImpl
   #ownerNode: Element | null;
   #onChange: (declarations: readonly PropertyDeclaration[]) => void;
   #updating = false;
-  #exec: ExecutionCaps;
+  #env: StyleletEnvironment;
 
   constructor({
     declarations = [],
@@ -53,9 +50,8 @@ export class CSSStyleDeclarationImpl
     parentRule = null,
     ownerNode = null,
     onChange = () => {},
-  }: CSSStyleDeclarationOptions, exec: ExecutionCaps) {
-    super();
-    this.#exec = exec;
+  }: CSSStyleDeclarationOptions, env: StyleletEnvironment) {
+    this.#env = env;
     this.#computed = computed;
     this.#readonly = readonly;
     this.#parentRule = parentRule;
@@ -64,7 +60,7 @@ export class CSSStyleDeclarationImpl
     this.#replaceDeclarations(declarations);
 
     if (!computed && ownerNode !== null) {
-      const value = ownerNode.getAttribute('style');
+      const value = env.userAgent.dom.getAttribute(ownerNode, 'style');
       if (value !== null) {
         this.#replaceDeclarations(parseDeclarationBlock(value));
       }
@@ -242,7 +238,7 @@ export class CSSStyleDeclarationImpl
 
     this.#updating = true;
     try {
-      this.#ownerNode.setAttribute('style', this.cssText);
+      this.#env.userAgent.dom.setAttribute(this.#ownerNode, 'style', this.cssText);
     } finally {
       this.#updating = false;
     }
@@ -256,7 +252,7 @@ export class CSSStyleDeclarationImpl
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throw this.#exec.createDOMException(
+    throw this.#env.exec.createDOMException(
       'NoModificationAllowedError',
       'The CSS declaration block is read-only.',
     );

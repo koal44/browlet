@@ -34,12 +34,10 @@ export function getWindowProxyWindow(
   return requireWindowProxyHandler(windowProxy).window;
 }
 
-/*
- * WindowProxy is not a second Window platform object. For Web IDL receiver
- * checks, resolve its stable exotic identity to the currently wrapped Window
- * platform object. Navigation can replace that object without replacing the
- * WindowProxy.
- */
+// WindowProxy is not a second Window platform object. For Web IDL receiver
+// checks, resolve its stable exotic identity to the currently wrapped Window
+// platform object. Navigation can replace that object without replacing the
+// WindowProxy.
 export function resolveWindowProxyReceiver(
   windowProxy: WindowProxy,
 ): Window | undefined {
@@ -64,11 +62,11 @@ export type WindowProxy = Window & {
 
 const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
 
-/*
- * The handler retains Window associations for both backends. Its JavaScript
- * traps implement forwarding only for the plain-Node fallback.
- */
+// JavaScript traps implement forwarding only for the plain-Node fallback.
+/** Retains the Window association for a stable native or fallback WindowProxy. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
 class WindowProxyHandler implements ProxyHandler<object> {
+  /** Stable global-this identity retained when navigation replaces the Window. */
   windowProxy: WindowProxy;
   #window: WindowAssociation | null = null;
 

@@ -1,8 +1,19 @@
 import { defineElementInterface, ElementImpl } from '../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../web-idl/index';
-import { withHTMLElementStub } from '../../stubs';
 import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
+
+/** Base implementation for elements in the HTML namespace. */
+// https://html.spec.whatwg.org/multipage/dom.html#htmlelement
+export class HTMLElementImpl extends ElementImpl {
+  static is(value: unknown): value is HTMLElementImpl {
+    return value instanceof HTMLElementImpl;
+  }
+
+  get style(): CSSStyleDeclarationImpl {
+    return this.getInlineStyle();
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -45,20 +56,6 @@ import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
  * HTMLElement includes ElementContentEditable;
  * HTMLElement includes HTMLOrSVGOrMathMLElement;
  */
-export class HTMLElementImpl
-  extends withHTMLElementStub(ElementImpl)
-{
-  static is(value: unknown): value is HTMLElementImpl {
-    return value instanceof HTMLElementImpl;
-  }
-
-  get style(): CSSStyleDeclarationImpl {
-    return this.getInlineStyle();
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const htmlElementIDL = defineInterface({
   name: 'HTMLElement',
   inherits: 'Element',

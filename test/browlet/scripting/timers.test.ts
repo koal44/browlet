@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import { createTestDocument } from '../../support/dom';
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
@@ -25,7 +25,7 @@ describe('HTML timers', () => {
     fixture.timers.runStepsAfterTimeout('example', 10, completion);
     fixture.host.advanceBy(4);
 
-    const inactiveDocument = new DocumentImpl();
+    const inactiveDocument = createTestDocument();
     inactiveDocument.browsingContext = fixture.traversable.activeBrowsingContext;
     fixture.traversable.activeSessionHistoryEntry =
       createSessionHistoryEntry(createDocumentState(inactiveDocument));

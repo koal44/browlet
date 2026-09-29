@@ -1,35 +1,16 @@
 import { escapeRegExp } from '../infra/strings';
-import { HTML_NAMESPACE } from '../infra/index';
+import type {
+  DOMOperations, DOMNode as Document, DOMNode as Element, DOMNode as Node,
+} from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
-import { InternalPromise } from '../infra/promises';
-import type { ExecutionCaps, StyleletOptions } from './stylelet';
+import { defaultStyleletEnvironment, type StyleletEnvironment } from './environment';
 
 export class StyleletContext {
   document: Document;
   isHtml: boolean;
-  exec: ExecutionCaps;
+  env: StyleletEnvironment;
 
-  documentDesignMode: (document: Document) => string | undefined;
-  treeVersion: (root: Node) => number | undefined;
-  hasTreeVersion: boolean;
-
-  getId: (element: Element) => string;
-  getClass: (element: Element) => string;
-  getLocalName: (element: Element) => string;
-  getNamespaceURI: (element: Element) => string | null;
-  getAttribute: (element: Element, name: string) => string | null;
-  getAttributeNS: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => string | null;
-  hasAttribute: (element: Element, name: string) => boolean;
-  hasAttributeNS: (
-    element: Element,
-    namespace: string | null,
-    localName: string,
-  ) => boolean;
-  hasCustomState: (element: Element, name: string) => boolean;
+  dom: DOMOperations;
 
   hoverTarget: Element | null = null;
   activeTarget: Element | null = null;
@@ -45,36 +26,19 @@ export class StyleletContext {
   #caseSensitiveTokenRegexes = new Map<string, RegExp>();
   #caseInsensitiveTokenRegexes = new Map<string, RegExp>();
 
-  constructor(document: Document, options: StyleletOptions = {}) {
-    const documentCaps = options.document;
-    const elementCaps = options.element;
-    const treeCaps = options.tree;
-
+  constructor(document: Document, env: StyleletEnvironment = defaultStyleletEnvironment) {
+    this.env = env;
+    this.dom = env.userAgent.dom;
     this.document = document;
-    this.isHtml = document.contentType.includes('/html');
-    this.exec = options.exec ?? defaultExecutionCaps;
-
-    this.documentDesignMode = documentCaps?.designMode ?? defaultDocumentDesignMode;
-    this.treeVersion = treeCaps?.version ?? defaultTreeVersion;
-    this.hasTreeVersion = treeCaps?.version !== undefined;
-
-    this.getId = elementCaps?.getId ?? defaultGetId;
-    this.getClass = elementCaps?.getClass ?? defaultGetClass;
-    this.getLocalName = elementCaps?.getLocalName ?? defaultGetLocalName;
-    this.getNamespaceURI = elementCaps?.getNamespaceURI ?? defaultGetNamespaceURI;
-    this.getAttribute = elementCaps?.getAttribute ?? defaultGetAttribute;
-    this.getAttributeNS = elementCaps?.getAttributeNS ?? defaultGetAttributeNS;
-    this.hasAttribute = elementCaps?.hasAttribute ?? defaultHasAttribute;
-    this.hasAttributeNS = elementCaps?.hasAttributeNS ?? defaultHasAttributeNS;
-    this.hasCustomState = elementCaps?.hasCustomState ?? defaultHasCustomState;
+    this.isHtml = this.dom.isHTMLDocument(document);
   }
 
   get root(): Element | null {
-    return this.document.documentElement;
+    return this.dom.documentElement(this.document);
   }
 
   get isQuirksMode(): boolean {
-    return this.document.compatMode !== 'CSS1Compat';
+    return this.dom.isQuirksMode(this.document);
   }
 
   getCompiledSelector<T>(selector: object): T | undefined {
@@ -121,33 +85,12 @@ export class StyleletContext {
   }
 
   syncRuntimeCache(root: Node): RuntimeCache | null {
-    if (!this.hasTreeVersion) return null;
+    if (!this.dom.treeVersion) return null;
 
-    this.runtimeCache.sync(this.treeVersion(root));
+    this.runtimeCache.sync(this.dom.treeVersion(root));
     return this.runtimeCache;
   }
-
-  isHtmlElement(element: Element): element is HTMLElement {
-    return this.getNamespaceURI(element) === HTML_NAMESPACE;
-  }
 }
-
-/*
- * Standalone Stylelet uses the native environment's queue. StyleletContext selects
- * this complete provider when no execution facilities are supplied at construction.
- */
-export const defaultExecutionCaps: ExecutionCaps = {
-  Promise: class StyleletPromise<T> extends InternalPromise<T> {
-    protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
-      void this.backing.then(fulfilled, rejected).catch((error: unknown) => {
-        setTimeout(() => { throw error; }, 0);
-      });
-    }
-  },
-  runInParallel: (steps) => { setTimeout(steps, 0); },
-  queueTask: (steps) => { setTimeout(steps, 0); },
-  createDOMException: (name, message = '') => new DOMException(message, name),
-};
 
 function getOrCreateRegex(
   cache: Map<string, RegExp>,
@@ -160,60 +103,4 @@ function getOrCreateRegex(
   regex = new RegExp(source, ignoreCase ? 'i' : '');
   cache.set(source, regex);
   return regex;
-}
-
-function defaultDocumentDesignMode(document: Document): string | undefined {
-  return document.designMode;
-}
-
-function defaultTreeVersion(_root: Node): number | undefined {
-  return undefined;
-}
-
-function defaultGetId(element: Element): string {
-  const id = element.id;
-  return typeof id === 'string' ? id : element.getAttribute('id') ?? '';
-}
-
-function defaultGetClass(element: Element): string {
-  const className = element.className;
-  return typeof className === 'string'
-    ? className
-    : element.getAttribute('class') ?? '';
-}
-
-function defaultGetLocalName(element: Element): string {
-  return element.localName;
-}
-
-function defaultGetNamespaceURI(element: Element): string | null {
-  return element.namespaceURI;
-}
-
-function defaultGetAttribute(element: Element, name: string): string | null {
-  return element.getAttribute(name);
-}
-
-function defaultGetAttributeNS(
-  element: Element,
-  namespace: string | null,
-  localName: string,
-): string | null {
-  return element.getAttributeNS(namespace, localName);
-}
-
-function defaultHasAttribute(element: Element, name: string): boolean {
-  return element.hasAttribute(name);
-}
-
-function defaultHasAttributeNS(
-  element: Element,
-  namespace: string | null,
-  localName: string,
-): boolean {
-  return element.hasAttributeNS(namespace, localName);
-}
-
-function defaultHasCustomState(_element: Element, _name: string): boolean {
-  return false;
 }

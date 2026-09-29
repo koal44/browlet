@@ -83,13 +83,9 @@ type ElementInterfaceRegistry = {
   get(namespaceURI: string, localName: string): ElementInterface | undefined;
 };
 
-/*
- * HTML's element-interface algorithm distinguishes known HTML names from
- * names that receive HTMLUnknownElement. Until each known element has its
- * dedicated interface, Browlet deliberately gives it the generic HTMLElement
- * implementation. Exact implemented-interface contributions override this
- * set in the compiled element-interface table.
- */
+// https://html.spec.whatwg.org/multipage/dom.html#elements-in-the-dom
+// Known HTML names receive HTMLElement until their dedicated implementation
+// exists; exact contributions override this fallback in the interface table.
 const knownHTMLLocalNames = new Set([
   'a', 'abbr', 'acronym', 'address', 'applet', 'area', 'article', 'aside',
   'audio', 'b', 'base', 'basefont', 'bdi', 'bdo', 'bgsound', 'big',

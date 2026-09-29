@@ -8,10 +8,8 @@ import {
 import { blobSerializable } from './blob';
 import { InternalError } from '../../../../infra/internal-error';
 
-/*
- * File API defines File's record fields. HTML owns their registration and
- * composes the inherited Blob state into File's standalone capability.
- */
+// File API defines File's record fields. HTML owns their registration and
+// composes the inherited Blob state into File's standalone capability.
 const fileSerializable: SerializableSteps = {
   serializationSteps(value, serialized, forStorage) {
     if (!FileImpl.is(value)) {

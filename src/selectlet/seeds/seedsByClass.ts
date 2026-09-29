@@ -1,54 +1,29 @@
+import type {
+  DOMNode as QuerySource, DOMOperations, DOMNode as Element, DOMNode as DocumentFragment,
+} from '../../infra/index';
 import { LOOKUP_COPY, type LookupMode } from '../constants';
-import type { QueryContext, SelectletCaps } from '../selectlet';
 import { concatCollection, htmlCollectionSource } from '../collections';
-import { isDocument, isDocumentFragment } from '../dom';
-import { isElement } from '../../infra/selector-dom';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
-export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;
-type ClassCap<R> = (root: R, classes: string[]) => Iterable<Element>;
-
-export function buildSeedsByClass(caps: SelectletCaps | undefined, snap: Snapshot): SeedClassFn {
-  const docCap = caps?.doc?.cachedClasses;
-  const fragCap = caps?.frag?.cachedClasses;
-
-  return (classes, context, mode) =>
-    isDocument(context) ? seedsByClassInDocument(classes, context, mode, docCap, snap)
-    : isElement(context) ? seedsByClassInElement(classes, context, mode, docCap, fragCap, snap)
-    : seedsByClassInFragmentRoot(classes, context, fragCap, snap);
+export type SeedClassFn = (classes: string[], source: QuerySource, lookupMode: LookupMode) => Iterable<Element>;
+export function buildSeedsByClass(ctx: SelectletContext): SeedClassFn {
+  const dom = ctx.dom;
+  return (classes, source, mode) => {
+    if (classes.length === 0) return [];
+    if (dom.cachedClasses) {
+      if (!dom.isElement(source)) return dom.cachedClasses(source, classes);
+      const root = dom.root(source);
+      if (dom.isDocument(root) || dom.isDocumentFragment(root)) {
+        return containedClassCandidates(dom.cachedClasses(root, classes), source, dom);
+      }
+    }
+    return dom.isDocumentFragment(source)
+      ? seedsByClassInFragment(classes, source, ctx)
+      : htmlCollectionSource(dom.getElementsByClassName(source, classes.join(' ')), mode === LOOKUP_COPY, dom);
+  };
 }
 
-function seedsByClassInDocument(classes: string[], doc: Document, lookupMode: LookupMode, cap: ClassCap<Document> | undefined, snap: Snapshot): Iterable<Element> {
-  if (classes.length === 0) return [];
-  return cap
-    ? cap(doc, classes)
-    : htmlCollectionSource(doc.getElementsByClassName(classes.join(' ')), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
-}
-
-function seedsByClassInElement(classes: string[], el: Element, lookupMode: LookupMode, docCap: ClassCap<Document> | undefined, fragCap: ClassCap<DocumentFragment> | undefined, snap: Snapshot): Iterable<Element> {
-  if (classes.length === 0) return [];
-
-  const root = el.getRootNode();
-
-  if (docCap && isDocument(root)) {
-    return containedClassCandidates(docCap(root, classes), el);
-  }
-
-  if (fragCap && isDocumentFragment(root)) {
-    return containedClassCandidates(fragCap(root, classes), el);
-  }
-
-  return htmlCollectionSource(el.getElementsByClassName(classes.join(' ')), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
-}
-
-function seedsByClassInFragmentRoot(
-  classes: string[], frag: DocumentFragment, cap: ClassCap<DocumentFragment> | undefined, snap: Snapshot,
-): Iterable<Element> {
-  if (classes.length === 0) return [];
-  return cap ? cap(frag, classes) : seedsByClassInFragment(classes, frag, snap);
-}
-
-function seedsByClassInFragment(classes: string[], context: DocumentFragment, snap: Snapshot): Element[] {
+function seedsByClassInFragment(classes: string[], source: DocumentFragment, ctx: SelectletContext): Element[] {
   if (classes.length === 0) return [];
 
   const nodes: Element[] = [];
@@ -56,20 +31,20 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
 
   if (classes.length === 1) {
     const cls = classes[0]!;
-    const reCls = snap.getClassRegex(cls);
+    const reCls = ctx.getClassRegex(cls);
 
-    for (let el = context.firstElementChild; el; el = el.nextElementSibling) {
-      if (reCls.test(snap.getClass(el))) nodes.push(el);
-      concatCollection(nodes, el.getElementsByClassName(cls));
+    for (let el = ctx.dom.firstElementChild(source); el; el = ctx.dom.nextElementSibling(el)) {
+      if (reCls.test(ctx.dom.getClass(el))) nodes.push(el);
+      concatCollection(nodes, ctx.dom.getElementsByClassName(el, cls));
     }
 
     return nodes;
   }
 
-  const tests = classes.map((cls) => snap.getClassRegex(cls));
+  const tests = classes.map((cls) => ctx.getClassRegex(cls));
 
-  for (let el = context.firstElementChild; el; el = el.nextElementSibling) {
-    const attr = snap.getClass(el);
+  for (let el = ctx.dom.firstElementChild(source); el; el = ctx.dom.nextElementSibling(el)) {
+    const attr = ctx.dom.getClass(el);
 
     let matched = true;
     for (let i = 0, l = tests.length; i < l; ++i) {
@@ -81,18 +56,18 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
     }
 
     if (matched) nodes.push(el);
-    concatCollection(nodes, el.getElementsByClassName(query));
+    concatCollection(nodes, ctx.dom.getElementsByClassName(el, query));
   }
 
   return nodes;
 }
 
-function containedClassCandidates(candidates: Iterable<Element>, context: Element): Element[] {
+function containedClassCandidates(candidates: Iterable<Element>, source: Element, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
   let j = 0;
 
   for (const e of candidates) {
-    if (e !== context && context.contains(e)) {
+    if (e !== source && dom.contains(source, e)) {
       nodes[j++] = e;
     }
   }

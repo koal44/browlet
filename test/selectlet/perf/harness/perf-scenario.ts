@@ -29,40 +29,40 @@ type PerfScenarioStatus = 'normal' | 'skip' | 'only';
 
 type BenchOps = {
   match(sel: string, el: Element): boolean;
-  select(sel: string, ctx: QueryContext): Element[];
-  first(sel: string, ctx: QueryContext): Element | null;
+  select(sel: string, source: QuerySource): Element[];
+  first(sel: string, source: QuerySource): Element | null;
   closest(sel: string, el: Element): Element | null;
-  byId(id: string, ctx: QueryContext): Element | null;
-  byClass(cls: string, ctx: QueryContext): Element[];
-  byTag(tag: string, ctx: QueryContext): Element[];
-  byTagNs(byTagNs: { ns: string | null; local: string; }, ctx: QueryContext): Element[];
+  byId(id: string, source: QuerySource): Element | null;
+  byClass(cls: string, source: QuerySource): Element[];
+  byTag(tag: string, source: QuerySource): Element[];
+  byTagNs(byTagNs: { ns: string | null; local: string; }, source: QuerySource): Element[];
 };
 
-type MatchBench =   { op: 'match';     selector:  string;    ref:  ContextRef; } & BenchBase;
-type SelectBench =  { op: 'select';    selector:  string;    ref?: ContextRef; } & BenchBase;
-type FirstBench =   { op: 'first';     selector:  string;    ref?: ContextRef; } & BenchBase;
-type ClosestBench = { op: 'closest';   selector:  string;    ref:  ContextRef; } & BenchBase;
-type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: ContextRef; } & BenchBase;
-type ByIdBench =    { op: 'byId';      id:        string;    ref?: ContextRef; } & BenchBase;
-type ByClassBench = { op: 'byClass';   cls:       string;    ref?: ContextRef; } & BenchBase;
-type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef; } & BenchBase;
+type MatchBench =   { op: 'match';     selector:  string;    ref:  QuerySourceRef; } & BenchBase;
+type SelectBench =  { op: 'select';    selector:  string;    ref?: QuerySourceRef; } & BenchBase;
+type FirstBench =   { op: 'first';     selector:  string;    ref?: QuerySourceRef; } & BenchBase;
+type ClosestBench = { op: 'closest';   selector:  string;    ref:  QuerySourceRef; } & BenchBase;
+type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: QuerySourceRef; } & BenchBase;
+type ByIdBench =    { op: 'byId';      id:        string;    ref?: QuerySourceRef; } & BenchBase;
+type ByClassBench = { op: 'byClass';   cls:       string;    ref?: QuerySourceRef; } & BenchBase;
+type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: QuerySourceRef; } & BenchBase;
 // Note: byTagNs perf won't really be useful as the comparisons would be apples ≈ apples.
-type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null; local: string; }; ref?: ContextRef; } & BenchBase;
+type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null; local: string; }; ref?: QuerySourceRef; } & BenchBase;
 
 type BenchBase = { label?: string; iters: number; maxRatio?: number; quickIters?: number; debug?: boolean; cold?: boolean; };
 type Bench =
   MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench | ByTagNsBench;
 
-export type ContextRef =
+export type QuerySourceRef =
   | { by: 'document'; }
-  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef; }
-  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef; }
-  | { by: 'documentElement'; home?: ContextHome; }
-  | { by: 'iframe'; id: string; within?: ContextRef; }
-  | { by: 'template'; id: string; within?: ContextRef; }
-  | { by: 'shadowRoot'; id: string; within?: ContextRef; };
+  | { by: 'id'; id: string; home?: QuerySourceHome; within?: QuerySourceRef; }
+  | { by: 'first'; selector: string; home?: QuerySourceHome; within?: QuerySourceRef; }
+  | { by: 'documentElement'; home?: QuerySourceHome; }
+  | { by: 'iframe'; id: string; within?: QuerySourceRef; }
+  | { by: 'template'; id: string; within?: QuerySourceRef; }
+  | { by: 'shadowRoot'; id: string; within?: QuerySourceRef; };
 
-export type ContextHome = 'document' | 'detached' | 'fragment';
+export type QuerySourceHome = 'document' | 'detached' | 'fragment';
 
 type PerfScenario = {
   name: string;
@@ -90,12 +90,12 @@ type BenchResult = {
 type GlobalWithNW = typeof globalThis & { NW?: { Dom: NWDom; }; };
 type NWDom = {
   match(sel: string, el: Element): boolean;
-  select(sel: string, ctx: QueryContext): Element[];
-  first(sel: string, ctx: QueryContext): Element | null;
+  select(sel: string, source: QuerySource): Element[];
+  first(sel: string, source: QuerySource): Element | null;
   closest(sel: string, el: Element): Element | null;
-  byId(id: string, ctx: QueryContext): Element | null;
-  byClass(cls: string, ctx: QueryContext): Element[];
-  byTag(tag: string, ctx: QueryContext): Element[];
+  byId(id: string, source: QuerySource): Element | null;
+  byClass(cls: string, source: QuerySource): Element[];
+  byTag(tag: string, source: QuerySource): Element[];
 
   snapshot?: {
     probe?: { reset?: () => void; } & Record<string, unknown>;
@@ -334,7 +334,7 @@ async function installEngine(page: Page, engineName: EngineName, scriptPath: str
 
   if (engineName === 'selectlet') {
     await page.evaluate(() => {
-      window.selectlet = window.createSelectlet(document) as typeof selectlet;
+      window.selectlet = window.createSelectlet(document);
     });
   }
 }
@@ -350,14 +350,18 @@ async function installPerfHelpers(page: Page) {
       return assertNever(engineName);
     }
 
+    function getEngineContext(engineName: EngineName) {
+      const api = getEngineApi(engineName);
+      return api ? ('context' in api ? api.context : api.snapshot) : undefined;
+    }
+
     function runBench(engineName: EngineName, b: Bench, fn: () => unknown, iters: number): BenchResult {
       const label = benchLabel(b);
       const maxRatio = b.maxRatio ?? DEFAULT_MAX_RATIO;
 
       for (let i = 0; i < 10; i++) fn();
 
-      const api = getEngineApi(engineName);
-      const probe = api?.snapshot?.probe;
+      const probe = getEngineContext(engineName)?.probe;
       if (probe) probe.reset?.();
 
       const t0 = performance.now();
@@ -379,7 +383,7 @@ async function installPerfHelpers(page: Page) {
       return value;
     }
 
-    function walkElements(root: QueryContext, fn: (el: Element) => void) {
+    function walkElements(root: QuerySource, fn: (el: Element) => void) {
       if (isElement(root)) {
         fn(root);
         walkChildren(root, fn);
@@ -406,7 +410,7 @@ async function installPerfHelpers(page: Page) {
       }
     }
 
-    function matchWalk(ops: BenchOps, root: QueryContext, selectors: string[]) {
+    function matchWalk(ops: BenchOps, root: QuerySource, selectors: string[]) {
       let hits = 0;
       let calls = 0;
 
@@ -439,14 +443,13 @@ async function installPerfHelpers(page: Page) {
       let clearCache: (() => void) | undefined;
 
       if (engineName !== 'native' && benches.some((b) => b.cold)) {
-        const api = getEngineApi(engineName);
-        const snapshot = api?.snapshot;
+        const ctx = getEngineContext(engineName);
 
-        if (!snapshot || typeof snapshot.clearCache !== 'function') {
+        if (!ctx || typeof ctx.clearCache !== 'function') {
           throw new Error(`${engineName}.clearCache is not available`);
         }
 
-        clearCache = () => snapshot.clearCache!();
+        clearCache = () => ctx.clearCache!();
       }
 
       function benchFn<T>(b: Bench, fn: () => T): () => T {
@@ -456,45 +459,45 @@ async function installPerfHelpers(page: Page) {
 
       return benches.map((b) => {
         const label = benchLabel(b);
-        const ctx = resolveContext(b.ref);
+        const source = resolveQuerySource(b.ref);
         const iters = options.focused
           ? b.iters
           : b.quickIters ?? options.quickIters ?? b.iters;
 
         switch (b.op) {
           case 'match':
-            if (!isElement(ctx)) throw new Error(`${label}: match needs Element context`);
-            if (b.debug) debugBench(engineName, label, () => ops.match(b.selector, ctx));
-            return runBench(engineName, b, benchFn(b, () => ops.match(b.selector, ctx)), iters);
+            if (!isElement(source)) throw new Error(`${label}: match needs an Element source`);
+            if (b.debug) debugBench(engineName, label, () => ops.match(b.selector, source));
+            return runBench(engineName, b, benchFn(b, () => ops.match(b.selector, source)), iters);
 
           case 'select':
-            if (b.debug) debugBench(engineName, label, () => ops.select(b.selector, ctx));
-            return runBench(engineName, b, benchFn(b, () => ops.select(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.select(b.selector, source));
+            return runBench(engineName, b, benchFn(b, () => ops.select(b.selector, source)), iters);
 
           case 'first':
-            if (b.debug) debugBench(engineName, label, () => ops.first(b.selector, ctx));
-            return runBench(engineName, b, benchFn(b, () => ops.first(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.first(b.selector, source));
+            return runBench(engineName, b, benchFn(b, () => ops.first(b.selector, source)), iters);
 
           case 'closest':
-            if (!isElement(ctx)) throw new Error(`${label}: closest needs Element context`);
-            if (b.debug) debugBench(engineName, label, () => ops.closest(b.selector, ctx));
-            return runBench(engineName, b, benchFn(b, () => ops.closest(b.selector, ctx)), iters);
+            if (!isElement(source)) throw new Error(`${label}: closest needs an Element source`);
+            if (b.debug) debugBench(engineName, label, () => ops.closest(b.selector, source));
+            return runBench(engineName, b, benchFn(b, () => ops.closest(b.selector, source)), iters);
 
           case 'matchWalk':
-            if (b.debug) debugBench(engineName, label, () => matchWalk(ops, ctx, b.selectors));
-            return runBench(engineName, b, benchFn(b, () => matchWalk(ops, ctx, b.selectors)), iters);
+            if (b.debug) debugBench(engineName, label, () => matchWalk(ops, source, b.selectors));
+            return runBench(engineName, b, benchFn(b, () => matchWalk(ops, source, b.selectors)), iters);
 
           case 'byId':
-            return runBench(engineName, b, benchFn(b, () => ops.byId(b.id, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byId(b.id, source)), iters);
 
           case 'byClass':
-            return runBench(engineName, b, benchFn(b, () => ops.byClass(b.cls, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byClass(b.cls, source)), iters);
 
           case 'byTag':
-            return runBench(engineName, b, benchFn(b, () => ops.byTag(b.tag, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byTag(b.tag, source)), iters);
 
           case 'byTagNs':
-            return runBench(engineName, b, benchFn(b, () => ops.byTagNs(b.byTagNs, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byTagNs(b.byTagNs, source)), iters);
 
           default:
             return assertNever(b);
@@ -506,13 +509,13 @@ async function installPerfHelpers(page: Page) {
       if (engineName === 'native') {
         return {
           match: (s, e) => e.matches(s),
-          select: (s, c) => [...c.querySelectorAll(s)],
-          first: (s, c) => c.querySelector(s),
+          select: (s, source) => [...source.querySelectorAll(s)],
+          first: (s, source) => source.querySelector(s),
           closest: (s, e) => e.closest(s),
-          byId: (id, ctx) => queryId(ctx, id),
-          byClass: (cls, ctx) => queryClass(ctx, cls),
-          byTag: (tag, ctx) => queryTag(ctx, tag),
-          byTagNs: (byTagNs, ctx) => queryTagNs(ctx, byTagNs),
+          byId: (id, source) => queryId(source, id),
+          byClass: (cls, source) => queryClass(source, cls),
+          byTag: (tag, source) => queryTag(source, tag),
+          byTagNs: (byTagNs, source) => queryTagNs(source, byTagNs),
         };
       }
 
@@ -522,12 +525,12 @@ async function installPerfHelpers(page: Page) {
 
         return {
           match: (s, e) => nwdom.match(s, e),
-          select: (s, c) => [...nwdom.select(s, c)],
-          first: (s, c) => nwdom.first(s, c),
+          select: (s, source) => [...nwdom.select(s, source)],
+          first: (s, source) => nwdom.first(s, source),
           closest: (s, e) => nwdom.closest(s, e),
-          byId: (id, ctx) => nwdom.byId(id, ctx),
-          byClass: (cls, ctx) => nwdom.byClass(cls, ctx),
-          byTag: (tag, ctx) => nwdom.byTag(tag, ctx),
+          byId: (id, source) => nwdom.byId(id, source),
+          byClass: (cls, source) => nwdom.byClass(cls, source),
+          byTag: (tag, source) => nwdom.byTag(tag, source),
           byTagNs: () => { throw new Error('NW.Dom does not support byTagNs'); },
         };
       }
@@ -538,13 +541,13 @@ async function installPerfHelpers(page: Page) {
 
         return {
           match: (s, e) => sxlt.matches(s, e),
-          select: (s, c) => [...sxlt.select(s, c)],
-          first: (s, c) => sxlt.first(s, c),
+          select: (s, source) => [...sxlt.select(s, source)],
+          first: (s, source) => sxlt.first(s, source),
           closest: (s, e) => sxlt.closest(s, e),
-          byId: (id, ctx) => sxlt.byId(id, ctx),
-          byClass: (cls, ctx) => sxlt.byClass(cls, ctx) as Element[],
-          byTag: (tag, ctx) => sxlt.byTag(tag, ctx) as Element[],
-          byTagNs: (byTagNs, ctx) => sxlt.byTagNs(byTagNs.ns, byTagNs.local, ctx) as Element[],
+          byId: (id, source) => sxlt.byId(id, source),
+          byClass: (cls, source) => sxlt.byClass(cls, source) as Element[],
+          byTag: (tag, source) => sxlt.byTag(tag, source) as Element[],
+          byTagNs: (byTagNs, source) => sxlt.byTagNs(byTagNs.ns, byTagNs.local, source) as Element[],
         };
       }
 
@@ -586,16 +589,16 @@ async function installPerfHelpers(page: Page) {
       }
     }
 
-    function resolveContext(ref?: ContextRef): QueryContext {
+    function resolveQuerySource(ref?: QuerySourceRef): QuerySource {
       const doc = window.__perfXml ?? document;
       if (!ref || ref.by === 'document') return doc;
 
-      const base = 'within' in ref && ref.within ? resolveContext(ref.within) : doc;
+      const base = 'within' in ref && ref.within ? resolveQuerySource(ref.within) : doc;
 
       if (ref.by === 'iframe') {
         const iframe = queryId(base, ref.id);
         if (!isIFrameElement(iframe)) {
-          throw new Error(`Missing iframe context: ${JSON.stringify(ref)}`);
+          throw new Error(`Missing iframe source: ${JSON.stringify(ref)}`);
         }
         const child = iframe.contentDocument;
         if (!child) {
@@ -607,7 +610,7 @@ async function installPerfHelpers(page: Page) {
       if (ref.by === 'template') {
         const tmpl = queryId(base, ref.id);
         if (!isTemplateElement(tmpl)) {
-          throw new Error(`Missing template context: ${JSON.stringify(ref)}`);
+          throw new Error(`Missing template source: ${JSON.stringify(ref)}`);
         }
         return tmpl.content;
       }
@@ -629,15 +632,15 @@ async function installPerfHelpers(page: Page) {
         : assertNever(ref);
 
       if (!el) {
-        throw new Error(`Missing context element: ${JSON.stringify(ref)}`);
+        throw new Error(`Missing query source element: ${JSON.stringify(ref)}`);
       }
 
-      const home: ContextHome = ref.home ?? 'document';
+      const home: QuerySourceHome = ref.home ?? 'document';
       if (home === 'document') return el;
 
       const clone = el.cloneNode(true);
       if (!isElement(clone)) {
-        throw new Error(`Context clone is not an Element: ${JSON.stringify(ref)}`);
+        throw new Error(`Query source clone is not an Element: ${JSON.stringify(ref)}`);
       }
 
       if (home === 'detached') return clone;
@@ -677,28 +680,28 @@ async function installPerfHelpers(page: Page) {
 
     // Native fallbacks approximate missing Element/Fragment APIs for perf only.
     // Some paths use selector-backed approximations rather than exact native API equivalents.
-    function queryId(base: QueryContext, id: string): Element | null {
-      if (isDocument(base) || isDocumentFragment(base)) return base.getElementById(id);
-      return base.querySelector(`#${CSS.escape(id)}`);
+    function queryId(source: QuerySource, id: string): Element | null {
+      if (isDocument(source) || isDocumentFragment(source)) return source.getElementById(id);
+      return source.querySelector(`#${CSS.escape(id)}`);
     }
 
-    function queryClass(base: QueryContext, cls: string): Element[] {
-      if (isDocument(base) || isElement(base)) return [...base.getElementsByClassName(cls)];
-      return [...base.querySelectorAll(`.${CSS.escape(cls)}`)];
+    function queryClass(source: QuerySource, cls: string): Element[] {
+      if (isDocument(source) || isElement(source)) return [...source.getElementsByClassName(cls)];
+      return [...source.querySelectorAll(`.${CSS.escape(cls)}`)];
     }
 
-    function queryTag(base: QueryContext, tag: string): Element[] {
-      if (isDocument(base) || isElement(base)) return [...base.getElementsByTagName(tag)];
-      return [...base.querySelectorAll(tag)];
+    function queryTag(source: QuerySource, tag: string): Element[] {
+      if (isDocument(source) || isElement(source)) return [...source.getElementsByTagName(tag)];
+      return [...source.querySelectorAll(tag)];
     }
 
-    function queryTagNs(base: QueryContext, q: { ns: string | null; local: string; }): Element[] {
+    function queryTagNs(source: QuerySource, q: { ns: string | null; local: string; }): Element[] {
       const { ns, local } = q;
-      if (!isDocumentFragment(base)) {
-        return [...base.getElementsByTagNameNS(ns, local)];
+      if (!isDocumentFragment(source)) {
+        return [...source.getElementsByTagNameNS(ns, local)];
       }
       const nodes: Element[] = [];
-      for (let root = base.firstElementChild; root; root = root.nextElementSibling) {
+      for (let root = source.firstElementChild; root; root = root.nextElementSibling) {
         if ((ns === '*' || root.namespaceURI === ns) && (local === '*' || root.localName === local)) {
           nodes.push(root);
         }
@@ -712,36 +715,35 @@ async function installPerfHelpers(page: Page) {
     }
 
     function debugBench(engineName: EngineName, label: string, fn: () => unknown): never {
-      const api = getEngineApi(engineName);
-      const snapshot = api?.snapshot;
+      const ctx = getEngineContext(engineName);
 
       if (
-        !snapshot ||
-        typeof snapshot.setDebug !== 'function' ||
-        typeof snapshot.clearDebug !== 'function' ||
-        typeof snapshot.printDebug !== 'function'
+        !ctx ||
+        typeof ctx.setDebug !== 'function' ||
+        typeof ctx.clearDebug !== 'function' ||
+        typeof ctx.printDebug !== 'function'
       ) {
         throw new Error(`${engineName} debug is not available`);
       }
 
-      snapshot.setDebug(true);
-      snapshot.clearDebug();
+      ctx.setDebug(true);
+      ctx.clearDebug();
 
       try {
         fn();
-        throw new Error(`[perf debug] ${label}\n${snapshot.printDebug()}`);
+        throw new Error(`[perf debug] ${label}\n${ctx.printDebug()}`);
       } finally {
-        snapshot.setDebug(false);
+        ctx.setDebug(false);
       }
     }
 
     function supportsDebug(engineName: EngineName): boolean {
-      const api = getEngineApi(engineName);
+      const ctx = getEngineContext(engineName);
       return !!(
-        api && api.snapshot &&
-        typeof api.snapshot.setDebug === 'function' &&
-        typeof api.snapshot.clearDebug === 'function' &&
-        typeof api.snapshot.printDebug === 'function'
+        ctx &&
+        typeof ctx.setDebug === 'function' &&
+        typeof ctx.clearDebug === 'function' &&
+        typeof ctx.printDebug === 'function'
       );
     }
 

@@ -8,3 +8,5 @@ export {
 export { toScalarValueString, type ScalarValueString } from './strings';
 export { InternalError } from './internal-error';
 export type { TaskHandle, TaskScheduling } from './scheduling';
+export type { DOMOperations, DOMNode, DOMCollection } from './dom-operations';
+export { standardDOM } from './dom-standard';

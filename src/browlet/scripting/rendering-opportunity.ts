@@ -7,17 +7,14 @@ import type { Realm } from './realm';
 import { renderingTaskSource } from './tasks';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * A rendering-opportunity host observes display refreshes, an embedder signal,
- * or a deterministic test driver independently of HTML task execution. It
- * reports an opportunity here; it never runs rendering steps itself.
- *
- * https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
- */
+// The host reports refresh opportunities; rendering steps run later as HTML tasks.
+/** Turns host rendering opportunities into tasks for a Window agent. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
 export class WindowRenderingProducer {
   #agent: WindowAgent;
   #host: RenderingOpportunityHost;
   #update: RenderingUpdateHooks;
+  /** Unregisters the current host observation, or null while stopped. */
   #stopObserving: (() => void) | null = null;
 
   constructor(
@@ -113,12 +110,10 @@ export class WindowRenderingProducer {
       documents.push(document);
     }
 
-    /*
-     * HTML orders this list parent-before-child, with siblings in their
-     * navigable containers' shadow-including tree order. Browlet currently
-     * creates only top-level traversables. Traverse the child topology when
-     * it arrives; sorting only by depth would not be sufficient.
-     */
+    // HTML orders this list parent-before-child, with siblings in their
+    // navigable containers' shadow-including tree order. Browlet currently
+    // creates only top-level traversables. Traverse the child topology when
+    // it arrives; sorting only by depth would not be sufficient.
     return documents;
   }
 }
@@ -157,13 +152,11 @@ export type RenderingDocumentFilters = {
 export type RenderingUpdatePhase =
   typeof renderingUpdatePhases[number];
 
-/*
- * Keep this order aligned with HTML's "update the rendering" algorithm.
- * Every currently missing owner is an absent hook rather than a fake
- * implementation: CSSOM View, Web Animations, Fullscreen, Canvas, animation
- * frames, ResizeObserver/layout, focus, View Transitions,
- * IntersectionObserver, rendering/paint timing, display, and the top layer.
- */
+// Keep this order aligned with HTML's "update the rendering" algorithm.
+// Every currently missing owner is an absent hook rather than a fake
+// implementation: CSSOM View, Web Animations, Fullscreen, Canvas, animation
+// frames, ResizeObserver/layout, focus, View Transitions,
+// IntersectionObserver, rendering/paint timing, display, and the top layer.
 export const renderingUpdatePhases = [
   'reveal',
   'flushAutofocusCandidates',

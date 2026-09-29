@@ -1,8 +1,19 @@
 import { defineElementInterface, ElementImpl } from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
-import { withSVGElementStub } from '../stubs';
 import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
+
+/** Base implementation for elements in the SVG namespace. */
+// https://svgwg.org/svg2-draft/types.html#InterfaceSVGElement
+export class SVGElementImpl extends ElementImpl {
+  static is(value: unknown): value is SVGElementImpl {
+    return value instanceof SVGElementImpl;
+  }
+
+  get style(): CSSStyleDeclarationImpl {
+    return this.getInlineStyle();
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -16,18 +27,6 @@ import type { CSSStyleDeclarationImpl } from '../../stylelet/index';
  * SVGElement includes SVGElementInstance;
  * SVGElement includes HTMLOrSVGElement;
  */
-export class SVGElementImpl extends withSVGElementStub(ElementImpl) {
-  static is(value: unknown): value is SVGElementImpl {
-    return value instanceof SVGElementImpl;
-  }
-
-  get style(): CSSStyleDeclarationImpl {
-    return this.getInlineStyle();
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const svgElementIDL = defineInterface({
   name: 'SVGElement',
   inherits: 'Element',

@@ -7,10 +7,8 @@ import {
 } from '../../../scripting/structured-data/serializable';
 import { InternalError } from '../../../../infra/internal-error';
 
-/*
- * FileList sub-serialization uses HTML's shared memory so a File repeated in
- * the list and elsewhere in the graph retains one deserialized identity.
- */
+// FileList sub-serialization uses HTML's shared memory so a File repeated in
+// the list and elsewhere in the graph retains one deserialized identity.
 const fileListSerializable: SerializableSteps = {
   serializationSteps(value, serialized, _forStorage, context) {
     if (!FileListImpl.is(value)) {

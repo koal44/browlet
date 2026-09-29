@@ -1,4 +1,3 @@
-import { withCharacterDataStub } from '../../stubs';
 import {
   annotated, attr, defineIncludes, defineInterface, idlType, impl, xattr,
 } from '../../../web-idl/index';
@@ -9,31 +8,25 @@ import {
 } from './non-document-type-child-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
+import type { DOMEnvironment } from '../environment';
 
-/*
- * [Exposed=Window]
- * interface CharacterData : Node {
- *   attribute [LegacyNullToEmptyString] DOMString data;
- *   readonly attribute unsigned long length;
- *   DOMString substringData(unsigned long offset, unsigned long count);
- *   undefined appendData(DOMString data);
- *   undefined insertData(unsigned long offset, DOMString data);
- *   undefined deleteData(unsigned long offset, unsigned long count);
- *   undefined replaceData(unsigned long offset, unsigned long count, DOMString data);
- * };
- */
-export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
+/** Text storage and mutation behavior shared by character-data nodes. */
+// https://dom.spec.whatwg.org/#interface-characterdata
+export class CharacterDataImpl extends NodeImpl {
+  /** Child-node mutation operations shared with other node classes. */
   #childNodeMixin = new ChildNodeMixin(this);
+  /** Node text stored as UTF-16 code units. */
   #data: string;
-  #nonDocumentTypeChildNodeMixin =
-    new NonDocumentTypeChildNodeMixin(this);
+  /** Element-sibling navigation that skips intervening non-elements. */
+  #nonDocumentTypeChildNodeMixin = new NonDocumentTypeChildNodeMixin(this);
 
   constructor(
     nodeType: NodeType,
     data: string,
-    ownerDocument: DocumentImpl | null,
+    ownerDoc: DocumentImpl | null,
+    env: DOMEnvironment,
   ) {
-    super(nodeType, ownerDocument);
+    super(nodeType, ownerDoc, env);
     this.#data = data;
   }
 
@@ -41,11 +34,14 @@ export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
     return value instanceof CharacterDataImpl;
   }
 
+  /** Node text; assigning it notifies the parent of the content change. */
+  // https://dom.spec.whatwg.org/#dom-characterdata-data
   get data(): string {
     return this.#data;
   }
 
   set data(value: string) {
+    // TODO(DOM replace data): include range adjustment and mutation records.
     this.#data = value;
     this.notifyParentChildrenChanged();
   }
@@ -63,8 +59,18 @@ export class CharacterDataImpl extends withCharacterDataStub(NodeImpl) {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface CharacterData : Node {
+ *   attribute [LegacyNullToEmptyString] DOMString data;
+ *   readonly attribute unsigned long length;
+ *   DOMString substringData(unsigned long offset, unsigned long count);
+ *   undefined appendData(DOMString data);
+ *   undefined insertData(unsigned long offset, DOMString data);
+ *   undefined deleteData(unsigned long offset, unsigned long count);
+ *   undefined replaceData(unsigned long offset, unsigned long count, DOMString data);
+ * };
+ */
 export const characterDataIDL = defineInterface({
   name: 'CharacterData',
   inherits: 'Node',

@@ -8,17 +8,16 @@ import {
 import type { WindowImpl } from '../browsing/window/window';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * An agent owns the execution boundary shared by one or more realms. V8 owns
- * the ECMAScript execution contexts, [[CandidateExecution]], [[LittleEndian]],
- * and [[IsLockFree*]] state; Browlet owns the HTML host state that
- * specifications associate with the agent.
- *
- * https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-formalism
- */
+// V8 owns ECMAScript execution contexts and engine-level agent state;
+// Browlet owns the HTML event loop and host state shared by the agent's realms.
+/** Owns the HTML execution boundary shared by one or more realms. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-formalism
 export abstract class Agent {
+  /** Whether blocking operations are permitted for this agent kind. */
   canBlock: boolean;
+  /** Task processing and microtask checkpoints shared by the agent's realms. */
   eventLoop: EventLoop;
+  /** Unique identifier corresponding to the agent signifier. */
   signifier: symbol;
   #agentCluster: AgentCluster | null = null;
 
@@ -53,11 +52,10 @@ export abstract class Agent {
   }
 }
 
-/*
- * A similar-origin window agent contains various Window objects that can
- * potentially reach each other, either directly or through document.domain.
- */
+/** Groups Windows that can potentially access one another. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#similar-origin-window-agent
 export class WindowAgent extends Agent {
+  /** Windows served by this agent, including multiple browsing contexts. */
   windowObjects = new Set<WindowImpl>();
 
   constructor(eventLoopOptions: EventLoopOptions | null = null) {
@@ -72,7 +70,7 @@ export class SandboxAgent extends Agent {
   }
 }
 
-// Contains a single DedicatedWorkerGlobalScope once its realm is created.
+/** Execution owner for one dedicated worker global. */
 export class DedicatedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -81,7 +79,7 @@ export class DedicatedWorkerAgent extends Agent {
   }
 }
 
-// Contains a single SharedWorkerGlobalScope once its realm is created.
+/** Execution owner for one shared worker global. */
 export class SharedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -90,7 +88,7 @@ export class SharedWorkerAgent extends Agent {
   }
 }
 
-// Contains a single ServiceWorkerGlobalScope once its realm is created.
+/** Execution owner for one service worker global. */
 export class ServiceWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -99,7 +97,7 @@ export class ServiceWorkerAgent extends Agent {
   }
 }
 
-// Contains a single WorkletGlobalScope once its realm is created.
+/** Execution owner for one worklet global. */
 export class WorkletAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -108,6 +106,8 @@ export class WorkletAgent extends Agent {
   }
 }
 
+/** Reuse or allocate the Window agent selected by this group's origin/site policy. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-similar-origin-window-agent
 export function obtainSimilarOriginWindowAgent(
   origin: Origin,
   group: BrowsingContextGroup,
@@ -157,14 +157,14 @@ export function obtainSimilarOriginWindowAgent(
   return windowAgent;
 }
 
-/*
- * An agent cluster is the shared-memory boundary for one or more agents.
- *
- * https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
- */
+/** Defines the shared-memory boundary for a set of agents. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
 export class AgentCluster {
+  /** Agents permanently associated with this cluster. */
   agents = new Set<Agent>();
+  /** Isolation mode inherited from the browsing context group. */
   crossOriginIsolationMode: CrossOriginIsolationMode;
+  /** Whether this cluster uses an origin key instead of a site key. */
   isOriginKeyed = false;
 
   constructor(crossOriginIsolationMode: CrossOriginIsolationMode) {

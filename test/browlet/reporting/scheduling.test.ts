@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../support/dom';
 import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { requestNodeEventLoopTurn } from '../../../src/browlet/integration/scripting';
@@ -6,7 +7,6 @@ import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-r
 import { createTaskSource } from '../../../src/browlet/scripting/event-loop';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
-import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 
 describe('Browser-owned Reporting scheduling', () => {
   it('runs on a later turn without requiring a Window or HTML checkpoint', async () => {
@@ -45,7 +45,7 @@ describe('Browser-owned Reporting scheduling', () => {
     const eventLoop = getRelevantRealm(traversable.activeWindow!).agent.eventLoop;
     const source = createTaskSource('inactive reporting scheduling test');
     const trace: string[] = [];
-    eventLoop.queueTask(source, new DocumentImpl(), () => { trace.push('inactive task'); });
+    eventLoop.queueTask(source, createTestDocument(), () => { trace.push('inactive task'); });
     await new Promise<void>((resolve) => {
       userAgent.queueReportingTask(() => { trace.push('report'); resolve(); });
     });

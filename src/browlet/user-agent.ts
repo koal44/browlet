@@ -30,16 +30,20 @@ import {
   type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { InternalError } from '../infra/internal-error';
+import type { StyleletUserAgent } from '../stylelet/index';
+import type { SelectletUserAgent } from '../selectlet/index';
+import { browletDOM } from './integration/dom';
 import { internalType, type InternalPromise } from '../infra/promises';
 
-/*
- * HTML's user agent owns browsing context groups and the top-level
- * traversables normally presented as browser windows or tabs. Browlet is one
- * such host, but these collections outlive any individual realm or Document.
- */
-export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent {
+/** Owns browsing contexts and shared browser services that outlive individual documents. */
+export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
+  /** Implementation access shared by selector and style engines. */
+  dom = browletDOM;
+  /** Related-context groups currently retained by this browser. */
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
+  /** Top-level windows or tabs owned by this browser. */
   topLevelTraversableSet = new Set<TopLevelTraversable>();
+  /** Host scheduling facilities supplied to new agents. */
   eventLoopOptions: EventLoopOptions | null;
   /** Background Fetch continuations outlive their initiating environments. */
   HostPromise = HostPromise;
@@ -53,15 +57,19 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   defaultAcceptLanguage: string | null = null;
   /** Wire connections outlive individual documents and are closed by their browser owner. */
   connectionPool = new ConnectionPool();
+  /** HTTP wire operations using the browser's shared connection pool. */
   httpTransport: HTTPTransport = new NodeHTTPTransport(this);
   /** Credentials and authentication challenges shared by this user agent's HTTP requests. */
   httpAuthentication = new HTTPAuthenticationStore(this);
   /** Native HTTP codecs, instantiated separately for each response. */
   supportedContentCodings = new Set(supportedContentCodings);
+  /** Construct the decoder chain for one response's content codings. */
   createContentDecoder = createContentDecoder;
+  /** Partitioned response storage shared across this browser's Fetches. */
   httpCache = new HTTPCacheStore();
   /** CORS permissions are owned independently of ordinary HTTP cache entries. */
   corsPreflightCache = new CORSPreflightCache();
+  /** Stored cookies shared by this browser's documents and requests. */
   cookieStore = new CookieStore();
   /** Remembered HTTPS requirements shared by this user agent's browsing contexts. */
   hstsStore = new HSTSStore();
@@ -77,12 +85,14 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   maxReportAge = 2 * 24 * 60 * 60 * 1000;
   /** Reporting endpoints are retired after exceeding this consecutive-failure count. */
   maxReportingEndpointFailures = 5;
+  /** Whether network-dependent work should treat the browser as offline. */
   // PROVISIONAL: assumes connectivity until explicitly changed; host detection is not wired.
   assumeNoInternetConnectivity = false;
-  // Applies to tuple origins supplied by an authenticated protocol implementation.
+  /** Schemes whose tuple origins come from an authenticated protocol implementation. */
   // https://w3c.github.io/webappsec-secure-contexts/#packaged-applications
   authenticatedSchemes = new Set<string>();
-  /** https://w3c.github.io/webappsec-secure-contexts/#development-environments */
+  /** Development origins explicitly configured as potentially trustworthy. */
+  // https://w3c.github.io/webappsec-secure-contexts/#development-environments
   trustworthyOrigins: TupleOrigin[] = [];
   #sandbox: JSEnvironment | undefined;
 
@@ -308,10 +318,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     // Connect the BiDi navigation-aborted algorithm when sessions are implemented.
   }
 
-  /*
-   * Secure Contexts: Is origin potentially trustworthy?
-   * https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
-   */
+  // Secure Contexts: Is origin potentially trustworthy?
+  // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
   isOriginPotentiallyTrustworthy(origin: Origin): boolean {
     // Preserve an explicit trust decision when the origin has lost its tuple,
     // as with Browlet's file origins. Other opaque origins start untrusted.
@@ -333,10 +341,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return this.trustworthyOrigins.some((trustedOrigin) => areSameOrigin(origin, trustedOrigin));
   }
 
-  /*
-   * Secure Contexts: Is url potentially trustworthy?
-   * https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
-   */
+  // Secure Contexts: Is url potentially trustworthy?
+  // https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
   isURLPotentiallyTrustworthy(url: URLRecord): boolean {
     if (url.scheme === 'about' && (url.path === 'blank' || url.path === 'srcdoc')) return true;
     if (url.scheme === 'data') return true;

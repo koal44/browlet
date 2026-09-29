@@ -5,11 +5,9 @@ export function requestNodeEventLoopTurn(steps: () => void): void {
   setImmediate(steps);
 }
 
-/*
- * HTML section 2.1.1 permits cooperative scheduling. Captured closures stay
- * in this isolate; true worker parallelism needs algorithm-specific data and
- * message boundaries rather than a different implementation of this alias.
- */
+// HTML section 2.1.1 permits cooperative scheduling. Captured closures stay
+// in this isolate; true worker parallelism needs algorithm-specific data and
+// message boundaries rather than a different implementation of this alias.
 export const runInParallel = requestNodeEventLoopTurn;
 
 /** Internal continuations for browser-owned work that has no HTML realm. */

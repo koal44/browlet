@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../../support/dom';
 
-import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 
 describe('element lookups', () => {
   it('finds the first matching ID in document order', () => {
@@ -49,7 +49,7 @@ describe('element lookups', () => {
 });
 
 function createFixture() {
-  const document = new DocumentImpl();
+  const document = createTestDocument();
   const root = document.createElement('root');
   const first = document.createElement('item');
   const nested = document.createElement('item');

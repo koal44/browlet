@@ -1,8 +1,15 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineElementInterface } from '../../../dom/nodes/element';
 import { defineInterface, impl } from '../../../../web-idl/index';
-import { withHTMLHeadElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
+
+/** Contains document metadata before the body. */
+// https://html.spec.whatwg.org/multipage/semantics.html#the-head-element
+export class HTMLHeadElementImpl extends HTMLElementImpl {
+  static is(value: unknown): value is HTMLHeadElementImpl {
+    return value instanceof HTMLHeadElementImpl;
+  }
+}
 
 /*
  * [Exposed=Window]
@@ -10,16 +17,6 @@ import { HTMLElementImpl } from '../html-element';
  *   [HTMLConstructor] constructor();
  * };
  */
-export class HTMLHeadElementImpl
-  extends withHTMLHeadElementStub(HTMLElementImpl)
-{
-  static is(value: unknown): value is HTMLHeadElementImpl {
-    return value instanceof HTMLHeadElementImpl;
-  }
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const htmlHeadElementIDL = defineInterface({
   name: 'HTMLHeadElement',
   inherits: 'HTMLElement',

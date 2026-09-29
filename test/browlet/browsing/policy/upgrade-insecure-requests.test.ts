@@ -184,8 +184,8 @@ describe('Upgrade Insecure Requests: browsing-context inheritance', () => {
 
       // Supply adoption's node-document change while the DOM adoption algorithm
       // is unfinished. Real bindings retain the element's original realm.
-      embedder.setNodeDocument(embeddingDocument);
-      expect(embedder.getNodeDocument()).toBe(embeddingDocument);
+      embedder.nodeDocument = embeddingDocument;
+      expect(embedder.nodeDocument).toBe(embeddingDocument);
       expect(getRelevantRealm(embedder)).toBe(creationEnv.realm);
       const context = new BrowsingContext();
 

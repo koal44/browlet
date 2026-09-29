@@ -78,16 +78,16 @@ Scenarios can:
 - use steps to change page state between groups of cases
 - express cases using `select`, `first`, `match`, `closest`, `byId`, `byTag`, and `byClass`
 - attach expectations such as `count`, `ids`, `classes`, `throws`, and inclusion/exclusion checks
-- use context refs when a query should run relative to a specific node, including rehomed contexts for detached nodes and fragments
+- use query source refs when a query should run relative to a specific node, including rehomed sources for detached nodes and fragments
 - mark scenarios or cases as `skip`, `only`, `fail`, or `fixme`
 
 ## Philosophy
 
-The harness reduces selector tests to two things: a query and a context.
+The harness reduces selector tests to two things: a query and a source.
 
 Cases always compare `selectlet` against native browser behavior. Explicit expectations are extra assertions on top of that comparison.
 
-Contexts can also be rehomed, so the same ref can be tested in its original document, detached, or inside a `DocumentFragment`.
+Query sources can also be rehomed, so the same ref can be tested in its original document, detached, or inside a `DocumentFragment`.
 
 ## Notes
 

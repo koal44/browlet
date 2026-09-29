@@ -1,4 +1,4 @@
-import { getShadowTreeRoot } from '../../infra/selector-dom';
+import type { DOMOperations, DOMNode as Element } from '../../infra/index';
 import { assertNever } from '../../infra/util';
 import type { Combinator } from '../syntax/selector';
 import {
@@ -26,7 +26,7 @@ type SelectorCombinator = ' ' | '>' | '+' | '~';
 
 export function buildComplexMatcher(
   parts: CompiledPart[],
-  cost: number,
+  cost: number, dom: DOMOperations,
 ): CompiledMatcher {
   if (parts.length === 0) {
     throw new InternalError('Cannot build matcher for empty complex selector');
@@ -41,8 +41,8 @@ export function buildComplexMatcher(
   const usesTriMatch = parts.some((part) => part.matcher.usesTriMatch);
 
   return {
-    element: buildComplexElementProof(parts),
-    subject: usesTriMatch ? buildComplexSubjectProof(parts) : undefined,
+    element: buildComplexElementProof(parts, dom),
+    subject: usesTriMatch ? buildComplexSubjectProof(parts, dom) : undefined,
     cost,
     usesCache,
     usesTriMatch,
@@ -70,13 +70,13 @@ export function buildSelectorListMatcher(
 
 export function buildRelativeSelectorMatcher(
   arms: CompiledRelativeArm[],
-  cost: number,
+  cost: number, dom: DOMOperations,
 ): CompiledMatcher {
   if (arms.length === 0) return FALSE_MATCHER;
 
   const predicates = arms.map((steps): CandidateElementPredicate =>
     (element, runtimeCache) =>
-      matchRelativeFrom(steps, 0, element, runtimeCache));
+      matchRelativeFrom(steps, 0, element, runtimeCache, dom));
 
   const element: CandidateElementPredicate = predicates.length === 1
     ? predicates[0]!
@@ -105,14 +105,14 @@ const FALSE_MATCHER: CompiledMatcher = {
 };
 
 function buildComplexElementProof(
-  parts: CompiledPart[],
+  parts: CompiledPart[], dom: DOMOperations,
 ): CandidateElementPredicate {
   let proof = parts[0]!.matcher.element;
 
   for (let index = 1; index < parts.length; index++) {
     const part = parts[index]!;
     const step = part.matcher.element;
-    const connect = extendElementProof(part.combinator, proof);
+    const connect = extendElementProof(part.combinator, proof, dom);
 
     proof = (candidate, runtimeCache) =>
       step(candidate, runtimeCache) && connect(candidate, runtimeCache);
@@ -122,14 +122,14 @@ function buildComplexElementProof(
 }
 
 function buildComplexSubjectProof(
-  parts: CompiledPart[],
+  parts: CompiledPart[], dom: DOMOperations,
 ): CandidateSubjectPredicate {
   let proof = asSubjectPredicate(parts[0]!.matcher);
 
   for (let index = 1; index < parts.length; index++) {
     const part = parts[index]!;
     const step = asSubjectPredicate(part.matcher);
-    const connect = extendSubjectProof(part.combinator, proof);
+    const connect = extendSubjectProof(part.combinator, proof, dom);
 
     proof = (candidate, runtimeCache, subject) => triAnd(
       step(candidate, runtimeCache, subject),
@@ -171,13 +171,13 @@ function buildSubjectDisjunction(
 
 function extendElementProof(
   combinator: Combinator | null,
-  previous: CandidateElementPredicate,
+  previous: CandidateElementPredicate, dom: DOMOperations,
 ): CandidateElementPredicate {
   switch (combinator) {
-    case ' ': return buildAncestorElementProof(previous);
-    case '>': return buildParentElementProof(previous);
-    case '+': return buildPreviousElementProof(previous);
-    case '~': return buildAnyPreviousElementProof(previous);
+    case ' ': return buildAncestorElementProof(previous, dom);
+    case '>': return buildParentElementProof(previous, dom);
+    case '+': return buildPreviousElementProof(previous, dom);
+    case '~': return buildAnyPreviousElementProof(previous, dom);
     case '||': return () => false;
     case null:
       throw new InternalError('Cannot extend proof from first selector part');
@@ -188,13 +188,13 @@ function extendElementProof(
 
 function extendSubjectProof(
   combinator: Combinator | null,
-  previous: CandidateSubjectPredicate,
+  previous: CandidateSubjectPredicate, dom: DOMOperations,
 ): CandidateSubjectPredicate {
   switch (combinator) {
-    case ' ': return buildAncestorSubjectProof(previous);
-    case '>': return buildParentSubjectProof(previous);
-    case '+': return buildPreviousSubjectProof(previous);
-    case '~': return buildAnyPreviousSubjectProof(previous);
+    case ' ': return buildAncestorSubjectProof(previous, dom);
+    case '>': return buildParentSubjectProof(previous, dom);
+    case '+': return buildPreviousSubjectProof(previous, dom);
+    case '~': return buildAnyPreviousSubjectProof(previous, dom);
     case '||': return () => false;
     case null:
       throw new InternalError('Cannot extend proof from first selector part');
@@ -204,13 +204,13 @@ function extendSubjectProof(
 }
 
 function buildAncestorElementProof(
-  previous: CandidateElementPredicate,
+  previous: CandidateElementPredicate, dom: DOMOperations,
 ): CandidateElementPredicate {
   return function ancestorElementProof(candidate, runtimeCache) {
     for (
-      let parent = candidate.parentElement;
+      let parent = dom.parentElement(candidate);
       parent !== null;
-      parent = parent.parentElement
+      parent = dom.parentElement(parent)
     ) {
       if (previous(parent, runtimeCache)) return true;
     }
@@ -219,7 +219,7 @@ function buildAncestorElementProof(
 }
 
 function buildAncestorSubjectProof(
-  previous: CandidateSubjectPredicate,
+  previous: CandidateSubjectPredicate, dom: DOMOperations,
 ): CandidateSubjectPredicate {
   return function ancestorSubjectProof(candidate, runtimeCache, subject) {
     if (subject !== SubjectKind.Element) return false;
@@ -227,18 +227,18 @@ function buildAncestorSubjectProof(
     let result: TriMatch | undefined;
 
     for (
-      let parent = candidate.parentElement;
+      let parent = dom.parentElement(candidate);
       parent !== null;
-      parent = parent.parentElement
+      parent = dom.parentElement(parent)
     ) {
       const match = previous(parent, runtimeCache, SubjectKind.Element);
       if (match === true) return true;
       result = result === undefined ? match : triOr(result, match);
     }
 
-    const root = getShadowTreeRoot(candidate);
+    const root = shadowRoot(candidate, dom);
     if (root !== null) {
-      const match = previous(root.host, runtimeCache, SubjectKind.HostElement);
+      const match = previous(dom.shadowHost(root), runtimeCache, SubjectKind.HostElement);
       if (match === true) return true;
       result = result === undefined ? match : triOr(result, match);
     }
@@ -248,22 +248,22 @@ function buildAncestorSubjectProof(
 }
 
 function buildParentElementProof(
-  previous: CandidateElementPredicate,
+  previous: CandidateElementPredicate, dom: DOMOperations,
 ): CandidateElementPredicate {
   return function parentElementProof(candidate, runtimeCache) {
-    const parent = candidate.parentElement;
+    const parent = dom.parentElement(candidate);
     return parent !== null && previous(parent, runtimeCache);
   };
 }
 
 function buildParentSubjectProof(
-  previous: CandidateSubjectPredicate,
+  previous: CandidateSubjectPredicate, dom: DOMOperations,
 ): CandidateSubjectPredicate {
   return function parentSubjectProof(candidate, runtimeCache, subject) {
     if (subject !== SubjectKind.Element) return false;
 
     let result: TriMatch | undefined;
-    const parent = candidate.parentElement;
+    const parent = dom.parentElement(candidate);
 
     if (parent !== null) {
       const match = previous(parent, runtimeCache, SubjectKind.Element);
@@ -271,9 +271,9 @@ function buildParentSubjectProof(
       result = match;
     }
 
-    const root = getShadowTreeRoot(candidate);
-    if (root !== null && candidate.parentNode === root) {
-      const match = previous(root.host, runtimeCache, SubjectKind.HostElement);
+    const root = shadowRoot(candidate, dom);
+    if (root !== null && dom.parentNode(candidate) === root) {
+      const match = previous(dom.shadowHost(root), runtimeCache, SubjectKind.HostElement);
       if (match === true) return true;
       result = result === undefined ? match : triOr(result, match);
     }
@@ -283,20 +283,20 @@ function buildParentSubjectProof(
 }
 
 function buildPreviousElementProof(
-  previous: CandidateElementPredicate,
+  previous: CandidateElementPredicate, dom: DOMOperations,
 ): CandidateElementPredicate {
   return function previousElementProof(candidate, runtimeCache) {
-    const sibling = candidate.previousElementSibling;
+    const sibling = dom.previousElementSibling(candidate);
     return sibling !== null && previous(sibling, runtimeCache);
   };
 }
 
 function buildPreviousSubjectProof(
-  previous: CandidateSubjectPredicate,
+  previous: CandidateSubjectPredicate, dom: DOMOperations,
 ): CandidateSubjectPredicate {
   return function previousSubjectProof(candidate, runtimeCache, subject) {
     if (subject !== SubjectKind.Element) return false;
-    const sibling = candidate.previousElementSibling;
+    const sibling = dom.previousElementSibling(candidate);
     return sibling === null
       ? false
       : previous(sibling, runtimeCache, SubjectKind.Element);
@@ -304,13 +304,13 @@ function buildPreviousSubjectProof(
 }
 
 function buildAnyPreviousElementProof(
-  previous: CandidateElementPredicate,
+  previous: CandidateElementPredicate, dom: DOMOperations,
 ): CandidateElementPredicate {
   return function anyPreviousElementProof(candidate, runtimeCache) {
     for (
-      let sibling = candidate.previousElementSibling;
+      let sibling = dom.previousElementSibling(candidate);
       sibling !== null;
-      sibling = sibling.previousElementSibling
+      sibling = dom.previousElementSibling(sibling)
     ) {
       if (previous(sibling, runtimeCache)) return true;
     }
@@ -319,7 +319,7 @@ function buildAnyPreviousElementProof(
 }
 
 function buildAnyPreviousSubjectProof(
-  previous: CandidateSubjectPredicate,
+  previous: CandidateSubjectPredicate, dom: DOMOperations,
 ): CandidateSubjectPredicate {
   return function anyPreviousSubjectProof(candidate, runtimeCache, subject) {
     if (subject !== SubjectKind.Element) return false;
@@ -327,9 +327,9 @@ function buildAnyPreviousSubjectProof(
     let result: TriMatch | undefined;
 
     for (
-      let sibling = candidate.previousElementSibling;
+      let sibling = dom.previousElementSibling(candidate);
       sibling !== null;
-      sibling = sibling.previousElementSibling
+      sibling = dom.previousElementSibling(sibling)
     ) {
       const match = previous(sibling, runtimeCache, SubjectKind.Element);
       if (match === true) return true;
@@ -344,7 +344,7 @@ function matchRelativeFrom(
   steps: CompiledRelativeArm,
   index: number,
   base: Element,
-  runtimeCache: RuntimeCache | null,
+  runtimeCache: RuntimeCache | null, dom: DOMOperations,
 ): boolean {
   if (index >= steps.length) return true;
 
@@ -355,44 +355,49 @@ function matchRelativeFrom(
   switch (step.combinator) {
     case ' ':
       for (
-        let node = base.firstElementChild;
+        let node = dom.firstElementChild(base);
         node !== null;
-        node = nextDescendant(base, node)
+        node = nextDescendant(base, node, dom)
       ) {
         if (matches(node, runtimeCache) &&
-          matchRelativeFrom(steps, next, node, runtimeCache)) {
+          matchRelativeFrom(steps, next, node, runtimeCache, dom)) {
           return true;
         }
       }
       return false;
     case '>':
       for (
-        let node = base.firstElementChild;
+        let node = dom.firstElementChild(base);
         node !== null;
-        node = node.nextElementSibling
+        node = dom.nextElementSibling(node)
       ) {
         if (matches(node, runtimeCache) &&
-          matchRelativeFrom(steps, next, node, runtimeCache)) {
+          matchRelativeFrom(steps, next, node, runtimeCache, dom)) {
           return true;
         }
       }
       return false;
     case '+': {
-      const node = base.nextElementSibling;
+      const node = dom.nextElementSibling(base);
       return node !== null && matches(node, runtimeCache) &&
-        matchRelativeFrom(steps, next, node, runtimeCache);
+        matchRelativeFrom(steps, next, node, runtimeCache, dom);
     }
     case '~':
       for (
-        let node = base.nextElementSibling;
+        let node = dom.nextElementSibling(base);
         node !== null;
-        node = node.nextElementSibling
+        node = dom.nextElementSibling(node)
       ) {
         if (matches(node, runtimeCache) &&
-          matchRelativeFrom(steps, next, node, runtimeCache)) {
+          matchRelativeFrom(steps, next, node, runtimeCache, dom)) {
           return true;
         }
       }
       return false;
   }
+}
+
+function shadowRoot(node: Element, dom: DOMOperations): Element | null {
+  const root = dom.root(node);
+  return dom.isShadowRoot(root) ? root : null;
 }

@@ -1,3 +1,4 @@
+import type { DOMNode as Element } from '../../infra/index';
 import {
   propertyRegistry,
   resolveBuiltInPropertyDeclaration,
@@ -15,10 +16,11 @@ export function computeStyle(
   element: Element,
   scope: TreeScope,
 ): CSSStyleDeclarationImpl {
-  const declarations = 'style' in element &&
-    element.style instanceof CSSStyleDeclarationImpl
-    ? element.style.declarations
-    : parseDeclarationBlock(element.getAttribute('style') ?? '');
+  const dom = engine.context.dom;
+  const style = dom.inlineStyle?.(element);
+  const declarations = style instanceof CSSStyleDeclarationImpl
+    ? style.declarations
+    : parseDeclarationBlock(dom.getAttribute(element, 'style') ?? '');
   const computed: PropertyDeclaration[] = [];
 
   for (const name of Object.keys(propertyRegistry) as PropertyName[]) {
@@ -59,5 +61,5 @@ export function computeStyle(
     computed: true,
     declarations: computed,
     readonly: true,
-  }, engine.context.exec);
+  }, engine.context.env);
 }

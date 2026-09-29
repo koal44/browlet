@@ -1,3 +1,5 @@
+import type { DOMNode as Element, DOMNode as ParentNode } from '../../infra/index';
+
 export type NthElementIndexMap = WeakMap<Element, number>;
 
 export type NthOfTypeParentMap = Map<string, NthOfTypeIndexEntry>;

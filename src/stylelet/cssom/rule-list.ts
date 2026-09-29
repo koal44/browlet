@@ -1,4 +1,4 @@
-export class CSSRuleListImpl implements CSSRuleList {
+export class CSSRuleListImpl {
   [index: number]: CSSRule;
 
   #rules: CSSRule[] = [];

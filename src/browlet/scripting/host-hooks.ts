@@ -10,8 +10,10 @@ import { InternalError } from '../../infra/internal-error';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
-/* One HTML host installation serves all Browlet instances in this runtime. */
+// One HTML host installation serves all Browlet instances in this runtime.
 let installed = false;
+/** Install HTML callback and job routing once for this JavaScript runtime. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#javascript-specification-host-hooks
 export function installHostHooks(): void {
   if (installed || !setHostHooks) return;
   setHostHooks({
@@ -26,24 +28,22 @@ export function installHostHooks(): void {
 
 type JobCallback = JSJobCallback<Environment | null>;
 
-/* HTML §8.1.6 — HostMakeJobCallback. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostmakejobcallback
 function makeJobCallback(
   callback: JSFunction,
   registration: JSJobRegistration,
 ): JobCallback {
   const incumbent = registration.incumbent;
-  /*
-   * TODO(HTML §8.1.4.1): Capture an active-script execution context when the
-   * classic-script pipeline supplies HTML Script records. Realm.evaluate()
-   * currently supplies only a controlled realm/settings entry.
-   */
+  // TODO(HTML §8.1.4.1): Capture an active-script execution context when the
+  // classic-script pipeline supplies HTML Script records. Realm.evaluate()
+  // currently supplies only a controlled realm/settings entry.
   return {
     callback,
     hostDefined: incumbent instanceof Realm ? incumbent.hostDefined ?? null : null,
   };
 }
 
-/* HTML §8.1.6 — HostCallJobCallback. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostcalljobcallback
 function callJobCallback(
   record: JobCallback,
   receiver: unknown,
@@ -62,7 +62,7 @@ function callJobCallback(
   }
 }
 
-/* HTML §8.1.6 — HostEnqueuePromiseJob. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuepromisejob
 function enqueuePromiseJob(
   job: () => void,
   realm: JSRealm | null,
@@ -86,7 +86,7 @@ function enqueuePromiseJob(
   });
 }
 
-/* HTML §8.1.6 — HostEnqueueGenericJob. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuegenericjob
 function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
   if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML generic jobs require an HTML realm');
@@ -94,7 +94,7 @@ function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
   realm.queueGlobalTask(jsEngineTaskSource, job);
 }
 
-/* HTML §8.1.6 — HostEnqueueTimeoutJob. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuetimeoutjob
 function enqueueTimeoutJob(
   job: () => void,
   realm: JSRealm | null,

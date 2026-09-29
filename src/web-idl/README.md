@@ -118,9 +118,10 @@ private state; public subclassing changes the platform prototype, not the
 implementation constructor's `newTarget`.
 
 Creating the record runs inherited implementation initializers before stamping.
-That establishes dependencies needed before projection, such as an EventTarget's
-event execution. Failed initialization leaves the implementation unstamped and can
-be retried. Private stamping works on frozen objects without adding public keys;
+Failed initialization leaves the implementation unstamped and can be retried.
+Implementation dependencies such as EventTarget's environment are constructor
+arguments, supplied by construction declarations or direct callers.
+Private stamping works on frozen objects without adding public keys;
 stamping a Proxy does not stamp its target.
 
 Prefer direct implementation construction when typed return projection can

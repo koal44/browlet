@@ -1,10 +1,10 @@
-import { defaultExecutionCaps } from '../../../../src/stylelet/stylelet';
+import { defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
 import { describe, expect, it } from 'vitest';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 
 describe('MediaListImpl', () => {
   it('parses and serializes mediaText', () => {
-    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ', defaultExecutionCaps);
+    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ', defaultStyleletEnvironment);
 
     expect(list.mediaText).toBe('screen, (width >= 10px)');
     expect(list.length).toBe(2);
@@ -19,7 +19,7 @@ describe('MediaListImpl', () => {
   });
 
   it('replaces the collection and treats null as the empty string', () => {
-    const list = new MediaListImpl('screen, print', defaultExecutionCaps);
+    const list = new MediaListImpl('screen, print', defaultStyleletEnvironment);
 
     list.mediaText = 'speech';
     expect(list.mediaText).toBe('speech');
@@ -33,7 +33,7 @@ describe('MediaListImpl', () => {
   });
 
   it('converts item indices to Web IDL unsigned longs', () => {
-    const list = new MediaListImpl('screen, print', defaultExecutionCaps);
+    const list = new MediaListImpl('screen, print', defaultStyleletEnvironment);
 
     expect(list.item(1.9)).toBe('print');
     expect(list.item(-1)).toBeNull();
@@ -42,13 +42,13 @@ describe('MediaListImpl', () => {
   });
 
   it('represents an invalid list entry as not all', () => {
-    const list = new MediaListImpl('screen, &, print', defaultExecutionCaps);
+    const list = new MediaListImpl('screen, &, print', defaultStyleletEnvironment);
 
     expect(list.mediaText).toBe('screen, not all, print');
   });
 
   it('appends one query and ignores an equivalent query', () => {
-    const list = new MediaListImpl('screen', defaultExecutionCaps);
+    const list = new MediaListImpl('screen', defaultStyleletEnvironment);
 
     list.appendMedium('PRINT');
     list.appendMedium('print');
@@ -58,7 +58,7 @@ describe('MediaListImpl', () => {
   });
 
   it('treats the empty query before a lone comma as not all', () => {
-    const list = new MediaListImpl('screen', defaultExecutionCaps);
+    const list = new MediaListImpl('screen', defaultStyleletEnvironment);
 
     list.appendMedium(',');
     expect(list.mediaText).toBe('screen, not all');
@@ -68,7 +68,7 @@ describe('MediaListImpl', () => {
   });
 
   it('deletes every equivalent query', () => {
-    const list = new MediaListImpl('screen, SCREEN, print', defaultExecutionCaps);
+    const list = new MediaListImpl('screen, SCREEN, print', defaultStyleletEnvironment);
 
     list.deleteMedium('screen');
 
@@ -76,7 +76,7 @@ describe('MediaListImpl', () => {
   });
 
   it('throws NotFoundError when no query is removed', () => {
-    const list = new MediaListImpl('screen', defaultExecutionCaps);
+    const list = new MediaListImpl('screen', defaultStyleletEnvironment);
     let error: unknown;
 
     try {

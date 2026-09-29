@@ -1,12 +1,12 @@
 import type { ComplexSelector } from '../parser/parser';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 import { buildLookupPlan, buildMultiBridgeMove, sameLookupPlan, type LookupPlan, type MultiBridgeMove } from './bridge';
 import { buildChain, type Chain } from './chain';
 
-export function buildFullBridgeGroups(arms: ComplexSelector[], snap: Snapshot): FullBridgeGroup[] {
-  const drafts = buildFullBridgeDrafts(arms, snap);
+export function buildFullBridgeGroups(arms: ComplexSelector[], ctx: SelectletContext): FullBridgeGroup[] {
+  const drafts = buildFullBridgeDrafts(arms, ctx);
   drafts.sort(compareFullBridgeDrafts);
-  const groups = finalizeFullBridgeDrafts(drafts, snap);
+  const groups = finalizeFullBridgeDrafts(drafts, ctx);
   return groups;
 }
 
@@ -33,7 +33,7 @@ export type FullBridgeGroup = {
   usesHost: boolean;
 };
 
-function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBridgeDraft[] {
+function buildFullBridgeDrafts(arms: ComplexSelector[], ctx: SelectletContext): FullBridgeDraft[] {
   arms.sort((a, b) => a.cost - b.cost);
 
   const drafts: FullBridgeDraft[] = [];
@@ -43,7 +43,7 @@ function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBri
     const chain = buildChain(arm);
     const relation = chain[chain.length - 1]!;
     const last = relation.right.compound;
-    const lookup = buildLookupPlan(last, snap);
+    const lookup = buildLookupPlan(last, ctx);
 
     let draft: FullBridgeDraft | undefined;
 
@@ -82,7 +82,7 @@ function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBri
   return drafts;
 }
 
-function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], snap: Snapshot): FullBridgeGroup[] {
+function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], ctx: SelectletContext): FullBridgeGroup[] {
   const groups: FullBridgeGroup[] = [];
 
   for (let i = 0; i < drafts.length; i++) {
@@ -98,7 +98,7 @@ function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], snap: Snapshot): Fu
 
     groups[i] = {
       lookup: draft.lookup,
-      bridge: buildMultiBridgeMove(chains, snap),
+      bridge: buildMultiBridgeMove(chains, ctx),
       cost: draft.cost,
       usesScope: draft.usesScope,
       usesCache: draft.usesCache,

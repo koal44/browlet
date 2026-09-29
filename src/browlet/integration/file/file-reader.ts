@@ -2,12 +2,13 @@ import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, throwDOMException,
 } from '../../../web-idl/index';
-import { getBufferSourceCopy, type JSEnvironment } from '../../../js-engine/index';
+import { getBufferSourceCopy } from '../../../js-engine/index';
+import type { BrowletEnvironment } from '../../scripting/environment';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
 import type { TaskHandle } from '../../../infra/index';
-import { fireProgressEvent } from '../../dom/events/progress-event';
+import { ProgressEventImpl } from '../../dom/events/progress-event';
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
@@ -15,38 +16,17 @@ import { EventTargetImpl } from '../../dom/events/event-target';
 import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * File API §6.2 — The FileReader API
- *
- * [Exposed=(Window,Worker)]
- * interface FileReader : EventTarget {
- *   constructor();
- *   undefined readAsArrayBuffer(Blob blob);
- *   undefined readAsBinaryString(Blob blob);
- *   undefined readAsText(Blob blob, optional DOMString encoding);
- *   undefined readAsDataURL(Blob blob);
- *   undefined abort();
- *
- *   const unsigned short EMPTY = 0;
- *   const unsigned short LOADING = 1;
- *   const unsigned short DONE = 2;
- *   readonly attribute unsigned short readyState;
- *   readonly attribute (DOMString or ArrayBuffer)? result;
- *   readonly attribute DOMException? error;
- *
- *   attribute EventHandler onloadstart;
- *   attribute EventHandler onprogress;
- *   attribute EventHandler onload;
- *   attribute EventHandler onabort;
- *   attribute EventHandler onerror;
- *   attribute EventHandler onloadend;
- * };
- */
+/** Reads Blob data asynchronously and dispatches progress and completion events. */
+// https://w3c.github.io/FileAPI/#APIASynch
 export class FileReaderImpl extends EventTargetImpl {
-  #env: JSEnvironment;
+  /** Owner supplying file-reading task delivery and realm allocation. */
+  declare env: BrowletEnvironment;
   #state: FileReaderState = 'empty';
-  #result: string | ArrayBuffer | null = null;
-  #error: DOMException | null = null;
+  /** Packaged contents of the completed read, or null before completion. */
+  result: string | ArrayBuffer | null = null;
+  /** Failure from the current read, or null when no read has failed. */
+  error: DOMException | null = null;
+  /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
   #eventHandlers = new EventHandlerMap(this, [
     { name: 'onloadstart', type: 'loadstart' },
@@ -57,9 +37,8 @@ export class FileReaderImpl extends EventTargetImpl {
     { name: 'onloadend', type: 'loadend' },
   ]);
 
-  constructor(env: JSEnvironment) {
-    super();
-    this.#env = env;
+  constructor(env: BrowletEnvironment) {
+    super(env);
   }
 
   readAsArrayBuffer(blob: BlobImpl): void {
@@ -81,9 +60,10 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#read(blob, 'DataURL');
   }
 
-  /** File API §6.2.3.5 — The abort() method. */
+  /** Cancel the current read and deliver its abort and loadend events. */
+  // https://w3c.github.io/FileAPI/#abort
   abort(): void {
-    this.#result = null;
+    this.result = null;
     if (!this.#isLoading()) return;
 
     const operation = this.#operation;
@@ -99,26 +79,19 @@ export class FileReaderImpl extends EventTargetImpl {
 
     // The current draft does not set error to AbortError. Blink, Gecko, and
     // WebKit do; keep the normative state until that divergence is resolved.
-    fireProgressEvent('abort', this, operation.loaded, operation.total);
+    ProgressEventImpl.fire('abort', this, operation.loaded, operation.total);
     if (!this.#isLoading()) {
-      fireProgressEvent('loadend', this, operation.loaded, operation.total);
+      ProgressEventImpl.fire('loadend', this, operation.loaded, operation.total);
     }
   }
 
+  /** Numeric File API state corresponding to the internal read lifecycle. */
   get readyState(): number {
     switch (this.#state) {
       case 'empty': return 0;
       case 'loading': return 1;
       case 'done': return 2;
     }
-  }
-
-  get result(): string | ArrayBuffer | null {
-    return this.#result;
-  }
-
-  get error(): DOMException | null {
-    return this.#error;
   }
 
   get onloadstart(): EventHandlerCallback | null {
@@ -169,7 +142,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.#eventHandlers.set('onloadend', callback);
   }
 
-  /** File API §6.2 — Read operation. */
+  // https://w3c.github.io/FileAPI/#readOperation
   #read(
     blob: BlobImpl,
     type: FileReadType,
@@ -180,10 +153,10 @@ export class FileReaderImpl extends EventTargetImpl {
     }
 
     this.#state = 'loading';
-    this.#result = null;
-    this.#error = null;
+    this.result = null;
+    this.error = null;
 
-    const { fileReading, Promise: P, runInParallel } = this.#env.exec;
+    const { fileReading, Promise: P, runInParallel } = this.env.exec;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -201,7 +174,7 @@ export class FileReaderImpl extends EventTargetImpl {
     let lastProgressByteLength = 0;
 
     const fire = (name: string): void => {
-      fireProgressEvent(name, this, operation.loaded, operation.total);
+      ProgressEventImpl.fire(name, this, operation.loaded, operation.total);
     };
 
     const queueTask = (steps: () => void): void => {
@@ -217,7 +190,7 @@ export class FileReaderImpl extends EventTargetImpl {
       if (!isFirstChunk) return;
       isFirstChunk = false;
       queueTask(() => {
-        fireProgressEvent('loadstart', this, 0, blob.size);
+        ProgressEventImpl.fire('loadstart', this, 0, blob.size);
       });
     };
 
@@ -239,7 +212,7 @@ export class FileReaderImpl extends EventTargetImpl {
             lastProgressByteLength = transmitted;
             lastProgressTime = now;
             queueTask(() => {
-              fireProgressEvent('progress', this, transmitted, blob.size);
+              ProgressEventImpl.fire('progress', this, transmitted, blob.size);
             });
           }
           void P.resolve(undefined, idlType.undefined).then(readNextChunk);
@@ -263,16 +236,16 @@ export class FileReaderImpl extends EventTargetImpl {
             }
 
             try {
-              this.#result = packageData(
+              this.result = packageData(
                 bytes,
                 type,
                 blob.type,
                 encodingLabel,
-                this.#env,
+                this.env,
               );
               fire('load');
             } catch (error) {
-              this.#error = error as DOMException;
+              this.error = error as DOMException;
               fire('error');
             }
             if (!this.#isLoading()) fire('loadend');
@@ -283,7 +256,7 @@ export class FileReaderImpl extends EventTargetImpl {
           queueTask(() => {
             this.#state = 'done';
             this.#operation = null;
-            this.#error = error as DOMException;
+            this.error = error as DOMException;
             fire('error');
             if (!this.#isLoading()) fire('loadend');
           });
@@ -299,9 +272,35 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
 // BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
-export const fileReaderIDL = defineInterface<JSEnvironment>({
+/*
+ * File API §6.2 — The FileReader API
+ *
+ * [Exposed=(Window,Worker)]
+ * interface FileReader : EventTarget {
+ *   constructor();
+ *   undefined readAsArrayBuffer(Blob blob);
+ *   undefined readAsBinaryString(Blob blob);
+ *   undefined readAsText(Blob blob, optional DOMString encoding);
+ *   undefined readAsDataURL(Blob blob);
+ *   undefined abort();
+ *
+ *   const unsigned short EMPTY = 0;
+ *   const unsigned short LOADING = 1;
+ *   const unsigned short DONE = 2;
+ *   readonly attribute unsigned short readyState;
+ *   readonly attribute (DOMString or ArrayBuffer)? result;
+ *   readonly attribute DOMException? error;
+ *
+ *   attribute EventHandler onloadstart;
+ *   attribute EventHandler onprogress;
+ *   attribute EventHandler onload;
+ *   attribute EventHandler onabort;
+ *   attribute EventHandler onerror;
+ *   attribute EventHandler onloadend;
+ * };
+ */
+export const fileReaderIDL = defineInterface<BrowletEnvironment>({
   name: 'FileReader',
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],

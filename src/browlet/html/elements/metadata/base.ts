@@ -4,15 +4,8 @@ import { attr, defineInterface, idlType, impl, xattr } from '../../../../web-idl
 import { defineElementInterface } from '../../../dom/nodes/element';
 import { HTMLElementImpl } from '../html-element';
 
-/*
- * [Exposed=Window]
- * interface HTMLBaseElement : HTMLElement {
- *   [HTMLConstructor] constructor();
- *
- *   [CEReactions, ReflectSetter] attribute USVString href;
- *   [CEReactions, Reflect] attribute DOMString target;
- * };
- */
+/** Supplies the document base URL and default navigation target. */
+// https://html.spec.whatwg.org/multipage/semantics.html#the-base-element
 export class HTMLBaseElementImpl extends HTMLElementImpl {
   /** The URL fixed when this becomes the document's first base with href. */
   frozenBaseURL!: URLRecord;
@@ -24,7 +17,7 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   /** Resolves this element's href against the document's fallback base URL. */
   // https://html.spec.whatwg.org/multipage/semantics.html#dom-base-href
   get href(): string {
-    const document = this.getNodeDocument()!;
+    const document = this.nodeDocument;
     const href = this.getAttributeNS(null, 'href') ?? '';
     const { env } = document;
     const url = env.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
@@ -48,7 +41,7 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
 
   // https://html.spec.whatwg.org/multipage/semantics.html#set-the-frozen-base-url
   setFrozenBaseURL(): void {
-    const document = this.getNodeDocument()!;
+    const document = this.nodeDocument;
     const fallback = document.getFallbackBaseURL();
     const { env } = document;
     const url = env.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
@@ -64,23 +57,30 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
     if (namespace === null && localName === 'href') {
-      this.getNodeDocument()!.updateBaseElement(this);
+      this.nodeDocument.updateBaseElement(this);
     }
   }
 
   protected override insertedInto(): void {
     super.insertedInto();
-    this.getNodeDocument()!.updateBaseElement();
+    this.nodeDocument.updateBaseElement();
   }
 
   protected override removedFrom(): void {
     super.removedFrom();
-    this.getNodeDocument()!.updateBaseElement();
+    this.nodeDocument.updateBaseElement();
   }
 }
 
-// -- Web IDL ------------------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface HTMLBaseElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectSetter] attribute USVString href;
+ *   [CEReactions, Reflect] attribute DOMString target;
+ * };
+ */
 export const htmlBaseElementIDL = defineInterface({
   name: 'HTMLBaseElement',
   inherits: 'HTMLElement',

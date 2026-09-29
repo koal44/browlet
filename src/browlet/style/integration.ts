@@ -2,31 +2,17 @@ import type { ElementImpl } from '../dom/nodes/element';
 import type { NodeImpl } from '../dom/nodes/node';
 import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
-  type ExecutionCaps as StyleletExecutionCaps,
+  type StyleletEnvironment,
 } from '../../stylelet/index';
-import type { JSEnvironment } from '../../js-engine/index';
-import { createDOMException } from '../../web-idl/index';
-import type { Realm } from '../scripting/realm';
-import { domManipulationTaskSource } from '../scripting/tasks';
 
-/** Compose Stylelet with this owner's task delivery, promises, and exception requests. */
-export function createStyleletExecution(realm: Realm, env: JSEnvironment): StyleletExecutionCaps {
-  return {
-    Promise: env.exec.Promise,
-    runInParallel: env.exec.runInParallel,
-    // CSSOM leaves the source unspecified; DOM manipulation delivers stylesheet updates.
-    queueTask: (steps) => { realm.queueGlobalTask(domManipulationTaskSource, steps); },
-    createDOMException,
-  };
-}
-
+/** Owns an element's inline declaration and synchronizes its style attribute. */
+// https://drafts.csswg.org/cssom/#elementcssinlinestyle
 export class ElementCSSInlineStyleMixin {
+  /** Retained declaration updated by both CSSOM writes and attribute changes. */
   style: CSSStyleDeclarationImpl;
 
-  constructor(element: ElementImpl, exec: StyleletExecutionCaps) {
-    this.style = new CSSStyleDeclarationImpl({
-      ownerNode: element,
-    }, exec);
+  constructor(element: ElementImpl, env: StyleletEnvironment) {
+    this.style = new CSSStyleDeclarationImpl({ ownerNode: element }, env);
   }
 
   attributeChanged(value: string | null): void {
@@ -34,22 +20,17 @@ export class ElementCSSInlineStyleMixin {
   }
 }
 
-/* Deferred association hosts:
- * - external HTML links require the CSSOM fetch-a-CSS-style-sheet algorithm
- *   and HTML's linked-resource processing;
- * - XML processing instructions require an XML DOM host;
- * - HTTP Link headers require navigation response metadata.
- */
-/*
- * interface mixin LinkStyle {
- *   readonly attribute CSSStyleSheet? sheet;
- * };
- */
+// External links await CSSOM fetching and HTML linked-resource processing;
+// XML processing instructions and HTTP Link headers await their host owners.
+/** Maintains a style element's sheet as its attributes, text, and tree scope change. */
+// https://drafts.csswg.org/cssom/#the-linkstyle-interface
+// The declaration lives in Stylelet; Browlet owns the DOM association behavior.
 export class LinkStyleMixin {
   #owner;
   #options;
   #treeScopeResolver;
-  #sheet: CSSStyleSheetImpl | null = null;
+  /** Associated sheet, or null while detached or unsupported. */
+  sheet: CSSStyleSheetImpl | null = null;
   #scope: TreeScope | null = null;
   #deferred = false;
 
@@ -63,10 +44,7 @@ export class LinkStyleMixin {
     this.#treeScopeResolver = treeScopeResolver;
   }
 
-  get sheet(): CSSStyleSheetImpl | null {
-    return this.#sheet;
-  }
-
+  /** Delay sheet creation until the parser has supplied the full style text. */
   beginParsingChildren(): void {
     if (!this.#options.children) return;
     this.#deferred = true;
@@ -85,16 +63,16 @@ export class LinkStyleMixin {
   attributeChanged(qualifiedName: string): void {
     if (!this.#options.attributes.has(qualifiedName)) return;
 
-    if (this.#sheet) {
+    if (this.sheet) {
       if (qualifiedName === 'media') {
-        this.#sheet.setAssociatedMedia(
+        this.sheet.setAssociatedMedia(
           this.#owner.getAttribute('media') ?? '',
         );
         return;
       }
 
       if (qualifiedName === 'title') {
-        this.#sheet.setAssociatedTitle(
+        this.sheet.setAssociatedTitle(
           this.#owner.getAttribute('title') ?? '',
         );
         return;
@@ -104,13 +82,14 @@ export class LinkStyleMixin {
     this.update();
   }
 
+  /** Rebuild the association from the owner's current text, attributes, and root. */
   update(): void {
     if (this.#deferred) return;
 
-    if (this.#sheet && this.#scope) {
-      this.#scope.removeStyleSheet(this.#sheet);
+    if (this.sheet && this.#scope) {
+      this.#scope.removeStyleSheet(this.sheet);
     }
-    this.#sheet = null;
+    this.sheet = null;
     this.#scope = null;
 
     const type = this.#owner.getAttribute('type')?.toLowerCase() ?? '';
@@ -145,15 +124,18 @@ export class LinkStyleMixin {
       },
     );
     this.#scope = scope;
-    this.#sheet = sheet;
+    this.sheet = sheet;
   }
 }
 
 export type LinkStyleOptions = {
+  /** Attributes whose changes affect stylesheet association. */
   attributes: ReadonlySet<string>;
+  /** Whether the element's child text supplies the stylesheet source. */
   children?: boolean;
 };
 
 export type TreeScopeResolver = {
+  /** Style owner for a document or shadow root, if that scope supports stylesheets. */
   resolve(root: NodeImpl): TreeScope | null;
 };

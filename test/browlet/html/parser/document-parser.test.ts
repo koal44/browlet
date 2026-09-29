@@ -16,6 +16,7 @@ import {
 } from '../../../../src/browlet/html/parser/document-parser';
 import { HTMLLinkElementImpl } from '../../../../src/browlet/html/elements/metadata/link';
 import { HTMLStyleElementImpl } from '../../../../src/browlet/html/elements/metadata/style';
+import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 
 describe('BrowletParser', () => {
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
@@ -52,7 +53,7 @@ describe('BrowletParser', () => {
   });
 
   it('waits for script-blocking style sheets before executing a script', async () => {
-    const scripts: Element[] = [];
+    const scripts: ElementImpl[] = [];
     const { document, realm, env, drain } = createParserDocument();
     const parser = new BrowletParser(
       document,

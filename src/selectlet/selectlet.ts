@@ -1,7 +1,7 @@
-import { Snapshot } from './snapshot';
+import { SelectletContext } from './context';
+import { createSelectletEnvironment, type SelectletEnvironment } from './environment';
 import { toNodeList, type IndexedNodeList } from './node-list';
-import { isNode, isText } from './dom';
-import { isElement } from '../infra/selector-dom';
+import type { DOMOperations, DOMNode } from '../infra/index';
 
 export const DEFAULT_CONFIG = {
   /**
@@ -14,7 +14,7 @@ export const DEFAULT_CONFIG = {
    * Allows duplicate-ID lookup fallback code to temporarily remove and restore
    * id attributes when no fast id collection is available.
    *
-   * Faster for DocumentFragment/template contexts, but observable by mutation
+   * Faster for DocumentFragment/template sources, but observable by mutation
    * observers and other DOM-inspection code. Disabled by default.
    */
   MUTATE_IDS: false,
@@ -30,136 +30,98 @@ export const DEFAULT_CONFIG = {
   CACHE_WATERMARK: 1024,
 };
 
-export type Selectlet = {
+export type Selectlet<N extends object = Node, E extends N = Element & N> = {
   version: string;
-
-  byId(id: string, ctx?: QueryContext): Element | null;
-  byTag(tag: string, ctx?: QueryContext): ElementList;
-  byTagNs(ns: string | null, local: string, ctx?: QueryContext): ElementList;
-  byClass(cls: string, ctx?: QueryContext): ElementList;
-
-  matches(sel: string, el: Element): boolean;
-  select(sel: string, ctx?: QueryContext): ElementList;
-  first(sel: string, ctx?: QueryContext): Element | null;
-  closest(sel: string, el: Element): Element | null;
-
-  registerPseudo(name: string, predicate: CustomPseudoPredicate): void;
+  /** Query state and caches owned by this engine. */
+  context: SelectletContext;
+  byId(id: string, source?: N): E | null;
+  byTag(tag: string, source?: N): ElementList<E>;
+  byTagNs(ns: string | null, local: string, source?: N): ElementList<E>;
+  byClass(cls: string, source?: N): ElementList<E>;
+  matches(sel: string, el: E): boolean;
+  select(sel: string, source?: N): ElementList<E>;
+  first(sel: string, source?: N): E | null;
+  closest(sel: string, el: E): E | null;
+  registerPseudo(name: string, predicate: CustomPseudoPredicate<E>): void;
 };
 
-export type QueryContext = Document | Element | DocumentFragment;
-export type ElementList = Element[] | IndexedNodeList;
-
+/** DOM container supplied to a selector query. */
+export type QuerySource = Document | Element | DocumentFragment;
+export type ElementList<E extends object = DOMNode> = E[] | IndexedNodeList<E>;
 export type SelectletConfig = typeof DEFAULT_CONFIG;
 export type ConfigKey = keyof SelectletConfig;
 
-export type SelectletOptions = {
+export type SelectletOptions<N extends object = DOMNode, E extends N = N, A extends object = object> = {
+  /** Existing owner; takes precedence over the standalone dom option. */
+  env?: SelectletEnvironment<N, E, A>;
+  /** Operations for the supplied object graph; defaults to standard DOM objects. */
+  dom?: DOMOperations<N, E, A>;
+  /** Query result and cache configuration. */
   config?: Partial<SelectletConfig>;
-  caps?: SelectletCaps;
+  /** Adapt syntax errors at the host's API boundary. */
   errors?: SelectletErrorOptions;
 };
 
 export type SelectletErrorOptions = {
+  /** Translate selector parser failures to the exception exposed by the host. */
   syntax?: (err: SyntaxError) => Error;
 };
+export type CustomPseudoPredicate<E extends object = DOMNode> = (element: E) => boolean;
 
-export type SelectletCaps<
-  E extends Element = Element,
-  D extends Document = Document,
-  F extends DocumentFragment = DocumentFragment,
-> = {
-  doc?: DocumentCaps<E, D>;
-  frag?: FragmentCaps<E, F>;
-  el?: ElementCaps<E>;
-  tree?: TreeCaps<QueryContext>;
-  htmlCollectionArray?: HtmlCollectionArray<E>;
-};
+export function createSelectlet(doc: Document, opts?: SelectletOptions<Node, Element, Attr>): Selectlet<Node, Element>;
+export function createSelectlet<N extends object, E extends N, A extends object>(
+  doc: NoInfer<N>, opts: SelectletOptions<N, E, A>,
+): Selectlet<N, E>;
+export function createSelectlet(doc: DOMNode, opts: SelectletOptions = {}): Selectlet<DOMNode, DOMNode> {
+  const ctx = new SelectletContext(doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.errors, createSelectletEnvironment(opts));
 
-export type DocumentCaps<E extends Element, D extends Document> = {
-  cachedIds?: (doc: D, id: string) => Iterable<E>;
-  cachedClasses?: (doc: D, classes: string[]) => Iterable<E>;
-  designMode?: (doc: D) => string | undefined;
-  treeVersion?: (doc: D) => number | undefined;
-};
-
-export type FragmentCaps<E extends Element, F extends DocumentFragment> = {
-  cachedIds?: (frag: F, id: string) => Iterable<E>;
-  cachedClasses?: (frag: F, classes: string[]) => Iterable<E>;
-};
-
-export type ElementCaps<E extends Element> = {
-  getId?: (el: E) => string;
-  getClass?: (el: E) => string;
-  getLocalName?: (el: E) => string;
-  getNamespaceURI?: (el: E) => string | null;
-
-  getAttribute?: (el: E, name: string) => string | null;
-  getAttributeNS?: (el: E, namespace: string | null, localName: string) => string | null;
-  hasAttribute?: (el: E, name: string) => boolean;
-  hasAttributeNS?: (el: E, namespace: string | null, localName: string) => boolean;
-
-  hasCustomState?: (el: E, name: string) => boolean;
-};
-
-export type TreeCaps<N extends QueryContext = QueryContext> = {
-  treeVersion?: (root: N) => number | undefined;
-};
-
-export type HtmlCollectionArray<E extends Element = Element> =
-  (collection: unknown) => E[] | null;
-
-export type CustomPseudoPredicate = (element: Element) => boolean;
-
-export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Selectlet {
-  const _doc = doc;
-  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.caps, opts.errors);
-
-  installDynamicPseudoState(_doc, _snap);
+  installDynamicPseudoState(doc, ctx);
 
   const api = {
     version: 'selectlet-__VERSION__',
-    snapshot: _snap,
+    context: ctx,
 
     // ---------------------------------------------------------------------
     // Fast lookup helpers
     // ---------------------------------------------------------------------
 
-    byId(id: string, ctx?: QueryContext): Element | null {
-      return _snap.byId(id, ctx);
+    byId(id: string, source?: DOMNode): DOMNode | null {
+      return ctx.byId(id, source);
     },
 
-    byTag(tag: string, ctx?: QueryContext): ElementList {
-      const result = _snap.byTag(tag, ctx);
-      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
+    byTag(tag: string, source?: DOMNode): ElementList {
+      const result = ctx.byTag(tag, source);
+      return ctx.config.NODE_LIST ? toNodeList(result) : result;
     },
 
-    byTagNs(ns: string | null, local: string, ctx?: QueryContext): ElementList {
-      const result = _snap.byTagNs(ns, local, ctx);
-      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
+    byTagNs(ns: string | null, local: string, source?: DOMNode): ElementList {
+      const result = ctx.byTagNs(ns, local, source);
+      return ctx.config.NODE_LIST ? toNodeList(result) : result;
     },
 
-    byClass(cls: string, ctx?: QueryContext): ElementList {
-      const result = _snap.byClass(cls, ctx);
-      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
+    byClass(cls: string, source?: DOMNode): ElementList {
+      const result = ctx.byClass(cls, source);
+      return ctx.config.NODE_LIST ? toNodeList(result) : result;
     },
 
     // ---------------------------------------------------------------------
     // Selector API
     // ---------------------------------------------------------------------
 
-    matches(sel: string, el: Element): boolean {
-      return _snap.matches(sel, el);
+    matches(sel: string, el: DOMNode): boolean {
+      return ctx.matches(sel, el);
     },
 
-    select(sel: string, ctx?: QueryContext): ElementList {
-      return _snap.select(sel, ctx);
+    select(sel: string, source?: DOMNode): ElementList {
+      return ctx.select(sel, source);
     },
 
-    first(sel: string, ctx?: QueryContext): Element | null {
-      return _snap.first(sel, ctx);
+    first(sel: string, source?: DOMNode): DOMNode | null {
+      return ctx.first(sel, source);
     },
 
-    closest(sel: string, el: Element): Element | null {
-      return _snap.closest(sel, el);
+    closest(sel: string, el: DOMNode): DOMNode | null {
+      return ctx.closest(sel, el);
     },
 
     // ---------------------------------------------------------------------
@@ -181,66 +143,41 @@ export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Sel
         throw new SyntaxError(`Invalid pseudo-class name ${JSON.stringify(name)}`);
       }
 
-      if (key in _snap) {
+      if (key in ctx) {
         throw new Error(`Cannot register built-in pseudo-class :${key}`);
       }
 
-      _snap.pseudos[key] = predicate;
-      _snap.clearCache();
+      ctx.pseudos[key] = predicate;
+      ctx.clearCache();
     },
 
   };
 
-  _snap.update(_doc);
+  ctx.update(doc);
 
   return api;
 }
 
-function installDynamicPseudoState(doc: Document, snap: Snapshot): void {
-  // activeElement can fall back to body/html even when no element actually
-  // matches :focus, so track real focus events separately.
-  doc.addEventListener('focusin', (e) => {
-    const target = e.target;
-    if (!isNode(target)) return;
-    snap.focusTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
-  }, true);
+function installDynamicPseudoState(doc: DOMNode, ctx: SelectletContext): void {
+  const dom = ctx.dom;
+  const elementTarget = (target: DOMNode | null) => target === null ? null
+    : dom.isElement(target) ? target : dom.isText(target) ? dom.parentElement(target) : null;
 
-  doc.addEventListener('focusout', (e) => {
-    const target = e.target;
-    if (!isNode(target)) return;
-
-    const el = isElement(target) ? target : isText(target) ? target.parentElement : null;
-    if (snap.focusTarget === el) snap.focusTarget = null;
-  }, true);
-
-  const setHoverTarget = (e: Event) => {
-    const target = e.target;
-    if (!isNode(target)) return;
-    snap.hoverTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
-  };
-
-  const clearHoverTarget = () => {
-    snap.hoverTarget = null;
-  };
-
-  const setActiveTarget = (e: Event) => {
-    const target = e.target;
-    if (!isNode(target)) return;
-    snap.activeTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
-  };
-
-  const clearActiveTarget = () => {
-    snap.activeTarget = null;
-  };
-
-  doc.addEventListener('mouseover', setHoverTarget, true);
-  doc.addEventListener('pointerover', setHoverTarget, true);
-  doc.addEventListener('mouseout', clearHoverTarget, true);
-  doc.addEventListener('pointerout', clearHoverTarget, true);
-
-  doc.addEventListener('mousedown', setActiveTarget, true);
-  doc.addEventListener('pointerdown', setActiveTarget, true);
-  doc.addEventListener('mouseup', clearActiveTarget, true);
-  doc.addEventListener('pointerup', clearActiveTarget, true);
-  doc.addEventListener('pointercancel', clearActiveTarget, true);
+  // Document.activeElement may fall back to body/html without either matching :focus.
+  dom.listen(doc, 'focusin', (target) => { ctx.focusTarget = elementTarget(target); });
+  dom.listen(doc, 'focusout', (target) => {
+    if (ctx.focusTarget === elementTarget(target)) ctx.focusTarget = null;
+  });
+  for (const type of ['mouseover', 'pointerover']) {
+    dom.listen(doc, type, (target) => { ctx.hoverTarget = elementTarget(target); });
+  }
+  for (const type of ['mouseout', 'pointerout']) {
+    dom.listen(doc, type, () => { ctx.hoverTarget = null; });
+  }
+  for (const type of ['mousedown', 'pointerdown']) {
+    dom.listen(doc, type, (target) => { ctx.activeTarget = elementTarget(target); });
+  }
+  for (const type of ['mouseup', 'pointerup', 'pointercancel']) {
+    dom.listen(doc, type, () => { ctx.activeTarget = null; });
+  }
 }

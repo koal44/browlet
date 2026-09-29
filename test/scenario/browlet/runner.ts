@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import type {
-  ContextRef, Expectation, RunScenariosOptions, Scenario, ScenariosStatus,
+  QuerySourceRef, Expectation, RunScenariosOptions, Scenario, ScenariosStatus,
   ScenarioStep, TestCase,
 } from '../harness';
 import { Browlet } from '../../../src/browlet/browlet';
-import { asDocument } from '../../../src/browlet/stubs';
 import { isElement } from '../../selectlet/util';
 import { createSelectlet, type Selectlet } from '../../../src/selectlet/selectlet';
 
@@ -56,7 +55,7 @@ async function runScenario(scenario: Scenario): Promise<void> {
     : `<!doctype html><html><body>${scenario.markup}</body></html>`;
   const browlet = new Browlet({ route: () => source });
   await browlet.navigate(scenario.url ?? 'https://example.test/');
-  const document = asDocument(browlet.document);
+  const document = browlet.document;
   const selectlet = createSelectlet(document);
 
   for (const [stepIndex, step] of steps.entries()) {
@@ -92,39 +91,39 @@ function runCase(
   let thrown: unknown;
 
   try {
-    const context = resolveContext(document, selectlet, caseRef(testCase));
-    if (!context) throw new Error('No context provided');
+    const source = resolveQuerySource(document, selectlet, caseRef(testCase));
+    if (!source) throw new Error('No query source provided');
 
     if ('select' in testCase) {
-      nodes = [...selectlet.select(testCase.select, context)];
+      nodes = [...selectlet.select(testCase.select, source)];
     } else if ('first' in testCase) {
-      const element = selectlet.first(testCase.first, context);
+      const element = selectlet.first(testCase.first, source);
       nodes = element ? [element] : [];
     } else if ('byTag' in testCase) {
-      nodes = [...selectlet.byTag(testCase.byTag, context)];
+      nodes = [...selectlet.byTag(testCase.byTag, source)];
     } else if ('byTagNs' in testCase) {
       nodes = [...selectlet.byTagNs(
         testCase.byTagNs.ns,
         testCase.byTagNs.local,
-        context,
+        source,
       )];
     } else if ('byClass' in testCase) {
-      nodes = [...selectlet.byClass(testCase.byClass, context)];
+      nodes = [...selectlet.byClass(testCase.byClass, source)];
     } else if ('byId' in testCase) {
-      const element = selectlet.byId(testCase.byId, context);
+      const element = selectlet.byId(testCase.byId, source);
       nodes = element ? [element] : [];
     } else if ('match' in testCase) {
-      if (!isElement(context)) {
-        throw new Error(`Context for 'match' case must be an Element`);
+      if (!isElement(source)) {
+        throw new Error(`Query source for 'match' case must be an Element`);
       }
-      nodes = selectlet.matches(testCase.match, context)
-        ? [context]
+      nodes = selectlet.matches(testCase.match, source)
+        ? [source]
         : [];
     } else if ('closest' in testCase) {
-      if (!isElement(context)) {
-        throw new Error(`Context for 'closest' case must be an Element`);
+      if (!isElement(source)) {
+        throw new Error(`Query source for 'closest' case must be an Element`);
       }
-      const element = selectlet.closest(testCase.closest, context);
+      const element = selectlet.closest(testCase.closest, source);
       nodes = element ? [element] : [];
     } else {
       throw new Error('Browlet harness does not support this case');
@@ -137,17 +136,17 @@ function runCase(
   assertExpectation(caseQuery(testCase), nodes, threw, testCase.expect, thrown);
 }
 
-type QueryContext = Document | Element;
+type QuerySource = Document | Element;
 
-function resolveContext(
+function resolveQuerySource(
   document: Document,
   selectlet: Selectlet,
-  ref?: ContextRef,
-): QueryContext | null {
+  ref?: QuerySourceRef,
+): QuerySource | null {
   if (!ref || ref.by === 'document') return document;
 
   const base = 'within' in ref && ref.within
-    ? resolveContext(document, selectlet, ref.within)
+    ? resolveQuerySource(document, selectlet, ref.within)
     : document;
   if (!base) return null;
 
@@ -260,12 +259,12 @@ function shouldSkipCase(testCase: TestCase): boolean {
   }
 
   const ref = caseRef(testCase);
-  return !!ref && !supportsContextRef(ref);
+  return !!ref && !supportsQuerySourceRef(ref);
 }
 
-function supportsContextRef(ref: ContextRef): boolean {
+function supportsQuerySourceRef(ref: QuerySourceRef): boolean {
   if ('home' in ref && ref.home && ref.home !== 'document') return false;
-  if ('within' in ref && ref.within && !supportsContextRef(ref.within)) return false;
+  if ('within' in ref && ref.within && !supportsQuerySourceRef(ref.within)) return false;
   return ref.by === 'document' || ref.by === 'id' ||
     ref.by === 'first' || ref.by === 'documentElement';
 }
@@ -290,7 +289,7 @@ function formatCaseHeader(info: CaseInfo): string {
     info.scenario.name,
     `Step #${info.stepIndex + 1}, Case #${info.caseIndex + 1}`,
     `Query: ${caseQuery(info.testCase)}`,
-    `Context: ${refLabel(caseRef(info.testCase))}`,
+    `Query source: ${refLabel(caseRef(info.testCase))}`,
   ].join('\n');
 }
 
@@ -308,11 +307,11 @@ function caseQuery(testCase: TestCase): string {
   return '<unsupported case>';
 }
 
-function caseRef(testCase: TestCase): ContextRef | undefined {
+function caseRef(testCase: TestCase): QuerySourceRef | undefined {
   return 'ref' in testCase ? testCase.ref : undefined;
 }
 
-function refLabel(ref: ContextRef | undefined): string {
+function refLabel(ref: QuerySourceRef | undefined): string {
   if (!ref || ref.by === 'document') return 'document';
   if (ref.by === 'id') return `#${ref.id}`;
   if (ref.by === 'first') return `first(${ref.selector})`;

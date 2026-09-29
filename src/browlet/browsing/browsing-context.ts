@@ -28,28 +28,32 @@ import { HTML_NAMESPACE } from '../../infra/index';
 import { unsafeSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 
-/*
- * A browsing context is a programmatic representation of a series of
- * documents. HTML section 7.3.2 supplies its remaining state and lifecycle.
- */
+/** Retains a WindowProxy and the sequence of documents presented through it. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
 export class BrowsingContext {
   #windowProxy: WindowProxy | undefined;
+  /** Sandbox restrictions inherited when this context was opened as a popup. */
   popupSandboxingFlagSet: SandboxingFlagSet = new Set();
+  /** Browsing context that opened this one, if it retains an opener. */
   openerBrowsingContext: BrowsingContext | null = null;
+  /** Opener's origin captured at context creation. */
   openerOriginAtCreation: Origin | null = null;
+  /** Whether this context was created as a popup. */
   isPopup = false;
+  /** Whether this is an auxiliary context opened by another context. */
   isAuxiliary = false;
+  /** URL recorded when navigation first initialized this context. */
   initialURL: URLRecord | null = null;
+  /** Virtual group identity used when evaluating opener-policy relationships. */
   virtualBrowsingContextGroupID = 0;
   /** Upgrade policy inherited from the embedding document when this context was created. */
   insecureRequestsPolicy = new InsecureRequestsPolicy();
-  #group: BrowsingContextGroup | null = null;
+  /** Group whose membership is maintained by append() and remove(). */
+  group: BrowsingContextGroup | null = null;
 
-  /*
-   * A navigable can present a series of browsing contexts. This inverse link
-   * lets Document activity follow the existing Document -> browsing context
-   * relationship without maintaining a second per-Document activity index.
-   */
+  // A navigable can present a series of browsing contexts. This inverse link
+  // lets Document activity follow the existing Document -> browsing context
+  // relationship without maintaining a second per-Document activity index.
   #navigable: Navigable | null = null;
 
   constructor(windowProxy?: WindowProxy) {
@@ -59,10 +63,6 @@ export class BrowsingContext {
   get windowProxy(): WindowProxy {
     if (!this.#windowProxy) throw new InternalError('Browsing context has no WindowProxy yet');
     return this.#windowProxy;
-  }
-
-  get group(): BrowsingContextGroup | null {
-    return this.#group;
   }
 
   get navigable(): Navigable | null {
@@ -90,12 +90,8 @@ export class BrowsingContext {
   // https://w3c.github.io/webappsec-upgrade-insecure-requests/#nesting
   inheritInsecureRequestsPolicy(embedder: ElementImpl): void {
     // Adoption changes the node document without changing the element's realm.
-    const policy = embedder.getNodeDocument()!.env.insecureRequestsPolicy;
+    const policy = embedder.nodeDocument.env.insecureRequestsPolicy;
     if (policy.upgrade) this.insecureRequestsPolicy = policy.clone();
-  }
-
-  setGroup(group: BrowsingContextGroup | null): void {
-    this.#group = group;
   }
 
   setNavigable(navigable: Navigable): void {
@@ -107,6 +103,8 @@ export class BrowsingContext {
   }
 }
 
+/** Create a context and its initial about:blank document within an existing group. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
 export function createNewBrowsingContextAndDocument(
   creator: DocumentImpl | null,
   embedder: ElementImpl | null,
@@ -142,7 +140,7 @@ export function createNewBrowsingContextAndDocument(
     agent, userAgent: group.userAgent,
     creationURL: aboutBlankURL,
     origin,
-    parent: embedder?.getNodeDocument()?.getRelevantGlobalObject() ?? null,
+    parent: embedder?.nodeDocument.getRelevantGlobalObject() ?? null,
     topLevelCreationURL,
     topLevelOrigin,
   });
@@ -217,14 +215,16 @@ export function createNewTopLevelBrowsingContextAndDocument(
   return [browsingContext, document];
 }
 
-/*
- * A browsing context group owns its top-level browsing contexts and the
- * allocation state for their agent clusters.
- */
+/** Groups related top-level browsing contexts and their agent-cluster allocation state. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context-group
 export class BrowsingContextGroup {
+  /** Top-level contexts currently belonging to this group. */
   browsingContextSet = new Set<BrowsingContext>();
+  /** Agent clusters selected by site or origin keys. */
   agentClusterMap = new AgentClusterMap();
+  /** First cluster-key decision retained for each origin. */
   historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
+  /** Isolation mode shared by clusters created in this group. */
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
 
   constructor(public userAgent: UserAgent) {}
@@ -238,7 +238,7 @@ export class BrowsingContextGroup {
     }
 
     this.browsingContextSet.add(browsingContext);
-    browsingContext.setGroup(this);
+    browsingContext.group = this;
   }
 
   remove(browsingContext: BrowsingContext): void {
@@ -246,7 +246,7 @@ export class BrowsingContextGroup {
       throw new InternalError('The browsing context is not in this group');
     }
 
-    browsingContext.setGroup(null);
+    browsingContext.group = null;
     this.browsingContextSet.delete(browsingContext);
 
     if (this.browsingContextSet.size === 0) {
@@ -255,12 +255,11 @@ export class BrowsingContextGroup {
   }
 }
 
+/** Indexes clusters by origin or site value rather than record identity. */
 class AgentClusterMap {
-  /*
-   * HTML defines this as a weak map. JavaScript WeakMap cannot combine weak
-   * keys with value equality, so this retains clusters for the lifetime of the
-   * browsing context group until Browlet implements cluster collection.
-   */
+  // HTML defines this as a weak map. JavaScript WeakMap cannot combine weak
+  // keys with value equality, so this retains clusters for the lifetime of the
+  // browsing context group until Browlet implements cluster collection.
   #values = new Map<string | symbol, AgentCluster>();
 
   get(key: AgentClusterKey): AgentCluster | undefined {
@@ -276,6 +275,7 @@ class AgentClusterMap {
   }
 }
 
+/** Remembers each origin's initial cluster key using origin value equality. */
 class HistoricalAgentClusterKeyMap {
   #values = new Map<string | symbol, AgentClusterKey>();
 

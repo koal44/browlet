@@ -1,17 +1,23 @@
 export {
   createSelectlet,
   DEFAULT_CONFIG,
-} from '../../src/selectlet/selectlet';
+  SelectletContext,
+  createSelectletEnvironment,
+} from '../../src/selectlet/index';
 
 export type {
   Selectlet,
   SelectletOptions,
   SelectletConfig,
-  SelectletCaps,
   SelectletErrorOptions,
-  QueryContext,
+  SelectletEnvironment,
+  SelectletUserAgent,
+  QuerySource,
   ElementList,
   CustomPseudoPredicate,
-} from '../../src/selectlet/selectlet';
+} from '../../src/selectlet/index';
 
-export type { IndexedNodeList } from '../../src/selectlet/node-list';
+export type { IndexedNodeList } from '../../src/selectlet/index';
+
+export { standardDOM } from '../../src/infra/index';
+export type { DOMOperations } from '../../src/infra/index';

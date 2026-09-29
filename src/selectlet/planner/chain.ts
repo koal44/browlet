@@ -1,3 +1,4 @@
+import type { DOMOperations, DOMNode as Element } from '../../infra/index';
 import { collectCompoundTests } from '../compile/emit-seedable';
 import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
@@ -7,8 +8,7 @@ import type {
 } from '../parser/parser';
 import { assertNever } from '../../infra/util';
 import { SubjectKind } from '../constants';
-import { getShadowTreeRoot } from '../../infra/selector-dom';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
 export type Chain = ChainRelation[];
 
@@ -53,45 +53,45 @@ export function buildChain(complex: ComplexSelector): Chain {
   return chain;
 }
 
-export function buildStrictSelectorListTest(list: SelectorList, snap: Snapshot): CandidateElementPredicate {
+export function buildStrictSelectorListTest(list: SelectorList, ctx: SelectletContext): CandidateElementPredicate {
   if (list.usesHost) {
-    const test = buildStrictSelectorListSubjectTest(list, snap);
+    const test = buildStrictSelectorListSubjectTest(list, ctx);
     return (candidate, rc) =>
       test(candidate, rc, SubjectKind.Element) === true;
   }
-  return buildStrictSelectorListElementTest(list, snap);
+  return buildStrictSelectorListElementTest(list, ctx);
 }
 
-export function buildStrictSelectorListElementTest(list: SelectorList, snap: Snapshot): CandidateElementPredicate {
-  const proof = buildSelectorListElementProof(list, snap);
+export function buildStrictSelectorListElementTest(list: SelectorList, ctx: SelectletContext): CandidateElementPredicate {
+  const proof = buildSelectorListElementProof(list, ctx);
   return (candidate, rc) => proof(candidate, null, rc);
 }
 
-export function buildStrictSelectorListSubjectTest(list: SelectorList, snap: Snapshot): CandidateSubjectPredicate {
-  const proof = buildSelectorListSubjectProof(list, snap);
+export function buildStrictSelectorListSubjectTest(list: SelectorList, ctx: SelectletContext): CandidateSubjectPredicate {
+  const proof = buildSelectorListSubjectProof(list, ctx);
   return (candidate, rc, kind) => proof(candidate, null, rc, kind);
 }
 
-export function buildForgivingSelectorListElementTest(list: SelectorList, snap: Snapshot): CandidateElementPredicate {
+export function buildForgivingSelectorListElementTest(list: SelectorList, ctx: SelectletContext): CandidateElementPredicate {
   if (list.arms.length === 0) return () => false;
-  return buildStrictSelectorListElementTest(list, snap);
+  return buildStrictSelectorListElementTest(list, ctx);
 }
 
-export function buildForgivingSelectorListSubjectTest(list: SelectorList, snap: Snapshot): CandidateSubjectPredicate {
+export function buildForgivingSelectorListSubjectTest(list: SelectorList, ctx: SelectletContext): CandidateSubjectPredicate {
   if (list.arms.length === 0) return () => false;
-  return buildStrictSelectorListSubjectTest(list, snap);
+  return buildStrictSelectorListSubjectTest(list, ctx);
 }
 
-export function buildRelativeSelectorListElementTest(list: RelativeSelectorList, snap: Snapshot): CandidateElementPredicate {
+export function buildRelativeSelectorListElementTest(list: RelativeSelectorList, ctx: SelectletContext): CandidateElementPredicate {
   if (list.arms.length === 0) return () => false;
 
   const arms: CandidateElementPredicate[] = list.arms.map((arm) => {
     const steps: HasStep[] = arm.steps.map((step) => {
-      const test = buildCompoundElementTest(step.compound.compound, snap);
+      const test = buildCompoundElementTest(step.compound.compound, ctx);
       return [step.combinator, test];
     });
 
-    return (e, rc) => matchHasFrom(steps, 0, e, snap, rc);
+    return (e, rc) => matchHasFrom(steps, 0, e, ctx, rc);
   });
 
   if (arms.length === 1) return arms[0]!;
@@ -106,22 +106,22 @@ export function buildRelativeSelectorListElementTest(list: RelativeSelectorList,
   };
 }
 
-function buildStepElementTest(rel: ChainRelation, snap: Snapshot): CandidateElementPredicate {
-  return buildCompoundElementTest(rel.right.compound, snap);
+function buildStepElementTest(rel: ChainRelation, ctx: SelectletContext): CandidateElementPredicate {
+  return buildCompoundElementTest(rel.right.compound, ctx);
 }
 
-function buildStepSubjectTest(rel: ChainRelation, snap: Snapshot): CandidateSubjectPredicate {
-  return buildCompoundSubjectTest(rel.right.compound, snap);
+function buildStepSubjectTest(rel: ChainRelation, ctx: SelectletContext): CandidateSubjectPredicate {
+  return buildCompoundSubjectTest(rel.right.compound, ctx);
 }
 
-function buildCompoundElementTest(compound: CompoundSelector, snap: Snapshot): CandidateElementPredicate {
+function buildCompoundElementTest(compound: CompoundSelector, ctx: SelectletContext): CandidateElementPredicate {
   const tests = collectCompoundTests(compound);
 
   const n = tests.length;
   if (n === 0) return () => true;
   if (n === 1) {
     const test = tests[0]!;
-    return test.buildElement(snap);
+    return test.buildElement(ctx);
   }
 
   tests.sort((a, b) => a.cost - b.cost);
@@ -129,7 +129,7 @@ function buildCompoundElementTest(compound: CompoundSelector, snap: Snapshot): C
   const predicates: CandidateElementPredicate[] = [];
   for (let i = 0; i < n; i++) {
     const test = tests[i]!;
-    predicates[i] = test.buildElement(snap);
+    predicates[i] = test.buildElement(ctx);
   }
 
   return function compoundTest(e, rc) {
@@ -142,14 +142,14 @@ function buildCompoundElementTest(compound: CompoundSelector, snap: Snapshot): C
   };
 }
 
-export function buildCompoundSubjectTest(compound: CompoundSelector, snap: Snapshot): CandidateSubjectPredicate {
+export function buildCompoundSubjectTest(compound: CompoundSelector, ctx: SelectletContext): CandidateSubjectPredicate {
   const tests = collectCompoundTests(compound);
 
   const n = tests.length;
   if (n === 0) return () => true;
   if (n === 1) {
     const test = tests[0]!;
-    return buildCandidateSubjectTest(test, snap);
+    return buildCandidateSubjectTest(test, ctx);
   }
 
   tests.sort((a, b) => a.cost - b.cost);
@@ -157,7 +157,7 @@ export function buildCompoundSubjectTest(compound: CompoundSelector, snap: Snaps
   const predicates: CandidateSubjectPredicate[] = [];
   for (let i = 0; i < n; i++) {
     const test = tests[i]!;
-    predicates[i] = buildCandidateSubjectTest(test, snap);
+    predicates[i] = buildCandidateSubjectTest(test, ctx);
   }
 
   return function compoundSubjectTest(e, rc, kind) {
@@ -173,10 +173,10 @@ export function buildCompoundSubjectTest(compound: CompoundSelector, snap: Snaps
   };
 }
 
-function buildCandidateSubjectTest(test: CandidateTest, snap: Snapshot): CandidateSubjectPredicate {
-  if (test.buildSubject) return test.buildSubject(snap);
+function buildCandidateSubjectTest(test: CandidateTest, ctx: SelectletContext): CandidateSubjectPredicate {
+  if (test.buildSubject) return test.buildSubject(ctx);
 
-  const pred = test.buildElement(snap);
+  const pred = test.buildElement(ctx);
 
   return (e, rc, kind) => {
     if (kind !== SubjectKind.Element) return null;
@@ -192,28 +192,28 @@ export type ElementProofFn =
 type SubjectProofFn =
   (candidate: Element, frontier: Element[] | null, rc: RuntimeCache | null, kind: SubjectKind) => TriMatch;
 
-function buildStepElementProof(rel: ChainRelation, snap: Snapshot): ElementProofFn {
-  const test = buildStepElementTest(rel, snap);
+function buildStepElementProof(rel: ChainRelation, ctx: SelectletContext): ElementProofFn {
+  const test = buildStepElementTest(rel, ctx);
 
   return function proof(candidate, _frontier, rc) {
     return test(candidate, rc);
   };
 }
 
-function buildStepSubjectProof(rel: ChainRelation, snap: Snapshot): SubjectProofFn {
-  const test = buildStepSubjectTest(rel, snap);
+function buildStepSubjectProof(rel: ChainRelation, ctx: SelectletContext): SubjectProofFn {
+  const test = buildStepSubjectTest(rel, ctx);
 
   return function proof(candidate, _frontier, rc, kind) {
     return test(candidate, rc, kind);
   };
 }
 
-export function buildChainProof(chain: Chain, from: number, to: number, snap: Snapshot): ElementProofFn {
+export function buildChainProof(chain: Chain, from: number, to: number, ctx: SelectletContext): ElementProofFn {
   if (!chainRangeNeedsSubjectProof(chain, from, to)) {
-    return buildElementProof(chain, from, to, snap);
+    return buildElementProof(chain, from, to, ctx);
   }
 
-  const proof = buildSubjectProof(chain, from, to, snap);
+  const proof = buildSubjectProof(chain, from, to, ctx);
 
   return (candidate, frontier, rc) =>
     proof(candidate, frontier, rc, SubjectKind.Element) === true;
@@ -227,18 +227,18 @@ function chainRangeNeedsSubjectProof(chain: Chain, from: number, to: number): bo
   return false;
 }
 
-function buildElementProof(chain: Chain, from: number, to: number, snap: Snapshot): ElementProofFn {
+function buildElementProof(chain: Chain, from: number, to: number, ctx: SelectletContext): ElementProofFn {
   if (from < -1 || to < 0 || to >= chain.length || to <= from) {
     throw new Error(`Invalid proof range: ${from} ➝ ${to}`);
   }
 
   const start = from + 1;
   const startRelation = chain[start]!;
-  let proof: ElementProofFn = buildStepElementProof(startRelation, snap);
+  let proof: ElementProofFn = buildStepElementProof(startRelation, ctx);
 
   if (from >= 0) {
     const prev = proof;
-    const connect = buildElementConnectionToFrontier(startRelation);
+    const connect = buildElementConnectionToFrontier(startRelation, ctx.dom);
 
     proof = function proof(candidate, frontier, rc) {
       return prev(candidate, frontier, rc) && connect(candidate, frontier, rc);
@@ -247,9 +247,9 @@ function buildElementProof(chain: Chain, from: number, to: number, snap: Snapsho
 
   for (let i = start + 1; i <= to; i++) {
     const relation = chain[i]!;
-    const step = buildStepElementTest(relation, snap);
+    const step = buildStepElementTest(relation, ctx);
     const prev = proof;
-    const connect = extendElementProof(relation, prev, snap);
+    const connect = extendElementProof(relation, prev, ctx);
 
     proof = function proof(candidate, frontier, rc) {
       return step(candidate, rc) && connect(candidate, frontier, rc);
@@ -259,18 +259,18 @@ function buildElementProof(chain: Chain, from: number, to: number, snap: Snapsho
   return proof;
 }
 
-function buildSubjectProof(chain: Chain, from: number, to: number, snap: Snapshot): SubjectProofFn {
+function buildSubjectProof(chain: Chain, from: number, to: number, ctx: SelectletContext): SubjectProofFn {
   if (from < -1 || to < 0 || to >= chain.length || to <= from) {
     throw new Error(`Invalid proof range: ${from} ➝ ${to}`);
   }
 
   const start = from + 1;
   const startRelation = chain[start]!;
-  let proof: SubjectProofFn = buildStepSubjectProof(startRelation, snap);
+  let proof: SubjectProofFn = buildStepSubjectProof(startRelation, ctx);
 
   if (from >= 0) {
     const prev = proof;
-    const connect = buildSubjectConnectionToFrontier(startRelation);
+    const connect = buildSubjectConnectionToFrontier(startRelation, ctx.dom);
 
     proof = function proof(candidate, frontier, rc, kind) {
       return subjectAnd(
@@ -282,9 +282,9 @@ function buildSubjectProof(chain: Chain, from: number, to: number, snap: Snapsho
 
   for (let i = start + 1; i <= to; i++) {
     const relation = chain[i]!;
-    const step = buildStepSubjectTest(relation, snap);
+    const step = buildStepSubjectTest(relation, ctx);
     const prev = proof;
-    const connect = extendSubjectProof(relation, prev);
+    const connect = extendSubjectProof(relation, prev, ctx.dom);
 
     proof = function proof(candidate, frontier, rc, kind) {
       return subjectAnd(
@@ -297,20 +297,20 @@ function buildSubjectProof(chain: Chain, from: number, to: number, snap: Snapsho
   return proof;
 }
 
-function buildFullElementProof(chain: Chain, snap: Snapshot): ElementProofFn {
-  return buildElementProof(chain, -1, chain.length - 1, snap);
+function buildFullElementProof(chain: Chain, ctx: SelectletContext): ElementProofFn {
+  return buildElementProof(chain, -1, chain.length - 1, ctx);
 }
 
-function buildFullSubjectProof(chain: Chain, snap: Snapshot): SubjectProofFn {
-  return buildSubjectProof(chain, -1, chain.length - 1, snap);
+function buildFullSubjectProof(chain: Chain, ctx: SelectletContext): SubjectProofFn {
+  return buildSubjectProof(chain, -1, chain.length - 1, ctx);
 }
 
-export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ElementProofFn {
+export function buildMultiChainProof(chains: Chain[], ctx: SelectletContext): ElementProofFn {
   if (!multiChainNeedsSubject(chains)) {
-    return buildMultiChainElementProof(chains, snap);
+    return buildMultiChainElementProof(chains, ctx);
   }
 
-  const proof = buildMultiChainSubjectProof(chains, snap);
+  const proof = buildMultiChainSubjectProof(chains, ctx);
 
   return (candidate, frontier, rc) =>
     proof(candidate, frontier, rc, SubjectKind.Element) === true;
@@ -327,20 +327,20 @@ function multiChainNeedsSubject(chains: Chain[]): boolean {
   return false;
 }
 
-function buildMultiChainElementProof(chains: Chain[], snap: Snapshot): ElementProofFn {
+function buildMultiChainElementProof(chains: Chain[], ctx: SelectletContext): ElementProofFn {
   if (chains.length === 0) {
     throw new Error('Cannot build multi-chain proof for empty chain list');
   }
 
   if (chains.length === 1) {
     const chain = chains[0]!;
-    return buildFullElementProof(chain, snap);
+    return buildFullElementProof(chain, ctx);
   }
 
   const proofs: ElementProofFn[] = [];
   for (let i = 0; i < chains.length; i++) {
     const chain = chains[i]!;
-    proofs[i] = buildFullElementProof(chain, snap);
+    proofs[i] = buildFullElementProof(chain, ctx);
   }
 
   return function proof(candidate, frontier, rc) {
@@ -353,20 +353,20 @@ function buildMultiChainElementProof(chains: Chain[], snap: Snapshot): ElementPr
   };
 }
 
-function buildMultiChainSubjectProof(chains: Chain[], snap: Snapshot): SubjectProofFn {
+function buildMultiChainSubjectProof(chains: Chain[], ctx: SelectletContext): SubjectProofFn {
   if (chains.length === 0) {
     throw new Error('Cannot build multi-chain proof for empty chain list');
   }
 
   if (chains.length === 1) {
     const chain = chains[0]!;
-    return buildFullSubjectProof(chain, snap);
+    return buildFullSubjectProof(chain, ctx);
   }
 
   const proofs: SubjectProofFn[] = [];
   for (let i = 0; i < chains.length; i++) {
     const chain = chains[i]!;
-    proofs[i] = buildFullSubjectProof(chain, snap);
+    proofs[i] = buildFullSubjectProof(chain, ctx);
   }
 
   return function proof(candidate, frontier, rc, kind) {
@@ -383,7 +383,7 @@ function buildMultiChainSubjectProof(chains: Chain[], snap: Snapshot): SubjectPr
   };
 }
 
-function buildSelectorListElementProof(list: SelectorList, snap: Snapshot): ElementProofFn {
+function buildSelectorListElementProof(list: SelectorList, ctx: SelectletContext): ElementProofFn {
   const arms = list.arms;
 
   if (arms.length === 0) {
@@ -392,7 +392,7 @@ function buildSelectorListElementProof(list: SelectorList, snap: Snapshot): Elem
 
   if (arms.length === 1) {
     const arm = arms[0]!;
-    return buildFullElementProof(buildChain(arm), snap);
+    return buildFullElementProof(buildChain(arm), ctx);
   }
 
   arms.sort((a, b) => a.cost - b.cost);
@@ -403,10 +403,10 @@ function buildSelectorListElementProof(list: SelectorList, snap: Snapshot): Elem
     chains[i] = buildChain(arm);
   }
 
-  return buildMultiChainElementProof(chains, snap);
+  return buildMultiChainElementProof(chains, ctx);
 }
 
-function buildSelectorListSubjectProof(list: SelectorList, snap: Snapshot): SubjectProofFn {
+function buildSelectorListSubjectProof(list: SelectorList, ctx: SelectletContext): SubjectProofFn {
   const arms = list.arms;
 
   if (arms.length === 0) {
@@ -415,7 +415,7 @@ function buildSelectorListSubjectProof(list: SelectorList, snap: Snapshot): Subj
 
   if (arms.length === 1) {
     const arm = arms[0]!;
-    return buildFullSubjectProof(buildChain(arm), snap);
+    return buildFullSubjectProof(buildChain(arm), ctx);
   }
 
   arms.sort((a, b) => a.cost - b.cost);
@@ -423,7 +423,7 @@ function buildSelectorListSubjectProof(list: SelectorList, snap: Snapshot): Subj
   const proofs: SubjectProofFn[] = [];
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i]!;
-    proofs[i] = buildFullSubjectProof(buildChain(arm), snap);
+    proofs[i] = buildFullSubjectProof(buildChain(arm), ctx);
   }
 
   return function selectorListSubjectProof(candidate, frontier, rc, kind) {
@@ -440,12 +440,12 @@ function buildSelectorListSubjectProof(list: SelectorList, snap: Snapshot): Subj
   };
 }
 
-function buildElementConnectionToFrontier(rel: ChainRelation): ElementProofFn {
+function buildElementConnectionToFrontier(rel: ChainRelation, dom: DOMOperations): ElementProofFn {
   switch (rel.combinator) {
-    case ' ': return buildAncestorInFrontierElementProof();
-    case '>': return buildParentInFrontierElementProof();
-    case '+': return buildPrevInFrontierElementProof();
-    case '~': return buildPrevAnyInFrontierElementProof();
+    case ' ': return buildAncestorInFrontierElementProof(dom);
+    case '>': return buildParentInFrontierElementProof(dom);
+    case '+': return buildPrevInFrontierElementProof(dom);
+    case '~': return buildPrevAnyInFrontierElementProof(dom);
 
     case null:
       throw new Error('Cannot connect chain start relation to frontier.');
@@ -455,12 +455,12 @@ function buildElementConnectionToFrontier(rel: ChainRelation): ElementProofFn {
   }
 }
 
-function buildSubjectConnectionToFrontier(rel: ChainRelation): SubjectProofFn {
+function buildSubjectConnectionToFrontier(rel: ChainRelation, dom: DOMOperations): SubjectProofFn {
   switch (rel.combinator) {
-    case ' ': return buildAncestorInFrontierSubjectProof();
-    case '>': return buildParentInFrontierSubjectProof();
-    case '+': return buildPrevInFrontierSubjectProof();
-    case '~': return buildPrevAnyInFrontierSubjectProof();
+    case ' ': return buildAncestorInFrontierSubjectProof(dom);
+    case '>': return buildParentInFrontierSubjectProof(dom);
+    case '+': return buildPrevInFrontierSubjectProof(dom);
+    case '~': return buildPrevAnyInFrontierSubjectProof(dom);
 
     case null:
       throw new Error('Cannot connect chain start relation to frontier.');
@@ -470,9 +470,9 @@ function buildSubjectConnectionToFrontier(rel: ChainRelation): SubjectProofFn {
   }
 }
 
-function buildAncestorInFrontierElementProof(): ElementProofFn {
+function buildAncestorInFrontierElementProof(dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier) {
-    for (let p = candidate.parentElement; p; p = p.parentElement) {
+    for (let p = dom.parentElement(candidate); p; p = dom.parentElement(p)) {
       if (inFrontier(p, frontier)) return true;
     }
 
@@ -480,11 +480,11 @@ function buildAncestorInFrontierElementProof(): ElementProofFn {
   };
 }
 
-function buildAncestorInFrontierSubjectProof(): SubjectProofFn {
+function buildAncestorInFrontierSubjectProof(dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, _rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
-    for (let p = candidate.parentElement; p; p = p.parentElement) {
+    for (let p = dom.parentElement(candidate); p; p = dom.parentElement(p)) {
       if (inFrontier(p, frontier)) return true;
     }
 
@@ -492,41 +492,41 @@ function buildAncestorInFrontierSubjectProof(): SubjectProofFn {
   };
 }
 
-function buildParentInFrontierElementProof(): ElementProofFn {
+function buildParentInFrontierElementProof(dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier) {
-    const p = candidate.parentElement;
+    const p = dom.parentElement(candidate);
     return p !== null && inFrontier(p, frontier);
   };
 }
 
-function buildParentInFrontierSubjectProof(): SubjectProofFn {
+function buildParentInFrontierSubjectProof(dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, _rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
-    const p = candidate.parentElement;
+    const p = dom.parentElement(candidate);
     return p !== null && inFrontier(p, frontier);
   };
 }
 
-function buildPrevInFrontierElementProof(): ElementProofFn {
+function buildPrevInFrontierElementProof(dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier) {
-    const p = candidate.previousElementSibling;
+    const p = dom.previousElementSibling(candidate);
     return p !== null && inFrontier(p, frontier);
   };
 }
 
-function buildPrevInFrontierSubjectProof(): SubjectProofFn {
+function buildPrevInFrontierSubjectProof(dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, _rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
-    const p = candidate.previousElementSibling;
+    const p = dom.previousElementSibling(candidate);
     return p !== null && inFrontier(p, frontier);
   };
 }
 
-function buildPrevAnyInFrontierElementProof(): ElementProofFn {
+function buildPrevAnyInFrontierElementProof(dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier) {
-    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+    for (let p = dom.previousElementSibling(candidate); p; p = dom.previousElementSibling(p)) {
       if (inFrontier(p, frontier)) return true;
     }
 
@@ -534,11 +534,11 @@ function buildPrevAnyInFrontierElementProof(): ElementProofFn {
   };
 }
 
-function buildPrevAnyInFrontierSubjectProof(): SubjectProofFn {
+function buildPrevAnyInFrontierSubjectProof(dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, _rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
-    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+    for (let p = dom.previousElementSibling(candidate); p; p = dom.previousElementSibling(p)) {
       if (inFrontier(p, frontier)) return true;
     }
 
@@ -556,12 +556,12 @@ function inFrontier(e: Element, frontier: Element[] | null): boolean {
   return false;
 }
 
-function extendElementProof(rel: ChainRelation, prev: ElementProofFn, _snap: Snapshot): ElementProofFn {
+function extendElementProof(rel: ChainRelation, prev: ElementProofFn, ctx: SelectletContext): ElementProofFn {
   switch (rel.combinator) {
-    case ' ': return buildAncestorElementProof(prev);
-    case '>': return buildParentElementProof(prev);
-    case '+': return buildPrevElementProof(prev);
-    case '~': return buildPrevAnyElementProof(prev);
+    case ' ': return buildAncestorElementProof(prev, ctx.dom);
+    case '>': return buildParentElementProof(prev, ctx.dom);
+    case '+': return buildPrevElementProof(prev, ctx.dom);
+    case '~': return buildPrevAnyElementProof(prev, ctx.dom);
 
     case null:
       throw new Error('Cannot extend proof from chain start relation.');
@@ -571,12 +571,12 @@ function extendElementProof(rel: ChainRelation, prev: ElementProofFn, _snap: Sna
   }
 }
 
-function extendSubjectProof(rel: ChainRelation, prev: SubjectProofFn): SubjectProofFn {
+function extendSubjectProof(rel: ChainRelation, prev: SubjectProofFn, dom: DOMOperations): SubjectProofFn {
   switch (rel.combinator) {
-    case ' ': return buildAncestorSubjectProof(prev);
-    case '>': return buildParentSubjectProof(prev);
-    case '+': return buildPrevSubjectProof(prev);
-    case '~': return buildPrevAnySubjectProof(prev);
+    case ' ': return buildAncestorSubjectProof(prev, dom);
+    case '>': return buildParentSubjectProof(prev, dom);
+    case '+': return buildPrevSubjectProof(prev, dom);
+    case '~': return buildPrevAnySubjectProof(prev, dom);
 
     case null:
       throw new Error('Cannot extend proof from chain start relation.');
@@ -586,9 +586,9 @@ function extendSubjectProof(rel: ChainRelation, prev: SubjectProofFn): SubjectPr
   }
 }
 
-function buildAncestorElementProof(prev: ElementProofFn): ElementProofFn {
+function buildAncestorElementProof(prev: ElementProofFn, dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier, rc) {
-    for (let p = candidate.parentElement; p; p = p.parentElement) {
+    for (let p = dom.parentElement(candidate); p; p = dom.parentElement(p)) {
       if (prev(p, frontier, rc)) return true;
     }
 
@@ -596,21 +596,21 @@ function buildAncestorElementProof(prev: ElementProofFn): ElementProofFn {
   };
 }
 
-function buildAncestorSubjectProof(prev: SubjectProofFn): SubjectProofFn {
+function buildAncestorSubjectProof(prev: SubjectProofFn, dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
     let result: TriMatch | undefined;
 
-    for (let p = candidate.parentElement; p; p = p.parentElement) {
+    for (let p = dom.parentElement(candidate); p; p = dom.parentElement(p)) {
       const r = prev(p, frontier, rc, SubjectKind.Element);
       if (r === true) return true;
       result = result === undefined ? r : subjectOr(result, r);
     }
 
-    const root = getShadowTreeRoot(candidate);
+    const root = shadowRoot(candidate, dom);
     if (root) {
-      const r = prev(root.host, frontier, rc, SubjectKind.HostElement);
+      const r = prev(dom.shadowHost(root), frontier, rc, SubjectKind.HostElement);
       if (r === true) return true;
       result = result === undefined ? r : subjectOr(result, r);
     }
@@ -619,29 +619,29 @@ function buildAncestorSubjectProof(prev: SubjectProofFn): SubjectProofFn {
   };
 }
 
-function buildParentElementProof(prev: ElementProofFn): ElementProofFn {
+function buildParentElementProof(prev: ElementProofFn, dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier, rc) {
-    const p = candidate.parentElement;
+    const p = dom.parentElement(candidate);
     return p !== null && prev(p, frontier, rc);
   };
 }
 
-function buildParentSubjectProof(prev: SubjectProofFn): SubjectProofFn {
+function buildParentSubjectProof(prev: SubjectProofFn, dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
     let result: TriMatch | undefined;
 
-    const p = candidate.parentElement;
+    const p = dom.parentElement(candidate);
     if (p) {
       const r = prev(p, frontier, rc, SubjectKind.Element);
       if (r === true) return true;
       result = r;
     }
 
-    const root = getShadowTreeRoot(candidate);
-    if (root && candidate.parentNode === root) {
-      const r = prev(root.host, frontier, rc, SubjectKind.HostElement);
+    const root = shadowRoot(candidate, dom);
+    if (root && dom.parentNode(candidate) === root) {
+      const r = prev(dom.shadowHost(root), frontier, rc, SubjectKind.HostElement);
       if (r === true) return true;
       result = result === undefined ? r : subjectOr(result, r);
     }
@@ -650,27 +650,27 @@ function buildParentSubjectProof(prev: SubjectProofFn): SubjectProofFn {
   };
 }
 
-function buildPrevElementProof(prev: ElementProofFn): ElementProofFn {
+function buildPrevElementProof(prev: ElementProofFn, dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier, rc) {
-    const p = candidate.previousElementSibling;
+    const p = dom.previousElementSibling(candidate);
     return p !== null && prev(p, frontier, rc);
   };
 }
 
-function buildPrevSubjectProof(prev: SubjectProofFn): SubjectProofFn {
+function buildPrevSubjectProof(prev: SubjectProofFn, dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
-    const p = candidate.previousElementSibling;
+    const p = dom.previousElementSibling(candidate);
     if (!p) return false;
 
     return prev(p, frontier, rc, SubjectKind.Element);
   };
 }
 
-function buildPrevAnyElementProof(prev: ElementProofFn): ElementProofFn {
+function buildPrevAnyElementProof(prev: ElementProofFn, dom: DOMOperations): ElementProofFn {
   return function proof(candidate, frontier, rc) {
-    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+    for (let p = dom.previousElementSibling(candidate); p; p = dom.previousElementSibling(p)) {
       if (prev(p, frontier, rc)) return true;
     }
 
@@ -678,12 +678,12 @@ function buildPrevAnyElementProof(prev: ElementProofFn): ElementProofFn {
   };
 }
 
-function buildPrevAnySubjectProof(prev: SubjectProofFn): SubjectProofFn {
+function buildPrevAnySubjectProof(prev: SubjectProofFn, dom: DOMOperations): SubjectProofFn {
   return function proof(candidate, frontier, rc, kind) {
     if (kind !== SubjectKind.Element) return false;
 
     let result: TriMatch | undefined;
-    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+    for (let p = dom.previousElementSibling(candidate); p; p = dom.previousElementSibling(p)) {
       const r = prev(p, frontier, rc, SubjectKind.Element);
       if (r === true) return true;
       result = result === undefined ? r : subjectOr(result, r);
@@ -722,7 +722,7 @@ type AdvanceCombinator = '>' | '+' | '~';
 type AdvanceFn = (frontier: Element[], rc: RuntimeCache | null) => Element[];
 type AdvanceFirstFn = (frontier: Element[], rc: RuntimeCache | null) => Element | null;
 
-export function buildAdvanceMove(chain: Chain, from: number, snap: Snapshot): AdvanceMove | null {
+export function buildAdvanceMove(chain: Chain, from: number, ctx: SelectletContext): AdvanceMove | null {
   const to = from + 1;
   if (to >= chain.length) return null;
   const fromRelation = chain[from]!;
@@ -739,42 +739,42 @@ export function buildAdvanceMove(chain: Chain, from: number, snap: Snapshot): Ad
     return null;
   }
 
-  const test = buildStepElementTest(rel, snap);
-  const run = buildAdvanceFn(combinator, test);
+  const test = buildStepElementTest(rel, ctx);
+  const run = buildAdvanceFn(combinator, test, ctx.dom);
 
   const move: AdvanceMove = { from, to, run, combinator, test };
 
   return move;
 }
 
-function buildAdvanceFn(combinator: AdvanceCombinator, test: CandidateElementPredicate): AdvanceFn {
+function buildAdvanceFn(combinator: AdvanceCombinator, test: CandidateElementPredicate, dom: DOMOperations): AdvanceFn {
   switch (combinator) {
-    case '>': return (frontier, rc) => advanceChildren(frontier, test, rc);
-    case '+': return (frontier, rc) => advanceNextSibling(frontier, test, rc);
-    case '~': return (frontier, rc) => advanceFollowingSiblings(frontier, test, rc);
+    case '>': return (frontier, rc) => advanceChildren(frontier, test, rc, dom);
+    case '+': return (frontier, rc) => advanceNextSibling(frontier, test, rc, dom);
+    case '~': return (frontier, rc) => advanceFollowingSiblings(frontier, test, rc, dom);
   }
 }
 
-function advanceNextSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element[] {
+function advanceNextSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element[] {
   const out: Element[] = [];
   let j = -1;
 
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    const candidate = base.nextElementSibling;
+    const candidate = dom.nextElementSibling(base);
     if (candidate && test(candidate, rc)) out[++j] = candidate;
   }
 
   return out;
 }
 
-function advanceFollowingSiblings(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element[] {
+function advanceFollowingSiblings(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element[] {
   const out: Element[] = [];
   const seen = new Set<Element>();
 
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    for (let candidate = base.nextElementSibling; candidate; candidate = candidate.nextElementSibling) {
+    for (let candidate = dom.nextElementSibling(base); candidate; candidate = dom.nextElementSibling(candidate)) {
       if (!seen.has(candidate) && test(candidate, rc)) {
         seen.add(candidate);
         out[out.length] = candidate;
@@ -785,13 +785,13 @@ function advanceFollowingSiblings(frontier: Element[], test: CandidateElementPre
   return out;
 }
 
-function advanceChildren(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element[] {
+function advanceChildren(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element[] {
   const out: Element[] = [];
   let j = -1;
 
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    for (let candidate = base.firstElementChild; candidate; candidate = candidate.nextElementSibling) {
+    for (let candidate = dom.firstElementChild(base); candidate; candidate = dom.nextElementSibling(candidate)) {
       if (test(candidate, rc)) out[++j] = candidate;
     }
   }
@@ -799,28 +799,28 @@ function advanceChildren(frontier: Element[], test: CandidateElementPredicate, r
   return out;
 }
 
-export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: CandidateElementPredicate): AdvanceFirstFn {
+export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: CandidateElementPredicate, dom: DOMOperations): AdvanceFirstFn {
   switch (combinator) {
-    case '>': return (frontier, rc) => firstChild(frontier, test, rc);
-    case '+': return (frontier, rc) => firstNextSibling(frontier, test, rc);
-    case '~': return (frontier, rc) => firstFollowingSibling(frontier, test, rc);
+    case '>': return (frontier, rc) => firstChild(frontier, test, rc, dom);
+    case '+': return (frontier, rc) => firstNextSibling(frontier, test, rc, dom);
+    case '~': return (frontier, rc) => firstFollowingSibling(frontier, test, rc, dom);
   }
 }
 
-function firstNextSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element | null {
+function firstNextSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    const candidate = base.nextElementSibling;
+    const candidate = dom.nextElementSibling(base);
     if (candidate && test(candidate, rc)) return candidate;
   }
 
   return null;
 }
 
-function firstFollowingSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element | null {
+function firstFollowingSibling(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    for (let candidate = base.nextElementSibling; candidate; candidate = candidate.nextElementSibling) {
+    for (let candidate = dom.nextElementSibling(base); candidate; candidate = dom.nextElementSibling(candidate)) {
       if (test(candidate, rc)) return candidate;
     }
   }
@@ -828,10 +828,10 @@ function firstFollowingSibling(frontier: Element[], test: CandidateElementPredic
   return null;
 }
 
-function firstChild(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null): Element | null {
+function firstChild(frontier: Element[], test: CandidateElementPredicate, rc: RuntimeCache | null, dom: DOMOperations): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     const base = frontier[i]!;
-    for (let candidate = base.firstElementChild; candidate; candidate = candidate.nextElementSibling) {
+    for (let candidate = dom.firstElementChild(base); candidate; candidate = dom.nextElementSibling(candidate)) {
       if (test(candidate, rc)) return candidate;
     }
   }
@@ -845,7 +845,7 @@ function matchHasFrom(
   steps: HasStep[],
   index: number,
   base: Element,
-  snap: Snapshot,
+  ctx: SelectletContext,
   rc: RuntimeCache | null,
 ): boolean {
   if (index >= steps.length) return true;
@@ -856,26 +856,31 @@ function matchHasFrom(
 
   switch (combinator) {
     case ' ':
-      for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      for (let node = ctx.dom.firstElementChild(base); node; node = nextDescendant(base, node, ctx.dom)) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, ctx, rc)) return true;
       }
       return false;
 
     case '>':
-      for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      for (let node = ctx.dom.firstElementChild(base); node; node = ctx.dom.nextElementSibling(node)) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, ctx, rc)) return true;
       }
       return false;
 
     case '+': {
-      const node = base.nextElementSibling;
-      return !!node && test(node, rc) && matchHasFrom(steps, next, node, snap, rc);
+      const node = ctx.dom.nextElementSibling(base);
+      return !!node && test(node, rc) && matchHasFrom(steps, next, node, ctx, rc);
     }
 
     case '~':
-      for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      for (let node = ctx.dom.nextElementSibling(base); node; node = ctx.dom.nextElementSibling(node)) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, ctx, rc)) return true;
       }
       return false;
   }
+}
+
+function shadowRoot(node: Element, dom: DOMOperations): Element | null {
+  const root = dom.root(node);
+  return dom.isShadowRoot(root) ? root : null;
 }

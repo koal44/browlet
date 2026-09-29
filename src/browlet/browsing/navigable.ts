@@ -12,12 +12,19 @@ import type { WindowImpl } from './window/window';
 import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../fetch/index';
 import { InternalError } from '../../infra/internal-error';
 
+/** Owns a navigation destination and its current and active history entries. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#navigable
 export class Navigable {
+  /** Stable identity across this navigable's documents and browsing contexts. */
   id = Symbol('Navigable');
+  /** Containing navigable, or null at the top level. */
   parent: Navigable | null;
+  /** History entry selected by the latest navigation or traversal. */
   currentSessionHistoryEntry: SessionHistoryEntry;
   #activeSessionHistoryEntry: SessionHistoryEntry;
+  /** Whether closing this navigable has begun. */
   isClosing = false;
+  /** Whether its navigation is delaying the container document's load event. */
   isDelayingLoadEvents = false;
 
   /** Create the initial history entry and associate its Document with this navigable. */
@@ -44,6 +51,7 @@ export class Navigable {
     return false;
   }
 
+  /** Entry whose document is active; replacement updates document activity. */
   get activeSessionHistoryEntry(): SessionHistoryEntry {
     return this.#activeSessionHistoryEntry;
   }
@@ -102,17 +110,27 @@ export class Navigable {
   }
 }
 
+/** Coordinates session-history traversal for its descendant navigables. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#traversable-navigable
 export class TraversableNavigable extends Navigable implements FetchPromptTarget {
+  /** Joint session-history step currently applied to this traversable. */
   currentSessionHistoryStep = 0;
+  /** Top-level history entries retained for traversal. */
   sessionHistoryEntries: SessionHistoryEntry[] = [];
+  /** Queue reserved for serialized history traversal work. */
   sessionHistoryTraversalQueue = new SessionHistoryTraversalQueue();
+  /** Whether apply-history-step is already running a nested operation. */
   runningNestedApplyHistoryStep = false;
+  /** Visibility reported by the host for this traversable. */
   systemVisibilityState: DocumentVisibilityState = 'visible';
+  /** Whether web content, rather than the user, created this traversable. */
   isCreatedByWebContent = false;
   /** Type-only identification as an eligible Fetch prompt destination. */
   declare [fetchPromptTargetBrand]: true;
 }
 
+/** Traversable representing a top-level browser window or tab. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-traversable
 export class TopLevelTraversable extends TraversableNavigable {
   constructor(documentState: DocumentBackedState) {
     super(documentState);
@@ -123,10 +141,9 @@ export class TopLevelTraversable extends TraversableNavigable {
   }
 }
 
-/*
- * HTML's session history traversal parallel queue. Its enqueueing and
- * synchronization behavior enters with the history traversal algorithms.
- */
+/** Placeholder identity for a traversable's session-history work queue. */
+// https://html.spec.whatwg.org/multipage/document-sequences.html#session-history-traversal-parallel-queue
+// Queueing and synchronization await the history traversal algorithms.
 export class SessionHistoryTraversalQueue {}
 
 export function createNewTopLevelTraversable(

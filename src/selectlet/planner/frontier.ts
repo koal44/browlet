@@ -1,14 +1,14 @@
+import type { DOMNode as QuerySource, DOMOperations, DOMNode as Element } from '../../infra/index';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import type { QueryContextDescription } from '../debug';
-import { describeCombinator, describeCompound, describeContext } from '../debug';
+import type { QuerySourceDescription } from '../debug';
+import { describeCombinator, describeCompound, describeQuerySource } from '../debug';
 import {
   buildAdvanceFirstFn, buildAdvanceMove,
   type AdvanceMove, type Chain,
 } from './chain';
 import { type BridgeMove, buildBridgeMove, describeBridgeMove, filterBridgeCandidates, findFirstBridgeCandidate } from './bridge';
 import { type LookupMode } from '../constants';
-import type { QueryContext } from '../selectlet';
-import type { Snapshot } from '../snapshot';
+import type { SelectletContext } from '../context';
 
 export type FrontierProgram = {
   chain: Chain;
@@ -22,16 +22,16 @@ type FrontierStep = {
   bridge?: BridgeMove | null;
   bridgeToEnd?: BridgeMove | null;
   count?: number;
-  lookupRoot?: QueryContext;
+  lookupRoot?: QuerySource;
 };
 
 export type FrontierState = {
-  root: QueryContext;
+  root: QuerySource;
   frontier: Element[] | null;
 };
 
-export function buildFrontierProgram(chain: Chain, snap: Snapshot): FrontierProgram {
-  const start = buildBridgeMove(chain, -1, chooseBridgeTarget(chain, -1), snap);
+export function buildFrontierProgram(chain: Chain, ctx: SelectletContext): FrontierProgram {
+  const start = buildBridgeMove(chain, -1, chooseBridgeTarget(chain, -1), ctx);
   const steps: FrontierStep[] = [];
 
   for (let i = 0; i < chain.length; i++) {
@@ -43,14 +43,14 @@ export function buildFrontierProgram(chain: Chain, snap: Snapshot): FrontierProg
   return { chain, start, steps };
 }
 
-export function getAdvanceMove(program: FrontierProgram, index: number, snap: Snapshot): AdvanceMove | null {
+export function getAdvanceMove(program: FrontierProgram, index: number, ctx: SelectletContext): AdvanceMove | null {
   const step = program.steps[index]!;
 
   if (step.advance !== undefined) return step.advance;
 
-  const move = buildAdvanceMove(program.chain, index, snap);
+  const move = buildAdvanceMove(program.chain, index, ctx);
 
-  if (move && snap.isDebug) {
+  if (move && ctx.isDebug) {
     const relation = program.chain[move.to]!;
     const compound = relation.right.compound;
     move.debug =
@@ -61,7 +61,7 @@ export function getAdvanceMove(program: FrontierProgram, index: number, snap: Sn
   return move;
 }
 
-export function getBridgeMove(program: FrontierProgram, index: number, snap: Snapshot): BridgeMove | null {
+export function getBridgeMove(program: FrontierProgram, index: number, ctx: SelectletContext): BridgeMove | null {
   const step = program.steps[index]!;
 
   if (step.bridge !== undefined) return step.bridge;
@@ -76,14 +76,14 @@ export function getBridgeMove(program: FrontierProgram, index: number, snap: Sna
     program.chain,
     index,
     chooseBridgeTarget(program.chain, index),
-    snap,
+    ctx,
   );
 
   step.bridge = bridge;
   return bridge;
 }
 
-export function getBridgeToEndMove(program: FrontierProgram, index: number, snap: Snapshot): BridgeMove {
+export function getBridgeToEndMove(program: FrontierProgram, index: number, ctx: SelectletContext): BridgeMove {
   const step = program.steps[index]!;
 
   if (step.bridgeToEnd !== undefined) {
@@ -101,7 +101,7 @@ export function getBridgeToEndMove(program: FrontierProgram, index: number, snap
     throw new Error(`Invalid bridge from terminal step: ${index}`);
   }
 
-  const bridge = buildBridgeMove(program.chain, index, last, snap);
+  const bridge = buildBridgeMove(program.chain, index, last, ctx);
   step.bridgeToEnd = bridge;
   return bridge;
 }
@@ -132,13 +132,13 @@ export function runAdvanceMove(state: FrontierState, move: AdvanceMove, canRoot:
   updateFrontierState(state, next, canRoot);
 }
 
-export function runFirstAdvanceMove(state: FrontierState, move: AdvanceMove, rc: RuntimeCache | null): Element | null {
+export function runFirstAdvanceMove(state: FrontierState, move: AdvanceMove, rc: RuntimeCache | null, dom: DOMOperations): Element | null {
   const frontier = state.frontier;
   if (!frontier) return null;
 
   let first = move.first;
   if (!first) {
-    first = buildAdvanceFirstFn(move.combinator, move.test);
+    first = buildAdvanceFirstFn(move.combinator, move.test, dom);
     move.first = first;
   }
 
@@ -151,9 +151,9 @@ export function runBridgeMove(state: FrontierState, move: BridgeMove, canRoot: b
   updateFrontierState(state, next, canRoot);
 }
 
-export function runFirstBridgeMove(state: FrontierState, move: BridgeMove, lookupMode: LookupMode, rc: RuntimeCache | null, best: Element | null): Element | null {
+export function runFirstBridgeMove(state: FrontierState, move: BridgeMove, lookupMode: LookupMode, rc: RuntimeCache | null, best: Element | null, dom: DOMOperations): Element | null {
   const candidates = move.lookup(state.root, lookupMode);
-  return findFirstBridgeCandidate(candidates, move.proof, state.frontier, rc, best);
+  return findFirstBridgeCandidate(candidates, move.proof, state.frontier, rc, best, dom);
 }
 
 function updateFrontierState(state: FrontierState, frontier: Element[], canRoot: boolean): void {
@@ -200,10 +200,10 @@ type DebugFrontierStep = {
   bridgeToEnd: string;
   canRoot: boolean;
   count?: number;
-  lookupRoot?: QueryContextDescription;
+  lookupRoot?: QuerySourceDescription;
 };
 
-export function describeFrontierProgram(program: FrontierProgram): DebugFrontierProgram {
+export function describeFrontierProgram(program: FrontierProgram, dom: DOMOperations): DebugFrontierProgram {
   const steps: DebugFrontierStep[] = [];
   const last = program.steps.length - 1;
 
@@ -216,7 +216,7 @@ export function describeFrontierProgram(program: FrontierProgram): DebugFrontier
       advance: describeAdvanceMove(step.advance),
       bridge: describeBridgeMove(step.bridge),
       bridgeToEnd: describeBridgeMove(step.bridgeToEnd),
-      lookupRoot: step.lookupRoot ? describeContext(step.lookupRoot, { preview: false }) : undefined,
+      lookupRoot: step.lookupRoot ? describeQuerySource(step.lookupRoot, { preview: false }, dom) : undefined,
     };
 
     if (step.count !== undefined) {

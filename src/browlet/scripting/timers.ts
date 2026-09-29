@@ -276,7 +276,7 @@ type ActiveTimer = {
 
 const nodeTimerHost: TimerHost = {
   scheduleTimeout(milliseconds, steps) {
-    /* Node clamps larger delays to one millisecond; wake in bounded chunks. */
+    // Node clamps larger delays to one millisecond; wake in bounded chunks.
     const delay = Math.min(milliseconds, 2_147_483_647);
     const handle = setTimeout(steps, delay);
     return () => { clearTimeout(handle); };

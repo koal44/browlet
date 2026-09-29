@@ -6,9 +6,47 @@ import {
 import { EventImpl } from './event';
 import type { EventTargetImpl } from './event-target';
 
+/** Reports completed work and, when known, its total amount. */
+// https://xhr.spec.whatwg.org/#interface-progressevent
+export class ProgressEventImpl extends EventImpl {
+  /** Whether total describes a known amount of work. */
+  lengthComputable: boolean;
+  /** Amount of work completed. */
+  loaded: number;
+  /** Total amount of work; meaningful when lengthComputable is true. */
+  total: number;
+
+  constructor(
+    type: string,
+    eventInitDict: ProgressEventInitRecord = {},
+    timeStamp?: DOMHighResTimeStamp,
+  ) {
+    super(type, eventInitDict, timeStamp);
+    this.lengthComputable = eventInitDict.lengthComputable ?? false;
+    this.loaded = eventInitDict.loaded ?? 0;
+    this.total = eventInitDict.total ?? 0;
+  }
+
+  /** Fire a trusted progress event at the target; a zero length leaves the total unknown. */
+  // https://xhr.spec.whatwg.org/#concept-event-fire-progress
+  static fire(
+    name: string,
+    target: EventTargetImpl,
+    transmitted: number,
+    length: number,
+  ): boolean {
+    return target.fireEvent(name, ProgressEventImpl, (event) => {
+      const progress = event as ProgressEventImpl;
+      progress.loaded = transmitted;
+      if (length !== 0) {
+        progress.lengthComputable = true;
+        progress.total = length;
+      }
+    });
+  }
+}
+
 /*
- * XMLHttpRequest Standard §5 — Interface ProgressEvent
- *
  * [Exposed=(Window,Worker)]
  * interface ProgressEvent : Event {
  *   constructor(DOMString type, optional ProgressEventInit eventInitDict = {});
@@ -24,63 +62,6 @@ import type { EventTargetImpl } from './event-target';
  *   double total = 0;
  * };
  */
-export class ProgressEventImpl extends EventImpl {
-  #lengthComputable = false;
-  #loaded = 0;
-  #total = 0;
-
-  constructor(
-    type: string,
-    eventInitDict: ProgressEventInitRecord = {},
-    timeStamp?: DOMHighResTimeStamp,
-  ) {
-    super(type, eventInitDict, timeStamp);
-    this.initialize(eventInitDict);
-  }
-
-  get lengthComputable(): boolean {
-    return this.#lengthComputable;
-  }
-
-  get loaded(): number {
-    return this.#loaded;
-  }
-
-  get total(): number {
-    return this.#total;
-  }
-
-  // -- Internal methods -------------------------------------------------
-
-  initialize(init: ProgressEventInitRecord): void {
-    this.#lengthComputable = init.lengthComputable ?? false;
-    this.#loaded = init.loaded ?? 0;
-    this.#total = init.total ?? 0;
-  }
-}
-
-/** XMLHttpRequest Standard §5.1 — Fire a progress event. */
-export function fireProgressEvent(
-  name: string,
-  target: EventTargetImpl,
-  transmitted: number,
-  length: number,
-): boolean {
-  return target.fireEvent(name, ProgressEventImpl, (event) => {
-    (event as ProgressEventImpl).initialize(
-      length === 0
-        ? { loaded: transmitted }
-        : {
-          lengthComputable: true,
-          loaded: transmitted,
-          total: length,
-        },
-    );
-  });
-}
-
-// -- Web IDL ------------------------------------------------------------
-
 export const progressEventIDL = defineInterface<DOMEnvironment>({
   name: 'ProgressEvent',
   inherits: 'Event',

@@ -1,9 +1,8 @@
 import { html, parse, type Token } from 'parse5';
 import { describe, expect, it } from 'vitest';
+import { createTestDocument } from '../../../support/dom';
 
-import {
-  createDocument, DocumentImpl, DocumentMode,
-} from '../../../../src/browlet/dom/nodes/document';
+import { DocumentMode } from '../../../../src/browlet/dom/nodes/document';
 import {
   DocumentFragmentImpl,
 } from '../../../../src/browlet/dom/nodes/document-fragment';
@@ -118,7 +117,7 @@ describe('Parser tree adapter', () => {
 
   it('stores and retrieves the Parse5 document mode', () => {
     const parser = createParser();
-    const document = new DocumentImpl();
+    const document = createTestDocument();
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
 
@@ -128,7 +127,7 @@ describe('Parser tree adapter', () => {
 
   it('creates and updates a document type before the document element', () => {
     const parser = createParser();
-    const document = new DocumentImpl();
+    const document = createTestDocument();
     const element = document.createElement('html');
 
     document.appendChild(element);
@@ -152,7 +151,7 @@ describe('Parser tree adapter', () => {
 });
 
 function createParser(): HTMLTreeAdapter {
-  const document = createDocument();
+  const document = createTestDocument();
   document.type = 'html';
   document.contentType = 'text/html';
   return new HTMLTreeAdapter(document);

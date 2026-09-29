@@ -1,3 +1,4 @@
+import type { DOMNode as Element } from '../../infra/index';
 import type {
   CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry,
   PropertyContext, PropertyDeclaration,
