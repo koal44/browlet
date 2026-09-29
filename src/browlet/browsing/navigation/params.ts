@@ -1,21 +1,16 @@
 import type { DocumentImpl } from '../../dom/nodes/document';
-import {
-  createPolicyContainer, type PolicyContainer,
-} from '../policy/container';
-import {
-  createOpenerPolicy, type OpenerPolicy,
-} from '../policy/coop';
-import type { SandboxingFlagSet } from '../policy/sandbox';
+import { PolicyContainer } from '../policy/container';
+import { OpenerPolicy } from '../policy/coop';
+import { SandboxingFlagSet } from '../policy/sandbox';
 import type { BrowsingContext } from '../browsing-context';
-import { createPermissionsPolicy, type PermissionsPolicy } from '../policy/permissions';
+import { PermissionsPolicy } from '../policy/permissions';
 import { FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
-import { areSameOrigin, createOpaqueOrigin, type Origin, obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/index';
+import { createOpaqueOrigin, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
 import { CSPList } from '../policy/csp/list';
-import { getRelevantRealm, retargetWindowProxy } from '../../bindings';
+import { getRelevantRealm } from '../../bindings';
 import type { EnvironmentRecord } from '../../scripting/environment';
-import {
-  TopLevelTraversable, type Navigable, type TraversableNavigable,
-} from '../navigable';
+import { TopLevelTraversable, type Navigable, type UserNavigationInvolvement } from '../navigable';
+import type { NavigationTimingType } from '../../performance/navigation';
 import {
   createDocumentState, createSessionHistoryEntry,
   type SessionHistoryEntry,
@@ -49,13 +44,13 @@ export class NavigationParams {
   /** Origin selected for the new document. */
   origin: Origin;
   /** Response policies transferred to the new document. */
-  policyContainer: PolicyContainer = createPolicyContainer();
+  policyContainer = new PolicyContainer();
   /** Sandbox restrictions selected for the navigation. */
   finalSandboxingFlagSet: SandboxingFlagSet;
   /** Container referrer policy used when initializing document ancestry. */
   iframeReferrerPolicy: ReferrerPolicy = '';
   /** Cross-origin opener policy assigned to the new document. */
-  openerPolicy: OpenerPolicy = createOpenerPolicy();
+  openerPolicy = new OpenerPolicy();
   /** Kind of navigation recorded by Navigation Timing. */
   navigationTimingType: NavigationTimingType = 'navigate';
   /** Inherited base for an about:blank or srcdoc document, when applicable. */
@@ -70,7 +65,7 @@ export class NavigationParams {
     this.response = response;
     this.origin = obtainURLOrigin(this.url);
     const context = this.obtainBrowsingContext();
-    this.finalSandboxingFlagSet = new Set(context.popupSandboxingFlagSet);
+    this.finalSandboxingFlagSet = new SandboxingFlagSet(context.popupSandboxingFlagSet);
     const env = getRelevantRealm(context.activeWindow).env;
     this.#startTime = coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds;
   }
@@ -120,6 +115,8 @@ export class NavigationParams {
   }
 
   /** Combine response and container permissions for the destination document. */
+  // https://w3c.github.io/webappsec-permissions-policy/#create-from-response
+  // PROVISIONAL: only top-level destinations without a Permissions-Policy header are supported.
   createPermissionsPolicy(): PermissionsPolicy {
     if (this.response.headerList.get('Permissions-Policy') !== null) {
       throw new InternalError('Permissions-Policy response parsing is not implemented');
@@ -127,7 +124,7 @@ export class NavigationParams {
     if (!(this.navigable instanceof TopLevelTraversable)) {
       throw new InternalError('Container permissions-policy creation is not implemented');
     }
-    return createPermissionsPolicy();
+    return PermissionsPolicy.create(null, this.origin);
   }
 
   /** Whether the response requests an origin-keyed agent cluster. */
@@ -155,142 +152,3 @@ export class NavigationParams {
 export type OpenerPolicyEnforcementResult = {
   needsBrowsingContextGroupSwitch: boolean;
 };
-
-export type NavigationHistoryBehavior = 'push' | 'replace';
-
-export type NavigationTimingType = 'navigate' | 'reload' | 'back_forward';
-
-export type UserNavigationInvolvement = 'none' | 'activation' | 'browser UI';
-
-export function resolveNavigationHistoryBehavior(
-  navigable: Navigable,
-  url: URLRecord,
-  origin: NavigationParams['origin'],
-): NavigationHistoryBehavior {
-  const activeDocument = navigable.activeDocument;
-  if (activeDocument === null) {
-    throw new InternalError('Navigation requires an active Document');
-  }
-
-  const activeURL = navigable.activeSessionHistoryEntry.url;
-  let historyHandling: NavigationHistoryBehavior =
-    urlsEqual(url, activeURL) &&
-    areSameOrigin(origin, activeDocument.origin)
-      ? 'replace'
-      : 'push';
-
-  if (
-    url.scheme === 'javascript' ||
-    activeDocument.isInitialAboutBlank
-  ) {
-    historyHandling = 'replace';
-  }
-  return historyHandling;
-}
-
-export function finalizeCrossDocumentNavigation(
-  navigable: Navigable,
-  historyHandling: NavigationHistoryBehavior,
-  userInvolvement: UserNavigationInvolvement,
-  historyEntry: SessionHistoryEntry,
-): void {
-  navigable.isDelayingLoadEvents = false;
-  const document = historyEntry.documentState.document;
-  if (document === null) return;
-  const activeDocument = navigable.activeDocument;
-  if (activeDocument === null) {
-    throw new InternalError('Navigation requires an active Document');
-  }
-
-  const browsingContext = document.browsingContext;
-  if (browsingContext === null) {
-    throw new InternalError('Navigation Document has no browsing context');
-  }
-  if (
-    navigable.parent === null &&
-    !(
-      browsingContext.isAuxiliary &&
-      browsingContext.openerBrowsingContext !== null
-    ) &&
-    !areSameOrigin(
-      document.origin,
-      activeDocument.origin,
-    )
-  ) {
-    historyEntry.documentState.navigableTargetName = '';
-  }
-
-  const traversable = requireTopLevelTraversable(navigable);
-  const targetEntries = traversable.sessionHistoryEntries;
-  let targetStep: number;
-  if (historyHandling === 'push') {
-    clearForwardSessionHistory(traversable);
-    targetStep = traversable.currentSessionHistoryStep + 1;
-    historyEntry.step = targetStep;
-    targetEntries.push(historyEntry);
-  } else {
-    const entryToReplace = navigable.activeSessionHistoryEntry;
-    const index = targetEntries.indexOf(entryToReplace);
-    if (index < 0) {
-      throw new InternalError('Active history entry is not in session history');
-    }
-    targetEntries[index] = historyEntry;
-    historyEntry.step = entryToReplace.step;
-    targetStep = traversable.currentSessionHistoryStep;
-  }
-
-  applyPushOrReplaceHistoryStep(
-    traversable,
-    navigable,
-    targetStep,
-    historyEntry,
-  );
-  void userInvolvement;
-}
-
-function applyPushOrReplaceHistoryStep(
-  traversable: TraversableNavigable,
-  navigable: Navigable,
-  targetStep: number,
-  historyEntry: SessionHistoryEntry,
-): void {
-  const document = historyEntry.documentState.document;
-  if (document === null) return;
-  const browsingContext = document.browsingContext;
-  const realm = getRelevantRealm(document);
-  if (browsingContext === null) {
-    throw new InternalError('Navigation Document has no browsing context');
-  }
-  const window = realm.windowImplementation;
-
-  navigable.currentSessionHistoryEntry = historyEntry;
-  navigable.activeSessionHistoryEntry = historyEntry;
-  traversable.currentSessionHistoryStep = targetStep;
-  retargetWindowProxy(
-    browsingContext.windowProxy,
-    window,
-  );
-  const env = realm.env;
-  env.markExecutionReady();
-}
-
-function clearForwardSessionHistory(
-  traversable: TraversableNavigable,
-): void {
-  const firstForwardEntry = traversable.sessionHistoryEntries.findIndex(
-    (entry) => entry.step !== 'pending' &&
-      entry.step > traversable.currentSessionHistoryStep,
-  );
-  if (firstForwardEntry >= 0) {
-    traversable.sessionHistoryEntries.splice(firstForwardEntry);
-  }
-}
-
-function requireTopLevelTraversable(
-  navigable: Navigable,
-): TopLevelTraversable {
-  if (!(navigable instanceof TopLevelTraversable)) {
-    throw new InternalError('Nested navigable history is not implemented');
-  }
-  return navigable;
-}

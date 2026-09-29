@@ -11,7 +11,7 @@ import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
-import type { NavigationParams } from '../../browsing/navigation/navigation';
+import type { NavigationParams } from '../../browsing/navigation/params';
 import type { BrowletEnvironment, Environment } from '../../scripting/environment';
 import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
 import { CSPList } from '../../browsing/policy/csp/list';
@@ -20,19 +20,10 @@ import type { NavigationTimingRecord } from '../../performance/navigation';
 import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
-import {
-  createPolicyContainer, type PolicyContainer,
-} from '../../browsing/policy/container';
-import {
-  createOpenerPolicy, type OpenerPolicy,
-} from '../../browsing/policy/coop';
-import {
-  createPermissionsPolicy, type PermissionsPolicy,
-} from '../../browsing/policy/permissions';
-import {
-  createSandboxingFlagSet, type SandboxingFlag,
-  type SandboxingFlagSet,
-} from '../../browsing/policy/sandbox';
+import { PolicyContainer } from '../../browsing/policy/container';
+import { OpenerPolicy } from '../../browsing/policy/coop';
+import { PermissionsPolicy } from '../../browsing/policy/permissions';
+import { SandboxingFlagSet, type SandboxingFlag } from '../../browsing/policy/sandbox';
 import { asciiLower } from '../../../infra/ascii';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
@@ -123,15 +114,15 @@ export class DocumentImpl extends NodeImpl {
   /** Module scripts known to this document. */
   moduleMap: ModuleMap = { entries: [] };
   /** Policies inherited or supplied when the document was created. */
-  policyContainer: PolicyContainer = createPolicyContainer();
+  policyContainer = new PolicyContainer();
   /** HTTP status of the resource that created this Document; zero when there was no response. */
   httpStatus = 0;
   /** Permissions policy controlling features in this document. */
-  permissionsPolicy: PermissionsPolicy = createPermissionsPolicy();
+  permissionsPolicy = new PermissionsPolicy();
   /** Cross-origin opener policy selected for this document. */
-  openerPolicy: OpenerPolicy = createOpenerPolicy();
+  openerPolicy = new OpenerPolicy();
   /** Sandbox restrictions currently applied to the document. */
-  activeSandboxingFlagSet: SandboxingFlagSet = createSandboxingFlagSet();
+  activeSandboxingFlagSet = new SandboxingFlagSet();
   /** Whether parsing may create declarative shadow roots. */
   allowDeclarativeShadowRoots = false;
   /** Ancestor origins retained for navigation, or null before selection. */
@@ -920,9 +911,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     ]),
     op('createElement', reference('Element'), [
       arg('localName', idlType.DOMString),
-      arg(
-        'options',
-        union(idlType.DOMString, reference('ElementCreationOptions')),
+      arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
         {
           default: emptyDictionary,
           optional: true,
@@ -932,9 +921,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     op('createElementNS', reference('Element'), [
       arg('namespace', nullable(idlType.DOMString)),
       arg('qualifiedName', idlType.DOMString),
-      arg(
-        'options',
-        union(idlType.DOMString, reference('ElementCreationOptions')),
+      arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
         {
           default: emptyDictionary,
           optional: true,

@@ -3,7 +3,7 @@ import { createTestDocument } from '../../support/dom';
 import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
@@ -91,7 +91,7 @@ function createFixture() {
     requestEventLoopTurn: vi.fn(),
     unsafeSharedCurrentTime,
   };
-  const traversable = createNewTopLevelTraversable(new UserAgent(options), null, '');
+  const traversable = TopLevelTraversable.create(new UserAgent(options), null, '');
   const document = traversable.activeDocument!;
   const realm = getRelevantRealm(traversable.activeBrowsingContext!.windowProxy);
   const loop = realm.agent.eventLoop;

@@ -104,7 +104,7 @@ export class CSSStyleSheetImpl
     sheet.#constructed = false;
     sheet.#constructorDocument = null;
     sheet.#stylesheetBaseURL = null;
-    if (rules) sheet.replaceInterpretedStyleSheet(rules);
+    if (rules) sheet.#replaceInterpretedStyleSheet(rules);
 
     return sheet;
   }
@@ -114,13 +114,13 @@ export class CSSStyleSheetImpl
   }
 
   get cssRules(): CSSRuleListImpl {
-    this.assertOriginClean();
+    this.#assertOriginClean();
     return this.#rules;
   }
 
   insertRule(rule: string, index = 0): number {
-    this.assertOriginClean();
-    this.assertModificationAllowed();
+    this.#assertOriginClean();
+    this.#assertModificationAllowed();
 
     if (index > this.#rules.length) {
       throw this.env.exec.createDOMException(
@@ -152,8 +152,8 @@ export class CSSStyleSheetImpl
   }
 
   deleteRule(index: number): void {
-    this.assertOriginClean();
-    this.assertModificationAllowed();
+    this.#assertOriginClean();
+    this.#assertModificationAllowed();
 
     if (index >= this.#rules.length) {
       throw this.env.exec.createDOMException(
@@ -186,10 +186,10 @@ export class CSSStyleSheetImpl
     // CSSOM leaves the task source unspecified; use DOM manipulation delivery.
     this.env.exec.runInParallel(() => {
       try {
-        const rules = this.parseRules(text);
+        const rules = this.#parseRules(text);
         this.env.exec.queueTask('dom-manipulation', () => {
           try {
-            this.replaceInterpretedStyleSheet(rules);
+            this.#replaceInterpretedStyleSheet(rules);
             this.#disallowModification = false;
             result.resolve(this);
           } catch (error) {
@@ -211,7 +211,7 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.replaceInterpretedStyleSheet(this.parseRules(text));
+    this.#replaceInterpretedStyleSheet(this.#parseRules(text));
   }
 
   // Internal operations ----------------------------------------------------
@@ -267,7 +267,7 @@ export class CSSStyleSheetImpl
 
   // Private helpers ---------------------------------------------------------
 
-  private parseRules(text: string): InterpretedStyleSheet {
+  #parseRules(text: string): InterpretedStyleSheet {
     return parseStylesheet(text, {
       ...(this.#interpretedStyleSheet.location === undefined
         ? {}
@@ -278,14 +278,14 @@ export class CSSStyleSheetImpl
     });
   }
 
-  private replaceInterpretedStyleSheet(
+  #replaceInterpretedStyleSheet(
     styleSheet: InterpretedStyleSheet,
   ): void {
     this.#interpretedStyleSheet = styleSheet;
     this.#rules.replace(buildCSSRules(styleSheet, this.env));
   }
 
-  private assertOriginClean(): void {
+  #assertOriginClean(): void {
     if (!this.#originClean) {
       throw this.env.exec.createDOMException(
         'SecurityError',
@@ -294,7 +294,7 @@ export class CSSStyleSheetImpl
     }
   }
 
-  private assertModificationAllowed(): void {
+  #assertModificationAllowed(): void {
     if (this.#disallowModification) {
       throw this.env.exec.createDOMException(
         'NotAllowedError',

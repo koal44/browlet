@@ -6,15 +6,9 @@ import { createMicrotaskQueue } from '../js-engine/index';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { project, getRelevantRealm } from './bindings';
-import type { Environment } from './scripting/environment';
 import { createAndInitializeDocument } from './browsing/document-lifecycle';
-import {
-  createNewTopLevelTraversable, type TopLevelTraversable,
-} from './browsing/navigable';
-import {
-  NavigationParams,
-  finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
-} from './browsing/navigation/navigation';
+import { TopLevelTraversable } from './browsing/navigable';
+import { NavigationParams } from './browsing/navigation/params';
 import {
   BrowletParser, type DocumentWrite,
 } from './html/parser/document-parser';
@@ -24,8 +18,7 @@ import { UserAgent } from './user-agent';
 import type { AuthenticationPrompt } from './loader/authentication';
 import { requestNodeEventLoopTurn } from './integration/scripting';
 import { PageEvaluation } from './automation/evaluation';
-import { unsafeSharedCurrentTime } from
-  './performance/high-resolution-time';
+import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
 import { InternalError } from '../infra/internal-error';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */
@@ -55,7 +48,7 @@ export class Browlet {
     }
     this.#userAgent.reportDeliveryEnabled = config.reporting ?? true;
     if (config.authentication) this.#userAgent.httpAuthentication.onPrompt = config.authentication;
-    this.#traversable = createNewTopLevelTraversable(
+    this.#traversable = TopLevelTraversable.create(
       this.#userAgent,
       null,
       '',
@@ -123,24 +116,24 @@ export class Browlet {
 
   /** Load a document and resolve with its browsing context's WindowProxy. */
   navigate(url: string | URL): Promise<WindowProxy> {
-    // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through InternalPromise before this host promise settles.
+    // eslint-disable-next-line no-restricted-globals -- Node-facing API: internal HTML work finishes through InternalPromise before this Node Promise settles.
     return new Promise((resolve, reject) => {
-      this.navigateDocument(url).observe(resolve, reject);
+      this.#navigateDocument(url).observe(resolve, reject);
     });
   }
 
-  // -- Private ----------------------------------------------------------
-
-  private navigateDocument(url: string | URL): InternalPromise<WindowProxy> {
+  #navigateDocument(url: string | URL): InternalPromise<WindowProxy> {
     const documentURL = new URL(url);
-    const source = this.getRouteSource(documentURL);
-    const documentURLRecord = requireURLRecord(documentURL.href, getRelevantRealm(this.window).env);
+    const source = this.#getRouteSource(documentURL);
+    const documentURLRecord = getRelevantRealm(this.window).env.parseURL(documentURL.href).url;
+    if (documentURLRecord === null) {
+      throw new InternalError(`Could not parse validated navigation URL ${documentURL.href}`);
+    }
     const navigationParams = NavigationParams.fromSource(
       this.#traversable,
       documentURLRecord,
     );
-    const historyHandling = resolveNavigationHistoryBehavior(
-      this.#traversable,
+    const historyHandling = this.#traversable.resolveHistoryBehavior(
       documentURLRecord,
       navigationParams.origin,
     );
@@ -152,8 +145,7 @@ export class Browlet {
     const realm = getRelevantRealm(document);
     const env = document.env;
     const historyEntry = navigationParams.createHistoryEntry(document, source);
-    finalizeCrossDocumentNavigation(
-      this.#traversable,
+    this.#traversable.finalizeCrossDocumentNavigation(
       historyHandling,
       navigationParams.userInvolvement,
       historyEntry,
@@ -167,7 +159,7 @@ export class Browlet {
     const parser = new BrowletParser(
       document,
       (element, write) => {
-        this.executeScript(
+        this.#executeScript(
           element,
           documentURL,
           write,
@@ -185,7 +177,7 @@ export class Browlet {
     }, undefined, internalType<Window>('Window'));
   }
 
-  private executeScript(
+  #executeScript(
     element: ElementImpl,
     documentURL: URL,
     write: DocumentWrite,
@@ -197,8 +189,8 @@ export class Browlet {
       ? documentURL
       : new URL(sourceURL, documentURL);
     const source = sourceURL === null
-      ? getTextContent(element)
-      : this.getRouteSource(scriptURL);
+      ? element.getChildTextContent()
+      : this.#getRouteSource(scriptURL);
     const lineOffset = sourceURL === null
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
@@ -208,7 +200,7 @@ export class Browlet {
     });
   }
 
-  private getRouteSource(url: string | URL): string {
+  #getRouteSource(url: string | URL): string {
     return this.#route(String(url));
   }
 }
@@ -224,19 +216,3 @@ export type BrowletConfig = {
   /** Answer HTTP authentication challenges; omitted prompts are declined. */
   authentication?: AuthenticationPrompt;
 };
-
-function getTextContent(element: ElementImpl): string {
-  let content = '';
-
-  for (let child = element.firstChild; child; child = child.nextSibling) {
-    if (child.isText()) content += child.data;
-  }
-
-  return content;
-}
-
-function requireURLRecord(input: string, env: Environment) {
-  const record = env.parseURL(input).url;
-  if (record === null) throw new InternalError(`Could not parse validated navigation URL ${input}`);
-  return record;
-}

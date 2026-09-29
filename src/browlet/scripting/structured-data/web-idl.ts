@@ -9,9 +9,7 @@ import {
  */
 export const structuredSerializeOptionsIDL = defineDictionary({
   name: 'StructuredSerializeOptions',
-  members: [dictMember(
-    'transfer',
-    sequence(idlType.object),
+  members: [dictMember('transfer', sequence(idlType.object),
     { default: emptySequence },
   )],
 });

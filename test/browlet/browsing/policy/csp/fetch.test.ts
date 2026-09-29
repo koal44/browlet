@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
 import { Browlet } from '../../../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../../../src/browlet/bindings';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
@@ -27,7 +28,7 @@ describe('Fetch CSP integration', () => {
   it('uses the cloned list origin and policies through the actual browser environment', () => {
     const { env, request, list } = requestWithPolicy("img-src 'self'");
     expect(list.selfOrigin).not.toEqual(env.origin);
-    list.policies[0]!.directives.set('img-src', ["'none'"]);
+    list.policies[0]!.directives.set('img-src', new CSPDirectiveValue(["'none'"]));
     expect(request.isBlockedByCSP()).toBe(false);
     expect(responseAt('https://resource.test/image').isBlockedByCSP(request)).toBe(false);
   });

@@ -17,7 +17,7 @@ import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding-world';
-import { createPolicyContainer, type PolicyContainer } from '../../../src/browlet/browsing/policy/container';
+import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
@@ -266,7 +266,7 @@ class TestAgent extends Agent {
 class TestEnvironment extends Environment {
   #moduleMap: ModuleMap = { entries: [] };
   #origin = createOpaqueOrigin();
-  #policyContainer = createPolicyContainer();
+  #policyContainer = new PolicyContainer();
   #globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(this);
 
   get apiBaseURL(): URLRecord {

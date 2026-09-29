@@ -2,9 +2,7 @@ import type { BrowletEnvironment } from '../../src/browlet/scripting/environment
 import { vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
-import {
-  createNewTopLevelTraversable,
-} from '../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../src/browlet/browsing/navigable';
 import { domExceptionCapabilities } from '../../src/browlet/integration/dom-exception';
 import { deserializeFetchAbortReason } from '../../src/browlet/integration/fetch';
 import { createExecution } from '../../src/browlet/integration/execution';
@@ -61,7 +59,7 @@ export function nextFetchTaskError(env: JSEnvironment) {
 
 /** Create a Window for task inspection; the default UserAgent leaves its event loop unstarted. */
 export function createFetchWindow(userAgent = new UserAgent()) {
-  const traversable = createNewTopLevelTraversable(userAgent, null, '');
+  const traversable = TopLevelTraversable.create(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const context = getBindingContext(realm);
   const eventLoop = realm.agent.eventLoop;

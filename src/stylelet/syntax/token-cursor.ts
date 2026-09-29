@@ -33,25 +33,27 @@ export type TryConsumer<T> =
 export type TryConsumerResult<T> = T | null;
 
 export class TokenCursor<Value extends Token = ComponentValue> {
-  private i: number;
-  private source?: TokenSource;
+  #input: Value[];
+  #i: number;
+  #source?: TokenSource;
   context: unknown;
 
   constructor(
-    private input: Value[],
+    input: Value[],
     options: TokenCursorOptions = {},
   ) {
-    this.i = options.position ?? 0;
+    this.#input = input;
+    this.#i = options.position ?? 0;
     this.context = options.context;
-    this.source = options.source;
+    this.#source = options.source;
   }
 
   pos(): number {
-    return this.i;
+    return this.#i;
   }
 
   restore(pos: number): void {
-    this.i = pos;
+    this.#i = pos;
   }
 
   eof(): boolean {
@@ -59,15 +61,15 @@ export class TokenCursor<Value extends Token = ComponentValue> {
   }
 
   peek(k = 0): Value | typeof EOFToken {
-    return this.input[this.i + k] ?? EOFToken;
+    return this.#input[this.#i + k] ?? EOFToken;
   }
 
   next(): Value | typeof EOFToken {
-    if (this.i >= this.input.length) {
+    if (this.#i >= this.#input.length) {
       return EOFToken;
     }
 
-    return this.input[this.i++]!;
+    return this.#input[this.#i++]!;
   }
 
   consume(): Value {
@@ -81,35 +83,35 @@ export class TokenCursor<Value extends Token = ComponentValue> {
   }
 
   consumeWhile(predicate: TokenPredicate<Value>): number {
-    const start = this.i;
+    const start = this.#i;
 
-    while (this.i < this.input.length && predicate(this.input[this.i]!)) {
-      this.i++;
+    while (this.#i < this.#input.length && predicate(this.#input[this.#i]!)) {
+      this.#i++;
     }
 
-    return this.i - start;
+    return this.#i - start;
   }
 
   match(kind: Value['type']): boolean {
     if (this.peek().type !== kind) return false;
 
-    this.i++;
+    this.#i++;
     return true;
   }
 
   sourceText(start: number, end: number): string | undefined {
-    if (this.source === undefined) return undefined;
+    if (this.#source === undefined) return undefined;
     if (start === end) return '';
 
-    const first = this.source.ranges[start];
-    const last = this.source.ranges[end - 1];
+    const first = this.#source.ranges[start];
+    const last = this.#source.ranges[end - 1];
     if (first === undefined || last === undefined) return undefined;
 
-    return this.source.text.slice(first.start, last.end);
+    return this.#source.text.slice(first.start, last.end);
   }
 
   error(message: string): never {
-    throw new TokenCursorError(message, this.i);
+    throw new TokenCursorError(message, this.#i);
   }
 }
 

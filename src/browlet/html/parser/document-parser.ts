@@ -22,7 +22,7 @@ export class BrowletParser {
   /** Document receiving nodes and parser lifecycle changes. */
   document: DocumentImpl;
   /** Host steps run when the parser encounters a script element. */
-  #handleScript: ScriptHandler;
+  #scriptHandler: ScriptHandler;
   #eventLoop: EventLoop;
   #stream: ParserStream<HTMLTreeAdapterMap>;
   #treeAdapter: HTMLTreeAdapter;
@@ -33,12 +33,12 @@ export class BrowletParser {
 
   constructor(
     document: DocumentImpl,
-    handleScript: ScriptHandler,
+    scriptHandler: ScriptHandler,
     eventLoop: EventLoop,
     env: JSEnvironment,
   ) {
     this.document = document;
-    this.#handleScript = handleScript;
+    this.#scriptHandler = scriptHandler;
     this.#eventLoop = eventLoop;
     this.#env = env;
     this.#treeAdapter = new HTMLTreeAdapter(document);
@@ -47,13 +47,13 @@ export class BrowletParser {
       treeAdapter: this.#treeAdapter,
     });
     this.#stream.on('script', (element, write, resume) => {
-      this.handleScript(element, write, resume);
+      this.#handleScript(element, write, resume);
     });
   }
 
   /** Feed already-decoded characters to the parser. */
   parse(source: string): InternalPromise<void> {
-    return this.startParsing(() => { this.#stream.end(source); });
+    return this.#startParsing(() => { this.#stream.end(source); });
   }
 
   /** Decode response chunks and feed the parser on the document's networking tasks. */
@@ -98,7 +98,7 @@ export class BrowletParser {
     };
     const read = () => {
       if (this.#stream.destroyed) return;
-      this.queueBodyTask(() => {
+      this.#queueBodyTask(() => {
         if (this.#stream.destroyed) return;
         this.#bodyReader ??= body!.stream.getDefaultReader();
         this.#bodyReader.readChunk({
@@ -108,20 +108,20 @@ export class BrowletParser {
               return;
             }
             const bytes = getBufferSourceCopy(chunk);
-            this.queueInput(() => consume(bytes));
+            this.#queueInput(() => consume(bytes));
           },
           closeSteps: () => {
             if (this.#stream.destroyed) return;
             this.#bodyReader!.release(this.#env);
             this.#bodyReader = undefined;
             this.#body = undefined;
-            this.queueInput(() => consume());
+            this.#queueInput(() => consume());
           },
           errorSteps: (error) => { this.#stream.destroy(toError(error)); },
         });
       });
     };
-    return this.startParsing(() => {
+    return this.#startParsing(() => {
       if (body === null) consume();
       else read();
     });
@@ -130,7 +130,7 @@ export class BrowletParser {
   /** Discard further input and stop pending parser continuations. */
   // https://html.spec.whatwg.org/multipage/parsing.html#abort-a-parser
   abort(): void {
-    this.stopInput();
+    this.#stopInput();
     this.#stream.destroy();
     if (this.document.activeParser === this) this.document.activeParser = null;
     // PROVISIONAL(HTML parser): readiness events, open-element cleanup, and
@@ -140,36 +140,36 @@ export class BrowletParser {
 
   // -- Private ----------------------------------------------------------
 
-  private startParsing(start: () => void): InternalPromise<void> {
+  #startParsing(start: () => void): InternalPromise<void> {
     const complete = this.#env.exec.Promise.withResolvers(idlType.undefined);
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#stream, (error) => {
       cleanup();
-      this.queueTask(() => {
+      this.#queueTask(() => {
         try {
-          if (error) { this.stopInput(); throw error; }
+          if (error) { this.#stopInput(); throw error; }
           this.#treeAdapter.finishParsing();
           complete.resolve(undefined);
         } catch (failure) { complete.reject(failure); }
       });
     });
-    this.queueInput(start);
+    this.#queueInput(start);
     return complete.promise;
   }
 
-  private stopInput(): void {
+  #stopInput(): void {
     const body = this.#body;
     if (body === undefined) return;
     const reader = this.#bodyReader;
     this.#bodyReader = undefined;
-    this.queueBodyTask(() => {
+    this.#queueBodyTask(() => {
       body.stream.cancelInternal(undefined).observe(() => {}, () => {});
       reader?.release(this.#env);
     });
     this.#body = undefined;
   }
 
-  private queueBodyTask(steps: () => void): void {
+  #queueBodyTask(steps: () => void): void {
     // Navigation bodies can belong to the browser sandbox rather than this
     // Document. Stream reads and cancellation enter that owner's checkpoint.
     const env = this.#body!.stream.env;
@@ -179,8 +179,8 @@ export class BrowletParser {
     });
   }
 
-  private queueInput(steps: () => void): void {
-    this.queueTask(() => {
+  #queueInput(steps: () => void): void {
+    this.#queueTask(() => {
       if (this.#stream.destroyed) return;
       try { steps(); }
       catch (error) { this.#stream.destroy(toError(error)); }
@@ -189,7 +189,7 @@ export class BrowletParser {
 
   // HTML's text insertion mode, at the end tag of a script element.
   // https://html.spec.whatwg.org/#parsing-main-incdata
-  private handleScript(
+  #handleScript(
     element: ElementImpl,
     write: DocumentWrite,
     resume: () => void,
@@ -197,14 +197,14 @@ export class BrowletParser {
     try {
       // Checkpoint before script preparation.
       this.#eventLoop.performMicrotaskCheckpointIfStackEmpty();
-      this.runScript(element, write, resume);
+      this.#runScript(element, write, resume);
     } catch (error) {
       this.#stream.destroy(toError(error));
     }
   }
 
   // https://html.spec.whatwg.org/#parsing-main-incdata
-  private runScript(
+  #runScript(
     element: ElementImpl,
     write: DocumentWrite,
     resume: () => void,
@@ -215,18 +215,18 @@ export class BrowletParser {
       // Recheck here: another stylesheet can block before that task runs.
       if (this.document.hasScriptBlockingStyleSheets()) {
         this.document.waitForScriptBlockingStyleSheets(this.#env).observe(
-          () => { this.queueTask(() => { this.runScript(element, write, resume); }); },
+          () => { this.#queueTask(() => { this.#runScript(element, write, resume); }); },
           (error) => { this.#stream.destroy(toError(error)); },
         );
         return;
       }
 
-      const complete = this.#handleScript(element, write);
+      const complete = this.#scriptHandler(element, write);
       if (complete === undefined) {
-        this.resume(resume);
+        this.#resume(resume);
       } else {
         complete.observe(
-          () => { this.queueTask(() => { this.resume(resume); }); },
+          () => { this.#queueTask(() => { this.#resume(resume); }); },
           (error) => { this.#stream.destroy(toError(error)); },
         );
       }
@@ -235,13 +235,13 @@ export class BrowletParser {
     }
   }
 
-  private resume(steps: () => void): void {
+  #resume(steps: () => void): void {
     if (this.#stream.destroyed) return;
     try { steps(); }
     catch (error) { this.#stream.destroy(toError(error)); }
   }
 
-  private queueTask(steps: () => void): void {
+  #queueTask(steps: () => void): void {
     this.#eventLoop.queueTask(networkingTaskSource, this.document, bindAsyncContext(steps));
   }
 }

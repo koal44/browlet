@@ -729,9 +729,7 @@ describe('Web IDL implementation bindings', () => {
         ),
         op('callbackArguments', idlType.undefined,
           [
-            arg(
-              'callback',
-              reference(nestedResultCallbackIDL.name),
+            arg('callback', reference(nestedResultCallbackIDL.name),
               onError('rethrow'),
             ),
           ],
@@ -1133,9 +1131,7 @@ describe('Web IDL implementation bindings', () => {
     });
     const callbackOptions = defineDictionary({
       name: 'CallbackOptions',
-      members: [dictMember(
-        'callback',
-        reference(increment.name),
+      members: [dictMember('callback', reference(increment.name),
         { ...onError('rethrow'), required: true },
       )],
     });
@@ -1149,18 +1145,14 @@ describe('Web IDL implementation bindings', () => {
         roAttr('nativeCallback', reference(increment.name)),
         roAttr('nativeCallbackUnion', reference(callbackOrString.name)),
         op('invoke', idlType.long, [
-          arg(
-            'callback',
-            reference(increment.name),
+          arg('callback', reference(increment.name),
             onError('rethrow'),
           ),
           arg('value', idlType.long),
           arg('thisArgument', idlType.object),
         ]),
         op('invokeUnion', idlType.long, [
-          arg(
-            'callback',
-            reference(callbackOrString.name),
+          arg('callback', reference(callbackOrString.name),
             onError('rethrow'),
           ),
         ]),
@@ -1168,31 +1160,23 @@ describe('Web IDL implementation bindings', () => {
           arg('options', reference(callbackOptions.name)),
         ]),
         op('invokeSequence', idlType.long, [
-          arg(
-            'callbacks',
-            sequence(reference(increment.name)),
+          arg('callbacks', sequence(reference(increment.name)),
             onError('rethrow'),
           ),
         ]),
         op('invokeRecord', idlType.long, [
-          arg(
-            'callbacks',
-            record(idlType.DOMString, reference(increment.name)),
+          arg('callbacks', record(idlType.DOMString, reference(increment.name)),
             onError('rethrow'),
           ),
         ]),
         op('preserveAny', idlType.any, [arg('value', idlType.any)]),
         op('report', idlType.undefined, [
-          arg(
-            'callback',
-            reference(voidCallback.name),
+          arg('callback', reference(voidCallback.name),
             onError('report'),
           ),
         ]),
         op('rethrow', idlType.undefined, [
-          arg(
-            'callback',
-            reference(voidCallback.name),
+          arg('callback', reference(voidCallback.name),
             onError('rethrow'),
           ),
         ]),

@@ -121,6 +121,16 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
 
   // -- Internal ---------------------------------------------------------
 
+  /** Concatenate direct Text children in tree order, excluding nested descendants. */
+  // https://dom.spec.whatwg.org/#concept-child-text-content
+  getChildTextContent(): string {
+    let content = '';
+    for (let child = this.firstChild; child; child = child.nextSibling) {
+      if (child.isText()) content += child.data;
+    }
+    return content;
+  }
+
   // Tag checks keep the base node module independent of its subclasses.
   isElement(): this is ElementImpl {
     return this.nodeType === NodeType.Element;
@@ -265,6 +275,8 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
  *   [CEReactions] Node removeChild(Node child);
  * };
  */
+// PROVISIONAL: only a subset of the interface above is implemented and bound.
+// Missing members, including textContent and nodeValue, follow ROADMAP.md's section 4 slices.
 export const nodeIDL = defineInterface({
   name: 'Node',
   inherits: 'EventTarget',

@@ -1,5 +1,5 @@
 import type { BrowsingContext } from '../browsing/browsing-context';
-import type { TraversableNavigable } from '../browsing/navigable';
+import type { Traversable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
 import {
   FetchGroup, getEnvironmentDefaultUserAgent,
@@ -216,7 +216,7 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
 
   /** Select a prompt destination; environments without a Window have none. */
   // https://fetch.spec.whatwg.org/#populate-request-from-client
-  getTraversableForUserPrompts(): TraversableNavigable | null {
+  getTraversableForUserPrompts(): Traversable | null {
     return null;
   }
 
@@ -375,7 +375,7 @@ export class WindowEnvironment extends Environment {
   }
 
   // https://fetch.spec.whatwg.org/#populate-request-from-client
-  override getTraversableForUserPrompts(): TraversableNavigable | null {
-    return this.window.getAssociatedDocument().getNodeNavigable()?.traversableNavigable ?? null;
+  override getTraversableForUserPrompts(): Traversable | null {
+    return this.window.getAssociatedDocument().getNodeNavigable()?.traversable ?? null;
   }
 }

@@ -8,5 +8,4 @@ export {
 export { toScalarValueString, type ScalarValueString } from './strings';
 export { InternalError } from './internal-error';
 export type { AsyncExecution, TaskCreationOptions, TaskHandle, TaskSourceKey } from './execution';
-export type { DOMOperations, DOMNode, DOMCollection } from './dom-operations';
-export { standardDOM } from './dom-standard';
+export { standardDOM, type DOMOperations, type DOMNode, type DOMCollection } from './dom-operations';

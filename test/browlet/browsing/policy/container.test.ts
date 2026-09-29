@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPolicyContainer } from '../../../../src/browlet/browsing/policy/container';
+import { PolicyContainer } from '../../../../src/browlet/browsing/policy/container';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { IntegrityPolicy } from '../../../../src/browlet/browsing/policy/integrity-policy';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
@@ -9,7 +9,7 @@ import { createOpaqueOrigin } from '../../../../src/url/origin';
 
 describe('Policy containers', () => {
   it('creates independent default policy state', () => {
-    const first = createPolicyContainer();
+    const first = new PolicyContainer();
     const second = new UserAgent().createPolicyContainer();
     expect(first).toEqual(second);
     expect(first).not.toBe(second);
@@ -23,7 +23,7 @@ describe('Policy containers', () => {
     const response = new FetchResponse();
     response.headerList.append('Integrity-Policy', 'blocked-destinations=(script), endpoints=(enforced)');
     response.headerList.append('integrity-policy-report-only', 'blocked-destinations=(style), endpoints=(reported)');
-    const container = createPolicyContainer();
+    const container = new PolicyContainer();
     container.parseIntegrityPolicyHeaders(response);
     expect(container.integrityPolicy).toEqual({
       sources: ['inline'], blockedDestinations: ['script'], endpoints: ['enforced'],
@@ -34,7 +34,7 @@ describe('Policy containers', () => {
   });
 
   it('preserves existing policies when the response supplies neither header', () => {
-    const container = createPolicyContainer();
+    const container = new PolicyContainer();
     const enforced = container.integrityPolicy;
     const reported = container.reportOnlyIntegrityPolicy;
     enforced.blockedDestinations.push('script');
@@ -48,7 +48,7 @@ describe('Policy containers', () => {
     ['Integrity-Policy', 'integrityPolicy', 'reportOnlyIntegrityPolicy'],
     ['Integrity-Policy-Report-Only', 'reportOnlyIntegrityPolicy', 'integrityPolicy'],
   ] as const)('discards a malformed %s without changing the other policy', (header, field, otherField) => {
-    const container = createPolicyContainer();
+    const container = new PolicyContainer();
     container[field].blockedDestinations.push('script');
     const other = container[otherField];
     other.sources.push('inline');
@@ -62,11 +62,11 @@ describe('Policy containers', () => {
   });
 
   it('copies enforced and reporting COEP fields and referrer policy', () => {
-    const original = createPolicyContainer();
-    original.embedderPolicy = {
-      value: 'require-corp', reportingEndpoint: 'enforced',
-      reportOnlyValue: 'credentialless', reportOnlyReportingEndpoint: 'reported',
-    };
+    const original = new PolicyContainer();
+    original.embedderPolicy.value = 'require-corp';
+    original.embedderPolicy.reportingEndpoint = 'enforced';
+    original.embedderPolicy.reportOnlyValue = 'credentialless';
+    original.embedderPolicy.reportOnlyReportingEndpoint = 'reported';
     original.referrerPolicy = 'no-referrer';
     const copy = original.clone();
     expect(copy).toEqual(original);
@@ -83,7 +83,7 @@ describe('Policy containers', () => {
   });
 
   it('copies populated CSP directives and preserves their self origin', () => {
-    const original = createPolicyContainer();
+    const original = new PolicyContainer();
     const origin = createOpaqueOrigin();
     original.cspList = new CSPList(origin);
     original.cspList.policies.push(
@@ -94,16 +94,16 @@ describe('Policy containers', () => {
     expect(copy.cspList).toEqual(original.cspList);
     expect(copy.cspList!.selfOrigin).toBe(origin);
     expect(copy.cspList!.policies).not.toBe(original.cspList.policies);
-    copy.cspList!.policies[0]!.directives.get('default-src')!.push('https://cdn.test');
+    copy.cspList!.policies[0]!.directives.get('default-src')!.tokens.push('https://cdn.test');
     copy.cspList!.policies[1]!.directives.clear();
     copy.cspList!.policies.pop();
     expect(original.cspList.policies.map((policy) => [...policy.directives])).toEqual([
-      [['default-src', ["'self'"]]], [['img-src', ["'none'"]]],
+      [['default-src', { tokens: ["'self'"] }]], [['img-src', { tokens: ["'none'"] }]],
     ]);
   });
 
   it.each(['integrityPolicy', 'reportOnlyIntegrityPolicy'] as const)('copies populated %s independently', (field) => {
-    const original = createPolicyContainer();
+    const original = new PolicyContainer();
     original[field].sources.push('inline');
     original[field].blockedDestinations.push('script', 'style');
     original[field].endpoints.push('reports');

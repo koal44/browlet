@@ -1,55 +1,59 @@
 export class TextCursor {
+  #i: number;
+
   constructor(
     public input: string,
-    private i = 0,
-  ) {}
+    i = 0,
+  ) {
+    this.#i = i;
+  }
 
-  pos(): number { return this.i; }
+  pos(): number { return this.#i; }
 
   eof(k = 0): boolean {
-    return this.i + k >= this.input.length;
+    return this.#i + k >= this.input.length;
   }
 
   peek(k = 0): string {
-    return this.input[this.i + k] ?? '';
+    return this.input[this.#i + k] ?? '';
   }
 
   restore(pos: number): void {
-    this.i = pos;
+    this.#i = pos;
   }
 
   next(): string {
-    if (this.i >= this.input.length) return '';
+    if (this.#i >= this.input.length) return '';
 
-    const ch = this.input[this.i]!;
-    this.i++;
+    const ch = this.input[this.#i]!;
+    this.#i++;
     return ch;
   }
 
   // trusted, no eof check!
   advance(k = 1): void {
-    this.i += k;
+    this.#i += k;
   }
 
   match(ch: string): boolean {
-    if (this.input[this.i] !== ch) return false;
-    this.i++;
+    if (this.input[this.#i] !== ch) return false;
+    this.#i++;
     return true;
   }
 
   consume(k = 1): number {
-    const start = this.i;
+    const start = this.#i;
     const next = start + k;
     const n = this.input.length;
 
-    this.i = next < n ? next : n;
-    return this.i - start;
+    this.#i = next < n ? next : n;
+    return this.#i - start;
   }
 
   consumeWhile(p: (ch: string) => boolean): number {
     const input = this.input;
     const n = input.length;
-    const start = this.i;
+    const start = this.#i;
     let i = start;
 
     while (i < n) {
@@ -58,21 +62,21 @@ export class TextCursor {
       i++;
     }
 
-    this.i = i;
+    this.#i = i;
     return i - start;
   }
 
   expect(ch: string): void {
-    if (this.input[this.i] !== ch) this.error(`Expected ${JSON.stringify(ch)}`);
-    this.i++;
+    if (this.input[this.#i] !== ch) this.error(`Expected ${JSON.stringify(ch)}`);
+    this.#i++;
   }
 
-  slice(start: number, end = this.i): string {
+  slice(start: number, end = this.#i): string {
     return this.input.slice(start, end);
   }
 
   error(message: string): never {
-    throw new TextCursorError(message, this.i, this.input);
+    throw new TextCursorError(message, this.#i, this.input);
   }
 }
 

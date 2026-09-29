@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { FetchRequest } from '../../../src/fetch/request';
-import type { ReferrerPolicy } from '../../../src/fetch/environment';
+import type { ReferrerPolicy } from '../../../src/fetch/policy';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
 import { createFetchUserAgent } from '../client-fixture';

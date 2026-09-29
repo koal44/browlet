@@ -1,6 +1,6 @@
 import { populateWithHTMLHeadBody } from '../browsing/browsing-context';
 import { createAndInitializeDocument } from '../browsing/document-lifecycle';
-import type { NavigationParams } from '../browsing/navigation/navigation';
+import type { NavigationParams } from '../browsing/navigation/params';
 import type { DocumentImpl } from '../dom/nodes/document';
 import { BrowletParser, type ScriptHandler } from '../html/parser/document-parser';
 import type { InternalPromise } from '../../infra/promises';

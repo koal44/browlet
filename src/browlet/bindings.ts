@@ -11,14 +11,12 @@ import {
   type BindingContext, type StampedImplInstance, type StampedPlatformObject,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
-import { referrerPolicyIDL } from './browsing/policy/referrer-policy';
 import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
 import { coepViolationReportBodyIDL } from './browsing/policy/coep';
-import { cspViolationReportBodyIDL } from './browsing/policy/csp/violation';
 import {
-  securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
-  securityPolicyViolationEventDispositionIDL,
-} from './browsing/policy/csp/violation-event';
+  cspViolationReportBodyIDL, securityPolicyViolationEventIDL,
+  securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
+} from './browsing/policy/csp/violation';
 import { reportIDL, reportBodyIDL } from './reporting/report';
 import { testReportBodyIDL } from './reporting/test-report';
 import {
@@ -315,7 +313,6 @@ const browletDefinitions = [
   ...mathMLIDLDefinitions,
   originIDL,
   locationIDL,
-  referrerPolicyIDL,
   reportIDL, reportBodyIDL, integrityViolationReportBodyIDL, testReportBodyIDL,
   coepViolationReportBodyIDL,
   cspViolationReportBodyIDL,

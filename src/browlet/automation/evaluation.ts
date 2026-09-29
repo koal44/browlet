@@ -1,14 +1,17 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
 import type { TaskHandle } from '../../infra/execution';
+import {
+  type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
+  hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isProxyObject,
+} from '../../js-engine/index';
 import { idlType } from '../../web-idl/index';
 import type { WindowRealm } from '../scripting/realm';
-import { copyEvaluationValue } from './evaluation-value';
 
-/** One page execution context and its outstanding host commands. */
+/** One page execution context and its outstanding automation calls from Node. */
 export class PageEvaluation {
   #realm: WindowRealm;
-  /** Host commands to reject if navigation destroys this evaluation context. */
+  /** Evaluations to reject in Node if navigation destroys this page context. */
   #pending = new Set<(reason: Error) => void>();
   /** Queued evaluation and callback-delivery tasks awaiting execution. */
   #tasks = new Set<TaskHandle>();
@@ -18,9 +21,10 @@ export class PageEvaluation {
     this.#realm = realm;
   }
 
-  /** Run page source as an HTML task and copy its eventual result back to the host. */
+  /** Run page source as an HTML task and copy its eventual result back to Node. */
   evaluate(expression: string, isFunction: boolean, argument: unknown): Promise<unknown> {
-    return new HostPromise((resolve, reject) => {
+    // eslint-disable-next-line no-restricted-globals -- Automation calls return promises in Node.
+    return new Promise((resolve, reject) => {
       if (isFunction) {
         // Method shorthand needs a function keyword when parsed as an expression.
         try { new Script(`(${expression})`); }
@@ -63,7 +67,7 @@ export class PageEvaluation {
     });
   }
 
-  /** Install a page function that copies arguments and results across the host boundary. */
+  /** Install a page function that copies arguments and results between the page and Node. */
   exposeFunction(name: string, callback: (args: unknown[]) => unknown): void {
     const realm = this.#realm;
     const function_ = realm.createFunction((_receiver, args) => {
@@ -71,8 +75,9 @@ export class PageEvaluation {
         let input: unknown[];
         try { input = copyEvaluationValue(args) as unknown[]; }
         catch (error) { reject(copyEvaluationValue(error, realm)); return; }
-        // The host callback and any Promise/thenable it returns stay on Node's queue.
-        void HostPromise.resolve().then(() => callback(input)).then(
+        // The Node callback and any Promise/thenable it returns stay on Node's queue.
+        // eslint-disable-next-line no-restricted-globals -- Run the supplied callback in Node before delivering its result to the page.
+        void Promise.resolve().then(() => callback(input)).then(
           (value) => this.#deliver(value, resolve, reject, false),
           (error: unknown) => this.#deliver(error, resolve, reject, true),
         );
@@ -126,5 +131,85 @@ export class PageEvaluation {
   }
 }
 
-// eslint-disable-next-line no-restricted-syntax -- Host-facing commands and callbacks belong to Node.
-const HostPromise = globalThis.Promise;
+/** Copy automation data into its recipient's realm; live objects require handles. */
+function copyEvaluationValue(
+  value: unknown, realm?: JSRealm, memory = new Map<object, unknown>(),
+): unknown {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
+    if (typeof value === 'symbol') throw new TypeError('Symbols cannot cross the evaluation boundary');
+    return value;
+  }
+  if (memory.has(value)) return memory.get(value);
+  if (typeof value === 'function' || isProxyObject(value)) {
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
+    throw new TypeError('Functions and proxies cannot cross the evaluation boundary');
+  }
+
+  let copy: object;
+  if (hasDateValue(value)) {
+    const date = new (realm?.intrinsics.date ?? Date)(getDateValue(value));
+    memory.set(value, date);
+    return date;
+  }
+  if (hasRegExpMatcher(value)) {
+    const { source, flags } = getRegExpData(value);
+    const expression = new (realm?.intrinsics.regExp ?? RegExp)(source, flags);
+    memory.set(value, expression);
+    return expression;
+  }
+  if (hasMapData(value)) {
+    const map = new (realm?.intrinsics.map ?? Map)();
+    memory.set(value, map);
+    for (const [key, item] of copyMapData(value)) {
+      Map.prototype.set.call(map,
+        copyEvaluationValue(key, realm, memory), copyEvaluationValue(item, realm, memory));
+    }
+    return map;
+  }
+  if (hasSetData(value)) {
+    const set = new (realm?.intrinsics.set ?? Set)();
+    memory.set(value, set);
+    for (const item of copySetData(value)) {
+      Set.prototype.add.call(set, copyEvaluationValue(item, realm, memory));
+    }
+    return set;
+  }
+  if (hasErrorData(value)) {
+    const error = value as Error;
+    const name = String(error.name);
+    const constructors: Record<string, ErrorConstructor> = realm ? {
+      Error: realm.intrinsics.error, TypeError: realm.intrinsics.typeError,
+      RangeError: realm.intrinsics.rangeError, SyntaxError: realm.intrinsics.syntaxError,
+      ReferenceError: realm.intrinsics.referenceError, EvalError: realm.intrinsics.evalError,
+      URIError: realm.intrinsics.uriError,
+    // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
+    } : { Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError };
+    const constructor = Object.hasOwn(constructors, name) ? constructors[name]! : constructors.Error!;
+    const result = new constructor(error.message);
+    memory.set(value, result);
+    result.name = name;
+    const stack = error.stack;
+    result.stack = stack === undefined ? undefined : String(stack);
+    if (Object.hasOwn(error, 'cause')) result.cause = copyEvaluationValue(error.cause, realm, memory);
+    return result;
+  }
+  if (Array.isArray(value)) {
+    copy = new (realm?.intrinsics.array ?? Array)(value.length);
+  } else {
+    const prototype = Object.getPrototypeOf(value) as object | null;
+    if (prototype !== null && Object.getPrototypeOf(prototype) !== null) {
+      // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
+      throw new TypeError('Only data values can cross the evaluation boundary; live objects require handles');
+    }
+    copy = realm ? realm.createOrdinaryObject(realm.intrinsics.objectPrototype) : {};
+  }
+  memory.set(value, copy);
+  for (const key of Object.keys(value)) {
+    Object.defineProperty(copy, key, {
+      configurable: true, enumerable: true, writable: true,
+      value: copyEvaluationValue(Reflect.get(value, key), realm, memory),
+    });
+  }
+  return copy;
+}

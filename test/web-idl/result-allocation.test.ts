@@ -222,9 +222,9 @@ class ResultImpl {
 
   existing(value: Uint8Array): Uint8Array { return value; }
 
-  createAsync(): InternalPromise<unknown> { return this.pending ??= this.createPromise(this.env); }
+  createAsync(): InternalPromise<unknown> { return this.pending ??= this.#createPromise(this.env); }
 
-  otherAsync(): InternalPromise<unknown> { return this.otherPending ??= this.createPromise(this.otherEnv); }
+  otherAsync(): InternalPromise<unknown> { return this.otherPending ??= this.#createPromise(this.otherEnv); }
 
   existingAsync(): InternalPromise<unknown> { return this.env.exec.Promise.resolve(this.value, implementationType<unknown>(this.type)); }
 
@@ -234,7 +234,7 @@ class ResultImpl {
 
   static createStatic(): string[] { return ['static']; }
 
-  private createPromise(env: JSEnvironment): InternalPromise<unknown> {
+  #createPromise(env: JSEnvironment): InternalPromise<unknown> {
     const value = this.value instanceof Uint8Array ? env.exec.buffers.copyUint8Array(this.value) : this.value;
     return env.exec.Promise.resolve(value, implementationType<unknown>(this.type));
   }

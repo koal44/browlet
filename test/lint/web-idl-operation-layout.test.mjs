@@ -1,6 +1,7 @@
 import { RuleTester } from 'eslint';
 import { describe, it } from 'vitest';
 import tseslint from 'typescript-eslint';
+import stylistic from '@stylistic/eslint-plugin';
 import rule from '../../scripts/eslint/web-idl-operation-layout.mjs';
 
 RuleTester.describe = describe;
@@ -40,12 +41,40 @@ tester.run('web-idl-operation-layout', rule, {
   valid: [
     { name: 'FileList layout', code: declarationImport + preferred },
     {
+      name: 'attribute name and type stay with the helper',
+      code: "import { roAttr } from '../../src/web-idl/index';\n" +
+        "roAttr('window', reference('WindowProxy'),\n  xattr('LegacyUnforgeable'),\n);",
+    },
+    {
+      name: 'multiline type starts beneath the name',
+      code: "import { attr } from '../../src/web-idl/index';\n" +
+        "attr('value',\n  union(\n    idlType.DOMString,\n    idlType.long,\n  ),\n);",
+    },
+    {
+      name: 'multiline type and options are sibling arguments',
+      plugins: { '@stylistic': stylistic },
+      rules: { '@stylistic/indent': ['error', 2] },
+      code: "import { arg } from '../../src/web-idl/index';\n" + `arg('init',
+  union(
+    sequence(sequence(idlType.USVString)),
+    record(idlType.USVString, idlType.USVString),
+    idlType.USVString,
+  ),
+  { default: '', optional: true },
+);`,
+    },
+    {
       name: 'static operation layout',
       code: declarationImport.replace('{ op }', '{ staticOp }') + preferred.replace('op(', 'staticOp('),
     },
     {
       name: 'compact declaration',
       code: declarationImport + "op('item', type, [arg('index', type)], indexedGetter(indices));",
+    },
+    {
+      name: 'compact nested calls stay in the header',
+      code: "import { roAttr } from '../../src/web-idl/index';\n" +
+        "roAttr('value', nullable(sequence(reference('Item'))));",
     },
     {
       name: 'compact groups below the header',
@@ -109,6 +138,65 @@ tester.run('web-idl-operation-layout', rule, {
     },
   ],
   invalid: [
+    {
+      name: 'multiline argument type cannot start inside the header',
+      plugins: { '@stylistic': stylistic },
+      rules: { '@stylistic/indent': ['error', 2] },
+      code: "import { arg, ctor } from '../../src/web-idl/index';\n" + `const definition = {
+  members: [
+    ctor([
+      arg('init', union(
+        sequence(sequence(idlType.USVString)),
+        record(idlType.USVString, idlType.USVString),
+        idlType.USVString,
+      ),
+      { default: '', optional: true },
+      ),
+    ]),
+  ],
+};`,
+      errors: [{ messageId: 'multilineType' }],
+    },
+    {
+      name: 'multiline wrapped type cannot start inside an aliased header',
+      code: "import { roAttr as attribute } from '../../src/web-idl/index';\n" +
+        "attribute('value', nullable(union(\n  idlType.DOMString,\n  idlType.long,\n)));",
+      errors: [{ messageId: 'multilineType' }],
+    },
+    {
+      name: 'split attribute header',
+      code: "import { roAttr } from '../../src/web-idl/index';\n" +
+        "roAttr(\n  'window',\n  reference('WindowProxy'),\n  xattr('LegacyUnforgeable'),\n);",
+      output: "import { roAttr } from '../../src/web-idl/index';\n" +
+        "roAttr('window', reference('WindowProxy'),\n  xattr('LegacyUnforgeable'),\n);",
+      errors: [{ messageId: 'header' }, { messageId: 'header' }],
+    },
+    {
+      name: 'aliased writable attribute with options',
+      code: "import { attr as attribute } from '../../src/web-idl/core/index.js';\n" +
+        "attribute(\n  'value', type, { get: readValue });",
+      output: "import { attr as attribute } from '../../src/web-idl/core/index.js';\n" +
+        "attribute('value', type, { get: readValue });",
+      errors: [{ messageId: 'header' }],
+    },
+    {
+      name: 'split operation without a binding',
+      code: declarationImport + "op(\n  'item',\n  type, [arg('index', type)],\n);",
+      output: declarationImport + "op('item', type, [arg('index', type)],\n);",
+      errors: [{ messageId: 'header' }, { messageId: 'header' }],
+    },
+    ...['staticOp', 'arg', 'dictMember', 'constant'].map((helper) => ({
+      name: `${helper} header`,
+      code: `import { ${helper} } from '../../src/web-idl/index';\n${helper}(\n  'value',\n  type,\n);`,
+      output: `import { ${helper} } from '../../src/web-idl/index';\n${helper}('value', type,\n);`,
+      errors: [{ messageId: 'header' }, { messageId: 'header' }],
+    })),
+    {
+      name: 'header comments need manual placement',
+      code: declarationImport + "op('item', // Keep this explanation.\n  type);",
+      output: null,
+      errors: [{ messageId: 'header' }],
+    },
     {
       name: 'full Web IDL entry',
       code: "import { op } from '../../src/web-idl/index';\n" + flattened,

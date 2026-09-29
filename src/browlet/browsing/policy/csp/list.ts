@@ -3,8 +3,7 @@ import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetc
 import { InternalError } from '../../../../infra/internal-error';
 import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
 import type { DocumentImpl } from '../../../dom/nodes/document';
-import { parseSandboxingDirective, type SandboxingFlagSet } from '../sandbox';
-import { urlMatchesSourceList } from './source-list';
+import { SandboxingFlagSet } from '../sandbox';
 import { CSPViolation } from './violation';
 
 const policyHeaders: [name: string, disposition: CSPDisposition][] = [
@@ -105,14 +104,14 @@ export class CSPList implements FetchCSPList {
   /** Sandbox restrictions supplied by enforced response policies, before origin selection. */
   // https://html.spec.whatwg.org/multipage/browsers.html#forced-sandboxing-flag-set
   getSandboxingFlags(): SandboxingFlagSet {
-    const flags: SandboxingFlagSet = new Set();
+    const flags = new SandboxingFlagSet();
     // SPEC_CLASH(csp-sandbox-combination): All three engines combine restrictions;
     // HTML's written algorithm instead selects the last enforced sandbox directive.
     for (const policy of this.policies) {
       if (policy.disposition !== 'enforce' || policy.source !== 'header') continue;
-      const tokens = policy.directives.get('sandbox');
+      const tokens = policy.directives.get('sandbox')?.tokens;
       if (tokens === undefined) continue;
-      for (const flag of parseSandboxingDirective(tokens.join(' '))) flags.add(flag);
+      for (const flag of SandboxingFlagSet.parse(tokens.join(' '))) flags.add(flag);
     }
     return flags;
   }
@@ -122,7 +121,7 @@ export class CSPList implements FetchCSPList {
   isBaseBlocked(base: URLRecord, document: DocumentImpl): boolean {
     for (const policy of this.policies) {
       const sources = policy.directives.get('base-uri');
-      if (sources === undefined || urlMatchesSourceList(base, sources, this.selfOrigin, 0)) continue;
+      if (sources === undefined || sources.matchesURL(base, this.selfOrigin, 0)) continue;
       new CSPViolation(policy, 'base-uri', 'inline', document.env).report();
       if (policy.disposition === 'enforce') return true;
     }

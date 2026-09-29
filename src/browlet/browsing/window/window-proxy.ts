@@ -95,7 +95,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
     attributes: PropertyDescriptor,
   ): boolean {
     return Reflect.defineProperty(
-      this.requireWindowObject(),
+      this.#requireWindowObject(),
       property,
       attributes,
     );
@@ -103,13 +103,13 @@ class WindowProxyHandler implements ProxyHandler<object> {
 
   deleteProperty(_target: object, property: string | symbol): boolean {
     return Reflect.deleteProperty(
-      this.requireWindowObject(),
+      this.#requireWindowObject(),
       property,
     );
   }
 
   get(_target: object, property: string | symbol): unknown {
-    const window = this.requireWindowObject();
+    const window = this.#requireWindowObject();
     if (
       windowProxyReferences.has(property) &&
       !Reflect.has(window, property)
@@ -124,40 +124,38 @@ class WindowProxyHandler implements ProxyHandler<object> {
     property: string | symbol,
   ): PropertyDescriptor | undefined {
     const descriptor = Reflect.getOwnPropertyDescriptor(
-      this.requireWindowObject(),
+      this.#requireWindowObject(),
       property,
     );
     return descriptor && { ...descriptor, configurable: true };
   }
 
   getPrototypeOf(_target: object): object | null {
-    return Reflect.getPrototypeOf(this.requireWindowObject());
+    return Reflect.getPrototypeOf(this.#requireWindowObject());
   }
 
   has(_target: object, property: string | symbol): boolean {
     return windowProxyReferences.has(property) ||
-      Reflect.has(this.requireWindowObject(), property);
+      Reflect.has(this.#requireWindowObject(), property);
   }
 
   ownKeys(_target: object): (string | symbol)[] {
-    return Reflect.ownKeys(this.requireWindowObject());
+    return Reflect.ownKeys(this.#requireWindowObject());
   }
 
   set(_target: object, property: string | symbol, value: unknown): boolean {
-    const window = this.requireWindowObject();
+    const window = this.#requireWindowObject();
     return Reflect.set(window, property, value, window);
   }
 
   setPrototypeOf(_target: object, prototype: object | null): boolean {
     return Reflect.setPrototypeOf(
-      this.requireWindowObject(),
+      this.#requireWindowObject(),
       prototype,
     );
   }
 
-  // -- Private ----------------------------------------------------------
-
-  private requireWindowObject(): Window {
+  #requireWindowObject(): Window {
     if (!this.#window) {
       throw new InternalError('WindowProxy has no associated Window');
     }

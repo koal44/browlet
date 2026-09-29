@@ -1,5 +1,5 @@
 import { getRelevantRealm } from '../../../../../src/browlet/bindings';
-import { createNewTopLevelTraversable } from '../../../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../../../src/browlet/browsing/navigable';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy, type CSPDisposition } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { monotonicClock, UnsafeMoment } from '../../../../../src/browlet/performance/clock';
@@ -9,7 +9,7 @@ import { obtainURLOrigin, parseURL } from '../../../../../src/url/url';
 
 /** Real Window bindings with an unstarted HTML loop, so tests choose task delivery explicitly. */
 export function createCSPWindow(serialized = '', disposition: CSPDisposition = 'enforce') {
-  const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const env = realm.env;
   const document = realm.windowImplementation.document;

@@ -18,9 +18,7 @@ import { InternalError } from '../../../infra/internal-error';
 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
-export class WindowImpl
-  extends EventTargetImpl
-{
+export class WindowImpl extends EventTargetImpl {
   /** Current associated document, attached by document construction. */
   #document: DocumentImpl | null = null;
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
@@ -290,20 +288,14 @@ export const windowIDL = defineInterface({
   ),
   implementation: impl(WindowImpl),
   members: [
-    roAttr(
-      'window',
-      reference('WindowProxy'),
+    roAttr('window', reference('WindowProxy'),
       xattr('LegacyUnforgeable'),
     ),
     roAttr('self', reference('WindowProxy'), xattr('Replaceable')),
-    roAttr(
-      'document',
-      reference('Document'),
+    roAttr('document', reference('Document'),
       xattr('LegacyUnforgeable'),
     ),
-    roAttr(
-      'location',
-      reference('Location'),
+    roAttr('location', reference('Location'),
       xattr(['PutForwards', 'href'], 'LegacyUnforgeable'),
     ),
     // Web IDL's unnamed getter has no implementation member name to bind
@@ -335,9 +327,9 @@ export const windowEventIDL = definePartialInterface({
   name: 'Window',
   exposed: 'Window',
   members: [
-    roAttr(
-      'event', union(reference('Event'), idlType.undefined),
-      xattr('Replaceable')),
+    roAttr('event', union(reference('Event'), idlType.undefined),
+      xattr('Replaceable'),
+    ),
   ],
 });
 

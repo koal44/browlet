@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDocument, getRelevantRealm, retargetWindowProxy } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
-import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -292,10 +292,10 @@ describe('Reporting policy integration and user control', () => {
   it.each([true, false])('reports enforced and report-only CORP violations with delivery enabled: %s', (enabled) => {
     const { window, env, scope } = createWindow();
     env.userAgent.reportDeliveryEnabled = enabled;
-    env.policyContainer.embedderPolicy = {
-      value: 'require-corp', reportingEndpoint: 'enforce',
-      reportOnlyValue: 'require-corp', reportOnlyReportingEndpoint: 'observe',
-    };
+    env.policyContainer.embedderPolicy.value = 'require-corp';
+    env.policyContainer.embedderPolicy.reportingEndpoint = 'enforce';
+    env.policyContainer.embedderPolicy.reportOnlyValue = 'require-corp';
+    env.policyContainer.embedderPolicy.reportOnlyReportingEndpoint = 'observe';
     const observer = new window.ReportingObserver(() => {});
     observer.observe();
     const response = new FetchResponse();
@@ -357,7 +357,7 @@ describe('Reporting policy integration and user control', () => {
 
 // Real Window bindings and an unstarted HTML event loop let scheduling tests choose task turns.
 function createWindow() {
-  const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const eventLoop = realm.agent.eventLoop;
   return {

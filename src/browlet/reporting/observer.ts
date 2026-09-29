@@ -69,7 +69,7 @@ export class ReportingObserverImpl {
     if (this.#reports.length !== 1) return;
     const observers = [...this.#global.reportingObservers];
     this.#global.env.exec.queueTask('report', () => {
-      for (const observer of observers) observer.invokeCallback();
+      for (const observer of observers) observer.#invokeCallback();
     });
   }
 
@@ -80,7 +80,7 @@ export class ReportingObserverImpl {
 
   /** Deliver a nonempty batch, clearing it before invoking author code. */
   // https://w3c.github.io/reporting/#invoke-observers
-  private invokeCallback(): void {
+  #invokeCallback(): void {
     const reports = this.takeRecords();
     if (reports.length === 0) return;
     this.#callback.call(this, reports, this);

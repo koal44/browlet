@@ -75,9 +75,7 @@ export class EventHandlerMap {
 export function eventHandlerAttr(
   name: string,
 ): AttributeMember {
-  return attr(
-    name,
-    reference('EventHandler'),
+  return attr(name, reference('EventHandler'),
     onError('report'),
   );
 }

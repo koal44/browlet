@@ -34,10 +34,10 @@ describe('CSP lists', () => {
     const copy = list.clone();
     expect(copy).toEqual(list);
     expect(copy.selfOrigin).toBe(origin);
-    copy.policies[0]!.directives.get('default-src')!.push('https://other.test');
+    copy.policies[0]!.directives.get('default-src')!.tokens.push('https://other.test');
     copy.policies.push(ContentSecurityPolicy.parse("img-src 'none'", 'header', 'report'));
     expect(list.policies).toHaveLength(1);
-    expect(list.policies[0]!.directives.get('default-src')).toEqual(["'self'"]);
+    expect(list.policies[0]!.directives.get('default-src')?.tokens).toEqual(["'self'"]);
   });
 });
 
@@ -51,11 +51,11 @@ describe('Response CSP parsing', () => {
     response.headerList.append('Unrelated', 'ignored');
     const list = CSPList.parse(response);
     expect(list.policies.map((policy) => [policy.disposition, [...policy.directives]])).toEqual([
-      ['enforce', [['default-src', ["'self'"]]]],
-      ['enforce', [['img-src', ['https://images.test']]]],
-      ['enforce', [['script-src', ['https://scripts.test']]]],
-      ['report', [['script-src', ["'none'"]]]],
-      ['report', [['style-src', ["'none'"]]]],
+      ['enforce', [['default-src', { tokens: ["'self'"] }]]],
+      ['enforce', [['img-src', { tokens: ['https://images.test'] }]]],
+      ['enforce', [['script-src', { tokens: ['https://scripts.test'] }]]],
+      ['report', [['script-src', { tokens: ["'none'"] }]]],
+      ['report', [['style-src', { tokens: ["'none'"] }]]],
     ]);
     expect(list.policies.every((policy) => policy.source === 'header')).toBe(true);
     expect(list.hasHeaderDeliveredPolicy()).toBe(true);
@@ -65,7 +65,7 @@ describe('Response CSP parsing', () => {
     const response = responseAt('https://resource.test/');
     response.headerList.append('Content-Security-Policy', "default-src 'self', default-src 'none'");
     const list = CSPList.parse(response);
-    expect(list.policies.map((policy) => policy.directives.get('default-src'))).toEqual([["'self'"], ["'none'"]]);
+    expect(list.policies.map((policy) => policy.directives.get('default-src')?.tokens)).toEqual([["'self'"], ["'none'"]]);
   });
 
   it('takes self origin from the final response URL rather than the first URL', () => {

@@ -5,8 +5,7 @@ import { surroundingASCIIWhitespacePattern, asciiWhitespaceRunPattern } from '..
 import { isomorphicDecode } from '../../../../js-engine/index';
 import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
 import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
-import { getDirectiveFallbackList, getEffectiveDirective, type CSPFetchDirective } from './directives';
-import { integrityMetadataMatchesSourceList, nonceMatchesSourceList, urlMatchesSourceList } from './source-list';
+import { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName } from './directives';
 import { Environment, WindowEnvironment } from '../../../scripting/environment';
 import { CSPViolation } from './violation';
 
@@ -17,7 +16,7 @@ const invalidDirectiveCharacterPattern = /[^\t\n\f\r \x21-\x2B\x2D-\x3A\x3C-\x7E
 // https://w3c.github.io/webappsec-csp/#framework-policy
 export class ContentSecurityPolicy {
   /** Directive names in insertion order, each retaining its whitespace-separated values. */
-  directives: Map<string, string[]> = new Map();
+  directives = new CSPDirectives();
   /** Whether violations block the operation or only produce reports. */
   disposition: CSPDisposition;
   /** Whether the policy was delivered in a response header or a meta element. */
@@ -44,104 +43,103 @@ export class ContentSecurityPolicy {
       // The grammar also excludes ASCII controls and punctuation in names;
       // the draft's parsing steps explicitly reject only non-ASCII tokens.
       if (token === '' || invalidDirectiveCharacterPattern.test(token)) continue;
-      const [name, ...value] = token.split(asciiWhitespaceRunPattern);
-      if (!directiveNamePattern.test(name!)) continue;
-      const directiveName = asciiLower(name!);
+      const tokens = token.split(asciiWhitespaceRunPattern);
+      const name = tokens.shift()!;
+      if (!directiveNamePattern.test(name)) continue;
+      const directiveName = asciiLower(name);
       if (policy.directives.has(directiveName)) {
         policy.parsingWarnings.push(`Ignoring duplicate Content Security Policy directive '${directiveName}'.`);
         continue;
       }
       // Unknown names remain inert until a directive algorithm recognizes them.
-      policy.directives.set(directiveName, value);
+      policy.directives.set(directiveName, new CSPDirectiveValue(tokens));
     }
     return policy;
   }
 
   /** Identify the source directive that rejects this request, regardless of disposition. */
   // https://w3c.github.io/webappsec-csp/#does-request-violate-policy
-  getViolatedRequestDirective(request: FetchRequest, selfOrigin: Origin): CSPFetchDirective | undefined {
-    if (request.initiator === 'prefetch') return this.getViolatedResourceHintDirective(request, selfOrigin);
-    const effective = getEffectiveDirective(request);
-    if (effective === null) return undefined;
-    const directive = this.getFetchDirective(effective);
-    if (directive === undefined) return undefined;
-    return this.allowsRequestURL(request, request.currentURL, directive, effective, selfOrigin) ? undefined : directive;
+  getViolatedRequestDirective(request: FetchRequest, selfOrigin: Origin): CSPFetchDirectiveName | undefined {
+    if (request.initiator === 'prefetch') return this.#getViolatedResourceHintDirective(request, selfOrigin);
+    const requestDirective = CSPDirectives.getRequestDirective(request);
+    if (requestDirective === null) return undefined;
+    const policyDirective = this.directives.getFetchDirective(requestDirective);
+    if (policyDirective === undefined) return undefined;
+    return this.#allowsRequestURL(request, request.currentURL, policyDirective, requestDirective, selfOrigin)
+      ? undefined : policyDirective;
   }
 
   /** Check the response's URL, retaining nonce/hash authorization from the request. */
   // https://w3c.github.io/webappsec-csp/#should-block-response
   getViolatedResponseDirective(
     request: FetchRequest, response: FetchResponse, selfOrigin: Origin,
-  ): CSPFetchDirective | undefined {
-    const effective = getEffectiveDirective(request);
-    if (effective === null) return undefined;
-    const directive = this.getFetchDirective(effective);
-    if (directive === undefined) return undefined;
-    if ((directive === 'script-src' || effective === 'script-src-elem') && isScriptLikeDestination(request.destination)) {
-      this.potentiallyReportHash(response, request, directive);
+  ): CSPFetchDirectiveName | undefined {
+    const requestDirective = CSPDirectives.getRequestDirective(request);
+    if (requestDirective === null) return undefined;
+    const policyDirective = this.directives.getFetchDirective(requestDirective);
+    if (policyDirective === undefined) return undefined;
+    if ((policyDirective === 'script-src' || requestDirective === 'script-src-elem') &&
+      isScriptLikeDestination(request.destination)) {
+      this.#potentiallyReportHash(response, request, policyDirective);
     }
-    return this.allowsRequestURL(request, response.url, directive, effective, selfOrigin) ? undefined : directive;
-  }
-
-  /** Select the first present directive in the effective directive's fallback chain. */
-  // https://w3c.github.io/webappsec-csp/#should-directive-execute
-  getFetchDirective(effective: CSPFetchDirective): CSPFetchDirective | undefined {
-    return getDirectiveFallbackList(effective).find((name) => this.directives.has(name));
+    return this.#allowsRequestURL(request, response.url, policyDirective, requestDirective, selfOrigin)
+      ? undefined : policyDirective;
   }
 
   /** Capture the requesting client's violation, without exposing redirected resource URLs. */
   // https://w3c.github.io/webappsec-csp/#create-violation-for-request
   createViolationForRequest(request: FetchRequest): CSPViolation {
     const env = request.client;
-    const directive = getEffectiveDirective(request);
+    const requestDirective = CSPDirectives.getRequestDirective(request);
     // Fetch accepts other hosts' environments; this CSP implementation belongs to HTML.
     if (!(env instanceof Environment)) throw new InternalError('CSP violation reporting requires a browser client');
-    if (directive === null) throw new InternalError('CSP violation requires an effective directive');
-    return new CSPViolation(this, directive, request.url, env);
+    if (requestDirective === null) throw new InternalError('CSP violation requires a request directive');
+    return new CSPViolation(this, requestDirective, request.url, env);
   }
 
   // https://w3c.github.io/webappsec-csp/#does-resource-hint-violate-policy
-  private getViolatedResourceHintDirective(request: FetchRequest, selfOrigin: Origin): 'default-src' | undefined {
+  #getViolatedResourceHintDirective(request: FetchRequest, selfOrigin: Origin): 'default-src' | undefined {
     if (!this.directives.has('default-src')) return undefined;
     // SPEC_CLASH(csp-resource-hint-matching): Include default-src's own list
     // and recognize a successful match; the draft omits it and tests 'Allowed'
     // against an algorithm returning 'Matches'. Chromium uses fallback here.
     for (const name of resourceHintDirectives) {
       const sources = this.directives.get(name);
-      if (sources !== undefined && urlMatchesSourceList(request.currentURL, sources, selfOrigin, request.redirectCount)) {
+      if (sources !== undefined && sources.matchesURL(request.currentURL, selfOrigin, request.redirectCount)) {
         return undefined;
       }
     }
     return 'default-src';
   }
 
-  private allowsRequestURL(
-    request: FetchRequest, url: URLRecord | null, directive: CSPFetchDirective,
-    effective: CSPFetchDirective, selfOrigin: Origin,
+  #allowsRequestURL(
+    request: FetchRequest, url: URLRecord | null, policyDirective: CSPFetchDirectiveName,
+    requestDirective: CSPFetchDirectiveName, selfOrigin: Origin,
   ): boolean {
-    const sources = this.directives.get(directive)!;
+    const sources = this.directives.get(policyDirective)!;
     // script-src has its own checks even when serving as worker-src's fallback.
-    // default-src and child-src instead delegate to the effective directive.
-    if ((directive === 'script-src' || effective === 'script-src-elem') && isScriptLikeDestination(request.destination)) {
-      if (nonceMatchesSourceList(request.cryptographicNonceMetadata, sources) ||
-        integrityMetadataMatchesSourceList(request.integrityMetadata, sources)) return true;
-      if (sources.some((source) => asciiLower(source) === "'strict-dynamic'")) return request.parserInserted !== true;
-    } else if (effective === 'style-src-elem') {
-      if (nonceMatchesSourceList(request.cryptographicNonceMetadata, sources)) return true;
-    } else if (effective === 'connect-src' && request.mode === 'webtransport' && request.webTransportHashList.length !== 0) {
-      return sources.some((source) => asciiLower(source) === "'unsafe-webtransport-hashes'");
+    // default-src and child-src instead delegate to the request directive's checks.
+    if ((policyDirective === 'script-src' || requestDirective === 'script-src-elem') &&
+      isScriptLikeDestination(request.destination)) {
+      if (sources.matchesNonce(request.cryptographicNonceMetadata) ||
+        sources.matchesIntegrityMetadata(request.integrityMetadata)) return true;
+      if (sources.tokens.some((source) => asciiLower(source) === "'strict-dynamic'")) return request.parserInserted !== true;
+    } else if (requestDirective === 'style-src-elem') {
+      if (sources.matchesNonce(request.cryptographicNonceMetadata)) return true;
+    } else if (requestDirective === 'connect-src' && request.mode === 'webtransport' && request.webTransportHashList.length !== 0) {
+      return sources.tokens.some((source) => asciiLower(source) === "'unsafe-webtransport-hashes'");
     }
-    return url !== null && urlMatchesSourceList(url, sources, selfOrigin, request.redirectCount);
+    return url !== null && sources.matchesURL(url, selfOrigin, request.redirectCount);
   }
 
   // https://w3c.github.io/webappsec-csp/#potentially-report-hash
-  private potentiallyReportHash(response: FetchResponse, request: FetchRequest, directive: CSPFetchDirective): void {
-    const sources = this.directives.get(directive)!;
-    const algorithm = sources.includes("'report-sha512'") ? 'sha512' :
-      sources.includes("'report-sha384'") ? 'sha384' : sources.includes("'report-sha256'") ? 'sha256' : undefined;
+  #potentiallyReportHash(response: FetchResponse, request: FetchRequest, policyDirective: CSPFetchDirectiveName): void {
+    const sources = this.directives.get(policyDirective)!;
+    const algorithm = sources.tokens.includes("'report-sha512'") ? 'sha512' :
+      sources.tokens.includes("'report-sha384'") ? 'sha384' : sources.tokens.includes("'report-sha256'") ? 'sha256' : undefined;
     if (algorithm === undefined) return;
     const env = request.client;
-    const reportTo = this.directives.get('report-to');
+    const reportTo = this.directives.get('report-to')?.tokens;
     if (!(env instanceof WindowEnvironment) || !env.userAgent.reportDeliveryEnabled ||
       reportTo === undefined || reportTo.length === 0 || response.type === 'error') return;
 
@@ -185,7 +183,7 @@ export class ContentSecurityPolicy {
     const copy = new ContentSecurityPolicy(this.source, this.disposition);
     copy.serialized = this.serialized;
     copy.parsingWarnings = [...this.parsingWarnings];
-    for (const [name, value] of this.directives) copy.directives.set(name, [...value]);
+    copy.directives = this.directives.clone();
     return copy;
   }
 }
@@ -196,7 +194,7 @@ export type CSPDisposition = 'enforce' | 'report';
 /** Delivery mechanism, used by the directive-specific restrictions. */
 export type CSPSource = 'header' | 'meta';
 
-const resourceHintDirectives: CSPFetchDirective[] = [
+const resourceHintDirectives: CSPFetchDirectiveName[] = [
   'default-src', 'child-src', 'connect-src', 'font-src', 'frame-src', 'img-src',
   'manifest-src', 'media-src', 'object-src', 'script-src', 'script-src-elem',
   'style-src', 'style-src-elem', 'worker-src',

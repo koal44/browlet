@@ -1,5 +1,4 @@
 import type { FetchTimingInfo, ResponseBodyInfo } from '../../fetch/index';
-import type { NavigationTimingType } from '../browsing/navigation/navigation';
 import type { DocumentLoadTimingInfo } from '../dom/nodes/document';
 
 /** Live inputs retained until the navigation performance entry can be exposed. */
@@ -18,3 +17,6 @@ export type NavigationTimingRecord = {
   /** HTTP response status before performance exposure rules are applied. */
   responseStatus: number;
 };
+
+/** Kind of navigation recorded in the document's performance entry. */
+export type NavigationTimingType = 'navigate' | 'reload' | 'back_forward';

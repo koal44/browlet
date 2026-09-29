@@ -1,8 +1,17 @@
-/** Placeholder for the document's permissions policy until feature-policy processing is implemented. */
-// https://w3c.github.io/webappsec-permissions-policy/#permissions-policy
-export type PermissionsPolicy = Record<never, never>;
+import type { ElementImpl } from '../../dom/nodes/element';
+import type { Origin } from '../../../url/index';
+import { InternalError } from '../../../infra/internal-error';
 
-/** Allocate independent placeholder policy state for a document. */
-export function createPermissionsPolicy(): PermissionsPolicy {
-  return {};
+/** Placeholder state for a document's policy-controlled feature permissions. */
+// https://w3c.github.io/webappsec-permissions-policy/#permissions-policy
+// TODO: Populate declared and inherited policies when feature-policy processing is implemented.
+export class PermissionsPolicy {
+  /** Create policy state for the document's embedding element and origin. */
+  // https://w3c.github.io/webappsec-permissions-policy/#create-for-navigable
+  static create(embedder: ElementImpl | null, _origin: Origin): PermissionsPolicy {
+    if (embedder !== null) {
+      throw new InternalError('Embedded permissions-policy creation is not implemented');
+    }
+    return new PermissionsPolicy();
+  }
 }

@@ -3,9 +3,7 @@ import { createTestDocument } from '../../support/dom';
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
-import {
-  createNewTopLevelTraversable,
-} from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { Duration, monotonicClock, UnsafeMoment } from
   '../../../src/browlet/performance/clock';
@@ -119,7 +117,7 @@ describe('HTML timers', () => {
 });
 
 function createTimerFixture() {
-  const traversable = createNewTopLevelTraversable(
+  const traversable = TopLevelTraversable.create(
     new UserAgent(),
     null,
     '',

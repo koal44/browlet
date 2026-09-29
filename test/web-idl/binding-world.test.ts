@@ -637,9 +637,7 @@ const unnamedOperationIDL = defineInterface({
   name: 'UnnamedOperationExample',
   exposed: '*',
   implementation: impl(ExampleImpl),
-  members: [op(
-    undefined,
-    idlType.object,
+  members: [op(undefined, idlType.object,
     [arg('name', idlType.DOMString)],
     { special: 'getter' },
   )],
@@ -649,9 +647,7 @@ const unnamedHookOperationIDL = defineInterface({
   name: 'UnnamedHookOperationExample',
   exposed: '*',
   implementation: impl(ExampleImpl),
-  members: [op(
-    undefined,
-    idlType.object,
+  members: [op(undefined, idlType.object,
     [arg('name', idlType.DOMString)],
     namedGetter(() => new Set(['name'])),
   )],

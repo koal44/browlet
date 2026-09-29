@@ -14,7 +14,7 @@ import type { CORSPreflightCache } from './cache-cors';
 import type {
   ConnectionPool, HTTPContentDecoder, HTTPContentDecoderListener, HTTPTransport, NetworkPartitionKey,
 } from './transport';
-import type { FetchIntegrityPolicy } from './policy';
+import type { FetchIntegrityPolicy, ReferrerPolicy } from './policy';
 import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
@@ -133,10 +133,6 @@ export interface FetchCSPList {
 
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy-value
 export type FetchEmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';
-
-// https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
-export type ReferrerPolicy = '' | 'no-referrer' | 'no-referrer-when-downgrade' | 'same-origin' |
-  'origin' | 'strict-origin' | 'origin-when-cross-origin' | 'strict-origin-when-cross-origin' | 'unsafe-url';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
 export interface FetchEnvironmentRecord extends StorageEnvironment {

@@ -349,10 +349,7 @@ export const transformStreamIDL = defineInterface<JSEnvironment>({
 export const transformerStartCallbackIDL = defineCallbackFunction({
   name: 'TransformerStartCallback',
   returns: idlType.any,
-  arguments: [arg(
-    'controller',
-    reference('TransformStreamDefaultController'),
-  )],
+  arguments: [arg('controller', reference('TransformStreamDefaultController'))],
 });
 
 /*
@@ -361,10 +358,7 @@ export const transformerStartCallbackIDL = defineCallbackFunction({
 export const transformerFlushCallbackIDL = defineCallbackFunction({
   name: 'TransformerFlushCallback',
   returns: promise(idlType.undefined),
-  arguments: [arg(
-    'controller',
-    reference('TransformStreamDefaultController'),
-  )],
+  arguments: [arg('controller', reference('TransformStreamDefaultController'))],
 });
 
 /*

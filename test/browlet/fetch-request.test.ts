@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
-import { createPolicyContainer } from '../../src/browlet/browsing/policy/container';
+import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
+import { CSPDirectives, CSPDirectiveValue } from '../../src/browlet/browsing/policy/csp/directives';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
 import { UserAgent } from '../../src/browlet/user-agent';
 import type { FetchBody } from '../../src/fetch/body';
@@ -388,14 +389,14 @@ describe('Fetch client population with HTML settings', () => {
       cspList: {
         selfOrigin: env.policyContainer.cspList.selfOrigin,
         policies: [
-          { source: 'header', disposition: 'enforce', directives: new Map([['default-src', ["'self'"]]]) },
-          { source: 'header', disposition: 'report', directives: new Map([['img-src', ["'none'"]]]) },
+          { source: 'header', disposition: 'enforce', directives: new CSPDirectives([['default-src', new CSPDirectiveValue(["'self'"])]]) },
+          { source: 'header', disposition: 'report', directives: new CSPDirectives([['img-src', new CSPDirectiveValue(["'none'"])]]) },
         ],
       },
     };
     expect(expected.cspList.selfOrigin).not.toEqual(env.origin);
     expect(request.policyContainer).toMatchObject(expected);
-    env.policyContainer.cspList.policies[0]!.directives.get('default-src')!.push('*');
+    env.policyContainer.cspList.policies[0]!.directives.get('default-src')!.tokens.push('*');
     env.policyContainer.cspList.policies[1]!.directives.clear();
     env.policyContainer.cspList.policies.length = 0;
     expect(request.policyContainer).toMatchObject(expected);
@@ -514,7 +515,7 @@ describe('Fetch client settings ownership', () => {
     container.embedderPolicy.value = 'credentialless';
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(false);
 
-    document!.policyContainer = createPolicyContainer();
+    document!.policyContainer = new PolicyContainer();
     expect(request.crossOriginEmbedderPolicyAllowsCredentials()).toBe(true);
   });
 

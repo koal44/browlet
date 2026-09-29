@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { UserAgent } from '../../src/browlet/user-agent';
-import { createNewBrowsingContextAndDocument } from '../../src/browlet/browsing/browsing-context';
+import { BrowsingContext } from '../../src/browlet/browsing/browsing-context';
 import type { FetchUserAgent } from '../../src/fetch/environment';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
@@ -223,7 +223,7 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     expect(entry).not.toBeNull();
 
     window.URL.revokeObjectURL(url);
-    const [, child] = createNewBrowsingContextAndDocument(document, null, document.browsingContext!.group!);
+    const [, child] = BrowsingContext.create(document, null, document.browsingContext!.group!);
     expect(child.getBaseURL().blobURLEntry).toBe(entry);
     expect(obtainURLOrigin(child.getBaseURL())).toBe(env.origin);
   });

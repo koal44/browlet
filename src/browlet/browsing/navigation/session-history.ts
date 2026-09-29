@@ -3,6 +3,28 @@ import type { PolicyContainer } from '../policy/container';
 import type { ReferrerPolicy } from '../../../fetch/index';
 import type { Origin, URLRecord } from '../../../url/index';
 
+/** One URL and document state at a joint session-history step. */
+// https://html.spec.whatwg.org/multipage/browsing-the-web.html#session-history-entry
+export type SessionHistoryEntry = {
+  /** Assigned history step, or pending before insertion into history. */
+  step: number | 'pending';
+  /** URL represented by this history entry. */
+  url: URLRecord;
+  /** Live document and retained reload inputs. */
+  documentState: DocumentState;
+};
+
+/** Create a pending history entry for an existing document. */
+export function createSessionHistoryEntry(
+  documentState: DocumentBackedState,
+): SessionHistoryEntry {
+  const url = documentState.document.url;
+
+  // The History and Navigation APIs will add their serialized-state,
+  // navigation-key, scroll-restoration, and persisted-user-state slots.
+  return { step: 'pending', url, documentState };
+}
+
 /** Retains the document or the inputs needed to recreate it during history traversal. */
 // https://html.spec.whatwg.org/multipage/browsing-the-web.html#document-state
 export type DocumentState = {
@@ -37,22 +59,26 @@ export type DocumentState = {
 /** Session-history state while its Document is present. */
 export type DocumentBackedState = DocumentState & { document: DocumentImpl; };
 
-/** One reason that a document cannot be restored from the back/forward cache. */
-// https://html.spec.whatwg.org/multipage/nav-history-apis.html#nrr-details-struct
-export type NotRestoredReasonDetails = {
-  reason: string;
-};
-
-/** One URL and document state at a joint session-history step. */
-// https://html.spec.whatwg.org/multipage/browsing-the-web.html#session-history-entry
-export type SessionHistoryEntry = {
-  /** Assigned history step, or pending before insertion into history. */
-  step: number | 'pending';
-  /** URL represented by this history entry. */
-  url: URLRecord;
-  /** Live document and retained reload inputs. */
-  documentState: DocumentState;
-};
+/** Initialize history state, retaining the supplied document when present. */
+export function createDocumentState(document: DocumentImpl): DocumentBackedState;
+export function createDocumentState(document: DocumentImpl | null): DocumentState;
+export function createDocumentState(document: DocumentImpl | null): DocumentState {
+  return {
+    document,
+    historyPolicyContainer: null,
+    requestReferrer: undefined,
+    requestReferrerPolicy: 'strict-origin-when-cross-origin',
+    initiatorOrigin: null,
+    origin: null,
+    aboutBaseURL: null,
+    nestedHistories: [],
+    resource: null,
+    reloadPending: false,
+    everPopulated: false,
+    navigableTargetName: '',
+    notRestoredReasons: null,
+  };
+}
 
 export type NestedHistory = {
   /** Identity of the child navigable whose history is retained. */
@@ -71,38 +97,8 @@ export type PostResource = {
     | 'text/plain';
 };
 
-/** Initialize history state, optionally retaining an already-created document. */
-export function createDocumentState(
-  document: DocumentImpl,
-): DocumentBackedState;
-export function createDocumentState(document?: DocumentImpl | null): DocumentState;
-export function createDocumentState(
-  document: DocumentImpl | null = null,
-): DocumentState {
-  return {
-    document,
-    historyPolicyContainer: null,
-    requestReferrer: undefined,
-    requestReferrerPolicy: 'strict-origin-when-cross-origin',
-    initiatorOrigin: null,
-    origin: null,
-    aboutBaseURL: null,
-    nestedHistories: [],
-    resource: null,
-    reloadPending: false,
-    everPopulated: false,
-    navigableTargetName: '',
-    notRestoredReasons: null,
-  };
-}
-
-/** Create a pending history entry for an existing document. */
-export function createSessionHistoryEntry(
-  documentState: DocumentBackedState,
-): SessionHistoryEntry {
-  const url = documentState.document.url;
-
-  // The History and Navigation APIs will add their serialized-state,
-  // navigation-key, scroll-restoration, and persisted-user-state slots.
-  return { step: 'pending', url, documentState };
-}
+/** One reason that a document cannot be restored from the back/forward cache. */
+// https://html.spec.whatwg.org/multipage/nav-history-apis.html#nrr-details-struct
+export type NotRestoredReasonDetails = {
+  reason: string;
+};

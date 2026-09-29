@@ -2,9 +2,7 @@ import { createServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
-import {
-  NavigationParams, finalizeCrossDocumentNavigation,
-} from '../../../src/browlet/browsing/navigation/navigation';
+import { NavigationParams } from '../../../src/browlet/browsing/navigation/params';
 import { loadHTMLDocument } from '../../../src/browlet/loader/document-loader';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { fetch } from '../../../src/fetch/fetch';
@@ -59,7 +57,7 @@ describe('HTML response loading', () => {
           params.request = request;
           params.fetchController = controller;
           const document = loadHTMLDocument(params, () => {});
-          finalizeCrossDocumentNavigation(navigable, 'replace', 'browser UI', params.createHistoryEntry(document));
+          navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', params.createHistoryEntry(document));
           loading.resolve(document);
         } catch (error) { loading.reject(error); }
       },

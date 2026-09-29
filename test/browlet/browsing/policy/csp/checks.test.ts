@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
-import { getEffectiveDirective } from '../../../../../src/browlet/browsing/policy/csp/directives';
+import { CSPDirectives, CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
 import { UserAgent } from '../../../../../src/browlet/user-agent';
 import { FetchRequest, type Destination } from '../../../../../src/fetch/request';
 import { FetchResponse } from '../../../../../src/fetch/response';
@@ -20,7 +20,7 @@ describe('CSP Fetch directive selection', () => {
     ['worker', 'worker-src'], ['sharedworker', 'worker-src'], ['serviceworker', 'worker-src'],
     ['report', null], ['document', 'connect-src'],
   ])('selects %s requests through %s', (destination, expected) => {
-    expect(getEffectiveDirective(requestFor(destination))).toBe(expected);
+    expect(CSPDirectives.getRequestDirective(requestFor(destination))).toBe(expected);
   });
 
   it('uses the nearest present fallback without combining policies or ignoring empty directives', () => {
@@ -29,7 +29,7 @@ describe('CSP Fetch directive selection', () => {
     expect(policy.getViolatedRequestDirective(request, selfOrigin)).toBeUndefined();
     policy.directives.delete('script-src-elem');
     expect(policy.getViolatedRequestDirective(request, selfOrigin)).toBe('script-src');
-    policy.directives.set('script-src-elem', []);
+    policy.directives.set('script-src-elem', new CSPDirectiveValue());
     expect(policy.getViolatedRequestDirective(request, selfOrigin)).toBe('script-src-elem');
   });
 
@@ -155,7 +155,7 @@ describe('CSP request and response checks', () => {
     expect(policy.getViolatedRequestDirective(request, selfOrigin)).toBe('connect-src');
     const response = responseAt('https://resource.test/');
     expect(policy.getViolatedResponseDirective(request, response, selfOrigin)).toBe('connect-src');
-    policy.directives.set('connect-src', ["'UNSAFE-WEBTRANSPORT-HASHES'"]);
+    policy.directives.set('connect-src', new CSPDirectiveValue(["'UNSAFE-WEBTRANSPORT-HASHES'"]));
     expect(policy.getViolatedRequestDirective(request, selfOrigin)).toBeUndefined();
     expect(policy.getViolatedResponseDirective(request, response, selfOrigin)).toBeUndefined();
     request.webTransportHashList = [];
@@ -167,7 +167,7 @@ describe('CSP resource hints', () => {
   it('leaves prefetch unrestricted without default-src', () => {
     const request = requestFor('');
     request.initiator = 'prefetch';
-    expect(getEffectiveDirective(request)).toBe('default-src');
+    expect(CSPDirectives.getRequestDirective(request)).toBe('default-src');
     expect(parse("img-src 'none'").getViolatedRequestDirective(request, selfOrigin)).toBeUndefined();
   });
 

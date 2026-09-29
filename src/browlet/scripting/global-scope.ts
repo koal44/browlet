@@ -230,9 +230,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
     op('clearInterval', idlType.undefined, [
       arg('id', idlType.long, { default: integer(0), optional: true }),
     ]),
-    op(
-      'queueMicrotask',
-      idlType.undefined,
+    op('queueMicrotask', idlType.undefined,
       [arg('callback', reference('VoidFunction'), onError('report'))],
     ),
     // HTML §2.7.10 contributes the structured-cloning API to this mixin.
@@ -255,9 +253,5 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
 export const highResolutionTimeWindowOrWorkerGlobalScopeIDL =
   definePartialInterfaceMixin({
     name: windowOrWorkerGlobalScopeIDL.name,
-    members: [roAttr(
-      'performance',
-      reference('Performance'),
-      xattr('Replaceable'),
-    )],
+    members: [roAttr('performance', reference('Performance'), xattr('Replaceable'))],
   });

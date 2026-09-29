@@ -1349,9 +1349,7 @@ export const readableStreamIDL = defineInterface<JSEnvironment>({
     ),
     op('tee', sequence(reference('ReadableStream'))),
     asyncIter(idlType.any, {
-      arguments: [arg(
-        'options',
-        reference('ReadableStreamIteratorOptions'),
+      arguments: [arg('options', reference('ReadableStreamIteratorOptions'),
         { default: emptyDictionary, optional: true },
       )],
       create: 'createAsyncIterator',

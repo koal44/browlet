@@ -59,6 +59,8 @@ with those lifecycles.
 stripping, request calculation, and redirect updates are implemented and called
 by Fetch. Window settings use the Document's URL/srcdoc state, not its base URL;
 other settings use their creation URL. Stripping returns independent copies.
+Fetch's [policy module](../../../fetch/policy.ts) owns the shared enum values,
+TypeScript type, and Web IDL declaration; the browser algorithms remain here.
 
 Header parsing follows the grammar: ASCII-insensitive tokens, unknown
 letter/hyphen extensions, and whole-value rejection for malformed tokens.

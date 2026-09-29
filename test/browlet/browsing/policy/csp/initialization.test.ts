@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NavigationParams } from '../../../../../src/browlet/browsing/navigation/navigation';
+import { NavigationParams } from '../../../../../src/browlet/browsing/navigation/params';
 import { createAndInitializeDocument } from '../../../../../src/browlet/browsing/document-lifecycle';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchResponse } from '../../../../../src/fetch/response';
@@ -39,7 +39,7 @@ describe('CSP document initialization', () => {
   it('ignores sandbox in report-only or meta policies', () => {
     const { document } = createCSPWindow('sandbox', 'report');
     document.policyContainer.cspList!.policies.push(ContentSecurityPolicy.parse('sandbox', 'meta', 'enforce'));
-    expect(document.policyContainer.cspList!.getSandboxingFlags()).toEqual(new Set());
+    expect(document.policyContainer.cspList!.getSandboxingFlags().size).toBe(0);
   });
 
   it('derives sandbox flags and origin from the final response before Window selection', () => {

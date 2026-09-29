@@ -2,11 +2,8 @@ import {
   type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode,
   obtainSimilarOriginWindowAgent,
 } from '../scripting/agents';
-import {
-  createDocument, getRelevantRealm, retargetWindowProxy,
-} from '../bindings';
+import { createDocument, createWindowEnvironment, getRelevantRealm, retargetWindowProxy } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import { createWindowEnvironment } from '../bindings';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
   type URLRecord,
@@ -20,8 +17,8 @@ import {
 import type { WindowImpl } from './window/window';
 import { DocumentMode, type DocumentImpl } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
-import type { PermissionsPolicy } from './policy/permissions';
-import type { SandboxingFlagSet } from './policy/sandbox';
+import { PermissionsPolicy } from './policy/permissions';
+import { SandboxingFlagSet } from './policy/sandbox';
 import type { ReferrerPolicy } from '../../fetch/index';
 import { InsecureRequestsPolicy } from './policy/upgrade-insecure-requests';
 import { HTML_NAMESPACE } from '../../infra/index';
@@ -33,7 +30,7 @@ import { InternalError } from '../../infra/internal-error';
 export class BrowsingContext {
   #windowProxy: WindowProxy | undefined;
   /** Sandbox restrictions inherited when this context was opened as a popup. */
-  popupSandboxingFlagSet: SandboxingFlagSet = new Set();
+  popupSandboxingFlagSet = new SandboxingFlagSet();
   /** Browsing context that opened this one, if it retains an opener. */
   openerBrowsingContext: BrowsingContext | null = null;
   /** Opener's origin captured at context creation. */
@@ -58,6 +55,118 @@ export class BrowsingContext {
 
   constructor(windowProxy?: WindowProxy) {
     this.#windowProxy = windowProxy;
+  }
+
+  /** Create a context and its initial about:blank document within an existing group. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
+  static create(
+    creator: DocumentImpl | null,
+    embedder: ElementImpl | null,
+    group: BrowsingContextGroup,
+  ): [browsingContext: BrowsingContext, document: DocumentImpl] {
+    const browsingContext = new BrowsingContext();
+    if (embedder !== null) browsingContext.inheritInsecureRequestsPolicy(embedder);
+    const unsafeContextCreationTime = unsafeSharedCurrentTime();
+    let creatorOrigin: Origin | null = null;
+    let creatorBaseURL: URLRecord | null = null;
+
+    if (creator !== null) {
+      creatorOrigin = creator.origin;
+      creatorBaseURL = creator.getBaseURL();
+      inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
+    }
+
+    const sandboxFlags = determineCreationSandboxingFlags(
+      browsingContext,
+      embedder,
+    );
+    const origin = determineAboutBlankOrigin(sandboxFlags, creatorOrigin);
+    const permissionsPolicy = PermissionsPolicy.create(embedder, origin);
+    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const aboutBlankURL = parseURL('about:blank').url;
+    if (aboutBlankURL === null) throw new InternalError('Could not parse about:blank');
+    const topLevelCreationURL = embedder === null
+      ? aboutBlankURL
+      : getEmbedderTopLevelCreationURL(embedder);
+    const topLevelOrigin = embedder === null
+      ? origin
+      : getEmbedderTopLevelOrigin(embedder);
+    const env = createWindowEnvironment({
+      agent, userAgent: group.userAgent,
+      creationURL: aboutBlankURL,
+      origin,
+      parent: embedder?.nodeDocument.getRelevantGlobalObject() ?? null,
+      topLevelCreationURL,
+      topLevelOrigin,
+    });
+    const { window, realm } = env;
+    browsingContext.initializeWindowProxy(
+      realm.globalThis as WindowProxy,
+    );
+    const document = createDocument(realm);
+
+    document.type = 'html';
+    document.contentType = 'text/html';
+    document.mode = DocumentMode.Quirks;
+    document.origin = origin;
+    document.browsingContext = browsingContext;
+    document.permissionsPolicy = permissionsPolicy;
+    document.setActiveSandboxingFlagSet(sandboxFlags);
+    document.initializeLoadTimingInfo(
+      unsafeContextCreationTime.coarsen(env.crossOriginIsolatedCapability).milliseconds,
+    );
+    document.isInitialAboutBlank = true;
+    document.aboutBaseURL = creatorBaseURL;
+    document.allowDeclarativeShadowRoots = true;
+    document.customElementRegistry = new CustomElementRegistryImpl();
+
+    const iframeReferrerPolicy = determineIframeElementReferrerPolicy(embedder);
+    document.internalAncestorOriginObjectsList =
+      createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder);
+    document.ancestorOriginsList = createAncestorOriginsList(document);
+
+    if (creator !== null) {
+      inheritCreatorDocumentState(document, creator);
+    }
+
+    if (
+      document.URL !== 'about:blank' ||
+      serializeURL(env.creationURL) !== 'about:blank'
+    ) {
+      throw new InternalError('Initial Document and environment must use about:blank');
+    }
+
+    window.setAssociatedDocument(document);
+    document.initializeInsecureRequestsPolicy();
+    document.initializeCSP();
+    document.readyForPostLoadTasks = true;
+    populateWithHTMLHeadBody(document);
+    makeActive(document);
+    document.completelyFinishLoading();
+
+    return [browsingContext, document];
+  }
+
+  /** Create a top-level context and its initial document in a new group. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-top-level-browsing-context
+  static createTopLevel(
+    userAgent: UserAgent,
+  ): [browsingContext: BrowsingContext, document: DocumentImpl] {
+    const [group, document] = BrowsingContextGroup.create(userAgent);
+    const [browsingContext] = group.browsingContextSet;
+    if (!browsingContext) {
+      throw new InternalError('A new browsing context group must contain its context');
+    }
+    return [browsingContext, document];
+  }
+
+  /** Create an opener-associated browsing context and its initial document. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-auxiliary-browsing-context
+  // TODO: Implement opener and group inheritance as part of auxiliary browsing-context support.
+  static createAuxiliary(
+    _opener: BrowsingContext,
+  ): [browsingContext: BrowsingContext, document: DocumentImpl] {
+    throw new InternalError('Auxiliary browsing-context creation is not implemented');
   }
 
   get windowProxy(): WindowProxy {
@@ -103,118 +212,6 @@ export class BrowsingContext {
   }
 }
 
-/** Create a context and its initial about:blank document within an existing group. */
-// https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
-export function createNewBrowsingContextAndDocument(
-  creator: DocumentImpl | null,
-  embedder: ElementImpl | null,
-  group: BrowsingContextGroup,
-): [browsingContext: BrowsingContext, document: DocumentImpl] {
-  const browsingContext = new BrowsingContext();
-  if (embedder !== null) browsingContext.inheritInsecureRequestsPolicy(embedder);
-  const unsafeContextCreationTime = unsafeSharedCurrentTime();
-  let creatorOrigin: Origin | null = null;
-  let creatorBaseURL: URLRecord | null = null;
-
-  if (creator !== null) {
-    creatorOrigin = creator.origin;
-    creatorBaseURL = creator.getBaseURL();
-    inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
-  }
-
-  const sandboxFlags = determineCreationSandboxingFlags(
-    browsingContext,
-    embedder,
-  );
-  const origin = determineAboutBlankOrigin(sandboxFlags, creatorOrigin);
-  const permissionsPolicy = createPermissionsPolicy(embedder, origin);
-  const agent = obtainSimilarOriginWindowAgent(origin, group, false);
-  const aboutBlankURL = requireURLRecord('about:blank');
-  const topLevelCreationURL = embedder === null
-    ? aboutBlankURL
-    : getEmbedderTopLevelCreationURL(embedder);
-  const topLevelOrigin = embedder === null
-    ? origin
-    : getEmbedderTopLevelOrigin(embedder);
-  const env = createWindowEnvironment({
-    agent, userAgent: group.userAgent,
-    creationURL: aboutBlankURL,
-    origin,
-    parent: embedder?.nodeDocument.getRelevantGlobalObject() ?? null,
-    topLevelCreationURL,
-    topLevelOrigin,
-  });
-  const { window, realm } = env;
-  browsingContext.initializeWindowProxy(
-    realm.globalThis as WindowProxy,
-  );
-  const document = createDocument(realm);
-
-  document.type = 'html';
-  document.contentType = 'text/html';
-  document.mode = DocumentMode.Quirks;
-  document.origin = origin;
-  document.browsingContext = browsingContext;
-  document.permissionsPolicy = permissionsPolicy;
-  document.setActiveSandboxingFlagSet(sandboxFlags);
-  document.initializeLoadTimingInfo(
-    unsafeContextCreationTime.coarsen(env.crossOriginIsolatedCapability).milliseconds,
-  );
-  document.isInitialAboutBlank = true;
-  document.aboutBaseURL = creatorBaseURL;
-  document.allowDeclarativeShadowRoots = true;
-  document.customElementRegistry = new CustomElementRegistryImpl();
-
-  const iframeReferrerPolicy = determineIframeElementReferrerPolicy(embedder);
-  document.internalAncestorOriginObjectsList =
-    createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder);
-  document.ancestorOriginsList = createAncestorOriginsList(document);
-
-  if (creator !== null) {
-    inheritCreatorDocumentState(document, creator);
-  }
-
-  if (
-    document.URL !== 'about:blank' ||
-    serializeURL(env.creationURL) !== 'about:blank'
-  ) {
-    throw new InternalError('Initial Document and environment must use about:blank');
-  }
-
-  window.setAssociatedDocument(document);
-  document.initializeInsecureRequestsPolicy();
-  document.initializeCSP();
-  document.readyForPostLoadTasks = true;
-  populateWithHTMLHeadBody(document);
-  makeActive(document);
-  document.completelyFinishLoading();
-
-  return [browsingContext, document];
-}
-
-export function createNewBrowsingContextGroupAndDocument(
-  userAgent: UserAgent,
-): [group: BrowsingContextGroup, document: DocumentImpl] {
-  const group = userAgent.createBrowsingContextGroup();
-  const [browsingContext, document] =
-    createNewBrowsingContextAndDocument(
-      null, null, group
-    );
-  group.append(browsingContext);
-  return [group, document];
-}
-
-export function createNewTopLevelBrowsingContextAndDocument(
-  userAgent: UserAgent,
-): [browsingContext: BrowsingContext, document: DocumentImpl] {
-  const [group, document] = createNewBrowsingContextGroupAndDocument(userAgent);
-  const [browsingContext] = group.browsingContextSet;
-  if (!browsingContext) {
-    throw new InternalError('A new browsing context group must contain its context');
-  }
-  return [browsingContext, document];
-}
-
 /** Groups related top-level browsing contexts and their agent-cluster allocation state. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context-group
 export class BrowsingContextGroup {
@@ -228,6 +225,17 @@ export class BrowsingContextGroup {
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
 
   constructor(public userAgent: UserAgent) {}
+
+  /** Create a group with its initial browsing context and about:blank document. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context-group
+  static create(
+    userAgent: UserAgent,
+  ): [group: BrowsingContextGroup, document: DocumentImpl] {
+    const group = userAgent.createBrowsingContextGroup();
+    const [browsingContext, document] = BrowsingContext.create(null, null, group);
+    group.append(browsingContext);
+    return [group, document];
+  }
 
   append(browsingContext: BrowsingContext): void {
     if (
@@ -263,15 +271,21 @@ class AgentClusterMap {
   #values = new Map<string | symbol, AgentCluster>();
 
   get(key: AgentClusterKey): AgentCluster | undefined {
-    return this.#values.get(obtainAgentClusterMapKey(key));
+    return this.#values.get(AgentClusterMap.#getKey(key));
   }
 
   set(key: AgentClusterKey, value: AgentCluster): void {
-    this.#values.set(obtainAgentClusterMapKey(key), value);
+    this.#values.set(AgentClusterMap.#getKey(key), value);
   }
 
   values(): MapIterator<AgentCluster> {
     return this.#values.values();
+  }
+
+  static #getKey(key: AgentClusterKey): string | symbol {
+    if (Array.isArray(key)) return `site:${serializeSite(key)}`;
+    if (key.kind === 'opaque') return key.identity;
+    return `origin:${serializeOrigin(key)}`;
   }
 }
 
@@ -280,28 +294,22 @@ class HistoricalAgentClusterKeyMap {
   #values = new Map<string | symbol, AgentClusterKey>();
 
   get(origin: Origin): AgentClusterKey | undefined {
-    return this.#values.get(obtainOriginMapKey(origin));
+    return this.#values.get(HistoricalAgentClusterKeyMap.#getKey(origin));
   }
 
   has(origin: Origin): boolean {
-    return this.#values.has(obtainOriginMapKey(origin));
+    return this.#values.has(HistoricalAgentClusterKeyMap.#getKey(origin));
   }
 
   set(origin: Origin, key: AgentClusterKey): void {
-    this.#values.set(obtainOriginMapKey(origin), key);
+    this.#values.set(HistoricalAgentClusterKeyMap.#getKey(origin), key);
   }
-}
 
-function obtainAgentClusterMapKey(key: AgentClusterKey): string | symbol {
-  if (Array.isArray(key)) return `site:${serializeSite(key)}`;
-  if (key.kind === 'opaque') return key.identity;
-  return `origin:${serializeOrigin(key)}`;
-}
-
-function obtainOriginMapKey(origin: Origin): string | symbol {
-  return origin.kind === 'opaque'
-    ? origin.identity
-    : serializeOrigin(origin);
+  static #getKey(origin: Origin): string | symbol {
+    return origin.kind === 'opaque'
+      ? origin.identity
+      : serializeOrigin(origin);
+  }
 }
 
 function determineCreationSandboxingFlags(
@@ -311,7 +319,7 @@ function determineCreationSandboxingFlags(
   if (embedder !== null) {
     throw new InternalError('Embedded browsing-context sandboxing is not implemented');
   }
-  return new Set(browsingContext.popupSandboxingFlagSet);
+  return new SandboxingFlagSet(browsingContext.popupSandboxingFlagSet);
 }
 
 function inheritCreatorVirtualBrowsingContextGroupID(
@@ -331,16 +339,6 @@ function determineAboutBlankOrigin(
     return createOpaqueOrigin();
   }
   return creatorOrigin;
-}
-
-function createPermissionsPolicy(
-  embedder: ElementImpl | null,
-  _origin: Origin,
-): PermissionsPolicy {
-  if (embedder !== null) {
-    throw new InternalError('Embedded permissions-policy creation is not implemented');
-  }
-  return {};
 }
 
 function getEmbedderTopLevelCreationURL(_embedder: ElementImpl): URLRecord {
@@ -412,10 +410,4 @@ function makeActive(
   retargetWindowProxy(browsingContext.windowProxy, window);
   const env = realm.env;
   env.markExecutionReady();
-}
-
-function requireURLRecord(input: string): URLRecord {
-  const url = parseURL(input).url;
-  if (url === null) throw new InternalError(`Could not parse ${input}`);
-  return url;
 }

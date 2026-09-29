@@ -4,33 +4,33 @@
  * only provides bounded traversal and saved-position restoration.
  */
 export class CodePointCursor {
-  private codePoints: string[];
-  private i = 0;
+  #codePoints: string[];
+  #i = 0;
 
   constructor(public readonly input: string) {
-    this.codePoints = Array.from(input);
+    this.#codePoints = Array.from(input);
   }
 
   pos(): number {
-    return this.i;
+    return this.#i;
   }
 
   restore(pos: number): void {
-    this.i = Math.max(0, Math.min(pos, this.codePoints.length));
+    this.#i = Math.max(0, Math.min(pos, this.#codePoints.length));
   }
 
   eof(k = 0): boolean {
-    return this.i + k >= this.codePoints.length;
+    return this.#i + k >= this.#codePoints.length;
   }
 
   peek(k = 0): string {
-    return this.codePoints[this.i + k] ?? '';
+    return this.#codePoints[this.#i + k] ?? '';
   }
 
   consume(): string {
     if (this.eof()) return '';
 
-    return this.codePoints[this.i++]!;
+    return this.#codePoints[this.#i++]!;
   }
 }
 

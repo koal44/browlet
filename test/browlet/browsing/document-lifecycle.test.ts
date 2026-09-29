@@ -10,15 +10,13 @@ import {
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createAndInitializeDocument } from '../../../src/browlet/browsing/document-lifecycle';
-import { NavigationParams } from '../../../src/browlet/browsing/navigation/navigation';
+import { NavigationParams } from '../../../src/browlet/browsing/navigation/params';
 import { Realm, WindowRealm } from '../../../src/browlet/scripting/realm';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../src/browlet/scripting/agents';
 import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
-import {
-  createNewTopLevelTraversable, Navigable, TopLevelTraversable,
-} from '../../../src/browlet/browsing/navigable';
+import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import {
   createDocumentState, createSessionHistoryEntry,
 } from '../../../src/browlet/browsing/navigation/session-history';
@@ -214,7 +212,7 @@ describe('navigables', () => {
   });
 
   it('derives node-navigable and fully-active status from the active entry', () => {
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -251,7 +249,7 @@ describe('navigables', () => {
     document.observeFullyActiveState((active) => { activity.push(active); });
 
     traversable.activeSessionHistoryEntry = {
-      ...initialEntry, documentState: createDocumentState(),
+      ...initialEntry, documentState: createDocumentState(null),
     };
 
     expect(traversable.activeDocument).toBeNull();
@@ -267,7 +265,7 @@ describe('navigables', () => {
   });
 
   it('does not mistake a parent association for a container Document', () => {
-    const parent = createNewTopLevelTraversable(
+    const parent = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -289,7 +287,7 @@ describe('navigables', () => {
   it('creates the complete initial top-level about:blank graph', () => {
     const userAgent = new UserAgent();
 
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       userAgent,
       null,
       '',
@@ -310,7 +308,7 @@ describe('navigables', () => {
     expect(browsingContext.group?.browsingContextSet)
       .toEqual(new Set([browsingContext]));
     expect(browsingContext.navigable).toBe(traversable);
-    expect(browsingContext.popupSandboxingFlagSet).toEqual(new Set());
+    expect(browsingContext.popupSandboxingFlagSet.size).toBe(0);
     expect(browsingContext.activeDocument).toBe(document);
     expect(browsingContext.activeWindow).toBe(window);
     expect(getWindowProxyWindow(browsingContext.windowProxy)).toBe(window);
@@ -327,7 +325,7 @@ describe('navigables', () => {
     expect(document.URL).toBe('about:blank');
     expect(document.origin.kind).toBe('opaque');
     expect(document.browsingContext).toBe(browsingContext);
-    expect(document.activeSandboxingFlagSet).toEqual(new Set());
+    expect(document.activeSandboxingFlagSet.size).toBe(0);
     expect(document.aboutBaseURL).toBeNull();
     expect(document.isInitialAboutBlank).toBe(true);
     expect(document.allowDeclarativeShadowRoots).toBe(true);
@@ -435,7 +433,7 @@ describe('environment settings objects', () => {
 describe('navigation response inputs', () => {
   it.each(['same-origin', 'same-site', 'cross-site'] as const)(
     'uses a Fetch request and a response with %s redirect taint', (redirectTaint) => {
-      const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+      const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
       const env = getRelevantRealm(traversable.activeWindow!).env;
       const url = requireURL('https://example.test/page');
       const request = new FetchRequest(url, env, env.userAgent);
@@ -457,7 +455,7 @@ describe('navigation response inputs', () => {
   );
 
   it('takes navigation start from the Fetch controller, where Fetch retains full timing', () => {
-    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const response = new FetchResponse();
     response.urlList.push(requireURL('https://example.test/page'));
     const params = NavigationParams.fromResponse(traversable, response);
@@ -471,7 +469,7 @@ describe('navigation response inputs', () => {
   });
 
   it('keeps a network body out of the session history source-text slot', () => {
-    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const env = getRelevantRealm(traversable.activeWindow!).env;
     const response = new FetchResponse();
     response.urlList.push(requireURL('https://example.test/page'));

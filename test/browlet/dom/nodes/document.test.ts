@@ -13,6 +13,7 @@ import { unwrap } from '../../../../src/browlet/bindings';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../src/url/url';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
+import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 
 describe('Document', () => {
   it('uses the DOM document defaults', () => {
@@ -35,7 +36,7 @@ describe('Document', () => {
       cspList: undefined,
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
-    expect(document.permissionsPolicy).toEqual({});
+    expect(document.permissionsPolicy).toBeInstanceOf(PermissionsPolicy);
     expect(document.openerPolicy).toEqual({
       value: 'unsafe-none',
       reportingEndpoint: null,

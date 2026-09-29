@@ -5,6 +5,7 @@ import {
   areSameOrigin, areSameSite, areSchemelesslySameSite, obtainPublicSuffix, obtainURLOrigin,
   serializeOrigin, serializeURLPath, stripURLForReporting, type Origin, type URLRecord,
 } from '../url/index';
+import { defineEnumeration } from '../web-idl/index';
 import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from './environment';
 import { parseIntegrityMetadata } from './integrity';
 import { isScriptLikeDestination, type FetchRequest } from './request';
@@ -127,6 +128,38 @@ function isSameSiteForCookies(request: FetchRequest): boolean {
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 // Chromium's Lax-allowing-unsafe compatibility window for recently created default cookies.
 const laxAllowingUnsafeMaxAge = 2 * 60 * 1000;
+
+// -----------------------------------------------------------------------------
+// Referrer policy
+// -----------------------------------------------------------------------------
+
+/** Referrer disclosure policy; an empty value defers to the client's policy. */
+export type ReferrerPolicy = typeof referrerPolicyValues[number];
+
+const referrerPolicyValues = [
+  '', 'no-referrer', 'no-referrer-when-downgrade', 'same-origin', 'origin',
+  'strict-origin', 'origin-when-cross-origin', 'strict-origin-when-cross-origin', 'unsafe-url',
+] as const;
+
+// Referrer Policy supplies this declaration to Fetch's Request API.
+// https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
+/*
+ * enum ReferrerPolicy {
+ *   "",
+ *   "no-referrer",
+ *   "no-referrer-when-downgrade",
+ *   "same-origin",
+ *   "origin",
+ *   "strict-origin",
+ *   "origin-when-cross-origin",
+ *   "strict-origin-when-cross-origin",
+ *   "unsafe-url"
+ * };
+ */
+export const referrerPolicyIDL = defineEnumeration({
+  name: 'ReferrerPolicy',
+  values: [...referrerPolicyValues],
+});
 
 // -----------------------------------------------------------------------------
 // Origin

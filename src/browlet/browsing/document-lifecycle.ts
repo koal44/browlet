@@ -3,7 +3,7 @@ import { areSameOriginDomain } from '../../url/index';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import { createDocument, createWindowEnvironment, getRelevantRealm } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import type { NavigationParams } from './navigation/navigation';
+import type { NavigationParams } from './navigation/params';
 import type { WindowImpl } from './window/window';
 import { InternalError } from '../../infra/internal-error';
 

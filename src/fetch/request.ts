@@ -21,13 +21,14 @@ import {
 import {
   getFetchEnvironment,
   type FetchEnvironment, type FetchEnvironmentRecord, type FetchUserAgent,
-  type FetchPolicyContainer, type FetchPromptTarget, type ReferrerPolicy,
+  type FetchPolicyContainer, type FetchPromptTarget,
 } from './environment';
 import type { NetworkPartitionKey } from './transport';
 import {
   appendCookieHeader, appendMetadataHeadersIfTrustworthy, appendOriginHeader,
   crossOriginEmbedderPolicyAllowsCredentials, isBlockedByIntegrityPolicy,
   isRequestBlockedByMixedContent, upgradeForHSTS, upgradeInsecureRequest, upgradeMixedContent,
+  type ReferrerPolicy,
 } from './policy';
 import { InternalError } from '../infra/internal-error';
 
@@ -77,7 +78,6 @@ export class FetchRequest {
   policyContainer: FetchPolicyContainer | undefined = undefined;
   /** Referrer URL, null to omit it, or undefined until the client supplies the source. */
   referrer: URLRecord | null | undefined = undefined;
-  // Referrer Policy supplies the enum declaration at the browser composition root.
   /** Policy controlling referrer disclosure; an empty string leaves it to the client policy. */
   referrerPolicy: ReferrerPolicy = '';
   /** Fetch mode governing origin restrictions, CORS processing, and response exposure. */

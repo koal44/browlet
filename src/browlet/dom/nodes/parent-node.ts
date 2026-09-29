@@ -87,9 +87,7 @@ export class ParentNodeMixin {
 export const parentNodeIDL = defineInterfaceMixin({
   name: 'ParentNode',
   members: [
-    roAttr(
-      'children',
-      reference('HTMLCollection'),
+    roAttr('children', reference('HTMLCollection'),
       xattr('SameObject'),
     ),
     roAttr('firstElementChild', nullable(reference('Element'))),

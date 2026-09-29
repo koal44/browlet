@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTestDocument } from '../../support/dom';
-import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { requestNodeEventLoopTurn } from '../../../src/browlet/integration/scripting';
 import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
@@ -24,7 +24,7 @@ describe('Browser-owned Reporting scheduling', () => {
     const userAgent = new UserAgent({
       createMicrotaskQueue, requestEventLoopTurn: requestNodeEventLoopTurn, unsafeSharedCurrentTime,
     });
-    const traversable = createNewTopLevelTraversable(userAgent, null, '');
+    const traversable = TopLevelTraversable.create(userAgent, null, '');
     const realm = getRelevantRealm(traversable.activeWindow!);
     const source = createTaskSource('reporting scheduling test');
     const trace: string[] = [];
@@ -41,7 +41,7 @@ describe('Browser-owned Reporting scheduling', () => {
     const userAgent = new UserAgent({
       createMicrotaskQueue, requestEventLoopTurn: requestNodeEventLoopTurn, unsafeSharedCurrentTime,
     });
-    const traversable = createNewTopLevelTraversable(userAgent, null, '');
+    const traversable = TopLevelTraversable.create(userAgent, null, '');
     const eventLoop = getRelevantRealm(traversable.activeWindow!).agent.eventLoop;
     const source = createTaskSource('inactive reporting scheduling test');
     const trace: string[] = [];

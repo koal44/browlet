@@ -66,9 +66,7 @@ export const queuingStrategyIDL = defineDictionary({
   name: 'QueuingStrategy',
   members: [
     dictMember('highWaterMark', idlType.unrestrictedDouble),
-    dictMember(
-      'size',
-      reference('QueuingStrategySize'),
+    dictMember('size', reference('QueuingStrategySize'),
       onError('rethrow'),
     ),
   ],

@@ -4,7 +4,7 @@ import {
   getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import {
-  createNewTopLevelTraversable, type Navigable,
+  TopLevelTraversable, type Navigable,
 } from '../../../src/browlet/browsing/navigable';
 import { type EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
 import {
@@ -136,7 +136,7 @@ function createWindowFixture(): {
   document: NonNullable<Navigable['activeDocument']>;
   navigable: Navigable;
 } {
-  const navigable = createNewTopLevelTraversable(
+  const navigable = TopLevelTraversable.create(
     new UserAgent(),
     null,
     '',

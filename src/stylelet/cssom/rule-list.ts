@@ -22,20 +22,20 @@ export class CSSRuleListImpl {
 
   replace(rules: CSSRule[]): void {
     this.#rules = rules;
-    this.updateIndices();
+    this.#updateIndices();
   }
 
   insert(index: number, rule: CSSRule): void {
     this.#rules.splice(index, 0, rule);
-    this.updateIndices();
+    this.#updateIndices();
   }
 
   remove(index: number): void {
     this.#rules.splice(index, 1);
-    this.updateIndices();
+    this.#updateIndices();
   }
 
-  private updateIndices(): void {
+  #updateIndices(): void {
     for (let index = 0; index < this.#indexedLength; index++) {
       Reflect.deleteProperty(this, index);
     }

@@ -44,18 +44,14 @@ describe('Web IDL declarations and serialization', () => {
           op('addEventListener', idlType.undefined, [
             arg('type', idlType.DOMString),
             arg('callback', nullable(reference('EventListener'))),
-            arg(
-              'options',
-              union(reference('AddEventListenerOptions'), idlType.boolean),
+            arg('options', union(reference('AddEventListenerOptions'), idlType.boolean),
               { default: emptyDictionary, optional: true },
             ),
           ]),
           op('removeEventListener', idlType.undefined, [
             arg('type', idlType.DOMString),
             arg('callback', nullable(reference('EventListener'))),
-            arg(
-              'options',
-              union(reference('EventListenerOptions'), idlType.boolean),
+            arg('options', union(reference('EventListenerOptions'), idlType.boolean),
               { default: emptyDictionary, optional: true },
             ),
           ]),

@@ -1,6 +1,4 @@
-import {
-  createEmbedderPolicy, type EmbedderPolicy,
-} from './coep';
+import { EmbedderPolicy } from './coep';
 import { IntegrityPolicy } from './integrity-policy';
 import type { CSPList } from './csp/list';
 import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
@@ -11,7 +9,7 @@ export class PolicyContainer implements FetchPolicyContainer {
   /** Content Security Policies; absent until the resource's origin is established. */
   cspList: CSPList | undefined = undefined;
   /** Enforced and report-only cross-origin embedder policy. */
-  embedderPolicy: EmbedderPolicy = createEmbedderPolicy();
+  embedderPolicy = new EmbedderPolicy();
   /** Default referrer disclosure policy for requests initiated by this owner. */
   referrerPolicy: ReferrerPolicy = 'strict-origin-when-cross-origin';
   /** Enforced integrity requirements for outgoing requests. */
@@ -34,16 +32,11 @@ export class PolicyContainer implements FetchPolicyContainer {
   clone(): PolicyContainer {
     const clone = new PolicyContainer();
     clone.cspList = this.cspList?.clone();
-    clone.embedderPolicy = { ...this.embedderPolicy };
+    clone.embedderPolicy = this.embedderPolicy.clone();
     clone.referrerPolicy = this.referrerPolicy;
     clone.integrityPolicy = this.integrityPolicy.clone();
     // Preserve both policies, as Gecko does; HTML's clone steps omit report-only integrity.
     clone.reportOnlyIntegrityPolicy = this.reportOnlyIntegrityPolicy.clone();
     return clone;
   }
-}
-
-/** Create an independent policy container with HTML's defaults. */
-export function createPolicyContainer(): PolicyContainer {
-  return new PolicyContainer();
 }

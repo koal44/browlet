@@ -44,10 +44,7 @@ export class DocumentOrShadowRootMixin {
  */
 export const documentOrShadowRootIDL = defineInterfaceMixin({
   name: 'DocumentOrShadowRoot',
-  members: [roAttr(
-    'customElementRegistry',
-    nullable(reference('CustomElementRegistry')),
-  )],
+  members: [roAttr('customElementRegistry', nullable(reference('CustomElementRegistry')))],
 });
 
 type DocumentOrShadowRootMixinOptions = {

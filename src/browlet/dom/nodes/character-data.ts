@@ -78,10 +78,7 @@ export const characterDataIDL = defineInterface({
   implementation: impl(CharacterDataImpl),
   members: [
     // The remaining members depend on the DOM replace-data algorithm.
-    attr(
-      'data',
-      annotated(idlType.DOMString, xattr('LegacyNullToEmptyString')),
-    ),
+    attr('data', annotated(idlType.DOMString, xattr('LegacyNullToEmptyString'))),
   ],
 });
 

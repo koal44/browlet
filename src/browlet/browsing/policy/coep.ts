@@ -1,28 +1,29 @@
-import type { FetchEmbedderPolicyValue } from '../../../fetch/index';
+import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue } from '../../../fetch/index';
 import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/index';
 import { ReportBodyImpl } from '../../reporting/report';
 
-/** Create the default embedder policy with no reporting endpoints. */
+/** Cross-origin embedding requirements and their reporting endpoints. */
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy
-export function createEmbedderPolicy(): EmbedderPolicy {
-  return {
-    value: 'unsafe-none',
-    reportingEndpoint: '',
-    reportOnlyValue: 'unsafe-none',
-    reportOnlyReportingEndpoint: '',
-  };
-}
-
-export type EmbedderPolicy = {
+export class EmbedderPolicy implements FetchEmbedderPolicy {
   /** Enforced cross-origin embedding requirement. */
-  value: EmbedderPolicyValue;
+  value: EmbedderPolicyValue = 'unsafe-none';
   /** Reporting endpoint name for enforced-policy violations. */
-  reportingEndpoint: string;
+  reportingEndpoint = '';
   /** Embedding requirement evaluated only for reporting. */
-  reportOnlyValue: EmbedderPolicyValue;
+  reportOnlyValue: EmbedderPolicyValue = 'unsafe-none';
   /** Reporting endpoint name for report-only violations. */
-  reportOnlyReportingEndpoint: string;
-};
+  reportOnlyReportingEndpoint = '';
+
+  /** Copy the enforced and report-only settings independently of their current owner. */
+  clone(): EmbedderPolicy {
+    const copy = new EmbedderPolicy();
+    copy.value = this.value;
+    copy.reportingEndpoint = this.reportingEndpoint;
+    copy.reportOnlyValue = this.reportOnlyValue;
+    copy.reportOnlyReportingEndpoint = this.reportOnlyReportingEndpoint;
+    return copy;
+  }
+}
 
 export type EmbedderPolicyValue = FetchEmbedderPolicyValue;
 

@@ -1,7 +1,7 @@
 import { idlType } from '../../../../src/web-idl/core/index';
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../../src/browlet/bindings';
-import { createNewTopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
 import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/high-resolution-time';
 import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
@@ -269,7 +269,7 @@ function inNodeTask(steps: () => void): Promise<void> {
 }
 
 function createParserDocument() {
-  const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active document');
   while (document.firstChild) document.firstChild.removeFromTree();

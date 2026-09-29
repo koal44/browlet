@@ -1,32 +1,8 @@
-import { isLocalURL, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
+import { isLocalURL, referrerPolicyIDL, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import { surroundingTabOrSpacePattern } from '../../../infra/patterns';
 import { areSameOrigin, copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../../../url/index';
-import { defineEnumeration } from '../../../web-idl/index';
-
-// Referrer Policy supplies this declaration to Fetch's Request API.
-// https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
-/*
- * enum ReferrerPolicy {
- *   "",
- *   "no-referrer",
- *   "no-referrer-when-downgrade",
- *   "same-origin",
- *   "origin",
- *   "strict-origin",
- *   "origin-when-cross-origin",
- *   "strict-origin-when-cross-origin",
- *   "unsafe-url"
- * };
- */
-export const referrerPolicyIDL = defineEnumeration({
-  name: 'ReferrerPolicy',
-  values: [
-    '', 'no-referrer', 'no-referrer-when-downgrade', 'same-origin', 'origin',
-    'strict-origin', 'origin-when-cross-origin', 'strict-origin-when-cross-origin', 'unsafe-url',
-  ] satisfies ReferrerPolicy[],
-});
 
 /** Returns the last recognized policy, or an empty string for an absent or malformed header. */
 // https://w3c.github.io/webappsec-referrer-policy/#parse-referrer-policy-from-header

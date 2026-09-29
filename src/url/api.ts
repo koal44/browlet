@@ -450,17 +450,13 @@ export const urlSearchParamsIDL = defineInterface({
   implementation: impl(URLSearchParamsImpl),
   members: [
     ctor([
-      arg(
-        'init',
+      arg('init',
         union(
           sequence(sequence(idlType.USVString)),
           record(idlType.USVString, idlType.USVString),
           idlType.USVString,
         ),
-        {
-          default: '',
-          optional: true,
-        },
+        { default: '', optional: true },
       ),
     ]),
     roAttr('size', idlType.unsignedLong),

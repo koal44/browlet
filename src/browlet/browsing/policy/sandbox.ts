@@ -1,23 +1,21 @@
 import { asciiLower } from '../../../infra/ascii';
 import { asciiWhitespaceRunPattern } from '../../../infra/patterns';
 
-/** Parse HTML's sandbox keywords into the restrictions which remain enabled. */
-// https://html.spec.whatwg.org/multipage/browsers.html#parse-a-sandboxing-directive
-// Return the flag set instead of requiring the caller to allocate an output parameter.
-export function parseSandboxingDirective(input: string): SandboxingFlagSet {
-  const tokens = new Set(asciiLower(input).split(asciiWhitespaceRunPattern));
-  const flags: SandboxingFlagSet = new Set(['sandboxed-navigation', 'sandboxed-document-domain']);
-  for (const [flag, exceptions] of sandboxExceptions) {
-    if (!exceptions.some((token) => tokens.has(token))) flags.add(flag);
+/** Sandbox restrictions; an empty set imposes none. */
+// https://html.spec.whatwg.org/multipage/browsers.html#sandboxing-flag-set
+export class SandboxingFlagSet extends Set<SandboxingFlag> {
+  /** Parse sandbox keywords, applying all restrictions when the directive is empty. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#parse-a-sandboxing-directive
+  // Return the flag set instead of requiring the caller to allocate an output parameter.
+  static parse(directive: string): SandboxingFlagSet {
+    const tokens = new Set(asciiLower(directive).split(asciiWhitespaceRunPattern));
+    const flags = new SandboxingFlagSet(['sandboxed-navigation', 'sandboxed-document-domain']);
+    for (const [flag, exceptions] of sandboxExceptions) {
+      if (!exceptions.some((token) => tokens.has(token))) flags.add(flag);
+    }
+    return flags;
   }
-  return flags;
 }
-
-export function createSandboxingFlagSet(): SandboxingFlagSet {
-  return new Set();
-}
-
-export type SandboxingFlagSet = Set<SandboxingFlag>;
 
 export type SandboxingFlag =
   | 'sandboxed-navigation'

@@ -12,7 +12,7 @@ policy-container association.
 | Module | Responsibility |
 | --- | --- |
 | [policy.ts](policy.ts), [list.ts](list.ts) | Policies/directives, retained self origin, response parsing/copying, checks, and initialization |
-| [source-list.ts](source-list.ts), [directives.ts](directives.ts) | Source matching, effective directives, and fallback |
+| [directives.ts](directives.ts) | Directive values, source matching, request directives, and fallback |
 | Violation/event/body implementations in this folder | Captured violation data, trusted events, Reporting bodies, and hash reports |
 
 A policy retains its disposition, source, original text, and ordered directives.

@@ -35,7 +35,7 @@ export class MediaListImpl {
     this.#queries = value === null || value === ''
       ? []
       : parseMediaQueryList(value);
-    this.updateIndices();
+    this.#updateIndices();
   }
 
   get length(): number {
@@ -54,7 +54,7 @@ export class MediaListImpl {
     }
 
     this.#queries.push(query);
-    this.updateIndices();
+    this.#updateIndices();
   }
 
   deleteMedium(medium: CSSOMString): void {
@@ -71,7 +71,7 @@ export class MediaListImpl {
       );
     }
 
-    this.updateIndices();
+    this.#updateIndices();
   }
 
   toString(): CSSOMString {
@@ -82,7 +82,7 @@ export class MediaListImpl {
     return this.#queries.map(serializeMediaQuery)[Symbol.iterator]();
   }
 
-  private updateIndices(): void {
+  #updateIndices(): void {
     for (let index = 0; index < this.#indexedLength; index++) {
       Reflect.deleteProperty(this, index);
     }

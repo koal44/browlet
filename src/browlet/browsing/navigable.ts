@@ -1,15 +1,15 @@
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
-import {
-  createNewTopLevelBrowsingContextAndDocument, type BrowsingContext,
-} from './browsing-context';
+import { BrowsingContext } from './browsing-context';
 import {
   createDocumentState, createSessionHistoryEntry, type DocumentBackedState,
   type SessionHistoryEntry,
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
+import { getRelevantRealm, retargetWindowProxy } from '../bindings';
 import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../fetch/index';
+import { areSameOrigin, urlsEqual, type Origin, type URLRecord } from '../../url/index';
 import { InternalError } from '../../infra/internal-error';
 
 /** Owns a navigation destination and its current and active history entries. */
@@ -88,10 +88,10 @@ export class Navigable {
 
   /** Nearest inclusive ancestor that owns session-history traversal. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-traversable
-  get traversableNavigable(): TraversableNavigable {
+  get traversable(): Traversable {
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- Walk the inclusive ancestor chain.
     let navigable: Navigable = this;
-    while (!(navigable instanceof TraversableNavigable)) {
+    while (!(navigable instanceof Traversable)) {
       if (navigable.parent === null) throw new InternalError('A navigable needs a traversable ancestor');
       navigable = navigable.parent;
     }
@@ -108,11 +108,95 @@ export class Navigable {
   allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
     return 'allowed';
   }
+
+  /** Choose whether navigation appends a history entry or replaces the active one. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-convert-to-replace
+  resolveHistoryBehavior(url: URLRecord, origin: Origin): NavigationHistoryBehavior {
+    const activeDocument = this.activeDocument;
+    if (activeDocument === null) {
+      throw new InternalError('Navigation requires an active Document');
+    }
+
+    const activeURL = this.activeSessionHistoryEntry.url;
+    let historyHandling: NavigationHistoryBehavior =
+      urlsEqual(url, activeURL) &&
+      areSameOrigin(origin, activeDocument.origin)
+        ? 'replace'
+        : 'push';
+
+    if (
+      url.scheme === 'javascript' ||
+      activeDocument.isInitialAboutBlank
+    ) {
+      historyHandling = 'replace';
+    }
+    return historyHandling;
+  }
+
+  /** Commit a new document by pushing or replacing this navigable's history entry. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#finalize-a-cross-document-navigation
+  // PROVISIONAL: commits run synchronously until the history traversal queue is implemented.
+  finalizeCrossDocumentNavigation(
+    historyHandling: NavigationHistoryBehavior,
+    userInvolvement: UserNavigationInvolvement,
+    historyEntry: SessionHistoryEntry,
+  ): void {
+    this.isDelayingLoadEvents = false;
+    const document = historyEntry.documentState.document;
+    if (document === null) return;
+    const activeDocument = this.activeDocument;
+    if (activeDocument === null) {
+      throw new InternalError('Navigation requires an active Document');
+    }
+
+    const browsingContext = document.browsingContext;
+    if (browsingContext === null) {
+      throw new InternalError('Navigation Document has no browsing context');
+    }
+    if (
+      this.parent === null &&
+      !(
+        browsingContext.isAuxiliary &&
+        browsingContext.openerBrowsingContext !== null
+      ) &&
+      !areSameOrigin(document.origin, activeDocument.origin)
+    ) {
+      historyEntry.documentState.navigableTargetName = '';
+    }
+
+    const traversable = requireTopLevelTraversable(this);
+    const targetEntries = traversable.sessionHistoryEntries;
+    let targetStep: number;
+    if (historyHandling === 'push') {
+      traversable.clearForwardSessionHistory();
+      targetStep = traversable.currentSessionHistoryStep + 1;
+      historyEntry.step = targetStep;
+      targetEntries.push(historyEntry);
+    } else {
+      const entryToReplace = this.activeSessionHistoryEntry;
+      const index = targetEntries.indexOf(entryToReplace);
+      if (index < 0) {
+        throw new InternalError('Active history entry is not in session history');
+      }
+      targetEntries[index] = historyEntry;
+      historyEntry.step = entryToReplace.step;
+      targetStep = traversable.currentSessionHistoryStep;
+    }
+
+    traversable.applyPushOrReplaceHistoryStep(this, targetStep, historyEntry);
+    void userInvolvement;
+  }
 }
+
+/** History action selected after resolving a navigation's default behavior. */
+export type NavigationHistoryBehavior = 'push' | 'replace';
+
+/** User participation in a navigation or history traversal. */
+export type UserNavigationInvolvement = 'none' | 'activation' | 'browser UI';
 
 /** Coordinates session-history traversal for its descendant navigables. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#traversable-navigable
-export class TraversableNavigable extends Navigable implements FetchPromptTarget {
+export class Traversable extends Navigable implements FetchPromptTarget {
   /** Joint session-history step currently applied to this traversable. */
   currentSessionHistoryStep = 0;
   /** Top-level history entries retained for traversal. */
@@ -127,13 +211,91 @@ export class TraversableNavigable extends Navigable implements FetchPromptTarget
   isCreatedByWebContent = false;
   /** Type-only identification as an eligible Fetch prompt destination. */
   declare [fetchPromptTargetBrand]: true;
+
+  /** Activate the committed entry and retarget its browsing context's WindowProxy. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#apply-the-push/replace-history-step
+  // PROVISIONAL: only the supplied top-level entry participates in this history step.
+  applyPushOrReplaceHistoryStep(
+    navigable: Navigable,
+    targetStep: number,
+    historyEntry: SessionHistoryEntry,
+  ): void {
+    const document = historyEntry.documentState.document;
+    if (document === null) return;
+    const browsingContext = document.browsingContext;
+    const realm = getRelevantRealm(document);
+    if (browsingContext === null) {
+      throw new InternalError('Navigation Document has no browsing context');
+    }
+    const window = realm.windowImplementation;
+
+    navigable.currentSessionHistoryEntry = historyEntry;
+    navigable.activeSessionHistoryEntry = historyEntry;
+    this.currentSessionHistoryStep = targetStep;
+    retargetWindowProxy(browsingContext.windowProxy, window);
+    realm.env.markExecutionReady();
+  }
+
+  /** Discard entries after this traversable's current history step. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#clear-the-forward-session-history
+  // Nested history lists enter with child navigables.
+  clearForwardSessionHistory(): void {
+    const firstForwardEntry = this.sessionHistoryEntries.findIndex(
+      (entry) => entry.step !== 'pending' &&
+        entry.step > this.currentSessionHistoryStep,
+    );
+    if (firstForwardEntry >= 0) {
+      this.sessionHistoryEntries.splice(firstForwardEntry);
+    }
+  }
 }
 
 /** Traversable representing a top-level browser window or tab. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#top-level-traversable
-export class TopLevelTraversable extends TraversableNavigable {
+export class TopLevelTraversable extends Traversable {
   constructor(documentState: DocumentBackedState) {
     super(documentState);
+  }
+
+  /** Create a top-level destination and register its initial document and history. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-top-level-traversable
+  static create(
+    userAgent: UserAgent,
+    opener: BrowsingContext | null,
+    targetName: string,
+    openerNavigableForWebDriver?: Navigable,
+  ): TopLevelTraversable {
+    let document: DocumentImpl;
+
+    if (opener === null) {
+      [, document] = BrowsingContext.createTopLevel(userAgent);
+    } else {
+      [, document] = BrowsingContext.createAuxiliary(opener);
+    }
+
+    const documentState = createDocumentState(document);
+    documentState.initiatorOrigin = opener === null
+      ? null
+      : document.origin;
+    documentState.origin = document.origin;
+    documentState.navigableTargetName = targetName;
+    documentState.aboutBaseURL = document.aboutBaseURL;
+
+    const traversable = new TopLevelTraversable(documentState);
+    const initialHistoryEntry = traversable.activeSessionHistoryEntry;
+    initialHistoryEntry.step = 0;
+    traversable.sessionHistoryEntries.push(initialHistoryEntry);
+
+    if (opener !== null) {
+      legacyCloneTraversableStorageShed(opener, traversable);
+    }
+
+    userAgent.appendTopLevelTraversable(traversable);
+
+    // TODO(WebDriver BiDi): Invoke "navigable created" with the traversable and
+    // openerNavigableForWebDriver once Browlet exposes the BiDi integration.
+    void openerNavigableForWebDriver;
+    return traversable;
   }
 
   override get isTopLevelTraversable(): true {
@@ -146,51 +308,17 @@ export class TopLevelTraversable extends TraversableNavigable {
 // Queueing and synchronization await the history traversal algorithms.
 export class SessionHistoryTraversalQueue {}
 
-export function createNewTopLevelTraversable(
-  userAgent: UserAgent,
-  opener: BrowsingContext | null,
-  targetName: string,
-  openerNavigableForWebDriver?: Navigable,
-): TopLevelTraversable {
-  let document: DocumentImpl;
-
-  if (opener === null) {
-    [, document] = createNewTopLevelBrowsingContextAndDocument(userAgent);
-  } else {
-    document = createNewAuxiliaryBrowsingContextAndDocument(opener);
+function requireTopLevelTraversable(navigable: Navigable): TopLevelTraversable {
+  if (!(navigable instanceof TopLevelTraversable)) {
+    throw new InternalError('Nested navigable history is not implemented');
   }
-
-  const documentState = createDocumentState(document);
-  documentState.initiatorOrigin = opener === null
-    ? null
-    : document.origin;
-  documentState.origin = document.origin;
-  documentState.navigableTargetName = targetName;
-  documentState.aboutBaseURL = document.aboutBaseURL;
-
-  const traversable = new TopLevelTraversable(documentState);
-  const initialHistoryEntry = traversable.activeSessionHistoryEntry;
-  initialHistoryEntry.step = 0;
-  traversable.sessionHistoryEntries.push(initialHistoryEntry);
-
-  if (opener !== null) {
-    legacyCloneTraversableStorageShed(opener, traversable);
-  }
-
-  userAgent.appendTopLevelTraversable(traversable);
-
-  // TODO(WebDriver BiDi): Invoke "navigable created" with the traversable and
-  // openerNavigableForWebDriver once Browlet exposes the BiDi integration.
-  void openerNavigableForWebDriver;
-  return traversable;
+  return navigable;
 }
 
-function createNewAuxiliaryBrowsingContextAndDocument(
-  _opener: BrowsingContext,
-): DocumentImpl {
-  throw new InternalError('Auxiliary browsing-context creation is not implemented');
-}
-
+/** Copy the opener's session-storage data into the new traversable. */
+// https://storage.spec.whatwg.org/#legacy-clone-a-traversable-storage-shed
+// SPEC_MISMATCH: (sourceTraversable, targetTraversable) -> undefined
+// TODO: Resolve the opener's top-level traversable when session-storage sheds are implemented.
 function legacyCloneTraversableStorageShed(
   _opener: BrowsingContext,
   _traversable: TopLevelTraversable,

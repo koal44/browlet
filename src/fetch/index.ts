@@ -7,6 +7,7 @@ import {
   requestCredentialsIDL, requestDestinationIDL, requestDuplexIDL, requestModeIDL,
   requestPriorityIDL, requestRedirectIDL,
 } from './request';
+import { referrerPolicyIDL } from './policy';
 import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
 import { fetchGlobalScopeIDL } from './fetch-global';
 
@@ -26,7 +27,7 @@ export type {
   FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
   HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry,
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
-  FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue, ReferrerPolicy,
+  FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,
 } from './environment';
 export { fetchEnvironment } from './environment';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
@@ -40,7 +41,7 @@ export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
 } from './integrity';
-export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
+export { referrerPolicyIDL, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 
 export const fetchIDLDefinitions: Definition<JSEnvironment>[] = [
@@ -49,6 +50,7 @@ export const fetchIDLDefinitions: Definition<JSEnvironment>[] = [
   xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
   requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
   requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
+  referrerPolicyIDL,
   requestIDL, requestIncludesBodyIDL,
   responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
   fetchGlobalScopeIDL,

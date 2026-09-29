@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { utf8Decode } from '../../../src/encoding/codecs/utf-8';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
-import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { sendReports } from '../../../src/browlet/reporting/delivery';
@@ -278,7 +278,7 @@ describe('Reporting delivery results', () => {
 });
 
 function createWindow(userAgent = new UserAgent()) {
-  const traversable = createNewTopLevelTraversable(userAgent, null, '');
+  const traversable = TopLevelTraversable.create(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeDocument!);
   const env = realm.env;
   return { userAgent, traversable, realm, env, scope: env.getWindowOrWorkerGlobalScopeMixin() };

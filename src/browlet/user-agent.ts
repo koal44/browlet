@@ -2,7 +2,7 @@ import { BrowsingContextGroup } from './browsing/browsing-context';
 import { createSandboxEnvironment } from './bindings';
 import type { Navigable, TopLevelTraversable } from './browsing/navigable';
 import type { Environment } from './scripting/environment';
-import { createPolicyContainer, type PolicyContainer } from './browsing/policy/container';
+import { PolicyContainer } from './browsing/policy/container';
 import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
 import { HostPromise, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
@@ -148,7 +148,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Create a fresh HTML policy container, including for clientless Fetch requests. */
   createPolicyContainer(): PolicyContainer {
-    return createPolicyContainer();
+    return new PolicyContainer();
   }
 
   /** Shared Fetch timestamps use the same clock as HTML and High Resolution Time. */

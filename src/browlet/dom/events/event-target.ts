@@ -540,9 +540,7 @@ export const eventTargetIDL = defineInterface<DOMEnvironment>({
     op('addEventListener', idlType.undefined, [
       arg('type', idlType.DOMString),
       arg('callback', nullable(reference('EventListener'))),
-      arg(
-        'options',
-        union(reference('AddEventListenerOptions'), idlType.boolean),
+      arg('options', union(reference('AddEventListenerOptions'), idlType.boolean),
         {
           default: emptyDictionary,
           optional: true,
@@ -552,9 +550,7 @@ export const eventTargetIDL = defineInterface<DOMEnvironment>({
     op('removeEventListener', idlType.undefined, [
       arg('type', idlType.DOMString),
       arg('callback', nullable(reference('EventListener'))),
-      arg(
-        'options',
-        union(reference('EventListenerOptions'), idlType.boolean),
+      arg('options', union(reference('EventListenerOptions'), idlType.boolean),
         {
           default: emptyDictionary,
           optional: true,

@@ -7,9 +7,9 @@ describe('Content Security Policy parsing', () => {
     const serialized = "default-src 'self'; script-src https://cdn.example.test/scripts/; object-src 'none'";
     const policy = ContentSecurityPolicy.parse(serialized, 'header', 'enforce');
     expect([...policy.directives]).toEqual([
-      ['default-src', ["'self'"]],
-      ['script-src', ['https://cdn.example.test/scripts/']],
-      ['object-src', ["'none'"]],
+      ['default-src', { tokens: ["'self'"] }],
+      ['script-src', { tokens: ['https://cdn.example.test/scripts/'] }],
+      ['object-src', { tokens: ["'none'"] }],
     ]);
     expect(policy.source).toBe('header');
     expect(policy.disposition).toBe('enforce');
@@ -43,8 +43,8 @@ describe('Content Security Policy parsing', () => {
       'header', 'enforce',
     );
     expect([...policy.directives]).toEqual([
-      ['script-src', ["'SELF'", 'https://CDN.test/CaseSensitive/', "'nonce-AbC'"]],
-      ['upgrade-insecure-requests', []],
+      ['script-src', { tokens: ["'SELF'", 'https://CDN.test/CaseSensitive/', "'nonce-AbC'"] }],
+      ['upgrade-insecure-requests', { tokens: [] }],
     ]);
   });
 
@@ -52,7 +52,7 @@ describe('Content Security Policy parsing', () => {
     const policy = ContentSecurityPolicy.parse(
       "script-src; img-src 'self'; SCRIPT-SRC *; img-src https://other.test", 'header', 'enforce',
     );
-    expect([...policy.directives]).toEqual([['script-src', []], ['img-src', ["'self'"]]]);
+    expect([...policy.directives]).toEqual([['script-src', { tokens: [] }], ['img-src', { tokens: ["'self'"] }]]);
     expect(policy.parsingWarnings).toEqual([
       "Ignoring duplicate Content Security Policy directive 'script-src'.",
       "Ignoring duplicate Content Security Policy directive 'img-src'.",
@@ -62,19 +62,19 @@ describe('Content Security Policy parsing', () => {
   it('retains unknown directive data without interpreting it as another directive', () => {
     const policy = ContentSecurityPolicy.parse("future-directive KeepThis; default-src 'none'", 'header', 'enforce');
     expect([...policy.directives]).toEqual([
-      ['future-directive', ['KeepThis']], ['default-src', ["'none'"]],
+      ['future-directive', { tokens: ['KeepThis'] }], ['default-src', { tokens: ["'none'"] }],
     ]);
   });
 
   it('leaves nonce, hash, wildcard, and path syntax for source matching', () => {
     const values = ["'nonce-AbC/+=_'", "'sha256-AbC/+=_'", '*.example.test:*/Path/', 'https:', "'strict-dynamic'"];
     const policy = ContentSecurityPolicy.parse(`script-src ${values.join(' ')}`, 'header', 'enforce');
-    expect(policy.directives.get('script-src')).toEqual(values);
+    expect(policy.directives.get('script-src')?.tokens).toEqual(values);
   });
 
   it('does not infer a missing semicolon between directives', () => {
     const policy = ContentSecurityPolicy.parse("default-src 'self' script-src 'none'", 'header', 'enforce');
-    expect([...policy.directives]).toEqual([['default-src', ["'self'", 'script-src', "'none'"]]]);
+    expect([...policy.directives]).toEqual([['default-src', { tokens: ["'self'", 'script-src', "'none'"] }]]);
   });
 
   it.each(['\u00A0', '\u0085', '\u2003', '\uFEFF', '\uD800'])('discards a directive containing non-ASCII %j', (character) => {
@@ -86,7 +86,7 @@ describe('Content Security Policy parsing', () => {
 
   it('can accept a later directive when an earlier non-ASCII directive was discarded', () => {
     const policy = ContentSecurityPolicy.parse("img-src caf\u00E9.test; img-src 'none'", 'header', 'enforce');
-    expect([...policy.directives]).toEqual([['img-src', ["'none'"]]]);
+    expect([...policy.directives]).toEqual([['img-src', { tokens: ["'none'"] }]]);
   });
 
   it.each([
@@ -95,18 +95,18 @@ describe('Content Security Policy parsing', () => {
     const policy = ContentSecurityPolicy.parse(
       `default-src 'none'; ${malformed}; script-src 'self'`, 'header', 'enforce',
     );
-    expect([...policy.directives]).toEqual([['default-src', ["'none'"]], ['script-src', ["'self'"]]]);
+    expect([...policy.directives]).toEqual([['default-src', { tokens: ["'none'"] }], ['script-src', { tokens: ["'self'"] }]]);
   });
 
   it('copies all policy data with independently mutable directives', () => {
     const original = ContentSecurityPolicy.parse("default-src 'none'; img-src 'self'; default-src *", 'header', 'report');
     const copy = original.clone();
     expect(copy).toEqual(original);
-    copy.directives.get('default-src')!.push('https://cdn.test');
+    copy.directives.get('default-src')!.tokens.push('https://cdn.test');
     copy.directives.delete('img-src');
     copy.disposition = 'enforce';
     copy.parsingWarnings.length = 0;
-    expect([...original.directives]).toEqual([['default-src', ["'none'"]], ['img-src', ["'self'"]]]);
+    expect([...original.directives]).toEqual([['default-src', { tokens: ["'none'"] }], ['img-src', { tokens: ["'self'"] }]]);
     expect(original.disposition).toBe('report');
     expect(original.parsingWarnings).toHaveLength(1);
   });

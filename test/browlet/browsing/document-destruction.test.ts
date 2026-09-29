@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { createNewTopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { navigationAndTraversalTaskSource, networkingTaskSource } from '../../../src/browlet/scripting/tasks';
@@ -143,7 +143,7 @@ describe('Document destruction', () => {
 });
 
 function createDocument(userAgent = new UserAgent()) {
-  const traversable = createNewTopLevelTraversable(userAgent, null, '');
+  const traversable = TopLevelTraversable.create(userAgent, null, '');
   const document = traversable.activeDocument!;
   const env = getRelevantRealm(document).env;
   return { document, traversable, env, global: env.getWindowOrWorkerGlobalScopeMixin() };

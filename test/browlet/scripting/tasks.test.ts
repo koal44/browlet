@@ -15,9 +15,7 @@ import {
   domManipulationTaskSource, navigationAndTraversalTaskSource, networkingTaskSource,
   renderingTaskSource, userInteractionTaskSource,
 } from '../../../src/browlet/scripting/tasks';
-import {
-  createNewTopLevelTraversable,
-} from '../../../src/browlet/browsing/navigable';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
@@ -65,7 +63,7 @@ describe('task queues', () => {
   });
 
   it('removes only the queued global task identified by a handle', () => {
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -242,7 +240,7 @@ describe('task queues', () => {
     });
     const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('accounting');
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -388,7 +386,7 @@ describe('task queues', () => {
   });
 
   it('derives a Window task destination and Document from its Realm', () => {
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -407,7 +405,7 @@ describe('task queues', () => {
   });
 
   it('captures the surrounding Window Realm Document for a microtask', () => {
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',
@@ -428,7 +426,7 @@ describe('task queues', () => {
   });
 
   it('captures each task Document when queued, even if the Window changes Documents', () => {
-    const traversable = createNewTopLevelTraversable(new UserAgent(), null, '');
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const window = traversable.activeWindow!;
     const realm = getRelevantRealm(window);
     const firstDocument = window.getAssociatedDocument();
@@ -550,7 +548,7 @@ describe('task queues', () => {
   );
 
   it('makes only null-Document or fully-active tasks runnable', () => {
-    const traversable = createNewTopLevelTraversable(
+    const traversable = TopLevelTraversable.create(
       new UserAgent(),
       null,
       '',

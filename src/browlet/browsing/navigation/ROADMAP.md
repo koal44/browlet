@@ -4,8 +4,9 @@
 
 - `session-history.ts` models the history/document-state records needed by the
   active top-level traversable.
-- `navigation.ts` implements the bounded route-backed cross-document
-  navigation and push/replace path.
+- `params.ts` prepares response, policy, and history-entry inputs.
+- `Navigable` owns the bounded cross-document commit; `Traversable`
+  applies its history step and clears forward entries.
 
 ## Missing
 
