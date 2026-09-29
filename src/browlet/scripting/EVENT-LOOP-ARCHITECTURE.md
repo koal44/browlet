@@ -39,8 +39,11 @@ and task-end hooks leave Long Tasks/Long Animation Frames to their owners.
 Rendering's independent producer records an opportunity and queues the ordered
 update pipeline; the host refresh source does not run author callbacks directly.
 
-`Realm.queueGlobalTask()` captures the global's associated Document and routes
-through its Agent. Low-level queueing requires an explicit loop and Document.
+`env.exec.queueTask(source, steps, options?)` queues work for the execution owner
+using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to HTML
+source identities. `Realm.queueGlobalTask()` captures the global's associated
+Document and routes through its Agent. Options carry timer nesting metadata.
+Low-level queueing can instead select an explicit loop and Document.
 The future element wrapper must route through the element's relevant global,
 not its current node document after adoption. Avoid implied-loop/Document calls.
 
@@ -50,9 +53,9 @@ or the composed global-task route; it does not move HTML scheduling into JS Engi
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
 
-The global-scope mixin owns GlobalTimers. Its active-time waits and Realm timer-task
-delivery serve both AbortSignal.timeout and Window function timers. Retaining an
-old Window's callback retains its owner across navigation.
+The global-scope mixin owns GlobalTimers. Its active-time waits and execution's
+`timer` task delivery serve both AbortSignal.timeout and Window function timers.
+Retaining an old Window's callback retains its owner across navigation.
 
 Browser-owned Reporting tasks instead use later Node host turns and yield to
 runnable work on that UserAgent's started HTML loops. They survive Document task

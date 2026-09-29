@@ -215,11 +215,10 @@ describe('Stylelet execution', () => {
     const exec: StyleletExecution = {
       ...defaultStyleletExecution,
       runInParallel: (steps) => { work.push(steps); },
-      style: {
-        queueTask(steps) {
-          tasks.push(steps);
-          return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
-        },
+      queueTask(source, steps) {
+        expect(source).toBe('dom-manipulation');
+        tasks.push(steps);
+        return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
       },
     };
     const sheet = new Stylelet(document, { exec }).createStyleSheet();

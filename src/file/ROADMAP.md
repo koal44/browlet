@@ -38,8 +38,8 @@ an implementation of file selection or filesystem access.
 
 Blob/File retain `env`; slices preserve it and deserialization uses the target
 environment. Background reads deliver bytes/failure/completion through
-`env.exec.fileReading`. Promise reads use the owner's internal Promise facility;
-`textStream()` pipes through TextDecoderStream's associated TransformStream.
+`env.exec.queueTask('file', steps)`. Promise reads use the owner's internal
+Promise facility; `textStream()` pipes through TextDecoderStream's associated TransformStream.
 Blob text is UTF-8; FileReader text instead applies label/MIME/BOM rules.
 
 Constructed File modification time is captured once. A host file with unknown

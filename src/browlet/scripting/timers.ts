@@ -1,8 +1,7 @@
+import type { TaskCreationOptions } from '../../infra/execution';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { Duration } from '../performance/clock';
-import { createTaskSource, type EventLoop, type Task, type TaskCreationOptions } from './event-loop';
-
-export const timerTaskSource = createTaskSource('timer');
+import type { EventLoop, Task } from './event-loop';
 
 /** Timer state owned by a WindowOrWorkerGlobalScope mixin. */
 export class GlobalTimers {

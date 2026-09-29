@@ -7,6 +7,6 @@ export {
 } from './namespaces';
 export { toScalarValueString, type ScalarValueString } from './strings';
 export { InternalError } from './internal-error';
-export type { TaskHandle, TaskScheduling } from './scheduling';
+export type { AsyncExecution, TaskCreationOptions, TaskHandle, TaskSourceKey } from './execution';
 export type { DOMOperations, DOMNode, DOMCollection } from './dom-operations';
 export { standardDOM } from './dom-standard';

@@ -183,10 +183,11 @@ export class CSSStyleSheetImpl
     };
     // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
     // Parse in parallel; return to the owner before changing rules or settling the promise.
+    // CSSOM leaves the task source unspecified; use DOM manipulation delivery.
     this.env.exec.runInParallel(() => {
       try {
         const rules = this.parseRules(text);
-        this.env.exec.style.queueTask(() => {
+        this.env.exec.queueTask('dom-manipulation', () => {
           try {
             this.replaceInterpretedStyleSheet(rules);
             this.#disallowModification = false;
@@ -196,7 +197,7 @@ export class CSSStyleSheetImpl
           }
         });
       } catch (error) {
-        this.env.exec.style.queueTask(() => { reject(error); });
+        this.env.exec.queueTask('dom-manipulation', () => { reject(error); });
       }
     });
     return result.promise;

@@ -1,5 +1,6 @@
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
+import type { TaskSourceKey } from '../../src/infra/execution';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { queueNetworkingTask } from '../../src/js-engine/index';
 import { createTestContext } from '../browlet/streams/environment';
@@ -18,6 +19,17 @@ export function createBodyFixture() {
     exec: {
       ...context.getEnvironment().exec,
       runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
+      queueTask(source: TaskSourceKey, steps: () => void) {
+        expect(source).toBe('network');
+        const task = { global: context.realm.global, steps };
+        tasks.push(task);
+        return {
+          remove() {
+            const index = tasks.indexOf(task);
+            if (index !== -1) tasks.splice(index, 1);
+          },
+        };
+      },
       networking: scheduling,
     },
   };

@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
+import type { TaskHandle } from '../../infra/execution';
 import { idlType } from '../../web-idl/index';
 import type { WindowRealm } from '../scripting/realm';
-import { createTaskSource } from '../scripting/event-loop';
-import type { QueuedTaskHandle } from '../scripting/tasks';
 import { copyEvaluationValue } from './evaluation-value';
 
 /** One page execution context and its outstanding host commands. */
@@ -12,7 +11,7 @@ export class PageEvaluation {
   /** Host commands to reject if navigation destroys this evaluation context. */
   #pending = new Set<(reason: Error) => void>();
   /** Queued evaluation and callback-delivery tasks awaiting execution. */
-  #tasks = new Set<QueuedTaskHandle>();
+  #tasks = new Set<TaskHandle>();
   #disposed = false;
 
   constructor(realm: WindowRealm) {
@@ -119,7 +118,7 @@ export class PageEvaluation {
     // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
     if (this.#disposed) throw new Error('Evaluation context was destroyed by navigation');
     const realm = this.#realm;
-    const task = realm.queueGlobalTask(evaluationTaskSource, () => {
+    const task = realm.env.exec.queueTask('automation', () => {
       this.#tasks.delete(task);
       realm.agent.eventLoop.runScriptEvaluation(realm.env, steps);
     });
@@ -127,7 +126,5 @@ export class PageEvaluation {
   }
 }
 
-// Automation entry is embedder work; HTML still owns task execution and checkpoints.
-const evaluationTaskSource = createTaskSource('automation');
 // eslint-disable-next-line no-restricted-syntax -- Host-facing commands and callbacks belong to Node.
 const HostPromise = globalThis.Promise;

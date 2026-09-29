@@ -35,11 +35,9 @@ export function createExecution(realm = new TestRealm(), binding?: BindingContex
     buffers: realm.createRuntimeBuffers(),
     queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel: (steps) => { setImmediate(steps); },
-    fileReading: {
-      queueTask(steps) {
-        const task = setImmediate(steps);
-        return { remove: () => { clearImmediate(task); } };
-      },
+    queueTask(_source, steps) {
+      const task = setImmediate(steps);
+      return { remove: () => { clearImmediate(task); } };
     },
     networking: {
       queueGlobalTask: (_global, steps) => { setImmediate(steps); },

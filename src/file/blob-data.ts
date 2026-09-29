@@ -90,7 +90,6 @@ export class BlobData {
   // File API's get stream algorithm, shared with Fetch's multipart body extraction.
   // https://w3c.github.io/FileAPI/#dfn-get-stream
   stream(env: JSEnvironment): ReadableStreamImpl {
-    const scheduling = env.exec.fileReading;
     let canceled = false;
     const stream = ReadableStreamImpl.createWithByteReadingSupport(
       undefined, () => { canceled = true; }, 0, env,
@@ -107,7 +106,7 @@ export class BlobData {
           // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
           const bytes = await this.read(offset, byteLength);
           offset += bytes.length;
-          scheduling.queueTask(() => {
+          env.exec.queueTask('file', () => {
             if (canceled) return;
             try {
               // Byte-stream enqueue transfers this read's storage into the stream runtime.
@@ -119,12 +118,12 @@ export class BlobData {
           });
         }
         if (!canceled) {
-          scheduling.queueTask(() => {
+          env.exec.queueTask('file', () => {
             if (!canceled) stream.close();
           });
         }
       } catch (error) {
-        scheduling.queueTask(() => {
+        env.exec.queueTask('file', () => {
           if (canceled) return;
           canceled = true;
           stream.error(realizeReadFailure(error));

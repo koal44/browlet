@@ -10,7 +10,8 @@
   assembles the declarations into its Web IDL bindings.
 - Documents and CSSOM implementations retain their existing environment through
   `StyleletEnvironment`. UserAgent supplies `dom`; `env.exec` supplies the shared
-  Promise and background scheduling plus the stylesheet task destination.
+  Promise and background scheduling plus `queueTask('dom-manipulation', steps)`
+  for stylesheet delivery.
   There is no separate document execution adapter. Standalone Stylelet uses
   native scheduling without loading Browlet's engine runtime.
 - The CSSOM exception factory remains provisional: Browlet supplies requests

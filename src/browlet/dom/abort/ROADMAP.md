@@ -41,7 +41,7 @@ dependents. Explicit reasons keep their original identity.
 ## HTML delivery and retention
 
 AbortSignal.timeout's declaration composes the owning global's active-time wait
-with Realm.queueGlobalTask on the timer task source. GlobalTimers and the running
+with `env.exec.queueTask('timer', steps)`. GlobalTimers and the running
 event loop now supply those operations. It retains the original Window owner
 across WindowProxy retargeting. DOM does not schedule a separate Node timer.
 

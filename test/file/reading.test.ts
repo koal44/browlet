@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   BlobData, BlobImpl, BlobReadFailure, packageData,
 } from '../../src/file/index';
-import type { TaskScheduling } from '../../src/infra/index';
 import type { InternalPromise } from '../../src/infra/promises';
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { expectBytesEqual } from '../support/bytes';
@@ -12,7 +11,7 @@ describe('File reading implementation', () => {
     { name: 'empty input', text: '' },
     { name: 'a UTF-8 character crossing the chunk boundary', text: `${'a'.repeat(65535)}😀` },
   ])('reads bytes and text for $name', async ({ text }) => {
-    const env = { ...createEnvironment(), runInParallel: queueMicrotask, fileReading: scheduling };
+    const env = createEnvironment();
     const blob = new BlobImpl([text], {}, env);
     const [decoded, bytes, bufferBytes] = await Promise.all([
       observe(blob.text()),
@@ -28,11 +27,10 @@ describe('File reading implementation', () => {
     const env = createEnvironment();
     const tasks: (() => void)[] = [];
     env.exec.runInParallel = (steps) => { steps(); };
-    env.exec.fileReading = {
-      queueTask(steps) {
-        tasks.push(steps);
-        return { remove() {} };
-      },
+    env.exec.queueTask = (source, steps) => {
+      expect(source).toBe('file');
+      tasks.push(steps);
+      return { remove() {} };
     };
     const blob = new BlobImpl([], {}, env);
     const result = blob[method]();
@@ -55,7 +53,7 @@ describe('File reading implementation', () => {
       snapshotState: null,
       read: () => Promise.reject(new BlobReadFailure('NotFound')),
     });
-    const env = { ...createEnvironment(), runInParallel: queueMicrotask, fileReading: scheduling };
+    const env = createEnvironment();
     const blob = BlobImpl.create(data, '', null, env);
     const result = blob[method]();
     const failure = await observe<unknown>(result).catch((error: unknown) => error);
@@ -80,11 +78,3 @@ function observe<T>(result: InternalPromise<T>): Promise<T> {
   result.observe(observed.resolve, observed.reject);
   return observed.promise;
 }
-
-// File-task delivery stays separate from explicit result observation.
-const scheduling: TaskScheduling = {
-  queueTask(steps) {
-    const task = setImmediate(steps);
-    return { remove: () => { clearImmediate(task); } };
-  },
-};

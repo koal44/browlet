@@ -150,11 +150,11 @@ describe('File API §6.2: FileReader reads', () => {
     const queues: (() => void)[][] = [[], []];
     const spies = [source, destination].flatMap((window, index) => {
       const env = getContext(window).getEnvironment();
-      const scheduling = env.exec.fileReading;
       const tasks = queues[index]!;
       return [
         vi.spyOn(env.exec, 'runInParallel').mockImplementation((steps) => { steps(); }),
-        vi.spyOn(scheduling, 'queueTask').mockImplementation((steps) => {
+        vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) => {
+          expect(source).toBe('file');
           tasks.push(steps);
           return {
             remove() {
@@ -385,16 +385,15 @@ describe('File API §6.2: FileReader reads', () => {
       queueNetworkingTask,
       exec: {
         ...env.exec,
-        fileReading: {
-          queueTask(steps) {
+        queueTask(source, steps) {
+          expect(source).toBe('file');
           // Three 64 KiB chunks, one final byte, then stream close.
           // Control delivery time, rather than assuming backing-read delays survive queuing.
-            const time = deliveryTimes[deliveryIndex++]!;
-            return env.exec.fileReading.queueTask(() => {
-              now = time;
-              steps();
-            });
-          },
+          const time = deliveryTimes[deliveryIndex++]!;
+          return env.exec.queueTask(source, () => {
+            now = time;
+            steps();
+          });
         },
       },
     });

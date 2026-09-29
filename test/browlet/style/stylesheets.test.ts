@@ -29,7 +29,7 @@ describe('stylesheet integration', () => {
     const document = createTestDocument();
     const { env } = document;
     const background = vi.spyOn(env.exec, 'runInParallel');
-    const delivery = vi.spyOn(env.exec.style, 'queueTask');
+    const delivery = vi.spyOn(env.exec, 'queueTask');
     const styles = document.getCSSEngine();
     const sheet = styles.createStyleSheet();
 
@@ -43,6 +43,7 @@ describe('stylesheet integration', () => {
     expect(sheet.cssRules).toHaveLength(1);
     expect(background).toHaveBeenCalledOnce();
     expect(delivery).toHaveBeenCalledOnce();
+    expect(delivery).toHaveBeenCalledWith('dom-manipulation', expect.any(Function));
   });
 
   it('creates and associates parser-created inline style sheets', () => {

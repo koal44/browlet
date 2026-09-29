@@ -156,7 +156,7 @@ export class FileReaderImpl extends EventTargetImpl {
     this.result = null;
     this.error = null;
 
-    const { fileReading, Promise: P, runInParallel } = this.env.exec;
+    const { Promise: P, runInParallel } = this.env.exec;
     const reader = blob.stream().getDefaultReader();
     const operation: FileReadOperation = {
       cancel() {
@@ -179,7 +179,7 @@ export class FileReaderImpl extends EventTargetImpl {
 
     const queueTask = (steps: () => void): void => {
       if (this.#operation !== operation) return;
-      const task = fileReading.queueTask(() => {
+      const task = this.env.exec.queueTask('file', () => {
         operation.tasks.delete(task);
         if (this.#operation === operation) steps();
       });

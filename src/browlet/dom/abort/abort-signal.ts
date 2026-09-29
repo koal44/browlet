@@ -9,7 +9,6 @@ import {
 import {
   EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
-import { timerTaskSource } from '../../scripting/timers';
 import { EventTargetImpl } from '../events/event-target';
 
 export type AbortAlgorithmHandle = {
@@ -266,11 +265,11 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
         ...invokeWith(
           atArg(0, (ctx) => ctx.construct(AbortSignalImpl)),
           atArg(2, (ctx) => {
-            const { realm } = ctx;
-            const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;
+            const { env } = ctx.realm;
+            const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
             return (milliseconds: number, steps: () => void) => {
               timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
-                realm.queueGlobalTask(timerTaskSource, steps);
+                env.exec.queueTask('timer', steps);
               });
             };
           }),

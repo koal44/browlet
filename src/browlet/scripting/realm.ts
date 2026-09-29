@@ -7,11 +7,12 @@ import type { EventImpl } from '../dom/events/event';
 import type { EventRealm, WindowEventRealm } from '../dom/environment';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentRecord, Environment } from './environment';
-import type { TaskCreationOptions, TaskSource } from './event-loop';
+import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import type { WindowImpl } from '../browsing/window/window';
 import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
+import type { TaskCreationOptions } from '../../infra/execution';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm

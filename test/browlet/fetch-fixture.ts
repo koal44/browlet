@@ -17,6 +17,7 @@ import { fetch, type FetchOptions } from '../../src/fetch/fetch';
 import type { FetchController } from '../../src/fetch/controller';
 import type { FetchRequest } from '../../src/fetch/request';
 import type { FetchResponse } from '../../src/fetch/response';
+import type { TaskCreationOptions } from '../../src/infra/execution';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { queueNetworkingTask } from '../../src/js-engine/index';
 import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
@@ -46,11 +47,15 @@ export function createFetchOperation(request: FetchRequest, env: JSEnvironment) 
 /** Capture an invariant failure thrown on Fetch's owning task, without changing ordinary task delivery. */
 export function nextFetchTaskError(env: JSEnvironment) {
   const failure = Promise.withResolvers<unknown>();
-  const queue = env.queueNetworkingTask.bind(env);
-  const spy = vi.spyOn(env, 'queueNetworkingTask').mockImplementation((steps, destination) => queue(() => {
-    try { steps(); }
-    catch (error) { spy.mockRestore(); failure.resolve(error); }
-  }, destination));
+  const queue = env.exec.queueTask.bind(env.exec);
+  const spy = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps, options?: TaskCreationOptions) => {
+    if (source === 'timer' && options !== undefined) return queue(source, steps, options);
+    if (source !== 'network') return queue(source, steps);
+    return queue(source, () => {
+      try { steps(); }
+      catch (error) { spy.mockRestore(); failure.resolve(error); }
+    });
+  });
   return failure.promise;
 }
 
@@ -65,7 +70,7 @@ export function createFetchWindow(userAgent = new UserAgent()) {
     realm,
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      context.getEnvironment().queueNetworkingTask(steps, realm.global);
+      context.getEnvironment().exec.queueTask('network', steps);
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];

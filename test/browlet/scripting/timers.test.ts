@@ -9,12 +9,8 @@ import {
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { Duration, monotonicClock, UnsafeMoment } from
   '../../../src/browlet/performance/clock';
-import {
-  EventLoop, type EventLoopOptions,
-} from '../../../src/browlet/scripting/event-loop';
-import {
-  GlobalTimers, timerTaskSource, type TimerHost,
-} from '../../../src/browlet/scripting/timers';
+import type { EventLoop, EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
+import { GlobalTimers, type TimerHost } from '../../../src/browlet/scripting/timers';
 
 describe('HTML timers', () => {
   it('counts only fully-active time before completing a timeout', () => {
@@ -131,12 +127,12 @@ function createTimerFixture() {
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active Document');
 
-  const eventLoop = new EventLoop(createEventLoopOptions()
-    .createMicrotaskQueue());
+  const { env } = document;
+  const eventLoop = env.responsibleEventLoop;
   const host = new ManualTimerHost();
   const timers = new GlobalTimers({
     eventLoop,
-    queueTask: (steps, options) => { eventLoop.queueTask(timerTaskSource, document, steps, options); },
+    queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
     host,
     time: {
       currentHighResolutionTime: () => new Duration(host.now),

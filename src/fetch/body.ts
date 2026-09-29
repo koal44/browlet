@@ -39,12 +39,12 @@ export class FetchBody {
   static fromBytes(bytes: Uint8Array, env: JSEnvironment): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     // The bytes are already available; only delivery to the owning loop is deferred.
-    env.queueNetworkingTask(() => {
+    env.exec.queueTask('network', () => {
       if (bytes.length > 0 && !stream.isErrored) {
         stream.enqueueChunk(env.exec.buffers.copyUint8Array(bytes));
       }
       stream.close();
-    }, env.exec.global);
+    });
     const body = new FetchBody(stream, env);
     body.source = bytes;
     body.length = bytes.length;

@@ -160,8 +160,8 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
   userAgent.runInParallel(() => {
     userAgent.HostPromise.try(getResponse, responseType).observe(
       // Body/Streams operations must enter their owner's task and checkpoint.
-      (result) => params.env.queueNetworkingTask(() => processFetchResponse(params, result), params.env.exec.global),
-      (error) => params.env.queueNetworkingTask(() => { throw error; }, params.env.exec.global),
+      (result) => params.env.exec.queueTask('network', () => processFetchResponse(params, result)),
+      (error) => params.env.exec.queueTask('network', () => { throw error; }),
     );
   });
 }
@@ -253,9 +253,9 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
           httpRedirectFetch(params, response).observe(
             // Invalid redirect targets finish here; a valid navigation restarts nonrecursive main fetch.
             (result) => {
-              if (result !== undefined) params.env.queueNetworkingTask(() => processFetchResponse(params, result), params.env.exec.global);
+              if (result !== undefined) params.env.exec.queueTask('network', () => processFetchResponse(params, result));
             },
-            (error) => params.env.queueNetworkingTask(() => { throw error; }, params.env.exec.global),
+            (error) => params.env.exec.queueTask('network', () => { throw error; }),
           );
         };
         return response;
@@ -530,7 +530,7 @@ function httpNetworkFetch(
   }
 
   // Stream creation and all subsequent stream mutations belong to this execution owner.
-  env.queueNetworkingTask(() => {
+  env.exec.queueTask('network', () => {
     if (params.canceled) {
       result.resolve(FetchResponse.appropriateNetworkError(params));
       return;
@@ -707,7 +707,7 @@ function httpNetworkFetch(
       uploadEnded = true;
       queueCallback(() => params.processRequestEndOfBody?.());
     }
-  }, env.exec.global);
+  });
   return result.promise;
 }
 
@@ -1076,10 +1076,10 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
 // Stream operations enter the body's task/checkpoint owner.
 function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: PromiseResultType<T>): InternalPromise<T> {
   const result = params.request.userAgent.HostPromise.withResolvers(type);
-  params.env.queueNetworkingTask(() => {
+  params.env.exec.queueTask('network', () => {
     try { result.resolve(steps()); }
     catch (error) { result.reject(error); }
-  }, params.env.exec.global);
+  });
   return result.promise;
 }
 
@@ -1165,10 +1165,10 @@ function fetchWithCache(
   return result.promise;
 
   function queue(steps: () => void): void {
-    env.queueNetworkingTask(() => {
+    env.exec.queueTask('network', () => {
       try { steps(); }
       catch (error) { result.reject(error); }
-    }, env.exec.global);
+    });
   }
 }
 
@@ -1227,7 +1227,7 @@ class NetworkUpload implements HTTPUploadSource {
     const { env, request } = this.#params;
     const result = request.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>('UploadChunk'));
     this.#pending = result;
-    env.queueNetworkingTask(() => {
+    env.exec.queueTask('network', () => {
       if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
       try {
         if (!this.#reader) {
@@ -1252,7 +1252,7 @@ class NetworkUpload implements HTTPUploadSource {
           errorSteps: (error) => this.#fail(error),
         });
       } catch (error) { this.#fail(error); }
-    }, env.exec.global);
+    });
     return result.promise;
   }
 
@@ -1261,12 +1261,12 @@ class NetworkUpload implements HTTPUploadSource {
     this.#finished = true;
     this.#settle(null);
     const { env } = this.#params;
-    env.queueNetworkingTask(() => {
+    env.exec.queueTask('network', () => {
       const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
       pending.observe(() => {}, () => {});
       this.#reader?.release(env);
       this.#reader = undefined;
-    }, env.exec.global);
+    });
   }
 
   #settle(bytes: Uint8Array | null): void {
@@ -1353,10 +1353,10 @@ class NetworkBody {
       !(this.#pull && this.#size > 0)) return;
     this.#taskQueued = true;
     const { env } = this.#params;
-    env.queueNetworkingTask(() => {
+    env.exec.queueTask('network', () => {
       this.#taskQueued = false;
       this.#deliver();
-    }, env.exec.global);
+    });
   }
 
   #deliver(): void {

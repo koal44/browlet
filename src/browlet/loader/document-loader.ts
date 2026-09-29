@@ -3,7 +3,6 @@ import { createAndInitializeDocument } from '../browsing/document-lifecycle';
 import type { NavigationParams } from '../browsing/navigation/navigation';
 import type { DocumentImpl } from '../dom/nodes/document';
 import { BrowletParser, type ScriptHandler } from '../html/parser/document-parser';
-import { networkingTaskSource } from '../scripting/tasks';
 import type { InternalPromise } from '../../infra/promises';
 
 /** Create an HTML document and start consuming its navigation response. */
@@ -32,11 +31,11 @@ export function loadHTMLDocument(params: NavigationParams, handleScript: ScriptH
     () => document.processLinkHeaders(params.response, 'media'),
   );
   parsing.observe(
-    () => env.realm.queueGlobalTask(networkingTaskSource, () => {
+    () => env.exec.queueTask('network', () => {
       document.activeParser = null;
       document.finishLoading();
     }),
-    () => env.realm.queueGlobalTask(networkingTaskSource, () => {
+    () => env.exec.queueTask('network', () => {
       document.abort();
       document.activeParser = null;
     }),

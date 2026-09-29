@@ -1,4 +1,4 @@
-import type { AsyncExecution, TaskScheduling } from '../infra/scheduling';
+import type { AsyncExecution } from '../infra/execution';
 import type { RuntimeBuffers } from './buffers';
 import type { GlobalObject } from './realm';
 
@@ -15,7 +15,6 @@ export interface RealmExecution extends AsyncExecution {
   /** Original DOMException constructor supplied by the owner's Binding. */
   DOMException: typeof DOMException;
   buffers: RuntimeBuffers;
-  fileReading: TaskScheduling;
   networking: NetworkingTasks;
 
   queueMicrotask(steps: () => void): void;

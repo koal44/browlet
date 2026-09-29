@@ -7,7 +7,6 @@ import type { ElementImpl } from '../../../dom/nodes/element';
 import type { DocumentImpl } from '../../../dom/nodes/document';
 import { ReportBodyImpl } from '../../../reporting/report';
 import type { Environment } from '../../../scripting/environment';
-import { domManipulationTaskSource } from '../../../scripting/tasks';
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 import { SecurityPolicyViolationEventImpl } from './violation-event';
 
@@ -71,7 +70,7 @@ export class CSPViolation {
     let target = this.element;
     // SPEC_CLASH(csp-violation-task-source): CSP leaves the source unnamed;
     // WebKit uses DOM manipulation, Blink networking. Follow WebKit here.
-    env.realm.queueGlobalTask(domManipulationTaskSource, () => {
+    env.exec.queueTask('dom-manipulation', () => {
       const document = this.#document;
       if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
       const body = new CSPViolationReportBodyImpl(this);

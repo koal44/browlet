@@ -93,9 +93,12 @@ UserAgent. Do not put ordinary imports behind environment properties or copy
 another owner's complete API into a facade. Stylelet consumes the existing
 `StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations and
 `exec` supplies execution. `RealmExecution` and `StyleletExecution` both extend
-Infra's `AsyncExecution` for Promise creation and background work; the stylesheet
-task destination uses Infra's `TaskScheduling`. Browlet composes these on the
-same `env.exec` object.
+Infra's [`AsyncExecution`](infra/execution.ts) for Promise creation, background
+work, and `queueTask(source, steps, options?)` delivery. The source keyword selects
+a shared task source; `env.exec` selects the owning destination. Browlet's
+[`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
+identities; HTML retains task queues and scheduling policy. Optional task metadata
+carries timer nesting levels without moving timer initialization into Infra.
 Its provisional CSSOM exception factory preserves requests for method-realm
 realization rather than eagerly allocating in the receiver's realm.
 Standalone Stylelet composes native facilities without requiring HTML settings

@@ -173,7 +173,7 @@ export class BrowletParser {
     // Navigation bodies can belong to the browser sandbox rather than this
     // Document. Stream reads and cancellation enter that owner's checkpoint.
     const env = this.#body!.stream.env;
-    env.exec.networking.queueGlobalTask(env.exec.global, () => {
+    env.exec.queueTask('network', () => {
       try { steps(); }
       catch (error) { this.#stream.destroy(toError(error)); }
     });

@@ -3,6 +3,7 @@ import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { Environment } from './environment';
 import { InternalError } from '../../infra/internal-error';
+import type { TaskCreationOptions } from '../../infra/execution';
 
 // Task-source/queue associations stay private so scheduling can coalesce
 // sources without changing callers.
@@ -488,10 +489,6 @@ export type TaskSource = { name: string; };
 export function createTaskSource(name: string): TaskSource {
   return { name };
 }
-
-export type TaskCreationOptions = {
-  timerNestingLevel?: number;
-};
 
 const microtaskTaskSource = createTaskSource('microtask');
 const hostEntryTaskSource = createTaskSource('host script entry');

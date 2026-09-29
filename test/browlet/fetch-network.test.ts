@@ -38,7 +38,7 @@ describe('HTTP network response streams', () => {
 
   it('bounds an unread body, resumes below the lower limit, and preserves chunk ownership', async () => {
     const f = await fixture();
-    const queue = vi.spyOn(f.env.exec.networking, 'queueGlobalTask');
+    const queue = vi.spyOn(f.env.exec, 'queueTask');
     const first = new Uint8Array(32 * 1024).fill(1);
     const second = new Uint8Array(32 * 1024).fill(2);
     f.transport.send(first);

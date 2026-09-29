@@ -11,10 +11,8 @@ import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type Fetc
 import type { InternalPromise } from '../../infra/promises';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { Environment } from './environment';
-import { GlobalTimers, timerTaskSource, type TimerAction } from './timers';
+import { GlobalTimers, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
-import { createTaskSource } from './event-loop';
-import type { QueuedTaskHandle } from './tasks';
 
 /** Owns timers, performance, reporting, and resource lifetimes for one global. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -49,10 +47,9 @@ export class WindowOrWorkerGlobalScopeMixin {
   constructor(env: Environment) {
     this.env = env;
     this.performance = new PerformanceImpl(env.timing, env);
-    const { realm } = env;
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
-      queueTask: (steps, options) => realm.queueGlobalTask(timerTaskSource, steps, options),
+      queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
       time: env.timing,
     });
   }
@@ -135,11 +132,6 @@ export class WindowOrWorkerGlobalScopeMixin {
     }
   }
 
-  /** Queue observer work on the HTML event loop owning this global. */
-  queueReportingTask(steps: () => void): QueuedTaskHandle {
-    return this.env.realm.queueGlobalTask(reportingTaskSource, steps);
-  }
-
   /** Release global report state and registered observer batches during destruction. */
   // HTML removes this document's queued callback tasks before this cleanup.
   // The lifecycle owner hands off outbound data before calling this method.
@@ -180,9 +172,6 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.timers.setAssociatedDocument(document);
   }
 }
-
-// Reporting leaves the task source unnamed; WebKit likewise gives it a distinct source.
-export const reportingTaskSource = createTaskSource('reporting');
 
 // TrustedScript awaits the Trusted Types interface and timer string compilation.
 // typedef (DOMString or Function or TrustedScript) TimerHandler;

@@ -1,6 +1,6 @@
 import { standardDOM, type DOMOperations } from '../infra/index';
 import { InternalPromise } from '../infra/promises';
-import type { AsyncExecution, TaskScheduling } from '../infra/scheduling';
+import type { AsyncExecution } from '../infra/execution';
 import type { DOMExceptionName } from '../web-idl/core/index';
 
 /** Existing owner supplying Stylelet's execution and host DOM operations. */
@@ -19,8 +19,6 @@ export interface StyleletUserAgent {
 
 /** Shared Promise facilities plus delivery of stylesheet updates. */
 export interface StyleletExecution extends AsyncExecution {
-  /** Task destination for stylesheet replacement results. */
-  style: TaskScheduling;
   /** Create an exception for delivery through the host's CSSOM binding. */
   // PROVISIONAL: Browlet supplies an exception request, not an owner-realm
   // allocation. Keep synchronous failures available for method-realm realization
@@ -58,11 +56,9 @@ export const defaultStyleletExecution: StyleletExecution = {
     }
   },
   runInParallel: (steps) => { setTimeout(steps, 0); },
-  style: {
-    queueTask(steps) {
-      const timer = setTimeout(steps, 0);
-      return { remove: () => { clearTimeout(timer); } };
-    },
+  queueTask(_source, steps) {
+    const timer = setTimeout(steps, 0);
+    return { remove: () => { clearTimeout(timer); } };
   },
   createDOMException: (name, message = '') => new DOMException(message, name),
 };
