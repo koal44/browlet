@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   annotated, arg, asyncIter, asyncSequence, attr, constant, ctor, decimal,
   defineCallbackFunction,
-  defineCallbackInterface, defineDictionary, defineEnumeration,
+  defineCallbackInterface, defineDictionary, defineEnumeration, defineProxyObject,
   defineIncludes, defineInterface, defineInterfaceMixin,
   defineNamespace, definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
@@ -32,6 +32,18 @@ describe('Web IDL declarations and serialization', () => {
       'Promise<RenamedExample?> read(sequence<RenamedExample> values);',
     );
     expect(() => serializeDefinitions([consumer])).toThrow('No interface declares the referenced implementation class');
+  });
+
+  it('serializes proxy type references without inventing an interface declaration', () => {
+    const proxy = defineProxyObject({ name: 'ProxyObject', is: () => false });
+    const consumer = defineInterface({
+      name: 'Consumer', members: [roAttr('value', reference('ProxyObject'))],
+    });
+
+    expect(serializeDefinition(proxy)).toBe('');
+    expect(serializeDefinitions([proxy, consumer])).toBe(
+      'interface Consumer {\n  readonly attribute ProxyObject value;\n};',
+    );
   });
 
   it('represents the EventTarget fragment as structurally lossless data', () => {

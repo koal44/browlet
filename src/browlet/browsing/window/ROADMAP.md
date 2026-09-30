@@ -3,7 +3,8 @@
 ## Present
 
 - `window.ts`: Window implementation and its current Web IDL contributions.
-- `window-proxy.ts`: stable outer identity and retargeting across navigation.
+- `window-proxy.ts`: internal handle retaining the stable platform identity and
+  paired Window association across navigation.
 - `location.ts`: Location identity and currently supported URL accessors.
 
 ## Missing
@@ -25,6 +26,11 @@ on either backend. Blink owns Window/Location in `core/frame` and the
 actual V8 WindowProxy in `bindings/core/v8/window_proxy.*`, reinforcing that
 the proxy is binding/engine machinery attached to—but not identical with—the
 Window implementation.
+
+The `WindowProxy` TypeScript surface currently uses `lib.dom.Window` by
+assertion. Binding stamps connect implementation/platform identities, but do
+not verify that all ambient Window members have been implemented. Full member
+coverage remains part of the Window work above.
 
 `Window.postMessage()` belongs on Window, with its future algorithms in
 `communication/window-messaging.ts`; it must consume the single structured-data

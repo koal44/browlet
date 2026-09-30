@@ -7,7 +7,7 @@ import {
   impl, roAttr, reference, union, xattr,
 } from '../../../web-idl/index';
 import { LocationImpl } from './location';
-import type { WindowProxy } from './window-proxy';
+import type { WindowProxy, WindowProxyHandle } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
 import type { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
 import type { BrowletEnvironment } from '../../scripting/environment';
@@ -51,11 +51,11 @@ export class WindowImpl extends EventTargetImpl {
   }
 
   get window(): WindowProxy {
-    return this.getWindowProxy();
+    return this.getWindowProxy().platform;
   }
 
   get self(): WindowProxy {
-    return this.getWindowProxy();
+    return this.getWindowProxy().platform;
   }
 
   get document(): DocumentImpl {
@@ -169,7 +169,7 @@ export class WindowImpl extends EventTargetImpl {
     return names;
   }
 
-  getWindowProxy(): WindowProxy {
+  getWindowProxy(): WindowProxyHandle {
     const browsingContext = this.getAssociatedDocument().browsingContext;
     if (!browsingContext) {
       throw new InternalError('Window Document has no browsing context');
@@ -211,7 +211,7 @@ export class WindowImpl extends EventTargetImpl {
       };
     }
 
-    const callbackThisValue = this.getWindowProxy();
+    const callbackThisValue = this.getWindowProxy().platform;
     return (argumentsList) => {
       Reflect.apply(handler, callbackThisValue, argumentsList);
     };

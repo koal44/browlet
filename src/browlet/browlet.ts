@@ -77,7 +77,7 @@ export class Browlet {
     if (browsingContext === null) {
       throw new InternalError('Top-level traversable has no active browsing context');
     }
-    return browsingContext.windowProxy;
+    return browsingContext.windowProxy.platform;
   }
 
   /** Replace the host callback supplying document sources for navigation. */

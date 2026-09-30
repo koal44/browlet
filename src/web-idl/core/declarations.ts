@@ -451,6 +451,29 @@ export function defineTypedef(
   return { kind: 'typedef', ...definition };
 }
 
+// Proxy objects
+
+/** A proxy type with its own identity that stands in for a platform object, e.g. WindowProxy. */
+export type ProxyObjectDefinition = {
+  /** Declaration discriminator supplied by `defineProxyObject()`. */
+  kind: 'proxy-object';
+  /** IDL type name used to refer to these proxies. */
+  name: string;
+  /** Recognize values during conversion, union selection, and overload resolution. */
+  is(value: unknown): boolean;
+  /** Retrieve the platform receiver for member calls, e.g. a WindowProxy's current Window. */
+  // Value conversion preserves the proxy object; only member receivers use this resolution.
+  resolveReceiver?(value: unknown): object | undefined;
+};
+
+/** Declare a proxy type whose identity is preserved through IDL conversion. */
+// Project declaration: describes receiver forwarding, not every use of JavaScript's Proxy.
+export function defineProxyObject(
+  definition: Omit<ProxyObjectDefinition, 'kind'>,
+): ProxyObjectDefinition {
+  return { kind: 'proxy-object', ...definition };
+}
+
 // All definition kinds
 
 /** Any declaration accepted by definition assembly; `Env` carries binding-hook requirements. */
@@ -468,4 +491,5 @@ export type Definition<Env = unknown> =
   | EnumerationDefinition
   | CallbackFunctionDefinition
   | TypedefDefinition
+  | ProxyObjectDefinition
   | IncludesDefinition;

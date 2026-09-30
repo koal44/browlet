@@ -1,68 +1,42 @@
-import { WindowImpl } from './window';
+import type { WindowImpl } from './window';
+import { defineProxyObject, type StampedPlatformObject } from '../../../web-idl/index';
 import { InternalError } from '../../../infra/internal-error';
 
-/** Retains a WindowProxy's current Window implementation and platform object. */
+/** Retains a WindowProxy's platform identity and current Window association. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
-// The handler is internal; the exposed identity is the engine proxy or the
+// The handle is internal; the exposed identity is the engine proxy or the
 // plain-Node forwarding proxy, neither of which inherits from this class.
 // PROVISIONAL: the traps implement fallback forwarding, not HTML's complete
 // exotic internal methods or cross-origin access checks; see ROADMAP.md.
-export class WindowProxyHandler implements ProxyHandler<object> {
-  static #handlers = new WeakMap<object, WindowProxyHandler>();
+export class WindowProxyHandle implements ProxyHandler<object> {
+  static #handles = new WeakMap<object, WindowProxyHandle>();
 
-  /** Creates a forwarding WindowProxy for the plain-Node fallback. */
-  static create(): WindowProxy {
-    return new WindowProxyHandler().windowProxy;
+  /** Retrieves the supplied platform's handle, creating a fallback proxy when omitted. */
+  static getOrCreate(platform?: object): WindowProxyHandle {
+    const handle = platform === undefined ? undefined : WindowProxyHandle.#handles.get(platform);
+    return handle ?? new WindowProxyHandle(platform);
   }
 
-  /** Registers an existing global-this object as a WindowProxy and returns it unchanged. */
-  static register(windowProxy: object): WindowProxy {
-    if (WindowProxyHandler.is(windowProxy)) return windowProxy;
-    return new WindowProxyHandler(windowProxy).windowProxy;
-  }
-
+  /** Recognizes a registered WindowProxy platform object at the binding boundary. */
   static is(this: void, value: unknown): value is WindowProxy {
-    return WindowProxyHandler.#handlers.has(value as object);
-  }
-
-  /** Current Window implementation, or null before the initial association. */
-  static getWindow(windowProxy: WindowProxy): WindowImpl | null {
-    return WindowProxyHandler.#requireHandler(windowProxy).#associatedWindow?.implementation ?? null;
+    return WindowProxyHandle.#handles.has(value as object);
   }
 
   /** Resolves the proxy to the current Window platform object for Web IDL receiver checks. */
   static resolveReceiver(this: void, windowProxy: WindowProxy): Window | undefined {
-    return WindowProxyHandler.#requireHandler(windowProxy).#associatedWindow?.platform;
-  }
-
-  /** Replaces the Window association while preserving the proxy's identity. */
-  static setWindow(
-    windowProxy: WindowProxy,
-    implementation: WindowImpl,
-    platform: Window,
-  ): void {
-    const handler = WindowProxyHandler.#requireHandler(windowProxy);
-    if (!WindowImpl.is(implementation)) {
-      throw new InternalError('WindowProxy target is not a Window implementation');
-    }
-    handler.#associatedWindow = { implementation, platform };
-  }
-
-  static #requireHandler(windowProxy: WindowProxy): WindowProxyHandler {
-    const handler = WindowProxyHandler.#handlers.get(windowProxy);
-    if (!handler) throw new InternalError('Object is not a WindowProxy');
-    return handler;
+    const handle = WindowProxyHandle.#handles.get(windowProxy);
+    return handle ? handle.#associatedWindow?.platform : undefined;
   }
 
   // -----------------------------------------------------------------------
 
   /** Stable global-this identity retained when navigation replaces the Window. */
-  windowProxy: WindowProxy;
+  platform: WindowProxy;
   #associatedWindow: WindowAssociation | null = null;
 
-  private constructor(windowProxy?: object) {
-    this.windowProxy = (windowProxy ?? new Proxy({}, this)) as WindowProxy;
-    WindowProxyHandler.#handlers.set(this.windowProxy, this);
+  private constructor(platform?: object) {
+    this.platform = (platform ?? new Proxy({}, this)) as WindowProxy;
+    WindowProxyHandle.#handles.set(this.platform, this);
   }
 
   /** Current Window association; throws before construction has connected it. */
@@ -71,6 +45,11 @@ export class WindowProxyHandler implements ProxyHandler<object> {
       throw new InternalError('WindowProxy has no associated Window');
     }
     return this.#associatedWindow;
+  }
+
+  /** Replaces the paired Window identities while preserving this proxy's identity. */
+  setAssociatedWindow(window: WindowAssociation): void {
+    this.#associatedWindow = window;
   }
 
   defineProperty(
@@ -97,7 +76,7 @@ export class WindowProxyHandler implements ProxyHandler<object> {
     if (
       windowProxyReferences.has(property) &&
       !Reflect.has(window, property)
-    ) return this.windowProxy;
+    ) return this.platform;
 
     const value: unknown = Reflect.get(window, property, window);
     return value;
@@ -141,6 +120,8 @@ export class WindowProxyHandler implements ProxyHandler<object> {
 }
 
 /** Author-visible Window surface forwarded through a stable exotic identity. */
+// PROVISIONAL: this lib.dom surface is asserted at composition, not derived
+// from the implemented Window declarations; see ROADMAP.md.
 export type WindowProxy = Window & {
   frames: WindowProxy;
   parent: WindowProxy;
@@ -149,12 +130,20 @@ export type WindowProxy = Window & {
   readonly window: WindowProxy;
 };
 
-type WindowAssociation = {
+/** Paired implementation and platform identities of one projected Window. */
+export type WindowAssociation = {
   /** HTML state and algorithms of the currently associated Window. */
   implementation: WindowImpl;
   /** Bound Window used for property forwarding and receiver resolution. */
-  platform: Window;
+  platform: StampedPlatformObject<Window>;
 };
+
+/** Preserve the WindowProxy identity and resolve Window member calls through its handle. */
+export const windowProxyDefinition = defineProxyObject({
+  name: 'WindowProxy',
+  is: WindowProxyHandle.is,
+  resolveReceiver: WindowProxyHandle.resolveReceiver,
+});
 
 const windowProxyReferences = new Set<PropertyKey>([
   'frames', 'parent', 'self', 'top', 'window',

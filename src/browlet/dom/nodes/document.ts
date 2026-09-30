@@ -233,7 +233,7 @@ export class DocumentImpl extends NodeImpl {
   /** Associated WindowProxy, or null without a browsing context. */
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): Window | null {
-    return this.browsingContext?.windowProxy ?? null;
+    return this.browsingContext?.windowProxy.platform ?? null;
   }
 
   // https://html.spec.whatwg.org/#dom-document-readystate

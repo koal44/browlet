@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
+  defineDictionary, defineProxyObject, defineInterface, frozenArray, idlType, reference, sequence,
   type Definition, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
-import type { HostDefinedInterface } from '../../src/web-idl/conversion';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../src/web-idl/overload';
@@ -178,10 +177,10 @@ describe('Web IDL effective overload sets', () => {
     expect(selected.values[0]).toBe(implInst);
 
     const hostObject = {};
-    const hostBinding = createBinding([], [{
+    const hostBinding = createBinding([defineProxyObject({
       is: (value) => value === hostObject,
       name: 'HostObject',
-    }]);
+    })]);
     const host = namedOperation('host', reference('HostObject'));
     expect(resolve([host, string], [hostObject], hostBinding)).toEqual({
       callable: host,
@@ -233,12 +232,11 @@ function namedOperation(
 
 function createBinding(
   definitions: Definition[],
-  hostDefinedInterfaces: HostDefinedInterface[] = [],
 ): RealmBinding {
   return new RealmBinding(
     new DefinitionAssembly(definitions),
     new Realm(),
-    new BindingWorld([], hostDefinedInterfaces), (ctx) => ({ realm: ctx.realm }),
+    new BindingWorld(definitions), (ctx) => ({ realm: ctx.realm }),
   );
 }
 

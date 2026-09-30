@@ -15,7 +15,7 @@ import {
 } from './collection';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
-  type ConversionContext, type HostDefinedInterface,
+  type ConversionContext,
 } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
@@ -50,7 +50,6 @@ import { InternalError } from '../infra/internal-error';
 
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   definitions: DefinitionAssembly;
-  hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   world: BindingWorld;
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
@@ -74,7 +73,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     createEnvironment: (ctx: BindingContext<Env>) => Env,
   ) {
     this.definitions = definitions;
-    this.hostDefinedInterfaces = world.hostDefinedInterfaces;
     this.realm = realm;
     this.world = world;
     this.defaultConversionContext = { binding: this, realm };
@@ -1554,16 +1552,16 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return record;
   }
 
-  // Project helper: resolve direct platform receivers and host-defined receiver aliases.
+  // Project helper: resolve direct platform receivers and proxy object receiver aliases.
   #resolveReceiverRecord(
     value: unknown,
   ): PlatformRecord | undefined {
     const direct = getPlatformRecord(value);
     if (direct?.binding.world === this.world) return direct;
 
-    for (const hostInterface of this.hostDefinedInterfaces.values()) {
-      if (!hostInterface.is(value)) continue;
-      const platformObject = hostInterface.resolveReceiver?.(value);
+    for (const definition of this.definitions.proxyObjects) {
+      if (!definition.is(value)) continue;
+      const platformObject = definition.resolveReceiver?.(value);
       const record = getPlatformRecord(platformObject);
       if (record?.binding.world === this.world) return record;
     }

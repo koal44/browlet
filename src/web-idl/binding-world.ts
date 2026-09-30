@@ -3,7 +3,6 @@ import { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import { webIDLCommonDefinitions } from './common-definitions';
 import type { Definition } from './core/index';
-import type { HostDefinedInterface } from './conversion';
 import type { WebIDLEnvironment, WebIDLRealm } from './realm';
 import {
   getImplementationRecord, getPlatformRecord,
@@ -19,24 +18,17 @@ import { InternalError } from '../infra/internal-error';
  */
 // A weaker world type would permit registrations its declarations cannot use.
 export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironment> {
-  hostDefinedInterfaces: Map<string, HostDefinedInterface>;
   #definitions: DefinitionAssembly;
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
   // Project helper: compose definitions shared across realm bindings.
-  constructor(
-    definitions: Definition<Env>[],
-    hostDefinedInterfaces: HostDefinedInterface[] = [],
-  ) {
+  constructor(definitions: Definition<Env>[]) {
     this.#definitions = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
       // BindingWorld restricts registration to the environment required by these callbacks.
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
     ]);
-    this.hostDefinedInterfaces = new Map(
-      hostDefinedInterfaces.map((hostInterface) => [hostInterface.name, hostInterface]),
-    );
   }
 
   /**

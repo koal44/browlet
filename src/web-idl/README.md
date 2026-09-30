@@ -84,8 +84,14 @@ includer explicitly exposes it. Binding must not manufacture missing state.
 
 ## Registration and environment composition
 
-`new BindingWorld<Env>(definitions, hostDefinedInterfaces?)` assembles definitions
-requiring that environment, plus any supplied host-defined interfaces.
+`new BindingWorld<Env>(definitions)` assembles definitions requiring that environment.
+`defineProxyObject()` joins that same collection for proxies that stand in for
+platform objects, such as HTML's WindowProxy. Conversion preserves the proxy's
+identity, while an optional receiver resolver selects the platform object
+supplying its interface members. These definitions install no global or prototype
+and emit no IDL declaration text. Using JavaScript's `Proxy` alone does not need
+this declaration: legacy indexed/named objects and observable arrays keep their
+existing binding machinery.
 `world.register(env)` returns one Binding Context per realm in that world.
 Repeated registration returns the existing context; `world.forRealm(realm)`
 only looks it up.

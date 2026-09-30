@@ -1,6 +1,5 @@
 import type { Browlet } from '../../src/browlet/browlet';
-import { createDocument, createWindowEnvironment, getRelevantRealm, retargetWindowProxy } from '../../src/browlet/bindings';
-import type { WindowProxy } from '../../src/browlet/browsing/window/window-proxy';
+import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../../src/browlet/bindings';
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 
 /** Create another Window on the same agent without requiring iframe navigation. */
@@ -14,7 +13,7 @@ export function createSiblingWindow(first: Browlet): Window {
   });
   const { window, realm } = siblingEnv;
   window.setAssociatedDocument(createDocument(realm));
-  const proxy = realm.globalThis as WindowProxy;
-  retargetWindowProxy(proxy, window);
-  return proxy;
+  const proxy = realm.windowProxy;
+  setAssociatedWindow(proxy, window);
+  return proxy.platform;
 }

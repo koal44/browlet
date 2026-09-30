@@ -9,7 +9,10 @@ export function serializeDefinitions<Env>(
   definitions: Definition<Env>[],
 ): string {
   const interfaces = collectInterfaceNames(definitions);
-  return definitions.map((definition) => serializeDefinition(definition, interfaces)).join('\n\n');
+  return definitions
+    .filter((definition) => definition.kind !== 'proxy-object')
+    .map((definition) => serializeDefinition(definition, interfaces))
+    .join('\n\n');
 }
 
 // Project formatter for Web IDL §2 Interface definition language — definition syntax.
@@ -17,6 +20,8 @@ export function serializeDefinition<Env>(
   definition: Definition<Env>,
   interfaces: InterfaceNames = collectInterfaceNames([definition]),
 ): string {
+  // Proxy objects are binding declarations without Web IDL declaration syntax.
+  if (definition.kind === 'proxy-object') return '';
   const attributes = serializeAttributes(definition, interfaces);
   const prefix = attributes === '' ? '' : `${attributes}\n`;
 

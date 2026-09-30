@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import {
   arg, atArg, attr, BindingWorld, ctor,
-  defineInterface, idlType, impl, invokeWith, namedGetter, op,
+  defineProxyObject, defineInterface, idlType, impl, invokeWith, namedGetter, op,
   reference, roAttr, xattr, type BindingContext,
 } from '../../src/web-idl/index';
 import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
@@ -107,6 +107,55 @@ describe('Web IDL binding worlds and realm registration', () => {
       .toBe(implementation);
     expect(Reflect.get(firstRealm.global, 'Example')).not
       .toBe(Reflect.get(secondRealm.global, 'Example'));
+  });
+
+  it('preserves proxy values while resolving member calls to their current platform receiver', () => {
+    const object = Object.freeze({});
+    let target: object | undefined;
+    class ReceiverImpl {
+      constructor(public value: string) {}
+      echo(value: object): object { return value; }
+    }
+    const world = new BindingWorld([
+      defineProxyObject({
+        name: 'ProxyObject',
+        is: (value) => value === object,
+        resolveReceiver: () => target,
+      }),
+      defineInterface({
+        name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
+        members: [
+          attr('value', idlType.DOMString),
+          op('echo', reference('ProxyObject'), [arg('value', reference('ProxyObject'))]),
+        ],
+      }),
+    ]);
+    const realmA = new Realm();
+    const realmB = new Realm();
+    const a = world.register({ realm: realmA });
+    const b = world.register({ realm: realmB });
+    a.install(realmA.global);
+    b.install(realmB.global);
+    target = a.project(ReceiverImpl, new ReceiverImpl('first'));
+    const prototype = Reflect.getPrototypeOf(target)!;
+    const descriptor = Reflect.getOwnPropertyDescriptor(prototype, 'value')!;
+    const echo = Reflect.get(target, 'echo') as (value: object) => object;
+
+    expect(Reflect.apply(descriptor.get!, object, [])).toBe('first');
+    expect(Reflect.apply(echo, object, [object])).toBe(object);
+    expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.intrinsics.typeError);
+    expect(Object.hasOwn(realmA.global, 'ProxyObject')).toBe(false);
+    expect(Object.hasOwn(realmB.global, 'ProxyObject')).toBe(false);
+
+    const replacement = new ReceiverImpl('second');
+    target = b.project(ReceiverImpl, replacement);
+    expect(Reflect.apply(descriptor.get!, object, [])).toBe('second');
+    Reflect.apply(descriptor.set!, object, ['changed']);
+    expect(replacement.value).toBe('changed');
+    expect(Reflect.apply(echo, object, [object])).toBe(object);
+
+    target = undefined;
+    expect(() => { Reflect.apply(descriptor.get!, object, []); }).toThrow(realmA.intrinsics.typeError);
   });
 
   it('preserves the origin of a lazily projected implementation', () => {

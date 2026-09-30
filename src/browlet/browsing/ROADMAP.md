@@ -32,8 +32,9 @@ frozen-base and Blob acquisition tests already cover retention.
 
 ## Section 7 invariants
 
-- A browsing context owns the stable WindowProxy and the series of Windows it
-  exposes. It does not own session history.
+- A browsing context retains the stable `WindowProxyHandle`, which pairs the
+  exposed proxy identity with its current Window implementation and platform
+  object. It does not own session history.
 - A navigable owns its current and active session-history entries; its active
   Document and browsing context are derived through the active entry. Its
   constructor requires a document state with a present Document, establishes

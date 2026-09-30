@@ -3,7 +3,7 @@ import { TestRealm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { convertToJavaScript } from '../../src/web-idl/conversion';
 import {
-  ctor, defineInterface, idlType, impl, op, reference, union,
+  ctor, defineProxyObject, defineInterface, idlType, impl, op, reference, union,
 } from '../../src/web-idl/core/index';
 import { getImplementationRecord, getPlatformRecord } from '../../src/web-idl/platform-object';
 
@@ -55,7 +55,7 @@ describe('interface projection ownership', () => {
     });
   }
 
-  it('retains already-platform union values and host-defined interface identities', () => {
+  it('retains already-platform union values and proxy object identities', () => {
     const { a, ctxB, hostObject } = setup();
     const platformObject = a.project(ChildImpl, new ChildImpl());
     expect(convertToJavaScript(
@@ -100,8 +100,9 @@ function setup() {
   const hostObject = new Proxy(Object.freeze({}), {
     getPrototypeOf() { throw new Error('Host objects must not enter implementation discovery'); },
   });
-  const world = new BindingWorld(definitions, [
-    { name: 'HostObject', is: (value) => value === hostObject },
+  const world = new BindingWorld([
+    ...definitions,
+    defineProxyObject({ name: 'HostObject', is: (value) => value === hostObject }),
   ]);
   const realmA = new TestRealm();
   const realmB = new TestRealm();

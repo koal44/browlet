@@ -7,7 +7,7 @@ import {
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
-import { getRelevantRealm, retargetWindowProxy } from '../bindings';
+import { getRelevantRealm, setAssociatedWindow } from '../bindings';
 import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../fetch/index';
 import { areSameOrigin, urlsEqual, type Origin, type URLRecord } from '../../url/index';
 import { InternalError } from '../../infra/internal-error';
@@ -232,7 +232,7 @@ export class Traversable extends Navigable implements FetchPromptTarget {
     navigable.currentSessionHistoryEntry = historyEntry;
     navigable.activeSessionHistoryEntry = historyEntry;
     this.currentSessionHistoryStep = targetStep;
-    retargetWindowProxy(browsingContext.windowProxy, window);
+    setAssociatedWindow(browsingContext.windowProxy, window);
     realm.env.markExecutionReady();
   }
 

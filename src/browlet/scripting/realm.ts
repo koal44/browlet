@@ -10,6 +10,7 @@ import type { EnvironmentRecord, BrowletEnvironment } from './environment';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import type { WindowImpl } from '../browsing/window/window';
+import type { WindowProxyHandle } from '../browsing/window/window-proxy';
 import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
@@ -222,11 +223,35 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
 /** HTML realm whose Window is linked during composition, before global installation. */
 export class WindowRealm extends Realm implements WindowEventRealm {
   declare agent: WindowAgent;
-  /** Window linked after its environment is composed and before global projection. */
-  windowImplementation!: WindowImpl;
+  #windowImplementation: WindowImpl | undefined;
+  #windowProxy: WindowProxyHandle | undefined;
 
   constructor(options: WindowRealmOptions) {
     super({ ...options, globalNames: ['Window'], isGlobalPrototypeChainMutable: false });
+  }
+
+  /** This realm's own Window, retained even after navigation replaces the proxy's target. */
+  get windowImplementation(): WindowImpl {
+    return this.#windowImplementation!;
+  }
+
+  set windowImplementation(window: WindowImpl) {
+    if (this.#windowImplementation !== undefined) {
+      throw new InternalError('Realm Window implementation is already initialized');
+    }
+    this.#windowImplementation = window;
+  }
+
+  /** Shared handle whose current Window can belong to a later realm after navigation. */
+  get windowProxy(): WindowProxyHandle {
+    return this.#windowProxy!;
+  }
+
+  set windowProxy(proxy: WindowProxyHandle) {
+    if (this.#windowProxy !== undefined) {
+      throw new InternalError('Realm WindowProxy is already initialized');
+    }
+    this.#windowProxy = proxy;
   }
 
   override getAssociatedDocument(): DocumentImpl {

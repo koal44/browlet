@@ -1,7 +1,7 @@
 import { createServer, type RequestListener, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
-import { createDocument, createWindowEnvironment, getRelevantRealm, retargetWindowProxy } from '../../src/browlet/bindings';
+import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../../src/browlet/bindings';
 import { BrowsingContext } from '../../src/browlet/browsing/browsing-context';
 import type { WindowProxy } from '../../src/browlet/browsing/window/window-proxy';
 import { closeServer, listen } from './loader/http-fixture';
@@ -315,13 +315,13 @@ function createRelatedWindow(first: Window): WindowProxy {
     agent, userAgent: env.userAgent, creationURL, origin: env.origin, parent: null,
     topLevelCreationURL: creationURL, topLevelOrigin: env.origin,
   });
-  const proxy = realm.globalThis as WindowProxy;
+  const proxy = realm.windowProxy;
   const document = createDocument(realm);
   document.browsingContext = new BrowsingContext(proxy);
   document.url = creationURL;
   window.setAssociatedDocument(document);
-  retargetWindowProxy(proxy, window);
-  return proxy;
+  setAssociatedWindow(proxy, window);
+  return proxy.platform;
 }
 
 interface FetchPage {

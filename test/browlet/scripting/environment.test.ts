@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDocument, getBindingContext, getRelevantRealm, retargetWindowProxy } from '../../../src/browlet/bindings';
+import { createDocument, getBindingContext, getRelevantRealm, setAssociatedWindow } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/session-history';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -305,13 +304,13 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   });
   const { window } = env;
   const realm = env.realm;
-  const proxy = realm.globalThis as WindowProxy;
+  const proxy = realm.windowProxy;
   const document = createDocument(realm);
   document.url = creationURL;
   document.origin = origin;
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  retargetWindowProxy(proxy, window);
+  setAssociatedWindow(proxy, window);
   const documentState = createDocumentState(document);
   const navigable = parent === null
     ? new TopLevelTraversable(documentState)

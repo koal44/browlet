@@ -93,7 +93,7 @@ function createFixture() {
   };
   const traversable = TopLevelTraversable.create(new UserAgent(options), null, '');
   const document = traversable.activeDocument!;
-  const realm = getRelevantRealm(traversable.activeBrowsingContext!.windowProxy);
+  const realm = getRelevantRealm(document);
   const loop = realm.agent.eventLoop;
   // The embedder supplies shared memory; this does not expose its constructor
   // on a Window that has not opted into cross-origin isolation.

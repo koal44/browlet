@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createDocument, unwrap,
-  project, retargetWindowProxy,
+  project, setAssociatedWindow,
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
-import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -21,7 +20,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
   it('binds real Window and EventTarget members without changing WindowImpl identity', () => {
     const fixture = createNativeWindow();
     const { realm, window, platformWindow, document, context } = fixture;
-    const proxy = context.windowProxy;
+    const proxy = context.windowProxy.platform;
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
     expect(unwrap(platformWindow)).toBe(window);
@@ -47,7 +46,8 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
 
   it('retains per-Window records when the native proxy is reused', () => {
     const first = createNativeWindow();
-    const proxy = first.context.windowProxy;
+    const handle = first.context.windowProxy;
+    const proxy = handle.platform;
     // Borrow the Web IDL getter deliberately to exercise receiver resolution.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const firstDocumentGetter = Object.getOwnPropertyDescriptor(first.platformWindow, 'document')?.get as
@@ -61,7 +61,9 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     `, 'old-state.js') as () => [number, object];
     first.realm.agent.eventLoop.performMicrotaskCheckpoint();
     const second = createNativeWindow(first);
-    expect(second.context.windowProxy).toBe(proxy);
+    expect(second.context.windowProxy).toBe(handle);
+    expect(second.realm.windowProxy).toBe(handle);
+    expect(second.realm.globalThis).toBe(proxy);
     expect(second.platformWindow).not.toBe(first.platformWindow);
     expect(second.realm.intrinsics.object).not.toBe(first.realm.intrinsics.object);
     expect(oldClosure()).toBe(42);
@@ -156,13 +158,13 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
     topLevelCreationURL: creationURL, topLevelOrigin: origin, previousRealm: previous?.realm,
   });
   const { window, realm } = env;
-  const proxy = realm.globalThis as WindowProxy;
+  const proxy = realm.windowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
   const document = createDocument(realm);
   document.browsingContext = context;
   window.setAssociatedDocument(document);
-  retargetWindowProxy(proxy, window);
+  setAssociatedWindow(proxy, window);
   return { agent, realm, window, platformWindow, document, context };
 }
 

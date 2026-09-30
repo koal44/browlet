@@ -25,9 +25,7 @@ import {
 import {
   WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
-import {
-  WindowProxyHandler, type WindowProxy,
-} from './browsing/window/window-proxy';
+import { WindowProxyHandle, windowProxyDefinition } from './browsing/window/window-proxy';
 import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
 import { ElementImpl } from './dom/nodes/element';
 import type { NodeImpl } from './dom/nodes/node';
@@ -73,6 +71,7 @@ import { InternalError } from '../infra/internal-error';
 
 // -- Singleton entry points ---------------------------------------------
 
+/** Compose a Window, its binding, and the new or reused WindowProxy handle. */
 export function createWindowEnvironment(
   initialization: WindowEnvironmentInit,
 ): WindowEnvironment {
@@ -86,12 +85,14 @@ export function createSandboxEnvironment(
   return browletBindings.createSandboxEnvironment(eventLoopOptions, userAgent);
 }
 
+/** Construct and stamp a Document in the realm; HTML initialization remains with the caller. */
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
   return browletBindings.createDocument(realm);
 }
 
-export function retargetWindowProxy(windowProxy: WindowProxy, window: WindowImpl): void {
-  browletBindings.retargetWindowProxy(windowProxy, window);
+/** Point a proxy at a Window implementation and its existing platform object. */
+export function setAssociatedWindow(windowProxy: WindowProxyHandle, window: WindowImpl): void {
+  browletBindings.setAssociatedWindow(windowProxy, window);
 }
 
 /** Relevant realm of a browser object; Window and DOM-node inputs retain their concrete realm type. */
@@ -101,14 +102,17 @@ export function getRelevantRealm(value: object): Realm {
   return browletBindings.getRelevantRealm(value);
 }
 
+/** Retrieve an implementation's platform object, allocating its first projection if needed. */
 export function project(value: object): StampedPlatformObject {
   return browletBindings.project(value);
 }
 
+/** Retrieve the implementation paired with a platform object in Browlet's binding world. */
 export function unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
   return browletBindings.unwrap<Value>(value);
 }
 
+/** Register a realm once, composing a sandbox environment unless a factory is supplied. */
 export function registerRealm(
   realm: Realm,
   createEnvironment?: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment,
@@ -125,15 +129,14 @@ export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironme
 
 /** Assembles Browlet declarations and retains their shared platform-identity world. */
 class BrowletBindings {
+  /** Shared implementation/platform identity across Browlet's registered realms. */
   #world: BindingWorld<BrowletEnvironment>;
 
   constructor() {
-    this.#world = new BindingWorld<BrowletEnvironment>(
-      browletDefinitions,
-      hostDefinedInterfaces,
-    );
+    this.#world = new BindingWorld<BrowletEnvironment>(browletDefinitions);
   }
 
+  /** Register the realm's binding and environment, reusing an existing registration. */
   register(
     realm: Realm,
     createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
@@ -142,6 +145,7 @@ class BrowletBindings {
     return this.#world.register(realm, createEnvironment);
   }
 
+  /** Retrieve a registered realm's binding; throw if composition has not registered it. */
   forRealm(realm: Realm): BindingContext<BrowletEnvironment> {
     const context = this.#world.forRealm(realm);
     if (!context) throw new InternalError('Realm has no Browlet binding');
@@ -214,10 +218,10 @@ class BrowletBindings {
     } else {
       globalObject = projectWindow(context, window);
     }
-    const globalThis = useAddonGlobals
-      ? WindowProxyHandler.register(realm.globalThis)
-      : previousRealm?.globalThis ?? WindowProxyHandler.create();
-    realm.setGlobalObjects(globalObject, globalThis);
+    realm.windowProxy = WindowProxyHandle.getOrCreate(
+      useAddonGlobals ? realm.globalThis : previousRealm?.globalThis,
+    );
+    realm.setGlobalObjects(globalObject, realm.windowProxy.platform);
     if (reservedEnv !== null) reservedEnv.id = '';
     window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
     return env;
@@ -235,35 +239,41 @@ class BrowletBindings {
     return this.register(realm, (context) => createSandboxEnvironmentFromBinding(context, userAgent)).getEnvironment();
   }
 
+  /** Construct a Document with this realm's environment and binding ownership. */
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
     return this.forRealm(realm).construct(DocumentImpl);
   }
 
-  retargetWindowProxy(
-    windowProxy: WindowProxy,
+  /** Replace the proxy's Window association without changing either Window's projection. */
+  setAssociatedWindow(
+    windowProxy: WindowProxyHandle,
     window: WindowImpl,
   ): void {
+    // Window composition has already projected this implementation. Projection
+    // retrieves that same platform identity; it does not create another Window.
     const platform = this.#world.project(window);
     if (!platform) throw new InternalError('Window has not been projected');
-    WindowProxyHandler.setWindow(
-      windowProxy,
-      window,
-      platform as StampedPlatformObject<Window>,
-    );
+    windowProxy.setAssociatedWindow({
+      implementation: window,
+      platform: platform as StampedPlatformObject<Window>,
+    });
   }
 
+  /** Find the owner through a binding stamp or an engine-associated JavaScript object. */
   getRelevantRealm(value: object): Realm {
     const realm = this.#world.getRealm(value) ?? Realm.getAssociatedRealm(value);
     if (!(realm instanceof Realm)) throw new InternalError('Object has no relevant Realm');
     return realm;
   }
 
+  /** Retrieve or first allocate the platform object for a bound implementation. */
   project(value: object): StampedPlatformObject {
     const object = this.#world.project(value);
     if (!object) throw new InternalError('Implementation has not been projected');
     return object;
   }
 
+  /** Retrieve the paired implementation, rejecting objects outside this binding world. */
   unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
     const implInst = this.#world.unwrap(value);
     if (!implInst) throw new InternalError('Value is not a platform object');
@@ -274,14 +284,23 @@ class BrowletBindings {
 // -- Construction helpers -----------------------------------------------
 
 type WindowEnvironmentInit = {
+  /** Agent whose event loop executes the new Window's work. */
   agent: WindowAgent;
+  /** Browser owner supplying shared state and integration facilities. */
   userAgent: UserAgent;
+  /** URL used to initialize the Window's environment. */
   creationURL: URLRecord;
+  /** Origin selected for the new Document. */
   origin: Origin;
+  /** Parent Window used for ancestry and secure-context determination. */
   parent: WindowImpl | null;
+  /** Top-level URL captured for the environment's initial settings. */
   topLevelCreationURL: URLRecord;
+  /** Top-level origin captured for partitioning and security decisions. */
   topLevelOrigin: Origin;
+  /** Early environment record whose identity survives navigation setup. */
   reservedEnv?: EnvironmentRecord | null;
+  /** Previous realm whose WindowProxy identity is reused for navigation. */
   previousRealm?: WindowRealm;
 };
 
@@ -319,6 +338,7 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
   };
 }
 
+/** Project the Window into its realm's global allocation and install provisional additions. */
 function projectWindow(
   context: BindingContext<BrowletEnvironment>,
   window: WindowImpl,
@@ -345,12 +365,6 @@ function projectWindow(
 
 // -- Shared declarations and singleton ----------------------------------
 
-const hostDefinedInterfaces = [{
-  is: WindowProxyHandler.is,
-  name: 'WindowProxy',
-  resolveReceiver: WindowProxyHandler.resolveReceiver,
-}];
-
 const browletDefinitions = [
   htmlDocumentIDL,
   ...htmlIDLDefinitions,
@@ -373,6 +387,7 @@ const browletDefinitions = [
   windowOrWorkerGlobalScopeIDL,
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,
   windowIDL,
+  windowProxyDefinition,
   windowEventIDL,
   windowIncludesWindowOrWorkerGlobalScopeIDL,
   ...domIDLDefinitions,

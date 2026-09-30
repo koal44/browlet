@@ -7,7 +7,7 @@ export {
 export {
   defineInterface, definePartialInterface, defineInterfaceMixin, definePartialInterfaceMixin,
   defineIncludes, defineDictionary, definePartialDictionary, defineNamespace, definePartialNamespace,
-  defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef,
+  defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef, defineProxyObject,
 } from './declarations';
 export type {
   InterfaceDefinition, PartialInterfaceDefinition, InterfaceMember, ConstructorMember,
@@ -15,7 +15,7 @@ export type {
   InterfaceMixinDefinition, PartialInterfaceMixinDefinition, MixinMember, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition, DictionaryMember,
   NamespaceDefinition, PartialNamespaceDefinition, NamespaceMember,
-  CallbackInterfaceDefinition, CallbackFunctionDefinition, Definition,
+  CallbackInterfaceDefinition, CallbackFunctionDefinition, ProxyObjectDefinition, Definition,
 } from './declarations';
 
 export {

@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDocument, getRelevantRealm, retargetWindowProxy } from '../../../src/browlet/bindings';
+import { createDocument, getRelevantRealm, setAssociatedWindow } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
@@ -264,11 +263,11 @@ describe('ReportingObserver', () => {
       topLevelCreationURL: owner.env.creationURL, topLevelOrigin: owner.env.origin,
     });
     const otherRealm = sibling.realm;
-    const proxy = otherRealm.globalThis as WindowProxy;
+    const proxy = otherRealm.windowProxy;
     const document = createDocument(otherRealm);
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
-    retargetWindowProxy(proxy, sibling.window);
+    setAssociatedWindow(proxy, sibling.window);
     const otherWindow = otherRealm.global as unknown as ReportingWindow;
     const callback = otherRealm.evaluate(`(function(reports, observer) {
       globalThis.delivered = { reports, observer, receiver: this };

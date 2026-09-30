@@ -3,7 +3,7 @@ import { createTestDocument } from '../../support/dom';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  getRelevantRealm, retargetWindowProxy,
+  getRelevantRealm, setAssociatedWindow,
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
@@ -130,10 +130,10 @@ function createRelatedWindow(first: Window): WindowProxy {
   });
   const { window } = relatedEnv;
   const { realm } = relatedEnv;
-  const proxy = realm.globalThis as WindowProxy;
+  const proxy = realm.windowProxy;
   const document = createTestDocument(relatedEnv);
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  retargetWindowProxy(proxy, window);
-  return proxy;
+  setAssociatedWindow(proxy, window);
+  return proxy.platform;
 }

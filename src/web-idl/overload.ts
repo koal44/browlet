@@ -552,7 +552,8 @@ function containsImplementedInterface(
       return record?.binding.world === context.binding.world &&
         record.implements(primaryInterface);
     }
-    return context.binding.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;
+    const definition = context.binding.definitions.getDefinition(candidate.name);
+    return definition?.kind === 'proxy-object' && definition.is(value);
   });
 }
 

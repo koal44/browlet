@@ -2,7 +2,7 @@
 
 This directory contains Browlet's cross-specification integrations. The
 top-level [`bindings.ts`](../bindings.ts) is the composition root which
-assembles Web IDL definitions, host-defined interfaces, and realm bindings,
+assembles interface and proxy object definitions with realm bindings,
 and connects execution facilities to their owners.
 
 The named functions exported by `bindings.ts` forward to its main

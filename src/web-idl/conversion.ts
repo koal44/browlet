@@ -137,8 +137,8 @@ export function isPlatformObject(
   context: ConversionContext,
 ): boolean {
   if (getPlatformRecord(value)?.binding.world === context.binding.world) return true;
-  for (const hostInterface of context.binding.hostDefinedInterfaces.values()) {
-    if (hostInterface.is(value)) return true;
+  for (const definition of context.binding.definitions.proxyObjects) {
+    if (definition.is(value)) return true;
   }
   return false;
 }
@@ -183,19 +183,6 @@ export type ConversionContext = {
   binding: RealmBinding;
   /** JavaScript allocation and conversion errors; may differ from binding.realm. */
   realm: WebIDLRealm;
-};
-
-export type HostDefinedInterface = {
-  is(value: unknown): boolean;
-  name: string;
-  /*
-   * Some host-defined exotic objects expose another platform object's Web IDL
-   * members without themselves being registered as that platform object.
-   * Resolve such a value only when it is used as an interface-member receiver;
-   * this hook does not participate in ordinary Web IDL value conversion.
-   * WindowProxy is the motivating and currently sole Browlet case.
-   */
-  resolveReceiver?(value: unknown): object | undefined;
 };
 
 export type ConversionOptions = {
@@ -581,16 +568,13 @@ function convertJavaScriptValueToNamedType(
         context,
       );
     }
-    // Project adapter: convert an interface supplied by the host.
-    case undefined: {
-      const hostInterface = context.binding.hostDefinedInterfaces.get(name);
-      if (hostInterface) {
-        return hostInterface.is(value)
-          ? value
-          : throwTypeError(context, `Value does not implement ${name}`);
-      }
+    // Project adapter: preserve a recognized proxy object's identity.
+    case 'proxy-object':
+      return definition.is(value)
+        ? value
+        : throwTypeError(context, `Value does not implement ${name}`);
+    case undefined:
       throw new InternalError(`Unknown Web IDL type ${name}`);
-    }
     default:
       throw new InternalError(`${name} is not a value type`);
   }
@@ -636,15 +620,12 @@ function convertNamedTypeToJavaScript(
         throw new InternalError(`IDL callback interface ${name} is not a callback value`);
       }
       return value.object;
-    // Project adapter: recover an interface value supplied by the host.
-    case undefined: {
-      const hostInterface = context.binding.hostDefinedInterfaces.get(name);
-      if (hostInterface) {
-        if (hostInterface.is(value)) return value;
-        throw new InternalError(`IDL interface value does not implement ${name}`);
-      }
+    // Project adapter: expose the proxy itself without projection.
+    case 'proxy-object':
+      if (definition.is(value)) return value;
+      throw new InternalError(`IDL interface value does not implement ${name}`);
+    case undefined:
       throw new InternalError(`Unknown Web IDL type ${name}`);
-    }
     default:
       throw new InternalError(`${name} is not a value type`);
   }
@@ -1183,7 +1164,8 @@ function isImplementedInterfaceType(
     return record?.binding.world === context.binding.world &&
       record.implements(primaryInterface);
   }
-  return context.binding.hostDefinedInterfaces.get(type.type.name)?.is(value) ?? false;
+  const definition = context.binding.definitions.getDefinition(type.type.name);
+  return definition?.kind === 'proxy-object' && definition.is(value);
 }
 
 // Project helper: recognize a named callback definition in a resolved type.

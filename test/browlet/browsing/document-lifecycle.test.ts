@@ -22,10 +22,7 @@ import {
 } from '../../../src/browlet/browsing/navigation/session-history';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { monotonicClock } from '../../../src/browlet/performance/clock';
-import {
-  WindowProxyHandler,
-  type WindowProxy as InternalWindowProxy,
-} from '../../../src/browlet/browsing/window/window-proxy';
+import { WindowProxyHandle } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { InternalError } from '../../../src/infra/internal-error';
@@ -39,6 +36,7 @@ import { createOpaqueOrigin } from '../../../src/url/origin';
 import {
   obtainURLOrigin, parseURL, serializeURL, type URLRecord,
 } from '../../../src/url/url';
+import type { StampedPlatformObject } from '../../../src/web-idl/index';
 import { itPassesWith } from '../../test-runtime';
 
 describe('browsing context groups', () => {
@@ -61,9 +59,9 @@ describe('browsing context groups', () => {
   });
 
   it('starts a browsing context with HTML\'s scalar defaults', () => {
-    const context = new BrowsingContext(WindowProxyHandler.create());
+    const context = new BrowsingContext(WindowProxyHandle.getOrCreate());
 
-    expect(WindowProxyHandler.getWindow(context.windowProxy)).toBeNull();
+    expect(() => context.windowProxy.associatedWindow).toThrow(InternalError);
     expect(context.openerBrowsingContext).toBeNull();
     expect(context.openerOriginAtCreation).toBeNull();
     expect(context.isPopup).toBe(false);
@@ -75,19 +73,19 @@ describe('browsing context groups', () => {
     const document = createTestDocument();
     const env = document.env;
     const window = unwrap<WindowImpl>(env.global);
-    const platform = { addEventListener() {} } as unknown as Window;
+    const platform = project(window) as StampedPlatformObject<Window>;
     window.setAssociatedDocument(document);
-    WindowProxyHandler.setWindow(context.windowProxy, window, platform);
+    context.windowProxy.setAssociatedWindow({ implementation: window, platform });
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);
-    expect(Reflect.get(context.windowProxy, 'addEventListener'))
-      .toBe(Reflect.get(context.windowProxy, 'addEventListener'));
+    expect(Reflect.get(context.windowProxy.platform, 'addEventListener'))
+      .toBe(Reflect.get(platform, 'addEventListener'));
   });
 
   it.each(['activeWindow', 'activeDocument'] as const)(
     'rejects %s access before the WindowProxy has a Window', (property) => {
-      const context = new BrowsingContext(WindowProxyHandler.create());
+      const context = new BrowsingContext(WindowProxyHandle.getOrCreate());
 
       expect(() => context[property]).toThrow(InternalError);
     },
@@ -102,16 +100,41 @@ describe('browsing context groups', () => {
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     const { window, realm } = env;
-    const context = new BrowsingContext(realm.globalThis as InternalWindowProxy);
+    const context = new BrowsingContext(realm.windowProxy);
 
     expect(realm).toBeInstanceOf(WindowRealm);
     expect(realm.agent).toBe(agent);
     expect(realm.windowImplementation).toBe(window);
     expect(realm.globalObject).toBe(project(window));
-    expect(realm.globalThis).toBe(context.windowProxy);
+    expect(realm.globalThis).toBe(context.windowProxy.platform);
     expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.intrinsics.object);
-    expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy);
+    expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy.platform);
     expect(agent.windowObjects).toEqual(new Set([window]));
+  });
+
+  it('rejects reassignment of a Window realm\'s Window implementation', () => {
+    const realm = getRelevantRealm(new Browlet({ route: () => '' }).window);
+    const window = realm.windowImplementation;
+    const replacement = new WindowImpl(new URL('about:blank'), realm.env);
+
+    expect(() => { realm.windowImplementation = replacement; })
+      .toThrow('Realm Window implementation is already initialized');
+    expect(() => { realm.windowImplementation = window; })
+      .toThrow('Realm Window implementation is already initialized');
+    expect(realm.windowImplementation).toBe(window);
+    expect(realm.globalObject).toBe(project(window));
+  });
+
+  it('rejects reassignment of a Window realm\'s WindowProxy handle', () => {
+    const realm = getRelevantRealm(new Browlet({ route: () => '' }).window);
+    const proxy = realm.windowProxy;
+
+    expect(() => { realm.windowProxy = WindowProxyHandle.getOrCreate(); })
+      .toThrow('Realm WindowProxy is already initialized');
+    expect(() => { realm.windowProxy = proxy; })
+      .toThrow('Realm WindowProxy is already initialized');
+    expect(realm.windowProxy).toBe(proxy);
+    expect(realm.globalThis).toBe(proxy.platform);
   });
 
   it('creates a Window realm from its early record before attaching settings or Window', () => {
@@ -311,11 +334,11 @@ describe('navigables', () => {
     expect(browsingContext.popupSandboxingFlagSet.size).toBe(0);
     expect(browsingContext.activeDocument).toBe(document);
     expect(browsingContext.activeWindow).toBe(window);
-    expect(WindowProxyHandler.getWindow(browsingContext.windowProxy)).toBe(window);
+    expect(browsingContext.windowProxy.associatedWindow.implementation).toBe(window);
 
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
-    expect(realm.globalThis).toBe(browsingContext.windowProxy);
+    expect(realm.globalThis).toBe(browsingContext.windowProxy.platform);
     expect(realm.agent.agentCluster).not.toBeNull();
     expect(window.getAssociatedDocument()).toBe(document);
 
@@ -531,7 +554,7 @@ describe('navigation lifecycle', () => {
 
   it('keeps the WindowProxy while replacing the Window and realm', async () => {
     const browlet = new Browlet({ route: () => '' });
-    const windowProxy = browlet.window as InternalWindowProxy;
+    const windowProxy = browlet.window;
     const initialDocument = browlet.document;
     const initialDocumentImpl = unwrap<DocumentImpl>(
       initialDocument,
@@ -540,8 +563,9 @@ describe('navigation lifecycle', () => {
     if (navigable === null) {
       throw new Error('Initial Document has no node navigable');
     }
-    const initialWindow = WindowProxyHandler.getWindow(windowProxy);
     const initialRealm = getRelevantRealm(initialDocument);
+    const handle = initialRealm.windowProxy;
+    const initialWindow = handle.associatedWindow.implementation;
     const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
 
     await browlet.navigate('https://example.test/');
@@ -550,20 +574,24 @@ describe('navigation lifecycle', () => {
     const documentImpl = unwrap<DocumentImpl>(
       document,
     );
-    const window = WindowProxyHandler.getWindow(windowProxy);
+    const window = handle.associatedWindow.implementation;
     const realm = getRelevantRealm(document);
     expect(browlet.window).toBe(windowProxy);
     expect(document).not.toBe(initialDocument);
     expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
+    expect(initialRealm.windowImplementation).toBe(initialWindow);
+    expect(initialRealm.windowProxy).toBe(handle);
+    expect(initialRealm.getAssociatedDocument()).toBe(initialDocumentImpl);
+    expect(realm.windowProxy).toBe(handle);
     expect(realm.env.userAgent).toBe(initialRealm.env.userAgent);
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
-    expect(window && window.getAssociatedDocument()).toBe(documentImpl);
+    expect(window.getAssociatedDocument()).toBe(documentImpl);
     expect(documentImpl.browsingContext?.windowProxy)
-      .toBe(windowProxy);
+      .toBe(handle);
     expect(initialDocumentImpl.getNodeNavigable()).toBeNull();
     expect(initialDocumentImpl.isFullyActive()).toBe(false);
     expect(documentImpl.getNodeNavigable()).toBe(navigable);

@@ -2,7 +2,7 @@ import {
   type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode,
   obtainSimilarOriginWindowAgent,
 } from '../scripting/agents';
-import { createDocument, createWindowEnvironment, getRelevantRealm, retargetWindowProxy } from '../bindings';
+import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
@@ -10,10 +10,7 @@ import {
 } from '../../url/index';
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
-import {
-  WindowProxyHandler,
-  type WindowProxy,
-} from './window/window-proxy';
+import type { WindowProxyHandle } from './window/window-proxy';
 import type { WindowImpl } from './window/window';
 import { DocumentMode, type DocumentImpl } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
@@ -28,7 +25,7 @@ import { InternalError } from '../../infra/internal-error';
 /** Retains a WindowProxy and the sequence of documents presented through it. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
 export class BrowsingContext {
-  #windowProxy: WindowProxy | undefined;
+  #windowProxy: WindowProxyHandle | undefined;
   /** Sandbox restrictions inherited when this context was opened as a popup. */
   popupSandboxingFlagSet = new SandboxingFlagSet();
   /** Browsing context that opened this one, if it retains an opener. */
@@ -53,7 +50,7 @@ export class BrowsingContext {
   // relationship without maintaining a second per-Document activity index.
   #navigable: Navigable | null = null;
 
-  constructor(windowProxy?: WindowProxy) {
+  constructor(windowProxy?: WindowProxyHandle) {
     this.#windowProxy = windowProxy;
   }
 
@@ -100,9 +97,7 @@ export class BrowsingContext {
       topLevelOrigin,
     });
     const { window, realm } = env;
-    browsingContext.initializeWindowProxy(
-      realm.globalThis as WindowProxy,
-    );
+    browsingContext.initializeWindowProxy(realm.windowProxy);
     const document = createDocument(realm);
 
     document.type = 'html';
@@ -169,7 +164,7 @@ export class BrowsingContext {
     throw new InternalError('Auxiliary browsing-context creation is not implemented');
   }
 
-  get windowProxy(): WindowProxy {
+  get windowProxy(): WindowProxyHandle {
     if (!this.#windowProxy) throw new InternalError('Browsing context has no WindowProxy yet');
     return this.#windowProxy;
   }
@@ -180,9 +175,7 @@ export class BrowsingContext {
 
   /** Current Window; throws until the WindowProxy has been connected. */
   get activeWindow(): WindowImpl {
-    const window = WindowProxyHandler.getWindow(this.windowProxy);
-    if (window === null) throw new InternalError('Browsing context has no active Window');
-    return window;
+    return this.windowProxy.associatedWindow.implementation;
   }
 
   /** Document associated with the current Window. */
@@ -190,7 +183,7 @@ export class BrowsingContext {
     return this.activeWindow.getAssociatedDocument();
   }
 
-  initializeWindowProxy(proxy: WindowProxy): void {
+  initializeWindowProxy(proxy: WindowProxyHandle): void {
     if (this.#windowProxy) throw new InternalError('Browsing context already has a WindowProxy');
     this.#windowProxy = proxy;
   }
@@ -407,7 +400,7 @@ function makeActive(
     throw new InternalError('Document has no browsing context');
   }
 
-  retargetWindowProxy(browsingContext.windowProxy, window);
+  setAssociatedWindow(browsingContext.windowProxy, window);
   const env = realm.env;
   env.markExecutionReady();
 }

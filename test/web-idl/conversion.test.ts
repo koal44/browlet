@@ -5,11 +5,10 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   convertToIDL, convertToJavaScript, createFrozenArray,
   createFrozenArrayFromIterable, type ConversionContext,
-  type HostDefinedInterface,
 } from '../../src/web-idl/conversion';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
-  annotated, asyncSequence, decimal, defineDictionary, defineEnumeration,
+  annotated, asyncSequence, decimal, defineDictionary, defineEnumeration, defineProxyObject,
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
   sequence, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
@@ -17,13 +16,13 @@ import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 
 describe('Web IDL value conversion', () => {
-  it('preserves the identity of host-defined interface values', () => {
+  it('preserves the identity of proxy object values', () => {
     const object = {};
-    const hostInterface: HostDefinedInterface = {
+    const definition = defineProxyObject({
       is: (value) => value === object,
       name: 'HostObject',
-    };
-    const { ctx, realm } = createContext([], [hostInterface]);
+    });
+    const { ctx, realm } = createContext([definition]);
     const type = reference('HostObject');
 
     expect(convertToIDL(object, type, ctx)).toBe(object);
@@ -581,13 +580,12 @@ describe('Web IDL value conversion', () => {
 
 function createContext(
   definitions: Definition[] = [],
-  hostDefinedInterfaces: HostDefinedInterface[] = [],
 ): { ctx: ConversionContext; realm: Realm; } {
   const realm = new Realm();
   const binding = new RealmBinding(
     new DefinitionAssembly(definitions),
     realm,
-    new BindingWorld([], hostDefinedInterfaces), (ctx) => ({ realm: ctx.realm }),
+    new BindingWorld(definitions), (ctx) => ({ realm: ctx.realm }),
   );
   return { ctx: binding.defaultConversionContext, realm };
 }

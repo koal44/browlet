@@ -1,5 +1,5 @@
 import type {
-  CallbackInterfaceDefinition, Definition, DictionaryDefinition, DictionaryMember,
+  CallbackInterfaceDefinition, Definition, DictionaryDefinition, DictionaryMember, ProxyObjectDefinition,
   PartialDictionaryDefinition, IncludesDefinition, InterfaceDefinition, InterfaceMember,
   PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember,
   PartialInterfaceMixinDefinition, NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
@@ -8,6 +8,8 @@ import type { ImplementationClass } from './core/types';
 import { InternalError } from '../infra/internal-error';
 
 export class DefinitionAssembly {
+  /** Proxy definitions indexed once for value and member-receiver recognition. */
+  proxyObjects: ProxyObjectDefinition[];
   #definitions = new Map<string, PrimaryDefinition>();
   #interfacePartials = new Map<string, PartialInterfaceDefinition[]>();
   #mixinPartials = new Map<string, PartialInterfaceMixinDefinition[]>();
@@ -43,6 +45,10 @@ export class DefinitionAssembly {
           this.#definitions.set(definition.name, definition);
       }
     }
+
+    this.proxyObjects = [...this.#definitions.values()].filter(
+      (definition) => definition.kind === 'proxy-object',
+    );
 
     for (const primaryInterface of this.getInterfaces()) {
       validateStructuredDataSteps(primaryInterface.definition);

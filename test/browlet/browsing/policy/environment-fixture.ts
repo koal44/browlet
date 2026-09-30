@@ -2,7 +2,6 @@ import { createDocument, createWindowEnvironment } from '../../../../src/browlet
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/session-history';
-import type { WindowProxy } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import type { WindowEnvironment } from '../../../../src/browlet/scripting/environment';
 import { UserAgent } from '../../../../src/browlet/user-agent';
@@ -23,7 +22,7 @@ export function createPolicyEnvironment(
   const document = createDocument(env.realm);
   document.url = creationURL;
   document.origin = origin;
-  document.browsingContext = new BrowsingContext(env.realm.globalThis as WindowProxy);
+  document.browsingContext = new BrowsingContext(env.realm.windowProxy);
   env.window.setAssociatedDocument(document);
   const state = createDocumentState(document);
   if (parent) new Navigable(state, parent.window.getAssociatedDocument().getNodeNavigable());
