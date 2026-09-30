@@ -13,7 +13,7 @@ import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
 import {
-  DetachedTransferableStamper, transferable,
+  DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 
 describe('HTML structured transfer', () => {
@@ -188,7 +188,7 @@ describe('HTML structured transfer', () => {
     expect(isBufferSourceDetached(second)).toBe(true);
   });
 
-  it('runs exact platform transfer and receiving capabilities', () => {
+  it('runs exact platform transfer and receiving steps', () => {
     class TransferBoxImpl {
       value = '';
     }
@@ -199,16 +199,16 @@ describe('HTML structured transfer', () => {
       ...xattr('Transferable'),
       implementation: impl(TransferBoxImpl),
       members: [],
+      transfer: {
+        transferSteps(value, dataHolder) {
+          dataHolder.set('Value', (value as TransferBoxImpl).value);
+        },
+        transferReceivingSteps(dataHolder, value) {
+          (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
+        },
+      },
     });
-    const capabilities = [transferable.for(transferBoxIDL, {
-      transferSteps(value, dataHolder) {
-        dataHolder.set('Value', (value as TransferBoxImpl).value);
-      },
-      transferReceivingSteps(dataHolder, value) {
-        (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
-      },
-    })];
-    const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL], { capabilities });
+    const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL]);
     const sourceRealm = new Realm({ globalNames: ['TransferTest'] });
     const targetRealm = new Realm({ globalNames: ['TransferTest'] });
     const source = bindings.register({ realm: sourceRealm });

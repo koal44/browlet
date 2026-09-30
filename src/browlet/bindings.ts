@@ -36,8 +36,6 @@ import { AbortControllerImpl } from './dom/abort/abort-controller';
 import { AbortSignalImpl } from './dom/abort/abort-signal';
 import { EventImpl } from './dom/events/event';
 import { htmlIDLDefinitions } from './html/web-idl';
-import { domExceptionCapabilities } from './integration/dom-exception';
-import { fileCapabilities } from './integration/file/capabilities';
 import { fileReaderIDL } from './integration/file/file-reader';
 import { objectURLIDL } from './integration/file/object-url';
 import { requestNodeEventLoopTurn } from './integration/scripting';
@@ -132,10 +130,7 @@ class BrowletBindings {
   constructor() {
     this.#world = new BindingWorld<BrowletEnvironment>(
       browletDefinitions,
-      {
-        capabilities: browletCapabilities,
-        hostDefinedInterfaces,
-      },
+      hostDefinedInterfaces,
     );
   }
 
@@ -355,11 +350,6 @@ const hostDefinedInterfaces = [{
   name: 'WindowProxy',
   resolveReceiver: WindowProxyHandler.resolveReceiver,
 }];
-
-const browletCapabilities = [
-  ...domExceptionCapabilities,
-  ...fileCapabilities,
-];
 
 const browletDefinitions = [
   htmlDocumentIDL,

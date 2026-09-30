@@ -1,20 +1,7 @@
-import { deserializeAbortReason } from '../../fetch/index';
 import type { NetworkingTasks } from '../../js-engine/index';
-import type { BrowletEnvironment } from '../scripting/environment';
-import type { BindingContext } from '../../web-idl/index';
 import { Realm } from '../scripting/realm';
 import { networkingTaskSource } from '../scripting/tasks';
 import { InternalError } from '../../infra/internal-error';
-
-/** Realize Fetch's fallback error before delivering the reason into the target realm. */
-export function deserializeFetchAbortReason(
-  abortReason: object | null,
-  context: BindingContext<BrowletEnvironment>,
-): unknown {
-  return context.realizeException(
-    deserializeAbortReason(abortReason, context.getEnvironment()),
-  );
-}
 
 export const queueGlobalFetchTask: NetworkingTasks['queueGlobalTask'] = (global, steps) => {
   const realm = Realm.getAssociatedRealm(global);

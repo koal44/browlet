@@ -3,8 +3,6 @@ import { vi } from 'vitest';
 
 import { createBoundExecution, getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { TopLevelTraversable } from '../../src/browlet/browsing/navigable';
-import { domExceptionCapabilities } from '../../src/browlet/integration/dom-exception';
-import { deserializeFetchAbortReason } from '../../src/browlet/integration/fetch';
 import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
 import { Realm } from '../../src/browlet/scripting/realm';
 import { AgentCluster } from '../../src/browlet/scripting/agents';
@@ -84,9 +82,7 @@ export function createFetchWindow(userAgent = new UserAgent()) {
 export function createIsolatedFetchRealm() {
   const realm = new Realm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = new BindingWorld<BrowletEnvironment>([], {
-    capabilities: domExceptionCapabilities,
-  }).register(realm, (context) => new SandboxEnvironment(realm, createBoundExecution(context)));
+  const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) => new SandboxEnvironment(realm, createBoundExecution(context)));
   registration.install(realm.global);
   return createFetchRealmFixture(registration);
 }
@@ -96,6 +92,5 @@ function createFetchRealmFixture(context: BindingContext<BrowletEnvironment>) {
     ...createControllerFixture(context.getEnvironment()),
     context,
     realm: context.realm,
-    deserialize: (reason: object | null) => deserializeFetchAbortReason(reason, context),
   };
 }

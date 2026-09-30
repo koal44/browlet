@@ -463,6 +463,47 @@ describe('File API File and FileList projection', () => {
     expect(clone.item(0)?.size).toBe(7);
   });
 
+  it('clones a FileList containing a directly constructed File before author access', () => {
+    const window = createWindow();
+    const ctx = getBindingContext(getRelevantRealm(window));
+    const file = new FileImpl(
+      ['payload'], 'payload.txt', { lastModified: 42, type: 'text/plain' }, ctx.getEnvironment(),
+    );
+    const list = ctx.project(FileListImpl, new FileListImpl([file, file])) as StampedPlatformObject<FileList>;
+
+    const clone = window.structuredClone(list);
+
+    expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
+    expect(clone.length).toBe(2);
+    expect(clone.item(0)).toBe(clone.item(1));
+    expect(clone.item(0)).toBeInstanceOf(requireFunction(window, 'File'));
+    expect(clone.item(0)?.name).toBe('payload.txt');
+    expect(clone.item(0)?.lastModified).toBe(42);
+    expect(clone.item(0)?.size).toBe(7);
+  });
+
+  it('keeps a directly constructed File with its FileList realm when cloning from another realm', () => {
+    const sourceWindow = createWindow();
+    const targetWindow = createWindow();
+    const ctx = getBindingContext(getRelevantRealm(sourceWindow));
+    const file = new FileImpl(
+      ['payload'], 'payload.txt', { lastModified: 42, type: 'text/plain' }, ctx.getEnvironment(),
+    );
+    const list = ctx.project(FileListImpl, new FileListImpl([file])) as StampedPlatformObject<FileList>;
+    const source = {
+      list,
+      get file() { return list.item(0); },
+    };
+
+    const clone = targetWindow.structuredClone(source);
+
+    expect(clone.list.item(0)).toBe(clone.file);
+    expect(clone.file).toBeInstanceOf(requireFunction(targetWindow, 'File'));
+    expect(clone.file).not.toBe(source.file);
+    expect(source.file).toBeInstanceOf(requireFunction(sourceWindow, 'File'));
+    expect(source.file).not.toBeInstanceOf(requireFunction(targetWindow, 'File'));
+  });
+
   it.each([false, true])('subserializes FileList entries with shared graph identity (list first: %s)', async (listFirst) => {
     const sourceWindow = createWindow();
     const targetWindow = createWindow();

@@ -1,12 +1,4 @@
-import type { BufferViewTypeName } from '../../../web-idl/index';
-
-/**
- * Open fields owned by one interface's Serializable capability.
- *
- * The outer structured-data record family is closed below; only an interface
- * specification knows the fields that its own platform record contributes.
- */
-export type StructuredDataRecord = Map<string, unknown>;
+import type { BufferViewTypeName, StructuredDataRecord } from '../../../web-idl/index';
 
 export function createStructuredDataRecord(): StructuredDataRecord {
   return new Map();

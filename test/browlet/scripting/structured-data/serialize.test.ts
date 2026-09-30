@@ -8,9 +8,6 @@ import { DOMException as InternalDOMException } from '../../../../src/web-idl/co
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
-import {
-  domExceptionCapabilities,
-} from '../../../../src/browlet/integration/dom-exception';
 import type {
   SerializedRecord,
 } from '../../../../src/browlet/scripting/structured-data/records';
@@ -18,9 +15,6 @@ import {
   structuredSerialize, structuredSerializeForStorage,
   structuredSerializeInternal,
 } from '../../../../src/browlet/scripting/structured-data/serialize';
-import {
-  serializable,
-} from '../../../../src/browlet/scripting/structured-data/serializable';
 
 describe('HTML structured serialization', () => {
   it('serializes primitive values and rejects symbols', () => {
@@ -511,16 +505,16 @@ describe('HTML structured serialization', () => {
       ...xattr('Serializable'),
       implementation: impl(ContainerImpl),
       members: [],
-    });
-    const capabilities = [serializable.for(containerIDL, {
-      serializationSteps(value, record, forStorage, context) {
-        const container = value as ContainerImpl;
-        record.set('Child', context.subserialize(container.child));
-        record.set('ForStorage', forStorage);
+      serialization: {
+        serializationSteps(value, record, forStorage, context) {
+          const container = value as ContainerImpl;
+          record.set('Child', context.subserialize(container.child));
+          record.set('ForStorage', forStorage);
+        },
+        deserializationSteps() {},
       },
-      deserializationSteps() {},
-    })];
-    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL], { capabilities });
+    });
+    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
     const realm = new Realm();
     const ctx = bindings.register({ realm });
     const container = ctx.createPlatformRecord(containerIDL);
@@ -565,9 +559,7 @@ function createContext(options: {
   agentCluster?: AgentCluster;
   crossOriginIsolated?: boolean;
 } = {}): BindingContext<ScriptingEnvironment> {
-  const bindings = new BindingWorld<ScriptingEnvironment>([], {
-    capabilities: domExceptionCapabilities,
-  });
+  const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const realm = new Realm({
     crossOriginIsolated: options.crossOriginIsolated,
   });

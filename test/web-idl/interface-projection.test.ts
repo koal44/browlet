@@ -100,9 +100,9 @@ function setup() {
   const hostObject = new Proxy(Object.freeze({}), {
     getPrototypeOf() { throw new Error('Host objects must not enter implementation discovery'); },
   });
-  const world = new BindingWorld(definitions, {
-    hostDefinedInterfaces: [{ name: 'HostObject', is: (value) => value === hostObject }],
-  });
+  const world = new BindingWorld(definitions, [
+    { name: 'HostObject', is: (value) => value === hostObject },
+  ]);
   const realmA = new TestRealm();
   const realmB = new TestRealm();
   const a = world.register({ realm: realmA });

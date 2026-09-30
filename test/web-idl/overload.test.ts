@@ -238,7 +238,7 @@ function createBinding(
   return new RealmBinding(
     new DefinitionAssembly(definitions),
     new Realm(),
-    new BindingWorld([], { hostDefinedInterfaces }), (ctx) => ({ realm: ctx.realm }),
+    new BindingWorld([], hostDefinedInterfaces), (ctx) => ({ realm: ctx.realm }),
   );
 }
 

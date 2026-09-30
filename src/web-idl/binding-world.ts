@@ -2,7 +2,6 @@ import { DefinitionAssembly } from './assembly';
 import { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import { webIDLCommonDefinitions } from './common-definitions';
-import type { CapabilityRegistration } from './capability';
 import type { Definition } from './core/index';
 import type { HostDefinedInterface } from './conversion';
 import type { WebIDLEnvironment, WebIDLRealm } from './realm';
@@ -24,19 +23,19 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #definitions: DefinitionAssembly;
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
-  // Project helper: compose definitions and capabilities shared across realm bindings.
+  // Project helper: compose definitions shared across realm bindings.
   constructor(
     definitions: Definition<Env>[],
-    options: BindingWorldOptions = {},
+    hostDefinedInterfaces: HostDefinedInterface[] = [],
   ) {
     this.#definitions = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
       // BindingWorld restricts registration to the environment required by these callbacks.
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
-    ], options.capabilities);
+    ]);
     this.hostDefinedInterfaces = new Map(
-      (options.hostDefinedInterfaces ?? []).map((hostInterface) => [hostInterface.name, hostInterface]),
+      hostDefinedInterfaces.map((hostInterface) => [hostInterface.name, hostInterface]),
     );
   }
 
@@ -106,8 +105,3 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return record?.binding.world === this ? record.realm : undefined;
   }
 }
-
-export type BindingWorldOptions = {
-  capabilities?: CapabilityRegistration[];
-  hostDefinedInterfaces?: HostDefinedInterface[];
-};

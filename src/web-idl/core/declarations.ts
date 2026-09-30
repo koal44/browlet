@@ -3,6 +3,7 @@ import type {
   DeclarationCallback, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
   InjectedArgument, OperationMember, StringifierMember, WebIDLType,
 } from './types';
+import type { SerializableSteps, TransferableSteps } from './structured-data';
 
 // Interfaces
 
@@ -20,6 +21,12 @@ export type InterfaceDefinition<Env = unknown, Impl extends object = object> = {
   exposed?: Exposure;
   /** Extended attributes applying to this interface. */
   extendedAttributes?: ExtendedAttribute[];
+  /** HTML serialization steps for this exact interface, including any inherited state. */
+  serialization?: SerializableSteps<
+    Impl, Record<string, unknown>, Env extends { realm: infer Realm; } ? Realm : unknown
+  >;
+  /** HTML transfer steps for this exact interface. */
+  transfer?: TransferableSteps<Impl>;
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** Implementation class and hooks used when constructing or projecting its instances. */
   implementation?: {

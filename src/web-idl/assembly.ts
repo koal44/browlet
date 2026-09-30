@@ -4,7 +4,6 @@ import type {
   PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember,
   PartialInterfaceMixinDefinition, NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition,
 } from './core/declarations';
-import type { Capability, CapabilityRegistration } from './capability';
 import type { ImplementationClass } from './core/types';
 import { InternalError } from '../infra/internal-error';
 
@@ -21,8 +20,8 @@ export class DefinitionAssembly {
   #namespaces = new Map<string, AssembledNamespaceDefinition>();
   #dictionaries = new Map<string, AssembledDictionaryDefinition>();
 
-  // Project helper: index declarations and register per-interface capabilities.
-  constructor(definitions: Definition[], capabilities: CapabilityRegistration[] = []) {
+  // Project helper: index declarations and their implementation classes.
+  constructor(definitions: Definition[]) {
     for (const definition of definitions) {
       switch (definition.kind) {
         case 'partial-interface':
@@ -46,27 +45,11 @@ export class DefinitionAssembly {
     }
 
     for (const primaryInterface of this.getInterfaces()) {
+      validateStructuredDataSteps(primaryInterface.definition);
       const implementation = primaryInterface.definition.implementation;
       if (implementation) {
         this.#implementationInterfaces.set(implementation.implClass, primaryInterface);
       }
-    }
-
-    for (const registration of capabilities) {
-      const primaryInterface = this.getInterface(registration.definition.name);
-      if (primaryInterface?.definition !== registration.definition) {
-        throw new InternalError(
-          `Capability ${registration.capability.name} targets unknown ` +
-          `interface definition ${registration.definition.name}`,
-        );
-      }
-      if (primaryInterface.capabilities.has(registration.capability)) {
-        throw new InternalError(
-          `Interface ${registration.definition.name} has a duplicate ` +
-          `${registration.capability.name} capability registration`,
-        );
-      }
-      primaryInterface.capabilities.set(registration.capability, registration.value);
     }
   }
 
@@ -115,7 +98,6 @@ export class DefinitionAssembly {
     if (definition?.kind !== 'interface') return;
 
     const primaryInterface: AssembledInterfaceDefinition = {
-      capabilities: new Map(),
       definition,
       includes: [],
       members: [],
@@ -268,7 +250,6 @@ export type AssembledInterfaceDefinition = {
   partials: PartialInterfaceDefinition[];
   includes: IncludedMixin[];
   members: AssembledInterfaceMember[];
-  capabilities: Map<Capability<unknown>, unknown>;
 };
 
 export type AssembledInterfaceMember = {
@@ -316,6 +297,23 @@ export type PrimaryDefinition = Exclude<
   | PartialDictionaryDefinition
   | IncludesDefinition
 >;
+
+// HTML's markers and executable steps describe the same exact primary interface.
+// A declaration can describe unfinished support, such as MessagePort-backed stream transfer.
+function validateStructuredDataSteps(definition: InterfaceDefinition): void {
+  for (const [name, steps] of [
+    ['Serializable', definition.serialization],
+    ['Transferable', definition.transfer],
+  ] as const) {
+    const markers = definition.extendedAttributes?.filter(
+      (attribute) => attribute.kind !== 'raw' && attribute.name === name,
+    ) ?? [];
+    if (markers.length === 0 && !steps) continue;
+    if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
+      throw new InternalError(`${definition.name} must declare exactly one [${name}] marker`);
+    }
+  }
+}
 
 // Project helper for Web IDL §2.7 Dictionaries — lexicographic dictionary member order.
 function compareDictionaryMembers(

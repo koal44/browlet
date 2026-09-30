@@ -11,15 +11,9 @@ import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   structuredDeserialize,
 } from '../../../../src/browlet/scripting/structured-data/deserialize';
-import {
-  domExceptionCapabilities,
-} from '../../../../src/browlet/integration/dom-exception';
 import type {
   SerializedRecord,
 } from '../../../../src/browlet/scripting/structured-data/records';
-import {
-  serializable,
-} from '../../../../src/browlet/scripting/structured-data/serializable';
 import {
   structuredSerialize,
 } from '../../../../src/browlet/scripting/structured-data/serialize';
@@ -398,21 +392,21 @@ describe('HTML structured deserialization', () => {
       ...xattr('Serializable'),
       implementation: impl(ContainerImpl),
       members: [],
+      serialization: {
+        serializationSteps(value, record, _forStorage, context) {
+          record.set(
+            'Child',
+            context.subserialize((value as ContainerImpl).child),
+          );
+        },
+        deserializationSteps(record, value, _targetRealm, context) {
+          (value as ContainerImpl).child = context.subdeserialize(
+            record.get('Child'),
+          );
+        },
+      },
     });
-    const capabilities = [serializable.for(containerIDL, {
-      serializationSteps(value, record, _forStorage, context) {
-        record.set(
-          'Child',
-          context.subserialize((value as ContainerImpl).child),
-        );
-      },
-      deserializationSteps(record, value, _targetRealm, context) {
-        (value as ContainerImpl).child = context.subdeserialize(
-          record.get('Child'),
-        );
-      },
-    })];
-    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL], { capabilities });
+    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
     const source = bindings.register({ realm: sourceRealm });
@@ -450,9 +444,7 @@ function createContexts(options: {
   target: BindingContext<ScriptingEnvironment>;
   targetRealm: Realm;
 } {
-  const bindings = new BindingWorld<ScriptingEnvironment>([], {
-    capabilities: domExceptionCapabilities,
-  });
+  const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = new Realm({ crossOriginIsolated: true });
   const targetRealm = new Realm({ crossOriginIsolated: true });
   const source = bindings.register({ realm: sourceRealm });

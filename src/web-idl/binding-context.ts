@@ -1,7 +1,6 @@
 import type { InternalPromise } from '../infra/promises';
 import type { AssembledInterfaceDefinition } from './assembly';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
-import type { Capability } from './capability';
 import type { ImplementationClass, WebIDLType } from './core/types';
 import type { InterfaceDefinition } from './core/declarations';
 import { convertToIDL, convertToJavaScript } from './conversion';
@@ -93,15 +92,6 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.#binding.createPlatformRecord(this.#resolveInterface(definition));
   }
 
-  // Project helper: retrieve a capability for an exact registered interface definition.
-  getCapability<Value>(
-    definition: InterfaceDefinition<never>,
-    capability: Capability<Value>,
-  ): Value | undefined {
-    const primaryInterface = this.#resolveInterface(definition);
-    return primaryInterface.capabilities.get(capability) as Value | undefined;
-  }
-
   // Project helper: look up a registered interface definition by name.
   getInterface(interfaceName: string): InterfaceDefinition<never> | undefined {
     return this.#binding.definitions.getInterface(interfaceName)?.definition;
@@ -152,17 +142,22 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   // Project helper: project an implementation through its registered interface.
   project<T extends object>(implClass: ImplementationClass<T>, implInst: T): StampedPlatformObject {
+    return this.associate(implClass, implInst).project();
+  }
+
+  /** Establish an implementation's binding record without projection, preserving an existing owner. */
+  associate<T extends object>(implClass: ImplementationClass<T>, implInst: T): PlatformRecord {
     if (getPlatformRecord(implInst)) {
       throw new InternalError('Expected an implementation target');
     }
-    const object = this.#binding.projectImplementationObject(
+    const record = this.#binding.associateImplementationObject(
       implInst,
       this.#getImplementationInterface(implClass),
     );
-    if (!object) {
+    if (!record) {
       throw new InternalError('Implementation target is associated with another interface');
     }
-    return object;
+    return record;
   }
 
   // Project helper: resolve the interface registered for an implementation class.

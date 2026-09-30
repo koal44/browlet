@@ -1,28 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import { structuredSerialize } from '../../../../src/browlet/scripting/structured-data/serialize';
+import { structuredSerializeWithTransfer } from '../../../../src/browlet/scripting/structured-data/transfer';
+import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import {
   createStructuredDataRecord,
 } from '../../../../src/browlet/scripting/structured-data/records';
 import {
-  serializable, type DeserializationContext, type SerializationContext,
-  type SerializableSteps,
-} from '../../../../src/browlet/scripting/structured-data/serializable';
-import {
-  domExceptionCapabilities,
-} from '../../../../src/browlet/integration/dom-exception';
-import {
-  DetachedTransferableStamper, transferable,
+  DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
-  BindingWorld, defineInterface, xattr, type StampedPlatformObject,
+  BindingWorld, defineInterface, impl, xattr, type StampedPlatformObject,
+  type SerializableSteps, type TransferableSteps, type SerializationContext, type DeserializationContext,
 } from '../../../../src/web-idl/index';
 
 describe('HTML structured-data platform contracts', () => {
   it('runs DOMException steps across realms through exact interface metadata', () => {
-    const domain = new BindingWorld([], {
-      capabilities: domExceptionCapabilities,
-    });
+    const domain = new BindingWorld([]);
     const firstRealm = new Realm();
     const secondRealm = new Realm();
     const first = domain.register({ realm: firstRealm });
@@ -41,10 +36,7 @@ describe('HTML structured-data platform contracts', () => {
     Reflect.set(source, 'custom', 'not serialized');
     const sourceBinding = first.getObjectRecord(source);
     if (!sourceBinding) throw new Error('DOMException was not projected');
-    const steps = first.getCapability(
-      sourceBinding.primaryInterface.definition,
-      serializable,
-    );
+    const steps = sourceBinding.primaryInterface.definition.serialization;
     if (!steps) throw new Error('DOMException is not registered as serializable');
     const serialized = createStructuredDataRecord();
 
@@ -75,9 +67,7 @@ describe('HTML structured-data platform contracts', () => {
   });
 
   it('gives derived serializable interfaces standalone inherited-state steps', () => {
-    const domain = new BindingWorld([], {
-      capabilities: domExceptionCapabilities,
-    });
+    const domain = new BindingWorld([]);
     const realm = new Realm();
     const registration = domain.register({ realm });
     registration.install(realm.global);
@@ -91,10 +81,7 @@ describe('HTML structured-data platform contracts', () => {
     });
     const sourceBinding = registration.getObjectRecord(source);
     if (!sourceBinding) throw new Error('QuotaExceededError was not projected');
-    const steps = registration.getCapability(
-      sourceBinding.primaryInterface.definition,
-      serializable,
-    );
+    const steps = sourceBinding.primaryInterface.definition.serialization;
     if (!steps) {
       throw new Error('QuotaExceededError is not registered as serializable');
     }
@@ -124,57 +111,63 @@ describe('HTML structured-data platform contracts', () => {
     expect(clone.requested).toBe(20);
   });
 
-  it('requires exact no-argument declaration markers', () => {
-    const steps: SerializableSteps = {
-      deserializationSteps() {},
+  it('requires exact no-argument markers for declared structured-data steps', () => {
+    const serialization: SerializableSteps = {
       serializationSteps() {},
+      deserializationSteps() {},
     };
-    const missing = defineInterface({
-      name: 'MissingSerializableMarker',
-      members: [],
-    });
-    const malformed = defineInterface({
-      name: 'MalformedSerializableMarker',
-      ...xattr({ arguments: [], kind: 'arguments', name: 'Serializable' }),
-      members: [],
-    });
-    const duplicate = defineInterface({
-      name: 'DuplicateSerializableMarker',
-      ...xattr('Serializable', 'Serializable'),
-      members: [],
-    });
-    const transferableIDL = defineInterface({
-      name: 'TransferableExample',
-      ...xattr('Transferable'),
-      members: [],
-    });
-    const malformedTransferable = defineInterface({
-      name: 'MalformedTransferableMarker',
-      ...xattr({ arguments: [], kind: 'arguments', name: 'Transferable' }),
-      members: [],
-    });
-    const transferSteps = {
-      transferReceivingSteps() {},
+    const transfer: TransferableSteps = {
       transferSteps() {},
+      transferReceivingSteps() {},
     };
+    for (const [name, steps] of [
+      ['Serializable', { serialization }],
+      ['Transferable', { transfer }],
+    ] as const) {
+      const missingMarker = defineInterface({ name: 'MissingMarker', ...steps, members: [] });
+      const malformed = defineInterface({
+        name: 'MalformedMarker', ...steps,
+        ...xattr({ arguments: [], kind: 'arguments', name }), members: [],
+      });
+      const duplicate = defineInterface({
+        name: 'DuplicateMarker', ...steps, ...xattr(name, name), members: [],
+      });
+      const complete = defineInterface({
+        name: 'Complete', ...steps, ...xattr(name), members: [],
+      });
 
-    expect(() => serializable.for(missing, steps)).toThrow(
-      'must declare exactly one [Serializable] marker',
-    );
-    expect(() => serializable.for(malformed, steps)).toThrow(
-      'must declare exactly one [Serializable] marker',
-    );
-    expect(() => serializable.for(duplicate, steps)).toThrow(
-      'must declare exactly one [Serializable] marker',
-    );
-    expect(() => transferable.for(missing, transferSteps)).toThrow(
-      'must declare exactly one [Transferable] marker',
-    );
-    expect(() => transferable.for(malformedTransferable, transferSteps)).toThrow(
-      'must declare exactly one [Transferable] marker',
-    );
-    expect(() => transferable.for(transferableIDL, transferSteps))
-      .not.toThrow();
+      for (const definition of [missingMarker, malformed, duplicate]) {
+        expect(() => new BindingWorld([definition])).toThrow(
+          'must declare exactly one [' + name + '] marker',
+        );
+      }
+      expect(() => new BindingWorld([complete])).not.toThrow();
+    }
+  });
+
+  it('does not inherit serialization or transfer permission from a parent interface', () => {
+    class ParentImpl {}
+    class ChildImpl extends ParentImpl {}
+    const save = vi.fn();
+    const move = vi.fn();
+    const parent = defineInterface({
+      name: 'Parent', exposed: '*', ...xattr('Serializable', 'Transferable'),
+      implementation: impl(ParentImpl), members: [],
+      serialization: { serializationSteps: save, deserializationSteps() {} },
+      transfer: { transferSteps: move, transferReceivingSteps() {} },
+    });
+    const child = defineInterface({
+      name: 'Child', inherits: 'Parent', exposed: '*',
+      implementation: impl(ChildImpl), members: [],
+    });
+    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register({ realm: new Realm() });
+    const value = ctx.createPlatformRecord(child).platformObject;
+
+    expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
+    expect(() => structuredSerializeWithTransfer(value, [value], ctx))
+      .toThrow(expect.objectContaining({ name: 'DataCloneError' }));
+    expect(save).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
   });
 
   it('keeps detached state private and instance-specific on frozen implementations', () => {

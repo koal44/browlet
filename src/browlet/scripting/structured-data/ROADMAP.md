@@ -11,22 +11,24 @@ and the remaining history/worker/messaging consumers are still future work.
 | Location | Responsibility |
 | --- | --- |
 | `records.ts` | Closed record families and graph-memory types |
-| `serializable.ts`, `transferable.ts` | Exact-interface capabilities and HTML-owned detached state |
+| [Web IDL contracts](../../../web-idl/core/structured-data.ts) | Interface-owned serialization and transfer steps, with narrow nested-operation callbacks |
+| `transferable.ts` | HTML-owned detached state |
 | `serialize.ts`, `deserialize.ts` | Graph traversal, storage mode, target-realm reconstruction, and shared memory |
 | `transfer.ts` | Transfer-list validation, serialization/transfer order, and receiving steps |
 | `structured-clone.ts` | The internal structured-cloning operation |
 | `web-idl.ts` | Shared StructuredSerializeOptions declaration |
 | `../global-scope.ts` | The public WindowOrWorkerGlobalScope contribution |
-| [Integration](../../integration/README.md) | Providers owned by the contributing platform subsystems |
+| [File](../../../file/index.ts), [DOMException](../../../web-idl/dom-exception.ts) | Concrete steps beside the contributing implementations and declarations |
 
 [Web IDL](../../../web-idl/README.md) owns platform identity, exposure checks,
-internal target-realm creation, and the generic capability seam. HTML owns graph
+internal target-realm creation, and typed declaration hooks. HTML owns graph
 records, memories, storage mode, transfer ordering, and sub-operations. Each
 defining specification supplies its interface's steps. Dispatch uses the exact
 primary interface; inherited interfaces do not each run an independent hook.
 
-Serializable/Transferable attributes remain declaration metadata. Executable
-capabilities stay separate from that syntax. Deserialization creates internal
+Serializable/Transferable attributes remain declaration metadata. The same
+declaration's `serialization` and `transfer` fields supply executable steps;
+there is no separate registration table. Deserialization creates internal
 instances without invoking public constructors or requiring public constructibility.
 Native structuredClone cannot replace this graph/binding/exposure machinery.
 
@@ -38,7 +40,7 @@ Insert each shallow record into memory before descending; deserialization likewi
 allocates and remembers the target value before recursively populating it.
 Cycles and repeated identity must survive across graph and transfer memories.
 
-Use captured target-realm intrinsics and exact platform capabilities rather than
+Use captured target-realm intrinsics and exact interface steps rather than
 active-host instanceof checks. DOMException, QuotaExceededError, Blob, File, and
 FileList provide concrete serialization consumers. An interface restores its
 specified data, not arbitrary author-added properties.
@@ -90,7 +92,7 @@ The native queue/context and host-hook work does not remove these slot limitatio
 ## Remaining work
 
 1. **Real platform transfer.** Connect MessagePort transfer/receiving with its
-   actual entanglement and lifecycle. Generic capability tests are synthetic;
+   actual entanglement and lifecycle. Platform transfer tests are synthetic;
    ArrayBuffer success does not prove a platform consumer. Streams transfer
    depends on the same MessagePort machinery.
 2. **Consumer integration.** History state, cross-document/channel/broadcast
@@ -113,5 +115,5 @@ Projected structuredClone tests cover receiver realms, serializable platforms,
 ArrayBuffer transfer, duplicate rejection, and partial-transfer ordering.
 
 A new platform type needs actual serialization/receiving and public-consumer
-proof in addition to capability registration. Keep the missing platform-transfer
+proof in addition to declaring hooks. Keep the missing platform-transfer
 proof explicit until a real registered type supplies it.

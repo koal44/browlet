@@ -587,7 +587,7 @@ function createContext(
   const binding = new RealmBinding(
     new DefinitionAssembly(definitions),
     realm,
-    new BindingWorld([], { hostDefinedInterfaces }), (ctx) => ({ realm: ctx.realm }),
+    new BindingWorld([], hostDefinedInterfaces), (ctx) => ({ realm: ctx.realm }),
   );
   return { ctx: binding.defaultConversionContext, realm };
 }

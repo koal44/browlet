@@ -12,13 +12,7 @@ export {
 export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
 
 export type { BindingContext };
-export {
-  defineCapability, type Capability, type CapabilityRegistration,
-  type CapabilityOptions,
-} from './capability';
-export {
-  BindingWorld, type BindingWorldOptions,
-} from './binding-world';
+export { BindingWorld } from './binding-world';
 export type { WebIDLEnvironment, WebIDLRealm };
 export type { CallbackHooks, SecurityCheckType } from './realm';
 export type { GlobalObjectAllocation } from './realm-binding';

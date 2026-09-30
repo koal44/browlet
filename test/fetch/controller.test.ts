@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FetchController } from '../../src/fetch/controller';
+import { deserializeAbortReason, FetchController } from '../../src/fetch/controller';
 import { FetchParams } from '../../src/fetch/params';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
@@ -110,6 +110,26 @@ describe('Fetch controller lifecycle', () => {
     const reason = deserialize({});
     expect(reason).toMatchObject({ name: 'AbortError', message: '' });
   });
+
+  it.each(['absent', 'undefined', 'throws'] as const)(
+    'allocates the %s abort fallback in the destination realm',
+    (mode) => {
+      const env = createEnvironment();
+      const other = createEnvironment();
+      const DOMException = env.exec.DOMException;
+      Reflect.set(env.realm.global, 'DOMException', () => { throw new Error('Replaced constructor'); });
+      env.exec.deserialize = () => {
+        if (mode === 'throws') throw new Error('Unavailable serialized type');
+        return undefined;
+      };
+
+      const reason = deserializeAbortReason(mode === 'absent' ? null : {}, env);
+
+      expect(reason).toBeInstanceOf(DOMException);
+      expect(reason).not.toBeInstanceOf(other.exec.DOMException);
+      expect(reason).toMatchObject({ name: 'AbortError', message: '' });
+    },
+  );
 
   it('reports timing to the supplied environment and exposes the retained full record', () => {
     const controller = new FetchController();

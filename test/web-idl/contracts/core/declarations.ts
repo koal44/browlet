@@ -1,6 +1,7 @@
 import {
   allocateIn, arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
-  dictMember, idlType, impl, invokeWith, op, sequence, staticOp,
+  dictMember, idlType, impl, invokeWith, op, sequence, staticOp, xattr,
+  type SerializableSteps, type TransferableSteps,
 } from '../../../../src/web-idl/core/index';
 
 declare module '../../../../src/web-idl/core/types' {
@@ -11,6 +12,56 @@ declare module '../../../../src/web-idl/core/types' {
 
 class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
+
+class SavedValue { value = 1; }
+const serialization = {
+  serializationSteps(value, record, _forStorage, context) {
+    record.set('Value', value.value);
+    // @ts-expect-error Each field accepts only its declared value type.
+    record.set('Value', 'wrong');
+    // @ts-expect-error Field names come from this interface's record shape.
+    record.set('Missing', 1);
+    const nested = context.subserialize(value);
+    context.subserialize(value, SavedValue);
+    // @ts-expect-error The declared implementation must accept the nested value.
+    context.subserialize({ value: 'wrong' }, SavedValue);
+    // @ts-expect-error Nested records are opaque; their representation belongs to HTML.
+    nested.type;
+    // @ts-expect-error Steps retain their concrete implementation type.
+    value.missing;
+  },
+  deserializationSteps(record, value, targetRealm, context) {
+    value.value = targetRealm.example;
+    value.value = record.get('Value');
+    // @ts-expect-error Reading a field retains its declared value type.
+    record.get('Value').toUpperCase();
+    // @ts-expect-error The matching serializer defines the available fields.
+    record.get('Missing');
+    context.unwrap(context.subdeserialize({}), SavedValue).value.toFixed();
+    // @ts-expect-error An operation context does not expose Binding Context.
+    context.getEnvironment();
+  },
+} satisfies SerializableSteps<SavedValue, { Value: number; }, { example: number; }>;
+defineInterface<{ realm: { example: number; }; }>({
+  name: 'SavedValue', ...xattr('Serializable'),
+  implementation: impl(SavedValue), serialization, members: [],
+});
+defineInterface<{ realm: { example: number; }; }>({
+  name: 'InlineSavedValue', ...xattr('Serializable'), members: [],
+  serialization: {
+    serializationSteps() {},
+    deserializationSteps(_record, _value, targetRealm) {
+      targetRealm.example.toFixed();
+      // @ts-expect-error The declaration's environment determines the destination realm.
+      targetRealm.missing;
+    },
+  },
+});
+// @ts-expect-error Serializable interfaces need both directions.
+const incompleteSerialization: SerializableSteps = { serializationSteps() {} };
+// @ts-expect-error Transferable interfaces need both directions.
+const incompleteTransfer: TransferableSteps = { transferSteps() {} };
+
 impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
 ctor([], { constructWith: [atArg(0, () => new Example())] });
 op('read', idlType.ArrayBuffer, [], allocateIn('receiver'));

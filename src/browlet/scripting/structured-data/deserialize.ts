@@ -10,7 +10,6 @@ import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
   StructuredDeserializeMemory,
 } from './records';
-import { serializable } from './serializable';
 import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.6, StructuredDeserialize. */
@@ -155,13 +154,10 @@ export function structuredDeserialize(
     if (!platformRecord) {
       throw new InternalError('A platform-object record was not created');
     }
-    const steps = ctx.getCapability(
-      platformRecord.primaryInterface.definition,
-      serializable,
-    );
+    const steps = platformRecord.primaryInterface.definition.serialization;
     if (!steps) {
       throw new InternalError(
-        `${platformRecord.primaryInterface.definition.name} has no Serializable capability`,
+        `${platformRecord.primaryInterface.definition.name} has no serialization steps`,
       );
     }
     steps.deserializationSteps(
@@ -169,8 +165,13 @@ export function structuredDeserialize(
       platformRecord.implInst,
       realm,
       {
-        unwrap: (platformObject, implClass) =>
-          ctx.unwrap(platformObject, implClass),
+        unwrap: (platformObject, implClass) => {
+          const implementation = ctx.unwrap(platformObject, implClass);
+          if (!implementation) {
+            throw new InternalError('Deserialized value does not implement the expected interface');
+          }
+          return implementation;
+        },
         subdeserialize: (subSerialized) => {
           if (!isSerializedRecord(subSerialized)) {
             throw new InternalError('Sub-deserialization requires a serialized record');

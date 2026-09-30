@@ -5,7 +5,7 @@ import {
 } from '../../../js-engine/index';
 import {
   throwDOMException,
-  type BindingContext, type StampedImplInstance,
+  type BindingContext, type StampedImplInstance, type TransferableSteps,
 } from '../../../web-idl/index';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
@@ -15,9 +15,7 @@ import {
 } from './records';
 import { structuredDeserialize } from './deserialize';
 import { structuredSerializeInternal } from './serialize';
-import {
-  DetachedTransferableStamper, transferable, type TransferableSteps,
-} from './transferable';
+import { DetachedTransferableStamper } from './transferable';
 import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.7, StructuredSerializeWithTransfer. */
@@ -76,7 +74,7 @@ export function structuredDeserializeWithTransfer(
   };
 }
 
-// BINDING_INTEGRATION: resolve the source instance and its transferable capability.
+// BINDING_INTEGRATION: resolve the source instance and its interface's transfer steps.
 function prepareTransfer(
   value: unknown,
   ctx: BindingContext<ScriptingEnvironment>,
@@ -98,10 +96,7 @@ function prepareTransfer(
 
   const record = ctx.getObjectRecord(value);
   if (!record) return throwDOMException('DataCloneError');
-  const steps = ctx.getCapability(
-    record.primaryInterface.definition,
-    transferable,
-  );
+  const steps = record.primaryInterface.definition.transfer;
   if (!steps) return throwDOMException('DataCloneError');
   return {
     kind: 'platform-object',
@@ -158,13 +153,10 @@ function receiveTransfer(
       return throwDOMException('DataCloneError');
     }
     const platformRecord = ctx.createPlatformRecord(definition);
-    const steps = ctx.getCapability(
-      platformRecord.primaryInterface.definition,
-      transferable,
-    );
+    const steps = platformRecord.primaryInterface.definition.transfer;
     if (!steps) {
       throw new InternalError(
-        `${platformRecord.primaryInterface.definition.name} has no Transferable capability`,
+        `${platformRecord.primaryInterface.definition.name} has no transfer steps`,
       );
     }
     steps.transferReceivingSteps(

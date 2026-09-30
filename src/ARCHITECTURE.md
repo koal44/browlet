@@ -215,6 +215,11 @@ through the assembled bindings singleton. Outside Web IDL, mark genuine binding
 integration with `BINDING_INTEGRATION:`; unresolved implementation leakage uses
 `TODO(BINDING_INTEGRATION):`.
 
+Interface serialization and transfer steps live beside their implementations and
+attach to the Web IDL declaration through portable contracts. HTML supplies the
+active clone's traversal and identity memory; Binding supplies platform identity
+and target construction. These hooks need no separate capability registry.
+
 For example, Fetch owns request/response policy and transactions; HTTP owns
 reusable protocol syntax and cache rules; the UserAgent supplies transport and
 per-response native decoders. The adapter owns sockets and codecs, while Fetch

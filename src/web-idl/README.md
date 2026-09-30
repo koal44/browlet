@@ -11,7 +11,7 @@ records backend constraints and unresolved behavior.
 | Entry | Intended consumer |
 | --- | --- |
 | [`core/index.ts`](core/index.ts) | Host-neutral declarations, type/member helpers, IDL serialization, and DOMException requests; no engine or binding runtime |
-| [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, capabilities, stamped-object types, and runtime definitions |
+| [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, stamped-object types, and runtime definitions |
 
 Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration callbacks with typed `BindingContext` arguments.
@@ -21,7 +21,8 @@ cannot hide a dependency in the standalone surface.
 | Modules | Responsibility |
 | --- | --- |
 | `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
-| `assembly.ts` | Combine definitions, partials, includes, capabilities, and implementation-class lookup |
+| `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
+| `assembly.ts` | Combine definitions, partials, includes, marker validation, and implementation-class lookup |
 | `binding-world.ts`, `binding-context.ts` | Register realms and expose their shared boundary operations |
 | `realm-binding.ts`, `definition-binding.ts` | Realm-owned prototypes, functions, allocation, and member adapters |
 | `implementation-binding.ts`, `platform-object.ts` | Construction dependencies, implementation adaptation, and stamped identity |
@@ -83,8 +84,8 @@ includer explicitly exposes it. Binding must not manufacture missing state.
 
 ## Registration and environment composition
 
-`new BindingWorld<Env>(definitions, options)` assembles definitions requiring
-that environment, plus optional capabilities/host-defined interfaces.
+`new BindingWorld<Env>(definitions, hostDefinedInterfaces?)` assembles definitions
+requiring that environment, plus any supplied host-defined interfaces.
 `world.register(env)` returns one Binding Context per realm in that world.
 Repeated registration returns the existing context; `world.forRealm(realm)`
 only looks it up.
@@ -105,9 +106,26 @@ allocation. A sandbox can register for internal allocations without installing
 author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
 both the sandbox and Window paths.
 
-Capabilities are explicit contributions attached to assembled definitions.
-Resolve them at declaration/composition boundaries. They are not an ambient
-registry for ordinary implementation algorithms.
+Interfaces attach HTML's `serialization` and `transfer` steps directly to their
+declarations. The steps live with the owning implementation and run for the exact
+primary interface; inherited state must be included explicitly. Both directions
+are required by each step type. Assembly validates the matching no-argument
+`Serializable` or `Transferable` marker. A marker without steps can still describe
+unfinished support, such as stream transfer; it does not enable the operation.
+
+The contracts contain interface-owned record fields and narrow nested-operation
+callbacks. A declaration's environment determines the deserialization target
+realm type. HTML supplies traversal, shared identity memory, storage mode, and
+transfer ordering; Web IDL retains the hooks and supplies platform identity and
+construction. Steps do not capture a realm or Binding Context in the shared
+declaration, and standalone subsystems do not import HTML's implementation.
+
+Each provider can name its fields through `SerializableSteps<Impl, Fields>` or
+`TransferableSteps<Impl, Fields>`. The backing record remains a Map; its typed
+view checks field names and values. Deserialization receives the completed record
+from the matching serializer, not arbitrary author input. Required fields must
+be populated by that serializer; TypeScript does not prove that every path writes
+them. The HTML traversal keeps the interface-specific shape opaque.
 
 ## Identity and construction
 
@@ -130,6 +148,13 @@ when callbacks, retained state, or internal creation require ownership earlier.
 An implementation can therefore be stamped but not yet projected. Structured
 serialization can dispatch from that record without creating a platform object.
 HTML separately owns transferable detached state.
+
+`ctx.associate(Impl, value)` establishes that record without projection, reusing
+the same interface and owner checks as `ctx.project()`. Nested serialization can
+name an implementation with `context.subserialize(value, Impl)`. A fresh value
+uses the containing object's binding; an associated value keeps its owner.
+Ordinary JavaScript values still use the one-argument form without implementation
+discovery. Both forms share the enclosing operation's identity memory.
 
 `world.project()` and `world.unwrap()` enforce world membership. One implementation
 belongs to one world and retains one platform identity; another world must

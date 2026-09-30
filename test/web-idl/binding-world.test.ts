@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import {
   arg, atArg, attr, BindingWorld, ctor,
-  defineCapability, defineInterface, idlType, impl, invokeWith, namedGetter, op,
+  defineInterface, idlType, impl, invokeWith, namedGetter, op,
   reference, roAttr, xattr, type BindingContext,
 } from '../../src/web-idl/index';
 import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
@@ -447,68 +447,19 @@ describe('Web IDL binding worlds and realm registration', () => {
     );
   });
 
-  it('indexes capabilities by exact primary interface', () => {
-    class ParentImpl {}
-    class ChildImpl extends ParentImpl {}
-    const parentIDL = defineInterface({
-      name: 'CapabilityParent',
-      exposed: '*',
-      implementation: impl(ParentImpl),
-      members: [],
-    });
-    const childIDL = defineInterface({
-      name: 'CapabilityChild',
-      inherits: parentIDL.name,
-      exposed: '*',
-      implementation: impl(ChildImpl),
-      members: [],
-    });
-    const capability = defineCapability<string>('Test');
-    const interfaces = new BindingWorld(
-      [parentIDL, childIDL],
-      {
-        capabilities: [
-          capability.for(parentIDL, 'parent'),
-          capability.for(childIDL, 'child'),
-        ],
-      },
-    );
-    const registration = interfaces.register({ realm: new Realm() });
-    const child = registration.createPlatformRecord(childIDL);
-
-    expect(registration.getObjectRecord(child.platformObject))
-      .toBe(child);
-    expect(child.primaryInterface.definition).toBe(childIDL);
-    expect(registration.getCapability(
-      child.primaryInterface.definition,
-      capability,
-    )).toBe('child');
-    expect(registration.getCapability(parentIDL, capability))
-      .toBe('parent');
-  });
-
-  it('shares capability values across realms without leaking between worlds', () => {
-    const definition = defineInterface({ name: 'SharedCapability', members: [] });
-    const definitions = [definition];
-    const capability = defineCapability<{ owner: string; }>('Test');
-    const firstValue = { owner: 'first' };
-    const secondValue = { owner: 'second' };
-    const firstWorld = new BindingWorld(definitions, {
-      capabilities: [capability.for(definition, firstValue)],
-    });
-    const secondWorld = new BindingWorld(definitions, {
-      capabilities: [capability.for(definition, secondValue)],
-    });
-    const unconfiguredWorld = new BindingWorld(definitions);
+  it('keeps platform identities within their world when declarations are shared', () => {
+    const firstWorld = new BindingWorld([exampleIDL]);
+    const secondWorld = new BindingWorld([exampleIDL]);
     const first = firstWorld.register({ realm: new Realm() });
     const another = firstWorld.register({ realm: new Realm() });
     const second = secondWorld.register({ realm: new Realm() });
-    const unconfigured = unconfiguredWorld.register({ realm: new Realm() });
+    const original = first.createPlatformRecord(exampleIDL);
+    const other = second.createPlatformRecord(exampleIDL);
 
-    expect(first.getCapability(definition, capability)).toBe(firstValue);
-    expect(another.getCapability(definition, capability)).toBe(firstValue);
-    expect(second.getCapability(definition, capability)).toBe(secondValue);
-    expect(unconfigured.getCapability(definition, capability)).toBeUndefined();
+    expect(another.unwrap(original.platformObject, ExampleImpl)).toBe(original.implInst);
+    expect(second.unwrap(original.platformObject, ExampleImpl)).toBeUndefined();
+    expect(first.unwrap(other.platformObject, ExampleImpl)).toBeUndefined();
+    expect(other.implInst).not.toBe(original.implInst);
   });
 
   it('requires an implementation creator to instantiate a declared interface', () => {
@@ -562,50 +513,21 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(publicConstructions).toBe(1);
   });
 
-  it('rejects foreign, duplicate, and unexposed interface capabilities', () => {
+  it('rejects foreign definitions and unexposed interfaces during allocation', () => {
     class RestrictedImpl {}
     const restrictedIDL = defineInterface({
-      name: 'RestrictedCapability',
+      name: 'RestrictedInterface',
       exposed: ['Worker'],
       implementation: impl(RestrictedImpl),
       members: [],
     });
-    const foreignIDL = defineInterface({
-      name: restrictedIDL.name,
-      members: [],
-    });
-    const capability = defineCapability<string>('Restricted');
+    const foreignIDL = defineInterface({ name: restrictedIDL.name, members: [] });
+    const registration = new BindingWorld([restrictedIDL]).register({ realm: new Realm() });
 
-    expect(() => new BindingWorld(
-      [restrictedIDL],
-      {
-        capabilities: [
-          capability.for(foreignIDL, 'foreign'),
-        ],
-      },
-    )).toThrow('targets unknown interface definition RestrictedCapability');
-    expect(() => new BindingWorld(
-      [restrictedIDL],
-      {
-        capabilities: [
-          capability.for(restrictedIDL, 'first'),
-          capability.for(restrictedIDL, 'second'),
-        ],
-      },
-    )).toThrow('has a duplicate Restricted capability registration');
-
-    const registration = new BindingWorld(
-      [restrictedIDL],
-      {
-        capabilities: [
-          capability.for(restrictedIDL, 'registered'),
-        ],
-      },
-    ).register({ realm: new Realm() });
-
+    expect(() => registration.createPlatformRecord(foreignIDL)).toThrow();
     expect(registration.isInterfaceExposed(restrictedIDL)).toBe(false);
     expect(() => registration.createPlatformRecord(restrictedIDL)).toThrow(
-      'Interface RestrictedCapability is not exposed in this realm',
+      'Interface RestrictedInterface is not exposed in this realm',
     );
   });
 });

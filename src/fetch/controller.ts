@@ -88,7 +88,7 @@ export function deserializeAbortReason(
   abortReason: object | null,
   env: JSEnvironment,
 ): unknown {
-  const fallbackError = createDOMException('AbortError');
+  const fallbackError = new env.exec.DOMException('', 'AbortError');
   if (abortReason !== null) {
     try {
       const error = env.exec.deserialize(abortReason);

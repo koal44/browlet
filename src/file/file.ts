@@ -3,9 +3,10 @@ import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
+  type SerializableSteps,
 } from '../web-idl/index';
 import {
-  BlobImpl, type BlobPart, type BlobPropertyBag,
+  BlobImpl, blobSerialization, type BlobPart, type BlobPropertyBag, type BlobSerializedFields,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
 import { InternalError } from '../infra/internal-error';
@@ -97,6 +98,29 @@ export type FileSerializationState = {
   name: string;
 };
 
+// https://w3c.github.io/FileAPI/#file-section
+/** Preserve File metadata along with its inherited Blob state. */
+const fileSerialization = {
+  serializationSteps(value, serialized, forStorage) {
+    blobSerialization.serializationSteps(value, serialized, forStorage);
+    const state = value.getFileSerializationState();
+    serialized.set('Name', state.name);
+    serialized.set('LastModified', state.lastModified);
+  },
+  deserializationSteps(serialized, value) {
+    blobSerialization.deserializationSteps(serialized, value);
+    value.setFileSerializationState({
+      lastModified: serialized.get('LastModified'),
+      name: serialized.get('Name'),
+    });
+  },
+} satisfies SerializableSteps<FileImpl, FileSerializedFields>;
+
+type FileSerializedFields = BlobSerializedFields & {
+  Name: string;
+  LastModified: number;
+};
+
 export type HostFileMetadata = {
   lastModified?: number;
   name: string;
@@ -138,6 +162,7 @@ export const fileIDL = defineInterface<JSEnvironment>({
   inherits: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
+  serialization: fileSerialization,
   implementation: impl(FileImpl, {
     constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
   }),

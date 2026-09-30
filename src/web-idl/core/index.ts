@@ -44,3 +44,8 @@ export type {
 export {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute, serializeMember, serializeType,
 } from './serialize';
+
+export type {
+  SerializableSteps, TransferableSteps, StructuredDataRecord,
+  SerializationContext, DeserializationContext,
+} from './structured-data';

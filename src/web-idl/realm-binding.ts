@@ -41,7 +41,7 @@ import {
 import { ObservableArrayBinding } from './observable-array';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
-  interfaceImplements, stampImplementation, type PlatformRecord, type StampedPlatformObject,
+  interfaceImplements, PlatformRecord, type StampedPlatformObject,
 } from './platform-object';
 import type { BindingWorld } from './binding-world';
 import { createRejectedPromise } from './promise';
@@ -508,13 +508,21 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     implInst: object,
     expectedInterface: AssembledInterfaceDefinition,
   ): StampedPlatformObject | undefined {
+    return this.associateImplementationObject(implInst, expectedInterface)?.project();
+  }
+
+  /** Associate an implementation with its interface and owner without allocating its platform object. */
+  associateImplementationObject(
+    implInst: object,
+    expectedInterface: AssembledInterfaceDefinition,
+  ): PlatformRecord | undefined {
     const existing = getImplementationRecord(implInst);
     if (existing) {
       if (existing.binding.world !== this.world) {
         throw new InternalError('Implementation instance belongs to another binding world');
       }
       return interfaceImplements(existing.primaryInterface, expectedInterface)
-        ? existing.project()
+        ? existing
         : undefined;
     }
 
@@ -523,8 +531,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       !primaryInterface ||
       !interfaceImplements(primaryInterface, expectedInterface)
     ) return;
-    const stampedInst = stampImplementation(implInst, primaryInterface, this);
-    return this.projectPlatformObject(stampedInst, primaryInterface).platformObject!;
+    return new PlatformRecord(implInst, primaryInterface, this);
   }
 
   // Project allocation entry point for Web IDL §3.8 Platform objects implementing interfaces — create a new

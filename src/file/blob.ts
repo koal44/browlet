@@ -6,7 +6,8 @@ import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
-  reference, roAttr, sequence, union, xattr,
+  reference, roAttr, sequence, throwDOMException, union, xattr,
+  type SerializableSteps,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
 
@@ -192,6 +193,40 @@ export type BlobSerializationState = {
   type: string;
 };
 
+// https://w3c.github.io/FileAPI/#blob-section
+/** Preserve Blob data and metadata across structured serialization. */
+export const blobSerialization = {
+  serializationSteps(value, serialized, forStorage) {
+    const state = value.getSerializationState();
+    let data = state.data;
+    if (forStorage) {
+      try {
+        data = data.cloneForStorage();
+      } catch {
+        return throwDOMException('DataCloneError', 'The Blob byte source cannot be serialized for storage');
+      }
+    }
+    serialized.set('SnapshotState', state.snapshotState);
+    serialized.set('ByteSequence', data);
+    // Preserve the MIME type, which the draft's listed record fields omit.
+    serialized.set('Type', state.type);
+  },
+  deserializationSteps(serialized, value) {
+    value.setSerializationState({
+      data: serialized.get('ByteSequence'),
+      snapshotState: serialized.get('SnapshotState'),
+      type: serialized.get('Type'),
+    });
+  },
+} satisfies SerializableSteps<BlobImpl, BlobSerializedFields>;
+
+/** File API record fields shared by Blob and File serialization. */
+export type BlobSerializedFields = {
+  SnapshotState: BlobSnapshotState;
+  ByteSequence: BlobData;
+  Type: string;
+};
+
 /** File API §3.1, convert line endings to native. */
 export function convertLineEndingsToNative(
   value: string,
@@ -247,6 +282,7 @@ export const blobIDL = defineInterface<JSEnvironment>({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
+  serialization: blobSerialization,
   implementation: impl(BlobImpl, {
     constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),

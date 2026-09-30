@@ -10,7 +10,6 @@ describe('Web IDL package surface', () => {
       'BindingWorld',
       'DOMExceptionImpl',
       'QuotaExceededErrorImpl',
-      'defineCapability',
       'domExceptionIDL',
       'endOfIteration',
       'isDOMException',

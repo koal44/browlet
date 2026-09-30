@@ -14,7 +14,7 @@ import {
   isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
-import { throwDOMException, type BindingContext } from '../../../web-idl/index';
+import { throwDOMException, type BindingContext, type ImplementationClass } from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, isSerializedErrorName,
@@ -26,7 +26,6 @@ import {
   type SetSerializedRecord, type SharedArrayBufferSerializedRecord,
   type StructuredSerializeMemory,
 } from './records';
-import { serializable } from './serializable';
 import { DetachedTransferableStamper } from './transferable';
 import { InternalError } from '../../../infra/internal-error';
 
@@ -141,10 +140,7 @@ export function structuredSerializeInternal(
       serialized = serializeError(value, ctx.realm);
       deep = true;
     } else if (record) {
-      const steps = ctx.getCapability(
-        record.primaryInterface.definition,
-        serializable,
-      );
+      const steps = record.primaryInterface.definition.serialization;
       if (!steps) return throwDOMException('DataCloneError');
       if (DetachedTransferableStamper.has(record.implInst)) {
         return throwDOMException('DataCloneError');
@@ -160,7 +156,14 @@ export function structuredSerializeInternal(
         serialized.fields,
         forStorage,
         {
-          subserialize: (subValue) => structuredSerializeInternal(subValue, forStorage, ctx, memory),
+          subserialize: (subValue: unknown, implClass?: ImplementationClass) => {
+            if (implClass) {
+              // The typed overload supplies an implementation; its containing object selects
+              // the owner just as an interface-valued result does during projection.
+              record.binding.context.associate(implClass, subValue as object);
+            }
+            return structuredSerializeInternal(subValue, forStorage, ctx, memory);
+          },
         },
       );
       return serialized;

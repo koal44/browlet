@@ -1,5 +1,5 @@
 import {
-  atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineCapability, defineInterface,
+  atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineInterface,
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type BindingContext, type Definition, type StampedImplInstance, type StampedPlatformObject,
   type WebIDLEnvironment, type WebIDLRealm,
@@ -72,10 +72,7 @@ const callbackDefinition = defineCallbackInterface<HostEnvironment>({
     return callback.object;
   },
 });
-const capability = defineCapability<JSEnvironment>('environment');
-const world = new BindingWorld<HostEnvironment>([definition, callbackDefinition], {
-  capabilities: [capability.for(definition, env)],
-});
+const world = new BindingWorld<HostEnvironment>([definition, callbackDefinition]);
 const ctx = world.register(hostRealm, (context) => {
   context.realm.eventTimeStamp();
   return env;
@@ -84,7 +81,6 @@ ctx.realm.eventTimeStamp();
 world.forRealm(hostRealm)?.realm.eventTimeStamp();
 world.forRealm(hostRealm)?.getEnvironment().exec.createEvent();
 world.register(env);
-ctx.getCapability(definition, capability);
 ctx.createPlatformRecord(definition);
 ctx.isInterfaceExposed(definition);
 const implInst: StampedImplInstance<Example> = ctx.construct(Example);

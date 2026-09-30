@@ -11,10 +11,10 @@ files, workers, MediaSource, and the final conformance audit.
 | Location | Responsibility |
 | --- | --- |
 | [blob-data.ts](blob-data.ts) | Immutable segments, snapshot state, reads, slicing, and source failures |
-| [blob.ts](blob.ts) | Blob construction, metadata, stream/promise reads, and declaration |
-| [file.ts](file.ts), [file-list.ts](file-list.ts) | File metadata/host-source factory and owner-mutable FileList |
+| [blob.ts](blob.ts) | Blob construction, metadata, stream/promise reads, serialization steps, and declaration |
+| [file.ts](file.ts), [file-list.ts](file-list.ts) | File metadata/host-source factory, owner-mutable FileList, and serialization steps |
 | [package-data.ts](package-data.ts) | FileReader text, Data URL, ArrayBuffer, and binary-string results |
-| [Browlet File integration](../browlet/integration/file/) | Concrete FileReader EventTarget, Blob URL store/URL methods, and HTML Serializable registration |
+| [Browlet File integration](../browlet/integration/file/) | Concrete FileReader EventTarget and Blob URL store/URL methods |
 | [Storage](../storage/ROADMAP.md) | Storage-key acquisition and equality |
 | [Fetch](../fetch/README.md) | Blob scheme responses/ranges and multipart body consumption |
 

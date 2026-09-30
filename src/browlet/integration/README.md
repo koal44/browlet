@@ -2,8 +2,8 @@
 
 This directory contains Browlet's cross-specification integrations. The
 top-level [`bindings.ts`](../bindings.ts) is the composition root which
-assembles their capability providers with Web IDL definitions, host-defined
-interfaces, and realm bindings.
+assembles Web IDL definitions, host-defined interfaces, and realm bindings,
+and connects execution facilities to their owners.
 
 The named functions exported by `bindings.ts` forward to its main
 `BrowletBindings` instance. `createWindowEnvironment()` allocates the realm and
@@ -38,7 +38,7 @@ that implementation whole on the Browlet side of the boundary rather than
 splitting its state into a host-neutral facade and a browser-specific object.
 Domain-local behavior still remains with its owning subsystem.
 
-- `file/` connects File API algorithms to HTML scheduling and structured data,
+- `file/` connects File API algorithms to HTML scheduling,
   supplies platform line ending policy, and owns `FileReader`, whose concrete
   implementation depends on Browlet's EventTarget, tasks, timing, and events.
   It also owns the UserAgent's Blob URL store and entries, allowing them to
@@ -52,6 +52,7 @@ Domain-local behavior still remains with its owning subsystem.
   microtask-queue backend, including its enqueue and checkpoint operations.
 - `fetch.ts` resolves an explicit global task destination to its existing Realm
   and queues through that Realm, which can differ from the body owner's Realm.
-  It also realizes deserialized abort reasons at the destination binding boundary.
-- `dom-exception.ts` connects Web IDL DOMException records to HTML structured
-  data.
+
+File and DOMException serialization steps live beside their implementations and
+attach directly to the Web IDL declarations. HTML invokes their portable step
+contracts; they need no integration module or separate registration.
