@@ -11,12 +11,15 @@ import { CORSPreflightCache } from '../../src/fetch/cache-cors';
 import { CookieStore } from '../../src/http/index';
 import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
+import type { TestRealm } from '../web-idl/test-realm';
 
-export function createClientEnvironment(url = 'https://example.test/'): ClientEnvironment {
+export function createClientEnvironment(
+  url = 'https://example.test/', env: TestEnvironment = createEnvironment(),
+): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   return {
-    ...createEnvironment(),
+    ...env,
     isWindow: false,
     isServiceWorker: false,
     isTopLevelWindow: false,
@@ -46,7 +49,8 @@ export function createClientEnvironment(url = 'https://example.test/'): ClientEn
 }
 
 // These test clients have known origins; reserved-record derivation is tested in HTML.
-interface ClientEnvironment extends FetchEnvironment {
+export interface ClientEnvironment extends FetchEnvironment, TestEnvironment {
+  realm: TestRealm;
   topLevelOrigin: Origin;
 }
 

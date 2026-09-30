@@ -1,4 +1,4 @@
-import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import {
@@ -23,7 +23,7 @@ import { parseURL } from '../../src/url/url';
 import { BindingWorld } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
-import { createFetchUserAgent } from './client-fixture';
+import { createClientEnvironment, createFetchUserAgent, type ClientEnvironment } from './client-fixture';
 
 export function createFetchRequest(
   url = 'https://example.test/start',
@@ -34,10 +34,10 @@ export function createFetchRequest(
   return new FetchRequest(parsed, client, client?.userAgent ?? createFetchUserAgent());
 }
 
-export function createFetchFixture(world?: BindingWorld<TestEnvironment>) {
-  const bindings = world ?? new BindingWorld<TestEnvironment>(fetchDefinitions);
+export function createFetchFixture(world?: BindingWorld<ClientEnvironment>) {
+  const bindings = world ?? new BindingWorld<ClientEnvironment>(fetchDefinitions);
   const realm = new TestRealm();
-  const context = bindings.register(realm, (ctx) => createEnvironment(realm, ctx));
+  const context = bindings.register(realm, (ctx) => createClientEnvironment(undefined, createEnvironment(realm, ctx)));
   const env = context.getEnvironment();
   // This fixture allocates implementations without installing the browser API.
   return {

@@ -18,10 +18,9 @@ import {
   FetchHeaders, getEnvironmentDefaultUserAgent, HeadersImpl, type HeadersGuard, type HeadersInitValue,
   isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
-import {
-  getFetchEnvironment,
-  type FetchEnvironment, type FetchEnvironmentRecord, type FetchUserAgent,
-  type FetchPolicyContainer, type FetchPromptTarget,
+import type {
+  FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
+  FetchPolicyContainer, FetchPromptTarget,
 } from './environment';
 import type { NetworkPartitionKey } from './transport';
 import {
@@ -729,7 +728,7 @@ export const requestInitIDL = defineDictionary({
   ],
 });
 
-export const requestIDL = defineInterface({
+export const requestIDL = defineInterface<FetchEnvironment>({
   name: 'Request',
   exposed: ['Window', 'Worker'],
   implementation: impl(RequestImpl, {
@@ -745,7 +744,7 @@ export const requestIDL = defineInterface({
         construct(ctx, input, init): RequestImpl {
           return RequestImpl.create(
             input as FetchRequestInfo, init as FetchRequestInit,
-            getFetchEnvironment(ctx, requestIDL),
+            ctx.getEnvironment(),
           );
         },
       },

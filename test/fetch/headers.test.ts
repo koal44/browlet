@@ -18,10 +18,9 @@ import {
 } from '../../src/http/index';
 import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { allocateIn, BindingWorld, type BindingContext } from '../../src/web-idl/index';
-import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
-import { createClientEnvironment } from './client-fixture';
+import { createClientEnvironment, type ClientEnvironment } from './client-fixture';
 
 describe('header lists (Fetch §2.2.2)', () => {
   it('distinguishes absent and empty values and combines duplicate lines in order', () => {
@@ -689,9 +688,8 @@ describe('Headers implementation (Fetch §5.1)', () => {
 describe('Headers realm allocation', () => {
   it.each(['Request', 'Response'])('projects %s Headers in the receiver realm through a borrowed getter', (name) => {
     const fixture = createFetchFixture();
-    const foreignRealm = new TestRealm();
-    const foreign = fixture.bindings.register(foreignRealm, () => createEnvironment(foreignRealm));
-    const createObject = (context: BindingContext<TestEnvironment>) => name === 'Request'
+    const { realm: foreignRealm, context: foreign } = createFetchFixture(fixture.bindings);
+    const createObject = (context: BindingContext<ClientEnvironment>) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
         RequestImpl, createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal,
       ))

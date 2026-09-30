@@ -5,6 +5,8 @@ import { InternalError } from '../../../infra/internal-error';
 
 /** Exposes URL components for a Window; navigation operations remain unimplemented. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-location-interface
+// PROVISIONAL: URL snapshot only. Document association, navigation, ancestor
+// origins, and the platform object's exotic/security behavior await ROADMAP.md.
 export class LocationImpl {
   /** URL snapshot exposed by the current provisional Location implementation. */
   #url: URL;

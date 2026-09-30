@@ -28,6 +28,11 @@ Do not restart the completed task/timer foundation when adding these consumers.
 for initial browsing and navigation. EnvironmentRecord supplies security,
 navigation state, network partitioning, and the UserAgent before a realm exists.
 Full environments inherit that state and add the actual realm, exec, and global.
+SandboxEnvironment supplies internal execution through the same binding
+contract without attaching HTML settings. Browser client fields that have no
+sandbox meaning currently throw; add them only with an actual consumer and
+defined ownership. UserAgent-owned sandboxes retain their owner, while
+standalone sandboxes have no UserAgent until one is supplied at construction.
 Workers/worklets must use their own specified origin, policy, isolation, and
 time-origin inputs rather than substitute the global for its settings object.
 

@@ -1,12 +1,10 @@
 import type { BlobImpl } from '../file/index';
 import type { CookieStore } from '../http/index';
-import { InternalError } from '../infra/internal-error';
 import type { InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
-import { defineCapability, type BindingContext, type InterfaceDefinition } from '../web-idl/index';
 import type { FetchController } from './controller';
 import type { FetchGroup } from './group';
 import type { HTTPCacheStore } from './cache-http';
@@ -263,16 +261,4 @@ export interface HTTPAuthentication {
   /** Apply configured proxy credentials independently of the request's credentials mode. */
   applyProxyAuthentication(request: FetchRequest): void;
   promptProxy(request: FetchRequest, response: FetchResponse): InternalPromise<boolean>;
-}
-
-/** Binding integration: HTML supplies the relevant browser environment and its execution facilities. */
-export const fetchEnvironment =
-  defineCapability<(context: BindingContext) => FetchEnvironment>('Fetch environment');
-
-export function getFetchEnvironment(
-  context: BindingContext, definition: InterfaceDefinition<never>,
-): FetchEnvironment {
-  const getEnvironment = context.getCapability(definition, fetchEnvironment);
-  if (!getEnvironment) throw new InternalError('Fetch API requires HTML environment settings');
-  return getEnvironment(context);
 }

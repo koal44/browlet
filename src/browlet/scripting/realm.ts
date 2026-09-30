@@ -6,7 +6,7 @@ import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
 import type { EventRealm, WindowEventRealm } from '../dom/environment';
 import { type Agent, WindowAgent } from './agents';
-import type { EnvironmentRecord, Environment } from './environment';
+import type { EnvironmentRecord, BrowletEnvironment } from './environment';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import type { WindowImpl } from '../browsing/window/window';
@@ -45,7 +45,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
   #envRecord: EnvironmentRecord | undefined;
-  #hostDefined: Environment | undefined;
+  #hostDefined: BrowletEnvironment | undefined;
 
   constructor(options: RealmOptions = {}) {
     const agent = options.agent ?? new WindowAgent();
@@ -103,14 +103,14 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   }
 
   /** Attached HTML settings object; internal sandbox realms have none. */
-  get hostDefined(): Environment | undefined {
+  get hostDefined(): BrowletEnvironment | undefined {
     return this.#hostDefined;
   }
 
   // TODO: Revisit merging env and hostDefined when additional realm
   // lifecycles clarify which callers still need an optional environment.
   /** Required browser environment; throws if no HTML settings object is attached. */
-  get env(): Environment {
+  get env(): BrowletEnvironment {
     if (this.#hostDefined === undefined) throw new InternalError('Realm has no environment');
     return this.#hostDefined;
   }
@@ -200,7 +200,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   }
 
   /** Attach this realm's HTML environment. */
-  setHostDefined(env: Environment): void {
+  setHostDefined(env: BrowletEnvironment): void {
     this.#envRecord = env;
     this.#hostDefined = env;
   }
@@ -209,9 +209,9 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
 
   #getCallbackSettings(
     context: object,
-  ): Environment | undefined {
+  ): BrowletEnvironment | undefined {
     if (this.#hostDefined === undefined && context instanceof Realm) return undefined;
-    const env = context as Environment;
+    const env = context as BrowletEnvironment;
     if (env.realm.hostDefined === env) {
       return env;
     }

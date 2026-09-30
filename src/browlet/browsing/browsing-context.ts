@@ -11,7 +11,7 @@ import {
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';
 import {
-  getWindowProxyWindow,
+  WindowProxyHandler,
   type WindowProxy,
 } from './window/window-proxy';
 import type { WindowImpl } from './window/window';
@@ -180,7 +180,7 @@ export class BrowsingContext {
 
   /** Current Window; throws until the WindowProxy has been connected. */
   get activeWindow(): WindowImpl {
-    const window = getWindowProxyWindow(this.windowProxy);
+    const window = WindowProxyHandler.getWindow(this.windowProxy);
     if (window === null) throw new InternalError('Browsing context has no active Window');
     return window;
   }

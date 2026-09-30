@@ -1,6 +1,4 @@
-import {
-  deserializeAbortReason, fetchEnvironment, requestIDL, responseIDL,
-} from '../../fetch/index';
+import { deserializeAbortReason } from '../../fetch/index';
 import type { NetworkingTasks } from '../../js-engine/index';
 import type { BrowletEnvironment } from '../scripting/environment';
 import type { BindingContext } from '../../web-idl/index';
@@ -27,17 +25,3 @@ export const queueGlobalFetchTask: NetworkingTasks['queueGlobalTask'] = (global,
 export const fetchTaskScheduling: NetworkingTasks = {
   queueGlobalTask: queueGlobalFetchTask,
 };
-
-export const fetchCapabilities = [
-  fetchEnvironment.for(requestIDL, getFetchEnvironment),
-  fetchEnvironment.for(responseIDL, getFetchEnvironment),
-];
-
-/** Supply Fetch constructors with the browser environment of their realm. */
-function getFetchEnvironment(context: BindingContext) {
-  const realm = context.realm;
-  if (!(realm instanceof Realm)) {
-    throw new InternalError('Fetch construction requires an HTML environment settings object');
-  }
-  return realm.env;
-}

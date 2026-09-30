@@ -12,7 +12,7 @@ import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
 import type { NavigationParams } from '../../browsing/navigation/params';
-import type { BrowletEnvironment, Environment } from '../../scripting/environment';
+import type { BrowletEnvironment } from '../../scripting/environment';
 import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
 import { CSPList } from '../../browsing/policy/csp/list';
 import type { FetchRequest, FetchResponse } from '../../../fetch/index';
@@ -56,7 +56,7 @@ import { InternalError } from '../../../infra/internal-error';
 /** Create a document in env with optional binding-owned node allocation. */
 export function createDocument(
   options: DocumentConstructionOptions = {},
-  env: Environment,
+  env: BrowletEnvironment,
 ): DocumentImpl {
   const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
   return nodeFactory.constructNode(DocumentImpl, [nodeFactory, env]);
@@ -71,7 +71,7 @@ export type DocumentConstructionOptions = {
 // https://dom.spec.whatwg.org/#interface-document
 export class DocumentImpl extends NodeImpl {
   /** Browser settings used by this document's loading, policy, and event operations. */
-  declare env: Environment;
+  declare env: BrowletEnvironment;
   /** The document's URL record, independent of its base URL. */
   // https://dom.spec.whatwg.org/#concept-document-url
   url = parseDocumentURL('about:blank');
@@ -182,7 +182,7 @@ export class DocumentImpl extends NodeImpl {
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
-    env: Environment,
+    env: BrowletEnvironment,
   ) {
     super(NodeType.Document, null, env);
     this.nodeDocument = this;

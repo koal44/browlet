@@ -23,7 +23,7 @@ import {
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { monotonicClock } from '../../../src/browlet/performance/clock';
 import {
-  createWindowProxy, getWindowProxyWindow, setWindowProxyWindow,
+  WindowProxyHandler,
   type WindowProxy as InternalWindowProxy,
 } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
@@ -61,9 +61,9 @@ describe('browsing context groups', () => {
   });
 
   it('starts a browsing context with HTML\'s scalar defaults', () => {
-    const context = new BrowsingContext(createWindowProxy());
+    const context = new BrowsingContext(WindowProxyHandler.create());
 
-    expect(getWindowProxyWindow(context.windowProxy)).toBeNull();
+    expect(WindowProxyHandler.getWindow(context.windowProxy)).toBeNull();
     expect(context.openerBrowsingContext).toBeNull();
     expect(context.openerOriginAtCreation).toBeNull();
     expect(context.isPopup).toBe(false);
@@ -75,9 +75,9 @@ describe('browsing context groups', () => {
     const document = createTestDocument();
     const env = document.env;
     const window = unwrap<WindowImpl>(env.global);
-    const windowObject = { addEventListener() {} } as unknown as Window;
+    const platform = { addEventListener() {} } as unknown as Window;
     window.setAssociatedDocument(document);
-    setWindowProxyWindow(context.windowProxy, window, windowObject);
+    WindowProxyHandler.setWindow(context.windowProxy, window, platform);
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);
@@ -87,7 +87,7 @@ describe('browsing context groups', () => {
 
   it.each(['activeWindow', 'activeDocument'] as const)(
     'rejects %s access before the WindowProxy has a Window', (property) => {
-      const context = new BrowsingContext(createWindowProxy());
+      const context = new BrowsingContext(WindowProxyHandler.create());
 
       expect(() => context[property]).toThrow(InternalError);
     },
@@ -311,7 +311,7 @@ describe('navigables', () => {
     expect(browsingContext.popupSandboxingFlagSet.size).toBe(0);
     expect(browsingContext.activeDocument).toBe(document);
     expect(browsingContext.activeWindow).toBe(window);
-    expect(getWindowProxyWindow(browsingContext.windowProxy)).toBe(window);
+    expect(WindowProxyHandler.getWindow(browsingContext.windowProxy)).toBe(window);
 
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
@@ -540,7 +540,7 @@ describe('navigation lifecycle', () => {
     if (navigable === null) {
       throw new Error('Initial Document has no node navigable');
     }
-    const initialWindow = getWindowProxyWindow(windowProxy);
+    const initialWindow = WindowProxyHandler.getWindow(windowProxy);
     const initialRealm = getRelevantRealm(initialDocument);
     const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
 
@@ -550,7 +550,7 @@ describe('navigation lifecycle', () => {
     const documentImpl = unwrap<DocumentImpl>(
       document,
     );
-    const window = getWindowProxyWindow(windowProxy);
+    const window = WindowProxyHandler.getWindow(windowProxy);
     const realm = getRelevantRealm(document);
     expect(browlet.window).toBe(windowProxy);
     expect(document).not.toBe(initialDocument);

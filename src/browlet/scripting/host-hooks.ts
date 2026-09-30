@@ -3,7 +3,7 @@ import type {
   JSJobCallback, JSJobRegistration, JSFunction,
   JSRealm,
 } from '../../js-engine/index';
-import type { Environment } from './environment';
+import type { BrowletEnvironment } from './environment';
 import { createTaskSource } from './event-loop';
 import { Realm } from './realm';
 import { InternalError } from '../../infra/internal-error';
@@ -26,7 +26,7 @@ export function installHostHooks(): void {
   installed = true;
 }
 
-type JobCallback = JSJobCallback<Environment | null>;
+type JobCallback = JSJobCallback<BrowletEnvironment | null>;
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostmakejobcallback
 function makeJobCallback(

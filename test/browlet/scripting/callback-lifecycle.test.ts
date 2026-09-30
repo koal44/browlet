@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
-import { registerRealm } from '../../../src/browlet/bindings';
+import { createBoundExecution, registerRealm } from '../../../src/browlet/bindings';
 
 import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
@@ -21,9 +21,8 @@ import { PolicyContainer } from '../../../src/browlet/browsing/policy/container'
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
-import { createExecution } from '../../../src/browlet/integration/execution';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { Environment, EnvironmentRecord } from
+import { BrowletEnvironment, EnvironmentRecord } from
   '../../../src/browlet/scripting/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/scripting/global-scope';
 import type { EventLoopOptions, Task } from
@@ -263,7 +262,7 @@ class TestAgent extends Agent {
   }
 }
 
-class TestEnvironment extends Environment {
+class TestEnvironment extends BrowletEnvironment {
   #moduleMap: ModuleMap = { entries: [] };
   #origin = createOpaqueOrigin();
   #policyContainer = new PolicyContainer();
@@ -321,7 +320,7 @@ function createTestRealm(
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  const context = registerRealm(realm, (binding) => new TestEnvironment(realm, record, createExecution(binding)));
+  const context = registerRealm(realm, (binding) => new TestEnvironment(realm, record, createBoundExecution(binding)));
   const env = realm.env;
   return { realm, env, context };
 }

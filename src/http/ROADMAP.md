@@ -147,7 +147,7 @@ and Gecko CookieParser::GetExpiry/CookieCommons::MaybeCapExpiry.
 UserAgent.cookiesEnabled suppresses sending and storage without deleting the jar.
 Third-party access is permitted subject to SameSite; stronger restrictions and
 session-only policy remain explicit future work. Cookie isSecure follows the
-request's HTTPS scheme, independently of Environment.isSecureContext. Document
+request's HTTPS scheme, independently of BrowletEnvironment.isSecureContext. Document
 access, actual iframe/worker lifecycle, and CHIPS need their respective owners.
 
 ## Transport boundary and evidence

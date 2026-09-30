@@ -1,20 +1,32 @@
 import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect, it, vi } from 'vitest';
-import { getBindingContext } from '../../../src/browlet/bindings';
+import { createSandboxEnvironment, getBindingContext } from '../../../src/browlet/bindings';
+import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
 import { SandboxAgent } from '../../../src/browlet/scripting/agents';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchBody } from '../../../src/fetch/body';
+import { createMicrotaskQueue } from '../../../src/js-engine/index';
 
 describe('Browser-owned sandbox execution', () => {
   it('reuses one environment per user agent without a Window or HTML settings object', () => {
-    const first = new UserAgent();
+    const createQueue = vi.fn(createMicrotaskQueue);
+    const requestTurn = vi.fn();
+    const first = new UserAgent({
+      createMicrotaskQueue: createQueue,
+      requestEventLoopTurn: requestTurn,
+      unsafeSharedCurrentTime,
+    });
+    // Construction allocates the sandbox, but an idle loop needs no host turn.
+    expect(createQueue).toHaveBeenCalledTimes(1);
+    expect(requestTurn).not.toHaveBeenCalled();
     const second = new UserAgent();
     const env = first.sandbox;
     const realm = Realm.getAssociatedRealm(env.exec.global)!;
     const other = Realm.getAssociatedRealm(second.sandbox.exec.global)!;
     expect(first.sandbox).toBe(env);
+    expect(createQueue).toHaveBeenCalledTimes(1);
     expect(realm).not.toBe(other);
     expect(realm.agent).toBeInstanceOf(SandboxAgent);
     expect(realm.agent.eventLoop).not.toBe(other.agent.eventLoop);
@@ -25,6 +37,28 @@ describe('Browser-owned sandbox execution', () => {
     expect(Reflect.has(env.exec.global, 'Window')).toBe(false);
     expect(getBindingContext(realm).getEnvironment()).toBe(env);
     expect(first.browsingContextGroupSet.size).toBe(0);
+  });
+
+  it('retains the owning UserAgent without inventing browser client settings', () => {
+    const userAgent = new UserAgent();
+    const env = userAgent.sandbox;
+    expect(env.userAgent).toBe(userAgent);
+    expect(env.global).toBe(env.exec.global);
+    expect(env.topLevelOrigin).toBeNull();
+    expect(env.topLevelCreationURL).toBeNull();
+    expect(env.getReferrerSource()).toBeNull();
+    expect(env.getReportingSource()).toBeNull();
+    expect(env.getTraversableForUserPrompts()).toBeNull();
+    expect(() => env.origin).toThrow('Sandbox has no origin');
+    expect(() => env.apiBaseURL).toThrow('Sandbox has no API base URL');
+    expect(() => env.policyContainer).toThrow('Sandbox has no policy container');
+    expect(() => env.creationURL).toThrow('Environment has no creation URL');
+    expect(() => env.getWindowOrWorkerGlobalScopeMixin()).toThrow('Sandbox has no Window or Worker global scope');
+  });
+
+  it('reports a missing UserAgent when a standalone sandbox needs browser services', () => {
+    const env = createSandboxEnvironment();
+    expect(() => env.userAgent).toThrow('Environment has no UserAgent');
   });
 
   it('runs owner tasks and their Promise continuations without manual checkpoints', async () => {

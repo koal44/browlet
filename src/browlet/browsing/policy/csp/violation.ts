@@ -11,14 +11,14 @@ import type { DOMEnvironment } from '../../../dom/environment';
 import type { ElementImpl } from '../../../dom/nodes/element';
 import type { DocumentImpl } from '../../../dom/nodes/document';
 import { ReportBodyImpl } from '../../../reporting/report';
-import type { Environment } from '../../../scripting/environment';
+import type { BrowletEnvironment } from '../../../scripting/environment';
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 
 /** A policy violation captured before its asynchronous event and report delivery. */
 // https://w3c.github.io/webappsec-csp/#framework-violation
 export class CSPViolation {
   /** Environment whose policy was violated. Worker construction awaits its global implementation. */
-  env: Environment;
+  env: BrowletEnvironment;
   /** Protected Document retained for queued event targeting. */
   #document: DocumentImpl;
   /** Protected resource URL captured when the violation occurs. */
@@ -47,7 +47,7 @@ export class CSPViolation {
   // https://w3c.github.io/webappsec-csp/#create-violation-for-global
   // Require the resource at construction instead of exposing a partially populated violation.
   constructor(
-    policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource, env: Environment,
+    policy: ContentSecurityPolicy, effectiveDirective: string, resource: CSPViolationResource, env: BrowletEnvironment,
   ) {
     const document = env.realm.getAssociatedDocument();
     if (document === null) throw new InternalError('CSP worker violation integration is not implemented');

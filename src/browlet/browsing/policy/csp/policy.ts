@@ -6,7 +6,7 @@ import { isomorphicDecode } from '../../../../js-engine/index';
 import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
 import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
 import { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName } from './directives';
-import { Environment, WindowEnvironment } from '../../../scripting/environment';
+import { BrowletEnvironment, WindowEnvironment } from '../../../scripting/environment';
 import { CSPViolation } from './violation';
 
 const directiveNamePattern = /^[A-Za-z0-9-]+$/;
@@ -92,7 +92,7 @@ export class ContentSecurityPolicy {
     const env = request.client;
     const requestDirective = CSPDirectives.getRequestDirective(request);
     // Fetch accepts other hosts' environments; this CSP implementation belongs to HTML.
-    if (!(env instanceof Environment)) throw new InternalError('CSP violation reporting requires a browser client');
+    if (!(env instanceof BrowletEnvironment)) throw new InternalError('CSP violation reporting requires a browser client');
     if (requestDirective === null) throw new InternalError('CSP violation requires a request directive');
     return new CSPViolation(this, requestDirective, request.url, env);
   }

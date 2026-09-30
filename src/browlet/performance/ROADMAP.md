@@ -112,7 +112,7 @@ Read these sources, with paths relative to the [reference root](../../fetch/READ
 2. Connect Fetch's timing/body information and `mark resource timing` to
    Resource Timing. Preserve time-origin conversion, timing-allow filtering,
    redirect/cache information, protocol data, and encoded/decoded sizes.
-   Fetch 8A now calls `Environment.markResourceTiming()`; it is explicitly
+   Fetch 8A now calls `BrowletEnvironment.markResourceTiming()`; it is explicitly
    provisional until this entry/buffer machinery exists. The environment's
    `relativeHighResolutionTime()` already uses the real High Resolution Time
    implementation. Replace the recording no-op when implementing this step.

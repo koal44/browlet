@@ -8,6 +8,10 @@ interfaces, and realm bindings.
 The named functions exported by `bindings.ts` forward to its main
 `BrowletBindings` instance. `createWindowEnvironment()` allocates the realm and
 execution facilities before constructing Window and installing its platform global.
+`scripting/environment.ts` creates realm facilities; `bindings.ts` completes
+them with its Promise constructor, DOM event/abort allocation, and structured
+data. The live global and DOMException accessors remain at that composition
+boundary because global installation and interface registration finish later.
 The Realm initially reads security from an `EnvironmentRecord` instance.
 Registration constructs the complete `WindowEnvironment` before global projection;
 it inherits the record state and adds `realm` and `exec`. The composition root
@@ -43,13 +47,6 @@ Domain-local behavior still remains with its owning subsystem.
   URL declaration exposes Blob registration and revocation using the static
   method's environment. UserAgent supplies parsing and captured-entry
   acquisition to URL and Fetch without exposing store mutation to Fetch.
-- `execution.ts` composes engine facilities, DOM event and AbortController construction,
-  HTML task delivery, and structured cloning into `BrowletExecution`, which extends
-  `RealmExecution`, `EventExecution`, and `StyleletExecution` contracts. The binding's
-  `getEnvironment()` retains the actual environment as `BrowletEnvironment`;
-  portable declarations require only their `JSEnvironment` or `DOMEnvironment`
-  view of that same object. Clone and serialization
-  operations capture the explicit destination binding here.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
   scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.

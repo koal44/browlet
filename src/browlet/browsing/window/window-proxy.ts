@@ -1,92 +1,76 @@
 import { WindowImpl } from './window';
 import { InternalError } from '../../../infra/internal-error';
 
-/*
- * A WindowProxy is an exotic object with a [[Window]] internal slot. It has
- * no interface object of its own and is the stable global-this identity for
- * one browsing context while its wrapped Window can change on navigation.
- *
- * The forwarding below supports plain Node. With the compatibility addon,
- * adoptNativeWindowProxy associates the actual reusable engine proxy with
- * the same HTML Window and Web IDL receiver information.
- */
-export function createWindowProxy(): WindowProxy {
-  const handler = new WindowProxyHandler();
-  windowProxyHandlers.set(handler.windowProxy, handler);
-  return handler.windowProxy;
-}
-
-export function adoptNativeWindowProxy(object: object): WindowProxy {
-  if (windowProxyHandlers.has(object as WindowProxy)) return object as WindowProxy;
-  const handler = new WindowProxyHandler(object);
-  windowProxyHandlers.set(handler.windowProxy, handler);
-  return handler.windowProxy;
-}
-
-export function isWindowProxy(value: unknown): value is WindowProxy {
-  return typeof value === 'object' && value !== null &&
-    windowProxyHandlers.has(value as WindowProxy);
-}
-
-export function getWindowProxyWindow(
-  windowProxy: WindowProxy,
-): WindowImpl | null {
-  return requireWindowProxyHandler(windowProxy).window;
-}
-
-// WindowProxy is not a second Window platform object. For Web IDL receiver
-// checks, resolve its stable exotic identity to the currently wrapped Window
-// platform object. Navigation can replace that object without replacing the
-// WindowProxy.
-export function resolveWindowProxyReceiver(
-  windowProxy: WindowProxy,
-): Window | undefined {
-  return requireWindowProxyHandler(windowProxy).windowObject;
-}
-
-export function setWindowProxyWindow(
-  windowProxy: WindowProxy,
-  window: WindowImpl,
-  windowObject: Window,
-): void {
-  requireWindowProxyHandler(windowProxy).setWindow(window, windowObject);
-}
-
-export type WindowProxy = Window & {
-  frames: WindowProxy;
-  parent: WindowProxy;
-  self: WindowProxy;
-  readonly top: WindowProxy;
-  readonly window: WindowProxy;
-};
-
-const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
-
-// JavaScript traps implement forwarding only for the plain-Node fallback.
-/** Retains the Window association for a stable native or fallback WindowProxy. */
+/** Retains a WindowProxy's current Window implementation and platform object. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
-class WindowProxyHandler implements ProxyHandler<object> {
-  /** Stable global-this identity retained when navigation replaces the Window. */
-  windowProxy: WindowProxy;
-  #window: WindowAssociation | null = null;
+// The handler is internal; the exposed identity is the engine proxy or the
+// plain-Node forwarding proxy, neither of which inherits from this class.
+// PROVISIONAL: the traps implement fallback forwarding, not HTML's complete
+// exotic internal methods or cross-origin access checks; see ROADMAP.md.
+export class WindowProxyHandler implements ProxyHandler<object> {
+  static #handlers = new WeakMap<object, WindowProxyHandler>();
 
-  constructor(nativeProxy?: object) {
-    this.windowProxy = (nativeProxy ?? new Proxy({}, this)) as WindowProxy;
+  /** Creates a forwarding WindowProxy for the plain-Node fallback. */
+  static create(): WindowProxy {
+    return new WindowProxyHandler().windowProxy;
   }
 
-  get window(): WindowImpl | null {
-    return this.#window?.implementation ?? null;
+  /** Registers an existing global-this object as a WindowProxy and returns it unchanged. */
+  static register(windowProxy: object): WindowProxy {
+    if (WindowProxyHandler.is(windowProxy)) return windowProxy;
+    return new WindowProxyHandler(windowProxy).windowProxy;
   }
 
-  get windowObject(): Window | undefined {
-    return this.#window?.object;
+  static is(this: void, value: unknown): value is WindowProxy {
+    return WindowProxyHandler.#handlers.has(value as object);
   }
 
-  setWindow(window: WindowImpl, object: Window): void {
-    if (!WindowImpl.is(window)) {
+  /** Current Window implementation, or null before the initial association. */
+  static getWindow(windowProxy: WindowProxy): WindowImpl | null {
+    return WindowProxyHandler.#requireHandler(windowProxy).#associatedWindow?.implementation ?? null;
+  }
+
+  /** Resolves the proxy to the current Window platform object for Web IDL receiver checks. */
+  static resolveReceiver(this: void, windowProxy: WindowProxy): Window | undefined {
+    return WindowProxyHandler.#requireHandler(windowProxy).#associatedWindow?.platform;
+  }
+
+  /** Replaces the Window association while preserving the proxy's identity. */
+  static setWindow(
+    windowProxy: WindowProxy,
+    implementation: WindowImpl,
+    platform: Window,
+  ): void {
+    const handler = WindowProxyHandler.#requireHandler(windowProxy);
+    if (!WindowImpl.is(implementation)) {
       throw new InternalError('WindowProxy target is not a Window implementation');
     }
-    this.#window = { implementation: window, object };
+    handler.#associatedWindow = { implementation, platform };
+  }
+
+  static #requireHandler(windowProxy: WindowProxy): WindowProxyHandler {
+    const handler = WindowProxyHandler.#handlers.get(windowProxy);
+    if (!handler) throw new InternalError('Object is not a WindowProxy');
+    return handler;
+  }
+
+  // -----------------------------------------------------------------------
+
+  /** Stable global-this identity retained when navigation replaces the Window. */
+  windowProxy: WindowProxy;
+  #associatedWindow: WindowAssociation | null = null;
+
+  private constructor(windowProxy?: object) {
+    this.windowProxy = (windowProxy ?? new Proxy({}, this)) as WindowProxy;
+    WindowProxyHandler.#handlers.set(this.windowProxy, this);
+  }
+
+  /** Current Window association; throws before construction has connected it. */
+  get associatedWindow(): WindowAssociation {
+    if (!this.#associatedWindow) {
+      throw new InternalError('WindowProxy has no associated Window');
+    }
+    return this.#associatedWindow;
   }
 
   defineProperty(
@@ -95,7 +79,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
     attributes: PropertyDescriptor,
   ): boolean {
     return Reflect.defineProperty(
-      this.#requireWindowObject(),
+      this.associatedWindow.platform,
       property,
       attributes,
     );
@@ -103,13 +87,13 @@ class WindowProxyHandler implements ProxyHandler<object> {
 
   deleteProperty(_target: object, property: string | symbol): boolean {
     return Reflect.deleteProperty(
-      this.#requireWindowObject(),
+      this.associatedWindow.platform,
       property,
     );
   }
 
   get(_target: object, property: string | symbol): unknown {
-    const window = this.#requireWindowObject();
+    const window = this.associatedWindow.platform;
     if (
       windowProxyReferences.has(property) &&
       !Reflect.has(window, property)
@@ -124,58 +108,54 @@ class WindowProxyHandler implements ProxyHandler<object> {
     property: string | symbol,
   ): PropertyDescriptor | undefined {
     const descriptor = Reflect.getOwnPropertyDescriptor(
-      this.#requireWindowObject(),
+      this.associatedWindow.platform,
       property,
     );
     return descriptor && { ...descriptor, configurable: true };
   }
 
   getPrototypeOf(_target: object): object | null {
-    return Reflect.getPrototypeOf(this.#requireWindowObject());
+    return Reflect.getPrototypeOf(this.associatedWindow.platform);
   }
 
   has(_target: object, property: string | symbol): boolean {
     return windowProxyReferences.has(property) ||
-      Reflect.has(this.#requireWindowObject(), property);
+      Reflect.has(this.associatedWindow.platform, property);
   }
 
   ownKeys(_target: object): (string | symbol)[] {
-    return Reflect.ownKeys(this.#requireWindowObject());
+    return Reflect.ownKeys(this.associatedWindow.platform);
   }
 
   set(_target: object, property: string | symbol, value: unknown): boolean {
-    const window = this.#requireWindowObject();
+    const window = this.associatedWindow.platform;
     return Reflect.set(window, property, value, window);
   }
 
   setPrototypeOf(_target: object, prototype: object | null): boolean {
     return Reflect.setPrototypeOf(
-      this.#requireWindowObject(),
+      this.associatedWindow.platform,
       prototype,
     );
   }
-
-  #requireWindowObject(): Window {
-    if (!this.#window) {
-      throw new InternalError('WindowProxy has no associated Window');
-    }
-    return this.#window.object;
-  }
 }
 
+/** Author-visible Window surface forwarded through a stable exotic identity. */
+export type WindowProxy = Window & {
+  frames: WindowProxy;
+  parent: WindowProxy;
+  self: WindowProxy;
+  readonly top: WindowProxy;
+  readonly window: WindowProxy;
+};
+
 type WindowAssociation = {
+  /** HTML state and algorithms of the currently associated Window. */
   implementation: WindowImpl;
-  object: Window;
+  /** Bound Window used for property forwarding and receiver resolution. */
+  platform: Window;
 };
 
 const windowProxyReferences = new Set<PropertyKey>([
   'frames', 'parent', 'self', 'top', 'window',
 ]);
-
-function requireWindowProxyHandler(
-  windowProxy: WindowProxy,
-): WindowProxyHandler {
-  const handler = windowProxyHandlers.get(windowProxy);
-  if (!handler) throw new InternalError('Object is not a WindowProxy');
-  return handler;
-}

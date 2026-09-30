@@ -1,7 +1,7 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import { createSandboxEnvironment } from './bindings';
 import type { Navigable, TopLevelTraversable } from './browsing/navigable';
-import type { Environment } from './scripting/environment';
+import type { BrowletEnvironment } from './scripting/environment';
 import { PolicyContainer } from './browsing/policy/container';
 import { HSTSStore } from './browsing/policy/hsts';
 import type { EventLoopOptions } from './scripting/event-loop';
@@ -45,6 +45,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   topLevelTraversableSet = new Set<TopLevelTraversable>();
   /** Host scheduling facilities supplied to new agents. */
   eventLoopOptions: EventLoopOptions | null;
+  /** Execution created with this user agent for work that can outlive pages. */
+  sandbox: BrowletEnvironment;
   /** Background Fetch continuations outlive their initiating environments. */
   HostPromise = HostPromise;
   /** Background steps remain distinct from task delivery to a global. */
@@ -94,15 +96,10 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Development origins explicitly configured as potentially trustworthy. */
   // https://w3c.github.io/webappsec-secure-contexts/#development-environments
   trustworthyOrigins: TupleOrigin[] = [];
-  #sandbox: JSEnvironment | undefined;
 
   constructor(eventLoopOptions: EventLoopOptions | null = null) {
     this.eventLoopOptions = eventLoopOptions;
-  }
-
-  /** Lazily allocated execution shared by this user agent's work that can outlive pages. */
-  get sandbox(): JSEnvironment {
-    return this.#sandbox ??= createSandboxEnvironment(this.eventLoopOptions ?? undefined);
+    this.sandbox = createSandboxEnvironment(eventLoopOptions ?? undefined, this);
   }
 
   createBrowsingContextGroup(): BrowsingContextGroup {
@@ -258,21 +255,21 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Whether automation emulates an offline network for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
-  webDriverBiDiNetworkIsOffline(_env: Environment): boolean {
+  webDriverBiDiNetworkIsOffline(_env: BrowletEnvironment): boolean {
     // PROVISIONAL: no BiDi sessions; select scoped network conditions when implemented.
     return false;
   }
 
   /** Identification override selected for the given environment, or null when absent. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-user-agent
-  webDriverBiDiEmulatedUserAgent(_env: Environment): string | null {
+  webDriverBiDiEmulatedUserAgent(_env: BrowletEnvironment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped emulation when implemented.
     return null;
   }
 
   /** Language override selected for the given environment, or null when absent. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-emulated-language
-  webDriverBiDiEmulatedLanguage(_env: Environment): string | null {
+  webDriverBiDiEmulatedLanguage(_env: BrowletEnvironment): string | null {
     // PROVISIONAL: no BiDi sessions; select scoped language emulation when implemented.
     return null;
   }

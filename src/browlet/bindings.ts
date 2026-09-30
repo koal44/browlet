@@ -1,13 +1,13 @@
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon, createMicrotaskQueue, queueNetworkingTask } from '../js-engine/index';
+import { addon, createMicrotaskQueue } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  BindingWorld, type GlobalObjectAllocation,
+  BindingWorld, createDOMException, type GlobalObjectAllocation,
   type BindingContext, type StampedImplInstance, type StampedPlatformObject,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
@@ -26,20 +26,20 @@ import {
   WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
 import {
-  adoptNativeWindowProxy, createWindowProxy, isWindowProxy,
-  resolveWindowProxyReceiver, setWindowProxyWindow, type WindowProxy,
+  WindowProxyHandler, type WindowProxy,
 } from './browsing/window/window-proxy';
 import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
 import { ElementImpl } from './dom/nodes/element';
 import type { NodeImpl } from './dom/nodes/node';
 import { domIDLDefinitions } from './dom/web-idl';
+import { AbortControllerImpl } from './dom/abort/abort-controller';
+import { AbortSignalImpl } from './dom/abort/abort-signal';
+import { EventImpl } from './dom/events/event';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
-import { fetchCapabilities } from './integration/fetch';
 import { fileReaderIDL } from './integration/file/file-reader';
 import { objectURLIDL } from './integration/file/object-url';
-import { createExecution } from './integration/execution';
 import { requestNodeEventLoopTurn } from './integration/scripting';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
@@ -48,7 +48,10 @@ import {
 import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
 import { SandboxAgent, type WindowAgent } from './scripting/agents';
 import type { EventLoopOptions } from './scripting/event-loop';
-import { EnvironmentRecord, WindowEnvironment, type BrowletEnvironment } from './scripting/environment';
+import {
+  createExecution, EnvironmentRecord, SandboxEnvironment, WindowEnvironment,
+  type BrowletEnvironment, type BrowletExecution,
+} from './scripting/environment';
 import type { UserAgent } from './user-agent';
 import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
@@ -57,6 +60,10 @@ import {
 } from './scripting/global-scope';
 import { Realm, WindowRealm } from './scripting/realm';
 import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
+import { structuredDeserialize } from './scripting/structured-data/deserialize';
+import type { SerializedRecord } from './scripting/structured-data/records';
+import { structuredSerialize } from './scripting/structured-data/serialize';
+import { structuredClone } from './scripting/structured-data/structured-clone';
 import { svgIDLDefinitions } from './svg/web-idl';
 import { InternalError } from '../infra/internal-error';
 
@@ -65,7 +72,9 @@ import { InternalError } from '../infra/internal-error';
 // Browlet decides which contributions coexist and which initial objects are
 // installed on its Window environment. One main binding world spans the realms
 // hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
-// These named entry points forward to the module's main BrowletBindings instance.
+
+// -- Singleton entry points ---------------------------------------------
+
 export function createWindowEnvironment(
   initialization: WindowEnvironmentInit,
 ): WindowEnvironment {
@@ -73,15 +82,10 @@ export function createWindowEnvironment(
 }
 
 /** Create browser-owned execution without a Window, Document, or HTML settings object. */
-export function createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
-  createMicrotaskQueue,
-  requestEventLoopTurn: requestNodeEventLoopTurn,
-  unsafeSharedCurrentTime,
-}): BrowletEnvironment {
-  const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
-  // Reuse the main binding world for internal allocations without installing
-  // author-facing interfaces on the sandbox's global.
-  return browletBindings.register(realm).getEnvironment();
+export function createSandboxEnvironment(
+  eventLoopOptions?: EventLoopOptions, userAgent?: UserAgent,
+): BrowletEnvironment {
+  return browletBindings.createSandboxEnvironment(eventLoopOptions, userAgent);
 }
 
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
@@ -119,6 +123,8 @@ export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironme
   return browletBindings.forRealm(realm);
 }
 
+// -- Binding composition ------------------------------------------------
+
 /** Assembles Browlet declarations and retains their shared platform-identity world. */
 class BrowletBindings {
   #world: BindingWorld<BrowletEnvironment>;
@@ -136,7 +142,7 @@ class BrowletBindings {
   register(
     realm: Realm,
     createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
-      (context) => ({ realm: context.realm, exec: createExecution(context), queueNetworkingTask }),
+      createSandboxEnvironmentFromBinding,
   ): BindingContext<BrowletEnvironment> {
     return this.#world.register(realm, createEnvironment);
   }
@@ -182,7 +188,7 @@ class BrowletBindings {
     const context = this.register(realm, (binding) => {
       // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
       // Execution reads the installed global lazily; all consumers retain this environment.
-      env = new WindowEnvironment(realm, envRecord, createExecution(binding));
+      env = new WindowEnvironment(realm, envRecord, createBoundExecution(binding));
       env.creationURL = creationURL;
       env.topLevelCreationURL = topLevelCreationURL;
       env.topLevelOrigin = topLevelOrigin;
@@ -214,12 +220,24 @@ class BrowletBindings {
       globalObject = projectWindow(context, window);
     }
     const globalThis = useAddonGlobals
-      ? adoptNativeWindowProxy(realm.globalThis)
-      : previousRealm?.globalThis ?? createWindowProxy();
+      ? WindowProxyHandler.register(realm.globalThis)
+      : previousRealm?.globalThis ?? WindowProxyHandler.create();
     realm.setGlobalObjects(globalObject, globalThis);
     if (reservedEnv !== null) reservedEnv.id = '';
     window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
     return env;
+  }
+
+  /** Create an independent execution owner and compose its sandbox binding. */
+  createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
+    createMicrotaskQueue,
+    requestEventLoopTurn: requestNodeEventLoopTurn,
+    unsafeSharedCurrentTime,
+  }, userAgent?: UserAgent): BrowletEnvironment {
+    const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
+    // Reuse the main binding world for internal allocations without installing
+    // author-facing interfaces on the sandbox's global.
+    return this.register(realm, (context) => createSandboxEnvironmentFromBinding(context, userAgent)).getEnvironment();
   }
 
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
@@ -230,12 +248,12 @@ class BrowletBindings {
     windowProxy: WindowProxy,
     window: WindowImpl,
   ): void {
-    const windowObject = this.#world.project(window);
-    if (!windowObject) throw new InternalError('Window has not been projected');
-    setWindowProxyWindow(
+    const platform = this.#world.project(window);
+    if (!platform) throw new InternalError('Window has not been projected');
+    WindowProxyHandler.setWindow(
       windowProxy,
       window,
-      windowObject as StampedPlatformObject<Window>,
+      platform as StampedPlatformObject<Window>,
     );
   }
 
@@ -258,6 +276,8 @@ class BrowletBindings {
   }
 }
 
+// -- Construction helpers -----------------------------------------------
+
 type WindowEnvironmentInit = {
   agent: WindowAgent;
   userAgent: UserAgent;
@@ -269,6 +289,40 @@ type WindowEnvironmentInit = {
   reservedEnv?: EnvironmentRecord | null;
   previousRealm?: WindowRealm;
 };
+
+/** Assemble a sandbox's environment once its binding context exists. */
+function createSandboxEnvironmentFromBinding(
+  context: BindingContext<BrowletEnvironment>, userAgent?: UserAgent,
+): BrowletEnvironment {
+  return new SandboxEnvironment(context.realm, createBoundExecution(context), userAgent);
+}
+
+/** Complete realm execution with allocations and structured data owned by this binding. */
+export function createBoundExecution(context: BindingContext<BrowletEnvironment>): BrowletExecution {
+  const { realm } = context;
+  return {
+    ...createExecution(realm),
+    // Window installation follows binding registration; retain the live global.
+    get global() { return realm.global; },
+    Promise: context.Promise,
+    // Interface binding registration finishes after execution is composed.
+    get DOMException() { return context.DOMException; },
+    createDOMException,
+    createEvent: (EventConstructor = EventImpl) => {
+      const event = context.construct(EventConstructor, '', {});
+      event.isTrusted = true;
+      return event;
+    },
+    createAbortController: () => context.construct(AbortControllerImpl),
+    createDependentAbortSignal: (signals) => AbortSignalImpl.any(
+      context.construct(AbortSignalImpl), signals as AbortSignalImpl[],
+    ),
+    clone: (value, transferList = []) => structuredClone(value, transferList, context),
+    // Exception requests become recognizable platform objects at serialization.
+    serialize: (value) => structuredSerialize(context.realizeException(value), context),
+    deserialize: (record) => structuredDeserialize(record as SerializedRecord, context),
+  };
+}
 
 function projectWindow(
   context: BindingContext<BrowletEnvironment>,
@@ -294,16 +348,17 @@ function projectWindow(
   return object;
 }
 
+// -- Shared declarations and singleton ----------------------------------
+
 const hostDefinedInterfaces = [{
-  is: isWindowProxy,
+  is: WindowProxyHandler.is,
   name: 'WindowProxy',
-  resolveReceiver: resolveWindowProxyReceiver,
+  resolveReceiver: WindowProxyHandler.resolveReceiver,
 }];
 
 const browletCapabilities = [
   ...domExceptionCapabilities,
   ...fileCapabilities,
-  ...fetchCapabilities,
 ];
 
 const browletDefinitions = [

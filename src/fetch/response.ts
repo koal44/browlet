@@ -17,10 +17,7 @@ import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
   isForbiddenResponseHeaderName, isNullBodyStatus, isRedirectStatus, type HeadersGuard, type HeadersInitValue,
 } from './headers';
-import {
-  getFetchEnvironment, type FetchEmbedderPolicy,
-  type FetchEnvironment, type FetchUserAgent,
-} from './environment';
+import type { FetchEmbedderPolicy, FetchEnvironment, FetchUserAgent } from './environment';
 import type { FetchRequest, RedirectTaint } from './request';
 import type { FetchParams } from './params';
 import {
@@ -425,7 +422,7 @@ export const responseTypeIDL = defineEnumeration({
   values: ['basic', 'cors', 'default', 'error', 'opaque', 'opaqueredirect'],
 });
 
-export const responseIDL = defineInterface<JSEnvironment>({
+export const responseIDL = defineInterface<FetchEnvironment>({
   name: 'Response',
   exposed: ['Window', 'Worker'],
   implementation: impl(ResponseImpl, {
@@ -454,8 +451,7 @@ export const responseIDL = defineInterface<JSEnvironment>({
       ],
       {
         ...xattr('NewObject'),
-        ...invokeWith(atArg(2, (ctx): FetchEnvironment =>
-          getFetchEnvironment(ctx, responseIDL))),
+        ...invokeWith(atArg(2, (ctx) => ctx.getEnvironment())),
       },
     ),
     staticOp('json', reference('Response'),

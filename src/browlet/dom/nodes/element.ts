@@ -3,7 +3,7 @@ import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
-import type { Environment } from '../../scripting/environment';
+import type { BrowletEnvironment } from '../../scripting/environment';
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { HTMLCollectionImpl } from './collections';
 import {
@@ -32,7 +32,7 @@ import { InternalError } from '../../../infra/internal-error';
 // https://dom.spec.whatwg.org/#interface-element
 export class ElementImpl extends NodeImpl {
   /** Execution and allocation owner supplied at construction. */
-  declare env: Environment;
+  declare env: BrowletEnvironment;
   /** Document supplied at construction, including while this element is detached. */
   declare nodeDocument: DocumentImpl;
   /** Ordered attributes owned by this element. */
@@ -57,7 +57,7 @@ export class ElementImpl extends NodeImpl {
   /** Slot assignment shared with text nodes. */
   #slottableMixin = new SlottableMixin();
 
-  constructor(context: ElementCreationContext, env: Environment) {
+  constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(NodeType.Element, context.document, env);
     this.attributes = new NamedNodeMapImpl();
     this.attributes.associateElement(this);
@@ -450,5 +450,5 @@ type ElementInterfaceOptions = {
 
 type ElementImplementation = abstract new (
   context: ElementCreationContext,
-  env: Environment,
+  env: BrowletEnvironment,
 ) => ElementImpl;

@@ -2,7 +2,7 @@ import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
 } from '../../web-idl/index';
-import type { BrowletEnvironment, Environment } from '../scripting/environment';
+import type { BrowletEnvironment } from '../scripting/environment';
 import type { WindowOrWorkerGlobalScopeMixin } from '../scripting/global-scope';
 import type { ReportImpl } from './report';
 
@@ -22,7 +22,7 @@ export class ReportingObserverImpl {
 
   constructor(
     callback: ReportingObserverCallback, options: ReportingObserverOptions,
-    env: Environment,
+    env: BrowletEnvironment,
   ) {
     this.#callback = callback;
     this.#types = options.types;

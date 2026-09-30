@@ -1,5 +1,5 @@
-import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
+import type { FetchEnvironment } from './environment';
 import { headersIDL, headersInitIDL } from './headers';
 import { bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from './body';
 import {
@@ -29,7 +29,6 @@ export type {
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,
 } from './environment';
-export { fetchEnvironment } from './environment';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
 export {
   requestIDL, FetchRequest, isScriptLikeDestination,
@@ -44,7 +43,7 @@ export {
 export { referrerPolicyIDL, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 
-export const fetchIDLDefinitions: Definition<JSEnvironment>[] = [
+export const fetchIDLDefinitions: Definition<FetchEnvironment>[] = [
   headersInitIDL,
   headersIDL,
   xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,

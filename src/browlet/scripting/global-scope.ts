@@ -10,7 +10,7 @@ import type { ReportingObserverImpl } from '../reporting/observer';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
 import type { InternalPromise } from '../../infra/promises';
 import type { DocumentImpl } from '../dom/nodes/document';
-import type { Environment } from './environment';
+import type { BrowletEnvironment } from './environment';
 import { GlobalTimers, type TimerAction } from './timers';
 import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 
@@ -40,11 +40,11 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Recent reports for buffered observation, limited to 100 entries per type. */
   reportBuffer: ReportImpl[] = [];
   /** Environment shared by this global's browser facilities. */
-  env: Environment;
+  env: BrowletEnvironment;
   /** Stable Performance implementation sharing this environment's time origin. */
   performance: PerformanceImpl;
 
-  constructor(env: Environment) {
+  constructor(env: BrowletEnvironment) {
     this.env = env;
     this.performance = new PerformanceImpl(env.timing, env);
     this.timers = new GlobalTimers({

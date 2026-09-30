@@ -58,6 +58,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
       unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
     };
     const userAgent = new UserAgent(eventLoopOptions);
+    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledOnce();
     const group = userAgent.createBrowsingContextGroup();
     const origin = createTupleOrigin('https', createHost('example.com'));
 
@@ -65,8 +66,9 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const second = obtainSimilarOriginWindowAgent(origin, group, false);
 
     expect(first.eventLoop.started).toBe(true);
+    expect(first.eventLoop).not.toBe(userAgent.sandbox.responsibleEventLoop);
     expect(second).toBe(first);
-    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledOnce();
+    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledTimes(2);
     expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
   });
 

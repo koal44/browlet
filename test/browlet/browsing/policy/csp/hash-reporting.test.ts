@@ -4,7 +4,7 @@ import { Browlet } from '../../../../../src/browlet/browlet';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { ReportImpl } from '../../../../../src/browlet/reporting/report';
-import type { Environment } from '../../../../../src/browlet/scripting/environment';
+import type { BrowletEnvironment } from '../../../../../src/browlet/scripting/environment';
 import { networkingTaskSource } from '../../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../../src/fetch/body';
 import { FetchRequest } from '../../../../../src/fetch/request';
@@ -261,7 +261,7 @@ function createHashResponse(
 }
 
 /** Observe submission without replacing generation, queues, or the browser scheduler. */
-function waitForHashReports(env: Environment, count = 1): Promise<void> {
+function waitForHashReports(env: BrowletEnvironment, count = 1): Promise<void> {
   const submitReport = env.queueReport.bind(env);
   return new Promise((resolve) => {
     vi.spyOn(env, 'queueReport').mockImplementation((type, endpoint, body) => {

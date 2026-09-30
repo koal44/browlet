@@ -12,7 +12,7 @@ Automatic collection, periodic retirement, and other global lifecycles remain be
 | --- | --- |
 | `ReportImpl` | Observer-visible fields, producer data, original origin, delivery bookkeeping, copying, and serialization |
 | `WindowOrWorkerGlobalScopeMixin` | Endpoint configuration, outbound queue, observer registrations, replay buffer, and cleanup |
-| `Environment` | Report generation, current reporting URL, identification, and access to the actual global |
+| `BrowletEnvironment` | Report generation, current reporting URL, identification, and access to the actual global |
 | `ReportingObserverImpl` | Registration options, pending callback batch, and projected observer operations |
 | `UserAgent` | Delivery preferences, age/failure limits, host scheduling, sandbox execution, and Fetch attempts |
 

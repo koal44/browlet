@@ -50,14 +50,15 @@ views of existing owners, not a new environment object for each subsystem.
 | HTML [`EnvironmentRecord`](browlet/scripting/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `exec: RealmExecution`, and `queueNetworkingTask(steps, destination)` for a JavaScript execution owner |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
-| [`BrowletEnvironment`](browlet/scripting/environment.ts) | Common HTML realm and composed execution view for full settings and sandboxes; `ScriptingEnvironment` is its realm-only view |
+| [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends both FetchEnvironmentRecord and JSEnvironment with the client settings Fetch consumes |
-| HTML [`Environment`](browlet/scripting/environment.ts) | Extends EnvironmentRecord and implements FetchEnvironment; adds the realm, execution, timing, policies, and Fetch group |
-| `WindowEnvironment` | Specializes Environment with its Window and live queries of the associated Document |
+| [`BrowletEnvironment`](browlet/scripting/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
+| `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
+| `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
 The early HTML record intentionally has no realm or `exec`. It is not an
 ECMAScript lexical Environment Record. A reserved navigation client can use it
-for partitioning and security before full settings exist. The full Environment
+for partitioning and security before full settings exist. BrowletEnvironment
 inherits the class and preserves the reservation's identity and security
 classification; it is not a wrapper around a second settings object.
 
@@ -72,14 +73,20 @@ for an actual shared implementation, not to simulate multiple class inheritance.
 [`RealmExecution`](js-engine/realm-execution.ts) groups facilities belonging to
 one execution owner: Promises, buffers, JSON, microtasks, background scheduling,
 task delivery, abort construction, and structured data. JS Engine defines the
-contract; [Browlet's execution integration](browlet/integration/execution.ts)
-composes the engine operations with HTML and DOM behavior. Defining a contract
-below HTML does not transfer ownership of HTML algorithms to JS Engine.
+contract; [`createExecution(realm)`](browlet/scripting/environment.ts) constructs
+the realm facilities. [`createBoundExecution(context)`](browlet/bindings.ts)
+adds the bound Promise, DOM allocations, and structured data at the composition
+root. Defining a contract below HTML does not transfer ownership of HTML
+algorithms to JS Engine.
 
 Subsystems can declare independent execution contracts, such as DOM's
 [`EventExecution`](browlet/dom/environment.ts). `BrowletExecution` combines it
 with `RealmExecution` on the same `env.exec` object; neither base contract depends
 on the other.
+
+Fetch uses `RealmExecution` through `JSEnvironment`; it adds no separate
+`FetchExecution` contract. Its base URL, origin, policies, and UserAgent belong
+to the surrounding `FetchEnvironment`, already implemented by BrowletEnvironment.
 
 Implementations use `env.exec`. It exposes no Binding Context, realm object,
 callback adapter, conversion API, or projection registry. Supply lifetime
@@ -135,10 +142,17 @@ Global projection and global-scope mixin setup finish before consumers receive t
 Document creation retains its own HTML initialization steps.
 
 `Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires
-them and throws if they are unattached. A UserAgent-owned sandbox has a real
-Realm, Agent, event loop, and JSEnvironment, but no Window, Document, or HTML
-settings object. It supplies execution for retained browser work such as
-Reporting uploads. Optional host settings do not weaken full Environment types.
+them and throws if they are unattached. Each UserAgent constructs its sandbox
+eagerly, with a real Realm, Agent, event loop, and SandboxEnvironment, but no
+Window, Document, or attached HTML settings object. It supplies execution for
+retained browser work such as Reporting uploads and retains that UserAgent explicitly.
+SandboxEnvironment extends BrowletEnvironment so binding declarations retain
+their full contract. Passing no browser record leaves its creation URL and
+standalone UserAgent unavailable; guarded accessors throw rather than return
+incorrectly typed nulls. Origins, API base URLs, policies, module maps, ancestry,
+time origins, and Window/Worker global-scope state also fail explicitly.
+Top-level associations and reporting/referrer sources are null. Window
+construction still requires a complete EnvironmentRecord.
 
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
@@ -147,7 +161,7 @@ execution. Early records, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
 
 The global-scope mixin owns each global's timers, Reporting state, and resource
-associations. Environment supplies settings, execution, and browser context.
+associations. BrowletEnvironment supplies settings, execution, and browser context.
 UserAgent owns shared transport, caches, credentials, stores, and BiDi hooks;
 that state can outlive one Window. Follow those existing associations instead
 of adding reverse lookups or duplicate lifetime flags.

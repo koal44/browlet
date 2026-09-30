@@ -5,7 +5,7 @@ import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import { HTMLElementImpl } from '../html-element';
 import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
-import type { Environment } from '../../../scripting/environment';
+import type { BrowletEnvironment } from '../../../scripting/environment';
 import { LinkStyleMixin } from '../../../style/integration';
 
 /** Represents an external resource link and its stylesheet association. */
@@ -19,7 +19,7 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
     ]),
   };
 
-  constructor(context: ElementCreationContext, env: Environment) {
+  constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(context, env);
     this.linkStyleMixin = new LinkStyleMixin(
       this, HTMLLinkElementImpl.#linkStyleOptions, context.treeScopeResolver,

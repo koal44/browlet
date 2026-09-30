@@ -1,3 +1,5 @@
+import { EOL } from 'node:os';
+
 import type { BrowsingContext } from '../browsing/browsing-context';
 import type { Traversable } from '../browsing/navigable';
 import type { UserAgent } from '../user-agent';
@@ -19,11 +21,14 @@ import {
 import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
+import type { TaskCreationOptions } from '../../infra/execution';
 import { queueNetworkingTask, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
-import type { DOMEnvironment } from '../dom/environment';
-import type { StyleletEnvironment } from '../../stylelet/index';
+import type { DOMEnvironment, EventExecution } from '../dom/environment';
+import type { StyleletEnvironment, StyleletExecution } from '../../stylelet/index';
 import type { SelectletEnvironment } from '../../selectlet/index';
-import type { BrowletExecution } from '../integration/execution';
+import { fetchTaskScheduling } from '../integration/fetch';
+import { runInParallel } from '../integration/scripting';
+import { taskSources } from './tasks';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import { ReportImpl, ReportBodyImpl } from '../reporting/report';
 import { TestReportBodyImpl } from '../reporting/test-report';
@@ -35,10 +40,6 @@ import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../br
 export class EnvironmentRecord implements FetchEnvironmentRecord {
   /** Identity transferred to the full environment when a reservation is consumed. */
   id: string;
-  /** Browser owner shared by navigation and networking. */
-  userAgent: UserAgent;
-  /** URL associated with this environment's creation. */
-  creationURL: URLRecord;
   /** Top-level creation URL, or null when the environment has none. */
   topLevelCreationURL: URLRecord | null;
   /** Top-level origin, or null until it can be determined. */
@@ -47,18 +48,43 @@ export class EnvironmentRecord implements FetchEnvironmentRecord {
   targetBrowsingContext: BrowsingContext | null;
   /** Service worker controlling this environment, when present. */
   activeServiceWorker: object | null;
+  /** Browser owner; null only for an internal sandbox constructed without one. */
+  #userAgent: UserAgent | null;
+  /** Creation URL; null only for internal sandboxes. */
+  #creationURL: URLRecord | null;
   #isSecureContext: boolean;
   #executionReady = false;
 
-  constructor(initialization: EnvironmentInit) {
-    this.id = initialization.id ?? crypto.randomUUID();
-    this.userAgent = initialization.userAgent;
-    this.creationURL = initialization.creationURL;
-    this.topLevelCreationURL = initialization.topLevelCreationURL;
-    this.topLevelOrigin = initialization.topLevelOrigin;
-    this.targetBrowsingContext = initialization.targetBrowsingContext;
-    this.activeServiceWorker = initialization.activeServiceWorker ?? null;
-    this.#isSecureContext = initialization.isSecureContext;
+  /** Null leaves browser-specific state unavailable for an internal sandbox. */
+  constructor(initialization: EnvironmentInit | null) {
+    this.id = initialization?.id ?? crypto.randomUUID();
+    this.#userAgent = initialization?.userAgent ?? null;
+    this.#creationURL = initialization?.creationURL ?? null;
+    this.topLevelCreationURL = initialization?.topLevelCreationURL ?? null;
+    this.topLevelOrigin = initialization?.topLevelOrigin ?? null;
+    this.targetBrowsingContext = initialization?.targetBrowsingContext ?? null;
+    this.activeServiceWorker = initialization?.activeServiceWorker ?? null;
+    this.#isSecureContext = initialization?.isSecureContext ?? false;
+  }
+
+  /** Browser owner; unavailable in standalone sandboxes without a supplied owner. */
+  get userAgent(): UserAgent {
+    if (this.#userAgent === null) throw new InternalError('Environment has no UserAgent');
+    return this.#userAgent;
+  }
+
+  set userAgent(value: UserAgent) {
+    this.#userAgent = value;
+  }
+
+  /** Creation URL; internal sandboxes have none. */
+  get creationURL(): URLRecord {
+    if (this.#creationURL === null) throw new InternalError('Environment has no creation URL');
+    return this.#creationURL;
+  }
+
+  set creationURL(value: URLRecord) {
+    this.#creationURL = value;
   }
 
   /** Security classification fixed when the environment was created. */
@@ -107,16 +133,14 @@ export interface ScriptingEnvironment {
   realm: Realm;
 }
 
-/** Realm and execution shared by browser settings and sandbox environments. */
-export interface BrowletEnvironment extends ScriptingEnvironment, JSEnvironment, DOMEnvironment {
-  realm: Realm;
-  exec: BrowletExecution;
-}
+/** Engine, DOM, and style facilities composed for one Browlet execution owner. */
+export interface BrowletExecution extends RealmExecution, EventExecution, StyleletExecution {}
 
-/** Browser state and operations associated with one realm and global. */
+/** Composed browser settings and execution for one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
 // its realm component is retained directly here.
-export abstract class Environment extends EnvironmentRecord implements FetchEnvironment, BrowletEnvironment, StyleletEnvironment, SelectletEnvironment {
+export abstract class BrowletEnvironment extends EnvironmentRecord implements
+  ScriptingEnvironment, JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
@@ -129,12 +153,13 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
   exec: BrowletExecution;
   queueNetworkingTask = queueNetworkingTask;
 
-  constructor(realm: Realm, record: EnvironmentRecord, exec: BrowletExecution) {
+  constructor(realm: Realm, record: EnvironmentRecord | null, exec: BrowletExecution) {
     super(record);
     this.exec = exec;
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;
-    realm.setHostDefined(this);
+    // Internal sandboxes participate in Binding without becoming HTML settings objects.
+    if (record !== null) realm.setHostDefined(this);
   }
 
   /** The platform global installed in this environment's realm. */
@@ -264,9 +289,57 @@ export abstract class Environment extends EnvironmentRecord implements FetchEnvi
   }
 }
 
+/** Internal execution with explicit failures for unsupported browser client settings. */
+export class SandboxEnvironment extends BrowletEnvironment {
+  constructor(realm: Realm, exec: BrowletExecution, userAgent?: UserAgent) {
+    super(realm, null, exec);
+    if (userAgent !== undefined) this.userAgent = userAgent;
+  }
+
+  get apiBaseURL(): URLRecord {
+    throw new InternalError('Sandbox has no API base URL');
+  }
+
+  get moduleMap(): ModuleMap {
+    throw new InternalError('Sandbox has no module map');
+  }
+
+  get origin(): Origin {
+    throw new InternalError('Sandbox has no origin');
+  }
+
+  get hasCrossSiteAncestor(): boolean {
+    throw new InternalError('Sandbox has no browsing ancestry');
+  }
+
+  get policyContainer(): PolicyContainer {
+    throw new InternalError('Sandbox has no policy container');
+  }
+
+  get crossOriginIsolatedCapability(): boolean {
+    return this.realm.crossOriginIsolated;
+  }
+
+  get timeOrigin(): Moment {
+    throw new InternalError('Sandbox has no time origin');
+  }
+
+  override getReferrerSource(): null {
+    return null;
+  }
+
+  getReportingSource(): null {
+    return null;
+  }
+
+  getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
+    throw new InternalError('Sandbox has no Window or Worker global scope');
+  }
+}
+
 /** HTML settings whose document-dependent values follow the associated Window. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
-export class WindowEnvironment extends Environment {
+export class WindowEnvironment extends BrowletEnvironment {
   declare realm: WindowRealm;
 
   constructor(realm: WindowRealm, record: EnvironmentRecord, exec: BrowletExecution) {
@@ -378,4 +451,21 @@ export class WindowEnvironment extends Environment {
   override getTraversableForUserPrompts(): Traversable | null {
     return this.window.getAssociatedDocument().getNodeNavigable()?.traversable ?? null;
   }
+}
+
+/** Create realm facilities for composition with Binding-owned allocations. */
+export function createExecution(realm: Realm) {
+  return {
+    nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
+    NativePromise: realm.intrinsics.promise.constructor,
+    TypeError: realm.intrinsics.typeError,
+    RangeError: realm.intrinsics.rangeError,
+    buffers: realm.createRuntimeBuffers(),
+    queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
+    runInParallel,
+    queueTask: (source, steps, options?: TaskCreationOptions) => realm.queueGlobalTask(taskSources[source], steps, options),
+    networking: fetchTaskScheduling,
+    parseJSON: (text) => realm.parseJSON(text),
+    stringifyJSON: (value) => realm.stringifyJSON(value),
+  } satisfies Partial<BrowletExecution>;
 }

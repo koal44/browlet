@@ -1,4 +1,4 @@
-import type { Environment } from '../scripting/environment';
+import type { BrowletEnvironment } from '../scripting/environment';
 import type { UserAgent } from '../user-agent';
 import type { ReportingEndpoint } from './endpoint';
 import type { ReportImpl } from './report';
@@ -6,7 +6,7 @@ import { areSameOrigin, type Origin } from '../../url/index';
 
 /** Hand reports to browser-owned delivery without retaining their generating environment. */
 // https://w3c.github.io/reporting/#send-reports
-export function sendReports(reports: ReportImpl[], env: Environment): void {
+export function sendReports(reports: ReportImpl[], env: BrowletEnvironment): void {
   const { userAgent } = env;
   if (!userAgent.reportDeliveryEnabled) return;
   const configuration = env.getWindowOrWorkerGlobalScopeMixin().reportingEndpoints;

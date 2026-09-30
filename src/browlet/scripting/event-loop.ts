@@ -1,7 +1,7 @@
 import type { JSMicrotaskQueue } from '../../js-engine/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
-import type { Environment } from './environment';
+import type { BrowletEnvironment } from './environment';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
 
@@ -11,7 +11,7 @@ import type { TaskCreationOptions } from '../../infra/execution';
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
-  #backupIncumbentSettingsObjectStack: Environment[] = [];
+  #backupIncumbentSettingsObjectStack: BrowletEnvironment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
@@ -124,8 +124,8 @@ export class EventLoop {
   /** Find the incumbent settings object for a script or host entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#incumbent-settings-object
   getIncumbentSettingsObject(
-    hostEntryEnv: Environment,
-  ): Environment {
+    hostEntryEnv: BrowletEnvironment,
+  ): BrowletEnvironment {
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -148,7 +148,7 @@ export class EventLoop {
 
   /** Push callback settings and hide the active script from incumbent selection. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#prepare-to-run-a-callback
-  prepareToRunCallback(env: Environment): void {
+  prepareToRunCallback(env: BrowletEnvironment): void {
     if (env.responsibleEventLoop !== this) {
       throw new InternalError('A callback context belongs to another event loop');
     }
@@ -162,7 +162,7 @@ export class EventLoop {
 
   /** Restore incumbent selection after the matching callback entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-a-callback
-  cleanUpAfterRunningCallback(env: Environment): void {
+  cleanUpAfterRunningCallback(env: BrowletEnvironment): void {
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -181,7 +181,7 @@ export class EventLoop {
 
   /** Enter script execution with this environment and the current task. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#prepare-to-run-script
-  prepareToRunScript(env: Environment): void {
+  prepareToRunScript(env: BrowletEnvironment): void {
     if (env.responsibleEventLoop !== this) {
       throw new InternalError('Script settings belong to another event loop');
     }
@@ -202,7 +202,7 @@ export class EventLoop {
 
   /** Leave script execution and checkpoint when the execution stack becomes empty. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script
-  cleanUpAfterRunningScript(env: Environment): void {
+  cleanUpAfterRunningScript(env: BrowletEnvironment): void {
     const entry = this.#jsExecutionContextStack.at(-1);
     if (
       entry?.kind !== 'realm' ||
@@ -229,7 +229,7 @@ export class EventLoop {
   // ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
   // a temporary task because Node exposes no surrounding execution context.
   runScriptEvaluation<Result>(
-    env: Environment,
+    env: BrowletEnvironment,
     steps: () => Result,
   ): Result {
     const hostEntryTask = this.#currentlyRunningTask === null
@@ -455,7 +455,7 @@ export class Task {
   /** Document whose activity gates execution, or null for ungated work. */
   document: DocumentImpl | null;
   /** Settings objects whose scripts were evaluated while this task ran. */
-  scriptEvaluationEnvironmentSettingsObjectSet = new Set<Environment>();
+  scriptEvaluationEnvironmentSettingsObjectSet = new Set<BrowletEnvironment>();
   /** Fixed source identity used to select the task's queue. */
   readonly source: TaskSource;
   /** Algorithm steps executed when this task is selected. */
@@ -499,13 +499,13 @@ type TrackedExecutionContext =
 
 type RealmExecutionContextEntry = {
   kind: 'realm';
-  env: Environment;
+  env: BrowletEnvironment;
   task: Task | null;
 };
 
 type ScriptHavingExecutionContext = {
   kind: 'script';
-  env: Environment;
+  env: BrowletEnvironment;
   skipWhenDeterminingIncumbent: number;
 };
 

@@ -5,7 +5,7 @@ import { SVG_NAMESPACE } from '../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../web-idl/index';
 import { SVGElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../stylelet/index';
-import type { Environment } from '../scripting/environment';
+import type { BrowletEnvironment } from '../scripting/environment';
 import { LinkStyleMixin } from '../style/integration';
 
 /** Associates inline SVG stylesheet text with its tree scope. */
@@ -17,7 +17,7 @@ export class SVGStyleElementImpl extends SVGElementImpl {
     children: true,
   };
 
-  constructor(context: ElementCreationContext, env: Environment) {
+  constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(context, env);
     this.linkStyleMixin = new LinkStyleMixin(
       this, SVGStyleElementImpl.#linkStyleOptions, context.treeScopeResolver,

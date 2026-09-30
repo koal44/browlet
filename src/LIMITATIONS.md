@@ -67,6 +67,14 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   [automation entry](browlet/automation/README.md) for page commands; a broader
   embedder contract must define direct-call/Promise interoperability. Do not
   hide this by checkpointing after every Web IDL operation.
+- **Internal sandboxes provide execution, with browser client settings stubbed.**
+  Their binding uses the full BrowletEnvironment contract, but origin, base
+  URL, creation URL, policy, module, ancestry, time-origin, and Window/Worker
+  global-scope queries throw explicitly. They remain suitable for internal
+  allocations and clientless work such as Reporting uploads. Public APIs that
+  need those settings require a Window or another complete environment.
+  Sources: [environments](browlet/scripting/environment.ts),
+  [sandbox tests](../test/browlet/scripting/sandbox.test.ts).
 
 ## Promise observation
 
