@@ -409,7 +409,7 @@ export function unwrapArg(
  * Its callback-function members use the original input object as their receiver.
  */
 export function cbDict(name: string): Pick<ArgumentOptions, 'callbackDictionary'> {
-  return { callbackDictionary: name };
+  return { callbackDictionary: reference(name) };
 }
 
 /**

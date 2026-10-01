@@ -1,11 +1,13 @@
 import type {
-  AnnotatedType, UnionType, BufferTypeName, SimpleTypeName, RecordType, ExtendedAttribute, WebIDLType,
+  AnnotatedType, UnionType, SimpleTypeName, RecordType, SequenceType, ExtendedAttribute, WebIDLType,
 } from './core/types';
+import { sequence } from './core/helpers';
 import type { Definition } from './core/declarations';
 import {
   AssembledInterfaces, AssembledCallbackInterfaces, AssembledCallbackFunctions, AssembledNamespaces,
   AssembledDictionaries, AssembledEnumerations, AssembledTypedefs, AssembledProxyObjects,
-  type AssembledDictionary,
+  type AssembledDictionary, type AssembledCallbackFunction, type AssembledCallbackInterface,
+  type AssembledInterface, type AssembledProxyObject,
 } from './assembled';
 
 /**
@@ -23,14 +25,21 @@ export class DefinitionAssembly {
   typedefs: AssembledTypedefs;
   proxyObjects: AssembledProxyObjects;
 
-  // A descriptor's aliases and interface references resolve within this assembly.
-  // Argument conversion also supplies temporary annotated descriptors, which these caches must not retain.
-  #unannotatedTypes = new WeakMap<WebIDLType, UnannotatedType>();
-  #conversionTypes = new WeakMap<WebIDLType, ConversionType>();
-  #candidateTypes = new WeakMap<WebIDLType, WebIDLType[]>();
-  #conversionCandidates = new WeakMap<WebIDLType, ConversionType[]>();
-  #overloadTypeKeys = new WeakMap<WebIDLType, string>();
-  #conversionTypeKeys = new WeakMap<WebIDLType, string>();
+  // Type resolution and candidate selection retain this assembly's interpretation of each descriptor.
+  #unannotatedTypes = new Map<WebIDLType, UnannotatedType>();
+  #conversionTypes = new Map<WebIDLType, ConversionType>();
+  #candidateTypes = new Map<WebIDLType, WebIDLType[]>();
+  #conversionCandidates = new Map<WebIDLType, ConversionType[]>();
+  #unionCandidates = new Map<WebIDLType, UnionCandidates>();
+
+  // Classification answers and comparison keys are computed on first use.
+  #typeAnalyses = new Map<WebIDLType, TypeAnalysis>();
+  #jsonTypeResults = new Map<WebIDLType, boolean>();
+  #overloadTypeKeys = new Map<WebIDLType, string>();
+  #conversionTypeKeys = new Map<WebIDLType, string>();
+
+  // Internal conversions reuse these derived descriptors for the assembly's lifetime.
+  #sequenceTypesByElementType = new Map<WebIDLType, SequenceType>();
 
   constructor(definitions: Definition[]) {
     this.interfaces = new AssembledInterfaces(definitions);
@@ -75,31 +84,31 @@ export class DefinitionAssembly {
     };
   }
 
-  /** Whether the declared type can contribute values to a default toJSON operation. */
-  // https://webidl.spec.whatwg.org/#dfn-json-types
-  isJSONType(type: WebIDLType, seen = new Set<string>()): boolean {
-    const unannotated = this.getUnannotatedType(type);
-    switch (unannotated.kind) {
-      case 'simple':
-        return jsonSimpleTypes.has(unannotated.name);
-      case 'nullable':
-      case 'sequence':
-      case 'frozen-array':
-        return this.isJSONType(unannotated.type, seen);
-      case 'union':
-        return unannotated.types.every((member) => this.isJSONType(member, seen));
-      case 'record':
-        return this.isJSONType(unannotated.value, seen);
-      case 'reference': {
-        if (seen.has(unannotated.name)) return false;
-        if (this.enumerations.has(unannotated.name)) return true;
-        const assembled = this.dictionaries.get(unannotated.name);
-        if (assembled) return assembled.isJSONType(this, new Set(seen).add(unannotated.name));
-        return this.interfaces.get(unannotated.name)?.hasToJSON() ?? false;
-      }
-      default:
-        return false;
+  /** Reuse a sequence descriptor for operations that collect values of an existing type. */
+  getSequenceType(elementType: WebIDLType): SequenceType {
+    let type = this.#sequenceTypesByElementType.get(elementType);
+    if (!type) {
+      type = sequence(elementType);
+      this.#sequenceTypesByElementType.set(elementType, type);
     }
+    return type;
+  }
+
+  /** Get candidates without descending into sequence elements or other container contents. */
+  getCandidateTypes(type: WebIDLType): WebIDLType[] {
+    const cached = this.#candidateTypes.get(type);
+    if (cached) return cached;
+    const inner = this.getUnannotatedType(type);
+    let candidates: WebIDLType[];
+    if (inner.kind === 'nullable') {
+      candidates = this.getCandidateTypes(inner.type);
+    } else if (inner.kind === 'union') {
+      candidates = this.getFlattenedMemberTypes(inner);
+    } else {
+      candidates = [inner];
+    }
+    this.#candidateTypes.set(type, candidates);
+    return candidates;
   }
 
   /** Resolve union members, removing nullable wrappers and nested unions. */
@@ -126,52 +135,79 @@ export class DefinitionAssembly {
     return flattenedMemberTypes;
   }
 
-  /** Count nullable members through aliases and nested unions. */
-  // https://webidl.spec.whatwg.org/#dfn-number-of-nullable-member-types
-  getNumberOfNullableMemberTypes(type: UnionType | AnnotatedUnionType): number {
-    const unionType = type.kind === 'annotated' ? type.type : type;
-    let numberOfNullableMemberTypes = 0;
-
-    for (let memberType of unionType.types) {
-      memberType = this.getUnannotatedType(memberType);
-      if (memberType.kind === 'nullable') {
-        numberOfNullableMemberTypes++;
-        memberType = this.getUnannotatedType(memberType.type);
+  /** Flatten conversion candidates while retaining each member's inherited conversion attributes. */
+  getConversionCandidates(type: WebIDLType, extendedAttributes?: ExtendedAttribute[]): ConversionType[] {
+    let cached = this.#conversionCandidates.get(type);
+    if (!cached) {
+      const conversionType = this.getConversionType(type);
+      if (conversionType.type.kind === 'nullable') {
+        cached = this.getConversionCandidates(conversionType.type.type, conversionType.extendedAttributes);
+      } else if (conversionType.type.kind === 'union') {
+        const candidates: ConversionType[] = [];
+        for (const member of conversionType.type.types) {
+          candidates.push(...this.getConversionCandidates(member, conversionType.extendedAttributes));
+        }
+        cached = candidates;
+      } else {
+        cached = [conversionType];
       }
-      if (memberType.kind === 'union') {
-        numberOfNullableMemberTypes += this.getNumberOfNullableMemberTypes(memberType);
-      }
+      this.#conversionCandidates.set(type, cached);
     }
-
-    return numberOfNullableMemberTypes;
+    // Attributes supplied by an invocation must not become part of the descriptor's cached result.
+    if (!extendedAttributes?.length) return cached;
+    return cached.map((candidate) => ({
+      type: candidate.type,
+      extendedAttributes: [...extendedAttributes, ...candidate.extendedAttributes],
+    }));
   }
 
-  /** Whether null is included directly or through a union member. */
-  // https://webidl.spec.whatwg.org/#dfn-includes-a-nullable-type
-  includesNullableType(type: WebIDLType): boolean {
-    const innerType = this.getUnannotatedType(type);
-    if (innerType.kind === 'nullable') return true;
-    return innerType.kind === 'union' &&
-      this.getNumberOfNullableMemberTypes(innerType) === 1;
-  }
-
-  /** Whether undefined is included directly or through a union member. */
-  // https://webidl.spec.whatwg.org/#dfn-includes-undefined
-  includesUndefined(type: WebIDLType): boolean {
-    const innerType = this.getUnannotatedType(type);
-    if (
-      innerType.kind === 'simple' &&
-      innerType.name === 'undefined'
-    ) return true;
-    if (innerType.kind === 'nullable') {
-      return this.includesUndefined(innerType.type);
+  /** Retain the first candidate in each conversion category, resolving names within this assembly. */
+  // https://webidl.spec.whatwg.org/#js-union
+  getUnionCandidates(type: WebIDLType): UnionCandidates {
+    const cached = this.#unionCandidates.get(type);
+    if (cached) return cached;
+    const candidates: UnionCandidates = {
+      simpleTypes: new Map(),
+      typesByKind: new Map(),
+      interfaces: [],
+      numeric: undefined,
+      string: undefined,
+      array: undefined,
+      dictionary: undefined,
+      callbackFunction: undefined,
+      callbackInterface: undefined,
+    };
+    for (const candidate of this.getConversionCandidates(type)) {
+      const inner = candidate.type;
+      if (!candidates.typesByKind.has(inner.kind)) candidates.typesByKind.set(inner.kind, candidate);
+      switch (inner.kind) {
+        case 'simple':
+          if (!candidates.simpleTypes.has(inner.name)) candidates.simpleTypes.set(inner.name, candidate);
+          if (numericTypeNames.has(inner.name)) candidates.numeric ??= candidate;
+          if (stringTypeNames.has(inner.name)) candidates.string ??= candidate;
+          break;
+        case 'reference': {
+          candidates.dictionary ??= this.dictionaries.get(inner.name);
+          candidates.callbackFunction ??= this.callbackFunctions.get(inner.name);
+          candidates.callbackInterface ??= this.callbackInterfaces.get(inner.name);
+          if (this.enumerations.has(inner.name)) candidates.string ??= candidate;
+          const assembled = this.interfaces.get(inner.name);
+          if (assembled) {
+            candidates.interfaces.push({ type: candidate, assembled });
+          } else {
+            const proxy = this.proxyObjects.get(inner.name);
+            if (proxy) candidates.interfaces.push({ type: candidate, proxy });
+          }
+          break;
+        }
+        case 'sequence':
+        case 'frozen-array':
+          candidates.array ??= candidate;
+          break;
+      }
     }
-    if (innerType.kind === 'union') {
-      return innerType.types.some(
-        (memberType) => this.includesUndefined(memberType),
-      );
-    }
-    return false;
+    this.#unionCandidates.set(type, candidates);
+    return candidates;
   }
 
   /** Get an overload comparison key with aliases resolved and annotations ignored. */
@@ -211,71 +247,6 @@ export class DefinitionAssembly {
     return key;
   }
 
-  /** Whether an overload candidate includes a string or enumeration type. */
-  hasStringCandidate(type: WebIDLType): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === 'simple'
-        ? stringTypeNames.has(candidate.name)
-        : candidate.kind === 'reference' &&
-          this.enumerations.has(candidate.name));
-  }
-
-  /** Whether an overload candidate includes a numeric type, excluding bigint. */
-  hasNumericCandidate(type: WebIDLType): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === 'simple' && numericTypeNames.has(candidate.name));
-  }
-
-  /** Match a simple type through aliases, nullable wrappers, and unions. */
-  hasSimpleCandidate(type: WebIDLType, name: SimpleTypeName): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === 'simple' && candidate.name === name);
-  }
-
-  /** Whether an overload candidate includes ArrayBuffer or SharedArrayBuffer. */
-  hasArrayBufferCandidate(type: WebIDLType): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === 'simple' &&
-      arrayBufferTypeNames.has(candidate.name as BufferTypeName));
-  }
-
-  /** Match a type kind through aliases, nullable wrappers, and unions. */
-  hasCandidateKind(type: WebIDLType, kind: WebIDLType['kind']): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === kind);
-  }
-
-  /** Whether an overload candidate includes a sequence or frozen array. */
-  hasSequenceCandidate(type: WebIDLType): boolean {
-    return this.getCandidateTypes(type).some((candidate) =>
-      candidate.kind === 'sequence' || candidate.kind === 'frozen-array');
-  }
-
-  /** Find a candidate after resolving aliases and flattening nullable types and unions. */
-  findCandidateType(
-    type: WebIDLType,
-    predicate: (candidate: WebIDLType) => boolean,
-  ): WebIDLType | undefined {
-    return this.getCandidateTypes(type).find(predicate);
-  }
-
-  /** Get candidates without descending into sequence elements or other container contents. */
-  getCandidateTypes(type: WebIDLType): WebIDLType[] {
-    const cached = this.#candidateTypes.get(type);
-    if (cached) return cached;
-    const inner = this.getUnannotatedType(type);
-    let candidates: WebIDLType[];
-    if (inner.kind === 'nullable') {
-      candidates = this.getCandidateTypes(inner.type);
-    } else if (inner.kind === 'union') {
-      candidates = this.getFlattenedMemberTypes(inner);
-    } else {
-      candidates = [inner];
-    }
-    this.#candidateTypes.set(type, candidates);
-    return candidates;
-  }
-
   /** Compare result descriptors, including conversion attributes and nested types. */
   getConversionTypeKey(type: WebIDLType): string {
     const cached = this.#conversionTypeKeys.get(type);
@@ -298,38 +269,77 @@ export class DefinitionAssembly {
     return key;
   }
 
-  /** Flatten conversion candidates while retaining each member's inherited conversion attributes. */
-  getConversionCandidates(type: WebIDLType, extendedAttributes?: ExtendedAttribute[]): ConversionType[] {
-    let cached = this.#conversionCandidates.get(type);
-    if (!cached) {
-      const conversionType = this.getConversionType(type);
-      if (conversionType.type.kind === 'nullable') {
-        cached = this.getConversionCandidates(conversionType.type.type, conversionType.extendedAttributes);
-      } else if (conversionType.type.kind === 'union') {
-        const candidates: ConversionType[] = [];
-        for (const member of conversionType.type.types) {
-          candidates.push(...this.getConversionCandidates(member, conversionType.extendedAttributes));
-        }
-        cached = candidates;
-      } else {
-        cached = [conversionType];
-      }
-      this.#conversionCandidates.set(type, cached);
-    }
-    // Attributes supplied by an invocation must not become part of the descriptor's cached result.
-    if (!extendedAttributes?.length) return cached;
-    return cached.map((candidate) => ({
-      type: candidate.type,
-      extendedAttributes: [...extendedAttributes, ...candidate.extendedAttributes],
-    }));
+  /** Whether an overload candidate includes a string or enumeration type. */
+  hasStringCandidate(type: WebIDLType): boolean {
+    return this.#getTypeAnalysis(type).hasString;
   }
 
-  /** Whether a resolved conversion candidate is a string or enumeration. */
-  isStringCandidate(candidate: ConversionType): boolean {
-    return candidate.type.kind === 'simple'
-      ? stringTypeNames.has(candidate.type.name)
-      : candidate.type.kind === 'reference' &&
-        this.enumerations.has(candidate.type.name);
+  /** Whether an overload candidate includes a numeric type, excluding bigint. */
+  hasNumericCandidate(type: WebIDLType): boolean {
+    return this.#getTypeAnalysis(type).hasNumeric;
+  }
+
+  /** Match a simple type through aliases, nullable wrappers, and unions. */
+  hasSimpleCandidate(type: WebIDLType, name: SimpleTypeName): boolean {
+    return this.#getTypeAnalysis(type).simpleNames.has(name);
+  }
+
+  /** Whether an overload candidate includes ArrayBuffer or SharedArrayBuffer. */
+  hasArrayBufferCandidate(type: WebIDLType): boolean {
+    const { simpleNames } = this.#getTypeAnalysis(type);
+    return simpleNames.has('ArrayBuffer') || simpleNames.has('SharedArrayBuffer');
+  }
+
+  /** Match a type kind through aliases, nullable wrappers, and unions. */
+  hasCandidateKind(type: WebIDLType, kind: WebIDLType['kind']): boolean {
+    return this.#getTypeAnalysis(type).kinds.has(kind);
+  }
+
+  /** Whether an overload candidate includes a sequence or frozen array. */
+  hasSequenceCandidate(type: WebIDLType): boolean {
+    const { kinds } = this.#getTypeAnalysis(type);
+    return kinds.has('sequence') || kinds.has('frozen-array');
+  }
+
+  /** Count nullable members through aliases and nested unions. */
+  // https://webidl.spec.whatwg.org/#dfn-number-of-nullable-member-types
+  getNumberOfNullableMemberTypes(type: UnionType | AnnotatedUnionType): number {
+    return this.#getTypeAnalysis(type).nullableMemberCount;
+  }
+
+  /** Whether null is included directly or through a union member. */
+  // https://webidl.spec.whatwg.org/#dfn-includes-a-nullable-type
+  includesNullableType(type: WebIDLType): boolean {
+    return this.#getTypeAnalysis(type).includesNullable;
+  }
+
+  /** Whether undefined is included directly or through a union member. */
+  // https://webidl.spec.whatwg.org/#dfn-includes-undefined
+  includesUndefined(type: WebIDLType): boolean {
+    return this.#getTypeAnalysis(type).simpleNames.has('undefined');
+  }
+
+  /** Find the single numeric or bigint candidate used to materialize an integer default. */
+  getSoleNumericTypeName(type: WebIDLType): SimpleTypeName | undefined {
+    return this.#getTypeAnalysis(type).soleNumericTypeName;
+  }
+
+  /** Find a sequence's element type through aliases, nullable wrappers, and unions. */
+  findSequenceElementType(type: WebIDLType): WebIDLType | undefined {
+    return this.#getTypeAnalysis(type).sequenceElementType;
+  }
+
+  /** Find an assembled dictionary or record type for a converted Map value. */
+  findDictionaryOrRecord(type: WebIDLType): AssembledDictionary | RecordType | undefined {
+    return this.#getTypeAnalysis(type).dictionaryOrRecord;
+  }
+
+  /** Resolve aliases and annotations before selecting an observable array's element type. */
+  getObservableArrayElementType(type: WebIDLType): WebIDLType | undefined {
+    const resolved = this.getUnannotatedType(type);
+    return resolved.kind === 'observable-array'
+      ? resolved.type
+      : undefined;
   }
 
   /** Whether attribute assignment uses nullable [LegacyTreatNonObjectAsNull] callback rules. */
@@ -343,65 +353,101 @@ export class DefinitionAssembly {
     return assembled?.treatsNonObjectAsNull() ?? false;
   }
 
-  /** Find the single numeric or bigint candidate used to materialize an integer default. */
-  getSoleNumericTypeName(type: WebIDLType): SimpleTypeName | undefined {
-    const numericTypes = this.getConversionCandidates(type)
-      .filter((candidate) => candidate.type.kind === 'simple' && (
-        candidate.type.name === 'bigint' ||
-        numericTypeNames.has(candidate.type.name)
-      ));
-    const numericType = numericTypes.length === 1
-      ? numericTypes[0]?.type
-      : undefined;
-    return numericType?.kind === 'simple' ? numericType.name : undefined;
-  }
-
-  /** Find a sequence's element type through aliases, nullable wrappers, and unions. */
-  findSequenceElementType(type: WebIDLType): WebIDLType | undefined {
-    const innerType = this.getUnannotatedType(type);
-    switch (innerType.kind) {
+  /** Whether the declared type can contribute values to a default toJSON operation. */
+  // https://webidl.spec.whatwg.org/#dfn-json-types
+  isJSONType(type: WebIDLType, seen?: Set<string>): boolean {
+    if (!seen) {
+      const cached = this.#jsonTypeResults.get(type);
+      if (cached !== undefined) return cached;
+      // Recursive checks depend on the current dictionary path; retain only completed root answers.
+      const result = this.isJSONType(type, new Set());
+      this.#jsonTypeResults.set(type, result);
+      return result;
+    }
+    const unannotated = this.getUnannotatedType(type);
+    switch (unannotated.kind) {
+      case 'simple':
+        return jsonSimpleTypeNames.has(unannotated.name);
       case 'nullable':
-        return this.findSequenceElementType(innerType.type);
-      case 'union':
-        for (const memberType of innerType.types) {
-          const elementType = this.findSequenceElementType(memberType);
-          if (elementType) return elementType;
-        }
-        return undefined;
       case 'sequence':
-        return innerType.type;
-      default:
-        return undefined;
-    }
-  }
-
-  /** Find an assembled dictionary or record type for a converted Map value. */
-  findDictionaryOrRecord(type: WebIDLType): AssembledDictionary | RecordType | undefined {
-    const innerType = this.getUnannotatedType(type);
-    switch (innerType.kind) {
-      case 'nullable':
-        return this.findDictionaryOrRecord(innerType.type);
+      case 'frozen-array':
+        return this.isJSONType(unannotated.type, seen);
       case 'union':
-        for (const memberType of innerType.types) {
-          const candidate = this.findDictionaryOrRecord(memberType);
-          if (candidate) return candidate;
-        }
-        return undefined;
+        return unannotated.types.every((member) => this.isJSONType(member, seen));
       case 'record':
-        return innerType;
-      case 'reference':
-        return this.dictionaries.get(innerType.name);
+        return this.isJSONType(unannotated.value, seen);
+      case 'reference': {
+        if (seen.has(unannotated.name)) return false;
+        if (this.enumerations.has(unannotated.name)) return true;
+        const assembled = this.dictionaries.get(unannotated.name);
+        if (assembled) return assembled.isJSONType(this, new Set(seen).add(unannotated.name));
+        return this.interfaces.get(unannotated.name)?.hasToJSON() ?? false;
+      }
       default:
-        return undefined;
+        return false;
     }
   }
 
-  /** Resolve aliases and annotations before selecting an observable array's element type. */
-  getObservableArrayElementType(type: WebIDLType): WebIDLType | undefined {
-    const resolved = this.getUnannotatedType(type);
-    return resolved.kind === 'observable-array'
-      ? resolved.type
-      : undefined;
+  // Prepare fixed classification and adaptation answers together, without inspecting container contents.
+  #getTypeAnalysis(type: WebIDLType): TypeAnalysis {
+    const cached = this.#typeAnalyses.get(type);
+    if (cached) return cached;
+    const analysis: TypeAnalysis = {
+      simpleNames: new Set(),
+      kinds: new Set(),
+      hasString: false,
+      hasNumeric: false,
+      includesNullable: false,
+      nullableMemberCount: 0,
+      soleNumericTypeName: undefined,
+      sequenceElementType: undefined,
+      dictionaryOrRecord: undefined,
+    };
+    let numericCount = 0;
+    for (const candidate of this.getCandidateTypes(type)) {
+      analysis.kinds.add(candidate.kind);
+      switch (candidate.kind) {
+        case 'simple': {
+          analysis.simpleNames.add(candidate.name);
+          analysis.hasString ||= stringTypeNames.has(candidate.name);
+          const numeric = numericTypeNames.has(candidate.name);
+          analysis.hasNumeric ||= numeric;
+          if (numeric || candidate.name === 'bigint') {
+            numericCount++;
+            analysis.soleNumericTypeName = candidate.name;
+          }
+          break;
+        }
+        case 'reference':
+          analysis.hasString ||= this.enumerations.has(candidate.name);
+          analysis.dictionaryOrRecord ??= this.dictionaries.get(candidate.name);
+          break;
+        case 'record':
+          analysis.dictionaryOrRecord ??= candidate;
+          break;
+        case 'sequence':
+          analysis.sequenceElementType ??= candidate.type;
+          break;
+      }
+    }
+    if (numericCount !== 1) analysis.soleNumericTypeName = undefined;
+
+    const inner = this.getUnannotatedType(type);
+    if (inner.kind === 'union') {
+      for (let memberType of inner.types) {
+        memberType = this.getUnannotatedType(memberType);
+        if (memberType.kind === 'nullable') {
+          analysis.nullableMemberCount++;
+          memberType = this.getUnannotatedType(memberType.type);
+        }
+        if (memberType.kind === 'union') {
+          analysis.nullableMemberCount += this.#getTypeAnalysis(memberType).nullableMemberCount;
+        }
+      }
+    }
+    analysis.includesNullable = inner.kind === 'nullable' || analysis.nullableMemberCount === 1;
+    this.#typeAnalyses.set(type, analysis);
+    return analysis;
   }
 }
 
@@ -411,10 +457,41 @@ export type ConversionType = {
   type: UnannotatedType;
 };
 
+/** Fixed choices used by union conversion; recognizing the incoming value remains a binding operation. */
+type UnionCandidates = {
+  simpleTypes: Map<SimpleTypeName, ConversionType>;
+  typesByKind: Map<UnannotatedType['kind'], ConversionType>;
+  interfaces: UnionInterfaceCandidate[];
+  numeric: ConversionType | undefined;
+  string: ConversionType | undefined;
+  array: ConversionType | undefined;
+  dictionary: AssembledDictionary | undefined;
+  callbackFunction: AssembledCallbackFunction | undefined;
+  callbackInterface: AssembledCallbackInterface | undefined;
+};
+
+/** An interface or proxy candidate paired with its resolved declaration. */
+export type UnionInterfaceCandidate = { type: ConversionType; } & (
+  { assembled: AssembledInterface; } | { proxy: AssembledProxyObject; }
+);
+
 type UnannotatedType = Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }>;
 type AnnotatedUnionType = AnnotatedType<UnionType>;
 
-const jsonSimpleTypes = new Set([
+/** Answers that depend only on a descriptor and this assembly's declarations. */
+type TypeAnalysis = {
+  simpleNames: Set<SimpleTypeName>;
+  kinds: Set<WebIDLType['kind']>;
+  hasString: boolean;
+  hasNumeric: boolean;
+  includesNullable: boolean;
+  nullableMemberCount: number;
+  soleNumericTypeName: SimpleTypeName | undefined;
+  sequenceElementType: WebIDLType | undefined;
+  dictionaryOrRecord: AssembledDictionary | RecordType | undefined;
+};
+
+const jsonSimpleTypeNames = new Set([
   'boolean', 'byte', 'octet', 'short', 'unsigned short', 'long',
   'unsigned long', 'long long', 'unsigned long long', 'float',
   'unrestricted float', 'double', 'unrestricted double', 'DOMString',
@@ -429,8 +506,4 @@ const numericTypeNames = new Set<SimpleTypeName>([
 
 const stringTypeNames = new Set<SimpleTypeName>([
   'DOMString', 'ByteString', 'USVString',
-]);
-
-const arrayBufferTypeNames = new Set<BufferTypeName>([
-  'ArrayBuffer', 'SharedArrayBuffer',
 ]);

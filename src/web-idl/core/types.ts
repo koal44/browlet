@@ -342,8 +342,8 @@ export type ArgumentDefinition = {
   // Project metadata: implementation resolution and callback adaptation.
   /** Classes to try when unwrapping; values matching none are retained unchanged. */
   implClasses?: ImplementationClass[];
-  /** Dictionary used to adapt an object argument; callback members retain the original object as `this`. */
-  callbackDictionary?: string;
+  /** Retained dictionary reference for object adaptation; callback members use the input object as `this`. */
+  callbackDictionary?: ReferenceType;
   /** Report or rethrow author callback exceptions when the converted callback is invoked. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
 };

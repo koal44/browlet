@@ -1,5 +1,5 @@
 import type { InternalPromise } from '../infra/promises';
-import { AssembledDictionary, type AssembledInterface } from './assembled';
+import { AssembledDictionary, type AssembledCallable, type AssembledInterface } from './assembled';
 import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import {
@@ -9,15 +9,18 @@ import {
   isCallbackFunctionValue, isCallbackInterfaceRecord,
   type CallbackFunctionValue, type CallbackInterfaceValue,
 } from './callback-value';
-import { hasExtendedAttribute, reference } from './core/helpers';
-import type { ArgumentDefinition, AttributeMember, OperationMember, WebIDLType, CallbackExceptionBehavior, ImplementationClass, InjectedArgument } from './core/types';
+import { hasExtendedAttribute } from './core/helpers';
+import type {
+  AttributeMember, OperationMember, WebIDLType, CallbackExceptionBehavior,
+  ImplementationClass, InjectedArgument, ReferenceType,
+} from './core/types';
 import type { AsyncIterableMember, ConstructorMember } from './core/declarations';
 import type {
   AsyncIteratorSteps, AttributeSteps, ConstructorSteps,
   ImplementationConstructorSteps, MemberBinding, OperationSteps,
   StringificationBehavior, ValuePairsSteps,
 } from './definition-binding';
-import { getArgumentDefinition, missingArgument } from './overload';
+import { missingArgument } from './overload';
 import { convertToIDL } from './conversion';
 import { toImplementationPromise } from './promise';
 import { defineDataProperty } from './property';
@@ -70,13 +73,14 @@ function registerDefinedInterface(
           );
         }
         break;
-      case 'constructor':
+      case 'constructor': {
+        const callable = assembled.callables.get(member);
         if (member.construct) {
           const construct = member.construct;
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: (values) => {
-              const args = adaptArguments(values, member.arguments, context, realmBinding);
+              const args = adaptArguments(values, callable, context, realmBinding);
               return callImplementation(construct, undefined, [context, ...args], realmBinding);
             },
           };
@@ -84,7 +88,7 @@ function registerDefinedInterface(
           memberBinding.constructorBehavior = {
             kind: 'initialize',
             steps: createDefinedConstructorSteps(
-              member.invoke, member.arguments, context, realmBinding,
+              member.invoke, callable, context, realmBinding,
             ),
           };
         } else {
@@ -92,7 +96,7 @@ function registerDefinedInterface(
             kind: 'construct',
             steps: createImplementationConstructorSteps(
               implClass,
-              member.arguments,
+              callable,
               context,
               realmBinding,
               member.constructWith ?? definition.constructWith,
@@ -100,11 +104,13 @@ function registerDefinedInterface(
           };
         }
         break;
+      }
       case 'operation': {
+        const callable = assembled.callables.get(member);
         if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
         if (member.invoke) {
           memberBinding.operationSteps = createDefinedOperationSteps(
-            member.invoke, member, context, realmBinding,
+            member.invoke, callable, context, realmBinding,
           );
         } else {
           if (member.name === undefined) {
@@ -112,7 +118,7 @@ function registerDefinedInterface(
           }
           registerOperation(
             memberBinding,
-            member,
+            callable,
             member.name,
             member.static ? implClass : implClass.prototype,
             context,
@@ -181,7 +187,7 @@ function registerDefinedInterface(
         }
         memberBinding.asyncIteratorSteps = createAsyncIteratorSteps(
           factory as (this: object, ...values: unknown[]) => object,
-          member,
+          assembled.callables.get(member),
           context,
           realmBinding,
         );
@@ -301,7 +307,7 @@ function registerDefinedAttribute(
 // Project helper: adapt converted constructor arguments for a declared initializer.
 function createDefinedConstructorSteps(
   invoke: NonNullable<ConstructorMember['invoke']>,
-  args: ArgumentDefinition[],
+  assembled: AssembledCallable,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): ConstructorSteps {
@@ -311,7 +317,7 @@ function createDefinedConstructorSteps(
       this,
       [
         context,
-        ...adaptArguments(values, args, context, realmBinding),
+        ...adaptArguments(values, assembled, context, realmBinding),
       ],
       realmBinding,
     );
@@ -321,7 +327,7 @@ function createDefinedConstructorSteps(
 // Project helper: adapt converted constructor arguments and inject implementation dependencies.
 function createImplementationConstructorSteps(
   implClass: ImplementationClass,
-  args: ArgumentDefinition[],
+  assembled: AssembledCallable,
   context: BindingContext,
   realmBinding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
@@ -332,7 +338,7 @@ function createImplementationConstructorSteps(
     [
       implClass,
       resolveImplementationArguments(
-        adaptArguments(values, args, context, realmBinding),
+        adaptArguments(values, assembled, context, realmBinding),
         injectedArguments,
         context,
       ),
@@ -355,7 +361,7 @@ export function constructImplementationObject<T extends object>(
 // Project helper: adapt converted arguments and the receiver context for a declared invocation.
 function createDefinedOperationSteps(
   invoke: NonNullable<OperationMember['invoke']>,
-  member: OperationMember,
+  assembled: AssembledCallable<OperationMember>,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): OperationSteps {
@@ -366,7 +372,7 @@ function createDefinedOperationSteps(
       receiver?.implInst ?? null,
       [
         operationContext,
-        ...adaptArguments(values, member.arguments, operationContext, realmBinding),
+        ...adaptArguments(values, assembled, operationContext, realmBinding),
       ],
       realmBinding,
     );
@@ -377,7 +383,7 @@ function createDefinedOperationSteps(
 // Web IDL §2.5.10 Asynchronously iterable declarations.
 function createAsyncIteratorSteps(
   factory: (this: object, ...values: unknown[]) => object,
-  member: AsyncIterableMember,
+  assembled: AssembledCallable<AsyncIterableMember>,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): AsyncIteratorSteps {
@@ -387,7 +393,7 @@ function createAsyncIteratorSteps(
       return callImplementation(
         factory,
         target,
-        adaptArguments(argumentsList, member.arguments ?? [], context, realmBinding),
+        adaptArguments(argumentsList, assembled, context, realmBinding),
         realmBinding,
       );
     },
@@ -400,7 +406,7 @@ function createAsyncIteratorSteps(
         realmBinding,
       );
     },
-    ...(member.return
+    ...(assembled.primary.return
       ? {
         // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
         return(iterator: AsyncIteratorValue, value: unknown) {
@@ -488,7 +494,7 @@ function registerAttribute(
 // Supplies operation behavior to Web IDL §3.7.7 Operations.
 function registerOperation(
   memberBinding: MemberBinding,
-  member: OperationMember,
+  assembled: AssembledCallable<OperationMember>,
   name: string,
   target: object,
   context: BindingContext,
@@ -509,7 +515,7 @@ function registerOperation(
       method,
       receiver?.implInst ?? null,
       resolveImplementationArguments(
-        adaptArguments(values, member.arguments, operationContext, realmBinding),
+        adaptArguments(values, assembled, operationContext, realmBinding),
         injectedArguments,
         operationContext,
         context,
@@ -617,13 +623,13 @@ function findDescriptor(
 // Project helper: adapt each converted argument using its fixed or variadic declaration.
 function adaptArguments(
   values: unknown[],
-  definitions: ArgumentDefinition[],
+  assembled: AssembledCallable,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): unknown[] {
   return values.map((value, index) => {
-    const argument = getArgumentDefinition(definitions, index);
-    return adaptIDLToImpl(value, argument?.type, argument ?? {}, context, realmBinding);
+    const argument = assembled.getArgument(index);
+    return adaptIDLToImpl(value, argument?.type, argument?.primary ?? {}, context, realmBinding);
   });
 }
 
@@ -638,7 +644,7 @@ export function adaptIDLToImpl(
 ): unknown {
   if (options.callbackDictionary !== undefined) {
     const input = value === missingArgument ? undefined : value;
-    const dictionaryType = reference(options.callbackDictionary);
+    const dictionaryType = options.callbackDictionary;
     return adaptIDLToImpl(
       convertToIDL(input, dictionaryType, realmBinding.defaultConversionContext), dictionaryType,
       { callbackThis: input }, context, realmBinding,
@@ -736,7 +742,7 @@ export function adaptIDLToImpl(
       member?.type ?? recordValueType,
       {
         callbackExceptionBehavior:
-          member?.callbackExceptionBehavior ??
+          member?.primary.callbackExceptionBehavior ??
           options.callbackExceptionBehavior,
         callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
       },
@@ -748,7 +754,7 @@ export function adaptIDLToImpl(
 }
 
 type ImplementationAdaptationOptions = {
-  callbackDictionary?: string;
+  callbackDictionary?: ReferenceType;
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   callbackThis?: unknown;
   implClasses?: ImplementationClass[];

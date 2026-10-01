@@ -296,6 +296,55 @@ describe('Web IDL initial objects', () => {
     expect(Reflect.get(object, 'value')).toBe('partial');
   });
 
+  it('shares factory overload declarations while keeping their functions and steps in each realm', () => {
+    class WidgetImpl { value = ''; }
+    const numericFactory = legacyFactory('LegacyWidget', idlType.unsignedLong);
+    const stringFactory = legacyFactory('LegacyWidget', idlType.DOMString);
+    const value: AttributeMember = {
+      kind: 'attribute', name: 'value', type: idlType.DOMString, readonly: true,
+    };
+    const interfaceIDL = defineInterface({
+      name: 'Widget', exposed: '*',
+      extendedAttributes: [numericFactory], members: [value],
+    });
+    const partial = definePartialInterface({
+      name: 'Widget', extendedAttributes: [stringFactory], members: [],
+    });
+    const assembly = new DefinitionAssembly([partial, interfaceIDL]);
+    const world = new BindingWorld([]);
+    const factories: RealmFunction[] = [];
+
+    for (const name of ['first', 'second']) {
+      const realm = new Realm();
+      const binding = new RealmBinding(assembly, realm, world, (ctx) => ({ realm: ctx.realm }));
+      const assembled = binding.resolveInterface('Widget');
+      const interfaceBinding = binding.getDefinitionBinding(assembled);
+      interfaceBinding.createImplementation = () => new WidgetImpl();
+      interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
+        get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
+      };
+      for (const factory of [numericFactory, stringFactory]) {
+        interfaceBinding.getOrCreateMemberRecord(factory).constructorBehavior = {
+          kind: 'initialize',
+          steps: function(value) { Reflect.set(this, 'value', `${name}:${typeof value}:${String(value)}`); },
+        };
+      }
+      binding.install();
+      const factory = requireFunction(Reflect.get(realm.global, 'LegacyWidget'));
+      factories.push(factory);
+
+      expect(factory).toBeInstanceOf(realm.intrinsics.function);
+      expect(factory.length).toBe(1);
+      expect(factory.prototype).toBe(binding.getInterfacePrototypeObject(assembled));
+      expect(Reflect.get(Reflect.construct(factory, [2 ** 32 + 7]), 'value')).toBe(`${name}:number:7`);
+      expect(Reflect.get(Reflect.construct(factory, ['text']), 'value')).toBe(`${name}:string:text`);
+      binding.install();
+      expect(Reflect.get(realm.global, 'LegacyWidget')).toBe(factory);
+    }
+    expect(factories[0]).not.toBe(factories[1]);
+    expect(factories[0]!.prototype === factories[1]!.prototype).toBe(false);
+  });
+
   it('preserves initial-object identities across installation', () => {
     const factory = legacyFactory('LegacyThing', idlType.DOMString);
     const attribute: AttributeMember = {

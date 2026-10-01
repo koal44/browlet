@@ -224,7 +224,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-blob
   blob(): InternalPromise<BlobImpl> {
-    return this.#consume(reference(BlobImpl), (bytes) => {
+    return this.#consume(blobType, (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       const data = BlobData.fromOwnedBytes(bytes);
       return BlobImpl.create(data, type === null ? '' : serializeMIMEType(type), undefined, this.#env);
@@ -238,7 +238,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-formdata
   formData(): InternalPromise<FormDataImpl> {
-    return this.#consume(reference(FormDataImpl), (bytes) => {
+    return this.#consume(formDataType, (bytes) => {
       const type = this.#record.headerList.extractMIMEType();
       if (type?.type === 'multipart' && type.subtype === 'form-data') {
         return FormDataImpl.fromEntries(
@@ -328,6 +328,9 @@ export const bodyInitIDL = defineTypedef({
   name: 'BodyInit',
   type: union(reference('ReadableStream'), reference('XMLHttpRequestBodyInit')),
 });
+
+const blobType = reference(BlobImpl);
+const formDataType = reference(FormDataImpl);
 
 export const bodyIDL = defineInterfaceMixin({
   name: 'Body',

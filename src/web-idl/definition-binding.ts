@@ -2,7 +2,7 @@ import type { JSFunction } from '../js-engine/index';
 import type { InternalPromise } from '../infra/promises';
 import type { AssembledCallbackInterface, AssembledInterface, AssembledNamespace } from './assembled';
 import type { InterfaceMember } from './core/declarations';
-import type { NamedArgumentsExtendedAttribute } from './core/types';
+import type { AttributeMember, NamedArgumentsExtendedAttribute } from './core/types';
 import type { ValuePair } from './iterable';
 import type { LegacyPropertyMetadata } from './legacy-platform-object';
 import type { StampedImplInstance, PlatformRecord } from './platform-object';
@@ -25,6 +25,8 @@ export class DefinitionBinding {
   declare namedPropertiesObject?: object;
   declare unforgeablesObject?: object;
   declare legacyPropertyMetadata?: LegacyPropertyMetadata | null;
+  /** Exposed JSON attributes in invocation order; their values are read on every call. */
+  declare defaultToJSONAttributes?: DefaultToJSONAttribute[];
 
   /** Retain a member's adapters and platform functions under its including definition. */
   getOrCreateMemberRecord(member: PlatformMemberDefinition): MemberBinding {
@@ -45,6 +47,13 @@ export type PlatformDefinition = AssembledInterface | AssembledNamespace | Assem
 export type PlatformMemberDefinition = InterfaceMember | NamedArgumentsExtendedAttribute;
 export type InterfaceObject = JSFunction & { prototype: object; };
 export type MemberFunctionKind = 'attributeFunction' | 'getter' | 'operation' | 'setter' | 'stringifier';
+
+/** An exposed JSON attribute and the declaration supplying its getter. */
+export type DefaultToJSONAttribute = {
+  assembled: AssembledInterface;
+  attribute: AttributeMember;
+  implementation: AttributeMember;
+};
 
 export type MemberBinding = Partial<Record<MemberFunctionKind, JSFunction>> & {
   attributeSteps?: AttributeSteps;

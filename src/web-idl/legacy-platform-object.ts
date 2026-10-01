@@ -1,7 +1,7 @@
 import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
-import type { AssembledInterface } from './assembled';
+import type { AssembledCallable, AssembledInterface } from './assembled';
 import { convertToIDL, convertToJavaScript } from './conversion';
 import type { OperationMember } from './core/types';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
@@ -10,7 +10,6 @@ import type { RealmBinding } from './realm-binding';
 import type {
   IndexedPropertySteps, NamedPropertySteps,
 } from './definition-binding';
-import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 export class LegacyPlatformObjectBinding {
@@ -103,7 +102,7 @@ export class LegacyPlatformObjectBinding {
 
     let indexed: IndexedProperties | undefined;
     if (indexedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, indexedGetter)?.indexedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, indexedGetter.primary)?.indexedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property indices implementation');
       }
@@ -117,7 +116,7 @@ export class LegacyPlatformObjectBinding {
 
     let named: NamedProperties | undefined;
     if (namedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, namedGetter)?.namedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, namedGetter.primary)?.namedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property names implementation');
       }
@@ -244,7 +243,7 @@ export class LegacyPlatformObjectBinding {
       enumerable: true,
       value: convertToJavaScript(
         value,
-        properties.getter.returns,
+        properties.getter.primary.returns,
         this.#binding.defaultConversionContext,
       ),
       writable: properties.setter !== undefined,
@@ -258,7 +257,7 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter.primary)?.operationSteps;
     if (!steps) {
       throw new InternalError('Missing named property getter implementation');
     }
@@ -268,7 +267,7 @@ export class LegacyPlatformObjectBinding {
       enumerable: !properties.unenumerable,
       value: convertToJavaScript(
         value,
-        properties.getter.returns,
+        properties.getter.primary.returns,
         this.#binding.defaultConversionContext,
       ),
       writable: properties.setter !== undefined,
@@ -473,8 +472,8 @@ export class LegacyPlatformObjectBinding {
     );
     const converted = this.#convertSetterValue(setter, value);
 
-    if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
+    if (setter.primary.name) {
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter.primary)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing indexed property setter implementation');
       }
@@ -503,8 +502,8 @@ export class LegacyPlatformObjectBinding {
 
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
-    if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
+    if (setter.primary.name) {
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter.primary)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing named property setter implementation');
       }
@@ -524,17 +523,14 @@ export class LegacyPlatformObjectBinding {
 
   // Extracted from Web IDL §3.9.7 Abstract operations — convert the value for an indexed or named property
   // setter.
-  #convertSetterValue(setter: OperationMember, value: unknown): unknown {
+  #convertSetterValue(setter: AssembledCallable<OperationMember>, value: unknown): unknown {
     const valueArgument = setter.arguments[1];
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
     }
     return convertToIDL(
       value,
-      getTypeWithApplicableExtendedAttributes(
-        valueArgument.type,
-        valueArgument.extendedAttributes,
-      ),
+      valueArgument.type,
       this.#binding.defaultConversionContext,
     );
   }
@@ -547,7 +543,7 @@ export class LegacyPlatformObjectBinding {
   ): boolean {
     const { deleter } = properties;
     if (!deleter) throw new InternalError('Named property has no deleter');
-    if (!deleter.name) {
+    if (!deleter.primary.name) {
       // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
       const steps = properties.steps.deleteExisting;
       if (!steps) {
@@ -556,10 +552,10 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#binding.getMemberBinding(properties.assembled, deleter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, deleter.primary)?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
-    const returnType = this.#binding.assembly.getUnannotatedType(deleter.returns);
+    const returnType = this.#binding.assembly.getUnannotatedType(deleter.primary.returns);
     return returnType.kind !== 'simple' ||
       returnType.name !== 'boolean' ||
       result !== false;
@@ -594,7 +590,7 @@ export class LegacyPlatformObjectBinding {
     index: number,
     properties: IndexedProperties,
   ): unknown {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter.primary)?.operationSteps;
     if (!steps) throw new InternalError('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
@@ -651,18 +647,18 @@ export type LegacyPropertyMetadata = {
 };
 
 type IndexedProperties = {
-  getter: OperationMember;
+  getter: AssembledCallable<OperationMember>;
   assembled: AssembledInterface;
-  setter: OperationMember | undefined;
+  setter: AssembledCallable<OperationMember> | undefined;
   steps: IndexedPropertySteps;
 };
 
 type NamedProperties = {
-  deleter: OperationMember | undefined;
-  getter: OperationMember;
+  deleter: AssembledCallable<OperationMember> | undefined;
+  getter: AssembledCallable<OperationMember>;
   assembled: AssembledInterface;
   overrideBuiltIns: boolean;
-  setter: OperationMember | undefined;
+  setter: AssembledCallable<OperationMember> | undefined;
   steps: NamedPropertySteps;
   unenumerable: boolean;
   unforgeableNames: Set<string>;

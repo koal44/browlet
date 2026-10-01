@@ -3,7 +3,7 @@ import {
 } from '../infra/observable-array';
 import { convertToIDL, convertToJavaScript, type IDLSequenceValue } from './conversion';
 import {
-  idlType, sequence, type AttributeMember, type WebIDLType,
+  idlType, type AttributeMember, type WebIDLType,
 } from './core/index';
 import type { PlatformRecord } from './platform-object';
 import type { RealmBinding } from './realm-binding';
@@ -43,7 +43,7 @@ export class ObservableArrayBinding {
   ): void {
     const values = convertToIDL(
       value,
-      sequence(elementType),
+      this.#binding.assembly.getSequenceType(elementType),
       this.#binding.defaultConversionContext,
     ) as IDLSequenceValue;
     this.#getHandle(record, attribute, elementType).replaceValues(values);

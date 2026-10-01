@@ -6,71 +6,111 @@ import type {
   NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition, Definition, IncludesDefinition,
 } from './core/declarations';
 import type {
-  AttributeMember, ExtendedAttribute, ImplementationClass, NamedArgumentsExtendedAttribute,
+  ArgumentDefinition, AttributeMember, ExtendedAttribute, ImplementationClass, NamedArgumentsExtendedAttribute,
   OperationMember, ReferenceType, WebIDLType,
 } from './core/types';
-import { hasExtendedAttribute } from './core/helpers';
+import { hasExtendedAttribute, reference } from './core/helpers';
 import type { SerialSteps, TransferSteps } from './core/structured-data';
 import { InternalError } from '../infra/internal-error';
-import type { DefinitionAssembly, ConversionType } from './assembly';
+import type { DefinitionAssembly } from './assembly';
 
 /** An interface with its parent, partial declarations, and included mixin members. */
 export class AssembledInterface {
-  name: string;
+  /** The original interface declaration, before applying partials and mixins. */
   primary: PrimaryInterfaceDefinition;
+  name: string;
+  /** Partial declarations retain their own exposure and other extended attributes. */
+  partials: PartialInterfaceDefinition[];
+  /** The assembled parent named by the primary declaration's inherits clause. */
   parentAssembled: AssembledInterface | undefined;
+  /** Own, partial, and included mixin members; inherited members remain on the parent interface. */
+  members: AssembledInterfaceMember[] = [];
   /** Serialization steps for this exact interface, including any inherited state. */
   serialSteps: SerialSteps | undefined;
   /** Transfer steps for this exact interface. */
   transferSteps: TransferSteps | undefined;
-  /** Partial declarations retain their own exposure and other extended attributes. */
-  partials: PartialInterfaceDefinition[];
-  /** Own, partial, and included mixin members; inherited members remain on the parent interface. */
-  members: AssembledInterfaceMember[] = [];
+
+  /** Stable named reference used when resolving implementation-class types. */
+  type: ReferenceType;
+  /** Prepared argument contracts, keyed by the declarations used for member binding. */
+  callables = new AssembledCallables();
+
+  // Factory declarations are grouped during construction; overloads are prepared on first use.
+  #legacyFactoriesByName = new Map<string, {
+    callables: AssembledCallable<NamedArgumentsExtendedAttribute>[];
+    overloads?: AssembledOverloads<AssembledCallable<NamedArgumentsExtendedAttribute>>;
+  }>();
+
+  // Lazy declaration lookups, shared by this binding world's realms.
+  #inheritanceChain: AssembledInterface[] | undefined;
+  #implementedPrimaries: Set<PrimaryInterfaceDefinition> | undefined;
+  #includedMembers: Set<InterfaceMember | MixinMember> | undefined;
+  #inheritedAttributes = new Map<AttributeMember, AttributeMember>();
+  // Undefined means unexamined; null retains the absence of a collection declaration.
+  #collectionDeclaration: MaplikeMember | SetlikeMember | null | undefined;
+  #inheritedCollectionDeclaration: MaplikeMember | SetlikeMember | null | undefined;
+  #hasDefaultToJSON: boolean | undefined;
+  #hasToJSON: boolean | undefined;
 
   constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = []) {
-    this.name = primary.name;
     this.primary = primary;
+    this.name = primary.name;
+    this.partials = partials;
     this.serialSteps = primary.serialSteps;
     this.transferSteps = primary.transferSteps;
-    this.partials = partials;
+    this.type = reference(primary.name);
+    for (const definition of [primary, ...partials]) {
+      for (const attribute of definition.extendedAttributes ?? []) {
+        if (attribute.kind !== 'named-arguments' || attribute.name !== 'LegacyFactoryFunction') continue;
+        this.callables.add(attribute);
+        let factory = this.#legacyFactoriesByName.get(attribute.value);
+        if (!factory) {
+          factory = { callables: [] };
+          this.#legacyFactoriesByName.set(attribute.value, factory);
+        }
+        factory.callables.push(this.callables.get(attribute));
+      }
+    }
   }
 
   /** Whether this interface or one of its ancestors has the requested primary declaration. */
   implements(expectedAssembled: AssembledInterface): boolean {
-    if (this.primary === expectedAssembled.primary) return true;
-    let assembled = this.parentAssembled;
-    while (assembled) {
-      if (assembled.primary === expectedAssembled.primary) return true;
-      assembled = assembled.parentAssembled;
+    if (!this.#implementedPrimaries) {
+      this.#implementedPrimaries = new Set();
+      for (const assembled of this.getInheritanceChain()) this.#implementedPrimaries.add(assembled.primary);
     }
-    return false;
+    return this.#implementedPrimaries.has(expectedAssembled.primary);
   }
 
-  /** List interfaces from the oldest ancestor through this interface. */
+  /** List interfaces from the oldest ancestor through this interface; the retained list must not be modified. */
   getInheritanceChain(): AssembledInterface[] {
-    const inheritance: AssembledInterface[] = [this];
-    let assembled = this.parentAssembled;
-    while (assembled) {
-      inheritance.unshift(assembled);
-      assembled = assembled.parentAssembled;
+    if (!this.#inheritanceChain) {
+      const inheritance: AssembledInterface[] = [this];
+      let assembled = this.parentAssembled;
+      while (assembled) {
+        inheritance.push(assembled);
+        assembled = assembled.parentAssembled;
+      }
+      this.#inheritanceChain = inheritance.reverse();
     }
-    return inheritance;
+    return this.#inheritanceChain;
   }
 
   /** Whether the member belongs to this interface or an ancestor. */
   includesMember(member: InterfaceMember | MixinMember): boolean {
-    if (this.members.some((entry) => entry.member === member)) return true;
-    let assembled = this.parentAssembled;
-    while (assembled) {
-      if (assembled.members.some((entry) => entry.member === member)) return true;
-      assembled = assembled.parentAssembled;
+    if (!this.#includedMembers) {
+      this.#includedMembers = new Set();
+      for (const assembled of this.getInheritanceChain()) {
+        for (const entry of assembled.members) this.#includedMembers.add(entry.member);
+      }
     }
-    return false;
+    return this.#includedMembers.has(member);
   }
 
   /** Find the nearest ancestor's matching attribute for an inherited accessor. */
   getInheritedAttribute(attribute: AttributeMember): AttributeMember {
+    const cached = this.#inheritedAttributes.get(attribute);
+    if (cached) return cached;
     let assembled = this.parentAssembled;
     while (assembled) {
       for (let i = assembled.members.length - 1; i >= 0; i--) {
@@ -79,7 +119,10 @@ export class AssembledInterface {
           member?.kind === 'attribute' &&
           member.name === attribute.name &&
           Boolean(member.static) === Boolean(attribute.static)
-        ) return member;
+        ) {
+          this.#inheritedAttributes.set(attribute, member);
+          return member;
+        }
       }
       assembled = assembled.parentAssembled;
     }
@@ -95,10 +138,20 @@ export class AssembledInterface {
 
   /** Find the maplike or setlike declaration, optionally continuing through ancestors. */
   getCollectionDeclaration(includeInherited = false): MaplikeMember | SetlikeMember | undefined {
-    for (const { member } of this.members) {
-      if (member.kind === 'maplike' || member.kind === 'setlike') return member;
+    if (this.#collectionDeclaration === undefined) {
+      this.#collectionDeclaration = null;
+      for (const { member } of this.members) {
+        if (member.kind === 'maplike' || member.kind === 'setlike') {
+          this.#collectionDeclaration = member;
+          break;
+        }
+      }
     }
-    return includeInherited ? this.parentAssembled?.getCollectionDeclaration(true) : undefined;
+    if (this.#collectionDeclaration || !includeInherited) return this.#collectionDeclaration ?? undefined;
+    if (this.#inheritedCollectionDeclaration === undefined) {
+      this.#inheritedCollectionDeclaration = this.parentAssembled?.getCollectionDeclaration(true) ?? null;
+    }
+    return this.#inheritedCollectionDeclaration ?? undefined;
   }
 
   /** Whether an explicit instance operation replaces a generated collection method. */
@@ -108,8 +161,11 @@ export class AssembledInterface {
   }
 
   /** Group accepted operation overloads by name and static/instance placement. */
-  getOperationGroups(include: OperationFilter): Map<string, OperationMember[]> {
-    return groupOperations(this.members, include);
+  getOperationGroups(
+    include: OperationFilter,
+    assembly: DefinitionAssembly,
+  ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
+    return groupOperations(this.members, this.callables, include, assembly);
   }
 
   /** Find the nearest indexed or named special operation, resolving aliases on its key argument. */
@@ -119,24 +175,28 @@ export class AssembledInterface {
     special: 'deleter' | 'getter' | 'setter',
     keyType: 'DOMString' | 'unsigned long',
     assembly: DefinitionAssembly,
-  ): OperationMember | undefined {
+  ): AssembledCallable<OperationMember> | undefined {
     for (const { member } of this.members) {
       if (member.kind !== 'operation' || member.special !== special) continue;
-      const key = member.arguments[0];
+      const callable = this.callables.get(member);
+      const key = callable.arguments[0];
       if (!key) continue;
       const type = assembly.getUnannotatedType(key.type);
-      if (type.kind === 'simple' && type.name === keyType) return member;
+      if (type.kind === 'simple' && type.name === keyType) return callable;
     }
     return this.parentAssembled?.findSpecialOperation(special, keyType, assembly);
   }
 
-  /** Collect constructors accepted by the caller's exposure check. */
-  getConstructors(include: (entry: AssembledInterfaceMember) => boolean): ConstructorMember[] {
-    const constructors: ConstructorMember[] = [];
+  /** Prepare constructors accepted by the caller's exposure check. */
+  getConstructors(
+    include: (entry: AssembledInterfaceMember) => boolean,
+    assembly: DefinitionAssembly,
+  ): AssembledOverloads<AssembledCallable<ConstructorMember>> {
+    const constructors: AssembledCallable<ConstructorMember>[] = [];
     for (const entry of this.members) {
-      if (entry.member.kind === 'constructor' && include(entry)) constructors.push(entry.member);
+      if (entry.member.kind === 'constructor' && include(entry)) constructors.push(this.callables.get(entry.member));
     }
-    return constructors;
+    return new AssembledOverloads(constructors, assembly);
   }
 
   /** Find the stringifier accepted by the caller's exposure check. */
@@ -165,14 +225,14 @@ export class AssembledInterface {
 
   /** Whether this interface directly contributes a default toJSON operation. */
   hasDefaultToJSON(): boolean {
-    return this.members.some(({ member }) =>
+    return this.#hasDefaultToJSON ??= this.members.some(({ member }) =>
       member.kind === 'operation' && member.name === 'toJSON' &&
       hasExtendedAttribute(member.extendedAttributes, 'Default'));
   }
 
   /** Whether this interface or an ancestor declares a toJSON operation. */
   hasToJSON(): boolean {
-    return this.members.some(({ member }) => member.kind === 'operation' && member.name === 'toJSON') ||
+    return this.#hasToJSON ??= this.members.some(({ member }) => member.kind === 'operation' && member.name === 'toJSON') ||
       (this.parentAssembled?.hasToJSON() ?? false);
   }
 
@@ -193,18 +253,6 @@ export class AssembledInterface {
     const names = new Set<string>();
     this.#addUnforgeablePropertyNames(names);
     return names;
-  }
-
-  #addUnforgeablePropertyNames(names: Set<string>): void {
-    for (const { member } of this.members) {
-      if (!hasExtendedAttribute(member.extendedAttributes, 'LegacyUnforgeable')) continue;
-      if (
-        member.kind === 'stringifier' ||
-        (member.kind === 'attribute' && member.stringifier === true)
-      ) names.add('toString');
-      if ((member.kind === 'attribute' || member.kind === 'operation') && member.name) names.add(member.name);
-    }
-    if (this.parentAssembled) this.parentAssembled.#addUnforgeablePropertyNames(names);
   }
 
   /** Whether the primary or a partial declaration marks this as a global interface. */
@@ -239,52 +287,54 @@ export class AssembledInterface {
     return attribute?.kind === 'identifier-list' ? attribute.values : [];
   }
 
-  /** Collect one legacy factory's overload declarations across interface fragments. */
-  getLegacyFactoryOverloads(name: string): NamedArgumentsExtendedAttribute[] {
-    const overloads: NamedArgumentsExtendedAttribute[] = [];
-    for (const definition of [this.primary, ...this.partials]) {
-      for (const attribute of definition.extendedAttributes ?? []) {
-        if (
-          attribute.kind === 'named-arguments' &&
-          attribute.name === 'LegacyFactoryFunction' &&
-          attribute.value === name
-        ) overloads.push(attribute);
-      }
-    }
-    return overloads;
+  /** Visit the distinct factory names collected from the primary and partial declarations. */
+  getLegacyFactoryNames(): MapIterator<string> {
+    return this.#legacyFactoriesByName.keys();
   }
 
-  /** Collect distinct legacy factory names across interface fragments. */
-  getLegacyFactoryNames(): string[] {
-    const names = new Set<string>();
-    for (const definition of [this.primary, ...this.partials]) {
-      for (const attribute of definition.extendedAttributes ?? []) {
-        if (
-          attribute.kind === 'named-arguments' &&
-          attribute.name === 'LegacyFactoryFunction'
-        ) names.add(attribute.value);
-      }
+  /** Retain each legacy factory's prepared overloads across this binding world's realms. */
+  getLegacyFactoryOverloads(
+    name: string,
+    assembly: DefinitionAssembly,
+  ): AssembledOverloads<AssembledCallable<NamedArgumentsExtendedAttribute>> {
+    const factory = this.#legacyFactoriesByName.get(name);
+    if (!factory) {
+      throw new InternalError(`${this.name} has no legacy factory function ${name}`);
     }
-    return [...names];
+    return factory.overloads ??= new AssembledOverloads(factory.callables, assembly);
+  }
+
+  #addUnforgeablePropertyNames(names: Set<string>): void {
+    for (const { member } of this.members) {
+      if (!hasExtendedAttribute(member.extendedAttributes, 'LegacyUnforgeable')) continue;
+      if (
+        member.kind === 'stringifier' ||
+        (member.kind === 'attribute' && member.stringifier === true)
+      ) names.add('toString');
+      if ((member.kind === 'attribute' || member.kind === 'operation') && member.name) names.add(member.name);
+    }
+    if (this.parentAssembled) this.parentAssembled.#addUnforgeablePropertyNames(names);
   }
 }
 
 /** A callback interface used for conversion and invocation. */
 export class AssembledCallbackInterface {
   primary: CallbackInterfaceDefinition;
-  /** Operation declarations used to convert callback arguments and results. */
-  operationsByName = new Map<string, OperationMember>();
+  /** Prepared operations used to convert callback arguments and results. */
+  operationsByName = new Map<string, AssembledCallable<OperationMember>>();
 
   constructor(primary: CallbackInterfaceDefinition) {
     this.primary = primary;
     for (const member of primary.members) {
       if (member.kind !== 'operation' || member.name === undefined) continue;
-      if (!this.operationsByName.has(member.name)) this.operationsByName.set(member.name, member);
+      if (!this.operationsByName.has(member.name)) {
+        this.operationsByName.set(member.name, new AssembledCallable(member));
+      }
     }
   }
 
   /** Find the declared operation required by callback invocation. */
-  getOperation(name: string): OperationMember {
+  getOperation(name: string): AssembledCallable<OperationMember> {
     const operation = this.operationsByName.get(name);
     if (!operation) {
       throw new InternalError(
@@ -300,14 +350,115 @@ export class AssembledCallbackInterface {
   }
 }
 
-/** A callback function's argument and result contract. */
-export class AssembledCallbackFunction {
-  primary: CallbackFunctionDefinition;
+/** Argument-count candidates for one exposure-selected group of callables. */
+export class AssembledOverloads<Callable extends AssembledCallable = AssembledCallable> {
+  callables: Callable[];
+  /** The length of the installed function. */
+  minimumArgumentCount: number;
+  /** Extra arguments are ignored above this count; variadic groups use Infinity. */
+  maximumArgumentCount = 0;
 
-  constructor(primary: CallbackFunctionDefinition) {
-    this.primary = primary;
+  #candidatesByArgumentCount: OverloadCandidates<Callable>[] = [];
+
+  constructor(callables: Callable[], assembly: DefinitionAssembly) {
+    this.callables = callables;
+    this.minimumArgumentCount = callables.length === 0 ? 0 : Infinity;
+    let maximumDeclaredCount = 0;
+    for (const callable of callables) {
+      maximumDeclaredCount = Math.max(maximumDeclaredCount, callable.arguments.length);
+      this.minimumArgumentCount = Math.min(this.minimumArgumentCount, callable.minimumArgumentCount);
+      this.maximumArgumentCount = Math.max(
+        this.maximumArgumentCount,
+        callable.variadicArgument ? Infinity : callable.arguments.length,
+      );
+    }
+
+    // Effective overload set: group allowable invocations by argument count.
+    // https://webidl.spec.whatwg.org/#dfn-effective-overload-set
+    // Optional suffixes admit shorter counts. One final group covers every count
+    // beyond the longest declaration, reusing each variadic argument's contract.
+    const lastCount = maximumDeclaredCount + (this.maximumArgumentCount === Infinity ? 1 : 0);
+    for (let count = 0; count <= lastCount; count++) {
+      const candidates = callables.filter((callable) =>
+        count >= callable.minimumArgumentCount &&
+        (count <= callable.arguments.length || callable.variadicArgument !== undefined));
+
+      // Distinguishing argument index: for valid overloads, the first differing
+      // type is distinguishable; all preceding types and optionality must match.
+      // https://webidl.spec.whatwg.org/#dfn-distinguishing-argument-index
+      let distinguishingIndex = -1;
+      if (candidates.length > 1) {
+        for (let index = 0; index < count; index++) {
+          const first = assembly.getOverloadTypeKey(candidates[0]!.getArgument(index)!.type);
+          if (candidates.some((candidate) =>
+            assembly.getOverloadTypeKey(candidate.getArgument(index)!.type) !== first)) {
+            distinguishingIndex = index;
+            break;
+          }
+        }
+      }
+      this.#candidatesByArgumentCount.push({ callables: candidates, distinguishingIndex });
+    }
   }
 
+  /** Return the shared candidates for an invocation; callers must not modify the list. */
+  getCandidates(argumentCount: number): OverloadCandidates<Callable> {
+    return this.#candidatesByArgumentCount[Math.min(argumentCount, this.#candidatesByArgumentCount.length - 1)]!;
+  }
+}
+
+/** A callable's fixed argument contracts, shared by all invocations. */
+export class AssembledCallable<Primary extends CallableDeclaration = CallableDeclaration> {
+  primary: Primary;
+  arguments: AssembledArgument[];
+  /** The final argument's contract, reused for every value in a variadic tail. */
+  variadicArgument: AssembledArgument | undefined;
+  minimumArgumentCount: number;
+
+  constructor(primary: Primary) {
+    this.primary = primary;
+    this.arguments = (primary.arguments ?? []).map((argument) => new AssembledArgument(argument));
+    const last = this.arguments.at(-1);
+    this.variadicArgument = last?.optionality === 'variadic' ? last : undefined;
+    let minimum = this.arguments.length;
+    while (minimum > 0 && this.arguments[minimum - 1]!.optionality !== 'required') minimum--;
+    this.minimumArgumentCount = minimum;
+  }
+
+  /** Select a fixed argument or the repeated variadic argument. */
+  getArgument(index: number): AssembledArgument | undefined {
+    return this.arguments[index] ?? this.variadicArgument;
+  }
+}
+
+/** An argument with its applicable conversion attributes incorporated into its type. */
+export class AssembledArgument {
+  primary: ArgumentDefinition;
+  type: WebIDLType;
+  optionality: ArgumentOptionality;
+
+  constructor(primary: ArgumentDefinition) {
+    this.primary = primary;
+    this.type = assembleMemberType(primary.type, primary.extendedAttributes);
+    this.optionality = primary.variadic ? 'variadic' : primary.optional ? 'optional' : 'required';
+  }
+}
+
+/** A dictionary member with its conversion type prepared independently of its incoming value. */
+export class AssembledDictionaryMember {
+  primary: DictionaryMember;
+  name: string;
+  type: WebIDLType;
+
+  constructor(primary: DictionaryMember) {
+    this.primary = primary;
+    this.name = primary.name;
+    this.type = assembleMemberType(primary.type, primary.extendedAttributes);
+  }
+}
+
+/** A callback function's argument and result contract. */
+export class AssembledCallbackFunction extends AssembledCallable<CallbackFunctionDefinition> {
   /** Whether legacy callback attributes accept non-object values as null. */
   treatsNonObjectAsNull(): boolean {
     return hasExtendedAttribute(this.primary.extendedAttributes, 'LegacyTreatNonObjectAsNull');
@@ -320,6 +471,7 @@ export class AssembledNamespace {
   primary: NamespaceDefinition;
   partials: PartialNamespaceDefinition[];
   members: AssembledNamespaceMember[] = [];
+  callables = new AssembledCallables();
 
   constructor(primary: NamespaceDefinition, partials: PartialNamespaceDefinition[] = []) {
     this.primary = primary;
@@ -328,23 +480,29 @@ export class AssembledNamespace {
     for (const partial of partials) {
       for (const member of partial.members) this.members.push({ member, source: partial });
     }
+    for (const { member } of this.members) {
+      if (member.kind === 'operation') this.callables.add(member);
+    }
   }
 
   /** Group accepted operation overloads by name and static/instance placement. */
-  getOperationGroups(include: OperationFilter): Map<string, OperationMember[]> {
-    return groupOperations(this.members, include);
+  getOperationGroups(
+    include: OperationFilter,
+    assembly: DefinitionAssembly,
+  ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
+    return groupOperations(this.members, this.callables, include, assembly);
   }
 }
 
 /** A dictionary with its inherited and partial members in conversion order. */
 export class AssembledDictionary {
   primary: DictionaryDefinition;
-  parentAssembled: AssembledDictionary | undefined;
   partials: PartialDictionaryDefinition[];
+  parentAssembled: AssembledDictionary | undefined;
   /** Conversion reads inherited members first, then lexicographically sorted own and partial members. */
-  members: DictionaryMember[] = [];
+  members: AssembledDictionaryMember[] = [];
   /** Member lookup includes inherited, primary, and partial declarations. */
-  membersByName = new Map<string, DictionaryMember>();
+  membersByName = new Map<string, AssembledDictionaryMember>();
 
   constructor(primary: DictionaryDefinition, partials: PartialDictionaryDefinition[] = []) {
     this.primary = primary;
@@ -358,16 +516,20 @@ export class AssembledDictionary {
 }
 
 /** An enumeration's accepted string values. */
+// https://webidl.spec.whatwg.org/#idl-enums
 export class AssembledEnumeration {
   primary: EnumerationDefinition;
 
+  #acceptedValues: Set<string>;
+
   constructor(primary: EnumerationDefinition) {
     this.primary = primary;
+    this.#acceptedValues = new Set(primary.values);
   }
 
   /** Accept only strings declared by this enumeration. */
   hasValue(value: string): boolean {
-    return this.primary.values.includes(value);
+    return this.#acceptedValues.has(value);
   }
 }
 
@@ -417,13 +579,13 @@ export class AssembledInterfaces {
           mixinsByName.set(definition.name, definition);
           break;
         case 'partial-interface':
-          append(interfacePartialsByName, definition.name, definition);
+          appendValuesByName(interfacePartialsByName, definition.name, definition);
           break;
         case 'partial-interface-mixin':
-          append(mixinPartialsByName, definition.name, definition);
+          appendValuesByName(mixinPartialsByName, definition.name, definition);
           break;
         case 'includes':
-          append(includesByInterfaceName, definition.interface, definition);
+          appendValuesByName(includesByInterfaceName, definition.interface, definition);
           break;
       }
     }
@@ -493,7 +655,7 @@ export class AssembledInterfaces {
   getReference(implClass: ImplementationClass): ReferenceType {
     const assembled = this.byImplClass.get(implClass);
     if (!assembled) throw new InternalError('No interface declares the referenced implementation class');
-    return { kind: 'reference', name: assembled.name };
+    return assembled.type;
   }
 
   /** Visit interfaces whose constructors belong to the named legacy namespace. */
@@ -539,7 +701,7 @@ export class AssembledInterfaces {
   }
 }
 
-/** Select callback interfaces referenced by candidate types or exposed as legacy objects. */
+/** Index callback interfaces by name and identify declarations with legacy interface objects. */
 export class AssembledCallbackInterfaces extends Map<string, AssembledCallbackInterface> {
   constructor(definitions: Definition[]) {
     super();
@@ -550,11 +712,6 @@ export class AssembledCallbackInterfaces extends Map<string, AssembledCallbackIn
     }
   }
 
-  /** Find the first candidate type that names one of these callback interfaces. */
-  findReferenced(candidates: ConversionType[]): AssembledCallbackInterface | undefined {
-    return findReferencedDefinition(this, candidates);
-  }
-
   /** Visit declarations eligible for a legacy callback interface object before realm exposure checks. */
   *withInterfaceObjects(): IterableIterator<AssembledCallbackInterface> {
     for (const assembled of this.values()) {
@@ -563,7 +720,7 @@ export class AssembledCallbackInterfaces extends Map<string, AssembledCallbackIn
   }
 }
 
-/** Select callback functions referenced by candidate types. */
+/** Index callback functions by their IDL names. */
 export class AssembledCallbackFunctions extends Map<string, AssembledCallbackFunction> {
   constructor(definitions: Definition[]) {
     super();
@@ -573,11 +730,6 @@ export class AssembledCallbackFunctions extends Map<string, AssembledCallbackFun
       }
     }
   }
-
-  /** Find the first candidate type that names one of these callback functions. */
-  findReferenced(candidates: ConversionType[]): AssembledCallbackFunction | undefined {
-    return findReferencedDefinition(this, candidates);
-  }
 }
 
 /** Combine namespace fragments and index the assembled namespaces by IDL name. */
@@ -586,7 +738,7 @@ export class AssembledNamespaces extends Map<string, AssembledNamespace> {
     super();
     const partialsByName = new Map<string, PartialNamespaceDefinition[]>();
     for (const definition of definitions) {
-      if (definition.kind === 'partial-namespace') append(partialsByName, definition.name, definition);
+      if (definition.kind === 'partial-namespace') appendValuesByName(partialsByName, definition.name, definition);
     }
     for (const definition of definitions) {
       if (definition.kind === 'namespace') {
@@ -596,13 +748,13 @@ export class AssembledNamespaces extends Map<string, AssembledNamespace> {
   }
 }
 
-/** Select dictionaries referenced by candidate types. */
+/** Assemble dictionary fragments and inheritance, indexed by IDL name. */
 export class AssembledDictionaries extends Map<string, AssembledDictionary> {
   constructor(definitions: Definition[]) {
     super();
     const partialsByName = new Map<string, PartialDictionaryDefinition[]>();
     for (const definition of definitions) {
-      if (definition.kind === 'partial-dictionary') append(partialsByName, definition.name, definition);
+      if (definition.kind === 'partial-dictionary') appendValuesByName(partialsByName, definition.name, definition);
     }
     for (const definition of definitions) {
       if (definition.kind === 'dictionary') {
@@ -612,11 +764,6 @@ export class AssembledDictionaries extends Map<string, AssembledDictionary> {
 
     const visited = new Set<AssembledDictionary>();
     for (const assembled of this.values()) assembleDictionary(assembled, this, visited);
-  }
-
-  /** Find the first candidate type that names one of these dictionaries. */
-  findReferenced(candidates: ConversionType[]): AssembledDictionary | undefined {
-    return findReferencedDefinition(this, candidates);
   }
 }
 
@@ -685,6 +832,29 @@ export class AssembledProxyObjects extends Map<string, AssembledProxyObject> {
   }
 }
 
+/** Retain prepared callables under their original member-binding identities. */
+class AssembledCallables {
+  #byDeclaration = new Map<CallableDeclaration, AssembledCallable>();
+
+  add(primary: CallableDeclaration): void {
+    if (!this.#byDeclaration.has(primary)) this.#byDeclaration.set(primary, new AssembledCallable(primary));
+  }
+
+  get<Primary extends CallableDeclaration>(primary: Primary): AssembledCallable<Primary> {
+    const assembled = this.#byDeclaration.get(primary);
+    if (!assembled) throw new InternalError('Callable does not belong to this assembled definition');
+    // Each entry retains the exact declaration used as its key.
+    return assembled as AssembledCallable<Primary>;
+  }
+}
+
+type CallableDeclaration = { arguments?: ArgumentDefinition[]; };
+type ArgumentOptionality = 'required' | 'optional' | 'variadic';
+type OverloadCandidates<Callable extends AssembledCallable> = {
+  callables: Callable[];
+  distinguishingIndex: number;
+};
+
 type StringifierEntry = InterfaceMemberEntry<'stringifier' | 'attribute'>;
 
 export type AssembledInterfaceMember = {
@@ -735,6 +905,11 @@ function assembleInterface(
       for (const member of partial.members) assembled.members.push({ member, source: partial });
     }
   }
+  for (const { member } of assembled.members) {
+    if (member.kind === 'operation' || member.kind === 'constructor' || member.kind === 'async-iterable') {
+      assembled.callables.add(member);
+    }
+  }
 }
 
 // https://webidl.spec.whatwg.org/#js-dictionary
@@ -761,13 +936,13 @@ function assembleDictionary(
     return 0;
   });
   if (assembled.parentAssembled) assembled.members.push(...assembled.parentAssembled.members);
-  assembled.members.push(...members);
+  for (const member of members) assembled.members.push(new AssembledDictionaryMember(member));
   for (const member of assembled.members) {
     if (!assembled.membersByName.has(member.name)) assembled.membersByName.set(member.name, member);
   }
 }
 
-function append<Value>(
+function appendValuesByName<Value>(
   valuesByName: Map<string, Value[]>,
   name: string,
   value: Value,
@@ -777,31 +952,42 @@ function append<Value>(
   else valuesByName.set(name, [value]);
 }
 
+// https://webidl.spec.whatwg.org/#idl-annotated-types
+function assembleMemberType(type: WebIDLType, extendedAttributes: ExtendedAttribute[] | undefined): WebIDLType {
+  const applicable = extendedAttributes?.filter((attribute) =>
+    attribute.kind !== 'raw' && typeExtendedAttributeNames.has(attribute.name));
+  if (!applicable?.length) return type;
+
+  // Direct type annotations precede applicable argument/member attributes;
+  // both precede attributes inherited through a typedef.
+  if (type.kind === 'annotated') {
+    return { ...type, type: assembleMemberType(type.type, applicable) };
+  }
+  return { extendedAttributes: applicable, kind: 'annotated', type };
+}
+
 // Interfaces and namespaces use the same grouping rules, with exposure selected by the binding.
 function groupOperations(
   members: (AssembledInterfaceMember | AssembledNamespaceMember)[],
+  callables: AssembledCallables,
   include: OperationFilter,
-): Map<string, OperationMember[]> {
-  const groups = new Map<string, OperationMember[]>();
+  assembly: DefinitionAssembly,
+): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
+  const groups = new Map<string, AssembledCallable<OperationMember>[]>();
   for (const entry of members) {
     const operation = entry.member;
     if (operation.kind !== 'operation' || !operation.name || !include(operation, entry)) continue;
     const key = `${operation.static === true ? 'static' : 'regular'}:${operation.name}`;
     const group = groups.get(key);
-    if (group) group.push(operation);
-    else groups.set(key, [operation]);
+    const callable = callables.get(operation);
+    if (group) group.push(callable);
+    else groups.set(key, [callable]);
   }
-  return groups;
+  const overloads = new Map<string, AssembledOverloads<AssembledCallable<OperationMember>>>();
+  for (const [name, group] of groups) overloads.set(name, new AssembledOverloads(group, assembly));
+  return overloads;
 }
 
-// Preserve the candidate type order supplied by union conversion.
-function findReferencedDefinition<Assembled>(
-  assembledByName: Map<string, Assembled>,
-  candidates: ConversionType[],
-): Assembled | undefined {
-  for (const { type } of candidates) {
-    if (type.kind !== 'reference') continue;
-    const assembled = assembledByName.get(type.name);
-    if (assembled) return assembled;
-  }
-}
+const typeExtendedAttributeNames = new Set([
+  'AllowResizable', 'AllowShared', 'Clamp', 'EnforceRange', 'LegacyNullToEmptyString',
+]);

@@ -3,7 +3,7 @@ import type { BindingContext } from './binding-context';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { idlType, implementationType, sequence, type ImplementationType, type WebIDLType } from './core/index';
+import { idlType, implementationType, type ImplementationType, type WebIDLType } from './core/index';
 import {
   createIDLPromiseRecord, isIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
@@ -238,7 +238,7 @@ export function getPromiseForWaitingForAll(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromiseRecord {
-  const promise = createPromise(sequence(type), context);
+  const promise = createPromise(context.binding.assembly.getSequenceType(type), context);
   waitForAll(
     promises,
     (values) => resolvePromise(promise, values, context),

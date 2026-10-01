@@ -10,6 +10,39 @@ import {
   type MaplikeMember, type OperationMember, type SetlikeMember,
 } from '../../src/web-idl/core/index';
 
+describe('Web IDL inherited collections', () => {
+  it.each(['map', 'set'] as const)('keeps inherited %s contents per object and checks borrowed receivers', (kind) => {
+    class BaseImpl {}
+    class ChildImpl extends BaseImpl {}
+    class UnrelatedImpl {}
+    const world = new BindingWorld([
+      defineInterface({ name: 'Child', inherits: 'Base', implementation: impl(ChildImpl), members: [] }),
+      defineInterface({ name: 'Unrelated', implementation: impl(UnrelatedImpl), members: [] }),
+      defineInterface({
+        name: 'Base', implementation: impl(BaseImpl),
+        members: [kind === 'map' ? maplike(idlType.long, idlType.DOMString) : setlike(idlType.long)],
+      }),
+    ]);
+    const realm = new Realm();
+    const ctx = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const first = ctx.project(ChildImpl, new ChildImpl());
+    const second = ctx.project(ChildImpl, new ChildImpl());
+    const unrelated = ctx.project(UnrelatedImpl, new UnrelatedImpl());
+    const method = kind === 'map' ? 'set' : 'add';
+
+    call(first, method, [1, 'one']);
+    expect(Reflect.get(first, 'size')).toBe(1);
+    expect(Reflect.get(second, 'size')).toBe(0);
+    call(second, method, [2, 'two']);
+    expect(call(first, 'has', [1])).toBe(true);
+    expect(call(first, 'has', [2])).toBe(false);
+    expect(call(second, 'has', [1])).toBe(false);
+    expect(call(second, 'has', [2])).toBe(true);
+    expect(() => { Reflect.apply(getMethod(first, 'has'), unrelated, [1]); })
+      .toThrow(realm.intrinsics.typeError);
+  });
+});
+
 describe('Web IDL collection iterator overrides', () => {
   it.each(['map', 'set'] as const)('honors a replaced %s iterator prototype next', (kind) => {
     const { object, realm } = kind === 'map' ? createMaplikeBinding() : createSetlikeBinding();

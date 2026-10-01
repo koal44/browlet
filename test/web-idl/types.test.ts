@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
-  annotated, defineTypedef, idlType, nullable, reference, sequence, union,
-  xattr,
+  annotated, defineDictionary, defineEnumeration, defineTypedef, frozenArray, idlType,
+  nullable, record, reference, sequence, union, xattr,
 } from '../../src/web-idl/core/index';
 import { serializeType } from '../../src/web-idl/core/index';
 
@@ -53,11 +53,87 @@ describe('Web IDL types', () => {
       expect(assembly.hasNumericCandidate(type)).toBe(name === 'long');
       expect(assembly.hasSequenceCandidate(type)).toBe(true);
       expect(assembly.hasSimpleCandidate(type, 'boolean')).toBe(false);
+      expect(assembly.getSoleNumericTypeName(type)).toBe(name === 'long' ? 'long' : undefined);
+      expect(assembly.findSequenceElementType(type)).toBe(idlType.boolean);
+      expect(assembly.findDictionaryOrRecord(type)).toBeUndefined();
     }
 
     const stringKey = strings.getConversionTypeKey(type);
     expect(numbers.getConversionTypeKey(type)).not.toBe(stringKey);
     expect(strings.getConversionTypeKey(type)).toBe(stringKey);
+  });
+
+  it('classifies candidates without including their container contents', () => {
+    const assembly = new DefinitionAssembly([
+      defineEnumeration({ name: 'Choice', values: ['one', 'two'] }),
+    ]);
+    const array = frozenArray(idlType.undefined);
+    const type = union(nullable(idlType.ArrayBuffer), array, reference('Choice'));
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(assembly.hasStringCandidate(type)).toBe(true);
+      expect(assembly.hasNumericCandidate(type)).toBe(false);
+      expect(assembly.hasArrayBufferCandidate(type)).toBe(true);
+      expect(assembly.hasArrayBufferCandidate(idlType.SharedArrayBuffer)).toBe(true);
+      expect(assembly.hasArrayBufferCandidate(sequence(idlType.ArrayBuffer))).toBe(false);
+      expect(assembly.hasSequenceCandidate(type)).toBe(true);
+      expect(assembly.hasCandidateKind(type, 'frozen-array')).toBe(true);
+      expect(assembly.hasCandidateKind(type, 'sequence')).toBe(false);
+      expect(assembly.includesNullableType(type)).toBe(true);
+      expect(assembly.includesUndefined(type)).toBe(false);
+      expect(assembly.findSequenceElementType(array)).toBeUndefined();
+      expect(assembly.getSoleNumericTypeName(sequence(idlType.long))).toBeUndefined();
+      expect(assembly.getSoleNumericTypeName(idlType.bigint)).toBe('bigint');
+      expect(assembly.hasNumericCandidate(idlType.bigint)).toBe(false);
+    }
+  });
+
+  it('selects adaptation types through aliases within the owning assembly', () => {
+    const type = nullable(reference('Value'));
+    const recordType = record(idlType.DOMString, idlType.long);
+    const sequences = new DefinitionAssembly([
+      defineTypedef({ name: 'Value', type: sequence(idlType.long) }),
+    ]);
+    const records = new DefinitionAssembly([
+      defineTypedef({ name: 'Value', type: recordType }),
+    ]);
+    const dictionaries = new DefinitionAssembly([
+      defineDictionary({ name: 'Value', members: [{ name: 'count', type: idlType.long }] }),
+    ]);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(sequences.findSequenceElementType(type)).toBe(idlType.long);
+      expect(sequences.findDictionaryOrRecord(type)).toBeUndefined();
+      expect(records.findSequenceElementType(type)).toBeUndefined();
+      expect(records.findDictionaryOrRecord(type)).toBe(recordType);
+      expect(dictionaries.findSequenceElementType(type)).toBeUndefined();
+      expect(dictionaries.findDictionaryOrRecord(type)).toBe(dictionaries.dictionaries.get('Value'));
+    }
+  });
+
+  it('classifies JSON dictionaries independently of repeated references and other assemblies', () => {
+    const type = reference('Branch');
+    const definitions = [
+      defineDictionary({
+        name: 'Branch',
+        members: [
+          { name: 'first', type: reference('Leaf') },
+          { name: 'second', type: reference('Leaf') },
+        ],
+      }),
+      defineDictionary({ name: 'Leaf', members: [{ name: 'value', type: reference('Value') }] }),
+    ];
+    const strings = new DefinitionAssembly([
+      ...definitions, defineTypedef({ name: 'Value', type: idlType.DOMString }),
+    ]);
+    const symbols = new DefinitionAssembly([
+      ...definitions, defineTypedef({ name: 'Value', type: idlType.symbol }),
+    ]);
+
+    expect(strings.isJSONType(type)).toBe(true);
+    expect(symbols.isJSONType(type)).toBe(false);
+    expect(strings.isJSONType(type)).toBe(true);
+    expect(symbols.isJSONType(type)).toBe(false);
   });
 
   it('preserves attribute order without carrying invocation attributes into later queries', () => {

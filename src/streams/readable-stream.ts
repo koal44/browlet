@@ -561,7 +561,7 @@ export class ReadableStreamImpl {
             : this.env.exec.Promise.resolve(undefined, idlType.undefined));
         }
         shutdownWithAction(
-          () => this.env.exec.Promise.all(actions.map((action) => action()), sequence(idlType.any))
+          () => this.env.exec.Promise.all(actions.map((action) => action()), abortResultsType)
             .then(() => undefined, undefined, idlType.any),
           error,
           true,
@@ -3359,3 +3359,4 @@ function canCopyDataBlockBytes(
 }
 
 const readResultType = implementationType<ReadableStreamReadResult>(reference('ReadableStreamReadResult'));
+const abortResultsType = sequence(idlType.any);

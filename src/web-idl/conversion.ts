@@ -8,7 +8,7 @@ import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
-import type { ConversionType } from './assembly';
+import type { ConversionType, UnionInterfaceCandidate } from './assembly';
 import type { AssembledDictionary } from './assembled';
 import {
   convertAsyncSequenceToJavaScript,
@@ -27,12 +27,11 @@ import type {
 } from './core/types';
 import type { WebIDLRealm } from './realm';
 import type { RealmBinding } from './realm-binding';
-import { getPlatformRecord, type StampedPlatformObject } from './platform-object';
+import { getPlatformRecord } from './platform-object';
 import {
   convertJavaScriptValueToPromise, isIDLPromiseRecord,
 } from './promise-record';
 import { defineDataProperty } from './property';
-import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 // Project entry point for Web IDL §3.2 JavaScript type mapping; realizes realm-owned failures.
@@ -198,8 +197,9 @@ function convertJavaScriptValue(
 ): unknown {
   return convertJavaScriptValueByConversionType(
     value,
-    context.binding.assembly.getConversionType(type, extendedAttributes),
+    context.binding.assembly.getConversionType(type),
     context,
+    extendedAttributes,
     legacyCallbackAttribute,
   );
 }
@@ -209,8 +209,10 @@ function convertJavaScriptValueByConversionType(
   value: unknown,
   { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
+  inheritedAttributes: ExtendedAttribute[],
   legacyCallbackAttribute = false,
 ): unknown {
+  if (inheritedAttributes.length) extendedAttributes = [...inheritedAttributes, ...extendedAttributes];
   switch (type.kind) {
     case 'simple':
       return convertJavaScriptValueToSimpleType(
@@ -305,8 +307,9 @@ function convertIDLValue(
 ): unknown {
   return convertIDLValueByConversionType(
     value,
-    context.binding.assembly.getConversionType(type, extendedAttributes),
+    context.binding.assembly.getConversionType(type),
     context,
+    extendedAttributes,
     allocateBuffers,
   );
 }
@@ -316,8 +319,10 @@ function convertIDLValueByConversionType(
   value: unknown,
   { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
+  inheritedAttributes: ExtendedAttribute[],
   allocateBuffers = false,
 ): unknown {
+  if (inheritedAttributes.length) extendedAttributes = [...inheritedAttributes, ...extendedAttributes];
   // Realize internal exceptions before exposing them, including as callback arguments.
   value = context.binding.realizeException(value);
   switch (type.kind) {
@@ -630,10 +635,6 @@ function convertJavaScriptValueToDictionary(
 
   const result: IDLDictionaryValue = new Map();
   for (const member of assembled.members) {
-    const memberType = getTypeWithApplicableExtendedAttributes(
-      member.type,
-      member.extendedAttributes,
-    );
     const memberValue = value === undefined || value === null
       ? undefined
       : Reflect.get(value, member.name) as unknown;
@@ -641,14 +642,14 @@ function convertJavaScriptValueToDictionary(
     if (memberValue !== undefined) {
       result.set(
         member.name,
-        convertToIDL(memberValue, memberType, context),
+        convertToIDL(memberValue, member.type, context),
       );
-    } else if (member.default !== undefined) {
+    } else if (member.primary.default !== undefined) {
       result.set(
         member.name,
-        materializeDefaultValue(member.default, memberType, context),
+        materializeDefaultValue(member.primary.default, member.type, context),
       );
-    } else if (member.required) {
+    } else if (member.primary.required) {
       throwTypeError(context, `Required dictionary member ${member.name} is missing`);
     }
   }
@@ -671,14 +672,10 @@ function convertDictionaryToJavaScript(
   );
   for (const member of assembled.members) {
     if (!members.has(member.name)) continue;
-    const memberType = getTypeWithApplicableExtendedAttributes(
-      member.type,
-      member.extendedAttributes,
-    );
     defineDataProperty(
       result,
       member.name,
-      convertToJavaScript(members.get(member.name), memberType, context),
+      convertToJavaScript(members.get(member.name), member.type, context),
     );
   }
   return result;
@@ -764,35 +761,32 @@ function convertJavaScriptValueToUnion(
     assembly.includesNullableType(type)
   ) return null;
 
-  const types = assembly.getConversionCandidates(type, extendedAttributes);
+  const candidates = assembly.getUnionCandidates(type);
 
   if (value === null || value === undefined) {
-    const assembled = assembly.dictionaries.findReferenced(types);
+    const assembled = candidates.dictionary;
     if (assembled) return convertJavaScriptValueToDictionary(value, assembled, context);
   }
 
   if (isPlatformObject(value, context)) {
-    const interfaceType = types.find((candidate) =>
+    const interfaceType = candidates.interfaces.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) {
-      return convertJavaScriptValueByConversionType(value, interfaceType, context);
+      return convertJavaScriptValueByConversionType(value, interfaceType.type, context, extendedAttributes);
     }
-    const object = types.find(isObjectType);
-    if (object) return value;
+    if (candidates.simpleTypes.has('object')) return value;
   }
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     if (bufferName) {
-      const buffer = types.find((candidate) =>
-        isSimpleType(candidate, bufferName));
-      if (buffer) return convertJavaScriptValueByConversionType(value, buffer, context);
-      const object = types.find(isObjectType);
-      if (object) return value;
+      const buffer = candidates.simpleTypes.get(bufferName);
+      if (buffer) return convertJavaScriptValueByConversionType(value, buffer, context, extendedAttributes);
+      if (candidates.simpleTypes.has('object')) return value;
     }
   }
 
   if (typeof value === 'function') {
-    const assembled = assembly.callbackFunctions.findReferenced(types);
+    const assembled = candidates.callbackFunction;
     if (assembled) {
       return createCallbackFunctionValue(
         assembled,
@@ -802,17 +796,12 @@ function convertJavaScriptValueToUnion(
         context,
       );
     }
-    const object = types.find(isObjectType);
-    if (object) return value;
+    if (candidates.simpleTypes.has('object')) return value;
   }
 
   if (isObject(value)) {
-    const asyncSequence = types.find((candidate) =>
-      candidate.type.kind === 'async-sequence');
-    if (asyncSequence && !(
-      hasStringData(value) && types.some((candidate) =>
-        assembly.isStringCandidate(candidate))
-    )) {
+    const asyncSequence = candidates.typesByKind.get('async-sequence');
+    if (asyncSequence && !(hasStringData(value) && candidates.string)) {
       const asyncMethod = getMethod(
         value,
         Symbol.asyncIterator,
@@ -837,7 +826,7 @@ function convertJavaScriptValueToUnion(
       }
     }
 
-    const sequence = types.find((candidate) => candidate.type.kind === 'sequence');
+    const sequence = candidates.typesByKind.get('sequence');
     if (sequence && sequence.type.kind === 'sequence') {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
@@ -850,8 +839,7 @@ function convertJavaScriptValueToUnion(
       }
     }
 
-    const frozenArray = types.find((candidate) =>
-      candidate.type.kind === 'frozen-array');
+    const frozenArray = candidates.typesByKind.get('frozen-array');
     if (frozenArray) {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
@@ -859,15 +847,16 @@ function convertJavaScriptValueToUnion(
           value,
           frozenArray,
           context,
+          extendedAttributes,
         );
       }
     }
 
-    const dictionaryAssembled = assembly.dictionaries.findReferenced(types);
+    const dictionaryAssembled = candidates.dictionary;
     if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
-    const record = types.find((candidate) => candidate.type.kind === 'record');
-    if (record) return convertJavaScriptValueByConversionType(value, record, context);
-    const callbackInterfaceAssembled = assembly.callbackInterfaces.findReferenced(types);
+    const record = candidates.typesByKind.get('record');
+    if (record) return convertJavaScriptValueByConversionType(value, record, context, extendedAttributes);
+    const callbackInterfaceAssembled = candidates.callbackInterface;
     if (callbackInterfaceAssembled) {
       return createCallbackInterfaceRecord(
         callbackInterfaceAssembled,
@@ -877,39 +866,34 @@ function convertJavaScriptValueToUnion(
         context,
       );
     }
-    const object = types.find(isObjectType);
-    if (object) return value;
+    if (candidates.simpleTypes.has('object')) return value;
   }
 
   if (typeof value === 'boolean') {
-    const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
-    if (boolean) return value;
+    if (candidates.simpleTypes.has('boolean')) return value;
   }
   if (typeof value === 'number') {
-    const numeric = types.find(isNumericType);
-    if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context);
+    const numeric = candidates.numeric;
+    if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context, extendedAttributes);
   }
   if (typeof value === 'bigint') {
-    const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
-    if (bigint) return value;
+    if (candidates.simpleTypes.has('bigint')) return value;
   }
 
-  const string = types.find((candidate) =>
-    assembly.isStringCandidate(candidate));
-  if (string) return convertJavaScriptValueByConversionType(value, string, context);
+  const string = candidates.string;
+  if (string) return convertJavaScriptValueByConversionType(value, string, context, extendedAttributes);
 
-  const numeric = types.find(isNumericType);
-  const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
+  const numeric = candidates.numeric;
+  const bigint = candidates.simpleTypes.has('bigint');
   if (numeric && bigint) {
     const primitive = toPrimitive(value, 'number');
     return typeof primitive === 'bigint'
       ? primitive
-      : convertJavaScriptValueByConversionType(primitive, numeric, context);
+      : convertJavaScriptValueByConversionType(primitive, numeric, context, extendedAttributes);
   }
-  if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context);
+  if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context, extendedAttributes);
 
-  const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
-  if (boolean) return Boolean(value);
+  if (candidates.simpleTypes.has('boolean')) return Boolean(value);
   if (bigint) return toBigInt(value);
   return throwTypeError(context, 'Value cannot be converted to the union type');
 }
@@ -923,95 +907,68 @@ function convertUnionToJavaScript(
   allocateBuffers: boolean,
 ): unknown {
   const assembly = context.binding.assembly;
-  const types = assembly.getConversionCandidates(type, extendedAttributes);
+  const candidates = assembly.getUnionCandidates(type);
 
   if (value === undefined) {
-    const undefinedType = types.find((candidate) =>
-      isSimpleType(candidate, 'undefined'));
-    if (undefinedType) return undefined;
+    if (candidates.simpleTypes.has('undefined')) return undefined;
   }
   if (value === null && assembly.includesNullableType(type)) {
     return null;
   }
   if (isPlatformObject(value, context)) {
-    const interfaceType = types.find((candidate) =>
+    const interfaceType = candidates.interfaces.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) return value;
-    const object = types.find(isObjectType);
-    if (object) return value;
+    if (candidates.simpleTypes.has('object')) return value;
   }
   if (isObject(value)) {
-    for (const candidate of types) {
-      const projected = projectImplementationForType(
-        value,
-        candidate,
-        context,
-      );
+    for (const candidate of candidates.interfaces) {
+      if (!('assembled' in candidate)) continue;
+      const projected = context.binding.projectImplementationObject(value, candidate.assembled);
       if (projected) return projected;
     }
   }
   if (isCallbackFunctionValue(value) || typeof value === 'function') {
-    const assembled = assembly.callbackFunctions.findReferenced(types);
+    const assembled = candidates.callbackFunction;
     if (assembled) return isCallbackFunctionValue(value) ? value.object : value;
   }
   if (isCallbackInterfaceRecord(value)) {
-    const assembled = assembly.callbackInterfaces.findReferenced(types);
+    const assembled = candidates.callbackInterface;
     if (assembled) return value.object;
   }
   if (isIDLAsyncSequence(value)) {
-    const sequence = types.find((candidate) =>
-      candidate.type.kind === 'async-sequence');
-    if (sequence) return convertIDLValueByConversionType(value, sequence, context);
+    const sequence = candidates.typesByKind.get('async-sequence');
+    if (sequence) return convertIDLValueByConversionType(value, sequence, context, extendedAttributes);
   }
   if (Array.isArray(value)) {
-    const array = types.find((candidate) =>
-      candidate.type.kind === 'sequence' ||
-      candidate.type.kind === 'frozen-array');
-    if (array) return convertIDLValueByConversionType(value, array, context);
+    const array = candidates.array;
+    if (array) return convertIDLValueByConversionType(value, array, context, extendedAttributes);
   }
   if (isMap(value)) {
-    const assembled = assembly.dictionaries.findReferenced(types);
+    const assembled = candidates.dictionary;
     if (assembled) return convertDictionaryToJavaScript(value, assembled, context);
-    const record = types.find((candidate) => candidate.type.kind === 'record');
-    if (record) return convertIDLValueByConversionType(value, record, context);
+    const record = candidates.typesByKind.get('record');
+    if (record) return convertIDLValueByConversionType(value, record, context, extendedAttributes);
   }
   if (typeof value === 'boolean') {
-    const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
-    if (boolean) return value;
+    if (candidates.simpleTypes.has('boolean')) return value;
   }
   if (typeof value === 'number') {
-    const numeric = types.find(isNumericType);
-    if (numeric) return value;
+    if (candidates.numeric) return value;
   }
   if (typeof value === 'bigint') {
-    const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
-    if (bigint) return value;
+    if (candidates.simpleTypes.has('bigint')) return value;
   }
   if (typeof value === 'string') {
-    const string = types.find((candidate) =>
-      assembly.isStringCandidate(candidate));
-    if (string) return value;
+    if (candidates.string) return value;
   }
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
-    const buffer = bufferName && types.find((candidate) =>
-      isSimpleType(candidate, bufferName));
-    if (buffer) return convertIDLValueByConversionType(value, buffer, context, allocateBuffers);
-    const object = types.find(isObjectType);
-    if (object) return value;
+    const buffer = bufferName && candidates.simpleTypes.get(bufferName);
+    if (buffer) return convertIDLValueByConversionType(value, buffer, context, extendedAttributes, allocateBuffers);
+    if (candidates.simpleTypes.has('object')) return value;
   }
   throw new InternalError('IDL union value has no matching specific type');
-}
-
-// Project helper: project an implementation using a candidate interface type.
-function projectImplementationForType(
-  value: object,
-  type: ConversionType,
-  context: ConversionContext,
-): StampedPlatformObject | undefined {
-  if (type.type.kind !== 'reference') return;
-  const assembled = context.binding.assembly.interfaces.get(type.type.name);
-  return assembled && context.binding.projectImplementationObject(value, assembled);
 }
 
 // Web IDL §3.2.4.9 Abstract operations — ConvertToInt.
@@ -1074,33 +1031,16 @@ function convertToFloat(
 
 // Project helper: test whether a value implements the candidate interface type.
 function isImplementedInterfaceType(
-  type: ConversionType,
+  candidate: UnionInterfaceCandidate,
   value: unknown,
   context: ConversionContext,
 ): boolean {
-  if (type.type.kind !== 'reference') return false;
-  const assembled = context.binding.assembly.interfaces.get(type.type.name);
-  if (assembled) {
+  if ('assembled' in candidate) {
     const record = getPlatformRecord(value);
     return record?.binding.world === context.binding.world &&
-      record.implements(assembled);
+      record.implements(candidate.assembled);
   }
-  return context.binding.assembly.proxyObjects.get(type.type.name)?.is(value) ?? false;
-}
-
-// Project helper: recognize a numeric conversion candidate.
-function isNumericType(type: ConversionType): boolean {
-  return type.type.kind === 'simple' && numericTypeNames.has(type.type.name);
-}
-
-// Project helper: recognize the object conversion candidate.
-function isObjectType(type: ConversionType): boolean {
-  return isSimpleType(type, 'object');
-}
-
-// Project helper: match a resolved simple type by name.
-function isSimpleType(type: ConversionType, name: SimpleTypeName): boolean {
-  return type.type.kind === 'simple' && type.type.name === name;
+  return candidate.proxy.is(value);
 }
 
 // Project helper: resolve the callback object's associated realm.
@@ -1169,12 +1109,6 @@ const integerTypes: Partial<Record<
   'long long': { bitLength: 64, signed: true },
   'unsigned long long': { bitLength: 64, signed: false },
 };
-
-const numericTypeNames = new Set<SimpleTypeName>([
-  'byte', 'octet', 'short', 'unsigned short', 'long', 'unsigned long',
-  'long long', 'unsigned long long', 'float', 'unrestricted float',
-  'double', 'unrestricted double',
-]);
 
 const bufferTypeNames = new Set<SimpleTypeName>([
   'ArrayBuffer', 'SharedArrayBuffer', ...bufferViewNames,

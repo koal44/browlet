@@ -9,7 +9,7 @@ import {
 import {
   decimal, defineEnumeration, defineIncludes, defineInterface,
   defineInterfaceMixin, definePartialInterface, frozenArray, idlType, impl, integer,
-  negativeInfinity, notANumber, positiveInfinity, reference,
+  negativeInfinity, notANumber, positiveInfinity, reference, roAttr,
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
@@ -454,6 +454,8 @@ describe('Web IDL realm interface bindings', () => {
     });
 
     const realm = new Realm();
+    const reads: string[] = [];
+    let currentValue = 'first';
     const binding = new RealmBinding(
       new DefinitionAssembly([derived, base]),
       realm,
@@ -467,21 +469,74 @@ describe('Web IDL realm interface bindings', () => {
       steps: () => undefined,
     };
     binding.getDefinitionBinding(binding.resolveInterface(base.name)).getOrCreateMemberRecord(inheritedValue).attributeSteps = {
-      get() { return 12; },
+      get() { reads.push('inheritedValue'); return 12; },
     };
     interfaceBinding.getOrCreateMemberRecord(ownValue).attributeSteps = {
-      get() { return 'value'; },
+      get() { reads.push('ownValue'); return currentValue; },
     };
     interfaceBinding.getOrCreateMemberRecord(nonJSONValue).attributeSteps = {
-      get() { return Symbol('not JSON'); },
+      get() { throw new Error('A non-JSON getter must not be read'); },
     };
     const Interface = getInstalledInterface(binding.install(), 'JSONDerived');
     const object = construct(Interface, []);
     const json = call(Interface.prototype, 'toJSON', object);
 
     expect(json).toBeInstanceOf(realm.intrinsics.object);
-    expect(json).toEqual({ inheritedValue: 12, ownValue: 'value' });
+    expect(json).toEqual({ inheritedValue: 12, ownValue: 'first' });
     expect(Reflect.ownKeys(json as object)).not.toContain('nonJSONValue');
+    currentValue = 'second';
+    const later = call(Interface.prototype, 'toJSON', object);
+    expect(later).toEqual({ inheritedValue: 12, ownValue: 'second' });
+    expect(later).not.toBe(json);
+    expect(reads).toEqual(['inheritedValue', 'ownValue', 'inheritedValue', 'ownValue']);
+  });
+
+  it('keeps default toJSON exposure per realm and reads current instance values and failures', () => {
+    class JSONValuesImpl {
+      current = 1;
+      failure: Error | undefined;
+      get value() {
+        if (this.failure) throw this.failure;
+        return this.current;
+      }
+      get secureValue() { return this.current * 2; }
+    }
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'JSONValues',
+        implementation: impl(JSONValuesImpl),
+        exposed: '*',
+        members: [
+          roAttr('value', idlType.long),
+          { ...roAttr('secureValue', idlType.long), extendedAttributes: [noArguments('SecureContext')] },
+          { ...operationMember('toJSON', [], idlType.object), extendedAttributes: [noArguments('Default')] },
+        ],
+      }),
+    ]);
+
+    for (const secureContext of [true, false]) {
+      const realm = new Realm({ secureContext });
+      const ctx = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+      const value = new JSONValuesImpl();
+      const object = ctx.project(JSONValuesImpl, value);
+      const first = call(object, 'toJSON', object);
+      expect(first).toEqual(secureContext ? { value: 1, secureValue: 2 } : { value: 1 });
+      expect(first).toBeInstanceOf(realm.intrinsics.object);
+
+      value.current = 3;
+      const second = call(object, 'toJSON', object);
+      expect(second).toEqual(secureContext ? { value: 3, secureValue: 6 } : { value: 3 });
+      expect(second).not.toBe(first);
+
+      const other = new JSONValuesImpl();
+      other.current = 5;
+      const otherObject = ctx.project(JSONValuesImpl, other);
+      expect(call(otherObject, 'toJSON', otherObject))
+        .toEqual(secureContext ? { value: 5, secureValue: 10 } : { value: 5 });
+
+      value.failure = new Error('Current getter failure');
+      expect(() => call(object, 'toJSON', object)).toThrow(value.failure);
+    }
   });
 
   it.each([false, true])('creates default toJSON results in the function realm while preserving child ownership (projected: %s)', (projected) => {

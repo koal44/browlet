@@ -6,11 +6,10 @@ import type {
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type { ArgumentDefinition, WebIDLType } from './core/index';
+import type { WebIDLType } from './core/index';
+import type { AssembledCallable } from './assembled';
 import type { CallbackExceptionBehavior } from './core/types';
 import { isIDLPromiseRecord, type IDLPromiseRecord } from './promise-record';
-import { getArgumentDefinition } from './overload';
-import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.11 Callback interfaces — call a user object's operation.
@@ -43,15 +42,15 @@ export function callUserObjectOperation(
         receiver,
         convertWebIDLArguments(
           argumentsList,
-          operation.arguments,
+          operation,
           callbackContext,
         ),
       );
-      return convertToIDL(result, operation.returns, callbackContext);
+      return convertToIDL(result, operation.primary.returns, callbackContext);
     });
   } catch (exception) {
     return rejectPromiseReturn(
-      operation.returns,
+      operation.primary.returns,
       exception,
       callbackContext,
     );
@@ -82,7 +81,7 @@ export function invokeCallbackFunction(
         projectCallbackReceiver(thisArgument),
         convertWebIDLArguments(
           argumentsList,
-          definition.arguments,
+          callable.assembled,
           callbackContext,
         ),
       );
@@ -121,7 +120,7 @@ export function constructCallbackFunction(
       constructor,
       convertWebIDLArguments(
         argumentsList,
-        callable.assembled.primary.arguments,
+        callable.assembled,
         callbackContext,
       ),
     );
@@ -133,10 +132,12 @@ export function constructCallbackFunction(
   });
 }
 
-// Web IDL §3.11 Callback interfaces — convert a Web IDL arguments list to a JavaScript arguments list.
+// https://webidl.spec.whatwg.org/#js-user-objects
+// Our argument values carry their IDL types through the assembled callable.
+// SPEC_MISMATCH: (args) -> JavaScript arguments list
 export function convertWebIDLArguments(
   argumentsList: WebIDLArgumentsList,
-  definitions: ArgumentDefinition[],
+  assembled: AssembledCallable,
   context: ConversionContext,
 ): unknown[] {
   const result: unknown[] = [];
@@ -149,16 +150,13 @@ export function convertWebIDLArguments(
       continue;
     }
 
-    const definition = getArgumentDefinition(definitions, index);
-    if (!definition) {
+    const argument = assembled.getArgument(index);
+    if (!argument) {
       throw new InternalError(`Web IDL argument ${index} has no declared type`);
     }
     result.push(convertToJavaScript(
       value,
-      getTypeWithApplicableExtendedAttributes(
-        definition.type,
-        definition.extendedAttributes,
-      ),
+      argument.type,
       context,
     ));
     count = index + 1;

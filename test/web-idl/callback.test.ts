@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { AssembledCallable } from '../../src/web-idl/assembled';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
@@ -14,7 +15,7 @@ import {
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
-  integer, nullable, promise as promiseType, reference,
+  integer, nullable, promise as promiseType, reference, union,
 } from '../../src/web-idl/core/index';
 import { isIDLPromiseRecord } from '../../src/web-idl/promise-record';
 
@@ -114,6 +115,30 @@ describe('Web IDL callbacks', () => {
     )).toThrow(targetRealm.intrinsics.typeError);
   });
 
+  it('retains each callback\'s identity and realm when reusing union candidates', () => {
+    const { binding, targetRealm, callbackRealm } = createCallbackBinding();
+    const ctx = binding.defaultConversionContext;
+    const functionType = union(reference('Increment'), idlType.DOMString);
+    const interfaceType = union(reference('NumberHandler'), idlType.DOMString);
+
+    for (const realm of [targetRealm, callbackRealm]) {
+      const callback = realm.evaluate('(value) => value + 1', 'union-callback.js');
+      const object = realm.evaluate('({ handleEvent(value) { return value + 2; } })', 'union-callback-interface.js');
+      const functionValue = convertToIDL(callback, functionType, ctx);
+      const interfaceValue = convertToIDL(object, interfaceType, ctx);
+      if (!isCallbackFunctionValue(functionValue) || !isCallbackInterfaceRecord(interfaceValue)) {
+        throw new Error('Union did not select its callback member');
+      }
+
+      expect(functionValue.realm).toBe(realm);
+      expect(interfaceValue.realm).toBe(realm);
+      expect(convertToJavaScript(functionValue, functionType, ctx)).toBe(callback);
+      expect(convertToJavaScript(interfaceValue, interfaceType, ctx)).toBe(object);
+      expect(invokeCallbackFunction(functionValue, [4], 'rethrow')).toBe(5);
+      expect(callUserObjectOperation(interfaceValue, 'handleEvent', [4])).toBe(6);
+    }
+  });
+
   it('reads the current callback-interface method on every invocation', () => {
     const { binding } = createCallbackBinding();
     const object = {
@@ -182,20 +207,22 @@ describe('Web IDL callbacks', () => {
   it('truncates trailing missing callback arguments', () => {
     const { binding } = createCallbackBinding();
     const ctx = binding.defaultConversionContext;
-    const definitions = [
-      { name: 'first', type: idlType.long },
-      { name: 'second', type: idlType.long },
-      { name: 'third', type: idlType.long },
-    ];
+    const assembled = new AssembledCallable({
+      arguments: [
+        { name: 'first', type: idlType.long },
+        { name: 'second', type: idlType.long },
+        { name: 'third', type: idlType.long },
+      ],
+    });
 
     expect(convertWebIDLArguments(
       [missingArgument, 2, missingArgument],
-      definitions,
+      assembled,
       ctx,
     )).toEqual([undefined, 2]);
     expect(convertWebIDLArguments(
       [1, missingArgument, missingArgument],
-      definitions,
+      assembled,
       ctx,
     )).toEqual([1]);
   });

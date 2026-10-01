@@ -5,7 +5,7 @@ import {
   defineCallbackInterface, defineDictionary, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
-  definePartialInterfaceMixin, definePartialNamespace, idlType,
+  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, roAttr,
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL definition assembly', () => {
@@ -71,6 +71,49 @@ describe('Web IDL definition assembly', () => {
       { member: secondPartial.members[0], source: secondPartial },
       { member: first.members[0], source: first },
     ]);
+  });
+
+  it('preserves ancestry, declaration identity, and nearest inherited attributes', () => {
+    const baseValue = roAttr('value', idlType.long);
+    const parentValue = roAttr('value', idlType.long);
+    const inheritedValue = { ...roAttr('value', idlType.long), inherit: true };
+    const base = defineInterface({ name: 'Base', members: [baseValue] });
+    const parent = defineInterface({ name: 'Parent', inherits: 'Base', members: [parentValue] });
+    const child = defineInterface({ name: 'Child', inherits: 'Parent', members: [inheritedValue] });
+    const unrelated = defineInterface({ name: 'Unrelated', members: [] });
+    const assembly = new DefinitionAssembly([child, unrelated, parent, base]);
+    const assembled = assembly.interfaces.get('Child')!;
+    const otherAssembly = new DefinitionAssembly([base]);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(assembled.getInheritanceChain().map((ancestor) => ancestor.name))
+        .toEqual(['Base', 'Parent', 'Child']);
+      expect(assembled.implements(assembly.interfaces.get('Base')!)).toBe(true);
+      expect(assembled.implements(assembly.interfaces.get('Child')!)).toBe(true);
+      expect(assembled.implements(otherAssembly.interfaces.get('Base')!)).toBe(true);
+      expect(assembled.implements(assembly.interfaces.get('Unrelated')!)).toBe(false);
+      expect(assembled.getInheritedAttribute(inheritedValue)).toBe(parentValue);
+      expect(assembled.includesMember(baseValue)).toBe(true);
+      expect(assembled.includesMember(inheritedValue)).toBe(true);
+      expect(assembled.includesMember(roAttr('value', idlType.long))).toBe(false);
+    }
+  });
+
+  it('distinguishes own, inherited, and absent collection declarations', () => {
+    const collection = maplike(idlType.DOMString, idlType.long);
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Child', inherits: 'Parent', members: [] }),
+      defineInterface({ name: 'Plain', members: [] }),
+      defineInterface({ name: 'Parent', members: [collection] }),
+    ]);
+    const assembled = assembly.interfaces.get('Child')!;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(assembled.getCollectionDeclaration()).toBeUndefined();
+      expect(assembled.getCollectionDeclaration(true)).toBe(collection);
+      expect(assembly.interfaces.get('Parent')!.getCollectionDeclaration()).toBe(collection);
+      expect(assembly.interfaces.get('Plain')!.getCollectionDeclaration(true)).toBeUndefined();
+    }
   });
 
   it('keeps callback interfaces distinct from interfaces', () => {

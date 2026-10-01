@@ -272,6 +272,8 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 }
 
+const fileReaderErrorType = nullable(reference('DOMException'));
+
 // BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
 /*
  * File API §6.2 — The FileReader API
@@ -332,7 +334,7 @@ export const fileReaderIDL = defineInterface<BrowletEnvironment>({
       // BINDING_INTEGRATION: realize a retained failure on its first author observation.
       get(context) {
         const error = context.realizeException((this as FileReaderImpl).error);
-        return context.convertToImpl(error, nullable(reference('DOMException')));
+        return context.convertToImpl(error, fileReaderErrorType);
       },
     }),
     eventHandlerAttr('onloadstart'),

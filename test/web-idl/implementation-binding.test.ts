@@ -8,17 +8,75 @@ import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
   arg, atArg, attr, attrFn, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
-  defineInterfaceMixin, definePartialDictionary, defineTypedef, dictMember, idlType,
+  defineInterfaceMixin, definePartialDictionary, defineTypedef, dictMember, idlType, integer,
   impl, implementationType, indexedGetter, iter, namedGetter, nullable, op, staticOp,
   promise as promiseType, roAttr, record, reference, unwrapArg, sequence,
   stringifier,
-  union, invokeWith,
+  union, invokeWith, xattr,
 } from '../../src/web-idl/core/index';
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 
 describe('Web IDL implementation bindings', () => {
+  it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
+    class NumberConsumerImpl {
+      constructor(public value: number) {}
+      clamp(value: number) { return value; }
+      wrap(value: number) { return value; }
+      many(...values: number[]) { return values; }
+    }
+    const valueType = reference('NumberValue');
+    const definition = defineInterface({
+      name: 'NumberConsumer', exposed: '*', implementation: impl(NumberConsumerImpl),
+      members: [
+        ctor([arg('value', valueType, xattr('Clamp'))]),
+        roAttr('value', idlType.long),
+        op('clamp', idlType.long, [arg('value', valueType, {
+          optional: true, default: integer(5), ...xattr('Clamp'),
+        })]),
+        op('wrap', idlType.long, [arg('value', valueType)]),
+        op('many', sequence(idlType.long), [arg('values', valueType, {
+          variadic: true, ...xattr('Clamp'),
+        })]),
+      ],
+    });
+
+    // The same declarations resolve their forward alias independently in each world.
+    for (const [type, maximum, wrapped] of [
+      [idlType.byte, 127, 44], [idlType.short, 300, 300],
+    ] as const) {
+      const realm = new Realm();
+      const world = new BindingWorld([
+        definition, defineTypedef({ name: 'NumberValue', type }),
+      ]);
+      world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+      const Constructor = Reflect.get(realm.global, 'NumberConsumer') as new(value: unknown) => {
+        value: number;
+        clamp(value?: unknown): number;
+        wrap(value: unknown): number;
+        many(...values: unknown[]): number[];
+      };
+      const object = new Constructor(300);
+      expect(object.value).toBe(maximum);
+      expect(object.clamp(300)).toBe(maximum);
+      expect(object.wrap(300)).toBe(wrapped);
+      expect(object.clamp()).toBe(5);
+      expect(object.many(300, 2.5, 3.5)).toEqual([maximum, 2, 4]);
+      expect(object.many()).toEqual([]);
+      expect(object.many(3.5)).toEqual([4]);
+
+      let value = 2.5;
+      let reads = 0;
+      const input = { valueOf() { reads++; return value; } };
+      expect(object.clamp(input)).toBe(2);
+      value = 3.5;
+      expect(object.clamp(input)).toBe(4);
+      expect(reads).toBe(2);
+      expect(object.wrap(300)).toBe(wrapped);
+    }
+  });
+
   it('converts implementation references through the registered interface, including unions and overloads', async () => {
     class ValueImpl {
       constructor(public value: string) {}

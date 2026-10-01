@@ -1,13 +1,13 @@
 import { isObject, type JSFunction } from '../js-engine/index';
 import { InternalPromise } from '../infra/promises';
 import { Stamper } from '../infra/stamper';
-import type { AssembledInterface } from './assembled';
+import type { AssembledArgument, AssembledInterface } from './assembled';
 import { endOfIteration } from './async-sequence';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import {
-  idlType, type ArgumentDefinition, type AsyncIterableMember,
+  idlType, type AsyncIterableMember,
 } from './core/index';
 import type { AsyncIteratorSteps } from './definition-binding';
 import { missingArgument } from './overload';
@@ -17,7 +17,6 @@ import {
 } from './promise-record';
 import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
-import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 export class AsynchronousIterableBinding {
@@ -75,6 +74,7 @@ export class AsynchronousIterableBinding {
     name: string,
     securityIdentifier: string,
   ): JSFunction<StampedAsyncIterator> {
+    const callable = assembled.callables.get(declaration);
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
@@ -88,7 +88,7 @@ export class AsynchronousIterableBinding {
         const steps = this.#requireSteps(assembled, declaration);
         const implementationIterator = steps.create(
           receiver.implInst,
-          this.#convertArguments(declaration.arguments ?? [], argumentsList),
+          this.#convertArguments(callable.arguments, argumentsList),
         );
         return AsyncIteratorStamper.stamp(iterator, {
           finished: false,
@@ -336,25 +336,21 @@ export class AsynchronousIterableBinding {
 
   // Web IDL §3.7.10 Asynchronous iterable declarations — convert arguments for an asynchronous iterator method.
   #convertArguments(
-    definitions: ArgumentDefinition[],
+    arguments_: AssembledArgument[],
     argumentsList: unknown[],
   ): unknown[] {
-    return definitions.map((argument, index) => {
-      const argumentType = getTypeWithApplicableExtendedAttributes(
-        argument.type,
-        argument.extendedAttributes,
-      );
+    return arguments_.map((argument, index) => {
       const value = argumentsList[index];
       if (index >= argumentsList.length || value === undefined) {
-        return argument.default === undefined
+        return argument.primary.default === undefined
           ? missingArgument
           : materializeDefaultValue(
-            argument.default,
-            argumentType,
+            argument.primary.default,
+            argument.type,
             this.#binding.defaultConversionContext,
           );
       }
-      return convertToIDL(value, argumentType, this.#binding.defaultConversionContext);
+      return convertToIDL(value, argument.type, this.#binding.defaultConversionContext);
     });
   }
 

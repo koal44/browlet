@@ -2,106 +2,41 @@ import { getPlatformRecord } from './platform-object';
 import {
   getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
 } from '../js-engine/index';
-import type { DefinitionAssembly } from './assembly';
+import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
 import { createIDLAsyncSequence } from './async-sequence';
 import {
   convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
-import type { ArgumentDefinition, WebIDLType } from './core/index';
-import { getTypeWithApplicableExtendedAttributes } from './types';
+import type { WebIDLType } from './core/index';
 import { InternalError } from '../infra/internal-error';
 
-// Web IDL §2.5.8 Overloading — compute the effective overload set, from selected callables.
-export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
-  callables: Callable[],
-  argumentCount: number,
-): EffectiveOverloadSetItem<Callable>[] {
-  let maxarg = 0;
-  for (const callable of callables) {
-    maxarg = Math.max(maxarg, callable.arguments.length);
-  }
-
-  const max = Math.max(maxarg, argumentCount);
-  const effectiveOverloadSet: EffectiveOverloadSetItem<Callable>[] = [];
-
-  for (const callable of callables) {
-    const argumentsList = callable.arguments;
-    const n = argumentsList.length;
-    const types = argumentsList.map(getArgumentType);
-    const optionalityValues = argumentsList.map(getOptionality);
-
-    effectiveOverloadSet.push({
-      callable,
-      optionality: optionalityValues,
-      types,
-    });
-
-    const variadicType = types.at(-1);
-    if (
-      optionalityValues.at(-1) === 'variadic' &&
-      variadicType !== undefined
-    ) {
-      for (let i = n; i <= max - 1; i++) {
-        const t = types.slice();
-        const o = optionalityValues.slice();
-
-        for (let j = n; j <= i; j++) {
-          t.push(variadicType);
-          o.push('variadic');
-        }
-        effectiveOverloadSet.push({
-          callable,
-          optionality: o,
-          types: t,
-        });
-      }
-    }
-
-    let i = n - 1;
-    while (i >= 0) {
-      if (optionalityValues[i] === 'required') break;
-      effectiveOverloadSet.push({
-        callable,
-        optionality: optionalityValues.slice(0, i),
-        types: types.slice(0, i),
-      });
-      i--;
-    }
-  }
-
-  return effectiveOverloadSet;
-}
-
-// Web IDL §3.6 Overload resolution algorithm.
-export function resolveOverload<Callable extends IDLCallable>(
-  effectiveOverloadSet: EffectiveOverloadSetItem<Callable>[],
+// https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
+// Prepared argument-count groups replace the spec's expanded type and optionality lists.
+// SPEC_MISMATCH: (effective overload set, arguments) -> (callable, IDL values)
+export function resolveOverload<Callable extends AssembledCallable>(
+  overloads: AssembledOverloads<Callable>,
   argumentsList: unknown[],
   context: ConversionContext,
 ): ResolvedOverload<Callable> {
-  const maxarg = effectiveOverloadSet.reduce(
-    (maximum, item) => Math.max(maximum, item.types.length),
-    0,
-  );
-  const argcount = Math.min(maxarg, argumentsList.length);
-  let candidates = effectiveOverloadSet.filter(
-    ({ types }) => types.length === argcount,
-  );
+  const argcount = Math.min(overloads.maximumArgumentCount, argumentsList.length);
+  const group = overloads.getCandidates(argcount);
+  const distinguishingIndex = group.distinguishingIndex;
+  let candidates = group.callables;
   if (candidates.length === 0) {
     return throwTypeError(context, 'No overload accepts this argument count');
   }
 
-  const distinguishingIndex = candidates.length === 1
-    ? -1
-    : getDistinguishingArgumentIndex(candidates, context.binding.assembly);
+  if (candidates.length > 1 && distinguishingIndex === -1) {
+    throw new InternalError('Overloads have no distinguishing argument');
+  }
   const values: unknown[] = [];
   let i = 0;
 
   while (i < distinguishingIndex) {
     values.push(convertArgument(
       argumentsList[i],
-      candidates[0] as EffectiveOverloadSetItem<Callable>,
-      i,
+      candidates[0]!.getArgument(i)!,
       context,
     ));
     i++;
@@ -124,14 +59,11 @@ export function resolveOverload<Callable extends IDLCallable>(
   if (candidates.length !== 1) {
     throw new InternalError('Overload set did not resolve to one callable');
   }
-  const selected = candidates[0] as EffectiveOverloadSetItem<Callable>;
+  const selected = candidates[0]!;
 
   if (i === distinguishingIndex && asyncSequenceMethod) {
-    const type = selected.types[i];
-    const asyncSequence = type && context.binding.assembly.findCandidateType(
-      type,
-      (candidate) => candidate.kind === 'async-sequence',
-    );
+    const type = selected.getArgument(i)!.type;
+    const asyncSequence = context.binding.assembly.getUnionCandidates(type).typesByKind.get('async-sequence')?.type;
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
@@ -145,12 +77,8 @@ export function resolveOverload<Callable extends IDLCallable>(
   }
 
   if (i === distinguishingIndex && method) {
-    const type = selected.types[i];
-    const sequenceLike = type && context.binding.assembly.findCandidateType(
-      type,
-      (candidate) =>
-        candidate.kind === 'sequence' || candidate.kind === 'frozen-array',
-    );
+    const type = selected.getArgument(i)!.type;
+    const sequenceLike = context.binding.assembly.getUnionCandidates(type).array?.type;
     if (
       !sequenceLike ||
       (sequenceLike.kind !== 'sequence' &&
@@ -177,43 +105,30 @@ export function resolveOverload<Callable extends IDLCallable>(
   while (i < argcount) {
     values.push(convertArgument(
       argumentsList[i],
-      selected,
-      i,
+      selected.getArgument(i)!,
       context,
     ));
     i++;
   }
 
-  while (i < selected.callable.arguments.length) {
-    const argument = selected.callable.arguments[i] as ArgumentDefinition;
-    if (argument.default !== undefined) {
+  while (i < selected.arguments.length) {
+    const argument = selected.arguments[i]!;
+    if (argument.primary.default !== undefined) {
       values.push(materializeDefaultValue(
-        argument.default,
-        getArgumentType(argument),
+        argument.primary.default,
+        argument.type,
         context,
       ));
-    } else if (!argument.variadic) {
+    } else if (argument.optionality !== 'variadic') {
       values.push(missingArgument);
     }
     i++;
   }
 
-  return { callable: selected.callable, values };
+  return { callable: selected, values };
 }
 
-export type IDLCallable = {
-  arguments: ArgumentDefinition[];
-};
-
-export type EffectiveOverloadSetItem<Callable extends IDLCallable> = {
-  callable: Callable;
-  types: WebIDLType[];
-  optionality: Optionality[];
-};
-
-export type Optionality = 'required' | 'optional' | 'variadic';
-
-export type ResolvedOverload<Callable extends IDLCallable> = {
+export type ResolvedOverload<Callable extends AssembledCallable> = {
   callable: Callable;
   values: unknown[];
 };
@@ -221,40 +136,25 @@ export type ResolvedOverload<Callable extends IDLCallable> = {
 export const missingArgument: unique symbol = Symbol('Web IDL missing argument');
 export type MissingArgument = typeof missingArgument;
 
-// Extracted from Web IDL §2.5.8 Overloading — compute the effective overload set's optionality values.
-function getOptionality(argument: ArgumentDefinition): Optionality {
-  if (argument.variadic) return 'variadic';
-  if (argument.optional) return 'optional';
-  return 'required';
-}
-
-// Project helper: include applicable argument attributes in the type used for conversion.
-function getArgumentType(argument: ArgumentDefinition): WebIDLType {
-  return getTypeWithApplicableExtendedAttributes(
-    argument.type,
-    argument.extendedAttributes,
-  );
-}
-
 // Extracted from Web IDL §3.6 Overload resolution algorithm — select by the distinguishing argument.
-function resolveDistinguishingArgument<Callable extends IDLCallable>(
-  candidates: EffectiveOverloadSetItem<Callable>[],
+function resolveDistinguishingArgument<Callable extends AssembledCallable>(
+  candidates: Callable[],
   value: unknown,
   index: number,
   context: ConversionContext,
 ): DistinguishingResolution<Callable> {
   const assembly = context.binding.assembly;
-  let matches: EffectiveOverloadSetItem<Callable>[];
+  let matches: Callable[];
 
   if (value === undefined) {
-    matches = candidates.filter(({ optionality }) =>
-      optionality[index] === 'optional');
+    matches = candidates.filter((callable) =>
+      callable.getArgument(index)!.optionality === 'optional');
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (value === null || value === undefined) {
-    matches = candidates.filter(({ types }) => {
-      const type = types[index] as WebIDLType;
+    matches = candidates.filter((callable) => {
+      const type = callable.getArgument(index)!.type;
       return assembly.includesNullableType(type) ||
         assembly.getCandidateTypes(type).some((candidate) =>
           candidate.kind === 'reference' &&
@@ -264,8 +164,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   }
 
   if (isPlatformObject(value, context)) {
-    matches = candidates.filter(({ types }) => {
-      const type = types[index] as WebIDLType;
+    matches = candidates.filter((callable) => {
+      const type = callable.getArgument(index)!.type;
       return containsImplementedInterface(type, value, context) ||
         assembly.hasSimpleCandidate(type, 'object');
     });
@@ -275,22 +175,22 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     if (bufferName === 'ArrayBuffer' || bufferName === 'SharedArrayBuffer') {
-      matches = candidates.filter(({ types }) => {
-        const type = types[index] as WebIDLType;
+      matches = candidates.filter((callable) => {
+        const type = callable.getArgument(index)!.type;
         return assembly.hasArrayBufferCandidate(type) ||
           assembly.hasSimpleCandidate(type, 'object');
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName === 'DataView') {
-      matches = candidates.filter(({ types }) => {
-        const type = types[index] as WebIDLType;
+      matches = candidates.filter((callable) => {
+        const type = callable.getArgument(index)!.type;
         return assembly.hasSimpleCandidate(type, 'DataView') ||
           assembly.hasSimpleCandidate(type, 'object');
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName) {
-      matches = candidates.filter(({ types }) => {
-        const type = types[index] as WebIDLType;
+      matches = candidates.filter((callable) => {
+        const type = callable.getArgument(index)!.type;
         return assembly.hasSimpleCandidate(type, bufferName) ||
           assembly.hasSimpleCandidate(type, 'object');
       });
@@ -299,8 +199,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   }
 
   if (typeof value === 'function') {
-    matches = candidates.filter(({ types }) => {
-      const type = types[index] as WebIDLType;
+    matches = candidates.filter((callable) => {
+      const type = callable.getArgument(index)!.type;
       return assembly.getCandidateTypes(type).some((candidate) =>
         candidate.kind === 'reference'
           ? assembly.callbackFunctions.has(candidate.name)
@@ -310,10 +210,10 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   }
 
   if (isObject(value)) {
-    const hasAsyncSequence = candidates.some(({ types }) =>
-      assembly.hasCandidateKind(types[index] as WebIDLType, 'async-sequence'));
-    const hasString = candidates.some(({ types }) =>
-      assembly.hasStringCandidate(types[index] as WebIDLType));
+    const hasAsyncSequence = candidates.some((callable) =>
+      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'async-sequence'));
+    const hasString = candidates.some((callable) =>
+      assembly.hasStringCandidate(callable.getArgument(index)!.type));
 
     if (hasAsyncSequence && !(hasStringData(value) && hasString)) {
       const asyncMethod = getMethod(
@@ -326,8 +226,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         : getMethod(value, Symbol.iterator, context.realm);
       const iteratorMethod = asyncMethod ?? syncMethod;
       if (iteratorMethod) {
-        matches = candidates.filter(({ types }) =>
-          assembly.hasCandidateKind(types[index] as WebIDLType, 'async-sequence'));
+        matches = candidates.filter((callable) =>
+          assembly.hasCandidateKind(callable.getArgument(index)!.type, 'async-sequence'));
         if (matches.length > 0) {
           return {
             asyncSequenceMethod: {
@@ -340,8 +240,8 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       }
     }
 
-    const hasSequenceLike = candidates.some(({ types }) =>
-      assembly.hasSequenceCandidate(types[index] as WebIDLType));
+    const hasSequenceLike = candidates.some((callable) =>
+      assembly.hasSequenceCandidate(callable.getArgument(index)!.type));
     if (hasSequenceLike) {
       const iteratorMethod = getMethod(
         value,
@@ -349,16 +249,16 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         context.realm,
       );
       if (iteratorMethod) {
-        matches = candidates.filter(({ types }) =>
-          assembly.hasSequenceCandidate(types[index] as WebIDLType));
+        matches = candidates.filter((callable) =>
+          assembly.hasSequenceCandidate(callable.getArgument(index)!.type));
         if (matches.length > 0) {
           return { candidates: matches, method: iteratorMethod };
         }
       }
     }
 
-    matches = candidates.filter(({ types }) => {
-      const type = types[index] as WebIDLType;
+    matches = candidates.filter((callable) => {
+      const type = callable.getArgument(index)!.type;
       return assembly.getCandidateTypes(type).some((candidate) => {
         if (candidate.kind === 'reference') {
           return assembly.callbackInterfaces.has(candidate.name) ||
@@ -372,91 +272,58 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   }
 
   if (typeof value === 'boolean') {
-    matches = candidates.filter(({ types }) =>
-      assembly.hasSimpleCandidate(types[index] as WebIDLType, 'boolean'));
+    matches = candidates.filter((callable) =>
+      assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'boolean'));
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'number') {
-    matches = candidates.filter(({ types }) =>
-      assembly.hasNumericCandidate(types[index] as WebIDLType));
+    matches = candidates.filter((callable) =>
+      assembly.hasNumericCandidate(callable.getArgument(index)!.type));
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'bigint') {
-    matches = candidates.filter(({ types }) =>
-      assembly.hasSimpleCandidate(types[index] as WebIDLType, 'bigint'));
+    matches = candidates.filter((callable) =>
+      assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'bigint'));
     if (matches.length > 0) return { candidates: matches };
   }
 
-  matches = candidates.filter(({ types }) =>
-    assembly.hasStringCandidate(types[index] as WebIDLType));
+  matches = candidates.filter((callable) =>
+    assembly.hasStringCandidate(callable.getArgument(index)!.type));
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter(({ types }) =>
-    assembly.hasNumericCandidate(types[index] as WebIDLType));
+  matches = candidates.filter((callable) =>
+    assembly.hasNumericCandidate(callable.getArgument(index)!.type));
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter(({ types }) =>
-    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'boolean'));
+  matches = candidates.filter((callable) =>
+    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'boolean'));
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter(({ types }) =>
-    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'bigint'));
+  matches = candidates.filter((callable) =>
+    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'bigint'));
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter(({ types }) =>
-    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'any'));
+  matches = candidates.filter((callable) =>
+    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'any'));
   if (matches.length > 0) return { candidates: matches };
 
   return throwTypeError(context, 'No overload matches the argument value');
 }
 
 // Extracted from Web IDL §3.6 Overload resolution algorithm — convert an argument or use its default.
-function convertArgument<Callable extends IDLCallable>(
+function convertArgument(
   value: unknown,
-  item: EffectiveOverloadSetItem<Callable>,
-  index: number,
+  argument: AssembledArgument,
   context: ConversionContext,
 ): unknown {
-  const type = item.types[index] as WebIDLType;
-  const optionality = item.optionality[index] as Optionality;
-  const argument = getArgumentDefinition(item.callable.arguments, index);
-
-  if (optionality === 'optional' && value === undefined) {
-    return argument?.default === undefined
+  if (argument.optionality === 'optional' && value === undefined) {
+    return argument.primary.default === undefined
       ? missingArgument
-      : materializeDefaultValue(argument.default, type, context);
+      : materializeDefaultValue(argument.primary.default, argument.type, context);
   }
-  return convertToIDL(value, type, context);
-}
-
-// Project helper: find the declaration for a fixed or expanded variadic argument.
-export function getArgumentDefinition(
-  definitions: ArgumentDefinition[],
-  index: number,
-): ArgumentDefinition | undefined {
-  const argument = definitions[index];
-  if (argument) return argument;
-  const last = definitions.at(-1);
-  return last?.variadic ? last : undefined;
-}
-
-// Locate the distinguishing position by comparing overload type keys.
-// Web IDL §2.5.8 Overloading — distinguishing argument index.
-function getDistinguishingArgumentIndex<Callable extends IDLCallable>(
-  candidates: EffectiveOverloadSetItem<Callable>[],
-  assembly: DefinitionAssembly,
-): number {
-  const length = candidates[0]?.types.length ?? 0;
-  for (let index = 0; index < length; index++) {
-    const first = assembly.getOverloadTypeKey(candidates[0]?.types[index] as WebIDLType);
-    if (candidates.some(({ types }) =>
-      assembly.getOverloadTypeKey(types[index] as WebIDLType) !== first)) {
-      return index;
-    }
-  }
-  throw new InternalError('Overloads have no distinguishing argument');
+  return convertToIDL(value, argument.type, context);
 }
 
 // Project helper: test candidate types against a platform object's implemented interfaces.
@@ -485,9 +352,9 @@ function throwTypeError(
   throw new context.realm.intrinsics.typeError(message);
 }
 
-type DistinguishingResolution<Callable extends IDLCallable> = {
+type DistinguishingResolution<Callable extends AssembledCallable> = {
   asyncSequenceMethod?: AsyncSequenceMethod;
-  candidates: EffectiveOverloadSetItem<Callable>[];
+  candidates: Callable[];
   method?: JSMethod;
 };
 

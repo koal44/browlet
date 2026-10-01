@@ -93,20 +93,46 @@ including its fragments and inheritance. Named lookups only read the completed
 assembly. Declarations and their nested members and types must remain unchanged
 after assembly. Dictionaries index their members by name alongside the ordered
 conversion list; callback interfaces index their operation declarations.
+Callable arguments and dictionary members retain their assembled types, including
+applicable conversion attributes such as `[Clamp]`. Callables also retain argument
+optionality and minimum argument counts. This preparation happens during assembly;
+invocation and implementation adaptation reuse it while reading current values.
+After realm exposure filtering, assembled overload groups prepare their argument-count
+choices, distinguishing positions, and function lengths. Invocation selects from
+these groups without rebuilding effective overload entries. One final group handles
+all counts beyond the longest variadic declaration, reusing its final argument contract.
+The original declarations remain the keys for member bindings.
 Runtime consumers use assembled class instances,
 which retain their original declarations as `primary`. All realms registered in
 that world use these same instances, while their JavaScript constructors and
 prototypes remain realm-owned. Realm binding caches use the assembled definitions
 as keys. Member searches, operation grouping, inheritance, and legacy metadata
-belong to the assembled definitions. Their collections own implementation-class
+belong to the assembled definitions. Interfaces retain ancestry, member membership,
+inherited attribute lookups, and collection declarations on first use, including
+absent collection declarations. Collection contents remain per object.
+Their collections own implementation-class
 lookup, namespace membership, inheritance ordering, candidate-type searches,
 typedef expansion, and proxy recognition. Member types still contain symbolic
 references; `DefinitionAssembly` resolves them within that world. Resolved types,
 candidate lists, and comparison keys are cached per descriptor on first use.
+One lazy type analysis supplies candidate classifications, nullability, adaptation
+types, and the numeric type for integer defaults. JSON type checks retain completed
+answers separately, without retaining intermediate dictionary traversal results.
+These maps live with the assembly. Retain type descriptors in declarations or
+module constants instead of constructing them during invocation. The assembly
+also retains derived sequence types used by Promise aggregates and observable
+array assignment. Conversion still reads and converts each incoming value anew.
 `getCandidateTypes()` ignores annotations for overload selection;
 `getConversionCandidates()` preserves conversion attributes in their original order.
-Caller-supplied attributes are applied separately, keeping them out of cached results.
-Returned candidate lists are shared and must not be modified. Realm-specific exposure and
+Union conversion retains its category selections and referenced definitions on first
+use. Caller-supplied attributes are applied only to the selected candidate, keeping
+them out of cached results. Enumeration membership uses a retained set of values.
+Returned candidate and inheritance lists are shared and must not be modified.
+Assembled interfaces collect legacy factory names and lazily prepare their overload
+groups; each realm separately retains its factory functions and implementation steps.
+Default `toJSON` prepares its exposed attribute list once per realm and interface;
+each invocation still reads current getters and converts their values into a new object.
+Realm-specific exposure and
 installation remain binding work; queries that need exposure accept a predicate
 from that binding. Mixins are
 temporary assembly inputs; contributed members retain their source declarations
@@ -249,8 +275,9 @@ The descriptor determines the resolver's TypeScript payload too:
 `reference(BarImpl)` supplies both the interface identity and its implementation type.
 Named dictionary results can use `implementationType<MyRecord>(reference('MyRecord'))`.
 Web IDL owns those descriptors and their payload mappings; Infra retains them
-through a generic result-type contract. `all(values, sequence(idlType.long))`
-takes the complete array result descriptor.
+through a generic result-type contract. Declare compound result types once, such
+as `const resultType = sequence(idlType.long)`. `all(values, resultType)` takes
+the complete array result descriptor.
 `then()` and `catch()` keep the descriptor. To change it, use
 `then(fulfill, reject, type)`, passing `undefined` when no rejection handler is needed.
 TypeScript requires the new descriptor when the callback changes the payload

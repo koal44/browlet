@@ -9,7 +9,8 @@ import {
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
   annotated, asyncSequence, decimal, defineDictionary, defineEnumeration, defineProxyObject,
-  defineInterface, frozenArray, idlType, integer, nullable, record, reference,
+  defineInterface, definePartialDictionary, defineTypedef, emptySequence, frozenArray,
+  idlType, integer, nullable, record, reference,
   sequence, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
@@ -149,6 +150,29 @@ describe('Web IDL value conversion', () => {
     }
   });
 
+  it('uses each assembly\'s enumeration values for a shared union descriptor', () => {
+    const type = union(idlType.long, reference('Choice'));
+    const first = createContext([defineEnumeration({ name: 'Choice', values: ['', '__proto__'] })]);
+    const second = createContext([defineEnumeration({ name: 'Choice', values: ['constructor'] })]);
+    let text = '';
+    let conversions = 0;
+    const value = { toString() { conversions++; return text; } };
+
+    for (let i = 0; i < 2; i++) {
+      text = '';
+      expect(convertToIDL(value, type, first.ctx)).toBe('');
+      text = '__proto__';
+      expect(convertToIDL(value, type, first.ctx)).toBe('__proto__');
+      expectRealmTypeError(() => convertToIDL(value, type, second.ctx), second.realm);
+      text = 'constructor';
+      expect(convertToIDL(value, type, second.ctx)).toBe('constructor');
+      expectRealmTypeError(() => convertToIDL(value, type, first.ctx), first.realm);
+      expect(convertToIDL(12, type, first.ctx)).toBe(12);
+      expect(convertToIDL(12, type, second.ctx)).toBe(12);
+    }
+    expect(conversions).toBe(10);
+  });
+
   it('realizes BigInt syntax failures without replacing author SyntaxErrors', () => {
     const { ctx, realm } = createContext();
     expect(() => convertToIDL('not an integer', idlType.bigint, ctx))
@@ -240,22 +264,42 @@ describe('Web IDL value conversion', () => {
     );
   });
 
-  it('associates applicable dictionary-member attributes with their types', () => {
-    const options = defineDictionary({
-      name: 'Options',
+  it('preserves inherited and partial dictionary conversions while reading fresh values', () => {
+    const valueType = reference('OptionsNumber');
+    const base = defineDictionary({
+      name: 'BaseOptions',
       members: [{
         extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
         name: 'value',
-        type: idlType.byte,
+        type: valueType,
       }],
     });
-    const { ctx } = createContext([options]);
+    const options = defineDictionary({
+      name: 'Options', inherits: base.name,
+      members: [{ name: 'items', type: sequence(idlType.long), default: emptySequence }],
+    });
+    const partial = definePartialDictionary({
+      name: options.name,
+      members: [{ name: 'wrapped', type: valueType }],
+    });
+    const { ctx } = createContext([
+      partial, options, base, defineTypedef({ name: 'OptionsNumber', type: idlType.byte }),
+    ]);
+    const type = reference(options.name);
+    let value = 300;
+    let reads = 0;
+    const input = { get value() { reads++; return value; }, wrapped: 300 };
 
-    expect(convertToIDL(
-      { value: 300 },
-      reference('Options'),
-      ctx,
-    )).toEqual(new Map([['value', 127]]));
+    const first = convertToIDL(input, type, ctx) as Map<string, unknown>;
+    expect([...first]).toEqual([['value', 127], ['items', []], ['wrapped', 44]]);
+    expect(convertToJavaScript(first, type, ctx)).toEqual({ value: 127, items: [], wrapped: 44 });
+
+    value = 3.5;
+    const second = convertToIDL(input, type, ctx) as Map<string, unknown>;
+    expect([...second]).toEqual([['value', 4], ['items', []], ['wrapped', 44]]);
+    expect(reads).toBe(2);
+    expect(second.get('items')).not.toBe(first.get('items'));
+    expect(first.get('value')).toBe(127);
   });
 
   it('materializes numeric dictionary defaults in their declared IDL types', () => {
@@ -569,6 +613,41 @@ describe('Web IDL value conversion', () => {
       union(nullable(idlType.DOMString), idlType.boolean),
       ctx,
     )).toBeNull();
+  });
+
+  it('reads current iterators and dictionary fields when reusing union candidates', () => {
+    const options = defineDictionary({
+      name: 'Options',
+      members: [{ name: 'value', type: idlType.long }],
+    });
+    const { ctx, realm } = createContext([options]);
+    const type = union(sequence(idlType.long), reference('Options'), idlType.boolean);
+    let iterable = true;
+    let iteratorGets = 0;
+    let fieldGets = 0;
+    const source = {
+      get [Symbol.iterator]() {
+        iteratorGets++;
+        return iterable ? function*() { yield '7'; } : undefined;
+      },
+      get value() { return String(++fieldGets); },
+    };
+
+    const sequenceValue = convertToIDL(source, type, ctx);
+    expect(sequenceValue).toEqual([7]);
+    expect(convertToJavaScript(sequenceValue, type, ctx)).toBeInstanceOf(realm.intrinsics.array);
+    expect(fieldGets).toBe(0);
+    iterable = false;
+    for (let i = 1; i <= 2; i++) {
+      const dictionary = convertToIDL(source, type, ctx);
+      expect(dictionary).toEqual(new Map([['value', i]]));
+      const platform = convertToJavaScript(dictionary, type, ctx);
+      expect(platform).toEqual({ value: i });
+      expect(Object.getPrototypeOf(platform)).toBe(realm.intrinsics.objectPrototype);
+    }
+    expect(iteratorGets).toBe(3);
+    expect(convertToIDL(true, type, ctx)).toBe(true);
+    expect(iteratorGets).toBe(3);
   });
 
   it('converts a union through its selected async sequence member', () => {
