@@ -131,13 +131,13 @@ describe('HTML callback and script-entry lifecycle', () => {
     const agent = new TestAgent(createEventLoopOptions(checkpoint));
     const callbackRealm = createTestRealm(agent, 'callback');
     const incumbentRealm = createTestRealm(agent, 'incumbent');
-    const definitions = new DefinitionAssembly([defineCallbackFunction({
+    const assembly = new DefinitionAssembly([defineCallbackFunction({
       arguments: [],
       name: 'LifecycleCallback',
       returns: idlType.undefined,
     })]);
     const incumbentContext = new RealmBinding(
-      definitions,
+      assembly,
       incumbentRealm.realm,
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
@@ -225,13 +225,13 @@ describe('HTML callback and script-entry lifecycle', () => {
     });
     const agent = new TestAgent(createEventLoopOptions(checkpoint));
     const entry = createTestRealm(agent, 'reentrant');
-    const definitions = new DefinitionAssembly([defineCallbackFunction({
+    const assembly = new DefinitionAssembly([defineCallbackFunction({
       arguments: [],
       name: 'LifecycleCallback',
       returns: idlType.undefined,
     })]);
     const context = new RealmBinding(
-      definitions,
+      assembly,
       entry.realm,
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );

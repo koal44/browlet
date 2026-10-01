@@ -193,7 +193,7 @@ describe('createFunctionalNotationConsumer', () => {
     }]);
     const consume = createFunctionalNotationConsumer(
       'fn',
-      (arguments_) => arguments_.next(),
+      (args) => args.next(),
       (value) => value,
     );
 

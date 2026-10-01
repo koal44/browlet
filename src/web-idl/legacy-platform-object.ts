@@ -1,9 +1,8 @@
 import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
-import type { AssembledInterfaceDefinition, DefinitionAssembly } from './assembly';
+import type { AssembledInterface } from './assembled';
 import { convertToIDL, convertToJavaScript } from './conversion';
-import { hasExtendedAttribute } from './core/helpers';
 import type { OperationMember } from './core/types';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
 import { isNamedPropertiesObject } from './global-platform-object';
@@ -11,9 +10,7 @@ import type { RealmBinding } from './realm-binding';
 import type {
   IndexedPropertySteps, NamedPropertySteps,
 } from './definition-binding';
-import {
-  getTypeWithApplicableExtendedAttributes, getUnannotatedType,
-} from './types';
+import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 export class LegacyPlatformObjectBinding {
@@ -98,94 +95,53 @@ export class LegacyPlatformObjectBinding {
 
   // Project helper: assemble inherited property declarations, flags, and registered callbacks.
   createPropertyMetadata(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
   ): LegacyPropertyMetadata | null {
-    const indexedGetter = findDerivedSpecialOperation(
-      primaryInterface,
-      'getter',
-      isIndexedOperation,
-      this.#binding.definitions,
-    );
-    const namedGetter = findDerivedSpecialOperation(
-      primaryInterface,
-      'getter',
-      isNamedOperation,
-      this.#binding.definitions,
-    );
+    const indexedGetter = assembled.findSpecialOperation('getter', 'unsigned long', this.#binding.assembly);
+    const namedGetter = assembled.findSpecialOperation('getter', 'DOMString', this.#binding.assembly);
     if (!indexedGetter && !namedGetter) return null;
 
     let indexed: IndexedProperties | undefined;
     if (indexedGetter) {
-      const steps = this.#binding.getMemberBinding(primaryInterface, indexedGetter)?.indexedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, indexedGetter)?.indexedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property indices implementation');
       }
       indexed = {
         getter: indexedGetter,
-        primaryInterface,
-        setter: findDerivedSpecialOperation(
-          primaryInterface,
-          'setter',
-          isIndexedOperation,
-          this.#binding.definitions,
-        ),
+        assembled,
+        setter: assembled.findSpecialOperation('setter', 'unsigned long', this.#binding.assembly),
         steps,
       };
     }
 
     let named: NamedProperties | undefined;
     if (namedGetter) {
-      const steps = this.#binding.getMemberBinding(primaryInterface, namedGetter)?.namedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, namedGetter)?.namedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property names implementation');
       }
       named = {
-        deleter: findDerivedSpecialOperation(
-          primaryInterface,
-          'deleter',
-          isNamedOperation,
-          this.#binding.definitions,
-        ),
+        deleter: assembled.findSpecialOperation('deleter', 'DOMString', this.#binding.assembly),
         getter: namedGetter,
-        primaryInterface,
-        overrideBuiltIns: implementsExtendedAttribute(
-          primaryInterface,
-          'LegacyOverrideBuiltIns',
-        ),
-        setter: findDerivedSpecialOperation(
-          primaryInterface,
-          'setter',
-          isNamedOperation,
-          this.#binding.definitions,
-        ),
+        assembled,
+        overrideBuiltIns: assembled.inheritsExtendedAttribute('LegacyOverrideBuiltIns'),
+        setter: assembled.findSpecialOperation('setter', 'DOMString', this.#binding.assembly),
         steps,
-        unenumerable: implementsExtendedAttribute(
-          primaryInterface,
-          'LegacyUnenumerableNamedProperties',
-        ),
-        unforgeableNames: getUnforgeablePropertyNames(primaryInterface),
+        unenumerable: assembled.inheritsExtendedAttribute('LegacyUnenumerableNamedProperties'),
+        unforgeableNames: assembled.getUnforgeablePropertyNames(),
       };
     }
     return { indexed, named };
   }
 
-  // Project predicate: find an indexed getter on the assembled interface.
-  supportsIndexedProperties(primaryInterface: AssembledInterfaceDefinition): boolean {
-    return findDerivedSpecialOperation(
-      primaryInterface,
-      'getter',
-      isIndexedOperation,
-      this.#binding.definitions,
-    ) !== undefined;
-  }
-
   // Project predicate: select indexed and named operations supported by this binding.
   supportsSpecialOperation(operation: OperationMember): boolean {
-    if (operation.special === 'deleter') {
-      return isNamedOperation(operation, this.#binding.definitions);
-    }
-    return isIndexedOperation(operation, this.#binding.definitions) ||
-      isNamedOperation(operation, this.#binding.definitions);
+    const key = operation.arguments[0];
+    if (!key) return false;
+    const type = this.#binding.assembly.getUnannotatedType(key.type);
+    return type.kind === 'simple' &&
+      (type.name === 'DOMString' || (operation.special !== 'deleter' && type.name === 'unsigned long'));
   }
 
   // Project Proxy adapter for ECMAScript §10.1.8.1 OrdinaryGet with legacy [[GetOwnProperty]].
@@ -302,7 +258,7 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
     if (!steps) {
       throw new InternalError('Missing named property getter implementation');
     }
@@ -518,7 +474,7 @@ export class LegacyPlatformObjectBinding {
     const converted = this.#convertSetterValue(setter, value);
 
     if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing indexed property setter implementation');
       }
@@ -548,7 +504,7 @@ export class LegacyPlatformObjectBinding {
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
     if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.primaryInterface, setter)?.operationSteps;
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing named property setter implementation');
       }
@@ -600,13 +556,10 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#binding.getMemberBinding(properties.primaryInterface, deleter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, deleter)?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
-    const returnType = getUnannotatedType(
-      deleter.returns,
-      this.#binding.definitions,
-    );
+    const returnType = this.#binding.assembly.getUnannotatedType(deleter.returns);
     return returnType.kind !== 'simple' ||
       returnType.name !== 'boolean' ||
       result !== false;
@@ -641,7 +594,7 @@ export class LegacyPlatformObjectBinding {
     index: number,
     properties: IndexedProperties,
   ): unknown {
-    const steps = this.#binding.getMemberBinding(properties.primaryInterface, properties.getter)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
     if (!steps) throw new InternalError('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
@@ -699,7 +652,7 @@ export type LegacyPropertyMetadata = {
 
 type IndexedProperties = {
   getter: OperationMember;
-  primaryInterface: AssembledInterfaceDefinition;
+  assembled: AssembledInterface;
   setter: OperationMember | undefined;
   steps: IndexedPropertySteps;
 };
@@ -707,108 +660,13 @@ type IndexedProperties = {
 type NamedProperties = {
   deleter: OperationMember | undefined;
   getter: OperationMember;
-  primaryInterface: AssembledInterfaceDefinition;
+  assembled: AssembledInterface;
   overrideBuiltIns: boolean;
   setter: OperationMember | undefined;
   steps: NamedPropertySteps;
   unenumerable: boolean;
   unforgeableNames: Set<string>;
 };
-
-// Project helper: locate the most-derived matching special operation.
-function findDerivedSpecialOperation(
-  primaryInterface: AssembledInterfaceDefinition,
-  special: 'deleter' | 'getter' | 'setter',
-  predicate: SpecialOperationPredicate,
-  definitions: DefinitionAssembly,
-): OperationMember | undefined {
-  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
-  while (current) {
-    const operation = current.members.find(({ member }) =>
-      member.kind === 'operation' &&
-      member.special === special &&
-      predicate(member, definitions))?.member;
-    if (operation?.kind === 'operation') return operation;
-    current = current.parent;
-  }
-  return;
-}
-
-type SpecialOperationPredicate = (
-  operation: OperationMember,
-  definitions: DefinitionAssembly,
-) => boolean;
-
-// Project predicate for Web IDL §2.5.6.1 Indexed properties — an unsigned long property-index argument.
-function isIndexedOperation(
-  operation: OperationMember,
-  definitions: DefinitionAssembly,
-): boolean {
-  return hasKeyType(operation, 'unsigned long', definitions);
-}
-
-// Project predicate for Web IDL §2.5.6.2 Named properties — a DOMString property-name argument.
-function isNamedOperation(
-  operation: OperationMember,
-  definitions: DefinitionAssembly,
-): boolean {
-  return hasKeyType(operation, 'DOMString', definitions);
-}
-
-// Project helper: compare the first argument's resolved IDL type with the property-key type.
-function hasKeyType(
-  operation: OperationMember,
-  name: 'DOMString' | 'unsigned long',
-  definitions: DefinitionAssembly,
-): boolean {
-  const key = operation.arguments[0];
-  if (!key) return false;
-  const type = getUnannotatedType(key.type, definitions);
-  return type.kind === 'simple' && type.name === name;
-}
-
-// Project helper: search inherited interfaces and partial declarations for an extended attribute.
-function implementsExtendedAttribute(
-  primaryInterface: AssembledInterfaceDefinition,
-  name: string,
-): boolean {
-  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
-  while (current) {
-    if (
-      hasExtendedAttribute(current.definition.extendedAttributes, name) ||
-      current.partials.some((partial) =>
-        hasExtendedAttribute(partial.extendedAttributes, name))
-    ) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
-// Project helper: collect [LegacyUnforgeable] member names across interface inheritance.
-function getUnforgeablePropertyNames(
-  primaryInterface: AssembledInterfaceDefinition,
-): Set<string> {
-  const names = new Set<string>();
-  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
-  while (current) {
-    for (const { member } of current.members) {
-      if (!hasExtendedAttribute(
-        member.extendedAttributes,
-        'LegacyUnforgeable',
-      )) continue;
-      if (
-        member.kind === 'stringifier' ||
-        (member.kind === 'attribute' && member.stringifier === true)
-      ) names.add('toString');
-      if (
-        (member.kind === 'attribute' || member.kind === 'operation') &&
-        member.name
-      ) names.add(member.name);
-    }
-    current = current.parent;
-  }
-  return names;
-}
 
 // Web IDL §3.9.7 Abstract operations — determine if a property name is an array index.
 function isArrayIndex(property: string): boolean {

@@ -8,7 +8,8 @@ import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
-import type { AssembledDictionaryDefinition, DefinitionAssembly } from './assembly';
+import type { ConversionType } from './assembly';
+import type { AssembledDictionary } from './assembled';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -31,10 +32,7 @@ import {
   convertJavaScriptValueToPromise, isIDLPromiseRecord,
 } from './promise-record';
 import { defineDataProperty } from './property';
-import {
-  getTypeWithApplicableExtendedAttributes, includesNullableType,
-  includesUndefined, resolveInterfaceType,
-} from './types';
+import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 // Project entry point for Web IDL §3.2 JavaScript type mapping; realizes realm-owned failures.
@@ -45,7 +43,7 @@ export function convertToIDL(
   options: ConversionOptions = {},
 ): unknown {
   const legacyCallbackAttribute = options.attributeAssignment === true &&
-    isNullableLegacyCallback(type, context.binding.definitions);
+    context.binding.assembly.isNullableLegacyCallback(type);
   // Web IDL §3.2.20 Nullable types — [LegacyTreatNonObjectAsNull] attribute-assignment step.
   if (legacyCallbackAttribute && !isObject(value)) return null;
   try {
@@ -137,10 +135,7 @@ export function isPlatformObject(
   context: ConversionContext,
 ): boolean {
   if (getPlatformRecord(value)?.binding.world === context.binding.world) return true;
-  for (const definition of context.binding.definitions.proxyObjects) {
-    if (definition.is(value)) return true;
-  }
-  return false;
+  return context.binding.assembly.proxyObjects.is(value);
 }
 
 // Project helper: materialize the default-value records supplied by declaration builders.
@@ -156,7 +151,7 @@ export function materializeDefaultValue(
   switch (value.kind) {
     case 'integer': {
       const integer = parseBigInteger(value.value);
-      const numericType = getSoleNumericTypeName(type, context.binding.definitions);
+      const numericType = context.binding.assembly.getSoleNumericTypeName(type);
       if (numericType === 'bigint') return integer;
       if (numericType && integerTypes[numericType]) return Number(integer);
       return convertToIDL(Number(integer), type, context);
@@ -201,18 +196,18 @@ function convertJavaScriptValue(
   extendedAttributes: ExtendedAttribute[],
   legacyCallbackAttribute = false,
 ): unknown {
-  return convertJavaScriptValueByEffectiveType(
+  return convertJavaScriptValueByConversionType(
     value,
-    resolveEffectiveType(type, context.binding.definitions, extendedAttributes),
+    context.binding.assembly.getConversionType(type, extendedAttributes),
     context,
     legacyCallbackAttribute,
   );
 }
 
 // Project dispatcher: convert a JavaScript value using its resolved type and retained extended attributes.
-function convertJavaScriptValueByEffectiveType(
+function convertJavaScriptValueByConversionType(
   value: unknown,
-  { type, extendedAttributes }: EffectiveType,
+  { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
   legacyCallbackAttribute = false,
 ): unknown {
@@ -235,7 +230,7 @@ function convertJavaScriptValueByEffectiveType(
     case 'nullable':
       if (
         value === undefined &&
-        includesUndefined(type.type, context.binding.definitions)
+        context.binding.assembly.includesUndefined(type.type)
       ) return undefined;
       if (value === null || value === undefined) return null;
       return convertJavaScriptValue(
@@ -308,18 +303,18 @@ function convertIDLValue(
   extendedAttributes: ExtendedAttribute[],
   allocateBuffers = false,
 ): unknown {
-  return convertIDLValueByEffectiveType(
+  return convertIDLValueByConversionType(
     value,
-    resolveEffectiveType(type, context.binding.definitions, extendedAttributes),
+    context.binding.assembly.getConversionType(type, extendedAttributes),
     context,
     allocateBuffers,
   );
 }
 
 // Project dispatcher: convert an IDL value using its resolved type and retained extended attributes.
-function convertIDLValueByEffectiveType(
+function convertIDLValueByConversionType(
   value: unknown,
-  { type, extendedAttributes }: EffectiveType,
+  { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
   allocateBuffers = false,
 ): unknown {
@@ -372,8 +367,12 @@ function convertIDLValueByEffectiveType(
       // https://webidl.spec.whatwg.org/#es-promise — expose the capability's Promise.
       if (isIDLPromiseRecord(value)) return value.promise;
       if (value instanceof InternalPromise) {
-        if (value.type.kind === 'implementation' ||
-          typeSignature(value.type as ImplementationType<unknown>, context.binding.definitions) !== typeSignature(type.type, context.binding.definitions)) {
+        const assembly = context.binding.assembly;
+        if (
+          value.type.kind === 'implementation' ||
+          assembly.getConversionTypeKey(value.type as ImplementationType<unknown>) !==
+          assembly.getConversionTypeKey(type.type)
+        ) {
           throw new InternalError('Promise result type does not match its Web IDL declaration');
         }
         return value.backing;
@@ -510,74 +509,66 @@ function convertJavaScriptValueToNamedType(
   context: ConversionContext,
   legacyCallbackAttribute: boolean,
 ): unknown {
-  const definition = context.binding.definitions.getDefinition(name);
-  switch (definition?.kind) {
-    // Web IDL §3.2.18 Enumeration types — JavaScript-to-IDL conversion.
-    case 'enumeration': {
-      const string = toString(value);
-      if (!definition.values.includes(string)) {
-        throwTypeError(context, `${string} is not a value of ${name}`);
-      }
-      return string;
-    }
-    // Web IDL §3.2.15 Interface types — JavaScript-to-IDL conversion.
-    case 'interface': {
-      const primaryInterface = context.binding.definitions.getInterface(name);
-      const record = getPlatformRecord(value);
-      if (
-        primaryInterface &&
-        record &&
-        record.binding.world === context.binding.world &&
-        record.implements(primaryInterface)
-      ) {
-        return record.implInst;
-      }
-      return throwTypeError(context, `Value does not implement ${name}`);
-    }
-    case 'dictionary': {
-      const dictionary = context.binding.definitions.getDictionary(name);
-      if (!dictionary) throw new InternalError(`Dictionary ${name} was not assembled`);
-      return convertJavaScriptValueToDictionary(value, dictionary, context);
-    }
-    // Web IDL §3.2.19 Callback function types — JavaScript-to-IDL conversion.
-    case 'callback-function': {
-      if (
-        typeof value !== 'function' &&
-        !(legacyCallbackAttribute && isObject(value))
-      ) {
-        return throwTypeError(context, `${name} is not callable`);
-      }
-      return createCallbackFunctionValue(
-        definition,
-        value,
-        getCallbackRealm(value, context),
-        context.realm.callbacks.captureContext(),
-        context,
-      );
-    }
-    // Web IDL §3.2.16 Callback interface types — JavaScript-to-IDL conversion.
-    case 'callback-interface': {
-      if (!isObject(value)) {
-        return throwTypeError(context, `${name} is not an object`);
-      }
-      return createCallbackInterfaceRecord(
-        definition,
-        value,
-        getCallbackRealm(value, context),
-        context.realm.callbacks.captureContext(),
-        context,
-      );
-    }
-    // Project adapter: preserve a recognized proxy object's identity.
-    case 'proxy-object':
-      return definition.is(value)
-        ? value
-        : throwTypeError(context, `Value does not implement ${name}`);
-    case undefined:
-      throw new InternalError(`Unknown Web IDL type ${name}`);
-    default:
-      throw new InternalError(`${name} is not a value type`);
+  const assembly = context.binding.assembly;
+  const assembled = assembly.interfaces.get(name);
+  if (assembled) {
+    const record = getPlatformRecord(value);
+    if (
+      record?.binding.world === context.binding.world &&
+      record.implements(assembled)
+    ) return record.implInst;
+    return throwTypeError(context, `Value does not implement ${name}`);
   }
+
+  const dictionaryAssembled = assembly.dictionaries.get(name);
+  if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+
+  const enumerationAssembled = assembly.enumerations.get(name);
+  if (enumerationAssembled) {
+    const string = toString(value);
+    if (!enumerationAssembled.hasValue(string)) {
+      throwTypeError(context, `${string} is not a value of ${name}`);
+    }
+    return string;
+  }
+
+  const callbackFunctionAssembled = assembly.callbackFunctions.get(name);
+  if (callbackFunctionAssembled) {
+    if (
+      typeof value !== 'function' &&
+      !(legacyCallbackAttribute && isObject(value))
+    ) return throwTypeError(context, `${name} is not callable`);
+    return createCallbackFunctionValue(
+      callbackFunctionAssembled,
+      value,
+      getCallbackRealm(value, context),
+      context.realm.callbacks.captureContext(),
+      context,
+    );
+  }
+
+  const callbackInterfaceAssembled = assembly.callbackInterfaces.get(name);
+  if (callbackInterfaceAssembled) {
+    if (!isObject(value)) return throwTypeError(context, `${name} is not an object`);
+    return createCallbackInterfaceRecord(
+      callbackInterfaceAssembled,
+      value,
+      getCallbackRealm(value, context),
+      context.realm.callbacks.captureContext(),
+      context,
+    );
+  }
+
+  const proxyAssembled = assembly.proxyObjects.get(name);
+  if (proxyAssembled) {
+    return proxyAssembled.is(value)
+      ? value
+      : throwTypeError(context, `Value does not implement ${name}`);
+  }
+  if (assembly.namespaces.has(name)) {
+    throw new InternalError(`${name} is not a value type`);
+  }
+  throw new InternalError(`Unknown Web IDL type ${name}`);
 }
 
 // Project adapter for named IDL values in Web IDL §3.2 JavaScript type mapping.
@@ -586,55 +577,51 @@ function convertNamedTypeToJavaScript(
   name: string,
   context: ConversionContext,
 ): unknown {
-  const definition = context.binding.definitions.getDefinition(name);
-  switch (definition?.kind) {
-    // Web IDL §3.2.18 Enumeration types — IDL-to-JavaScript conversion.
-    case 'enumeration':
-      return value;
-    // Web IDL §3.2.15 Interface types — project our implementation to its platform object.
-    case 'interface': {
-      const primaryInterface = context.binding.definitions.getInterface(name);
-      const object = primaryInterface && isObject(value)
-        ? context.binding.projectImplementationObject(value, primaryInterface)
-        : undefined;
-      if (!object) {
-        throw new InternalError(
-          `IDL interface value ${name} is not an implementation target`,
-        );
-      }
-      return object;
+  const assembly = context.binding.assembly;
+  const assembled = assembly.interfaces.get(name);
+  if (assembled) {
+    const object = isObject(value)
+      ? context.binding.projectImplementationObject(value, assembled)
+      : undefined;
+    if (!object) {
+      throw new InternalError(
+        `IDL interface value ${name} is not an implementation target`,
+      );
     }
-    case 'dictionary': {
-      const dictionary = context.binding.definitions.getDictionary(name);
-      if (!dictionary) throw new InternalError(`Dictionary ${name} was not assembled`);
-      return convertDictionaryToJavaScript(value, dictionary, context);
-    }
-    // Web IDL §3.2.19 Callback function types — recover the JavaScript callback object.
-    case 'callback-function':
-      if (isCallbackFunctionValue(value)) return value.object;
-      if (typeof value === 'function') return value;
-      throw new InternalError(`IDL callback function ${name} is not callable`);
-    // Web IDL §3.2.16 Callback interface types — recover the JavaScript callback object.
-    case 'callback-interface':
-      if (!isCallbackInterfaceRecord(value)) {
-        throw new InternalError(`IDL callback interface ${name} is not a callback value`);
-      }
-      return value.object;
-    // Project adapter: expose the proxy itself without projection.
-    case 'proxy-object':
-      if (definition.is(value)) return value;
-      throw new InternalError(`IDL interface value does not implement ${name}`);
-    case undefined:
-      throw new InternalError(`Unknown Web IDL type ${name}`);
-    default:
-      throw new InternalError(`${name} is not a value type`);
+    return object;
   }
+
+  const dictionaryAssembled = assembly.dictionaries.get(name);
+  if (dictionaryAssembled) return convertDictionaryToJavaScript(value, dictionaryAssembled, context);
+  if (assembly.enumerations.has(name)) return value;
+
+  if (assembly.callbackFunctions.has(name)) {
+    if (isCallbackFunctionValue(value)) return value.object;
+    if (typeof value === 'function') return value;
+    throw new InternalError(`IDL callback function ${name} is not callable`);
+  }
+  if (assembly.callbackInterfaces.has(name)) {
+    if (!isCallbackInterfaceRecord(value)) {
+      throw new InternalError(`IDL callback interface ${name} is not a callback value`);
+    }
+    return value.object;
+  }
+
+  const proxyAssembled = assembly.proxyObjects.get(name);
+  if (proxyAssembled) {
+    if (proxyAssembled.is(value)) return value;
+    throw new InternalError(`IDL interface value does not implement ${name}`);
+  }
+  if (assembly.namespaces.has(name)) {
+    throw new InternalError(`${name} is not a value type`);
+  }
+  throw new InternalError(`Unknown Web IDL type ${name}`);
 }
 
 // Web IDL §3.2.17 Dictionary types — convert a JavaScript value to a dictionary.
 function convertJavaScriptValueToDictionary(
   value: unknown,
-  dictionary: AssembledDictionaryDefinition,
+  assembled: AssembledDictionary,
   context: ConversionContext,
 ): IDLDictionaryValue {
   if (!isObject(value) && value !== undefined && value !== null) {
@@ -642,7 +629,7 @@ function convertJavaScriptValueToDictionary(
   }
 
   const result: IDLDictionaryValue = new Map();
-  for (const member of dictionary.members) {
+  for (const member of assembled.members) {
     const memberType = getTypeWithApplicableExtendedAttributes(
       member.type,
       member.extendedAttributes,
@@ -671,18 +658,18 @@ function convertJavaScriptValueToDictionary(
 // Web IDL §3.2.17 Dictionary types — convert a dictionary to a JavaScript value.
 function convertDictionaryToJavaScript(
   value: unknown,
-  dictionary: AssembledDictionaryDefinition,
+  assembled: AssembledDictionary,
   context: ConversionContext,
 ): object {
   if (!isObject(value)) {
-    throw new InternalError(`IDL dictionary ${dictionary.definition.name} is not an object`);
+    throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
   }
   const members = isMap(value) ? value : new Map(Object.entries(value));
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
   );
-  for (const member of dictionary.members) {
+  for (const member of assembled.members) {
     if (!members.has(member.name)) continue;
     const memberType = getTypeWithApplicableExtendedAttributes(
       member.type,
@@ -768,31 +755,27 @@ function convertJavaScriptValueToUnion(
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
 ): unknown {
-  if (value === undefined && includesUndefined(type, context.binding.definitions)) {
+  const assembly = context.binding.assembly;
+  if (value === undefined && assembly.includesUndefined(type)) {
     return undefined;
   }
   if (
     (value === null || value === undefined) &&
-    includesNullableType(type, context.binding.definitions)
+    assembly.includesNullableType(type)
   ) return null;
 
-  const types = flattenEffectiveTypes(
-    type,
-    context.binding.definitions,
-    extendedAttributes,
-  );
+  const types = assembly.getConversionCandidates(type, extendedAttributes);
 
   if (value === null || value === undefined) {
-    const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.binding.definitions));
-    if (dictionary) return convertJavaScriptValueByEffectiveType(value, dictionary, context);
+    const assembled = assembly.dictionaries.findReferenced(types);
+    if (assembled) return convertJavaScriptValueToDictionary(value, assembled, context);
   }
 
   if (isPlatformObject(value, context)) {
     const interfaceType = types.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) {
-      return convertJavaScriptValueByEffectiveType(value, interfaceType, context);
+      return convertJavaScriptValueByConversionType(value, interfaceType, context);
     }
     const object = types.find(isObjectType);
     if (object) return value;
@@ -802,16 +785,23 @@ function convertJavaScriptValueToUnion(
     if (bufferName) {
       const buffer = types.find((candidate) =>
         isSimpleType(candidate, bufferName));
-      if (buffer) return convertJavaScriptValueByEffectiveType(value, buffer, context);
+      if (buffer) return convertJavaScriptValueByConversionType(value, buffer, context);
       const object = types.find(isObjectType);
       if (object) return value;
     }
   }
 
   if (typeof value === 'function') {
-    const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-function', context.binding.definitions));
-    if (callback) return convertJavaScriptValueByEffectiveType(value, callback, context);
+    const assembled = assembly.callbackFunctions.findReferenced(types);
+    if (assembled) {
+      return createCallbackFunctionValue(
+        assembled,
+        value,
+        getCallbackRealm(value, context),
+        context.realm.callbacks.captureContext(),
+        context,
+      );
+    }
     const object = types.find(isObjectType);
     if (object) return value;
   }
@@ -821,7 +811,7 @@ function convertJavaScriptValueToUnion(
       candidate.type.kind === 'async-sequence');
     if (asyncSequence && !(
       hasStringData(value) && types.some((candidate) =>
-        isStringType(candidate, context.binding.definitions))
+        assembly.isStringCandidate(candidate))
     )) {
       const asyncMethod = getMethod(
         value,
@@ -865,7 +855,7 @@ function convertJavaScriptValueToUnion(
     if (frozenArray) {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
-        return convertJavaScriptValueByEffectiveType(
+        return convertJavaScriptValueByConversionType(
           value,
           frozenArray,
           context,
@@ -873,15 +863,19 @@ function convertJavaScriptValueToUnion(
       }
     }
 
-    const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.binding.definitions));
-    if (dictionary) return convertJavaScriptValueByEffectiveType(value, dictionary, context);
+    const dictionaryAssembled = assembly.dictionaries.findReferenced(types);
+    if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
     const record = types.find((candidate) => candidate.type.kind === 'record');
-    if (record) return convertJavaScriptValueByEffectiveType(value, record, context);
-    const callbackInterface = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-interface', context.binding.definitions));
-    if (callbackInterface) {
-      return convertJavaScriptValueByEffectiveType(value, callbackInterface, context);
+    if (record) return convertJavaScriptValueByConversionType(value, record, context);
+    const callbackInterfaceAssembled = assembly.callbackInterfaces.findReferenced(types);
+    if (callbackInterfaceAssembled) {
+      return createCallbackInterfaceRecord(
+        callbackInterfaceAssembled,
+        value,
+        getCallbackRealm(value, context),
+        context.realm.callbacks.captureContext(),
+        context,
+      );
     }
     const object = types.find(isObjectType);
     if (object) return value;
@@ -893,7 +887,7 @@ function convertJavaScriptValueToUnion(
   }
   if (typeof value === 'number') {
     const numeric = types.find(isNumericType);
-    if (numeric) return convertJavaScriptValueByEffectiveType(value, numeric, context);
+    if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context);
   }
   if (typeof value === 'bigint') {
     const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
@@ -901,8 +895,8 @@ function convertJavaScriptValueToUnion(
   }
 
   const string = types.find((candidate) =>
-    isStringType(candidate, context.binding.definitions));
-  if (string) return convertJavaScriptValueByEffectiveType(value, string, context);
+    assembly.isStringCandidate(candidate));
+  if (string) return convertJavaScriptValueByConversionType(value, string, context);
 
   const numeric = types.find(isNumericType);
   const bigint = types.find((candidate) => isSimpleType(candidate, 'bigint'));
@@ -910,9 +904,9 @@ function convertJavaScriptValueToUnion(
     const primitive = toPrimitive(value, 'number');
     return typeof primitive === 'bigint'
       ? primitive
-      : convertJavaScriptValueByEffectiveType(primitive, numeric, context);
+      : convertJavaScriptValueByConversionType(primitive, numeric, context);
   }
-  if (numeric) return convertJavaScriptValueByEffectiveType(value, numeric, context);
+  if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context);
 
   const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
   if (boolean) return Boolean(value);
@@ -928,18 +922,15 @@ function convertUnionToJavaScript(
   extendedAttributes: ExtendedAttribute[],
   allocateBuffers: boolean,
 ): unknown {
-  const types = flattenEffectiveTypes(
-    type,
-    context.binding.definitions,
-    extendedAttributes,
-  );
+  const assembly = context.binding.assembly;
+  const types = assembly.getConversionCandidates(type, extendedAttributes);
 
   if (value === undefined) {
     const undefinedType = types.find((candidate) =>
       isSimpleType(candidate, 'undefined'));
     if (undefinedType) return undefined;
   }
-  if (value === null && includesNullableType(type, context.binding.definitions)) {
+  if (value === null && assembly.includesNullableType(type)) {
     return null;
   }
   if (isPlatformObject(value, context)) {
@@ -960,32 +951,29 @@ function convertUnionToJavaScript(
     }
   }
   if (isCallbackFunctionValue(value) || typeof value === 'function') {
-    const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-function', context.binding.definitions));
-    if (callback) return convertIDLValueByEffectiveType(value, callback, context);
+    const assembled = assembly.callbackFunctions.findReferenced(types);
+    if (assembled) return isCallbackFunctionValue(value) ? value.object : value;
   }
   if (isCallbackInterfaceRecord(value)) {
-    const callback = types.find((candidate) =>
-      isDefinitionType(candidate, 'callback-interface', context.binding.definitions));
-    if (callback) return convertIDLValueByEffectiveType(value, callback, context);
+    const assembled = assembly.callbackInterfaces.findReferenced(types);
+    if (assembled) return value.object;
   }
   if (isIDLAsyncSequence(value)) {
     const sequence = types.find((candidate) =>
       candidate.type.kind === 'async-sequence');
-    if (sequence) return convertIDLValueByEffectiveType(value, sequence, context);
+    if (sequence) return convertIDLValueByConversionType(value, sequence, context);
   }
   if (Array.isArray(value)) {
     const array = types.find((candidate) =>
       candidate.type.kind === 'sequence' ||
       candidate.type.kind === 'frozen-array');
-    if (array) return convertIDLValueByEffectiveType(value, array, context);
+    if (array) return convertIDLValueByConversionType(value, array, context);
   }
   if (isMap(value)) {
-    const dictionary = types.find((candidate) =>
-      isDictionaryType(candidate, context.binding.definitions));
-    if (dictionary) return convertIDLValueByEffectiveType(value, dictionary, context);
+    const assembled = assembly.dictionaries.findReferenced(types);
+    if (assembled) return convertDictionaryToJavaScript(value, assembled, context);
     const record = types.find((candidate) => candidate.type.kind === 'record');
-    if (record) return convertIDLValueByEffectiveType(value, record, context);
+    if (record) return convertIDLValueByConversionType(value, record, context);
   }
   if (typeof value === 'boolean') {
     const boolean = types.find((candidate) => isSimpleType(candidate, 'boolean'));
@@ -1001,14 +989,14 @@ function convertUnionToJavaScript(
   }
   if (typeof value === 'string') {
     const string = types.find((candidate) =>
-      isStringType(candidate, context.binding.definitions));
+      assembly.isStringCandidate(candidate));
     if (string) return value;
   }
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     const buffer = bufferName && types.find((candidate) =>
       isSimpleType(candidate, bufferName));
-    if (buffer) return convertIDLValueByEffectiveType(value, buffer, context, allocateBuffers);
+    if (buffer) return convertIDLValueByConversionType(value, buffer, context, allocateBuffers);
     const object = types.find(isObjectType);
     if (object) return value;
   }
@@ -1018,12 +1006,12 @@ function convertUnionToJavaScript(
 // Project helper: project an implementation using a candidate interface type.
 function projectImplementationForType(
   value: object,
-  type: EffectiveType,
+  type: ConversionType,
   context: ConversionContext,
 ): StampedPlatformObject | undefined {
   if (type.type.kind !== 'reference') return;
-  const primaryInterface = context.binding.definitions.getInterface(type.type.name);
-  return primaryInterface && context.binding.projectImplementationObject(value, primaryInterface);
+  const assembled = context.binding.assembly.interfaces.get(type.type.name);
+  return assembled && context.binding.projectImplementationObject(value, assembled);
 }
 
 // Web IDL §3.2.4.9 Abstract operations — ConvertToInt.
@@ -1084,154 +1072,35 @@ function convertToFloat(
   return rounded;
 }
 
-// Project helper: follow typedefs while retaining the extended attributes associated with a type.
-// Web IDL §2.11 Typedefs; §2.13.33 Annotated types.
-function resolveEffectiveType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-  extendedAttributes: ExtendedAttribute[],
-): EffectiveType {
-  const attributes = [...extendedAttributes];
-  let resolved = type;
-
-  while (true) {
-    if (resolved.kind === 'annotated') {
-      attributes.push(...resolved.extendedAttributes);
-      resolved = resolved.type;
-      continue;
-    }
-    if (resolved.kind === 'interface') resolved = resolveInterfaceType(resolved, definitions);
-    if (resolved.kind === 'reference') {
-      const definition = definitions.getDefinition(resolved.name);
-      if (definition?.kind === 'typedef') {
-        resolved = definition.type;
-        continue;
-      }
-    }
-    return {
-      extendedAttributes: attributes,
-      type: resolved,
-    };
-  }
-}
-
-// Compare resolved result descriptors, including conversion attributes and nested types.
-function typeSignature(type: WebIDLType, definitions: DefinitionAssembly): string {
-  const { type: effective, extendedAttributes } = resolveEffectiveType(type, definitions, []);
-  let parts: string[];
-  switch (effective.kind) {
-    case 'simple':
-    case 'reference': parts = [effective.name]; break;
-    case 'union': parts = effective.types.map((member) => typeSignature(member, definitions)).sort(); break;
-    case 'record': parts = [typeSignature(effective.key, definitions), typeSignature(effective.value, definitions)]; break;
-    default: parts = [typeSignature(effective.type, definitions)];
-  }
-  return JSON.stringify([effective.kind, parts, extendedAttributes.map((attribute) => JSON.stringify(attribute)).sort()]);
-}
-
-// Project helper: flatten union members while retaining conversion attributes.
-// Web IDL §2.13.32 Union types — flattened member types.
-function flattenEffectiveTypes(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-  extendedAttributes: ExtendedAttribute[],
-): EffectiveType[] {
-  const resolved = resolveEffectiveType(type, definitions, extendedAttributes);
-  if (resolved.type.kind === 'nullable') {
-    return flattenEffectiveTypes(
-      resolved.type.type,
-      definitions,
-      resolved.extendedAttributes,
-    );
-  }
-  if (resolved.type.kind === 'union') {
-    return resolved.type.types.flatMap((member) =>
-      flattenEffectiveTypes(member, definitions, resolved.extendedAttributes));
-  }
-  return [resolved];
-}
-
 // Project helper: test whether a value implements the candidate interface type.
 function isImplementedInterfaceType(
-  type: EffectiveType,
+  type: ConversionType,
   value: unknown,
   context: ConversionContext,
 ): boolean {
   if (type.type.kind !== 'reference') return false;
-  const primaryInterface = context.binding.definitions.getInterface(type.type.name);
-  if (primaryInterface) {
+  const assembled = context.binding.assembly.interfaces.get(type.type.name);
+  if (assembled) {
     const record = getPlatformRecord(value);
     return record?.binding.world === context.binding.world &&
-      record.implements(primaryInterface);
+      record.implements(assembled);
   }
-  const definition = context.binding.definitions.getDefinition(type.type.name);
-  return definition?.kind === 'proxy-object' && definition.is(value);
-}
-
-// Project helper: recognize a named callback definition in a resolved type.
-function isDefinitionType(
-  type: EffectiveType,
-  kind: 'callback-function' | 'callback-interface',
-  definitions: DefinitionAssembly,
-): boolean {
-  return type.type.kind === 'reference' &&
-    definitions.getDefinition(type.type.name)?.kind === kind;
-}
-
-// Project helper: recognize a named dictionary in a resolved type.
-function isDictionaryType(
-  type: EffectiveType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return type.type.kind === 'reference' &&
-    definitions.getDefinition(type.type.name)?.kind === 'dictionary';
-}
-
-// Project helper: recognize string and enumeration conversion candidates.
-function isStringType(
-  type: EffectiveType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return type.type.kind === 'simple'
-    ? stringTypeNames.has(type.type.name)
-    : type.type.kind === 'reference' &&
-      definitions.getDefinition(type.type.name)?.kind === 'enumeration';
+  return context.binding.assembly.proxyObjects.get(type.type.name)?.is(value) ?? false;
 }
 
 // Project helper: recognize a numeric conversion candidate.
-function isNumericType(type: EffectiveType): boolean {
+function isNumericType(type: ConversionType): boolean {
   return type.type.kind === 'simple' && numericTypeNames.has(type.type.name);
 }
 
 // Project helper: recognize the object conversion candidate.
-function isObjectType(type: EffectiveType): boolean {
+function isObjectType(type: ConversionType): boolean {
   return isSimpleType(type, 'object');
 }
 
 // Project helper: match a resolved simple type by name.
-function isSimpleType(type: EffectiveType, name: SimpleTypeName): boolean {
+function isSimpleType(type: ConversionType, name: SimpleTypeName): boolean {
   return type.type.kind === 'simple' && type.type.name === name;
-}
-
-// Project helper for Web IDL §3.4.8 [LegacyTreatNonObjectAsNull] — recognize affected attribute types.
-function isNullableLegacyCallback(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  const nullableType = resolveEffectiveType(type, definitions, []).type;
-  if (nullableType.kind !== 'nullable') return false;
-  const callbackType = resolveEffectiveType(
-    nullableType.type,
-    definitions,
-    [],
-  ).type;
-  if (callbackType.kind !== 'reference') return false;
-  const definition = definitions.getDefinition(callbackType.name);
-  return definition?.kind === 'callback-function' &&
-    hasExtendedAttribute(
-      definition.extendedAttributes ?? [],
-      'LegacyTreatNonObjectAsNull',
-    );
 }
 
 // Project helper: resolve the callback object's associated realm.
@@ -1263,22 +1132,6 @@ function parseBigInteger(value: string): bigint {
   return negative ? -result : result;
 }
 
-// Project helper: find the numeric type used to materialize an integer default.
-function getSoleNumericTypeName(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): SimpleTypeName | undefined {
-  const numericTypes = flattenEffectiveTypes(type, definitions, [])
-    .filter((candidate) => candidate.type.kind === 'simple' && (
-      candidate.type.name === 'bigint' ||
-      numericTypeNames.has(candidate.type.name)
-    ));
-  const numericType = numericTypes.length === 1
-    ? numericTypes[0]?.type
-    : undefined;
-  return numericType?.kind === 'simple' ? numericType.name : undefined;
-}
-
 // Extracted from Web IDL §3.2.4.9 Abstract operations — ConvertToInt's [Clamp] rounding step.
 function roundToEven(value: number): number {
   const lower = Math.floor(value);
@@ -1302,13 +1155,6 @@ function unsupportedConversion(type: string): never {
   throw new InternalError(`Web IDL conversion for ${type} is not implemented`);
 }
 
-type EffectiveType = {
-  extendedAttributes: ExtendedAttribute[];
-  type: EffectiveBaseType;
-};
-
-type EffectiveBaseType = Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }>;
-
 // Web IDL §3.2.4 Integer types — bit lengths and signedness supplied to ConvertToInt.
 const integerTypes: Partial<Record<
   SimpleTypeName,
@@ -1328,10 +1174,6 @@ const numericTypeNames = new Set<SimpleTypeName>([
   'byte', 'octet', 'short', 'unsigned short', 'long', 'unsigned long',
   'long long', 'unsigned long long', 'float', 'unrestricted float',
   'double', 'unrestricted double',
-]);
-
-const stringTypeNames = new Set<SimpleTypeName>([
-  'DOMString', 'ByteString', 'USVString',
 ]);
 
 const bufferTypeNames = new Set<SimpleTypeName>([

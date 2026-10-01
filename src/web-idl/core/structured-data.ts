@@ -3,7 +3,7 @@ import type { ImplementationClass } from './types';
 // https://html.spec.whatwg.org/multipage/structured-data.html#serializable-objects
 // Declarations retain these hooks; HTML supplies graph traversal and invocation state.
 /** An interface's complete state-saving and state-restoring algorithms. */
-export type SerializableSteps<
+export type SerialSteps<
   Impl extends object = object,
   Fields extends object = Record<string, unknown>,
   Realm = unknown,
@@ -26,7 +26,7 @@ export type SerializableSteps<
 
 // https://html.spec.whatwg.org/multipage/structured-data.html#transferable-objects
 /** An interface's state-moving and state-receiving algorithms. */
-export type TransferableSteps<
+export type TransferSteps<
   Impl extends object = object,
   Fields extends object = Record<string, unknown>,
 > = {

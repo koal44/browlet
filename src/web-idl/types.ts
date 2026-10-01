@@ -1,11 +1,7 @@
-import type { DefinitionAssembly } from './assembly';
-import type {
-  AnnotatedType, ExtendedAttribute, UnionType, WebIDLType,
-} from './core/index';
-import type { InterfaceType, ReferenceType } from './core/types';
-import { InternalError } from '../infra/internal-error';
+import type { ExtendedAttribute, WebIDLType } from './core/index';
 
-// Project helper for Web IDL §2.13.33 Annotated types — associate argument and dictionary-member attributes.
+/** Apply argument or dictionary-member conversion attributes to its declared type. */
+// https://webidl.spec.whatwg.org/#idl-annotated-types
 export function getTypeWithApplicableExtendedAttributes(
   type: WebIDLType,
   extendedAttributes: ExtendedAttribute[] | undefined,
@@ -27,120 +23,6 @@ export function getTypeWithApplicableExtendedAttributes(
   }
   return { extendedAttributes: applicable, kind: 'annotated', type };
 }
-
-// Web IDL §2.13.32 Union types — flattened member types.
-export function getFlattenedMemberTypes(
-  type: UnionType | AnnotatedUnionType,
-  definitions: DefinitionAssembly,
-): WebIDLType[] {
-  const unionType = type.kind === 'annotated' ? type.type : type;
-  const flattenedMemberTypes: WebIDLType[] = [];
-
-  for (let memberType of unionType.types) {
-    memberType = getUnannotatedType(memberType, definitions);
-    if (memberType.kind === 'nullable') {
-      memberType = getUnannotatedType(memberType.type, definitions);
-    }
-    if (memberType.kind === 'union') {
-      flattenedMemberTypes.push(
-        ...getFlattenedMemberTypes(memberType, definitions),
-      );
-    } else {
-      flattenedMemberTypes.push(memberType);
-    }
-  }
-
-  return flattenedMemberTypes;
-}
-
-// Web IDL §2.13.32 Union types — number of nullable member types.
-export function getNumberOfNullableMemberTypes(
-  type: UnionType | AnnotatedUnionType,
-  definitions: DefinitionAssembly,
-): number {
-  const unionType = type.kind === 'annotated' ? type.type : type;
-  let numberOfNullableMemberTypes = 0;
-
-  for (let memberType of unionType.types) {
-    memberType = getUnannotatedType(memberType, definitions);
-    if (memberType.kind === 'nullable') {
-      numberOfNullableMemberTypes++;
-      memberType = getUnannotatedType(memberType.type, definitions);
-    }
-    if (memberType.kind === 'union') {
-      numberOfNullableMemberTypes += getNumberOfNullableMemberTypes(
-        memberType,
-        definitions,
-      );
-    }
-  }
-
-  return numberOfNullableMemberTypes;
-}
-
-// Web IDL §2.13.32 Union types — includes a nullable type (definition).
-export function includesNullableType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  const innerType = getUnannotatedType(type, definitions);
-  if (innerType.kind === 'nullable') return true;
-  return innerType.kind === 'union' &&
-    getNumberOfNullableMemberTypes(innerType, definitions) === 1;
-}
-
-// Web IDL §2.13.32 Union types — includes undefined (definition).
-export function includesUndefined(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  const innerType = getUnannotatedType(type, definitions);
-  if (
-    innerType.kind === 'simple' &&
-    innerType.name === 'undefined'
-  ) return true;
-  if (innerType.kind === 'nullable') {
-    return includesUndefined(innerType.type, definitions);
-  }
-  if (innerType.kind === 'union') {
-    return innerType.types.some(
-      (memberType) => includesUndefined(memberType, definitions),
-    );
-  }
-  return false;
-}
-
-// Project helper: follow typedefs and strip declaration annotations to inspect the underlying type.
-export function getUnannotatedType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }> {
-  let innerType = type;
-  while (true) {
-    if (innerType.kind === 'annotated') {
-      innerType = innerType.type;
-      continue;
-    }
-    if (innerType.kind === 'interface') return resolveInterfaceType(innerType, definitions);
-    if (innerType.kind === 'reference') {
-      const definition = definitions.getDefinition(innerType.name);
-      if (definition?.kind === 'typedef') {
-        innerType = definition.type;
-        continue;
-      }
-    }
-    return innerType;
-  }
-}
-
-/** Resolve a class reference through this assembly's declared implementation identity. */
-export function resolveInterfaceType(type: InterfaceType, definitions: DefinitionAssembly): ReferenceType {
-  const primaryInterface = definitions.getInterfaceForImplClass(type.implClass);
-  if (!primaryInterface) throw new InternalError('No interface declares the referenced implementation class');
-  return { kind: 'reference', name: primaryInterface.definition.name };
-}
-
-type AnnotatedUnionType = AnnotatedType<UnionType>;
 
 const typeExtendedAttributeNames = new Set([
   'AllowResizable',

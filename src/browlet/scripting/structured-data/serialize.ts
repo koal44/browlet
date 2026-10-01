@@ -140,14 +140,14 @@ export function structuredSerializeInternal(
       serialized = serializeError(value, ctx.realm);
       deep = true;
     } else if (record) {
-      const steps = record.primaryInterface.definition.serialization;
+      const steps = record.assembled.serialSteps;
       if (!steps) return throwDOMException('DataCloneError');
       if (DetachedTransferableStamper.has(record.implInst)) {
         return throwDOMException('DataCloneError');
       }
       serialized = {
         type: 'platform-object',
-        interfaceName: record.primaryInterface.definition.name,
+        interfaceName: record.assembled.name,
         fields: createStructuredDataRecord(),
       };
       memory.set(identity, serialized);

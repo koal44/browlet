@@ -44,8 +44,8 @@ describe('Web IDL observable arrays', () => {
       defineInterface({ name: 'Value', implementation: impl(ValueImpl), members: [] }),
       defineInterface({ name: 'Values', implementation: impl(ValuesImpl), members: [attribute] }),
     ]);
-    const owner = world.register({ realm: new Realm() });
-    const other = world.register({ realm: new Realm() });
+    const owner = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const other = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const object = owner.project(ValuesImpl, new ValuesImpl());
     const foreign = other.project(ValuesImpl, new ValuesImpl());
     // eslint-disable-next-line @typescript-eslint/unbound-method -- explicitly apply the borrowed getter to the owner
@@ -62,7 +62,7 @@ describe('Web IDL observable arrays', () => {
     const operations: string[] = [];
     const receivers: object[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         receivers.push(this);
         operations.push(`delete ${index} ${String(value)}`);
@@ -93,7 +93,7 @@ describe('Web IDL observable arrays', () => {
     const deleted: number[] = [];
     const exception = new Error('stop deleting');
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(_value, index) {
         deleted.push(index);
         if (index === 1) throw exception;
@@ -110,7 +110,7 @@ describe('Web IDL observable arrays', () => {
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.definition).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         operations.push(`delete ${index} ${String(value)}`);
       },
@@ -247,8 +247,8 @@ describe('Web IDL observable arrays', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(employee).createImplementation = () => new EmployeeImpl();
-    binding.getDefinitionBinding(building).createImplementation = () => new BuildingImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(employee.name)).createImplementation = () => new EmployeeImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(building.name)).createImplementation = () => new BuildingImpl();
     const object = binding.createPlatformRecord(binding.resolveInterface('Building')).platformObject!;
     const employeeObject = binding.createPlatformRecord(binding.resolveInterface('Employee')).platformObject!;
     const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
@@ -285,7 +285,7 @@ function createNumberArrayBinding(): NumberArrayFixture {
     new BindingWorld([]),
     (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(definition).createImplementation = () => new NumberArraysImpl();
+  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new NumberArraysImpl();
   return {
     attribute,
     binding,

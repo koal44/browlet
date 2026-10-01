@@ -95,7 +95,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(derived);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(derived.name));
     interfaceBinding.createImplementation = () => new ProjectionDerivedImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -196,9 +196,9 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const firstBinding = binding.getDefinitionBinding(first);
+    const firstBinding = binding.getDefinitionBinding(binding.resolveInterface(first.name));
     firstBinding.createImplementation = () => new FirstHostImpl();
-    const secondBinding = binding.getDefinitionBinding(second);
+    const secondBinding = binding.getDefinitionBinding(binding.resolveInterface(second.name));
     secondBinding.createImplementation = () => new SecondHostImpl();
     firstBinding.getOrCreateMemberRecord(firstConstructor).constructorBehavior = {
       kind: 'initialize',
@@ -314,18 +314,18 @@ describe('Web IDL realm interface bindings', () => {
       exposed: '*',
       members: [constructor, operation],
     });
-    const definitions = new DefinitionAssembly([interfaceIDL]);
+    const assembly = new DefinitionAssembly([interfaceIDL]);
 
     const world = new BindingWorld([]);
     const firstRealm = new RecordingRealm();
     const secondRealm = new RecordingRealm();
     const first = new RealmBinding(
-      definitions,
+      assembly,
       firstRealm,
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    const firstInterfaceBinding = first.getDefinitionBinding(interfaceIDL);
+    const firstInterfaceBinding = first.getDefinitionBinding(first.resolveInterface(interfaceIDL.name));
     firstInterfaceBinding.createImplementation = () => new CrossRealmImpl();
     firstInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -333,12 +333,12 @@ describe('Web IDL realm interface bindings', () => {
     };
     firstInterfaceBinding.getOrCreateMemberRecord(operation).operationSteps = () => 'ok';
     const second = new RealmBinding(
-      definitions,
+      assembly,
       secondRealm,
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    const secondInterfaceBinding = second.getDefinitionBinding(interfaceIDL);
+    const secondInterfaceBinding = second.getDefinitionBinding(second.resolveInterface(interfaceIDL.name));
     secondInterfaceBinding.createImplementation = () => new CrossRealmImpl();
     secondInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -373,31 +373,31 @@ describe('Web IDL realm interface bindings', () => {
       exposed: '*',
       members: [read, echo],
     });
-    const definitions = new DefinitionAssembly([interfaceIDL]);
-    const primaryInterface = definitions.getInterface('SeparatedIdentity');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([interfaceIDL]);
+    const assembled = assembly.interfaces.get('SeparatedIdentity');
+    if (!assembled) throw new Error('Missing assembled interface');
 
     const implementation = new PrivateStateImplementation(42);
 
     const realm = new RecordingRealm();
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(interfaceIDL).getOrCreateMemberRecord(read).operationSteps = function(receiver) {
+    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).getOrCreateMemberRecord(read).operationSteps = function(receiver) {
       const implInst = receiver?.implInst;
       if (!(implInst instanceof PrivateStateImplementation)) throw new Error('Wrong implementation');
       return PrivateStateImplementation.read(implInst);
     };
-    binding.getDefinitionBinding(interfaceIDL).getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
+    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
       expect(receiver!.implInst).toBe(implementation);
       expect(value).toBe(implementation);
       return value;
     };
-    const prototype = binding.getInterfacePrototypeObject(primaryInterface);
-    const record = binding.projectPlatformObject(implementation, primaryInterface);
+    const prototype = binding.getInterfacePrototypeObject(assembled);
+    const record = binding.projectPlatformObject(implementation, assembled);
     const { platformObject: object } = record;
 
     expect(binding.isPlatformObject(object)).toBe(true);
@@ -460,13 +460,13 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(derived);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(derived.name));
     interfaceBinding.createImplementation = () => new JSONDerivedImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    binding.getDefinitionBinding(base).getOrCreateMemberRecord(inheritedValue).attributeSteps = {
+    binding.getDefinitionBinding(binding.resolveInterface(base.name)).getOrCreateMemberRecord(inheritedValue).attributeSteps = {
       get() { return 12; },
     };
     interfaceBinding.getOrCreateMemberRecord(ownValue).attributeSteps = {
@@ -507,33 +507,33 @@ describe('Web IDL realm interface bindings', () => {
       exposed: '*',
       members: [pointAttribute, toJSON],
     });
-    const definitions = new DefinitionAssembly([holder, point]);
+    const assembly = new DefinitionAssembly([holder, point]);
 
     const world = new BindingWorld([]);
     const local = new RealmBinding(
-      definitions,
+      assembly,
       new Realm(),
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    local.getDefinitionBinding(point).createImplementation = () => new JSONPointImpl();
-    local.getDefinitionBinding(holder).createImplementation = () => new JSONHolderImpl();
+    local.getDefinitionBinding(local.resolveInterface(point.name)).createImplementation = () => new JSONPointImpl();
+    local.getDefinitionBinding(local.resolveInterface(holder.name)).createImplementation = () => new JSONHolderImpl();
     const foreign = new RealmBinding(
-      definitions,
+      assembly,
       new Realm(),
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    foreign.getDefinitionBinding(point).createImplementation = () => new JSONPointImpl();
-    foreign.getDefinitionBinding(holder).createImplementation = () => new JSONHolderImpl();
+    foreign.getDefinitionBinding(foreign.resolveInterface(point.name)).createImplementation = () => new JSONPointImpl();
+    foreign.getDefinitionBinding(foreign.resolveInterface(holder.name)).createImplementation = () => new JSONHolderImpl();
     const pointObject = projected
       ? local.createPlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
       : undefined;
     const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
-    local.getDefinitionBinding(holder).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
+    local.getDefinitionBinding(local.resolveInterface(holder.name)).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
-    foreign.getDefinitionBinding(holder).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
+    foreign.getDefinitionBinding(foreign.resolveInterface(holder.name)).getOrCreateMemberRecord(pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
     const holderObject = local.createPlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
@@ -571,7 +571,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new FrozenArrayImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -619,7 +619,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new BufferSourceImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -683,7 +683,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new ExtendedInterfaceImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
@@ -790,7 +790,7 @@ describe('Web IDL realm interface bindings', () => {
       interface: 'ExposedInterface',
       mixin: 'SecureMixin',
     });
-    const definitions = new DefinitionAssembly([
+    const assembly = new DefinitionAssembly([
       interfaceIDL,
       secureInterface,
       isolatedInterface,
@@ -801,7 +801,7 @@ describe('Web IDL realm interface bindings', () => {
     ]);
 
     const insecure = new RealmBinding(
-      definitions,
+      assembly,
       new Realm(),
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -818,7 +818,7 @@ describe('Web IDL realm interface bindings', () => {
     expect(Reflect.ownKeys(insecurePrototype)).not.toContain('mixinMember');
 
     const privileged = new RealmBinding(
-      definitions,
+      assembly,
       new Realm({ crossOriginIsolated: true, secureContext: true }),
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -897,9 +897,9 @@ type SecurityCheck = {
 };
 
 function constructorMember(
-  arguments_: ConstructorMember['arguments'],
+  args: ConstructorMember['arguments'],
 ): ConstructorMember {
-  return { arguments: arguments_, kind: 'constructor' };
+  return { arguments: args, kind: 'constructor' };
 }
 
 function attributeMember(
@@ -912,10 +912,10 @@ function attributeMember(
 
 function operationMember(
   name: string,
-  arguments_: OperationMember['arguments'],
+  args: OperationMember['arguments'],
   returns: OperationMember['returns'],
 ): OperationMember {
-  return { arguments: arguments_, kind: 'operation', name, returns };
+  return { arguments: args, kind: 'operation', name, returns };
 }
 
 function noArguments(name: string) {

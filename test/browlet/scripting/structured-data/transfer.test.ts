@@ -199,7 +199,7 @@ describe('HTML structured transfer', () => {
       ...xattr('Transferable'),
       implementation: impl(TransferBoxImpl),
       members: [],
-      transfer: {
+      transferSteps: {
         transferSteps(value, dataHolder) {
           dataHolder.set('Value', (value as TransferBoxImpl).value);
         },
@@ -211,9 +211,9 @@ describe('HTML structured transfer', () => {
     const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL]);
     const sourceRealm = new Realm({ globalNames: ['TransferTest'] });
     const targetRealm = new Realm({ globalNames: ['TransferTest'] });
-    const source = bindings.register({ realm: sourceRealm });
-    const target = bindings.register({ realm: targetRealm });
-    const original = source.createPlatformRecord(transferBoxIDL);
+    const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
+    const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+    const original = source.createPlatformRecord(source.getInterface(transferBoxIDL.name)!);
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
     Object.freeze(original.implInst);
 
@@ -254,14 +254,14 @@ describe('HTML structured transfer', () => {
     const clone = result.deserialized as { first: object; second: object; };
     expect(clone.first).toBe(transferred);
     expect(clone.second).toBe(transferred);
-    expect(resolved?.primaryInterface.definition).toBe(transferBoxIDL);
+    expect(resolved?.assembled).toBe(target.getInterface(transferBoxIDL.name));
     expect(target.unwrap(transferred, TransferBoxImpl)?.value)
       .toBe('transferred');
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = new Realm();
-    const hiddenTarget = bindings.register({ realm: hiddenRealm });
-    const hiddenOriginal = source.createPlatformRecord(transferBoxIDL);
+    const hiddenTarget = bindings.register(hiddenRealm, (ctx) => ({ realm: ctx.realm }));
+    const hiddenOriginal = source.createPlatformRecord(source.getInterface(transferBoxIDL.name)!);
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
       [hiddenOriginal.platformObject],
@@ -283,8 +283,8 @@ function createContexts(): {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = new Realm();
   const targetRealm = new Realm();
-  const source = bindings.register({ realm: sourceRealm });
-  const target = bindings.register({ realm: targetRealm });
+  const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
+  const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
   return {
     source,
     sourceRealm,

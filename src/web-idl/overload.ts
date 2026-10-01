@@ -8,13 +8,8 @@ import {
   convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
-import type {
-  ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
-} from './core/index';
-import {
-  getFlattenedMemberTypes, getTypeWithApplicableExtendedAttributes,
-  getUnannotatedType, includesNullableType,
-} from './types';
+import type { ArgumentDefinition, WebIDLType } from './core/index';
+import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 // Web IDL §2.5.8 Overloading — compute the effective overload set, from selected callables.
@@ -98,7 +93,7 @@ export function resolveOverload<Callable extends IDLCallable>(
 
   const distinguishingIndex = candidates.length === 1
     ? -1
-    : getDistinguishingArgumentIndex(candidates, context.binding.definitions);
+    : getDistinguishingArgumentIndex(candidates, context.binding.assembly);
   const values: unknown[] = [];
   let i = 0;
 
@@ -133,9 +128,8 @@ export function resolveOverload<Callable extends IDLCallable>(
 
   if (i === distinguishingIndex && asyncSequenceMethod) {
     const type = selected.types[i];
-    const asyncSequence = type && findContainedType(
+    const asyncSequence = type && context.binding.assembly.findCandidateType(
       type,
-      context.binding.definitions,
       (candidate) => candidate.kind === 'async-sequence',
     );
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
@@ -152,9 +146,8 @@ export function resolveOverload<Callable extends IDLCallable>(
 
   if (i === distinguishingIndex && method) {
     const type = selected.types[i];
-    const sequenceLike = type && findContainedType(
+    const sequenceLike = type && context.binding.assembly.findCandidateType(
       type,
-      context.binding.definitions,
       (candidate) =>
         candidate.kind === 'sequence' || candidate.kind === 'frozen-array',
     );
@@ -250,79 +243,77 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
   index: number,
   context: ConversionContext,
 ): DistinguishingResolution<Callable> {
-  let matches: EffectiveOverloadSetItem<Callable>[] | undefined;
+  const assembly = context.binding.assembly;
+  let matches: EffectiveOverloadSetItem<Callable>[];
 
   if (value === undefined) {
-    matches = retain(candidates, ({ optionality }) =>
+    matches = candidates.filter(({ optionality }) =>
       optionality[index] === 'optional');
-    if (matches) return { candidates: matches };
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (value === null || value === undefined) {
-    matches = retain(candidates, ({ types }) => {
+    matches = candidates.filter(({ types }) => {
       const type = types[index] as WebIDLType;
-      return includesNullableType(type, context.binding.definitions) ||
-        containsDictionary(type, context.binding.definitions);
+      return assembly.includesNullableType(type) ||
+        assembly.getCandidateTypes(type).some((candidate) =>
+          candidate.kind === 'reference' &&
+          assembly.dictionaries.has(candidate.name));
     });
-    if (matches) return { candidates: matches };
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (isPlatformObject(value, context)) {
-    matches = retain(candidates, ({ types }) => {
+    matches = candidates.filter(({ types }) => {
       const type = types[index] as WebIDLType;
       return containsImplementedInterface(type, value, context) ||
-        containsSimpleType(type, 'object', context.binding.definitions);
+        assembly.hasSimpleCandidate(type, 'object');
     });
-    if (matches) return { candidates: matches };
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     if (bufferName === 'ArrayBuffer' || bufferName === 'SharedArrayBuffer') {
-      matches = retain(candidates, ({ types }) => {
+      matches = candidates.filter(({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsAnyBufferType(type, context.binding.definitions) ||
-          containsSimpleType(type, 'object', context.binding.definitions);
+        return assembly.hasArrayBufferCandidate(type) ||
+          assembly.hasSimpleCandidate(type, 'object');
       });
-      if (matches) return { candidates: matches };
+      if (matches.length > 0) return { candidates: matches };
     } else if (bufferName === 'DataView') {
-      matches = retain(candidates, ({ types }) => {
+      matches = candidates.filter(({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsSimpleType(type, 'DataView', context.binding.definitions) ||
-          containsSimpleType(type, 'object', context.binding.definitions);
+        return assembly.hasSimpleCandidate(type, 'DataView') ||
+          assembly.hasSimpleCandidate(type, 'object');
       });
-      if (matches) return { candidates: matches };
+      if (matches.length > 0) return { candidates: matches };
     } else if (bufferName) {
-      matches = retain(candidates, ({ types }) => {
+      matches = candidates.filter(({ types }) => {
         const type = types[index] as WebIDLType;
-        return containsSimpleType(type, bufferName, context.binding.definitions) ||
-          containsSimpleType(type, 'object', context.binding.definitions);
+        return assembly.hasSimpleCandidate(type, bufferName) ||
+          assembly.hasSimpleCandidate(type, 'object');
       });
-      if (matches) return { candidates: matches };
+      if (matches.length > 0) return { candidates: matches };
     }
   }
 
   if (typeof value === 'function') {
-    matches = retain(candidates, ({ types }) => {
+    matches = candidates.filter(({ types }) => {
       const type = types[index] as WebIDLType;
-      return containsDefinitionKind(
-        type,
-        'callback-function',
-        context.binding.definitions,
-      ) || containsSimpleType(type, 'object', context.binding.definitions);
+      return assembly.getCandidateTypes(type).some((candidate) =>
+        candidate.kind === 'reference'
+          ? assembly.callbackFunctions.has(candidate.name)
+          : candidate.kind === 'simple' && candidate.name === 'object');
     });
-    if (matches) return { candidates: matches };
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (isObject(value)) {
     const hasAsyncSequence = candidates.some(({ types }) =>
-      containsKind(
-        types[index] as WebIDLType,
-        'async-sequence',
-        context.binding.definitions,
-      ));
+      assembly.hasCandidateKind(types[index] as WebIDLType, 'async-sequence'));
     const hasString = candidates.some(({ types }) =>
-      containsStringType(types[index] as WebIDLType, context.binding.definitions));
+      assembly.hasStringCandidate(types[index] as WebIDLType));
 
     if (hasAsyncSequence && !(hasStringData(value) && hasString)) {
       const asyncMethod = getMethod(
@@ -335,13 +326,9 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         : getMethod(value, Symbol.iterator, context.realm);
       const iteratorMethod = asyncMethod ?? syncMethod;
       if (iteratorMethod) {
-        matches = retain(candidates, ({ types }) =>
-          containsKind(
-            types[index] as WebIDLType,
-            'async-sequence',
-            context.binding.definitions,
-          ));
-        if (matches) {
+        matches = candidates.filter(({ types }) =>
+          assembly.hasCandidateKind(types[index] as WebIDLType, 'async-sequence'));
+        if (matches.length > 0) {
           return {
             asyncSequenceMethod: {
               method: iteratorMethod,
@@ -354,10 +341,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     }
 
     const hasSequenceLike = candidates.some(({ types }) =>
-      containsSequenceLikeType(
-        types[index] as WebIDLType,
-        context.binding.definitions,
-      ));
+      assembly.hasSequenceCandidate(types[index] as WebIDLType));
     if (hasSequenceLike) {
       const iteratorMethod = getMethod(
         value,
@@ -365,96 +349,65 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
         context.realm,
       );
       if (iteratorMethod) {
-        matches = retain(candidates, ({ types }) =>
-          containsSequenceLikeType(
-            types[index] as WebIDLType,
-            context.binding.definitions,
-          ));
-        if (matches) {
+        matches = candidates.filter(({ types }) =>
+          assembly.hasSequenceCandidate(types[index] as WebIDLType));
+        if (matches.length > 0) {
           return { candidates: matches, method: iteratorMethod };
         }
       }
     }
 
-    matches = retain(candidates, ({ types }) => {
+    matches = candidates.filter(({ types }) => {
       const type = types[index] as WebIDLType;
-      return containsDefinitionKind(
-        type,
-        'callback-interface',
-        context.binding.definitions,
-      ) || containsDictionary(type, context.binding.definitions) ||
-      containsKind(type, 'record', context.binding.definitions) ||
-      containsSimpleType(type, 'object', context.binding.definitions);
+      return assembly.getCandidateTypes(type).some((candidate) => {
+        if (candidate.kind === 'reference') {
+          return assembly.callbackInterfaces.has(candidate.name) ||
+            assembly.dictionaries.has(candidate.name);
+        }
+        return candidate.kind === 'record' ||
+          candidate.kind === 'simple' && candidate.name === 'object';
+      });
     });
-    if (matches) return { candidates: matches };
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'boolean') {
-    matches = retain(candidates, ({ types }) =>
-      containsSimpleType(
-        types[index] as WebIDLType,
-        'boolean',
-        context.binding.definitions,
-      ));
-    if (matches) return { candidates: matches };
+    matches = candidates.filter(({ types }) =>
+      assembly.hasSimpleCandidate(types[index] as WebIDLType, 'boolean'));
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'number') {
-    matches = retain(candidates, ({ types }) =>
-      containsNumericType(
-        types[index] as WebIDLType,
-        context.binding.definitions,
-      ));
-    if (matches) return { candidates: matches };
+    matches = candidates.filter(({ types }) =>
+      assembly.hasNumericCandidate(types[index] as WebIDLType));
+    if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'bigint') {
-    matches = retain(candidates, ({ types }) =>
-      containsSimpleType(
-        types[index] as WebIDLType,
-        'bigint',
-        context.binding.definitions,
-      ));
-    if (matches) return { candidates: matches };
+    matches = candidates.filter(({ types }) =>
+      assembly.hasSimpleCandidate(types[index] as WebIDLType, 'bigint'));
+    if (matches.length > 0) return { candidates: matches };
   }
 
-  matches = retain(candidates, ({ types }) =>
-    containsStringType(
-      types[index] as WebIDLType,
-      context.binding.definitions,
-    ));
-  if (matches) return { candidates: matches };
+  matches = candidates.filter(({ types }) =>
+    assembly.hasStringCandidate(types[index] as WebIDLType));
+  if (matches.length > 0) return { candidates: matches };
 
-  matches = retain(candidates, ({ types }) =>
-    containsNumericType(
-      types[index] as WebIDLType,
-      context.binding.definitions,
-    ));
-  if (matches) return { candidates: matches };
+  matches = candidates.filter(({ types }) =>
+    assembly.hasNumericCandidate(types[index] as WebIDLType));
+  if (matches.length > 0) return { candidates: matches };
 
-  matches = retain(candidates, ({ types }) =>
-    containsSimpleType(
-      types[index] as WebIDLType,
-      'boolean',
-      context.binding.definitions,
-    ));
-  if (matches) return { candidates: matches };
+  matches = candidates.filter(({ types }) =>
+    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'boolean'));
+  if (matches.length > 0) return { candidates: matches };
 
-  matches = retain(candidates, ({ types }) =>
-    containsSimpleType(
-      types[index] as WebIDLType,
-      'bigint',
-      context.binding.definitions,
-    ));
-  if (matches) return { candidates: matches };
+  matches = candidates.filter(({ types }) =>
+    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'bigint'));
+  if (matches.length > 0) return { candidates: matches };
 
-  matches = retain(candidates, ({ types }) =>
-    containsSimpleType(
-      types[index] as WebIDLType,
-      'any',
-      context.binding.definitions,
-    ));
-  if (matches) return { candidates: matches };
+  matches = candidates.filter(({ types }) =>
+    assembly.hasSimpleCandidate(types[index] as WebIDLType, 'any'));
+  if (matches.length > 0) return { candidates: matches };
 
   return throwTypeError(context, 'No overload matches the argument value');
 }
@@ -489,53 +442,21 @@ export function getArgumentDefinition(
   return last?.variadic ? last : undefined;
 }
 
-// Project helper: locate the distinguishing position by comparing canonical type names.
+// Locate the distinguishing position by comparing overload type keys.
 // Web IDL §2.5.8 Overloading — distinguishing argument index.
 function getDistinguishingArgumentIndex<Callable extends IDLCallable>(
   candidates: EffectiveOverloadSetItem<Callable>[],
-  definitions: DefinitionAssembly,
+  assembly: DefinitionAssembly,
 ): number {
   const length = candidates[0]?.types.length ?? 0;
   for (let index = 0; index < length; index++) {
-    const first = canonicalType(
-      candidates[0]?.types[index] as WebIDLType,
-      definitions,
-    );
+    const first = assembly.getOverloadTypeKey(candidates[0]?.types[index] as WebIDLType);
     if (candidates.some(({ types }) =>
-      canonicalType(types[index] as WebIDLType, definitions) !== first)) {
+      assembly.getOverloadTypeKey(types[index] as WebIDLType) !== first)) {
       return index;
     }
   }
   throw new InternalError('Overloads have no distinguishing argument');
-}
-
-// Project helper: produce comparable type names after resolving typedefs and annotations.
-function canonicalType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): string {
-  const inner = getUnannotatedType(type, definitions);
-  switch (inner.kind) {
-    case 'simple':
-      return inner.name;
-    case 'reference':
-      return `reference:${inner.name}`;
-    case 'nullable':
-      return `${canonicalType(inner.type, definitions)}?`;
-    case 'union':
-      return `(${inner.types.map((member) =>
-        canonicalType(member, definitions)).join(' or ')})`;
-    case 'sequence':
-    case 'async-sequence':
-    case 'promise':
-    case 'frozen-array':
-    case 'observable-array':
-      return `${inner.kind}<${canonicalType(inner.type, definitions)}>`;
-    case 'record':
-      return `record<${canonicalType(inner.key, definitions)}, ${
-        canonicalType(inner.value, definitions)
-      }>`;
-  }
 }
 
 // Project helper: test candidate types against a platform object's implemented interfaces.
@@ -544,131 +465,16 @@ function containsImplementedInterface(
   value: unknown,
   context: ConversionContext,
 ): boolean {
-  return getContainedTypes(type, context.binding.definitions).some((candidate) => {
+  return context.binding.assembly.getCandidateTypes(type).some((candidate) => {
     if (candidate.kind !== 'reference') return false;
-    const primaryInterface = context.binding.definitions.getInterface(candidate.name);
-    if (primaryInterface) {
+    const assembled = context.binding.assembly.interfaces.get(candidate.name);
+    if (assembled) {
       const record = getPlatformRecord(value);
       return record?.binding.world === context.binding.world &&
-        record.implements(primaryInterface);
+        record.implements(assembled);
     }
-    const definition = context.binding.definitions.getDefinition(candidate.name);
-    return definition?.kind === 'proxy-object' && definition.is(value);
+    return context.binding.assembly.proxyObjects.get(candidate.name)?.is(value) ?? false;
   });
-}
-
-// Project helper: find a callback definition among candidate types.
-function containsDefinitionKind(
-  type: WebIDLType,
-  kind: 'callback-function' | 'callback-interface',
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'reference' &&
-    definitions.getDefinition(candidate.name)?.kind === kind);
-}
-
-// Project helper: recognize a dictionary among candidate types.
-function containsDictionary(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'reference' &&
-    definitions.getDefinition(candidate.name)?.kind === 'dictionary');
-}
-
-// Project helper: recognize string or enumeration candidates.
-function containsStringType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'simple'
-      ? stringTypeNames.has(candidate.name)
-      : candidate.kind === 'reference' &&
-        definitions.getDefinition(candidate.name)?.kind === 'enumeration');
-}
-
-// Project helper: recognize numeric candidates.
-function containsNumericType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'simple' && numericTypeNames.has(candidate.name));
-}
-
-// Project helper: find a simple type by name among candidates.
-function containsSimpleType(
-  type: WebIDLType,
-  name: SimpleTypeName,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'simple' && candidate.name === name);
-}
-
-// Project helper: recognize ArrayBuffer or SharedArrayBuffer candidates.
-function containsAnyBufferType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'simple' &&
-    bufferTypeNames.has(candidate.name as BufferTypeName));
-}
-
-// Project helper: match a declaration type kind among candidates.
-function containsKind(
-  type: WebIDLType,
-  kind: WebIDLType['kind'],
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === kind);
-}
-
-// Project helper: recognize sequence or frozen-array candidates.
-function containsSequenceLikeType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): boolean {
-  return getContainedTypes(type, definitions).some((candidate) =>
-    candidate.kind === 'sequence' || candidate.kind === 'frozen-array');
-}
-
-// Project helper: find a matching type after unwrapping nullable types and unions.
-function findContainedType(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-  predicate: (candidate: WebIDLType) => boolean,
-): WebIDLType | undefined {
-  return getContainedTypes(type, definitions).find(predicate);
-}
-
-// Project helper: expose candidate types through nullable types, annotations, and unions.
-function getContainedTypes(
-  type: WebIDLType,
-  definitions: DefinitionAssembly,
-): WebIDLType[] {
-  const inner = getUnannotatedType(type, definitions);
-  if (inner.kind === 'nullable') {
-    return getContainedTypes(inner.type, definitions);
-  }
-  if (inner.kind === 'union') {
-    return getFlattenedMemberTypes(inner, definitions);
-  }
-  return [inner];
-}
-
-// Project helper: filter overload candidates, returning undefined when none match.
-function retain<Value>(
-  values: Value[],
-  predicate: (value: Value) => boolean,
-): Value[] | undefined {
-  const matches = values.filter(predicate);
-  return matches.length > 0 ? matches : undefined;
 }
 
 // Project helper: create an overload-resolution failure in the selected realm.
@@ -689,17 +495,3 @@ type AsyncSequenceMethod = {
   method: JSMethod;
   type: 'async' | 'sync';
 };
-
-const numericTypeNames = new Set<SimpleTypeName>([
-  'byte', 'octet', 'short', 'unsigned short', 'long', 'unsigned long',
-  'long long', 'unsigned long long', 'float', 'unrestricted float',
-  'double', 'unrestricted double',
-]);
-
-const stringTypeNames = new Set<SimpleTypeName>([
-  'DOMString', 'ByteString', 'USVString',
-]);
-
-const bufferTypeNames = new Set<BufferTypeName>([
-  'ArrayBuffer', 'SharedArrayBuffer',
-]);

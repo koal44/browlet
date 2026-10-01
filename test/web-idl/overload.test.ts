@@ -163,11 +163,11 @@ describe('Web IDL effective overload sets', () => {
       values: [missingArgument],
     });
 
-    const primaryInterface = binding.definitions.getInterface('Node');
+    const assembled = binding.assembly.interfaces.get('Node');
     const platformObject = {};
     const implInst = {};
-    if (!primaryInterface) throw new Error('Missing Node interface');
-    binding.initializePlatformObject(platformObject, primaryInterface, implInst);
+    if (!assembled) throw new Error('Missing Node interface');
+    binding.initializePlatformObject(platformObject, assembled, implInst);
 
     const node = namedOperation('node', reference('Node'));
     const string = namedOperation('string', idlType.DOMString);

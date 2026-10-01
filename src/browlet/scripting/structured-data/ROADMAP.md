@@ -27,7 +27,7 @@ defining specification supplies its interface's steps. Dispatch uses the exact
 primary interface; inherited interfaces do not each run an independent hook.
 
 Serializable/Transferable attributes remain declaration metadata. The same
-declaration's `serialization` and `transfer` fields supply executable steps;
+declaration's `serialSteps` and `transferSteps` fields supply executable steps;
 there is no separate registration table. Deserialization creates internal
 instances without invoking public constructors or requiring public constructibility.
 Native structuredClone cannot replace this graph/binding/exposure machinery.

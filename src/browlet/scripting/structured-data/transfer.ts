@@ -5,7 +5,7 @@ import {
 } from '../../../js-engine/index';
 import {
   throwDOMException,
-  type BindingContext, type StampedImplInstance, type TransferableSteps,
+  type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
@@ -96,12 +96,12 @@ function prepareTransfer(
 
   const record = ctx.getObjectRecord(value);
   if (!record) return throwDOMException('DataCloneError');
-  const steps = record.primaryInterface.definition.transfer;
+  const steps = record.assembled.transferSteps;
   if (!steps) return throwDOMException('DataCloneError');
   return {
     kind: 'platform-object',
     implInst: record.implInst,
-    interfaceName: record.primaryInterface.definition.name,
+    interfaceName: record.assembled.name,
     placeholder,
     steps,
   };
@@ -146,17 +146,17 @@ function receiveTransfer(
   ctx: BindingContext<ScriptingEnvironment>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
-    const definition = ctx.getInterface(
+    const assembled = ctx.getInterface(
       dataHolder.interfaceName,
     );
-    if (!definition || !ctx.isInterfaceExposed(definition)) {
+    if (!assembled || !ctx.isInterfaceExposed(assembled)) {
       return throwDOMException('DataCloneError');
     }
-    const platformRecord = ctx.createPlatformRecord(definition);
-    const steps = platformRecord.primaryInterface.definition.transfer;
+    const platformRecord = ctx.createPlatformRecord(assembled);
+    const steps = platformRecord.assembled.transferSteps;
     if (!steps) {
       throw new InternalError(
-        `${platformRecord.primaryInterface.definition.name} has no transfer steps`,
+        `${platformRecord.assembled.name} has no transfer steps`,
       );
     }
     steps.transferReceivingSteps(
@@ -189,5 +189,5 @@ type PreparedPlatformTransfer = {
   implInst: StampedImplInstance;
   interfaceName: string;
   placeholder: TransferPlaceholderSerializedRecord;
-  steps: TransferableSteps;
+  steps: TransferSteps;
 };

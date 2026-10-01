@@ -56,8 +56,8 @@ describe('Web IDL implementation bindings', () => {
     const world = new BindingWorld([consumerIDL, valueIDL]);
     const realm = new Realm();
     const otherRealm = new Realm();
-    world.register({ realm }).install(realm.global);
-    world.register({ realm: otherRealm }).install(otherRealm.global);
+    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    world.register(otherRealm, (ctx) => ({ realm: ctx.realm })).install(otherRealm.global);
     const Value = Reflect.get(otherRealm.global, 'RenamedValue') as new(value: string) => object;
     const Consumer = Reflect.get(realm.global, 'Consumer') as {
       read(value: unknown): string;
@@ -118,7 +118,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([handlerIDL, baseIDL, optionsIDL, definition]).register({ realm }).install(realm.global);
+    new BindingWorld([handlerIDL, baseIDL, optionsIDL, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Constructor = Reflect.get(realm.global, definition.name) as new(input?: object) => {
       handler: unknown; raw: unknown;
       run(value: unknown): { receiver: unknown; value: unknown; } | undefined;
@@ -159,7 +159,7 @@ describe('Web IDL implementation bindings', () => {
     });
     const realm = new Realm();
     const bindings = new BindingWorld([definition]);
-    bindings.register({ realm }).install(realm.global);
+    bindings.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Constructor = Reflect.get(realm.global, definition.name) as new() => object;
     const first = new Constructor();
     const second = new Constructor();
@@ -199,7 +199,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Constructor = Reflect.get(realm.global, definition.name) as new() => {
       handler: () => number;
     };
@@ -342,7 +342,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Fields = Reflect.get(realm.global, definition.name) as new() => {
       count: number; label: string; next: object | null; optional: unknown;
     };
@@ -386,7 +386,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Attributes = Reflect.get(realm.global, definition.name) as {
       new(): { value: number; }; label: string; alias: string;
     };
@@ -408,7 +408,7 @@ describe('Web IDL implementation bindings', () => {
       members: [ctor(), attr('value', idlType.long)],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Missing = Reflect.get(realm.global, definition.name) as new() => { value: number; };
     const object = new Missing();
 
@@ -869,10 +869,10 @@ describe('Web IDL implementation bindings', () => {
         stringifier(),
       ],
     });
-    const definitions = new DefinitionAssembly([interfaceIDL]);
+    const assembly = new DefinitionAssembly([interfaceIDL]);
 
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -931,11 +931,11 @@ describe('Web IDL implementation bindings', () => {
         },
       ],
     });
-    const definitions = new DefinitionAssembly([settings, interfaceIDL]);
+    const assembly = new DefinitionAssembly([settings, interfaceIDL]);
 
     const realm = new Realm();
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -993,7 +993,7 @@ describe('Web IDL implementation bindings', () => {
     });
     const realm = new Realm();
     new BindingWorld([callback, base, options, partial, alias, definition])
-      .register({ realm }).install(realm.global);
+      .register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Constructor = Reflect.get(realm.global, definition.name) as new() => {
       accept(options: Options | string): void;
     };
@@ -1029,7 +1029,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([dictionary, definition]).register({ realm }).install(realm.global);
+    new BindingWorld([dictionary, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Constructor = Reflect.get(realm.global, definition.name) as new() => {
       accept(value: Record<string, unknown>): void;
     };
@@ -1377,7 +1377,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Collection = Reflect.get(realm.global, 'Collection') as new() => {
       item(index: number): string | null | undefined;
       [index: number]: string | undefined;
@@ -1423,7 +1423,7 @@ describe('Web IDL implementation bindings', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([definition]).register({ realm }).install(realm.global);
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
     const Collection = Reflect.get(realm.global, 'Collection') as new() => object;
     const collection = new Collection();
 
@@ -1531,9 +1531,9 @@ describe('Web IDL implementation bindings', () => {
         kind: 'constructor',
       }],
     });
-    const definitions = new DefinitionAssembly([parentIDL, childIDL]);
+    const assembly = new DefinitionAssembly([parentIDL, childIDL]);
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -1568,7 +1568,7 @@ describe('Web IDL implementation bindings', () => {
         }),
       }),
     ]);
-    const ctx = world.register({ realm: new Realm() });
+    const ctx = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const child = path === 'construct' ? ctx.construct(ChildImpl) : new ChildImpl();
     if (path === 'construct') expect(calls).toEqual(['parent', 'child']);
     const platform = ctx.project(ChildImpl, child);
@@ -1587,7 +1587,7 @@ describe('Web IDL implementation bindings', () => {
         }),
       }),
     ]);
-    const ctx = world.register({ realm: new Realm() });
+    const ctx = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const instance = new ExampleImpl();
     expect(() => ctx.project(ExampleImpl, instance)).toThrow(failure);
     expect(getImplementationRecord(instance) === undefined).toBe(true);
@@ -1596,16 +1596,16 @@ describe('Web IDL implementation bindings', () => {
   });
 
   it('keeps binding contexts distinct within the same realm', () => {
-    const definitions = new DefinitionAssembly([]);
+    const assembly = new DefinitionAssembly([]);
     const realm = new Realm();
     const first = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
     const second = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),

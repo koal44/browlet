@@ -22,7 +22,8 @@ cannot hide a dependency in the standalone surface.
 | --- | --- |
 | `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
-| `assembly.ts` | Combine definitions, partials, includes, marker validation, and implementation-class lookup |
+| `assembly.ts` | Compose the assembled collections and answer type queries across them |
+| `assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
 | `binding-world.ts`, `binding-context.ts` | Register realms and expose their shared boundary operations |
 | `realm-binding.ts`, `definition-binding.ts` | Realm-owned prototypes, functions, allocation, and member adapters |
 | `implementation-binding.ts`, `platform-object.ts` | Construction dependencies, implementation adaptation, and stamped identity |
@@ -35,6 +36,8 @@ Keep declarations beside the implementation they describe, preserving their
 source IDL or specification reference. `defineInterface()`, `defineDictionary()`,
 and their peers create definitions; `attr()`, `roAttr()`, `op()`, `ctor()`, and
 type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
+`defineInterface()` produces a `PrimaryInterfaceDefinition`; its partials and
+included mixins are combined into an `AssembledInterface` during assembly.
 
 Automatic member binding calls implementation methods and accessors. A readonly
 attribute may also expose a stored implementation field. Use explicit bindings
@@ -85,6 +88,36 @@ includer explicitly exposes it. Binding must not manufacture missing state.
 ## Registration and environment composition
 
 `new BindingWorld<Env>(definitions)` assembles definitions requiring that environment.
+Each collection receives the same declarations array and owns its construction,
+including its fragments and inheritance. Named lookups only read the completed
+assembly. Declarations and their nested members and types must remain unchanged
+after assembly. Dictionaries index their members by name alongside the ordered
+conversion list; callback interfaces index their operation declarations.
+Runtime consumers use assembled class instances,
+which retain their original declarations as `primary`. All realms registered in
+that world use these same instances, while their JavaScript constructors and
+prototypes remain realm-owned. Realm binding caches use the assembled definitions
+as keys. Member searches, operation grouping, inheritance, and legacy metadata
+belong to the assembled definitions. Their collections own implementation-class
+lookup, namespace membership, inheritance ordering, candidate-type searches,
+typedef expansion, and proxy recognition. Member types still contain symbolic
+references; `DefinitionAssembly` resolves them within that world. Resolved types,
+candidate lists, and comparison keys are cached per descriptor on first use.
+`getCandidateTypes()` ignores annotations for overload selection;
+`getConversionCandidates()` preserves conversion attributes in their original order.
+Caller-supplied attributes are applied separately, keeping them out of cached results.
+Returned candidate lists are shared and must not be modified. Realm-specific exposure and
+installation remain binding work; queries that need exposure accept a predicate
+from that binding. Mixins are
+temporary assembly inputs; contributed members retain their source declarations
+for exposure checks. Proxy receiver resolution remains live and binding checks
+each candidate's world before accepting it.
+
+Name references to `DefinitionAssembly` `assembly` and references to individual
+assembled definitions `assembled`. Qualify the role when several are needed
+together, such as `expectedAssembled`; reserve `definition` and `definitions` for
+raw declarations.
+
 `defineProxyObject()` joins that same collection for proxies that stand in for
 platform objects, such as HTML's WindowProxy. Conversion preserves the proxy's
 identity, while an optional receiver resolver selects the platform object
@@ -92,17 +125,17 @@ supplying its interface members. These definitions install no global or prototyp
 and emit no IDL declaration text. Using JavaScript's `Proxy` alone does not need
 this declaration: legacy indexed/named objects and observable arrays keep their
 existing binding machinery.
-`world.register(env)` returns one Binding Context per realm in that world.
-Repeated registration returns the existing context; `world.forRealm(realm)`
-only looks it up.
+`world.register(realm, createEnvironment)` returns one Binding Context per realm
+in that world. Repeated registration returns the existing context without calling
+the factory again; `world.forRealm(realm)` only looks it up.
 
 Every registration supplies an environment. Its minimum shape is `{ realm }`;
 pure conversion hosts need no execution facilities. Declarations requiring more
 name their environment type explicitly. `ctx.realm` has type `Env['realm']`,
 and `ctx.getEnvironment()` returns the actual registered object as `Env`.
 
-Use `world.register(realm, createEnvironment)` when execution composition needs
-the new context. The factory must return an environment for that same realm;
+The factory receives the new Binding Context so it can compose execution
+facilities. It must return an environment for that same realm;
 the environment getter is unavailable until the factory returns. Composition
 and declaration setup must succeed before the realm binding is published.
 
@@ -112,7 +145,7 @@ allocation. A sandbox can register for internal allocations without installing
 author interfaces. [Browlet's composition root](../browlet/bindings.ts) demonstrates
 both the sandbox and Window paths.
 
-Interfaces attach HTML's `serialization` and `transfer` steps directly to their
+Interfaces attach HTML's `serialSteps` and `transferSteps` directly to their
 declarations. The steps live with the owning implementation and run for the exact
 primary interface; inherited state must be included explicitly. Both directions
 are required by each step type. Assembly validates the matching no-argument
@@ -126,8 +159,8 @@ transfer ordering; Web IDL retains the hooks and supplies platform identity and
 construction. Steps do not capture a realm or Binding Context in the shared
 declaration, and standalone subsystems do not import HTML's implementation.
 
-Each provider can name its fields through `SerializableSteps<Impl, Fields>` or
-`TransferableSteps<Impl, Fields>`. The backing record remains a Map; its typed
+Each provider can name its fields through `SerialSteps<Impl, Fields>` or
+`TransferSteps<Impl, Fields>`. The backing record remains a Map; its typed
 view checks field names and values. Deserialization receives the completed record
 from the matching serializer, not arbitrary author input. Required fields must
 be populated by that serializer; TypeScript does not prove that every path writes
@@ -137,8 +170,11 @@ them. The HTML traversal keeps the interface-specific shape opaque.
 
 One [`PlatformRecord`](platform-object.ts) is privately stamped onto both an
 implementation and its eventual platform object. It retains the owning realm
-binding and primary interface. The implementation keeps its class prototype and
-private state; public subclassing changes the platform prototype, not the
+binding and assembled interface. `record.assembled` supplies its name and exact
+serialization and transfer steps. `ctx.getInterface(name)` returns the assembled
+interface used by allocation and exposure checks; those operations reject an
+interface from another binding world's assembly. The implementation keeps its
+class prototype and private state; public subclassing changes the platform prototype, not the
 implementation constructor's `newTarget`.
 
 Creating the record runs inherited implementation initializers before stamping.

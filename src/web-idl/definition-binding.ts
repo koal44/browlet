@@ -1,8 +1,7 @@
 import type { JSFunction } from '../js-engine/index';
 import type { InternalPromise } from '../infra/promises';
-import type {
-  CallbackInterfaceDefinition, InterfaceDefinition, InterfaceMember, NamespaceDefinition,
-} from './core/declarations';
+import type { AssembledCallbackInterface, AssembledInterface, AssembledNamespace } from './assembled';
+import type { InterfaceMember } from './core/declarations';
 import type { NamedArgumentsExtendedAttribute } from './core/types';
 import type { ValuePair } from './iterable';
 import type { LegacyPropertyMetadata } from './legacy-platform-object';
@@ -39,8 +38,8 @@ export class DefinitionBinding {
   }
 }
 
-/** Original declarations that own realm-specific platform objects and functions. */
-export type PlatformDefinition = InterfaceDefinition | NamespaceDefinition | CallbackInterfaceDefinition;
+/** Assembled definitions that own realm-specific platform objects and functions. */
+export type PlatformDefinition = AssembledInterface | AssembledNamespace | AssembledCallbackInterface;
 
 /** Interface members and legacy factory declarations with member binding records. */
 export type PlatformMemberDefinition = InterfaceMember | NamedArgumentsExtendedAttribute;

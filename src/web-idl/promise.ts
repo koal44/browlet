@@ -7,7 +7,6 @@ import { idlType, implementationType, sequence, type ImplementationType, type We
 import {
   createIDLPromiseRecord, isIDLPromiseRecord, type IDLPromiseRecord,
 } from './promise-record';
-import { getUnannotatedType } from './types';
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */
 export function createWebIDLPromiseConstructor(context: BindingContext): typeof InternalPromise {
@@ -285,6 +284,6 @@ function isUndefinedType(
   type: WebIDLType,
   context: ConversionContext,
 ): boolean {
-  const resolved = getUnannotatedType(type, context.binding.definitions);
+  const resolved = context.binding.assembly.getUnannotatedType(type);
   return resolved.kind === 'simple' && resolved.name === 'undefined';
 }

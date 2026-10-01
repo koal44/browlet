@@ -230,7 +230,7 @@ describe('transform-stream projection', () => {
     expect(bindings.getObjectRecord(stream)).toBeUndefined();
     const object = bindings.project(TransformStreamImpl, stream);
     const projectedStream = bindings.getObjectRecord(object);
-    expect(projectedStream?.primaryInterface.definition.name)
+    expect(projectedStream?.assembled.name)
       .toBe('TransformStream');
     expect(projectedStream?.implInst).toBe(stream);
   });

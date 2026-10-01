@@ -10,7 +10,7 @@ export {
   defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef, defineProxyObject,
 } from './declarations';
 export type {
-  InterfaceDefinition, PartialInterfaceDefinition, InterfaceMember, ConstructorMember,
+  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceMember, ConstructorMember,
   IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
   InterfaceMixinDefinition, PartialInterfaceMixinDefinition, MixinMember, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition, DictionaryMember,
@@ -46,6 +46,6 @@ export {
 } from './serialize';
 
 export type {
-  SerializableSteps, TransferableSteps, StructuredDataRecord,
+  SerialSteps, TransferSteps, StructuredDataRecord,
   SerializationContext, DeserializationContext,
 } from './structured-data';

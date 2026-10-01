@@ -15,8 +15,8 @@ describe('Web IDL simple exceptions', () => {
   ])('realizes a requested $name once, preserving its message', ({ name, Exception }) => {
     const bindings = new BindingWorld([]);
     const realm = new TestRealm();
-    const context = bindings.register({ realm });
-    const foreignContext = bindings.register({ realm: new TestRealm() });
+    const context = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const foreignContext = bindings.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const request = new Exception('invalid input');
     const error = context.realizeException(request);
 
@@ -27,7 +27,7 @@ describe('Web IDL simple exceptions', () => {
   });
 
   it('preserves existing exceptions and does not inspect author objects', () => {
-    const context = new BindingWorld([]).register({ realm: new TestRealm() });
+    const context = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const { proxy, revoke } = Proxy.revocable({}, {});
     revoke();
 

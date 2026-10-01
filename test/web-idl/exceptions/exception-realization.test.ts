@@ -53,8 +53,8 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     const prototype = Reflect.getPrototypeOf(exception);
 
     const world = new BindingWorld([]);
-    const binding = world.register({ realm: new TestRealm() });
-    const otherBinding = world.register({ realm: new TestRealm() });
+    const binding = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    const otherBinding = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     binding.install(binding.realm.global);
     const error = binding.realizeException(exception);
     const constructor: unknown = Reflect.get(binding.realm.global, name);
@@ -89,7 +89,7 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     });
     const revoked = Proxy.revocable(exception, {});
     revoked.revoke();
-    const context = new BindingWorld([]).register({ realm: new TestRealm() });
+    const context = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
 
     for (const value of [
       Object.create(Reflect.getPrototypeOf(exception)),

@@ -129,7 +129,7 @@ accepts an environment factory because execution composition needs the new
 Binding Context. Declarations and their binding world name one environment type;
 that type supplies the realm type too. The factory returns the actual environment;
 declarations subsequently obtain it through `ctx.getEnvironment()`. A standalone
-binding needing only a realm can register `{ realm }` directly.
+binding needing only a realm can return `{ realm }` from its environment factory.
 Event construction captures the binding in an execution facility, without
 attaching it to Realm. Event targets require that facility through their constructor's
 environment; document factories pass their environment explicitly to node constructors,

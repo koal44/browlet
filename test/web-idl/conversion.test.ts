@@ -76,6 +76,18 @@ describe('Web IDL value conversion', () => {
     );
   });
 
+  it('applies each conversion\'s attributes when a union descriptor is reused', () => {
+    const { ctx, realm } = createContext();
+    const type = union(idlType.byte, idlType.boolean);
+    const clamped = annotated(type, xattr('Clamp'));
+    const enforced = annotated(type, xattr('EnforceRange'));
+
+    expect(convertToIDL(300, clamped, ctx)).toBe(127);
+    expectRealmTypeError(() => convertToIDL(300, enforced, ctx), realm);
+    expect(convertToIDL(300, type, ctx)).toBe(44);
+    expect(convertToIDL(300, clamped, ctx)).toBe(127);
+  });
+
   it('converts strings and enumerations with their distinct failure rules', () => {
     const choice = defineEnumeration({
       name: 'Choice',
@@ -516,11 +528,11 @@ describe('Web IDL value conversion', () => {
       members: [{ default: false, name: 'capture', type: idlType.boolean }],
     });
     const { ctx } = createContext([node, options]);
-    const primaryInterface = ctx.binding.definitions.getInterface('Node');
+    const assembled = ctx.binding.assembly.interfaces.get('Node');
     const platformObject = {};
     const implInst = {};
-    if (!primaryInterface) throw new Error('Missing Node interface');
-    ctx.binding.initializePlatformObject(platformObject, primaryInterface, implInst);
+    if (!assembled) throw new Error('Missing Node interface');
+    ctx.binding.initializePlatformObject(platformObject, assembled, implInst);
 
     expect(convertToIDL(
       platformObject,

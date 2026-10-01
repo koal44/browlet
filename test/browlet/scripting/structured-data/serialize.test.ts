@@ -505,7 +505,7 @@ describe('HTML structured serialization', () => {
       ...xattr('Serializable'),
       implementation: impl(ContainerImpl),
       members: [],
-      serialization: {
+      serialSteps: {
         serializationSteps(value, record, forStorage, context) {
           const container = value as ContainerImpl;
           record.set('Child', context.subserialize(container.child));
@@ -516,8 +516,8 @@ describe('HTML structured serialization', () => {
     });
     const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
     const realm = new Realm();
-    const ctx = bindings.register({ realm });
-    const container = ctx.createPlatformRecord(containerIDL);
+    const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const container = ctx.createPlatformRecord(ctx.getInterface(containerIDL.name)!);
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
     implInst.child = container.platformObject;
     const serialized = structuredSerializeForStorage(
@@ -567,7 +567,7 @@ function createContext(options: {
     options.crossOriginIsolated ? 'concrete' : 'none',
   );
   agentCluster.add(realm.agent);
-  const ctx = bindings.register({ realm });
+  const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
   ctx.install(realm.global);
   return ctx;
 }

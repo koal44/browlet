@@ -102,14 +102,14 @@ describe('interface constructor prototype fallback', () => {
 
 function createBindings() {
   class ExampleImpl {}
-  const definitions = new DefinitionAssembly([
+  const assembly = new DefinitionAssembly([
     defineInterface({
       name: 'Example', exposed: '*', implementation: impl(ExampleImpl), members: [ctor()],
     }),
   ]);
   const world = new BindingWorld([]);
-  const first = new RealmBinding(definitions, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
-  const second = new RealmBinding(definitions, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
+  const first = new RealmBinding(assembly, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
+  const second = new RealmBinding(assembly, new TestRealm(), world, (ctx) => ({ realm: ctx.realm }));
   registerDefinitionBindings(first);
   registerDefinitionBindings(second);
   const target = second.realm.evaluate('(function Target() {})', 'target.js') as JSFunction;

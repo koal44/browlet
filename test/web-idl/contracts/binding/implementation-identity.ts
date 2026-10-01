@@ -1,4 +1,5 @@
-import type { AssembledInterfaceDefinition, DefinitionAssembly } from '../../../../src/web-idl/assembly';
+import type { DefinitionAssembly } from '../../../../src/web-idl/assembly';
+import type { AssembledInterface } from '../../../../src/web-idl/assembled';
 import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from '../../../../src/web-idl/buffer-source';
 import type { StampedImplInstance, PlatformRecord, WebIDLType } from '../../../../src/web-idl/index';
 import {
@@ -6,35 +7,37 @@ import {
   stampImplementation,
 } from '../../../../src/web-idl/platform-object';
 import type { RealmBinding } from '../../../../src/web-idl/realm-binding';
-import { getUnannotatedType } from '../../../../src/web-idl/types';
 
 declare const binding: RealmBinding;
-const primaryInterface: AssembledInterfaceDefinition = binding.resolveInterface('Example');
-declare const definitions: DefinitionAssembly;
+const assembled: AssembledInterface = binding.resolveInterface('Example');
+declare const assembly: DefinitionAssembly;
 declare const type: WebIDLType;
 declare const authorValue: unknown;
 const implInst = { count: 1 };
 const platformObject = { authorProperty: true };
 
-const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, primaryInterface);
-const created: PlatformRecord = binding.createPlatformRecord(primaryInterface);
-const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, primaryInterface);
-const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, primaryInterface, implInst);
+const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, assembled);
+const created: PlatformRecord = binding.createPlatformRecord(assembled);
+binding.getDefinitionBinding(assembled);
+// @ts-expect-error Realm binding caches use assembled definitions, not their declarations.
+binding.getDefinitionBinding(assembled.primary);
+const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, assembled);
+const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, assembled, implInst);
 // @ts-expect-error The implementation must be supplied separately from the platform object.
-binding.initializePlatformObject(platformObject, primaryInterface);
-const registered: PlatformRecord<typeof implInst> = associatePlatformObject(platformObject, implInst, primaryInterface, binding);
+binding.initializePlatformObject(platformObject, assembled);
+const registered: PlatformRecord<typeof implInst> = associatePlatformObject(platformObject, implInst, assembled, binding);
 const found: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(implInst)?.implInst;
-const stamped = stampImplementation(implInst, primaryInterface, binding);
+const stamped = stampImplementation(implInst, assembled, binding);
 const foundStamped: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(stamped)?.implInst;
 // @ts-expect-error Name lookup accepts a name, not an already assembled definition.
-binding.resolveInterface(primaryInterface);
+binding.resolveInterface(assembled);
 // @ts-expect-error Internal creation requires the already assembled primary interface.
 binding.createPlatformRecord('Example');
 // @ts-expect-error Internal projection requires the already assembled primary interface.
 binding.projectGlobalObject(implInst, 'Example');
 binding.context.projectGlobalObject(implInst, 'Example');
 // @ts-expect-error The external projection boundary accepts an interface name.
-binding.context.projectGlobalObject(implInst, primaryInterface);
+binding.context.projectGlobalObject(implInst, assembled);
 projected.implInst.count.toFixed();
 // @ts-expect-error The record retains the implementation shape, not the platform shape.
 paired.implInst.authorProperty;
@@ -48,4 +51,4 @@ const returnedBuffer: ArrayBufferLike | ArrayBufferView = convertBufferSourceToJ
 buffer.byteLength.toFixed();
 returnedBuffer.byteLength.toFixed();
 // @ts-expect-error Outer annotations have been removed from the result.
-const annotation: 'annotated' = getUnannotatedType(type, definitions).kind;
+const annotation: 'annotated' = assembly.getUnannotatedType(type).kind;

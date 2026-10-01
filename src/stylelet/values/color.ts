@@ -1414,10 +1414,10 @@ const labFunctionConsumer: TryConsumer<LabFn> =
   createLabFunctionConsumer(
     'lab',
     SPACES.lab,
-    (arguments_) => ({
+    (args) => ({
       kind: ColorKind.LabFn,
       useLegacySyntax: false,
-      ...arguments_,
+      ...args,
     }),
   );
 
@@ -1432,17 +1432,17 @@ const oklabFunctionConsumer: TryConsumer<OklabFn> =
   createLabFunctionConsumer(
     'oklab',
     SPACES.oklab,
-    (arguments_) => ({
+    (args) => ({
       kind: ColorKind.OklabFn,
       useLegacySyntax: false,
-      ...arguments_,
+      ...args,
     }),
   );
 
 function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
   name: 'lab' | 'oklab',
   space: LabSpace | OklabSpace,
-  project: (arguments_: LabArguments) => Color,
+  project: (args: LabArguments) => Color,
 ): TryConsumer<Color> {
   return createFunctionalNotationConsumer(
     name,
@@ -1529,10 +1529,10 @@ const lchFunctionConsumer: TryConsumer<LchFn> =
   createLchFunctionConsumer(
     'lch',
     SPACES.lch,
-    (arguments_) => ({
+    (args) => ({
       kind: ColorKind.LchFn,
       useLegacySyntax: false,
-      ...arguments_,
+      ...args,
     }),
   );
 
@@ -1547,17 +1547,17 @@ const oklchFunctionConsumer: TryConsumer<OklchFn> =
   createLchFunctionConsumer(
     'oklch',
     SPACES.oklch,
-    (arguments_) => ({
+    (args) => ({
       kind: ColorKind.OklchFn,
       useLegacySyntax: false,
-      ...arguments_,
+      ...args,
     }),
   );
 
 function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
   name: 'lch' | 'oklch',
   space: LchSpace | OklchSpace,
-  project: (arguments_: LchArguments) => Color,
+  project: (args: LchArguments) => Color,
 ): TryConsumer<Color> {
   return createFunctionalNotationConsumer(
     name,

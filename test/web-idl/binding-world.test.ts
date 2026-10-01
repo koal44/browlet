@@ -54,14 +54,14 @@ describe('Web IDL binding worlds and realm registration', () => {
     })]);
     const realm = new Realm();
 
-    expect(() => world.register({ realm })).toThrow('operation read has no implementation');
+    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
     expect(world.forRealm(realm)).toBeUndefined();
-    expect(() => world.register({ realm })).toThrow('operation read has no implementation');
+    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
   });
 
   it('retains a realm-only environment when no execution facilities are needed', () => {
     const env = { realm: new Realm() };
-    const ctx = new BindingWorld([]).register(env);
+    const ctx = new BindingWorld([]).register(env.realm, () => env);
     expect(ctx.getEnvironment()).toBe(env);
     expect(ctx.realm).toBe(env.realm);
   });
@@ -72,7 +72,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(() => world.register(realm, () => ({ realm: new Realm() })))
       .toThrow('The binding environment belongs to a different realm');
     expect(world.forRealm(realm)).toBeUndefined();
-    expect(world.register({ realm }).getEnvironment().realm).toBe(realm);
+    expect(world.register(realm, (ctx) => ({ realm: ctx.realm })).getEnvironment().realm).toBe(realm);
   });
 
   it('makes the environment available only after its composition finishes', () => {
@@ -90,8 +90,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const interfaces = new BindingWorld([exampleIDL]);
     const firstRealm = new Realm();
     const secondRealm = new Realm();
-    const first = interfaces.register({ realm: firstRealm });
-    const second = interfaces.register({ realm: secondRealm });
+    const first = interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
+    const second = interfaces.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
 
     first.install(firstRealm.global);
     second.install(secondRealm.global);
@@ -100,7 +100,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const object = interfaces.project(implementation);
     if (!object) throw new Error('Example was not projected');
 
-    expect(interfaces.register({ realm: firstRealm })).toBe(first);
+    expect(interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }))).toBe(first);
     expect(interfaces.unwrap(object)).toBe(implementation);
     expect(interfaces.getRealm(object)).toBe(firstRealm);
     expect(second.unwrap(object, ExampleImpl))
@@ -132,8 +132,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     ]);
     const realmA = new Realm();
     const realmB = new Realm();
-    const a = world.register({ realm: realmA });
-    const b = world.register({ realm: realmB });
+    const a = world.register(realmA, (ctx) => ({ realm: ctx.realm }));
+    const b = world.register(realmB, (ctx) => ({ realm: ctx.realm }));
     a.install(realmA.global);
     b.install(realmB.global);
     target = a.project(ReceiverImpl, new ReceiverImpl('first'));
@@ -162,8 +162,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const interfaces = new BindingWorld([exampleIDL]);
     const firstRealm = new Realm();
     const secondRealm = new Realm();
-    const first = interfaces.register({ realm: firstRealm });
-    const second = interfaces.register({ realm: secondRealm });
+    const first = interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
+    const second = interfaces.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
     first.install(firstRealm.global);
     second.install(secondRealm.global);
 
@@ -228,8 +228,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const bindings = new BindingWorld([resultIDL, factoryIDL]);
     const receiverRealm = new Realm();
     const functionRealm = new Realm();
-    const receiverBinding = bindings.register({ realm: receiverRealm });
-    const functionBinding = bindings.register({ realm: functionRealm });
+    const receiverBinding = bindings.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
+    const functionBinding = bindings.register(functionRealm, (ctx) => ({ realm: ctx.realm }));
     receiverBinding.install(receiverRealm.global);
     functionBinding.install(functionRealm.global);
 
@@ -306,8 +306,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const world = new BindingWorld([definition]);
     const receiverRealm = new Realm();
     const methodRealm = new Realm();
-    const receiverContext = world.register({ realm: receiverRealm });
-    world.register({ realm: methodRealm }).install(methodRealm.global);
+    const receiverContext = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
+    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.global);
     const implInst = receiverContext.construct(ReceiverImpl);
     const object = world.project(implInst)!;
     const Constructor = Reflect.get(methodRealm.global, definition.name) as { prototype: object; };
@@ -346,7 +346,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     });
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();
-    const registration = interfaces.register({ realm });
+    const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.global);
 
     const implementation = registration.construct(
@@ -389,7 +389,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       parentIDL,
       childIDL,
       unrelatedIDL,
-    ]).register({ realm });
+    ]).register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.global);
 
     const child = new ChildImpl();
@@ -407,8 +407,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const first = new BindingWorld([exampleIDL]);
     const second = new BindingWorld([exampleIDL]);
     const realm = new Realm();
-    const firstContext = first.register({ realm });
-    const secondContext = second.register({ realm });
+    const firstContext = first.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const secondContext = second.register(realm, (ctx) => ({ realm: ctx.realm }));
     const implementation = firstContext.construct(ExampleImpl);
     const object = projected ? first.project(implementation) : undefined;
 
@@ -451,7 +451,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       members: [roAttr('value', idlType.long)],
     });
     const world = new BindingWorld([definition]);
-    const ctx = world.register({ realm: new Realm() });
+    const ctx = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const instance = ctx.construct(FrozenImpl);
     const object = ctx.project(FrozenImpl, instance);
 
@@ -467,7 +467,7 @@ describe('Web IDL binding worlds and realm registration', () => {
   it('projects default operations without implementation methods', () => {
     const interfaces = new BindingWorld([jsonIDL]);
     const realm = new Realm();
-    const registration = interfaces.register({ realm });
+    const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
     const implementation = registration.construct(JsonImpl);
     const object = interfaces.project(implementation);
     if (!object) throw new Error('JSONExample was not projected');
@@ -480,10 +480,10 @@ describe('Web IDL binding worlds and realm registration', () => {
     const interfaces = new BindingWorld([unnamedOperationIDL]);
     const realm = new Realm();
 
-    expect(() => interfaces.register({ realm })).toThrow(
+    expect(() => interfaces.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow(
       'Web IDL UnnamedOperationExample.operation has no binding',
     );
-    expect(() => interfaces.register({ realm })).toThrow(
+    expect(() => interfaces.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow(
       'Web IDL UnnamedOperationExample.operation has no binding',
     );
   });
@@ -491,7 +491,7 @@ describe('Web IDL binding worlds and realm registration', () => {
   it('does not treat a legacy property hook as unnamed invocation steps', () => {
     const interfaces = new BindingWorld([unnamedHookOperationIDL]);
 
-    expect(() => interfaces.register({ realm: new Realm() })).toThrow(
+    expect(() => interfaces.register(new Realm(), (ctx) => ({ realm: ctx.realm }))).toThrow(
       'Web IDL UnnamedHookOperationExample.operation has no binding',
     );
   });
@@ -499,12 +499,18 @@ describe('Web IDL binding worlds and realm registration', () => {
   it('keeps platform identities within their world when declarations are shared', () => {
     const firstWorld = new BindingWorld([exampleIDL]);
     const secondWorld = new BindingWorld([exampleIDL]);
-    const first = firstWorld.register({ realm: new Realm() });
-    const another = firstWorld.register({ realm: new Realm() });
-    const second = secondWorld.register({ realm: new Realm() });
-    const original = first.createPlatformRecord(exampleIDL);
-    const other = second.createPlatformRecord(exampleIDL);
+    const first = firstWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const another = firstWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const second = secondWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const firstAssembled = first.getInterface(exampleIDL.name)!;
+    const secondAssembled = second.getInterface(exampleIDL.name)!;
+    const original = first.createPlatformRecord(firstAssembled);
+    const other = second.createPlatformRecord(secondAssembled);
 
+    expect(another.getInterface(exampleIDL.name)).toBe(firstAssembled);
+    expect(secondAssembled).not.toBe(firstAssembled);
+    expect(() => first.createPlatformRecord(secondAssembled)).toThrow('belongs to a different assembly');
+    expect(() => first.isInterfaceExposed(secondAssembled)).toThrow('belongs to a different assembly');
     expect(another.unwrap(original.platformObject, ExampleImpl)).toBe(original.implInst);
     expect(second.unwrap(original.platformObject, ExampleImpl)).toBeUndefined();
     expect(first.unwrap(other.platformObject, ExampleImpl)).toBeUndefined();
@@ -516,11 +522,11 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'DeclarationOnly', exposed: '*', members: [],
     });
     const realm = new Realm();
-    const ctx = new BindingWorld([interfaceIDL]).register({ realm });
+    const ctx = new BindingWorld([interfaceIDL]).register(realm, (ctx) => ({ realm: ctx.realm }));
     ctx.install(realm.global);
 
     expect(Reflect.get(realm.global, interfaceIDL.name)).toBeTypeOf('function');
-    expect(() => ctx.createPlatformRecord(interfaceIDL))
+    expect(() => ctx.createPlatformRecord(ctx.getInterface(interfaceIDL.name)!))
       .toThrow('Interface DeclarationOnly has no implementation creation steps');
   });
 
@@ -538,12 +544,13 @@ describe('Web IDL binding worlds and realm registration', () => {
     });
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();
-    const registration = interfaces.register({ realm });
+    const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.global);
 
-    const internal = registration.createPlatformRecord(interfaceIDL);
+    const assembled = registration.getInterface(interfaceIDL.name)!;
+    const internal = registration.createPlatformRecord(assembled);
 
-    expect(internal.primaryInterface.definition).toBe(interfaceIDL);
+    expect(internal.assembled).toBe(assembled);
     expect(internal.realm).toBe(realm);
     expect(internal.implInst).toBeInstanceOf(InternalNewImpl);
     expect(internal.platformObject).not.toBe(internal.implInst);
@@ -556,8 +563,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const constructed = new Constructor();
 
     expect(registration.getObjectRecord(constructed)
-      ?.primaryInterface.definition)
-      .toBe(interfaceIDL);
+      ?.assembled)
+      .toBe(assembled);
     expect(allocations).toBe(2);
     expect(publicConstructions).toBe(1);
   });
@@ -571,11 +578,14 @@ describe('Web IDL binding worlds and realm registration', () => {
       members: [],
     });
     const foreignIDL = defineInterface({ name: restrictedIDL.name, members: [] });
-    const registration = new BindingWorld([restrictedIDL]).register({ realm: new Realm() });
+    const registration = new BindingWorld([restrictedIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const foreign = new BindingWorld([foreignIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const assembled = registration.getInterface(restrictedIDL.name)!;
 
-    expect(() => registration.createPlatformRecord(foreignIDL)).toThrow();
-    expect(registration.isInterfaceExposed(restrictedIDL)).toBe(false);
-    expect(() => registration.createPlatformRecord(restrictedIDL)).toThrow(
+    expect(() => registration.createPlatformRecord(foreign.getInterface(foreignIDL.name)!))
+      .toThrow('belongs to a different assembly');
+    expect(registration.isInterfaceExposed(assembled)).toBe(false);
+    expect(() => registration.createPlatformRecord(assembled)).toThrow(
       'Interface RestrictedInterface is not exposed in this realm',
     );
   });

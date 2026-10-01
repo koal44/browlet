@@ -118,7 +118,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
 
   it('realizes invalid-reader failures in the binding realm', async () => {
     const realm = new TestRealm();
-    const context = new BindingWorld([]).register({ realm });
+    const context = new BindingWorld([]).register(realm, (ctx) => ({ realm: ctx.realm }));
     const env = createEnvironment(realm);
     const failure = await observe(readResourceHeader(
       () => env.exec.Promise.fromValue(new Uint8Array(), env.exec.NativePromise, idlType.Uint8Array),

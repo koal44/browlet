@@ -200,12 +200,12 @@ describe('Web IDL maplike declarations', () => {
       exposed: ['Window'],
       members: [declaration],
     });
-    const definitions = new DefinitionAssembly([interfaceIDL]);
-    const primaryInterface = definitions.getInterface('SeparatedMaplike');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([interfaceIDL]);
+    const assembled = assembly.interfaces.get('SeparatedMaplike');
+    if (!assembled) throw new Error('Missing assembled interface');
 
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       new Realm(),
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
@@ -214,7 +214,7 @@ describe('Web IDL maplike declarations', () => {
     const implementation = new CollectionImplementation();
     const object = binding.projectPlatformObject(
       implementation,
-      primaryInterface,
+      assembled,
     ).platformObject!;
 
     expect(call(object, 'set', [1, 'one'])).toBe(object);
@@ -251,7 +251,7 @@ describe('Web IDL maplike declarations', () => {
     let calls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(clear).operationSteps = () => { calls++; };
+    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(clear).operationSteps = () => { calls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
 
     call(object, 'clear');
@@ -280,7 +280,7 @@ describe('Web IDL maplike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(staticSet).operationSteps = () => { staticCalls++; };
+    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(staticSet).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
@@ -373,8 +373,8 @@ describe('Web IDL setlike declarations', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(readonlyMap).createImplementation = () => new ReadonlyMapImpl();
-    binding.getDefinitionBinding(readonlySet).createImplementation = () => new ReadonlySetImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(readonlyMap.name)).createImplementation = () => new ReadonlyMapImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(readonlySet.name)).createImplementation = () => new ReadonlySetImpl();
     const map = binding.createPlatformRecord(binding.resolveInterface(readonlyMap.name)).platformObject!;
     const set = binding.createPlatformRecord(binding.resolveInterface(readonlySet.name)).platformObject!;
 
@@ -411,7 +411,7 @@ describe('Web IDL setlike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(staticAdd).operationSteps = () => { staticCalls++; };
+    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(staticAdd).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
@@ -438,8 +438,8 @@ describe('Web IDL collection result ownership', () => {
           : setlike(reference('Value'))],
       }),
     ]);
-    const owner = world.register({ realm: new Realm() });
-    const other = world.register({ realm: new Realm() });
+    const owner = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const other = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const object = owner.project(CollectionImpl, new CollectionImpl());
     const foreign = other.project(CollectionImpl, new CollectionImpl());
     const value = new ValueImpl();
@@ -528,7 +528,7 @@ function createBinding(
     new BindingWorld([]),
     (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(definition).createImplementation = () => new CollectionImpl();
+  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CollectionImpl();
   return binding;
 }
 

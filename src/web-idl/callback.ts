@@ -6,15 +6,11 @@ import type {
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type {
-  ArgumentDefinition, OperationMember, WebIDLType,
-} from './core/index';
+import type { ArgumentDefinition, WebIDLType } from './core/index';
 import type { CallbackExceptionBehavior } from './core/types';
 import { isIDLPromiseRecord, type IDLPromiseRecord } from './promise-record';
 import { getArgumentDefinition } from './overload';
-import {
-  getTypeWithApplicableExtendedAttributes, getUnannotatedType,
-} from './types';
+import { getTypeWithApplicableExtendedAttributes } from './types';
 import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.11 Callback interfaces — call a user object's operation.
@@ -24,7 +20,7 @@ export function callUserObjectOperation(
   argumentsList: WebIDLArgumentsList,
   thisArgument?: unknown,
 ): unknown {
-  const operation = getCallbackOperation(value, operationName);
+  const operation = value.assembled.getOperation(operationName);
   const callbackContext = { binding: value.conversionContext.binding, realm: value.realm };
 
   try {
@@ -69,7 +65,7 @@ export function invokeCallbackFunction(
   exceptionBehavior: CallbackExceptionBehavior | undefined,
   thisArgument?: unknown,
 ): unknown {
-  const { definition } = callable;
+  const definition = callable.assembled.primary;
   const context = callable.conversionContext;
   validateExceptionBehavior(definition.returns, exceptionBehavior, context);
   const callbackContext = { binding: context.binding, realm: callable.realm };
@@ -115,7 +111,7 @@ export function constructCallbackFunction(
   const constructor = callable.object;
   if (!isConstructor(constructor)) {
     throw new context.realm.intrinsics.typeError(
-      `${callable.definition.name} is not a constructor`,
+      `${callable.assembled.primary.name} is not a constructor`,
     );
   }
 
@@ -125,13 +121,13 @@ export function constructCallbackFunction(
       constructor,
       convertWebIDLArguments(
         argumentsList,
-        callable.definition.arguments,
+        callable.assembled.primary.arguments,
         callbackContext,
       ),
     );
     return convertToIDL(
       result,
-      callable.definition.returns,
+      callable.assembled.primary.returns,
       callbackContext,
     );
   });
@@ -206,21 +202,6 @@ function runCallback(
   }
 }
 
-// Project helper: find the callback-interface operation's declaration.
-function getCallbackOperation(
-  value: CallbackInterfaceRecord,
-  operationName: string,
-): OperationMember {
-  const operation = value.definition.members.find((member) =>
-    member.kind === 'operation' && member.name === operationName);
-  if (!operation || operation.kind !== 'operation') {
-    throw new InternalError(
-      `Callback interface ${value.definition.name} has no ${operationName} operation`,
-    );
-  }
-  return operation;
-}
-
 // Project validation of Web IDL §3.12 Invoking callback functions — invoke's exception-behavior requirements.
 function validateExceptionBehavior(
   returnType: WebIDLType,
@@ -236,7 +217,7 @@ function validateExceptionBehavior(
   if (!exceptionBehavior) {
     throw new InternalError('A non-promise callback requires exception behavior');
   }
-  const type = getUnannotatedType(returnType, context.binding.definitions);
+  const type = context.binding.assembly.getUnannotatedType(returnType);
   const canReport = type.kind === 'simple' && (
     type.name === 'undefined' || type.name === 'any'
   );
@@ -273,6 +254,6 @@ function getPromiseReturnType(
   returnType: WebIDLType,
   context: ConversionContext,
 ): WebIDLType | undefined {
-  const type = getUnannotatedType(returnType, context.binding.definitions);
+  const type = context.binding.assembly.getUnannotatedType(returnType);
   return type.kind === 'promise' ? type.type : undefined;
 }

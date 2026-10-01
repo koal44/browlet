@@ -1,6 +1,6 @@
 import {
   arg, defineInterface, idlType, impl, indexedGetter, nullable, op, reference,
-  roAttr, xattr, type SerializableSteps,
+  roAttr, xattr, type SerialSteps,
 } from '../web-idl/index';
 import { FileImpl } from './file';
 
@@ -47,7 +47,7 @@ export class FileListImpl {
 
 // https://w3c.github.io/FileAPI/#filelist-section
 // Nested operations share the enclosing clone's memory, preserving repeated File identities.
-const fileListSerialization = {
+const fileListSerialSteps = {
   serializationSteps(value, serialized, _forStorage, context) {
     const files = [];
     for (const file of value) files.push(context.subserialize(file, FileImpl));
@@ -60,13 +60,13 @@ const fileListSerialization = {
     });
     value.replace(files);
   },
-} satisfies SerializableSteps<FileListImpl, { Files: object[]; }>;
+} satisfies SerialSteps<FileListImpl, { Files: object[]; }>;
 
 export const fileListIDL = defineInterface({
   name: 'FileList',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  serialization: fileListSerialization,
+  serialSteps: fileListSerialSteps,
   implementation: impl(FileListImpl),
   members: [
     op('item', nullable(reference('File')),

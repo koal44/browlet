@@ -11,7 +11,7 @@ import {
 } from '../../style/integration';
 import {
   arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
-  type InterfaceDefinition,
+  type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import { asciiLower } from '../../../infra/ascii';
@@ -433,7 +433,7 @@ export type ElementCreationContext = {
 /** Declaration and constructor selected for an element's namespace and name. */
 export type ElementInterface = {
   /** Platform interface projected for this element implementation. */
-  definition: InterfaceDefinition;
+  definition: PrimaryInterfaceDefinition;
   /** Constructor used by the document's node factory. */
   implementation: ElementImplementation;
   /** Local names handled by this interface within its namespace. */
@@ -443,7 +443,7 @@ export type ElementInterface = {
 };
 
 type ElementInterfaceOptions = {
-  definition: InterfaceDefinition;
+  definition: PrimaryInterfaceDefinition;
   localNames?: string[];
   namespaceURI: string;
 };

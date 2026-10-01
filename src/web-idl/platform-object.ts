@@ -1,7 +1,7 @@
 import { isObject } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../infra/observable-array';
 import { Stamper } from '../infra/stamper';
-import type { AssembledInterfaceDefinition } from './assembly';
+import type { AssembledInterface } from './assembled';
 import type { RealmBinding } from './realm-binding';
 import type { AttributeMember } from './core/index';
 import type { WebIDLRealm } from './realm';
@@ -26,7 +26,8 @@ export function isStampedPlatformObject(platformObject: unknown): platformObject
 /** The shared record for an implementation instance and its eventual platform object. */
 export class PlatformRecord<T extends object = object> {
   implInst: StampedImplInstance<T>;
-  primaryInterface: AssembledInterfaceDefinition;
+  /** The object's interface with its inheritance, partials, and mixins assembled. */
+  assembled: AssembledInterface;
   binding: RealmBinding;
   platformObject?: StampedPlatformObject;
   // Lazily allocated storage for maplike, setlike, and observable-array members.
@@ -36,12 +37,12 @@ export class PlatformRecord<T extends object = object> {
 
   constructor(
     implInst: T,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     binding: RealmBinding,
   ) {
-    this.primaryInterface = primaryInterface;
+    this.assembled = assembled;
     this.binding = binding;
-    binding.initializeImplementation(implInst, primaryInterface);
+    binding.initializeImplementation(implInst, assembled);
     this.implInst = ImplementationStamper.stamp(implInst, this);
   }
 
@@ -49,25 +50,25 @@ export class PlatformRecord<T extends object = object> {
 
   project(): StampedPlatformObject {
     return this.platformObject ??
-      this.binding.projectPlatformObject(this.implInst, this.primaryInterface).platformObject!;
+      this.binding.projectPlatformObject(this.implInst, this.assembled).platformObject!;
   }
 
-  // Project helper: apply interface membership to this record's primary interface.
-  implements(primaryInterface: AssembledInterfaceDefinition): boolean {
-    return interfaceImplements(this.primaryInterface, primaryInterface);
+  /** Whether this object's interface is the requested interface or inherits from it. */
+  implements(assembled: AssembledInterface): boolean {
+    return this.assembled.implements(assembled);
   }
 }
 
 // Project helper: stamp the implementation with its owner before its first projection.
 export function stampImplementation<T extends object>(
   implInst: T,
-  primaryInterface: AssembledInterfaceDefinition,
+  assembled: AssembledInterface,
   binding: RealmBinding,
 ): StampedImplInstance<T> {
   if (isStampedPlatformObject(implInst) || isStampedImplInstance(implInst)) {
     throw new InternalError('Implementation object is already stamped or is a platform object');
   }
-  return new PlatformRecord(implInst, primaryInterface, binding).implInst;
+  return new PlatformRecord(implInst, assembled, binding).implInst;
 }
 
 // Project helper: pair implementation and platform identities in our record.
@@ -75,7 +76,7 @@ export function stampImplementation<T extends object>(
 export function associatePlatformObject<T extends object>(
   platformObject: object,
   implInst: T,
-  primaryInterface: AssembledInterfaceDefinition,
+  assembled: AssembledInterface,
   binding: RealmBinding,
 ): PlatformRecord<T> {
   if (platformObject === implInst) {
@@ -90,9 +91,9 @@ export function associatePlatformObject<T extends object>(
   }
 
   const record = (ImplementationStamper.get(implInst) ??
-    new PlatformRecord(implInst, primaryInterface, binding)) as PlatformRecord<T>;
+    new PlatformRecord(implInst, assembled, binding)) as PlatformRecord<T>;
   if (record.binding !== binding ||
-    record.primaryInterface !== primaryInterface || record.platformObject) {
+    record.assembled !== assembled || record.platformObject) {
     throw new InternalError('Implementation object is already associated with another owner or platform object');
   }
   record.platformObject = PlatformObjectStamper.stamp(platformObject, record);
@@ -129,21 +130,6 @@ export function getPlatformObject(
   implInst: unknown,
 ): StampedPlatformObject | undefined {
   return getImplementationRecord(implInst)?.platformObject;
-}
-
-// Web IDL §3.8 Platform objects implementing interfaces — "implements" rule.
-// Test the primary interface and its inherited interfaces using our assembled definitions.
-export function interfaceImplements(
-  primaryInterface: AssembledInterfaceDefinition,
-  expectedInterface: AssembledInterfaceDefinition,
-): boolean {
-  let current: AssembledInterfaceDefinition | undefined = primaryInterface;
-
-  while (current) {
-    if (current.definition === expectedInterface.definition) return true;
-    current = current.parent;
-  }
-  return false;
 }
 
 class ImplementationStamper extends Stamper {

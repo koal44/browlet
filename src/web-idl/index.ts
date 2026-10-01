@@ -12,6 +12,7 @@ export {
 export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
 
 export type { BindingContext };
+export type { AssembledInterface } from './assembled';
 export { BindingWorld } from './binding-world';
 export type { WebIDLEnvironment, WebIDLRealm };
 export type { CallbackHooks, SecurityCheckType } from './realm';

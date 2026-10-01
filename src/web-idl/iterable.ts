@@ -1,6 +1,6 @@
 import { isObject, type JSFunction } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
-import type { AssembledInterfaceDefinition } from './assembly';
+import type { AssembledInterface } from './assembled';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
 import { convertToIDL, convertToJavaScript, type ConversionContext } from './conversion';
@@ -27,7 +27,7 @@ export class SynchronousIterableBinding {
   // Web IDL §3.7.9 Iterable declarations — define the iteration methods.
   defineMethods(
     target: object,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
   ): void {
     if (iterable.key === undefined) {
@@ -35,8 +35,8 @@ export class SynchronousIterableBinding {
       return;
     }
 
-    this.#getIteratorPrototypeObject(primaryInterface, iterable);
-    this.#definePairIterationMethods(target, primaryInterface, iterable);
+    this.#getIteratorPrototypeObject(assembled, iterable);
+    this.#definePairIterationMethods(target, assembled, iterable);
   }
 
   // Extracted from Web IDL §3.7.9 Iterable declarations — install Array iteration methods for indexed
@@ -55,11 +55,11 @@ export class SynchronousIterableBinding {
   // Extracted from Web IDL §3.7.9 Iterable declarations — install pair iteration methods.
   #definePairIterationMethods(
     target: object,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
   ): void {
     const entries = this.#createIteratorMethod(
-      primaryInterface,
+      assembled,
       iterable,
       'key+value',
       'entries',
@@ -70,13 +70,13 @@ export class SynchronousIterableBinding {
     defineDataProperty(
       target,
       'keys',
-      this.#createIteratorMethod(primaryInterface, iterable, 'key', 'keys', 'keys'),
+      this.#createIteratorMethod(assembled, iterable, 'key', 'keys', 'keys'),
     );
     defineDataProperty(
       target,
       'values',
       this.#createIteratorMethod(
-        primaryInterface,
+        assembled,
         iterable,
         'value',
         'values',
@@ -86,13 +86,13 @@ export class SynchronousIterableBinding {
     defineDataProperty(
       target,
       'forEach',
-      this.#createForEachMethod(primaryInterface, iterable),
+      this.#createForEachMethod(assembled, iterable),
     );
   }
 
   // Project factory for the entries, keys, and values functions in Web IDL §3.7.9 Iterable declarations.
   #createIteratorMethod(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
     kind: IterationKind,
     name: string,
@@ -102,15 +102,15 @@ export class SynchronousIterableBinding {
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           securityIdentifier,
         );
         const iterator = this.#binding.realm.createOrdinaryObject(
-          this.#getIteratorPrototypeObject(primaryInterface, iterable),
+          this.#getIteratorPrototypeObject(assembled, iterable),
         );
         return DefaultIteratorStamper.stamp(iterator, {
           index: 0,
-          primaryInterface,
+          assembled,
           kind,
           target: receiver.implInst,
         });
@@ -121,14 +121,14 @@ export class SynchronousIterableBinding {
 
   // Project factory for the forEach function in Web IDL §3.7.9 Iterable declarations.
   #createForEachMethod(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
   ): JSFunction {
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           'forEach',
         );
         const callback = convertToIDL(
@@ -140,7 +140,7 @@ export class SynchronousIterableBinding {
           throw new InternalError('Function conversion did not produce a callback');
         }
         const context = { binding: receiver.binding, realm: this.#binding.realm };
-        let pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
+        let pairs = this.#getValuePairs(receiver.implInst, assembled, iterable);
         for (let index = 0; index < pairs.length; index++) {
           const [key, value] = pairs[index]!;
           invokeCallbackFunction(
@@ -161,7 +161,7 @@ export class SynchronousIterableBinding {
             'rethrow',
             argumentsList[1],
           );
-          pairs = this.#getValuePairs(receiver.implInst, primaryInterface, iterable);
+          pairs = this.#getValuePairs(receiver.implInst, assembled, iterable);
         }
         return undefined;
       },
@@ -171,24 +171,24 @@ export class SynchronousIterableBinding {
 
   // Project cache for Web IDL §3.7.9.2 Iterator prototype object.
   #getIteratorPrototypeObject(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
   ): object {
-    const definitionBinding = this.#binding.getDefinitionBinding(primaryInterface.definition);
+    const definitionBinding = this.#binding.getDefinitionBinding(assembled);
     if (definitionBinding.iteratorPrototype) return definitionBinding.iteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
       this.#binding.realm.intrinsics.iteration.iteratorPrototype,
     );
     const next = this.#binding.realm.createFunction(
-      (thisArgument) => this.#next(primaryInterface, iterable, thisArgument),
+      (thisArgument) => this.#next(assembled, iterable, thisArgument),
       { length: 0, name: 'next' },
     );
     defineDataProperty(prototype, 'next', next);
     Object.defineProperty(prototype, Symbol.toStringTag, {
       configurable: true,
       enumerable: false,
-      value: `${primaryInterface.definition.name} Iterator`,
+      value: `${assembled.primary.name} Iterator`,
       writable: false,
     });
     definitionBinding.iteratorPrototype = prototype;
@@ -197,7 +197,7 @@ export class SynchronousIterableBinding {
 
   // Web IDL §3.7.9.2 Iterator prototype object — next steps.
   #next(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
     thisArgument: unknown,
   ): object {
@@ -211,14 +211,14 @@ export class SynchronousIterableBinding {
     }
     const iterator = DefaultIteratorStamper.get(thisArgument);
     const receiver = iterator && getImplementationRecord(iterator.target);
-    if (!iterator || iterator.primaryInterface !== primaryInterface ||
+    if (!iterator || iterator.assembled !== assembled ||
       receiver?.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
 
     const pairs = this.#getValuePairs(
       iterator.target,
-      primaryInterface,
+      assembled,
       iterable,
     );
     if (iterator.index >= pairs.length) {
@@ -265,13 +265,13 @@ export class SynchronousIterableBinding {
   // Project delegate to Web IDL §2.5.9 Iterable declarations — the interface's value pairs to iterate over.
   #getValuePairs(
     implInst: StampedImplInstance,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     iterable: IterableMember,
   ): ValuePair[] {
-    const steps = this.#binding.getMemberBinding(primaryInterface, iterable)?.valuePairsSteps;
+    const steps = this.#binding.getMemberBinding(assembled, iterable)?.valuePairsSteps;
     if (!steps) {
       throw new InternalError(
-        `Missing ${primaryInterface.definition.name} value-pairs implementation`,
+        `Missing ${assembled.primary.name} value-pairs implementation`,
       );
     }
     return Reflect.apply(steps, implInst, []);
@@ -280,7 +280,7 @@ export class SynchronousIterableBinding {
   // Project adapter for the receiver and security checks in Web IDL §3.7.9 Iterable declarations.
   #getReceiverRecord(
     value: unknown,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     identifier: string,
   ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
@@ -289,7 +289,7 @@ export class SynchronousIterableBinding {
       this.#throwTypeError('Illegal invocation');
     }
     this.#binding.realm.performSecurityCheck(value, identifier, 'method');
-    if (!record.implements(primaryInterface)) {
+    if (!record.implements(assembled)) {
       this.#throwTypeError('Illegal invocation');
     }
     return record;
@@ -323,7 +323,7 @@ class DefaultIteratorStamper extends Stamper {
 
 type DefaultIterator = {
   index: number;
-  primaryInterface: AssembledInterfaceDefinition;
+  assembled: AssembledInterface;
   kind: IterationKind;
   target: StampedImplInstance;
 };

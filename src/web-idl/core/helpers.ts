@@ -7,7 +7,7 @@ import type {
   StringifierMember, StringType, UnionType, WebIDLType,
 } from './types';
 import type {
-  AsyncIterableMember, ConstructorMember, DictionaryMember, InterfaceDefinition,
+  AsyncIterableMember, ConstructorMember, DictionaryMember, PrimaryInterfaceDefinition,
   IterableMember, MaplikeMember, SetlikeMember,
 } from './declarations';
 import { InternalError } from '../../infra/internal-error';
@@ -503,7 +503,7 @@ type ExtendedAttributeOptions = {
 };
 
 type ImplementationOptions<Env = unknown, Impl extends object = object> = Omit<
-  NonNullable<InterfaceDefinition<Env, Impl>['implementation']>,
+  NonNullable<PrimaryInterfaceDefinition<Env, Impl>['implementation']>,
   'implClass'
 >;
 

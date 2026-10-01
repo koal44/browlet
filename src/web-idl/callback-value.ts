@@ -1,7 +1,5 @@
 import { isObject } from '../js-engine/index';
-import type {
-  CallbackFunctionDefinition, CallbackInterfaceDefinition,
-} from './core/index';
+import type { AssembledCallbackFunction, AssembledCallbackInterface } from './assembled';
 import type { ConversionContext } from './conversion';
 import type { WebIDLRealm } from './realm';
 
@@ -16,10 +14,10 @@ export type CallbackInterfaceValue<Realm extends WebIDLRealm = WebIDLRealm> = {
   ): unknown;
 };
 
-// Project helper: retain a callback function with its definition, realm, and captured context.
+// Retain a callback function with its assembled contract, realm, and captured context.
 // Web IDL §3.2.19 Callback function types — callback value representation.
 export function createCallbackFunctionValue(
-  definition: CallbackFunctionDefinition,
+  assembled: AssembledCallbackFunction,
   object: object,
   realm: WebIDLRealm,
   callbackContext: object,
@@ -29,17 +27,17 @@ export function createCallbackFunctionValue(
     [callbackValueBrand]: true,
     callbackContext,
     conversionContext,
-    definition,
+    assembled,
     kind: 'callback-function',
     object,
     realm,
   };
 }
 
-// Project helper: retain a callback interface with its definition, realm, and captured context.
+// Retain a callback interface with its assembled contract, realm, and captured context.
 // Web IDL §3.2.16 Callback interface types — callback value representation.
 export function createCallbackInterfaceRecord(
-  definition: CallbackInterfaceDefinition,
+  assembled: AssembledCallbackInterface,
   object: object,
   realm: WebIDLRealm,
   callbackContext: object,
@@ -49,7 +47,7 @@ export function createCallbackInterfaceRecord(
     [callbackValueBrand]: true,
     callbackContext,
     conversionContext,
-    definition,
+    assembled,
     kind: 'callback-interface',
     object,
     realm,
@@ -74,12 +72,12 @@ export type CallbackValue = CallbackFunctionValue | CallbackInterfaceRecord;
 
 export type CallbackFunctionValue = CallbackValueRecord & {
   adapter?: CallableFunction;
-  definition: CallbackFunctionDefinition;
+  assembled: AssembledCallbackFunction;
   kind: 'callback-function';
 };
 
 export type CallbackInterfaceRecord = CallbackValueRecord & {
-  definition: CallbackInterfaceDefinition;
+  assembled: AssembledCallbackInterface;
   kind: 'callback-interface';
 };
 

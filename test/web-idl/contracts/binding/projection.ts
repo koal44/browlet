@@ -2,7 +2,7 @@ import {
   atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineInterface,
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type BindingContext, type Definition, type StampedImplInstance, type StampedPlatformObject,
-  type WebIDLEnvironment, type WebIDLRealm,
+  type AssembledInterface, type WebIDLEnvironment, type WebIDLRealm,
 } from '../../../../src/web-idl/index';
 import type { JSEnvironment } from '../../../../src/js-engine/environment';
 import type { RealmExecution } from '../../../../src/js-engine/index';
@@ -80,14 +80,19 @@ const ctx = world.register(hostRealm, (context) => {
 ctx.realm.eventTimeStamp();
 world.forRealm(hostRealm)?.realm.eventTimeStamp();
 world.forRealm(hostRealm)?.getEnvironment().exec.createEvent();
-world.register(env);
+world.register(env.realm, () => env);
+const assembled: AssembledInterface = ctx.getInterface(definition.name)!;
+ctx.createPlatformRecord(assembled);
+ctx.isInterfaceExposed(assembled);
+// @ts-expect-error Allocation requires an assembled interface, not its declaration.
 ctx.createPlatformRecord(definition);
+// @ts-expect-error Exposure checks require an assembled interface, not its declaration.
 ctx.isInterfaceExposed(definition);
 const implInst: StampedImplInstance<Example> = ctx.construct(Example);
 implInst.value.toFixed();
 const platformObject: StampedPlatformObject = ctx.project(Example, implInst);
 const projected: StampedPlatformObject | undefined = world.project(implInst);
-const created: StampedPlatformObject | undefined = ctx.createPlatformRecord(definition).platformObject;
+const created: StampedPlatformObject | undefined = ctx.createPlatformRecord(assembled).platformObject;
 const unwrapped: StampedImplInstance<Example> | undefined = ctx.unwrap(platformObject, Example);
 unwrapped?.value.toFixed();
 const plain = new Example();
@@ -106,7 +111,7 @@ if (isStampedPlatformObject(plain)) {
   recognized.value.toFixed();
 }
 // @ts-expect-error HTML callbacks cannot be installed on the minimal host.
-world.register({ ...env, realm: minimalRealm });
+world.register(minimalRealm, () => ({ ...env, realm: minimalRealm }));
 // @ts-expect-error This world's realm lookup requires the same host type as registration.
 world.forRealm(minimalRealm);
 // @ts-expect-error A world of arbitrary Web IDL realms cannot run HTML callbacks.
@@ -114,8 +119,8 @@ new BindingWorld<WebIDLEnvironment>([definition]);
 // @ts-expect-error This callback adapter also requires the declared host realm.
 new BindingWorld<WebIDLEnvironment>([callbackDefinition]);
 
-// @ts-expect-error A realm alone does not supply the required execution facilities.
-world.register({ realm: hostRealm });
+// @ts-expect-error Registration requires an environment factory.
+world.register(hostRealm);
 // @ts-expect-error Composition must return the declared environment.
 world.register(hostRealm, (context) => ({ realm: context.realm }));
 // @ts-expect-error Definition collections cannot erase the environment requirement.
@@ -123,7 +128,7 @@ const erased: Definition[] = [definition];
 // @ts-expect-error Widening a world must not permit registrations its callbacks cannot use.
 const weakened: BindingWorld<WebIDLEnvironment> = world;
 
-const minimal = new BindingWorld([]).register({ realm: minimalRealm });
+const minimal = new BindingWorld([]).register(minimalRealm, (ctx) => ({ realm: ctx.realm }));
 minimal.getEnvironment().realm.global;
 // @ts-expect-error A realm-only environment has no execution contract.
 minimal.getEnvironment().exec;

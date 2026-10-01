@@ -22,7 +22,7 @@ describe('Web IDL async sequences', () => {
       name: 'Entry', members: [dictMember('name', idlType.DOMString)],
     });
     const realm = new Realm();
-    const context = new BindingWorld([entryIDL]).register({ realm });
+    const context = new BindingWorld([entryIDL]).register(realm, (ctx) => ({ realm: ctx.realm }));
     let conversions = 0;
     const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
     const sequence = context.convertToImpl(entries, asyncSequence(reference('Entry'))) as
@@ -176,7 +176,7 @@ describe('Web IDL async sequences', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(definition);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new AsyncSequenceConsumerImpl();
     interfaceBinding.getOrCreateMemberRecord(asyncOperation).operationSteps = (_receiver, _value) => 'async';
     interfaceBinding.getOrCreateMemberRecord(stringOperation).operationSteps = (_receiver, _value) => 'string';

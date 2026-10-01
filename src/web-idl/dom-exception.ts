@@ -7,7 +7,7 @@ import { getPlatformRecord } from './platform-object';
 import {
   arg, constant, ctor, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable,
-  roAttr, reference, xattr, type SerializableSteps,
+  roAttr, reference, xattr, type SerialSteps,
 } from './core/index';
 import { InternalError } from '../infra/internal-error';
 
@@ -90,7 +90,7 @@ export function isDOMException(value: unknown, name: string): boolean {
 }
 
 // https://webidl.spec.whatwg.org/#idl-DOMException
-const domExceptionSerialization = {
+const domExceptionSerialSteps = {
   serializationSteps(value, serialized) {
     serialized.set('Name', value.name);
     serialized.set('Message', value.message);
@@ -101,7 +101,7 @@ const domExceptionSerialization = {
       serialized.get('Name'),
     );
   },
-} satisfies SerializableSteps<DOMExceptionImpl, DOMExceptionSerializedFields>;
+} satisfies SerialSteps<DOMExceptionImpl, DOMExceptionSerializedFields>;
 
 type DOMExceptionSerializedFields = {
   Name: string;
@@ -112,7 +112,7 @@ export const domExceptionIDL = defineInterface({
   name: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  serialization: domExceptionSerialization,
+  serialSteps: domExceptionSerialSteps,
   implementation: impl(DOMExceptionImpl, {
     // Web IDL §3.14.1 DOMException custom bindings — native Error backing for platform objects.
     allocatePlatformObject(ctx, prototype) {
@@ -231,20 +231,20 @@ export class QuotaExceededErrorImpl extends DOMExceptionImpl {
 }
 
 // https://webidl.spec.whatwg.org/#idl-DOMException-derived-predefineds
-const quotaExceededErrorSerialization = {
+const quotaExceededErrorSerialSteps = {
   serializationSteps(value, serialized) {
-    domExceptionSerialization.serializationSteps(value, serialized);
+    domExceptionSerialSteps.serializationSteps(value, serialized);
     serialized.set('Quota', value.quota);
     serialized.set('Requested', value.requested);
   },
   deserializationSteps(serialized, value) {
-    domExceptionSerialization.deserializationSteps(serialized, value);
+    domExceptionSerialSteps.deserializationSteps(serialized, value);
     value.setQuotaState(
       serialized.get('Quota'),
       serialized.get('Requested'),
     );
   },
-} satisfies SerializableSteps<QuotaExceededErrorImpl, QuotaExceededErrorSerializedFields>;
+} satisfies SerialSteps<QuotaExceededErrorImpl, QuotaExceededErrorSerializedFields>;
 
 type QuotaExceededErrorSerializedFields = DOMExceptionSerializedFields & {
   Quota: number | null;
@@ -256,7 +256,7 @@ export const quotaExceededErrorIDL = defineInterface({
   inherits: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  serialization: quotaExceededErrorSerialization,
+  serialSteps: quotaExceededErrorSerialSteps,
   implementation: impl(QuotaExceededErrorImpl),
   members: [
     ctor([

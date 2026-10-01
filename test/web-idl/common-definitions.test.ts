@@ -43,7 +43,7 @@ callback VoidFunction = undefined();`);
     );
     const function_ = convertToIDL(
       realm.evaluate(
-        '(function (...arguments_) { return arguments_; })',
+        '(function (...args) { return args; })',
         'common-function.js',
       ),
       reference('Function'),

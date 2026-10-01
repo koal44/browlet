@@ -18,12 +18,11 @@ import { InternalError } from '../infra/internal-error';
  */
 // A weaker world type would permit registrations its declarations cannot use.
 export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironment> {
-  #definitions: DefinitionAssembly;
+  #assembly: DefinitionAssembly;
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
 
-  // Project helper: compose definitions shared across realm bindings.
   constructor(definitions: Definition<Env>[]) {
-    this.#definitions = new DefinitionAssembly([
+    this.#assembly = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
       // BindingWorld restricts registration to the environment required by these callbacks.
       // Assembly itself only combines declarations; it does not invoke the callbacks.
@@ -31,30 +30,21 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     ]);
   }
 
-  /**
-   * Register an environment, returning its realm's shared binding context.
-   * Use a factory when composing execution requires the new context.
-   */
-  register(env: Env): BindingContext<Env>;
+  /** Compose a realm's environment and binding context, reusing an existing registration. */
   register(
-    realm: Env['realm'], createEnvironment: (context: BindingContext<Env>) => Env,
-  ): BindingContext<Env>;
-  register(
-    envOrRealm: Env | Env['realm'],
-    createEnvironment?: (context: BindingContext<Env>) => Env,
+    realm: Env['realm'],
+    createEnvironment: (ctx: BindingContext<Env>) => Env,
   ): BindingContext<Env> {
-    const realm = createEnvironment ? envOrRealm as Env['realm'] : (envOrRealm as Env).realm;
-    const compose = createEnvironment ?? (() => envOrRealm as Env);
     const registered = this.forRealm(realm);
     if (registered) return registered;
 
     const binding = new RealmBinding<Env>(
-      this.#definitions,
+      this.#assembly,
       realm,
       // Realm bindings retain world identity and registry operations. Registration
       // above is the boundary that checks the declaration's environment contract.
       this as unknown as BindingWorld,
-      compose,
+      createEnvironment,
     );
     registerDefinitionBindings(binding);
     return binding.context;
@@ -79,19 +69,19 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return this.#realmBindings.get(realm);
   }
 
-  // Project helper: retrieve the implementation paired with a platform object in this world.
+  /** Retrieve the implementation paired with a platform object in this world. */
   unwrap(platformObject: object): StampedImplInstance | undefined {
     const record = getPlatformRecord(platformObject);
     return record?.binding.world === this ? record.implInst : undefined;
   }
 
-  // Project helper: project an associated implementation using its owning realm.
+  /** Retrieve or create a platform object if its implementation is already associated with this world. */
   project(implInst: object): StampedPlatformObject | undefined {
     const record = getImplementationRecord(implInst);
     return record?.binding.world === this ? record.project() : undefined;
   }
 
-  // Project helper: retrieve the owning realm from either object identity.
+  /** Find the owning realm from an implementation or platform object associated with this world. */
   getRealm(value: object): WebIDLRealm | undefined {
     const record = getPlatformRecord(value) ?? getImplementationRecord(value);
     return record?.binding.world === this ? record.realm : undefined;

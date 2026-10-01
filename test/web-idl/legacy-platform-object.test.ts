@@ -6,7 +6,7 @@ import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
-  type InterfaceDefinition, type OperationMember, type StringifierMember,
+  type PrimaryInterfaceDefinition, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
 import { getImplementationObject } from '../../src/web-idl/platform-object';
 
@@ -27,7 +27,7 @@ describe('Web IDL legacy platform objects', () => {
     const values = new WeakMap<object, string[]>();
 
     const { binding, realm } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -99,7 +99,7 @@ describe('Web IDL legacy platform objects', () => {
     const values = new WeakMap<object, Map<number, number>>();
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -155,7 +155,7 @@ describe('Web IDL legacy platform objects', () => {
     const invocations: string[] = [];
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -208,13 +208,13 @@ describe('Web IDL legacy platform objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(derived);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(derived.name));
     interfaceBinding.createImplementation = () => new IndexedDerivedImpl();
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseGetter).indexedPropertySteps = {
+    binding.getDefinitionBinding(binding.resolveInterface(base.name)).getOrCreateMemberRecord(baseGetter).indexedPropertySteps = {
       getSupportedPropertyIndices: () => [0],
       supportsIndex: (index) => index === 0,
     };
@@ -222,7 +222,7 @@ describe('Web IDL legacy platform objects', () => {
       getSupportedPropertyIndices: () => [1],
       supportsIndex: (index) => index === 1,
     };
-    binding.getDefinitionBinding(base).getOrCreateMemberRecord(baseGetter).operationSteps = () => 'base';
+    binding.getDefinitionBinding(binding.resolveInterface(base.name)).getOrCreateMemberRecord(baseGetter).operationSteps = () => 'base';
     interfaceBinding.getOrCreateMemberRecord(derivedGetter).operationSteps = () => 'derived';
     const object = construct(getInstalledInterface(binding.install(), 'IndexedDerived'));
 
@@ -245,7 +245,7 @@ describe('Web IDL legacy platform objects', () => {
     const values = new WeakMap<object, Map<string, string>>();
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -309,46 +309,46 @@ describe('Web IDL legacy platform objects', () => {
     );
     class LegacyNamedImpl {}
 
-    const definitions = new DefinitionAssembly([window, legacy]);
+    const assembly = new DefinitionAssembly([window, legacy]);
     const globalBinding = new RealmBinding(
-      definitions,
+      assembly,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const globalBindingInterfaceBinding = globalBinding.getDefinitionBinding(legacy);
+    const globalBindingInterfaceBinding = globalBinding.getDefinitionBinding(globalBinding.resolveInterface(legacy.name));
     globalBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
     globalBindingInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    globalBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
+    globalBinding.getDefinitionBinding(globalBinding.resolveInterface(window.name)).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(['shared']),
     };
     globalBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(['shared']),
     };
-    globalBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
+    globalBinding.getDefinitionBinding(globalBinding.resolveInterface(window.name)).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
     globalBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).operationSteps = () => 'legacy';
     const legacyBinding = new RealmBinding(
-      definitions,
+      assembly,
       new Realm({ globalNames: ['Window'] }),
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const legacyBindingInterfaceBinding = legacyBinding.getDefinitionBinding(legacy);
+    const legacyBindingInterfaceBinding = legacyBinding.getDefinitionBinding(legacyBinding.resolveInterface(legacy.name));
     legacyBindingInterfaceBinding.createImplementation = () => new LegacyNamedImpl();
     legacyBindingInterfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    legacyBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
+    legacyBinding.getDefinitionBinding(legacyBinding.resolveInterface(window.name)).getOrCreateMemberRecord(globalGetter).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(['shared']),
     };
     legacyBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(['shared']),
     };
-    legacyBinding.getDefinitionBinding(window).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
+    legacyBinding.getDefinitionBinding(legacyBinding.resolveInterface(window.name)).getOrCreateMemberRecord(globalGetter).operationSteps = () => 'global';
     legacyBindingInterfaceBinding.getOrCreateMemberRecord(legacyGetter).operationSteps = () => 'legacy';
     const global = globalBinding.projectGlobalObject(
       {},
@@ -392,7 +392,7 @@ describe('Web IDL legacy platform objects', () => {
     const values = new WeakMap<object, Map<string, unknown>>();
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -462,7 +462,7 @@ describe('Web IDL legacy platform objects', () => {
     );
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
@@ -501,7 +501,7 @@ describe('Web IDL legacy platform objects', () => {
     const invocations: string[] = [];
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -551,7 +551,7 @@ describe('Web IDL legacy platform objects', () => {
     const names = new WeakMap<object, Map<string, string>>();
 
     const { binding } = createBinding(interfaceIDL);
-    const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
@@ -615,10 +615,10 @@ describe('Web IDL legacy platform objects', () => {
     const indexGetter = indexedGetter('item', idlType.DOMString);
     const nameGetter = namedGetter('namedItem', idlType.DOMString);
     const interfaceIDL = legacyInterface('SharedLegacy', [constructor, indexGetter, nameGetter]);
-    const definitions = new DefinitionAssembly([interfaceIDL]);
+    const assembly = new DefinitionAssembly([interfaceIDL]);
     const objects = ['first', 'second'].map((name, index) => {
-      const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
-      const interfaceBinding = binding.getDefinitionBinding(interfaceIDL);
+      const binding = new RealmBinding(assembly, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+      const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
       interfaceBinding.createImplementation = () => new SharedLegacyImpl();
       interfaceBinding.getOrCreateMemberRecord(constructor).constructorBehavior = {
         kind: 'initialize', steps: () => undefined,
@@ -646,8 +646,8 @@ describe('Web IDL legacy platform objects', () => {
 
 function legacyInterface(
   name: string,
-  members: InterfaceDefinition['members'],
-): InterfaceDefinition {
+  members: PrimaryInterfaceDefinition['members'],
+): PrimaryInterfaceDefinition {
   return defineInterface({ name, exposed: '*', members });
 }
 
@@ -732,14 +732,14 @@ function noArguments(name: string) {
 }
 
 function createBinding(
-  interfaceIDL: InterfaceDefinition,
+  interfaceIDL: PrimaryInterfaceDefinition,
 ): { binding: RealmBinding; realm: Realm; } {
   class LegacyCollectionImpl {}
   const realm = new Realm();
   const binding = new RealmBinding(
     new DefinitionAssembly([interfaceIDL]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new LegacyCollectionImpl();
+  binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new LegacyCollectionImpl();
   return { binding, realm };
 }
 

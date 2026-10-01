@@ -1,8 +1,7 @@
 import type { InternalPromise } from '../infra/promises';
-import type { AssembledInterfaceDefinition } from './assembly';
+import type { AssembledInterface } from './assembled';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
 import type { ImplementationClass, WebIDLType } from './core/types';
-import type { InterfaceDefinition } from './core/declarations';
 import { convertToIDL, convertToJavaScript } from './conversion';
 import type { WebIDLEnvironment } from './realm';
 import {
@@ -18,11 +17,11 @@ import { createWebIDLPromiseConstructor } from './promise';
 /** A realm's Web IDL operations and environment within one binding world. */
 export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   realm: Env['realm'];
+  /** InternalPromise constructor whose results use this realm's Web IDL conversion. */
   Promise: typeof InternalPromise;
   #binding: RealmBinding<Env>;
   #env: Env | undefined;
 
-  // Project helper: retain a realm binding and compose its environment.
   constructor(
     binding: RealmBinding<Env>,
     createEnvironment: (ctx: BindingContext<Env>) => Env,
@@ -52,8 +51,8 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     interfaceName: string,
     allocation?: GlobalObjectAllocation,
   ): StampedPlatformObject {
-    const primaryInterface = this.#binding.resolveInterface(interfaceName);
-    return this.#binding.projectGlobalObject(implInst, primaryInterface, allocation).platformObject!;
+    const assembled = this.#binding.resolveInterface(interfaceName);
+    return this.#binding.projectGlobalObject(implInst, assembled, allocation).platformObject!;
   }
 
   /** Owning environment supplied by this realm's composition root. */
@@ -62,7 +61,8 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.#env;
   }
 
-  // Project helper: compose Web IDL §3.2 JavaScript type mapping with implementation adaptation.
+  /** Convert a JavaScript value to the representation used by implementations. */
+  // https://webidl.spec.whatwg.org/#js-type-mapping
   convertToImpl(value: unknown, type: WebIDLType): unknown {
     return adaptIDLToImpl(
       convertToIDL(value, type, this.#binding.defaultConversionContext),
@@ -78,53 +78,52 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return convertToJavaScript(value, type, this.#binding.defaultConversionContext);
   }
 
-  // Project helper: delegate exception realization to this realm binding.
+  /** Turn an internal exception request into a realm-owned error, preserving any prior realization. */
   realizeException(value: unknown): unknown {
     return this.#binding.realizeException(value);
   }
 
-  // Project helper: return our record for a newly created platform object.
-  // Web IDL §3.8 Platform objects implementing interfaces:
-  // delegates "create a new object implementing the interface".
-  // Definition arguments select registered interfaces by identity. Their callbacks
-  // are invoked only through that registration, not through this reference.
-  createPlatformRecord(definition: InterfaceDefinition<never>): PlatformRecord {
-    return this.#binding.createPlatformRecord(this.#resolveInterface(definition));
+  /** Create a platform object and return its implementation/platform binding record. */
+  // https://webidl.spec.whatwg.org/#new
+  // The interface must belong to this binding world's assembly.
+  createPlatformRecord(assembled: AssembledInterface): PlatformRecord {
+    this.#checkInterfaceOwner(assembled);
+    return this.#binding.createPlatformRecord(assembled);
   }
 
-  // Project helper: look up a registered interface definition by name.
-  getInterface(interfaceName: string): InterfaceDefinition<never> | undefined {
-    return this.#binding.definitions.getInterface(interfaceName)?.definition;
+  /** Find this binding world's assembled interface by name. */
+  getInterface(interfaceName: string): AssembledInterface | undefined {
+    return this.#binding.assembly.interfaces.get(interfaceName);
   }
 
-  // Project helper: resolve the definition and delegate Web IDL §3.3.7 [Exposed] checks.
-  isInterfaceExposed(definition: InterfaceDefinition<never>): boolean {
-    return this.#binding.isExposed(this.#resolveInterface(definition));
+  /** Whether the registered interface is exposed in this realm. */
+  // https://webidl.spec.whatwg.org/#Exposed
+  isInterfaceExposed(assembled: AssembledInterface): boolean {
+    this.#checkInterfaceOwner(assembled);
+    return this.#binding.isExposed(assembled);
   }
 
   /**
-   * Project helper: find an instance's binding record in this world, through
-   * either its implementation or its platform object. The record exists before
-   * projection; its platformObject is populated when projection occurs.
-   * This lookup does not allocate a platform object.
+   * Find this world's binding record from either object identity without projecting.
+   * The record's platformObject remains absent until projection.
    */
   getObjectRecord(value: unknown): Readonly<PlatformRecord> | undefined {
     const record = getPlatformRecord(value) ?? getImplementationRecord(value);
     return record?.binding.world === this.#binding.world ? record : undefined;
   }
 
-  // Project helper: construct an implementation with injected arguments and stamp its platform record.
+  /** Construct and associate an implementation using its declared injected arguments. */
   construct<T extends object>(
     implClass: ImplementationClass<T>,
     ...argumentsList: unknown[]
   ): StampedImplInstance<T> {
-    const primaryInterface = this.#getImplementationInterface(implClass);
-    const definition = primaryInterface.definition.implementation;
+    const assembled = this.#getImplementationInterface(implClass);
+    const definition = assembled.primary.implementation;
     const implInst = constructImplementationObject(
       implClass,
       resolveImplementationArguments(argumentsList, definition?.constructWith ?? [], this),
     );
-    return stampImplementation(implInst, primaryInterface, this.#binding);
+    return stampImplementation(implInst, assembled, this.#binding);
   }
 
   /** Return the stamped instance if the platform object implements the requested interface in this world. */
@@ -132,15 +131,15 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     platformObject: unknown,
     implClass: ImplementationClass<T>,
   ): StampedImplInstance<T> | undefined {
-    const primaryInterface = this.#getImplementationInterface(implClass);
+    const assembled = this.#getImplementationInterface(implClass);
     const record = getPlatformRecord(platformObject);
     return record?.binding.world === this.#binding.world &&
-      record.implements(primaryInterface)
+      record.implements(assembled)
       ? record.implInst as StampedImplInstance<T>
       : undefined;
   }
 
-  // Project helper: project an implementation through its registered interface.
+  /** Retrieve or create the platform object for an implementation through its registered interface. */
   project<T extends object>(implClass: ImplementationClass<T>, implInst: T): StampedPlatformObject {
     return this.associate(implClass, implInst).project();
   }
@@ -160,21 +159,17 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return record;
   }
 
-  // Project helper: resolve the interface registered for an implementation class.
-  #getImplementationInterface(implClass: ImplementationClass): AssembledInterfaceDefinition {
-    const primaryInterface = this.#binding.definitions.getInterfaceForImplClass(implClass);
-    if (!primaryInterface) {
+  #getImplementationInterface(implClass: ImplementationClass): AssembledInterface {
+    const assembled = this.#binding.assembly.interfaces.get(implClass);
+    if (!assembled) {
       throw new InternalError('No Web IDL interface is registered for this implementation');
     }
-    return primaryInterface;
+    return assembled;
   }
 
-  // Project helper: validate and resolve an exact interface definition identity.
-  #resolveInterface(definition: InterfaceDefinition<never>): AssembledInterfaceDefinition {
-    const primaryInterface = this.#binding.definitions.getInterface(definition.name);
-    if (primaryInterface?.definition !== definition) {
-      throw new InternalError(`Unknown Web IDL interface definition ${definition.name}`);
+  #checkInterfaceOwner(assembled: AssembledInterface): void {
+    if (this.#binding.assembly.interfaces.get(assembled.name) !== assembled) {
+      throw new InternalError(`Interface ${assembled.name} belongs to a different assembly`);
     }
-    return primaryInterface;
   }
 }

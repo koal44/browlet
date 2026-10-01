@@ -1,5 +1,5 @@
 import { isObject, type JSFunction } from '../js-engine/index';
-import type { AssembledInterfaceDefinition } from './assembly';
+import type { AssembledInterface } from './assembled';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
@@ -21,36 +21,25 @@ export class CollectionBinding {
   // Project storage for Web IDL §2.5.11 Maplike declarations and §2.5.12 Setlike declarations — map/set
   // entries.
   initialize(record: PlatformRecord): void {
-    for (let current: AssembledInterfaceDefinition | undefined = record.primaryInterface;
-      current;
-      current = current.parent) {
-      const declaration = current.members.find(({ member }) =>
-        member.kind === 'maplike' || member.kind === 'setlike')?.member;
-      if (declaration?.kind === 'maplike') {
-        record.mapEntries ??= new Map();
-        return;
-      }
-      if (declaration?.kind === 'setlike') {
-        record.setEntries ??= new Set();
-        return;
-      }
-    }
+    const declaration = record.assembled.getCollectionDeclaration(true);
+    if (declaration?.kind === 'maplike') record.mapEntries ??= new Map();
+    else if (declaration?.kind === 'setlike') record.setEntries ??= new Set();
   }
 
   // Web IDL §3.7.11 Maplike declarations — install the declared properties.
   defineMaplike(
     target: object,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
       enumerable: true,
-      get: this.#createSizeGetter(primaryInterface, 'map'),
+      get: this.#createSizeGetter(assembled, 'map'),
     });
 
     const entries = this.#createMapIteratorMethod(
-      primaryInterface,
+      assembled,
       declaration,
       'key+value',
       'entries',
@@ -61,66 +50,66 @@ export class CollectionBinding {
       target,
       'keys',
       this.#createMapIteratorMethod(
-        primaryInterface, declaration, 'key', 'keys',
+        assembled, declaration, 'key', 'keys',
       ),
     );
     defineDataProperty(
       target,
       'values',
       this.#createMapIteratorMethod(
-        primaryInterface, declaration, 'value', 'values',
+        assembled, declaration, 'value', 'values',
       ),
     );
     defineDataProperty(
       target,
       'forEach',
-      this.#createMapForEach(primaryInterface, declaration),
+      this.#createMapForEach(assembled, declaration),
     );
     defineDataProperty(
       target,
       'get',
-      this.#createMapGet(primaryInterface, declaration),
+      this.#createMapGet(assembled, declaration),
     );
     defineDataProperty(
       target,
       'has',
-      this.#createMapHas(primaryInterface, declaration),
+      this.#createMapHas(assembled, declaration),
     );
 
     if (declaration.readonly) return;
-    if (!hasRegularOperation(primaryInterface, 'set')) {
+    if (!assembled.hasInstanceOperation('set')) {
       defineDataProperty(
         target,
         'set',
-        this.#createMapSet(primaryInterface, declaration),
+        this.#createMapSet(assembled, declaration),
       );
     }
-    if (!hasRegularOperation(primaryInterface, 'delete')) {
+    if (!assembled.hasInstanceOperation('delete')) {
       defineDataProperty(
         target,
         'delete',
-        this.#createMapDelete(primaryInterface, declaration),
+        this.#createMapDelete(assembled, declaration),
       );
     }
-    if (!hasRegularOperation(primaryInterface, 'clear')) {
-      defineDataProperty(target, 'clear', this.#createClear(primaryInterface, 'map'));
+    if (!assembled.hasInstanceOperation('clear')) {
+      defineDataProperty(target, 'clear', this.#createClear(assembled, 'map'));
     }
   }
 
   // Web IDL §3.7.12 Setlike declarations — install the declared properties.
   defineSetlike(
     target: object,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
       enumerable: true,
-      get: this.#createSizeGetter(primaryInterface, 'set'),
+      get: this.#createSizeGetter(assembled, 'set'),
     });
 
     const values = this.#createSetIteratorMethod(
-      primaryInterface,
+      assembled,
       declaration,
       'value',
       'values',
@@ -130,7 +119,7 @@ export class CollectionBinding {
       target,
       'entries',
       this.#createSetIteratorMethod(
-        primaryInterface, declaration, 'key+value', 'entries',
+        assembled, declaration, 'key+value', 'entries',
       ),
     );
     defineDataProperty(target, 'keys', values);
@@ -138,31 +127,31 @@ export class CollectionBinding {
     defineDataProperty(
       target,
       'forEach',
-      this.#createSetForEach(primaryInterface, declaration),
+      this.#createSetForEach(assembled, declaration),
     );
     defineDataProperty(
       target,
       'has',
-      this.#createSetHas(primaryInterface, declaration),
+      this.#createSetHas(assembled, declaration),
     );
 
     if (declaration.readonly) return;
-    if (!hasRegularOperation(primaryInterface, 'add')) {
+    if (!assembled.hasInstanceOperation('add')) {
       defineDataProperty(
         target,
         'add',
-        this.#createSetAdd(primaryInterface, declaration),
+        this.#createSetAdd(assembled, declaration),
       );
     }
-    if (!hasRegularOperation(primaryInterface, 'delete')) {
+    if (!assembled.hasInstanceOperation('delete')) {
       defineDataProperty(
         target,
         'delete',
-        this.#createSetDelete(primaryInterface, declaration),
+        this.#createSetDelete(assembled, declaration),
       );
     }
-    if (!hasRegularOperation(primaryInterface, 'clear')) {
-      defineDataProperty(target, 'clear', this.#createClear(primaryInterface, 'set'));
+    if (!assembled.hasInstanceOperation('clear')) {
+      defineDataProperty(target, 'clear', this.#createClear(assembled, 'set'));
     }
   }
 
@@ -182,14 +171,14 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.1 size and §3.7.12.1 size getters.
   #createSizeGetter(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     kind: CollectionKind,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           'size',
           'getter',
         );
@@ -203,7 +192,7 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.3 entries, §3.7.11.4 keys, and §3.7.11.5 values.
   #createMapIteratorMethod(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
     kind: MapIterationKind,
     name: string,
@@ -212,7 +201,7 @@ export class CollectionBinding {
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           name,
           'method',
         );
@@ -229,7 +218,7 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.12.3 entries and §3.7.12.5 values.
   #createSetIteratorMethod(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
     kind: SetIterationKind,
     name: string,
@@ -238,7 +227,7 @@ export class CollectionBinding {
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           name,
           'method',
         );
@@ -255,14 +244,14 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.6 forEach.
   #createMapForEach(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           'forEach',
           'method',
         );
@@ -286,14 +275,14 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.12.6 forEach.
   #createSetForEach(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
-          primaryInterface,
+          assembled,
           'forEach',
           'method',
         );
@@ -322,13 +311,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.7 get.
   #createMapGet(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'get', 'method',
+          thisArgument, assembled, 'get', 'method',
         );
         const entries = this.getMapEntries(receiver);
         const key = convertCollectionValue(
@@ -347,13 +336,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.8 has.
   #createMapHas(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'has', 'method',
+          thisArgument, assembled, 'has', 'method',
         );
         const key = convertCollectionValue(
           argumentsList[0], declaration.key, this.#context,
@@ -366,13 +355,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.9 set.
   #createMapSet(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'set', 'method',
+          thisArgument, assembled, 'set', 'method',
         );
         const key = convertCollectionValue(
           argumentsList[0], declaration.key, this.#context,
@@ -389,13 +378,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.10 delete.
   #createMapDelete(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'delete', 'method',
+          thisArgument, assembled, 'delete', 'method',
         );
         const key = convertCollectionValue(
           argumentsList[0], declaration.key, this.#context,
@@ -408,13 +397,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.12.7 has.
   #createSetHas(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'has', 'method',
+          thisArgument, assembled, 'has', 'method',
         );
         const value = convertCollectionValue(
           argumentsList[0], declaration.value, this.#context,
@@ -427,13 +416,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.12.8 add.
   #createSetAdd(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'add', 'method',
+          thisArgument, assembled, 'add', 'method',
         );
         const value = convertCollectionValue(
           argumentsList[0], declaration.value, this.#context,
@@ -447,13 +436,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.12.9 delete.
   #createSetDelete(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     declaration: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'delete', 'method',
+          thisArgument, assembled, 'delete', 'method',
         );
         const value = convertCollectionValue(
           argumentsList[0], declaration.value, this.#context,
@@ -466,13 +455,13 @@ export class CollectionBinding {
 
   // Project factory for Web IDL §3.7.11.11 clear and §3.7.12.10 clear.
   #createClear(
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     kind: CollectionKind,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
-          thisArgument, primaryInterface, 'clear', 'method',
+          thisArgument, assembled, 'clear', 'method',
         );
         if (kind === 'map') this.getMapEntries(receiver).clear();
         else this.getSetEntries(receiver).clear();
@@ -533,7 +522,7 @@ export class CollectionBinding {
   // Setlike declarations.
   #getReceiverRecord(
     value: unknown,
-    primaryInterface: AssembledInterfaceDefinition,
+    assembled: AssembledInterface,
     identifier: string,
     type: 'getter' | 'method',
   ): PlatformRecord {
@@ -543,7 +532,7 @@ export class CollectionBinding {
       this.#throwTypeError('Illegal invocation');
     }
     this.#context.realm.performSecurityCheck(value, identifier, type);
-    if (!record.implements(primaryInterface)) {
+    if (!record.implements(assembled)) {
       this.#throwTypeError('Illegal invocation');
     }
     return record;
@@ -573,18 +562,6 @@ function convertCollectionValue(
   return typeof converted === 'number' && Object.is(converted, -0)
     ? 0
     : converted;
-}
-
-// Project predicate for Web IDL §3.7.11 Maplike declarations and §3.7.12 Setlike declarations — explicit
-// operation overrides.
-function hasRegularOperation(
-  primaryInterface: AssembledInterfaceDefinition,
-  name: string,
-): boolean {
-  return primaryInterface.members.some(({ member }) =>
-    member.kind === 'operation' &&
-    member.name === name &&
-    member.static !== true);
 }
 
 // Project adapter to ECMAScript §7.3.17 CreateArrayFromList using the binding's realm.

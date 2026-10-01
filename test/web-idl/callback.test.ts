@@ -114,6 +114,21 @@ describe('Web IDL callbacks', () => {
     )).toThrow(targetRealm.intrinsics.typeError);
   });
 
+  it('reads the current callback-interface method on every invocation', () => {
+    const { binding } = createCallbackBinding();
+    const object = {
+      handleEvent(value: number) { return value + 1; },
+    };
+    const value = convertToIDL(object, reference('NumberHandler'), binding.defaultConversionContext);
+    if (!isCallbackInterfaceRecord(value)) {
+      throw new Error('NumberHandler did not convert to a callback value');
+    }
+
+    expect(callUserObjectOperation(value, 'handleEvent', [2])).toBe(3);
+    object.handleEvent = (argument) => argument + 10;
+    expect(callUserObjectOperation(value, 'handleEvent', [2])).toBe(12);
+  });
+
   it('calls callback-interface objects and callable objects with distinct receivers', () => {
     const { binding } = createCallbackBinding();
     const ctx = binding.defaultConversionContext;
@@ -391,8 +406,8 @@ describe('Web IDL callbacks', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(definition).createImplementation = () => new CallbackOwnerImpl();
-    binding.getDefinitionBinding(definition).getOrCreateMemberRecord(attribute).attributeSteps = {
+    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CallbackOwnerImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(attribute).attributeSteps = {
       get: () => stored,
       set: (_receiver, value) => { stored = value; },
     };
@@ -472,7 +487,7 @@ function createCallbackBinding(): {
 } {
   const callbackRealm = new Realm();
   const targetRealm = new Realm();
-  const definitions = new DefinitionAssembly([
+  const assembly = new DefinitionAssembly([
     defineCallbackFunction({
       name: 'Increment',
       returns: idlType.long,
@@ -541,7 +556,7 @@ function createCallbackBinding(): {
   ]);
   return {
     binding: new RealmBinding(
-      definitions,
+      assembly,
       targetRealm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),

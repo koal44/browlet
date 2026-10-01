@@ -16,10 +16,10 @@ import { registerDefinitionBindings } from '../../src/web-idl/implementation-bin
 
 describe('Web IDL platform-object identity and state', () => {
   it('reads the shared stamped record without a registry', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
-    const binding = new RealmBinding(definitions, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
-    const primaryInterface = binding.resolveInterface('Example');
-    const implInst = stampImplementation({}, primaryInterface, binding);
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
+    const binding = new RealmBinding(assembly, new Realm(), new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+    const assembled = binding.resolveInterface('Example');
+    const implInst = stampImplementation({}, assembled, binding);
     const record = getImplementationRecord(implInst);
 
     expect(record?.implInst).toBe(implInst);
@@ -27,7 +27,7 @@ describe('Web IDL platform-object identity and state', () => {
     expect(record?.platformObject).toBeUndefined();
 
     const platformObject = {};
-    expect(binding.initializePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
+    expect(binding.initializePlatformObject(platformObject, assembled, implInst)).toBe(record);
     expect(getPlatformRecord(platformObject)).toBe(record);
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(getPlatformObject(implInst)).toBe(platformObject);
@@ -40,20 +40,20 @@ describe('Web IDL platform-object identity and state', () => {
       inherits: 'Base',
       members: [],
     });
-    const firstDefinitions = new DefinitionAssembly([derivedIDL, baseIDL]);
-    const secondDefinitions = new DefinitionAssembly([derivedIDL, baseIDL]);
-    const base = secondDefinitions.getInterface('Base');
-    const derived = firstDefinitions.getInterface('Derived');
-    const secondDerived = secondDefinitions.getInterface('Derived');
+    const firstAssembly = new DefinitionAssembly([derivedIDL, baseIDL]);
+    const secondAssembly = new DefinitionAssembly([derivedIDL, baseIDL]);
+    const baseAssembled = secondAssembly.interfaces.get('Base');
+    const derivedAssembled = firstAssembly.interfaces.get('Derived');
+    const secondDerivedAssembled = secondAssembly.interfaces.get('Derived');
     const world = new BindingWorld([]);
     const first = new RealmBinding(
-      firstDefinitions,
+      firstAssembly,
       new Realm(),
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
     const second = new RealmBinding(
-      secondDefinitions,
+      secondAssembly,
       new Realm(),
       world,
       (ctx) => ({ realm: ctx.realm }),
@@ -61,33 +61,33 @@ describe('Web IDL platform-object identity and state', () => {
     const object = {};
     const implInst = {};
 
-    if (!base || !derived || !secondDerived) {
+    if (!baseAssembled || !derivedAssembled || !secondDerivedAssembled) {
       throw new Error('Missing assembled interface');
     }
 
-    const record = first.initializePlatformObject(object, derived, implInst);
+    const record = first.initializePlatformObject(object, derivedAssembled, implInst);
 
     expect(first.isPlatformObject(object)).toBe(true);
     expect(isStampedImplInstance(implInst)).toBe(true);
     expect(isStampedImplInstance(object)).toBe(false);
     expect(isStampedPlatformObject(object)).toBe(true);
     expect(second.isPlatformObject(object)).toBe(true);
-    expect(second.implements(object, secondDerived)).toBe(true);
-    expect(second.implements(object, base)).toBe(true);
+    expect(second.implements(object, secondDerivedAssembled)).toBe(true);
+    expect(second.implements(object, baseAssembled)).toBe(true);
     expect(getPlatformRecord(object)).toBe(record);
     expect(record.implInst).toBe(implInst);
     expect(record.platformObject).toBe(object);
-    expect(record.primaryInterface).toBe(derived);
+    expect(record.assembled).toBe(derivedAssembled);
     expect(record.realm).toBe(first.realm);
     expect(Reflect.ownKeys(object)).toEqual([]);
     expect(second.isPlatformObject({})).toBe(false);
 
     const authorObject = Object.create(
-      second.getInterfacePrototypeObject(secondDerived),
+      second.getInterfacePrototypeObject(secondDerivedAssembled),
     ) as object;
     expect(second.isPlatformObject(authorObject)).toBe(false);
-    expect(second.implements(authorObject, secondDerived)).toBe(false);
-    expect(second.implements(authorObject, base)).toBe(false);
+    expect(second.implements(authorObject, secondDerivedAssembled)).toBe(false);
+    expect(second.implements(authorObject, baseAssembled)).toBe(false);
   });
 
   it('does not expose type-only definitions as realm globals', () => {
@@ -119,15 +119,15 @@ describe('Web IDL platform-object identity and state', () => {
   });
 
   it('returns the same instance with stamped state before projection', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
-    const primaryInterface = definitions.getInterface('Example');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
+    const assembled = assembly.interfaces.get('Example');
+    if (!assembled) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+    const binding = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const value = Object.freeze({ count: 1 });
 
     expect(isStampedImplInstance(value)).toBe(false);
-    const implInst = stampImplementation(value, primaryInterface, binding);
+    const implInst = stampImplementation(value, assembled, binding);
     expect(implInst).toBe(value);
     expect(implInst.count).toBe(1);
     expect(isStampedImplInstance(implInst)).toBe(true);
@@ -140,18 +140,18 @@ describe('Web IDL platform-object identity and state', () => {
     expect(getPlatformObject(implInst)).toBeUndefined();
 
     const platformObject = {};
-    binding.initializePlatformObject(platformObject, primaryInterface, implInst);
+    binding.initializePlatformObject(platformObject, assembled, implInst);
     expect(isStampedImplInstance(platformObject)).toBe(false);
     expect(getImplementationObject(platformObject)).toBe(implInst);
     expect(getPlatformObject(implInst)).toBe(platformObject);
   });
 
   it('looks up implementation records without inspecting proxy properties or prototypes', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
-    const primaryInterface = definitions.getInterface('ProxyExample');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
+    const assembled = assembly.interfaces.get('ProxyExample');
+    if (!assembled) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+    const binding = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const trap = (): never => { throw new Error('Proxy trap invoked'); };
     const { proxy, revoke } = Proxy.revocable({}, {
       get: trap, getPrototypeOf: trap, defineProperty: trap, has: trap,
@@ -159,7 +159,7 @@ describe('Web IDL platform-object identity and state', () => {
 
     expect(getImplementationRecord(proxy)).toBeUndefined();
     expect(isStampedImplInstance(proxy)).toBe(false);
-    const record = binding.initializePlatformObject({}, primaryInterface, proxy);
+    const record = binding.initializePlatformObject({}, assembled, proxy);
     expect(isStampedImplInstance(proxy)).toBe(true);
     expect(getImplementationRecord(proxy)).toBe(record);
     revoke();
@@ -169,21 +169,21 @@ describe('Web IDL platform-object identity and state', () => {
   });
 
   it('shares a record without changing frozen implementation and platform objects', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'FrozenExample', members: [] })]);
-    const primaryInterface = definitions.getInterface('FrozenExample');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'FrozenExample', members: [] })]);
+    const assembled = assembly.interfaces.get('FrozenExample');
+    if (!assembled) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+    const binding = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const implInst = Object.freeze({ count: 1 });
     const platformObject = Object.freeze({ authorProperty: true });
     const keys = Reflect.ownKeys(platformObject);
     const descriptors = Object.getOwnPropertyDescriptors(platformObject);
     const prototype = Reflect.getPrototypeOf(platformObject);
-    stampImplementation(implInst, primaryInterface, binding);
+    stampImplementation(implInst, assembled, binding);
     const record = getImplementationRecord(implInst);
 
     expect(isStampedPlatformObject(platformObject)).toBe(false);
-    expect(binding.initializePlatformObject(platformObject, primaryInterface, implInst)).toBe(record);
+    expect(binding.initializePlatformObject(platformObject, assembled, implInst)).toBe(record);
     expect(isStampedPlatformObject(platformObject)).toBe(true);
     expect(getPlatformRecord(platformObject)).toBe(record);
     expect(getPlatformObject(implInst)).toBe(platformObject);
@@ -201,33 +201,33 @@ describe('Web IDL platform-object identity and state', () => {
   });
 
   it.each([false, true])('rejects one object serving both identities (stamped: %s)', (stamped) => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
-    const primaryInterface = definitions.getInterface('Example');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
+    const assembled = assembly.interfaces.get('Example');
+    if (!assembled) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+    const binding = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const implInst = {};
-    if (stamped) stampImplementation(implInst, primaryInterface, binding);
+    if (stamped) stampImplementation(implInst, assembled, binding);
 
-    expect(() => binding.initializePlatformObject(implInst, primaryInterface, implInst))
+    expect(() => binding.initializePlatformObject(implInst, assembled, implInst))
       .toThrow('Implementation and platform objects must be distinct');
     expect(isStampedImplInstance(implInst)).toBe(stamped);
     expect(isStampedPlatformObject(implInst)).toBe(false);
   });
 
   it('reads a platform proxy record without invoking traps, including after revocation', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
-    const primaryInterface = definitions.getInterface('ProxyExample');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'ProxyExample', members: [] })]);
+    const assembled = assembly.interfaces.get('ProxyExample');
+    if (!assembled) throw new Error('Missing assembled interface');
     const world = new BindingWorld([]);
-    const binding = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+    const binding = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
     const target = {};
     const trap = (): never => { throw new Error('Proxy trap invoked'); };
     const { proxy, revoke } = Proxy.revocable(target, {
       get: trap, getPrototypeOf: trap, defineProperty: trap, has: trap,
     });
     const implInst = {};
-    const record = binding.initializePlatformObject(proxy, primaryInterface, implInst);
+    const record = binding.initializePlatformObject(proxy, assembled, implInst);
 
     expect(getPlatformRecord(proxy)).toBe(record);
     expect(isStampedPlatformObject(proxy)).toBe(true);
@@ -240,26 +240,26 @@ describe('Web IDL platform-object identity and state', () => {
   });
 
   it('rejects reusing a platform object in another world before stamping its new implementation', () => {
-    const definitions = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
-    const primaryInterface = definitions.getInterface('Example');
-    if (!primaryInterface) throw new Error('Missing assembled interface');
+    const assembly = new DefinitionAssembly([defineInterface({ name: 'Example', members: [] })]);
+    const assembled = assembly.interfaces.get('Example');
+    if (!assembled) throw new Error('Missing assembled interface');
     const firstWorld = new BindingWorld([]);
     const secondWorld = new BindingWorld([]);
-    const first = new RealmBinding(definitions, new Realm(), firstWorld, (ctx) => ({ realm: ctx.realm }));
-    const second = new RealmBinding(definitions, new Realm(), secondWorld, (ctx) => ({ realm: ctx.realm }));
+    const first = new RealmBinding(assembly, new Realm(), firstWorld, (ctx) => ({ realm: ctx.realm }));
+    const second = new RealmBinding(assembly, new Realm(), secondWorld, (ctx) => ({ realm: ctx.realm }));
     const platformObject = {};
     const implInst = {};
-    const record = first.initializePlatformObject(platformObject, primaryInterface, implInst);
+    const record = first.initializePlatformObject(platformObject, assembled, implInst);
     const secondImplInst = {};
 
     expect(second.isPlatformObject(platformObject)).toBe(false);
-    expect(second.implements(platformObject, primaryInterface)).toBe(false);
-    expect(() => second.initializePlatformObject(platformObject, primaryInterface, secondImplInst))
+    expect(second.implements(platformObject, assembled)).toBe(false);
+    expect(() => second.initializePlatformObject(platformObject, assembled, secondImplInst))
       .toThrow('Platform object is already associated');
     expect(isStampedImplInstance(secondImplInst)).toBe(false);
     expect(getPlatformRecord(platformObject)).toBe(record);
     expect(second.isPlatformObject(platformObject)).toBe(false);
-    expect(() => stampImplementation(platformObject, primaryInterface, second))
+    expect(() => stampImplementation(platformObject, assembled, second))
       .toThrow('Implementation object is already stamped or is a platform object');
     expect(isStampedImplInstance(platformObject)).toBe(false);
   });
@@ -293,8 +293,8 @@ describe('Web IDL platform-object identity and state', () => {
 
     const changedRecord = getPlatformRecord(object);
     expect(changedRecord).toBe(originalRecord);
-    expect(changedRecord?.primaryInterface)
-      .toBe(originalRecord?.primaryInterface);
+    expect(changedRecord?.assembled)
+      .toBe(originalRecord?.assembled);
     expect(changedRecord?.realm).toBe(second.realm);
     expect(Reflect.getPrototypeOf(object))
       .toBe(second.getInterfacePrototypeObject(second.resolveInterface('RealmMutable')));
@@ -335,11 +335,11 @@ function createRealmBindings(
 ): { first: RealmBinding; second: RealmBinding; } {
   class RealmTestImpl {}
   const world = new BindingWorld([]);
-  const definitions = new DefinitionAssembly([interfaceIDL]);
-  const first = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
-  const second = new RealmBinding(definitions, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+  const assembly = new DefinitionAssembly([interfaceIDL]);
+  const first = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+  const second = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
   for (const binding of [first, second]) {
-    binding.getDefinitionBinding(interfaceIDL).createImplementation = () => new RealmTestImpl();
+    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new RealmTestImpl();
   }
   return { first, second };
 }

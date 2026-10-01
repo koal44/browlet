@@ -24,11 +24,11 @@ describe('Web IDL definition assembly', () => {
     });
     const parent = defineInterface({ name: 'Parent', members: [] });
 
-    const definitions = new DefinitionAssembly([partial, child, parent]);
-    const assembled = definitions.getInterface('Child');
+    const assembly = new DefinitionAssembly([partial, child, parent]);
+    const assembled = assembly.interfaces.get('Child');
 
-    expect(assembled?.definition).toBe(child);
-    expect(assembled?.parent?.definition).toBe(parent);
+    expect(assembled?.primary).toBe(child);
+    expect(assembled?.parentAssembled?.primary).toBe(parent);
     expect(assembled?.partials).toEqual([partial]);
     expect(assembled?.members).toEqual([{
       member: partial.members[0],
@@ -38,8 +38,14 @@ describe('Web IDL definition assembly', () => {
 
   it('assembles partial mixins in includes-statement order', () => {
     const host = defineInterface({ name: 'Host', members: [] });
-    const first = defineInterfaceMixin({ name: 'First', members: [] });
-    const second = defineInterfaceMixin({ name: 'Second', members: [] });
+    const first = defineInterfaceMixin({
+      name: 'First',
+      members: [{ arguments: [], kind: 'operation', name: 'first', returns: idlType.undefined }],
+    });
+    const second = defineInterfaceMixin({
+      name: 'Second',
+      members: [{ arguments: [], kind: 'operation', name: 'second', returns: idlType.undefined }],
+    });
     const secondPartial = definePartialInterfaceMixin({
       name: 'Second',
       members: [{
@@ -50,7 +56,7 @@ describe('Web IDL definition assembly', () => {
     const includeSecond = defineIncludes({ interface: 'Host', mixin: 'Second' });
     const includeFirst = defineIncludes({ interface: 'Host', mixin: 'First' });
 
-    const definitions = new DefinitionAssembly([
+    const assembly = new DefinitionAssembly([
       includeSecond,
       secondPartial,
       host,
@@ -58,17 +64,13 @@ describe('Web IDL definition assembly', () => {
       first,
       second,
     ]);
-    const assembled = definitions.getInterface('Host');
+    const assembled = assembly.interfaces.get('Host');
 
-    expect(assembled?.includes.map(({ mixin }) => mixin?.definition)).toEqual([
-      second,
-      first,
+    expect(assembled?.members).toEqual([
+      { member: second.members[0], source: second },
+      { member: secondPartial.members[0], source: secondPartial },
+      { member: first.members[0], source: first },
     ]);
-    expect(assembled?.includes[0]?.mixin?.partials).toEqual([secondPartial]);
-    expect(assembled?.members).toEqual([{
-      member: secondPartial.members[0],
-      source: secondPartial,
-    }]);
   });
 
   it('keeps callback interfaces distinct from interfaces', () => {
@@ -79,11 +81,10 @@ describe('Web IDL definition assembly', () => {
         returns: idlType.undefined,
       }],
     });
-    const definitions = new DefinitionAssembly([callback]);
+    const assembly = new DefinitionAssembly([callback]);
 
-    expect(definitions.getDefinition('EventListener')).toBe(callback);
-    expect(definitions.getCallbackInterface('EventListener')).toBe(callback);
-    expect(definitions.getInterface('EventListener')).toBeUndefined();
+    expect(assembly.callbackInterfaces.get('EventListener')?.primary).toBe(callback);
+    expect(assembly.interfaces.get('EventListener')).toBeUndefined();
   });
 
   it('assembles primary and partial namespace members without reordering', () => {
@@ -102,10 +103,10 @@ describe('Web IDL definition assembly', () => {
       }],
     });
 
-    const definitions = new DefinitionAssembly([partial, primary]);
-    const assembled = definitions.getNamespace('Namespace');
+    const assembly = new DefinitionAssembly([partial, primary]);
+    const assembled = assembly.namespaces.get('Namespace');
 
-    expect(assembled?.definition).toBe(primary);
+    expect(assembled?.primary).toBe(primary);
     expect(assembled?.partials).toEqual([partial]);
     expect(assembled?.members.map(({ member }) => member.name)).toEqual([
       'first', 'second',
@@ -135,12 +136,12 @@ describe('Web IDL definition assembly', () => {
       members: [member('h'), member('d')],
     });
 
-    const definitions = new DefinitionAssembly([b, a, c, partialA]);
-    const assembled = definitions.getDictionary('C');
+    const assembly = new DefinitionAssembly([b, a, c, partialA]);
+    const assembled = assembly.dictionaries.get('C');
 
-    expect(assembled?.parent?.definition).toBe(b);
-    expect(assembled?.parent?.parent?.definition).toBe(a);
-    expect(assembled?.parent?.parent?.partials).toEqual([partialA]);
+    expect(assembled?.parentAssembled?.primary).toBe(b);
+    expect(assembled?.parentAssembled?.parentAssembled?.primary).toBe(a);
+    expect(assembled?.parentAssembled?.parentAssembled?.partials).toEqual([partialA]);
     expect(assembled?.members.map(({ name }) => name)).toEqual([
       'c', 'd', 'g', 'h', 'a', 'b', 'e', 'f',
     ]);

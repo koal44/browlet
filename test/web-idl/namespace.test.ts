@@ -53,24 +53,25 @@ describe('Web IDL namespace objects', () => {
       }],
       members: [],
     });
-    const definitions = new DefinitionAssembly([partial, nested, namespace]);
+    const assembly = new DefinitionAssembly([partial, nested, namespace]);
 
     const receivers: Array<object | null> = [];
 
     const realm = new Realm();
     const binding = new RealmBinding(
-      definitions,
+      assembly,
       realm,
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(namespace).getOrCreateMemberRecord(version).attributeSteps = {
+    const namespaceBinding = binding.getDefinitionBinding(assembly.namespaces.get(namespace.name)!);
+    namespaceBinding.getOrCreateMemberRecord(version).attributeSteps = {
       get(receiver) {
         receivers.push(receiver);
         return '1.0';
       },
     };
-    binding.getDefinitionBinding(namespace).getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
+    namespaceBinding.getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
       receivers.push(receiver);
       return value;
     };
@@ -96,7 +97,7 @@ describe('Web IDL namespace objects', () => {
     expect(Object.prototype.toString.call(
       requireObject(Reflect.get(Nested, 'prototype')),
     )).toBe('[object Tools.Nested]');
-    expect(binding.getNamespaceObject(binding.definitions.getNamespace('Tools')!)).toBe(tools);
+    expect(binding.getNamespaceObject(binding.assembly.namespaces.get('Tools')!)).toBe(tools);
 
     expect(Reflect.getOwnPropertyDescriptor(tools, 'version')).toMatchObject({
       configurable: true,

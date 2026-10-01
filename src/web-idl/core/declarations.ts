@@ -3,12 +3,12 @@ import type {
   DeclarationCallback, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
   InjectedArgument, OperationMember, StringifierMember, WebIDLType,
 } from './types';
-import type { SerializableSteps, TransferableSteps } from './structured-data';
+import type { SerialSteps, TransferSteps } from './structured-data';
 
 // Interfaces
 
-/** An interface's author-facing members and implementation binding. */
-export type InterfaceDefinition<Env = unknown, Impl extends object = object> = {
+/** An interface's primary declaration, including its own members and implementation binding. */
+export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = object> = {
   /** Declaration discriminator supplied by `defineInterface()`. */
   kind: 'interface';
   /** IDL identifier used by references and the interface object. */
@@ -22,11 +22,11 @@ export type InterfaceDefinition<Env = unknown, Impl extends object = object> = {
   /** Extended attributes applying to this interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** HTML serialization steps for this exact interface, including any inherited state. */
-  serialization?: SerializableSteps<
+  serialSteps?: SerialSteps<
     Impl, Record<string, unknown>, Env extends { realm: infer Realm; } ? Realm : unknown
   >;
   /** HTML transfer steps for this exact interface. */
-  transfer?: TransferableSteps<Impl>;
+  transferSteps?: TransferSteps<Impl>;
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** Implementation class and hooks used when constructing or projecting its instances. */
   implementation?: {
@@ -44,8 +44,8 @@ export type InterfaceDefinition<Env = unknown, Impl extends object = object> = {
 /** Declare an interface; `Env` describes the environment required by its binding hooks. */
 // https://webidl.spec.whatwg.org/#idl-interfaces
 export function defineInterface<Env = unknown>(
-  definition: Omit<InterfaceDefinition<Env>, 'kind'>,
-): InterfaceDefinition<Env> {
+  definition: Omit<PrimaryInterfaceDefinition<Env>, 'kind'>,
+): PrimaryInterfaceDefinition<Env> {
   return { kind: 'interface', ...definition };
 }
 
@@ -479,7 +479,7 @@ export function defineProxyObject(
 /** Any declaration accepted by definition assembly; `Env` carries binding-hook requirements. */
 // https://webidl.spec.whatwg.org/#idl
 export type Definition<Env = unknown> =
-  | InterfaceDefinition<Env>
+  | PrimaryInterfaceDefinition<Env>
   | PartialInterfaceDefinition<Env>
   | InterfaceMixinDefinition<Env>
   | PartialInterfaceMixinDefinition<Env>

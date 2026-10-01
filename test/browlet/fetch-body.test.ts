@@ -172,8 +172,8 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     else stream.error(authorError);
 
     const bindings = new BindingWorld([bodyConsumerIDL]);
-    const ownerBinding = bindings.register({ realm: owner.realm });
-    bindings.register({ realm: other.realm }).install(other.realm.global);
+    const ownerBinding = bindings.register(owner.realm, (ctx) => ({ realm: ctx.realm }));
+    bindings.register(other.realm, (ctx) => ({ realm: ctx.realm })).install(other.realm.global);
     const consumer = ownerBinding.project(
       BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, env),
     );

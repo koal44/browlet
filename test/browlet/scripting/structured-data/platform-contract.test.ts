@@ -12,7 +12,7 @@ import {
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
   BindingWorld, defineInterface, impl, xattr, type StampedPlatformObject,
-  type SerializableSteps, type TransferableSteps, type SerializationContext, type DeserializationContext,
+  type SerialSteps, type TransferSteps, type SerializationContext, type DeserializationContext,
 } from '../../../../src/web-idl/index';
 
 describe('HTML structured-data platform contracts', () => {
@@ -20,8 +20,8 @@ describe('HTML structured-data platform contracts', () => {
     const domain = new BindingWorld([]);
     const firstRealm = new Realm();
     const secondRealm = new Realm();
-    const first = domain.register({ realm: firstRealm });
-    const second = domain.register({ realm: secondRealm });
+    const first = domain.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
+    const second = domain.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
     first.install(firstRealm.global);
     second.install(secondRealm.global);
     const FirstDOMException = Reflect.get(
@@ -36,7 +36,7 @@ describe('HTML structured-data platform contracts', () => {
     Reflect.set(source, 'custom', 'not serialized');
     const sourceBinding = first.getObjectRecord(source);
     if (!sourceBinding) throw new Error('DOMException was not projected');
-    const steps = sourceBinding.primaryInterface.definition.serialization;
+    const steps = sourceBinding.assembled.serialSteps;
     if (!steps) throw new Error('DOMException is not registered as serializable');
     const serialized = createStructuredDataRecord();
 
@@ -47,7 +47,7 @@ describe('HTML structured-data platform contracts', () => {
       unusedSerializationContext,
     );
     const targetBinding = second.createPlatformRecord(
-      sourceBinding.primaryInterface.definition,
+      sourceBinding.assembled,
     );
     steps.deserializationSteps(
       serialized,
@@ -69,7 +69,7 @@ describe('HTML structured-data platform contracts', () => {
   it('gives derived serializable interfaces standalone inherited-state steps', () => {
     const domain = new BindingWorld([]);
     const realm = new Realm();
-    const registration = domain.register({ realm });
+    const registration = domain.register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.global);
     const QuotaExceededError = Reflect.get(
       realm.global,
@@ -81,7 +81,7 @@ describe('HTML structured-data platform contracts', () => {
     });
     const sourceBinding = registration.getObjectRecord(source);
     if (!sourceBinding) throw new Error('QuotaExceededError was not projected');
-    const steps = sourceBinding.primaryInterface.definition.serialization;
+    const steps = sourceBinding.assembled.serialSteps;
     if (!steps) {
       throw new Error('QuotaExceededError is not registered as serializable');
     }
@@ -94,7 +94,7 @@ describe('HTML structured-data platform contracts', () => {
       unusedSerializationContext,
     );
     const targetBinding = registration.createPlatformRecord(
-      sourceBinding.primaryInterface.definition,
+      sourceBinding.assembled,
     );
     steps.deserializationSteps(
       serialized,
@@ -112,17 +112,17 @@ describe('HTML structured-data platform contracts', () => {
   });
 
   it('requires exact no-argument markers for declared structured-data steps', () => {
-    const serialization: SerializableSteps = {
+    const serialSteps: SerialSteps = {
       serializationSteps() {},
       deserializationSteps() {},
     };
-    const transfer: TransferableSteps = {
+    const transferSteps: TransferSteps = {
       transferSteps() {},
       transferReceivingSteps() {},
     };
     for (const [name, steps] of [
-      ['Serializable', { serialization }],
-      ['Transferable', { transfer }],
+      ['Serializable', { serialSteps }],
+      ['Transferable', { transferSteps }],
     ] as const) {
       const missingMarker = defineInterface({ name: 'MissingMarker', ...steps, members: [] });
       const malformed = defineInterface({
@@ -153,15 +153,15 @@ describe('HTML structured-data platform contracts', () => {
     const parent = defineInterface({
       name: 'Parent', exposed: '*', ...xattr('Serializable', 'Transferable'),
       implementation: impl(ParentImpl), members: [],
-      serialization: { serializationSteps: save, deserializationSteps() {} },
-      transfer: { transferSteps: move, transferReceivingSteps() {} },
+      serialSteps: { serializationSteps: save, deserializationSteps() {} },
+      transferSteps: { transferSteps: move, transferReceivingSteps() {} },
     });
     const child = defineInterface({
       name: 'Child', inherits: 'Parent', exposed: '*',
       implementation: impl(ChildImpl), members: [],
     });
-    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register({ realm: new Realm() });
-    const value = ctx.createPlatformRecord(child).platformObject;
+    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const value = ctx.createPlatformRecord(ctx.getInterface(child.name)!).platformObject;
 
     expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
     expect(() => structuredSerializeWithTransfer(value, [value], ctx))

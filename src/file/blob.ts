@@ -7,7 +7,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, throwDOMException, union, xattr,
-  type SerializableSteps,
+  type SerialSteps,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
 
@@ -195,7 +195,7 @@ export type BlobSerializationState = {
 
 // https://w3c.github.io/FileAPI/#blob-section
 /** Preserve Blob data and metadata across structured serialization. */
-export const blobSerialization = {
+export const blobSerialSteps = {
   serializationSteps(value, serialized, forStorage) {
     const state = value.getSerializationState();
     let data = state.data;
@@ -218,7 +218,7 @@ export const blobSerialization = {
       type: serialized.get('Type'),
     });
   },
-} satisfies SerializableSteps<BlobImpl, BlobSerializedFields>;
+} satisfies SerialSteps<BlobImpl, BlobSerializedFields>;
 
 /** File API record fields shared by Blob and File serialization. */
 export type BlobSerializedFields = {
@@ -282,7 +282,7 @@ export const blobIDL = defineInterface<JSEnvironment>({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  serialization: blobSerialization,
+  serialSteps: blobSerialSteps,
   implementation: impl(BlobImpl, {
     constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),

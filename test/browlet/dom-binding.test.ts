@@ -662,7 +662,7 @@ function exposedNames(global: object, names: string[]): string[] {
 }
 
 type InterfaceConstructor = {
-  (...arguments_: unknown[]): unknown;
-  new(...arguments_: unknown[]): object;
+  (...args: unknown[]): unknown;
+  new(...args: unknown[]): object;
   prototype: object;
 };

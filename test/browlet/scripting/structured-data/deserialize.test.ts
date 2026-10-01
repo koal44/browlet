@@ -392,7 +392,7 @@ describe('HTML structured deserialization', () => {
       ...xattr('Serializable'),
       implementation: impl(ContainerImpl),
       members: [],
-      serialization: {
+      serialSteps: {
         serializationSteps(value, record, _forStorage, context) {
           record.set(
             'Child',
@@ -409,14 +409,14 @@ describe('HTML structured deserialization', () => {
     const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
     const sourceRealm = new Realm();
     const targetRealm = new Realm();
-    const source = bindings.register({ realm: sourceRealm });
-    const target = bindings.register({ realm: targetRealm });
-    const original = source.createPlatformRecord(containerIDL);
+    const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
+    const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+    const original = source.createPlatformRecord(source.getInterface(containerIDL.name)!);
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);
     const resolved = target.getObjectRecord(clone);
-    expect(resolved?.primaryInterface.definition).toBe(containerIDL);
+    expect(resolved?.assembled).toBe(target.getInterface(containerIDL.name));
     expect(target.unwrap(clone, ContainerImpl)?.child).toBe(clone);
   });
 
@@ -447,8 +447,8 @@ function createContexts(options: {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = new Realm({ crossOriginIsolated: true });
   const targetRealm = new Realm({ crossOriginIsolated: true });
-  const source = bindings.register({ realm: sourceRealm });
-  const target = bindings.register({ realm: targetRealm });
+  const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
+  const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
   source.install(sourceRealm.global);
   target.install(targetRealm.global);
   const agentCluster = options.agentCluster ?? new AgentCluster('concrete');

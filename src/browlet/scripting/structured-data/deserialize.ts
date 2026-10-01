@@ -110,13 +110,13 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'platform-object': {
-      const definition = ctx.getInterface(
+      const assembled = ctx.getInterface(
         serialized.interfaceName,
       );
-      if (!definition || !ctx.isInterfaceExposed(definition)) {
+      if (!assembled || !ctx.isInterfaceExposed(assembled)) {
         return throwDOMException('DataCloneError');
       }
-      platformRecord = ctx.createPlatformRecord(definition);
+      platformRecord = ctx.createPlatformRecord(assembled);
       value = platformRecord.platformObject;
       deep = true;
       break;
@@ -154,10 +154,10 @@ export function structuredDeserialize(
     if (!platformRecord) {
       throw new InternalError('A platform-object record was not created');
     }
-    const steps = platformRecord.primaryInterface.definition.serialization;
+    const steps = platformRecord.assembled.serialSteps;
     if (!steps) {
       throw new InternalError(
-        `${platformRecord.primaryInterface.definition.name} has no serialization steps`,
+        `${platformRecord.assembled.name} has no serialization steps`,
       );
     }
     steps.deserializationSteps(

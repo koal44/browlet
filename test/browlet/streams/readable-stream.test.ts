@@ -409,7 +409,7 @@ describe('readable-stream projection', () => {
     const signal = Reflect.get(controller, 'signal') as object;
     const realm = getRelevantRealm(window);
     const resolved = getBindingContext(realm).getObjectRecord(signal);
-    if (resolved?.primaryInterface.definition.name !== 'AbortSignal') {
+    if (resolved?.assembled.name !== 'AbortSignal') {
       throw new Error('AbortSignal did not resolve to its implementation');
     }
 

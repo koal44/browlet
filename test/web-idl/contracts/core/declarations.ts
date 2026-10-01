@@ -1,7 +1,7 @@
 import {
   allocateIn, arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
   dictMember, idlType, impl, invokeWith, op, sequence, staticOp, xattr,
-  type SerializableSteps, type TransferableSteps,
+  type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/core/index';
 
 declare module '../../../../src/web-idl/core/types' {
@@ -14,7 +14,7 @@ class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
 
 class SavedValue { value = 1; }
-const serialization = {
+const serialSteps = {
   serializationSteps(value, record, _forStorage, context) {
     record.set('Value', value.value);
     // @ts-expect-error Each field accepts only its declared value type.
@@ -41,14 +41,14 @@ const serialization = {
     // @ts-expect-error An operation context does not expose Binding Context.
     context.getEnvironment();
   },
-} satisfies SerializableSteps<SavedValue, { Value: number; }, { example: number; }>;
+} satisfies SerialSteps<SavedValue, { Value: number; }, { example: number; }>;
 defineInterface<{ realm: { example: number; }; }>({
   name: 'SavedValue', ...xattr('Serializable'),
-  implementation: impl(SavedValue), serialization, members: [],
+  implementation: impl(SavedValue), serialSteps, members: [],
 });
 defineInterface<{ realm: { example: number; }; }>({
   name: 'InlineSavedValue', ...xattr('Serializable'), members: [],
-  serialization: {
+  serialSteps: {
     serializationSteps() {},
     deserializationSteps(_record, _value, targetRealm) {
       targetRealm.example.toFixed();
@@ -58,9 +58,9 @@ defineInterface<{ realm: { example: number; }; }>({
   },
 });
 // @ts-expect-error Serializable interfaces need both directions.
-const incompleteSerialization: SerializableSteps = { serializationSteps() {} };
+const incompleteSerialization: SerialSteps = { serializationSteps() {} };
 // @ts-expect-error Transferable interfaces need both directions.
-const incompleteTransfer: TransferableSteps = { transferSteps() {} };
+const incompleteTransfer: TransferSteps = { transferSteps() {} };
 
 impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
 ctor([], { constructWith: [atArg(0, () => new Example())] });

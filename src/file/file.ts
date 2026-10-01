@@ -3,10 +3,10 @@ import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
-  type SerializableSteps,
+  type SerialSteps,
 } from '../web-idl/index';
 import {
-  BlobImpl, blobSerialization, type BlobPart, type BlobPropertyBag, type BlobSerializedFields,
+  BlobImpl, blobSerialSteps, type BlobPart, type BlobPropertyBag, type BlobSerializedFields,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
 import { InternalError } from '../infra/internal-error';
@@ -100,21 +100,21 @@ export type FileSerializationState = {
 
 // https://w3c.github.io/FileAPI/#file-section
 /** Preserve File metadata along with its inherited Blob state. */
-const fileSerialization = {
+const fileSerialSteps = {
   serializationSteps(value, serialized, forStorage) {
-    blobSerialization.serializationSteps(value, serialized, forStorage);
+    blobSerialSteps.serializationSteps(value, serialized, forStorage);
     const state = value.getFileSerializationState();
     serialized.set('Name', state.name);
     serialized.set('LastModified', state.lastModified);
   },
   deserializationSteps(serialized, value) {
-    blobSerialization.deserializationSteps(serialized, value);
+    blobSerialSteps.deserializationSteps(serialized, value);
     value.setFileSerializationState({
       lastModified: serialized.get('LastModified'),
       name: serialized.get('Name'),
     });
   },
-} satisfies SerializableSteps<FileImpl, FileSerializedFields>;
+} satisfies SerialSteps<FileImpl, FileSerializedFields>;
 
 type FileSerializedFields = BlobSerializedFields & {
   Name: string;
@@ -162,7 +162,7 @@ export const fileIDL = defineInterface<JSEnvironment>({
   inherits: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  serialization: fileSerialization,
+  serialSteps: fileSerialSteps,
   implementation: impl(FileImpl, {
     constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
   }),
