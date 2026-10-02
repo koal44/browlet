@@ -8,8 +8,8 @@ import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
-import type { ConversionType, UnionInterfaceCandidate } from './assembly';
-import type { AssembledDictionary } from './assembled';
+import type { ConversionType, DefinitionAssembly, UnionInterfaceCandidate } from './assembly';
+import type { AssembledDictionary, AssembledEnumeration, AssembledInterface } from './assembled';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -54,11 +54,67 @@ export function convertToIDL(
       legacyCallbackAttribute,
     );
   } catch (error) {
-    if (InternalTypeError.is(error)) throw new context.realm.intrinsics.typeError(error.message);
-    if (InternalRangeError.is(error)) throw new context.realm.intrinsics.rangeError(error.message);
-    if (InternalSyntaxError.is(error)) throw new context.realm.intrinsics.syntaxError(error.message);
-    throw error;
+    return throwConversionError(error, context);
   }
+}
+
+/** Prepare a fixed input type for repeated conversions in the method's realm. */
+export function createIDLConverter(
+  type: WebIDLType,
+  context: ConversionContext,
+  options: ConversionOptions = {},
+): (value: unknown) => unknown {
+  const assembly = context.binding.assembly;
+  const convert = createIDLValueConverter(type, assembly, options);
+  return (value) => {
+    try {
+      return convert(value, context);
+    } catch (error) {
+      return throwConversionError(error, context);
+    }
+  };
+}
+
+// Retain type decisions without capturing a realm: borrowed calls still supply
+// the method's conversion context, including when nested dictionary members fail.
+function createIDLValueConverter(
+  type: WebIDLType,
+  assembly: DefinitionAssembly,
+  options: ConversionOptions = {},
+): ValueConverter {
+  const conversion = assembly.getConversionType(type);
+  const resolved = conversion.type;
+  const legacyCallbackAttribute = options.attributeAssignment === true && assembly.isNullableLegacyCallback(type);
+  const interfaceAssembled = resolved.kind === 'reference' ? assembly.interfaces.get(resolved.name) : undefined;
+  const enumerationAssembled = resolved.kind === 'reference' ? assembly.enumerations.get(resolved.name) : undefined;
+  const dictionaryAssembled = resolved.kind === 'reference' ? assembly.dictionaries.get(resolved.name) : undefined;
+  let convert: ValueConverter;
+  if (resolved.kind === 'simple') {
+    const integer = integerTypes[resolved.name];
+    const simple = simpleIDLConverters[resolved.name];
+    convert = integer
+      ? (value, context) => convertToInteger(
+        value, integer.bitLength, integer.signed, conversion.extendedAttributes, context,
+      )
+      : simple
+        ? (value, context) => simple(value, conversion.extendedAttributes, context)
+        : (value, context) => convertJavaScriptValueToSimpleType(
+          value, resolved.name, conversion.extendedAttributes, context,
+        );
+  } else if (interfaceAssembled) {
+    convert = (value, context) => convertToInterface(value, interfaceAssembled, context);
+  } else if (enumerationAssembled) {
+    convert = (value, context) => convertToEnumeration(value, enumerationAssembled, context);
+  } else if (dictionaryAssembled) {
+    convert = (value, context) => convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+  } else {
+    convert = (value, context) => convertJavaScriptValueByConversionType(
+      value, conversion, context, [], legacyCallbackAttribute,
+    );
+  }
+  return legacyCallbackAttribute
+    ? (value, context) => isObject(value) ? convert(value, context) : null
+    : convert;
 }
 
 // Project entry point for Web IDL §3.2 JavaScript type mapping — IDL-to-JavaScript conversion.
@@ -70,6 +126,37 @@ export function convertToJavaScript(
 ): unknown {
   return convertIDLValue(value, type, context, [], allocateBuffers);
 }
+
+/** Select a fixed result type's conversion once while retaining the invocation's allocation realm. */
+export function createJavaScriptConverter(
+  type: WebIDLType,
+  assembly: DefinitionAssembly,
+  allocateBuffers = false,
+): ValueConverter {
+  const conversion = assembly.getConversionType(type);
+  const resolved = conversion.type;
+  if (resolved.kind === 'simple' && !bufferTypeNames.has(resolved.name)) {
+    if (resolved.name === 'undefined') {
+      return (value, context) => {
+        context.binding.realizeException(value);
+        return undefined;
+      };
+    }
+    return (value, context) => context.binding.realizeException(value);
+  }
+  if (resolved.kind === 'reference') {
+    const assembled = assembly.interfaces.get(resolved.name);
+    if (assembled) {
+      return (value, context) => projectInterface(context.binding.realizeException(value), assembled, context);
+    }
+    if (assembly.enumerations.has(resolved.name)) {
+      return (value, context) => context.binding.realizeException(value);
+    }
+  }
+  return (value, context) => convertIDLValueByConversionType(value, conversion, context, [], allocateBuffers);
+}
+
+export type ValueConverter = (value: unknown, context: ConversionContext) => unknown;
 
 // Web IDL §3.2.21.1 Creating a sequence from an iterable.
 export function createSequenceFromIterable(
@@ -92,9 +179,10 @@ export function createSequenceFromIterable(
     if (!isObject(result)) {
       throwTypeError(context, 'Iterator result is not an object');
     }
-    if (Reflect.get(result, 'done')) return sequence;
+    const iteration = result as { done?: unknown; value?: unknown; };
+    if (iteration.done) return sequence;
     sequence.push(convertToIDL(
-      Reflect.get(result, 'value'),
+      iteration.value,
       elementType,
       context,
     ));
@@ -149,7 +237,7 @@ export function materializeDefaultValue(
 
   switch (value.kind) {
     case 'integer': {
-      const integer = parseBigInteger(value.value);
+      const integer = context.binding.assembly.getIntegerLiteralValue(value);
       const numericType = context.binding.assembly.getSoleNumericTypeName(type);
       if (numericType === 'bigint') return integer;
       if (numericType && integerTypes[numericType]) return Number(integer);
@@ -172,6 +260,27 @@ export function materializeDefaultValue(
   }
 }
 
+/** Reuse successfully converted scalar defaults; create mutable defaults on every call. */
+export function createDefaultValueFactory(
+  value: DefaultValue,
+  type: WebIDLType,
+): (context: ConversionContext) => unknown {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return () => value;
+  if (value.kind === 'empty-sequence') return () => [];
+  if (value.kind === 'empty-dictionary') return (context) => materializeDefaultValue(value, type, context);
+  let initialized = false;
+  let result: unknown;
+  return (context) => {
+    if (!initialized) {
+      result = materializeDefaultValue(value, type, context);
+      // Preparation must not throw earlier than the invocation that uses the
+      // default. Only successful primitive results can be shared across calls.
+      initialized = !isObject(result);
+    }
+    return result;
+  };
+}
+
 export type ConversionContext = {
   /** Definitions, implementation identity, projection, and internal failures. */
   binding: RealmBinding;
@@ -183,7 +292,19 @@ export type ConversionOptions = {
   attributeAssignment?: boolean;
 };
 
-export type IDLDictionaryValue = Map<string, unknown>;
+/** Converted dictionary members, kept distinct from an author-supplied object. */
+// https://webidl.spec.whatwg.org/#idl-dictionaries
+// SPEC_MISMATCH: dictionary value = ordered map from member names to values
+export class IDLDictionaryValue {
+  assembled: AssembledDictionary;
+  record: Record<string, unknown>;
+
+  constructor(assembled: AssembledDictionary, record: Record<string, unknown>) {
+    this.assembled = assembled;
+    this.record = record;
+  }
+}
+
 export type IDLRecordValue = Map<string, unknown>;
 export type IDLSequenceValue = unknown[];
 
@@ -416,75 +537,9 @@ function convertJavaScriptValueToSimpleType(
     );
   }
 
-  switch (name) {
-    // Web IDL §3.2.1 any — JavaScript-to-IDL conversion.
-    case 'any':
-      return value;
-    // Web IDL §3.2.2 undefined — JavaScript-to-IDL conversion.
-    case 'undefined':
-      return undefined;
-    // Web IDL §3.2.3 boolean — JavaScript-to-IDL conversion.
-    case 'boolean':
-      return Boolean(value);
-    // Web IDL §3.2.5 float — JavaScript-to-IDL conversion.
-    case 'float':
-      return convertToFloat(value, false, context);
-    // Web IDL §3.2.6 unrestricted float — JavaScript-to-IDL conversion.
-    case 'unrestricted float':
-      return convertToFloat(value, true, context);
-    // Web IDL §3.2.7 double — JavaScript-to-IDL conversion.
-    case 'double': {
-      const number = toNumber(value);
-      if (!Number.isFinite(number)) {
-        throwTypeError(context, 'Value is not a finite double');
-      }
-      return number;
-    }
-    // Web IDL §3.2.8 unrestricted double — JavaScript-to-IDL conversion.
-    case 'unrestricted double':
-      return toNumber(value);
-    // Web IDL §3.2.9 bigint — JavaScript-to-IDL conversion.
-    case 'bigint':
-      return toBigInt(value);
-    // Web IDL §3.2.10 DOMString — JavaScript-to-IDL conversion.
-    case 'DOMString':
-      if (
-        value === null &&
-        hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
-      ) return '';
-      return toString(value);
-    // Web IDL §3.2.11 ByteString — JavaScript-to-IDL conversion.
-    case 'ByteString': {
-      const string = toString(value);
-      for (let i = 0; i < string.length; i++) {
-        if (string.charCodeAt(i) > 255) {
-          throwTypeError(context, 'Value is not a ByteString');
-        }
-      }
-      return string;
-    }
-    // Web IDL §3.2.12 USVString — JavaScript-to-IDL conversion.
-    case 'USVString':
-      if (
-        value === null &&
-        hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
-      ) return toScalarValueString('');
-      return toScalarValueString(toString(value));
-    // Web IDL §3.2.13 object — JavaScript-to-IDL conversion.
-    case 'object':
-      if (!isObject(value)) {
-        throwTypeError(context, 'Value is not an object');
-      }
-      return value;
-    // Web IDL §3.2.14 symbol — JavaScript-to-IDL conversion.
-    case 'symbol':
-      if (typeof value !== 'symbol') {
-        throwTypeError(context, 'Value is not a symbol');
-      }
-      return value;
-    default:
-      return unsupportedConversion(name);
-  }
+  const convert = simpleIDLConverters[name];
+  if (!convert) return unsupportedConversion(name);
+  return convert(value, extendedAttributes, context);
 }
 
 // Shared simple-type IDL-to-JavaScript conversion rules from Web IDL §3.2 JavaScript type mapping.
@@ -516,26 +571,13 @@ function convertJavaScriptValueToNamedType(
 ): unknown {
   const assembly = context.binding.assembly;
   const assembled = assembly.interfaces.get(name);
-  if (assembled) {
-    const record = getPlatformRecord(value);
-    if (
-      record?.binding.world === context.binding.world &&
-      record.implements(assembled)
-    ) return record.implInst;
-    return throwTypeError(context, `Value does not implement ${name}`);
-  }
+  if (assembled) return convertToInterface(value, assembled, context);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
   if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
 
   const enumerationAssembled = assembly.enumerations.get(name);
-  if (enumerationAssembled) {
-    const string = toString(value);
-    if (!enumerationAssembled.hasValue(string)) {
-      throwTypeError(context, `${string} is not a value of ${name}`);
-    }
-    return string;
-  }
+  if (enumerationAssembled) return convertToEnumeration(value, enumerationAssembled, context);
 
   const callbackFunctionAssembled = assembly.callbackFunctions.get(name);
   if (callbackFunctionAssembled) {
@@ -576,6 +618,25 @@ function convertJavaScriptValueToNamedType(
   throw new InternalError(`Unknown Web IDL type ${name}`);
 }
 
+// https://webidl.spec.whatwg.org/#es-interface
+function convertToInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
+  const record = getPlatformRecord(value);
+  if (
+    record?.binding.world === context.binding.world &&
+    record.implements(assembled)
+  ) return record.implInst;
+  return throwTypeError(context, `Value does not implement ${assembled.name}`);
+}
+
+// https://webidl.spec.whatwg.org/#es-enumeration
+function convertToEnumeration(value: unknown, assembled: AssembledEnumeration, context: ConversionContext): string {
+  const string = toString(value);
+  if (!assembled.hasValue(string)) {
+    throwTypeError(context, `${string} is not a value of ${assembled.primary.name}`);
+  }
+  return string;
+}
+
 // Project adapter for named IDL values in Web IDL §3.2 JavaScript type mapping.
 function convertNamedTypeToJavaScript(
   value: unknown,
@@ -584,17 +645,7 @@ function convertNamedTypeToJavaScript(
 ): unknown {
   const assembly = context.binding.assembly;
   const assembled = assembly.interfaces.get(name);
-  if (assembled) {
-    const object = isObject(value)
-      ? context.binding.projectImplementationObject(value, assembled)
-      : undefined;
-    if (!object) {
-      throw new InternalError(
-        `IDL interface value ${name} is not an implementation target`,
-      );
-    }
-    return object;
-  }
+  if (assembled) return projectInterface(value, assembled, context);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
   if (dictionaryAssembled) return convertDictionaryToJavaScript(value, dictionaryAssembled, context);
@@ -623,38 +674,76 @@ function convertNamedTypeToJavaScript(
   throw new InternalError(`Unknown Web IDL type ${name}`);
 }
 
+function projectInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
+  const object = isObject(value)
+    ? context.binding.projectImplementationObject(value, assembled)
+    : undefined;
+  if (!object) {
+    throw new InternalError(`IDL interface value ${assembled.name} is not an implementation target`);
+  }
+  return object;
+}
+
 // Web IDL §3.2.17 Dictionary types — convert a JavaScript value to a dictionary.
 function convertJavaScriptValueToDictionary(
   value: unknown,
   assembled: AssembledDictionary,
   context: ConversionContext,
 ): IDLDictionaryValue {
-  if (!isObject(value) && value !== undefined && value !== null) {
-    throwTypeError(context, 'A dictionary value must be an object');
-  }
-
-  const result: IDLDictionaryValue = new Map();
-  for (const member of assembled.members) {
-    const memberValue = value === undefined || value === null
-      ? undefined
-      : Reflect.get(value, member.name) as unknown;
-
-    if (memberValue !== undefined) {
-      result.set(
-        member.name,
-        convertToIDL(memberValue, member.type, context),
-      );
-    } else if (member.primary.default !== undefined) {
-      result.set(
-        member.name,
-        materializeDefaultValue(member.primary.default, member.type, context),
-      );
-    } else if (member.primary.required) {
-      throwTypeError(context, `Required dictionary member ${member.name} is missing`);
-    }
-  }
-  return result;
+  return context.binding.getDictionaryConverter(assembled)(value, context);
 }
+
+/** Prepare member conversions once; each call reads the current author object. */
+export function createDictionaryConverter(
+  assembled: AssembledDictionary,
+  assembly: DefinitionAssembly,
+): DictionaryConverter {
+  const members = assembled.members.map((member) => ({
+    member,
+    convert: createIDLValueConverter(member.type, assembly),
+    getDefault: member.primary.default === undefined
+      ? undefined
+      : createDefaultValueFactory(member.primary.default, member.type),
+  }));
+  // Required/defaulted members always exist after successful conversion. Copy
+  // their layout together; sparse dictionaries only create present properties.
+  const complete = members.every(({ member, getDefault }) => member.primary.required || getDefault);
+  const template: Record<string, unknown> = {};
+  if (complete) {
+    for (const { member } of members) defineDataProperty(template, member.name, undefined);
+  }
+  // Dictionary references defer to the binding's converter on invocation, so
+  // recursive dictionaries do not recursively expand during preparation.
+  return (value, context) => {
+    if (!isObject(value) && value !== undefined && value !== null) {
+      throwTypeError(context, 'A dictionary value must be an object');
+    }
+    const record: Record<string, unknown> = complete ? { ...template } : {};
+    const entries: [string, unknown][] | undefined = complete ? undefined : [];
+    for (const { member, convert, getDefault } of members) {
+      const memberValue = value === undefined || value === null
+        ? undefined
+        : (value as Record<string, unknown>)[member.name];
+      let converted: unknown;
+      if (memberValue !== undefined) {
+        converted = convert(memberValue, context);
+      } else if (getDefault) {
+        converted = getDefault(context);
+      } else if (member.primary.required) {
+        throwTypeError(context, `Required dictionary member ${member.name} is missing`);
+      } else {
+        continue;
+      }
+      if (entries) entries.push([member.name, converted]);
+      else record[member.name] = converted;
+    }
+    // Object.fromEntries creates sparse own properties together, without
+    // inherited setters or deleting absent fields from the complete layout.
+    return new IDLDictionaryValue(assembled, entries ? Object.fromEntries(entries) : record);
+  };
+}
+
+export type DictionaryConverter = (value: unknown, context: ConversionContext) => IDLDictionaryValue;
 
 // Web IDL §3.2.17 Dictionary types — convert a dictionary to a JavaScript value.
 function convertDictionaryToJavaScript(
@@ -665,17 +754,17 @@ function convertDictionaryToJavaScript(
   if (!isObject(value)) {
     throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
   }
-  const members = isMap(value) ? value : new Map(Object.entries(value));
+  const members = value instanceof IDLDictionaryValue ? value.record : value as Record<string, unknown>;
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
   );
   for (const member of assembled.members) {
-    if (!members.has(member.name)) continue;
+    if (!Object.hasOwn(members, member.name)) continue;
     defineDataProperty(
       result,
       member.name,
-      convertToJavaScript(members.get(member.name), member.type, context),
+      convertToJavaScript(members[member.name], member.type, context),
     );
   }
   return result;
@@ -697,7 +786,7 @@ function convertJavaScriptValueToRecord(
     if (!descriptor?.enumerable) continue;
     const typedKey = convertToIDL(key, type.key, context);
     const typedValue = convertToIDL(
-      Reflect.get(value, key),
+      (value as Record<PropertyKey, unknown>)[key],
       type.value,
       context,
     );
@@ -944,9 +1033,11 @@ function convertUnionToJavaScript(
     const array = candidates.array;
     if (array) return convertIDLValueByConversionType(value, array, context, extendedAttributes);
   }
-  if (isMap(value)) {
+  if (value instanceof IDLDictionaryValue) {
     const assembled = candidates.dictionary;
     if (assembled) return convertDictionaryToJavaScript(value, assembled, context);
+  }
+  if (isMap(value)) {
     const record = candidates.typesByKind.get('record');
     if (record) return convertIDLValueByConversionType(value, record, context, extendedAttributes);
   }
@@ -966,6 +1057,7 @@ function convertUnionToJavaScript(
     const bufferName = getBufferTypeName(value);
     const buffer = bufferName && candidates.simpleTypes.get(bufferName);
     if (buffer) return convertIDLValueByConversionType(value, buffer, context, extendedAttributes, allocateBuffers);
+    if (candidates.dictionary) return convertDictionaryToJavaScript(value, candidates.dictionary, context);
     if (candidates.simpleTypes.has('object')) return value;
   }
   throw new InternalError('IDL union value has no matching specific type');
@@ -1052,24 +1144,9 @@ function getCallbackRealm(
     context.realm.callbacks.getAssociatedRealm(value);
 }
 
-// Project helper: recognize our Map-backed dictionary and record values.
+// Recognize Map-backed record values, including Maps from another realm.
 function isMap(value: unknown): value is Map<string, unknown> {
   return isObject(value) && hasMapData(value);
-}
-
-// Project helper: parse the integer literal text retained by declaration builders.
-function parseBigInteger(value: string): bigint {
-  const negative = value.startsWith('-');
-  const unsigned = negative ? value.slice(1) : value;
-  let result: bigint;
-  if (/^0[xX][0-9a-fA-F]+$/.test(unsigned)) {
-    result = BigInt(unsigned);
-  } else if (/^0[0-7]+$/.test(unsigned)) {
-    result = BigInt(`0o${unsigned.slice(1)}`);
-  } else {
-    result = BigInt(unsigned);
-  }
-  return negative ? -result : result;
 }
 
 // Extracted from Web IDL §3.2.4.9 Abstract operations — ConvertToInt's [Clamp] rounding step.
@@ -1088,6 +1165,13 @@ function throwTypeError(
   message: string,
 ): never {
   throw new context.realm.intrinsics.typeError(message);
+}
+
+function throwConversionError(error: unknown, context: ConversionContext): never {
+  if (InternalTypeError.is(error)) throw new context.realm.intrinsics.typeError(error.message);
+  if (InternalRangeError.is(error)) throw new context.realm.intrinsics.rangeError(error.message);
+  if (InternalSyntaxError.is(error)) throw new context.realm.intrinsics.syntaxError(error.message);
+  throw error;
 }
 
 // Project helper: report a conversion that has not been implemented.
@@ -1113,3 +1197,47 @@ const integerTypes: Partial<Record<
 const bufferTypeNames = new Set<SimpleTypeName>([
   'ArrayBuffer', 'SharedArrayBuffer', ...bufferViewNames,
 ]);
+
+// https://webidl.spec.whatwg.org/#es-type-mapping
+// The generic converter and prepared inputs use the same conversion algorithms.
+const simpleIDLConverters: Partial<Record<SimpleTypeName, (
+  value: unknown,
+  extendedAttributes: ExtendedAttribute[],
+  context: ConversionContext,
+) => unknown>> = {
+  any: (value) => value,
+  undefined: () => undefined,
+  boolean: (value) => Boolean(value),
+  float: (value, _attributes, context) => convertToFloat(value, false, context),
+  'unrestricted float': (value, _attributes, context) => convertToFloat(value, true, context),
+  double(value, _attributes, context) {
+    const number = toNumber(value);
+    if (!Number.isFinite(number)) throwTypeError(context, 'Value is not a finite double');
+    return number;
+  },
+  'unrestricted double': (value) => toNumber(value),
+  bigint: (value) => toBigInt(value),
+  DOMString(value, attributes) {
+    if (value === null && hasExtendedAttribute(attributes, 'LegacyNullToEmptyString')) return '';
+    return toString(value);
+  },
+  ByteString(value, _attributes, context) {
+    const string = toString(value);
+    for (let i = 0; i < string.length; i++) {
+      if (string.charCodeAt(i) > 255) throwTypeError(context, 'Value is not a ByteString');
+    }
+    return string;
+  },
+  USVString(value, attributes) {
+    if (value === null && hasExtendedAttribute(attributes, 'LegacyNullToEmptyString')) return toScalarValueString('');
+    return toScalarValueString(toString(value));
+  },
+  object(value, _attributes, context) {
+    if (!isObject(value)) throwTypeError(context, 'Value is not an object');
+    return value;
+  },
+  symbol(value, _attributes, context) {
+    if (typeof value !== 'symbol') throwTypeError(context, 'Value is not a symbol');
+    return value;
+  },
+};

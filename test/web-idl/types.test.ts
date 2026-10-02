@@ -55,7 +55,7 @@ describe('Web IDL types', () => {
       expect(assembly.hasSimpleCandidate(type, 'boolean')).toBe(false);
       expect(assembly.getSoleNumericTypeName(type)).toBe(name === 'long' ? 'long' : undefined);
       expect(assembly.findSequenceElementType(type)).toBe(idlType.boolean);
-      expect(assembly.findDictionaryOrRecord(type)).toBeUndefined();
+      expect(assembly.findRecordValueType(type)).toBeUndefined();
     }
 
     const stringKey = strings.getConversionTypeKey(type);
@@ -103,11 +103,11 @@ describe('Web IDL types', () => {
 
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(sequences.findSequenceElementType(type)).toBe(idlType.long);
-      expect(sequences.findDictionaryOrRecord(type)).toBeUndefined();
+      expect(sequences.findRecordValueType(type)).toBeUndefined();
       expect(records.findSequenceElementType(type)).toBeUndefined();
-      expect(records.findDictionaryOrRecord(type)).toBe(recordType);
+      expect(records.findRecordValueType(type)).toBe(idlType.long);
       expect(dictionaries.findSequenceElementType(type)).toBeUndefined();
-      expect(dictionaries.findDictionaryOrRecord(type)).toBe(dictionaries.dictionaries.get('Value'));
+      expect(dictionaries.findRecordValueType(type)).toBeUndefined();
     }
   });
 

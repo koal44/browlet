@@ -3,20 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
-  convertToIDL, convertToJavaScript, createFrozenArray,
-  createFrozenArrayFromIterable, type ConversionContext,
+  convertToIDL as convertDirectlyToIDL, convertToJavaScript as convertDirectlyToJavaScript,
+  createIDLConverter, createJavaScriptConverter, createFrozenArray,
+  createFrozenArrayFromIterable, type ConversionContext, type IDLDictionaryValue,
 } from '../../src/web-idl/conversion';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
   annotated, asyncSequence, decimal, defineDictionary, defineEnumeration, defineProxyObject,
-  defineInterface, definePartialDictionary, defineTypedef, emptySequence, frozenArray,
+  defineInterface, definePartialDictionary, defineTypedef, emptyDictionary, emptySequence, frozenArray,
   idlType, integer, nullable, record, reference,
   sequence, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 
-describe('Web IDL value conversion', () => {
+describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (mode) => {
+  const convertToIDL: typeof convertDirectlyToIDL = mode === 'direct'
+    ? convertDirectlyToIDL
+    : (value, type, context, options) => createIDLConverter(type, context, options)(value);
+  const convertToJavaScript: typeof convertDirectlyToJavaScript = mode === 'direct'
+    ? convertDirectlyToJavaScript
+    : (value, type, context, allocateBuffers) =>
+      createJavaScriptConverter(type, context.binding.assembly, allocateBuffers)(value, context);
+
   it('preserves the identity of proxy object values', () => {
     const object = {};
     const definition = defineProxyObject({
@@ -224,10 +233,10 @@ describe('Web IDL value conversion', () => {
       input,
       reference('Options'),
       ctx,
-    ) as Map<string, unknown>;
+    ) as IDLDictionaryValue;
 
     expect(reads).toEqual(['a', 'z', 'b', 'y']);
-    expect([...dictionary]).toEqual([
+    expect(Object.entries(dictionary.record)).toEqual([
       ['a', 1], ['z', 2], ['b', true], ['y', 4],
     ]);
 
@@ -254,8 +263,8 @@ describe('Web IDL value conversion', () => {
       { name: 'example' },
       reference('Options'),
       ctx,
-    ) as Map<string, unknown>;
-    expect([...dictionary]).toEqual([
+    ) as IDLDictionaryValue;
+    expect(Object.entries(dictionary.record)).toEqual([
       ['enabled', false], ['name', 'example'],
     ]);
     expectRealmTypeError(
@@ -290,16 +299,16 @@ describe('Web IDL value conversion', () => {
     let reads = 0;
     const input = { get value() { reads++; return value; }, wrapped: 300 };
 
-    const first = convertToIDL(input, type, ctx) as Map<string, unknown>;
-    expect([...first]).toEqual([['value', 127], ['items', []], ['wrapped', 44]]);
+    const first = convertToIDL(input, type, ctx) as IDLDictionaryValue;
+    expect(Object.entries(first.record)).toEqual([['value', 127], ['items', []], ['wrapped', 44]]);
     expect(convertToJavaScript(first, type, ctx)).toEqual({ value: 127, items: [], wrapped: 44 });
 
     value = 3.5;
-    const second = convertToIDL(input, type, ctx) as Map<string, unknown>;
-    expect([...second]).toEqual([['value', 4], ['items', []], ['wrapped', 44]]);
+    const second = convertToIDL(input, type, ctx) as IDLDictionaryValue;
+    expect(Object.entries(second.record)).toEqual([['value', 4], ['items', []], ['wrapped', 44]]);
     expect(reads).toBe(2);
-    expect(second.get('items')).not.toBe(first.get('items'));
-    expect(first.get('value')).toBe(127);
+    expect(second.record.items).not.toBe(first.record.items);
+    expect(first.record.value).toBe(127);
   });
 
   it('materializes numeric dictionary defaults in their declared IDL types', () => {
@@ -320,10 +329,92 @@ describe('Web IDL value conversion', () => {
       undefined,
       reference('Options'),
       ctx,
-    )).toEqual(new Map<string, unknown>([
-      ['integer', 9007199254740993n],
-      ['single', Math.fround(1.337)],
-    ]));
+    )).toMatchObject({ record: { integer: 9007199254740993n, single: Math.fround(1.337) } });
+  });
+
+  it('reads dictionary proxies once per member and preserves present undefined defaults', () => {
+    const options = defineDictionary({
+      name: 'Options', members: [
+        { name: 'a', type: idlType.long, required: true },
+        { name: 'b', type: idlType.any, default: { kind: 'undefined' } },
+        { name: 'c', type: idlType.long },
+        { name: 'd', type: idlType.long, required: true },
+      ],
+    });
+    const { ctx } = createContext([options]);
+    const type = reference(options.name);
+    const steps: string[] = [];
+    const failure = new Error('conversion failed');
+    let fail = false;
+    const input: object = new Proxy({
+      a: { valueOf() { steps.push('convert a'); if (fail) throw failure; return 3; } },
+      get d() { expect(this).toBe(input); return 7; },
+    }, {
+      get(target, name, receiver) {
+        steps.push(`get ${String(name)}`);
+        return Reflect.get(target, name, receiver) as unknown;
+      },
+      has() { throw new Error('Dictionary conversion must not test property presence'); },
+      ownKeys() { throw new Error('Dictionary conversion must not enumerate its input'); },
+    });
+
+    const converted = convertToIDL(input, type, ctx);
+    expect(steps).toEqual(['get a', 'convert a', 'get b', 'get c', 'get d']);
+    const result = convertToJavaScript(converted, type, ctx);
+    expect(result).toEqual({ a: 3, b: undefined, d: 7 });
+    expect(Object.getPrototypeOf(result)).toBe(ctx.realm.intrinsics.objectPrototype);
+    expect(Object.hasOwn(result as object, 'b')).toBe(true);
+    expect(Object.hasOwn(result as object, 'c')).toBe(false);
+
+    steps.length = 0;
+    fail = true;
+    expect(() => convertToIDL(input, type, ctx)).toThrow(failure);
+    expect(steps).toEqual(['get a', 'convert a']);
+  });
+
+  it('keeps recursive dictionary values and nested mutable defaults independent', () => {
+    const node = reference('RecursiveOptions');
+    const options = defineDictionary({
+      name: 'RecursiveOptions',
+      members: [
+        { name: 'child', type: node },
+        { name: 'items', type: sequence(idlType.long), default: emptySequence },
+        { name: 'value', type: idlType.long },
+      ],
+    });
+    const holder = defineDictionary({
+      name: 'Holder',
+      members: [{ name: 'options', type: node, default: emptyDictionary }],
+    });
+    const { ctx } = createContext([options, holder]);
+    let current = 3;
+    const input = { child: { get value() { return current; } } };
+    const first = convertToIDL(input, node, ctx) as IDLDictionaryValue;
+    current = 7;
+    const second = convertToIDL(input, node, ctx) as IDLDictionaryValue;
+    expect((first.record.child as IDLDictionaryValue).record.value).toBe(3);
+    expect((second.record.child as IDLDictionaryValue).record.value).toBe(7);
+    expect(second.record.items).not.toBe(first.record.items);
+    expect(second.record.items).not.toBe((second.record.child as IDLDictionaryValue).record.items);
+
+    const defaults = reference(holder.name);
+    const a = (convertToIDL({}, defaults, ctx) as IDLDictionaryValue).record.options as IDLDictionaryValue;
+    const b = (convertToIDL({}, defaults, ctx) as IDLDictionaryValue).record.options as IDLDictionaryValue;
+    (a.record.items as unknown[]).push(1);
+    expect(b.record.items).toEqual([]);
+    expect(b).not.toBe(a);
+  });
+
+  it('uses the current conversion realm when a prepared dictionary member fails', () => {
+    const options = defineDictionary({
+      name: 'Options', members: [{ name: 'value', type: idlType.double }],
+    });
+    const { ctx, realm } = createContext([options]);
+    const other = new Realm();
+    const type = reference(options.name);
+    expect(convertToIDL({ value: 3 }, type, ctx)).toMatchObject({ record: { value: 3 } });
+    expectRealmTypeError(() => convertToIDL({ value: Infinity }, type, { binding: ctx.binding, realm: other }), other);
+    expectRealmTypeError(() => convertToIDL({ value: Infinity }, type, ctx), realm);
   });
 
   it('copies sequences and records without losing observable ordering', () => {
@@ -592,7 +683,7 @@ describe('Web IDL value conversion', () => {
       undefined,
       union(reference('Options'), idlType.boolean),
       ctx,
-    )).toEqual(new Map([['capture', false]]));
+    )).toMatchObject({ record: { capture: false } });
 
     let conversions = 0;
     const numeric = {
@@ -640,7 +731,7 @@ describe('Web IDL value conversion', () => {
     iterable = false;
     for (let i = 1; i <= 2; i++) {
       const dictionary = convertToIDL(source, type, ctx);
-      expect(dictionary).toEqual(new Map([['value', i]]));
+      expect(dictionary).toMatchObject({ record: { value: i } });
       const platform = convertToJavaScript(dictionary, type, ctx);
       expect(platform).toEqual({ value: i });
       expect(Object.getPrototypeOf(platform)).toBe(realm.intrinsics.objectPrototype);

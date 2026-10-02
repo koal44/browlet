@@ -82,6 +82,27 @@ describe('JavaScript Realm', () => {
     expect(realm.intrinsics.typeError).toBe(TypeError_);
   });
 
+  it('passes call arguments without invoking author iterator methods', () => {
+    const realm = new JSRealm();
+    realm.evaluate(`
+      Object.getPrototypeOf([][Symbol.iterator]()).next = () => {
+        throw new Error('Author iterator invoked');
+      };
+    `, 'iterator.js');
+
+    for (const constructible of [false, true]) {
+      const callable = realm.createFunction(
+        (thisArgument, argumentsList) => ({ thisArgument, argumentsList }),
+        { constructible, length: 2, name: 'perform' },
+      );
+      const result = Reflect.apply(callable, undefined, ['a', 'b']);
+      expect(result.thisArgument).toBeUndefined();
+      expect(result.argumentsList.length).toBe(2);
+      expect(result.argumentsList[0]).toBe('a');
+      expect(result.argumentsList[1]).toBe('b');
+    }
+  });
+
   it('isolates evaluation and recognizes objects across the shared runtime', () => {
     const first = new JSRealm();
     const second = new JSRealm();

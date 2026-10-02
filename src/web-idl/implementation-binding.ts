@@ -1,5 +1,5 @@
 import type { InternalPromise } from '../infra/promises';
-import { AssembledDictionary, type AssembledCallable, type AssembledInterface } from './assembled';
+import type { AssembledCallable, AssembledInterface } from './assembled';
 import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import {
@@ -21,9 +21,8 @@ import type {
   StringificationBehavior, ValuePairsSteps,
 } from './definition-binding';
 import { missingArgument } from './overload';
-import { convertToIDL } from './conversion';
+import { convertToIDL, IDLDictionaryValue } from './conversion';
 import { toImplementationPromise } from './promise';
-import { defineDataProperty } from './property';
 import { isIDLPromiseRecord } from './promise-record';
 import {
   closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
@@ -437,20 +436,27 @@ function registerAttribute(
   realmBinding: RealmBinding,
 ): void {
   const descriptor = findDescriptor(target, member.name);
-  const getterValue: unknown = descriptor && Reflect.get(descriptor, 'get');
-  const setterValue: unknown = descriptor && Reflect.get(descriptor, 'set');
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Accessors are explicitly applied to the implementation receiver.
+  const { get: getter, set: setter } = descriptor ?? { get: undefined, set: undefined };
   // Instance fields exist only after construction. Check them on access rather
   // than creating an implementation merely to inspect its shape.
-  const get = getterValue as ((this: object) => unknown) | undefined ?? function(this: object): unknown {
-    if (!Reflect.has(this, member.name)) {
-      throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
-    }
-    return Reflect.get(this, member.name);
-  };
-  const set = getterValue !== undefined
-    ? setterValue as ((this: object, value: unknown) => void) | undefined
+  const get: AttributeSteps['get'] = getter
+    ? (receiver) => callImplementation(getter, receiver?.implInst ?? target, [], realmBinding) as unknown
+    : (receiver) => {
+      const impl = receiver?.implInst ?? target;
+      try {
+        if (!(member.name in impl)) {
+          throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
+        }
+        return (impl as Record<string, unknown>)[member.name];
+      } catch (exception) {
+        throw realmBinding.realizeException(exception);
+      }
+    };
+  const set = getter !== undefined
+    ? setter
     : function(this: object, value: unknown): void {
-      if (!Reflect.has(this, member.name)) {
+      if (!(member.name in this)) {
         throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
       }
       if (!Reflect.set(this, member.name, value)) {
@@ -458,10 +464,7 @@ function registerAttribute(
       }
     };
   memberBinding.attributeSteps = {
-    // Project helper: read the implementation through our exception boundary.
-    get(receiver) {
-      return callImplementation(get, receiver?.implInst ?? target, [], realmBinding);
-    },
+    get,
     ...(set && !member.readonly
       ? {
         // Project helper: adapt the converted attribute value before storing it.
@@ -620,17 +623,18 @@ function findDescriptor(
   }
 }
 
-// Project helper: adapt each converted argument using its fixed or variadic declaration.
+// Consume the invocation's fresh argument list; its IDL values are no longer needed.
 function adaptArguments(
   values: unknown[],
   assembled: AssembledCallable,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): unknown[] {
-  return values.map((value, index) => {
+  for (let index = 0; index < values.length; index++) {
     const argument = assembled.getArgument(index);
-    return adaptIDLToImpl(value, argument?.type, argument?.primary ?? {}, context, realmBinding);
-  });
+    values[index] = adaptIDLToImpl(values[index], argument?.type, argument?.primary ?? {}, context, realmBinding);
+  }
+  return values;
 }
 
 // Project helper: adapt converted IDL values to our implementation representations.
@@ -651,6 +655,7 @@ export function adaptIDLToImpl(
     );
   }
   if (value === missingArgument) return undefined;
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
   if (isIDLAsyncSequence(value)) {
     // Delegates Web IDL §3.2.22.1 Iterating async sequences to async-sequence.ts.
     const iterator = openAsyncSequence(value, realmBinding.realm);
@@ -726,29 +731,44 @@ export function adaptIDLToImpl(
         realmBinding,
       ));
   }
+  if (value instanceof IDLDictionaryValue) {
+    const { assembled, record } = value;
+    // Conversion owns this record and has already created its data properties.
+    // Adapt in place without copying or touching inherited properties.
+    for (const member of assembled.getObjectMembers(realmBinding.assembly)) {
+      if (!Object.hasOwn(record, member.name)) continue;
+      const memberValue = record[member.name];
+      if (memberValue === null || (typeof memberValue !== 'object' && typeof memberValue !== 'function')) continue;
+      record[member.name] = adaptIDLToImpl(
+        memberValue, member.type,
+        {
+          callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? options.callbackExceptionBehavior,
+          callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
+        },
+        context, realmBinding,
+      );
+    }
+    return record;
+  }
   if (!(value instanceof Map)) return value;
+  const recordValueType = type && realmBinding.assembly.findRecordValueType(type);
+  if (!recordValueType) return value;
 
-  const dictionaryOrRecord = type && realmBinding.assembly.findDictionaryOrRecord(type);
-  if (!dictionaryOrRecord) return value;
-  const assembled = dictionaryOrRecord instanceof AssembledDictionary ? dictionaryOrRecord : undefined;
-  const recordValueType = 'value' in dictionaryOrRecord ? dictionaryOrRecord.value : undefined;
-
-  const object: Record<PropertyKey, unknown> = {};
+  // Arbitrary record keys still use Map during conversion. Create their own
+  // data properties together, including __proto__, before adapting values.
   const entries = value as Map<string, unknown>;
+  const object = Object.fromEntries(entries);
   for (const [name, memberValue] of entries) {
-    const member = assembled?.membersByName.get(name);
-    defineDataProperty(object, name, adaptIDLToImpl(
-      memberValue,
-      member?.type ?? recordValueType,
+    if (memberValue === null || (typeof memberValue !== 'object' && typeof memberValue !== 'function')) continue;
+    object[name] = adaptIDLToImpl(
+      memberValue, recordValueType,
       {
-        callbackExceptionBehavior:
-          member?.primary.callbackExceptionBehavior ??
-          options.callbackExceptionBehavior,
+        callbackExceptionBehavior: options.callbackExceptionBehavior,
         callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
       },
       context,
       realmBinding,
-    ));
+    );
   }
   return object;
 }
@@ -771,14 +791,14 @@ function adaptCallbackFunction(
   const existing = value.adapter;
   if (existing) return existing;
 
-  /*
-   * Present Web IDL callback machinery to implementations as an ordinary
-   * callable. Copying the callback record onto the wrapper preserves its
-   * Web IDL identity, so returning the callable projects the original
-   * JavaScript function rather than exposing this wrapper.
-   * A callback dictionary fixes the receiver to its original input object.
-   */
-  const adapter = new Proxy(function callback() {}, {
+  // Copying the callback record preserves its identity: returning the callable
+  // projects the original JavaScript function. A callback dictionary fixes the
+  // receiver to its original input object.
+  // These are ordinary data properties, including the private callback brand.
+  // Copy them before creating the proxy to avoid descriptor objects and proxy
+  // property-definition work for every retained callback.
+  const target = Object.assign(function callback() {}, value);
+  const adapter = new Proxy(target, {
     // Project adapter: delegate Web IDL §3.12 Invoking callback functions — invoke, then adapt the result.
     apply(_target, thisArgument, argumentsList) {
       const result = invokeCallbackFunction(
@@ -796,7 +816,6 @@ function adaptCallbackFunction(
       return constructCallbackFunction(value, argumentsList) as object;
     },
   });
-  Object.defineProperties(adapter, Object.getOwnPropertyDescriptors(value));
   value.adapter = adapter;
   return adapter;
 }

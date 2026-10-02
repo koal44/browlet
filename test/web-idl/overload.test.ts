@@ -10,10 +10,10 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { AssembledCallable, AssembledOverloads } from '../../src/web-idl/assembled';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { missingArgument, resolveOverload } from '../../src/web-idl/overload';
+import { createOverloadResolver, missingArgument, resolveOverload } from '../../src/web-idl/overload';
 
 describe('Web IDL effective overload sets', () => {
-  it('fills optional defaults before an omitted or repeated variadic argument', () => {
+  it.each(['direct', 'prepared'] as const)('fills optional defaults before an omitted or repeated variadic argument (%s)', (mode) => {
     const binding = createBinding([]);
     const callable = operation([
       { name: 'label', type: idlType.DOMString },
@@ -21,13 +21,31 @@ describe('Web IDL effective overload sets', () => {
       { name: 'values', type: idlType.double, variadic: true },
     ]);
     const overloads = new AssembledOverloads([callable], binding.assembly);
-    const resolveArguments = (...values: unknown[]) =>
-      resolveOverload(overloads, values, binding.defaultConversionContext).values;
+    const resolve = mode === 'prepared'
+      ? createOverloadResolver(overloads, binding.defaultConversionContext)
+      : (values: unknown[]) => resolveOverload(overloads, values, binding.defaultConversionContext);
+    const resolveArguments = (...values: unknown[]) => resolve(values).values;
 
     expect(resolveArguments('label')).toEqual(['label', 'default']);
     expect(resolveArguments('label', undefined, 2.5, '3')).toEqual(['label', 'default', 2.5, 3]);
     expect(resolveArguments('label', 'explicit')).toEqual(['label', 'explicit']);
     expect(() => resolveArguments()).toThrow(binding.realm.intrinsics.typeError);
+  });
+
+  it('keeps mutable defaults fresh and distinguishes omitted arguments in a prepared signature', () => {
+    const binding = createBinding([]);
+    const callable = operation([
+      { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
+      { name: 'label', optional: true, type: idlType.DOMString },
+    ]);
+    const resolve = createOverloadResolver(new AssembledOverloads([callable], binding.assembly), binding.defaultConversionContext);
+    const first = resolve([]).values;
+    const values = first[0] as number[];
+    values.push(99);
+    expect(first[1]).toBe(missingArgument);
+    expect(resolve([]).values).toEqual([[], missingArgument]);
+    expect(resolve([undefined, 'label']).values).toEqual([[], 'label']);
+    expect(resolve([[1, '2'], null, Symbol('ignored')]).values).toEqual([[1, 2], 'null']);
   });
 
   it('selects by value category and converts the selected arguments', () => {
@@ -46,9 +64,9 @@ describe('Web IDL effective overload sets', () => {
       callable: boolean,
       values: [false],
     });
-    expect(resolveArguments({})).toEqual({
+    expect(resolveArguments({})).toMatchObject({
       callable: dictionary,
-      values: [new Map()],
+      values: [{ record: {} }],
     });
 
     let iteratorGets = 0;

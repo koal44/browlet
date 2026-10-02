@@ -91,8 +91,8 @@ includer explicitly exposes it. Binding must not manufacture missing state.
 Each collection receives the same declarations array and owns its construction,
 including its fragments and inheritance. Named lookups only read the completed
 assembly. Declarations and their nested members and types must remain unchanged
-after assembly. Dictionaries index their members by name alongside the ordered
-conversion list; callback interfaces index their operation declarations.
+after assembly. Dictionaries retain their members in conversion order;
+callback interfaces index their operation declarations.
 Callable arguments and dictionary members retain their assembled types, including
 applicable conversion attributes such as `[Clamp]`. Callables also retain argument
 optionality and minimum argument counts. This preparation happens during assembly;
@@ -102,6 +102,17 @@ choices, distinguishing positions, and function lengths. Invocation selects from
 these groups without rebuilding effective overload entries. One final group handles
 all counts beyond the longest variadic declaration, reusing its final argument contract.
 The original declarations remain the keys for member bindings.
+Bindings prepare fixed input/result conversions while installing callables.
+Dictionary conversion plans retain member converters on first use, while each
+invocation reads the current author properties in specification order. Successful
+primitive defaults can be reused; sequence and dictionary defaults remain fresh.
+The invocation still supplies its conversion realm, including for nested failures.
+Converted dictionaries carry their assembled definition and a member record;
+implementation adaptation updates that record in place, visiting only member
+types that can hold objects. Complete dictionaries reuse a property layout,
+while sparse dictionaries collect only present entries
+before creating the record. Both produce ordinary objects with own data properties,
+including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
 Runtime consumers use assembled class instances,
 which retain their original declarations as `primary`. All realms registered in
 that world use these same instances, while their JavaScript constructors and

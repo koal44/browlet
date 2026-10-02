@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getMethod, isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, JSRealm,
+  getMethod, getV, isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, JSRealm,
   ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
 } from '../../src/js-engine/index';
 import { SyntaxError as InternalSyntaxError, TypeError as InternalTypeError } from '../../src/infra/exceptions';
@@ -29,6 +29,23 @@ describe('ECMAScript abstract operations', () => {
       .toThrow(realm.intrinsics.typeError);
     expect(() => getMethod(null, 'method', realm))
       .toThrow(realm.intrinsics.typeError);
+  });
+
+  it('preserves GetV receivers for proxies and primitives boxed in another realm', () => {
+    const realm = new JSRealm();
+    const receivers: unknown[] = [];
+    const object = new Proxy({ get value() { receivers.push(this); return 3; } }, {
+      get(target, key, receiver) {
+        receivers.push(receiver);
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
+    expect(getV(object, 'value', realm)).toBe(3);
+    expect(receivers).toEqual([object, object]);
+
+    const prototype = Object.getPrototypeOf(realm.intrinsics.object('text')) as object;
+    Object.defineProperty(prototype, 'receiver', { get() { return this as unknown; } });
+    expect(getV('text', 'receiver', realm)).toBe('text');
   });
 
   it('classifies property descriptors', () => {

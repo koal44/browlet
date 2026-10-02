@@ -3,6 +3,7 @@ import type { InternalPromise } from '../infra/promises';
 import type { AssembledCallbackInterface, AssembledInterface, AssembledNamespace } from './assembled';
 import type { InterfaceMember } from './core/declarations';
 import type { AttributeMember, NamedArgumentsExtendedAttribute } from './core/types';
+import type { ValueConverter } from './conversion';
 import type { ValuePair } from './iterable';
 import type { LegacyPropertyMetadata } from './legacy-platform-object';
 import type { StampedImplInstance, PlatformRecord } from './platform-object';
@@ -59,6 +60,9 @@ export type MemberBinding = Partial<Record<MemberFunctionKind, JSFunction>> & {
   attributeSteps?: AttributeSteps;
   constructorBehavior?: ConstructorBehavior;
   operationSteps?: OperationSteps;
+  /** Result conversion chosen from the operation's fixed declaration. */
+  convertResult?: ValueConverter;
+  isDefaultOperation?: boolean;
   stringificationBehavior?: StringificationBehavior;
   indexedPropertySteps?: IndexedPropertySteps;
   namedPropertySteps?: NamedPropertySteps;

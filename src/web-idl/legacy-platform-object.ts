@@ -174,7 +174,7 @@ export class LegacyPlatformObjectBinding {
     property: string | symbol,
     properties: LegacyPropertyMetadata,
   ): boolean {
-    if (typeof property === 'symbol') return Reflect.has(target, property);
+    if (typeof property === 'symbol') return property in target;
     if (this.#getOwnProperty(
       target,
       implementation,
@@ -182,7 +182,7 @@ export class LegacyPlatformObjectBinding {
       properties,
     )) return true;
     const parent = Reflect.getPrototypeOf(target);
-    return parent ? Reflect.has(parent, property) : false;
+    return parent ? property in parent : false;
   }
 
   // Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty.

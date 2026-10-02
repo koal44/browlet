@@ -695,12 +695,14 @@ type RealmFunctionFactory = <Result>(
 ) => JSFunction<Result>;
 
 const callableFunctionFactorySource = `
-  (steps) => ({
-    call() {
-      "use strict";
-      return steps(this, [...arguments], undefined);
-    },
-  }).call
+  (steps) => {
+    "use strict";
+    return {
+      call(...argumentsList) {
+        return steps(this, argumentsList, undefined);
+      },
+    }.call;
+  }
 `;
 
 // Binding owns construction and must return the object. An ordinary function's
@@ -708,9 +710,9 @@ const callableFunctionFactorySource = `
 // newTarget.prototype before the binding's own prototype lookup.
 const constructibleFunctionFactorySource = `
   ((Proxy) => (steps) => {
-    const target = function() {
-      "use strict";
-      return steps(this, [...arguments], undefined);
+    "use strict";
+    const target = function(...argumentsList) {
+      return steps(this, argumentsList, undefined);
     };
     const function_ = new Proxy(target, {
       construct(_target, argumentsList, newTarget) {

@@ -75,6 +75,7 @@ export class AssembledInterface {
 
   /** Whether this interface or one of its ancestors has the requested primary declaration. */
   implements(expectedAssembled: AssembledInterface): boolean {
+    if (this.primary === expectedAssembled.primary) return true;
     if (!this.#implementedPrimaries) {
       this.#implementedPrimaries = new Set();
       for (const assembled of this.getInheritanceChain()) this.#implementedPrimaries.add(assembled.primary);
@@ -501,12 +502,17 @@ export class AssembledDictionary {
   parentAssembled: AssembledDictionary | undefined;
   /** Conversion reads inherited members first, then lexicographically sorted own and partial members. */
   members: AssembledDictionaryMember[] = [];
-  /** Member lookup includes inherited, primary, and partial declarations. */
-  membersByName = new Map<string, AssembledDictionaryMember>();
+
+  #objectMembers: AssembledDictionaryMember[] | undefined;
 
   constructor(primary: DictionaryDefinition, partials: PartialDictionaryDefinition[] = []) {
     this.primary = primary;
     this.partials = partials;
+  }
+
+  /** Only members that can hold objects need implementation adaptation. */
+  getObjectMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
+    return this.#objectMembers ??= this.members.filter((member) => !assembly.isPrimitiveType(member.type));
   }
 
   /** A dictionary is a JSON type only when all of its member types are JSON types. */
@@ -937,9 +943,6 @@ function assembleDictionary(
   });
   if (assembled.parentAssembled) assembled.members.push(...assembled.parentAssembled.members);
   for (const member of members) assembled.members.push(new AssembledDictionaryMember(member));
-  for (const member of assembled.members) {
-    if (!assembled.membersByName.has(member.name)) assembled.membersByName.set(member.name, member);
-  }
 }
 
 function appendValuesByName<Value>(

@@ -102,9 +102,10 @@ export function getAsyncIteratorNextValue(
     if (!isObject(iterationResult)) {
       throw new realm.intrinsics.typeError('Iterator result is not an object');
     }
-    if (Reflect.get(iterationResult, 'done')) return endOfIteration;
+    const iteration = iterationResult as { done?: unknown; value?: unknown; };
+    if (iteration.done) return endOfIteration;
     return convert(
-      Reflect.get(iterationResult, 'value'),
+      iteration.value,
       iterator.elementType,
     );
   });
@@ -250,9 +251,10 @@ function adaptSyncIteratorResult(
     if (!isObject(result)) {
       throw new realm.intrinsics.typeError('Iterator result is not an object');
     }
-    const done = Boolean(Reflect.get(result, 'done'));
+    const iteration = result as { done?: unknown; value?: unknown; };
+    const done = Boolean(iteration.done);
     const valuePromise = createResolvedPromise(
-      Reflect.get(result, 'value'),
+      iteration.value,
       realm,
     );
     return reactToPromise(valuePromise, realm, (value) =>

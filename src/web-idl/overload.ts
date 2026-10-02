@@ -5,11 +5,48 @@ import {
 import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
 import { createIDLAsyncSequence } from './async-sequence';
 import {
-  convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
+  convertToIDL, createDefaultValueFactory, createIDLConverter, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import type { WebIDLType } from './core/index';
 import { InternalError } from '../infra/internal-error';
+
+/** Prepare invocation conversion once when installing a callable group in a realm. */
+export function createOverloadResolver<Callable extends AssembledCallable>(
+  overloads: AssembledOverloads<Callable>,
+  context: ConversionContext,
+): (argumentsList: unknown[]) => ResolvedOverload<Callable> {
+  if (overloads.callables.length !== 1) {
+    return (argumentsList) => resolveOverload(overloads, argumentsList, context);
+  }
+  const callable = overloads.callables[0]!;
+  const converters = callable.arguments.map((argument) => {
+    const convert = createIDLConverter(argument.type, context);
+    const getDefault = argument.primary.default === undefined
+      ? undefined
+      : createDefaultValueFactory(argument.primary.default, argument.type);
+    return (value: unknown) => argument.optionality === 'optional' && value === undefined
+      ? getDefault ? getDefault(context) : missingArgument
+      : convert(value);
+  });
+  const variadic = callable.variadicArgument && converters.at(-1);
+  // A single callable needs the argument-count check and conversions, but no
+  // candidate search or distinguishing-argument processing.
+  // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
+  return (argumentsList) => {
+    if (argumentsList.length < callable.minimumArgumentCount) {
+      return throwTypeError(context, 'No overload accepts this argument count');
+    }
+    const count = variadic
+      ? Math.max(converters.length - 1, argumentsList.length)
+      : converters.length;
+    const values: unknown[] = [];
+    for (let index = 0; index < count; index++) {
+      values.push((converters[index] ?? variadic!)(argumentsList[index]));
+    }
+    return { callable, values };
+  };
+}
 
 // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
 // Prepared argument-count groups replace the spec's expanded type and optionality lists.

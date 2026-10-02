@@ -46,11 +46,11 @@ describe('Web IDL result allocation', () => {
       expect(getBufferSourceCopy(second)).toEqual(Uint8Array.of(1, 2, 3, 4));
     });
 
-    it.each(['record', 'dictionary'] as const)(`allocates a %s and its nested sequence in the ${allocation} realm`, (kind) => {
+    it.each(['record', 'dictionary', 'dictionary union'] as const)(`allocates a %s and its nested sequence in the ${allocation} realm`, (kind) => {
       const type = kind === 'record'
         ? record(idlType.DOMString, sequence(idlType.ByteString))
-        : reference('ResultDictionary');
-      const value = new Map([['names', ['a=1']]]);
+        : kind === 'dictionary' ? reference('ResultDictionary') : union(reference('ResultDictionary'), idlType.DOMString);
+      const value = kind === 'record' ? new Map([['names', ['a=1']]]) : { names: ['a=1'] };
       const { call, realm, methodRealm } = createFixture(type, allocation, value);
       const target = allocation === 'method' ? methodRealm : realm;
       const result = call('create') as { names: string[]; };

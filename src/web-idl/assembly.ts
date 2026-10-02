@@ -1,5 +1,5 @@
 import type {
-  AnnotatedType, UnionType, SimpleTypeName, RecordType, SequenceType, ExtendedAttribute, WebIDLType,
+  AnnotatedType, UnionType, SimpleTypeName, SequenceType, ExtendedAttribute, WebIDLType, IntegerLiteral,
 } from './core/types';
 import { sequence } from './core/helpers';
 import type { Definition } from './core/declarations';
@@ -40,6 +40,8 @@ export class DefinitionAssembly {
 
   // Internal conversions reuse these derived descriptors for the assembly's lifetime.
   #sequenceTypesByElementType = new Map<WebIDLType, SequenceType>();
+  // Declaration literals are immutable; their numeric conversion still runs for each use.
+  #integerLiteralValues = new Map<IntegerLiteral, bigint>();
 
   constructor(definitions: Definition[]) {
     this.interfaces = new AssembledInterfaces(definitions);
@@ -82,6 +84,20 @@ export class DefinitionAssembly {
       type: cached.type,
       extendedAttributes: [...extendedAttributes, ...cached.extendedAttributes],
     };
+  }
+
+  /** Parse an immutable declaration's integer text once, before applying its member type. */
+  getIntegerLiteralValue(literal: IntegerLiteral): bigint {
+    const cached = this.#integerLiteralValues.get(literal);
+    if (cached !== undefined) return cached;
+    const negative = literal.value.startsWith('-');
+    const unsigned = negative ? literal.value.slice(1) : literal.value;
+    const integer = /^0[0-7]+$/.test(unsigned)
+      ? BigInt(`0o${unsigned.slice(1)}`)
+      : BigInt(unsigned);
+    const value = negative ? -integer : integer;
+    this.#integerLiteralValues.set(literal, value);
+    return value;
   }
 
   /** Reuse a sequence descriptor for operations that collect values of an existing type. */
@@ -269,6 +285,17 @@ export class DefinitionAssembly {
     return key;
   }
 
+  /** Whether conversion can only produce JavaScript primitives, including null. */
+  isPrimitiveType(type: WebIDLType): boolean {
+    return this.getCandidateTypes(type).every((candidate) => {
+      if (candidate.kind === 'reference') return this.enumerations.has(candidate.name);
+      return candidate.kind === 'simple' && (
+        numericTypeNames.has(candidate.name) || stringTypeNames.has(candidate.name) ||
+        candidate.name === 'boolean' || candidate.name === 'bigint' || candidate.name === 'undefined'
+      );
+    });
+  }
+
   /** Whether an overload candidate includes a string or enumeration type. */
   hasStringCandidate(type: WebIDLType): boolean {
     return this.#getTypeAnalysis(type).hasString;
@@ -329,9 +356,9 @@ export class DefinitionAssembly {
     return this.#getTypeAnalysis(type).sequenceElementType;
   }
 
-  /** Find an assembled dictionary or record type for a converted Map value. */
-  findDictionaryOrRecord(type: WebIDLType): AssembledDictionary | RecordType | undefined {
-    return this.#getTypeAnalysis(type).dictionaryOrRecord;
+  /** Find a record's value type through aliases, nullable wrappers, and unions. */
+  findRecordValueType(type: WebIDLType): WebIDLType | undefined {
+    return this.#getTypeAnalysis(type).recordValueType;
   }
 
   /** Resolve aliases and annotations before selecting an observable array's element type. */
@@ -401,7 +428,7 @@ export class DefinitionAssembly {
       nullableMemberCount: 0,
       soleNumericTypeName: undefined,
       sequenceElementType: undefined,
-      dictionaryOrRecord: undefined,
+      recordValueType: undefined,
     };
     let numericCount = 0;
     for (const candidate of this.getCandidateTypes(type)) {
@@ -420,10 +447,9 @@ export class DefinitionAssembly {
         }
         case 'reference':
           analysis.hasString ||= this.enumerations.has(candidate.name);
-          analysis.dictionaryOrRecord ??= this.dictionaries.get(candidate.name);
           break;
         case 'record':
-          analysis.dictionaryOrRecord ??= candidate;
+          analysis.recordValueType ??= candidate.value;
           break;
         case 'sequence':
           analysis.sequenceElementType ??= candidate.type;
@@ -488,7 +514,7 @@ type TypeAnalysis = {
   nullableMemberCount: number;
   soleNumericTypeName: SimpleTypeName | undefined;
   sequenceElementType: WebIDLType | undefined;
-  dictionaryOrRecord: AssembledDictionary | RecordType | undefined;
+  recordValueType: WebIDLType | undefined;
 };
 
 const jsonSimpleTypeNames = new Set([

@@ -77,13 +77,12 @@ export class GlobalPlatformObjectBinding {
         }
         if (isDataDescriptor(descriptor)) return descriptor.value as unknown;
         if (!descriptor.get) return undefined;
-        const getter = Reflect.get(descriptor, 'get') as CallableFunction;
-        return Reflect.apply(getter, receiver, []) as unknown;
+        return Reflect.apply(descriptor.get, receiver, []) as unknown;
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),
       // Project Proxy adapter for ECMAScript §10.1.7.1 OrdinaryHasProperty with named [[GetOwnProperty]].
       has: (target_, property) =>
-        ownDescriptor(property) !== undefined || Reflect.has(target_, property),
+        ownDescriptor(property) !== undefined || property in target_,
       // Web IDL §3.7.4.5 [[PreventExtensions]].
       preventExtensions: () => false,
       // Project delegate to ECMAScript §10.1.9.2 OrdinarySetWithOwnDescriptor.

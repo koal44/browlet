@@ -28,7 +28,7 @@ export function callUserObjectOperation(
       let receiver = projectCallbackReceiver(thisArgument);
 
       if (!isCallable(function_)) {
-        function_ = Reflect.get(value.object, operationName) as unknown;
+        function_ = (value.object as Record<string, unknown>)[operationName];
         if (!isCallable(function_)) {
           throw new value.realm.intrinsics.typeError(
             `${operationName} is not callable`,

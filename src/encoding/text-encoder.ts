@@ -48,17 +48,13 @@ export class TextEncoderImpl {
   encodeInto(
     source: string,
     destination: Uint8Array,
-  ): Map<keyof TextEncoderEncodeIntoResult, number> {
+  ): TextEncoderEncodeIntoResult {
     // An internal view of the same storage bypasses author-shadowed properties.
     const bytes = new Uint8Array(
       getBufferSourceUnderlyingBuffer(destination), getBufferSourceByteOffset(destination),
       getBufferSourceByteLength(destination),
     );
-    const result = utf8EncodeInto(source, bytes);
-    return new Map([
-      ['read', result.read],
-      ['written', result.written],
-    ]);
+    return utf8EncodeInto(source, bytes);
   }
 }
 

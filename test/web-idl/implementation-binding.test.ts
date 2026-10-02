@@ -752,10 +752,7 @@ describe('Web IDL implementation bindings', () => {
           {
             invoke() {
               const value = createResult('dictionary');
-              return new Map([
-                ['first', value],
-                ['second', value],
-              ]);
+              return { first: value, second: value };
             },
           },
         ),
@@ -1069,20 +1066,58 @@ describe('Web IDL implementation bindings', () => {
     expect(reportException.mock.calls).toEqual([[error], [error]]);
   });
 
-  it.each(['dictionary', 'record'] as const)('preserves __proto__ as an own %s member when adapting arguments', (kind) => {
+  it('keeps dictionary records fresh and absent members out of their property order', () => {
+    const received: Record<string, unknown>[] = [];
+    class RecordReceiverImpl {
+      accept(value: Record<string, unknown>) { received.push(value); }
+    }
+    const dictionary = defineDictionary({
+      name: 'Members',
+      members: [
+        dictMember('z', idlType.DOMString, { default: 'default' }),
+        dictMember('a', idlType.object),
+        dictMember('m', idlType.object),
+      ],
+    });
+    const definition = defineInterface({
+      name: 'RecordReceiver', exposed: '*', implementation: impl(RecordReceiverImpl),
+      members: [ctor(), op('accept', idlType.undefined, [arg('value', reference(dictionary.name))])],
+    });
+    const realm = new Realm();
+    new BindingWorld([dictionary, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => {
+      accept(value: Record<string, unknown>): void;
+    };
+    const object = new Constructor();
+    const value = {};
+    object.accept({ a: value });
+    received[0]!.z = 'changed';
+    object.accept({ m: value });
+    object.accept({});
+
+    expect(received.map((record) => Object.keys(record))).toEqual([['a', 'z'], ['m', 'z'], ['z']]);
+    expect(received[0]!.a).toBe(value);
+    expect(received[1]!.m).toBe(value);
+    expect(received[1]!.z).toBe('default');
+    expect(received[2]!.z).toBe('default');
+    expect(new Set(received).size).toBe(3);
+    expect(received.every((record) => Object.getPrototypeOf(record) === Object.prototype)).toBe(true);
+  });
+
+  it.each(['dictionary', 'required dictionary', 'record'] as const)('preserves __proto__ as an own %s member when adapting arguments', (kind) => {
     let received: Record<string, unknown> | undefined;
     class MemberReceiverImpl {
       accept(value: Record<string, unknown>) { received = value; }
     }
     const dictionary = defineDictionary({
-      name: 'Members', members: [dictMember('__proto__', idlType.object)],
+      name: 'Members', members: [dictMember('__proto__', idlType.object, { required: kind === 'required dictionary' })],
     });
     const definition = defineInterface({
       name: 'MemberReceiver', exposed: '*', implementation: impl(MemberReceiverImpl),
       members: [
         ctor(),
         op('accept', idlType.undefined, [
-          arg('value', kind === 'dictionary' ? reference(dictionary.name) : record(idlType.DOMString, idlType.object)),
+          arg('value', kind === 'record' ? record(idlType.DOMString, idlType.object) : reference(dictionary.name)),
         ]),
       ],
     });

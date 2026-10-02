@@ -1,5 +1,7 @@
 // Web IDL §2.8 Exceptions and §2.8.1 Base DOMException error names
 
+import { ExceptionRequestStamper } from '../../infra/exceptions';
+
 export const DOMExceptionNames = {
   indexSize: 'IndexSizeError',
   hierarchyRequest: 'HierarchyRequestError',
@@ -82,7 +84,7 @@ export type DOMExceptionName = typeof DOMExceptionNames[
  * native exception's name and message to create the realm-owned platform object.
  */
 export class DOMException extends globalThis.DOMException {
-  #brand: undefined;
+  #brand = ExceptionRequestStamper.stamp(this, 'DOMException');
 
   static is(value: unknown): value is DOMException {
     return typeof value === 'object' && value !== null && #brand in value;

@@ -94,9 +94,10 @@ export function getV(value: unknown, key: PropertyKey, realm: JSRealm): unknown 
       'Cannot get a property from null or undefined',
     );
   }
-  const object: object = isObject(value)
-    ? value
-    : realm.intrinsics.object(value) as object;
+  if (isObject(value)) return (value as Record<PropertyKey, unknown>)[key];
+  const object = realm.intrinsics.object(value) as object;
+  // Primitive boxing selects the realm's prototype, but the getter's receiver
+  // must remain the original primitive rather than the temporary box.
   return Reflect.get(object, key, value) as unknown;
 }
 
@@ -107,7 +108,8 @@ export function toPrimitive(
   if (!isObject(value)) return value as Primitive;
 
   const hint = preferredType ?? 'default';
-  const exotic = Reflect.get(value, Symbol.toPrimitive) as unknown;
+  const object = value as Record<PropertyKey, unknown>;
+  const exotic = object[Symbol.toPrimitive];
   if (exotic !== undefined && exotic !== null) {
     if (!isCallable(exotic)) {
       throw new TypeError('Symbol.toPrimitive is not callable');
@@ -123,7 +125,7 @@ export function toPrimitive(
     ? ['toString', 'valueOf']
     : ['valueOf', 'toString'];
   for (const name of methods) {
-    const method = Reflect.get(value, name) as unknown;
+    const method = object[name];
     if (!isCallable(method)) continue;
     const result = Reflect.apply(method, value, []);
     if (!isObject(result)) return result as Primitive;
