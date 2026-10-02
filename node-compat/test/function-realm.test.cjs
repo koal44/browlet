@@ -1,7 +1,10 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { join } = require('node:path');
+const { setImmediate: nextTurn } = require('node:timers/promises');
 const { test } = require('node:test');
+const { addonBuild } = require('../node-base.cjs');
 const compat = require('../addon/index.cjs');
 
 test('function realm follows bound and proxy targets without author property access', () => {
@@ -30,4 +33,31 @@ test('function realm follows bound and proxy targets without author property acc
     code: 'ERR_REVOKED_PROXY',
   });
   assert.throws(() => compat.getFunctionRealm({}), { code: 'ERR_INVALID_ARG_TYPE' });
+});
+
+test('reloading the addon preserves existing realm references', () => {
+  const path = join(addonBuild(process.env.NODE_BASE ?? '24.19.0'), 'node-compat.node');
+  const first = require(path);
+  const handle = compat.createContextHandle();
+  const callback = compat.runInContext('() => 1', handle);
+  const realm = first.getFunctionRealm(callback);
+  delete require.cache[require.resolve(path)];
+  const second = require(path);
+  assert.notEqual(second, first);
+  assert.equal(second.getFunctionRealm(callback), realm);
+  assert.equal(first.getFunctionRealm(callback), realm);
+  assert.equal(second.getRealm(callback), realm);
+});
+
+test('realm lookup keys do not retain discarded callbacks or their contexts', async () => {
+  function allocate() {
+    const handle = compat.createContextHandle();
+    const callback = compat.runInContext('() => 1', handle);
+    const realm = compat.getFunctionRealm(callback);
+    assert.equal(realm, handle.realm);
+    return [handle, callback, realm].map(value => new WeakRef(value));
+  }
+  const references = allocate();
+  for (let index = 0; index < 6; index++) { await nextTurn(); global.gc(); }
+  assert.ok(references.every(reference => reference.deref() === undefined));
 });

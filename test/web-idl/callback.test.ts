@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { AssembledCallable } from '../../src/web-idl/assembled';
+import { AssembledCallbackFunction } from '../../src/web-idl/assembled';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
 import {
-  callUserObjectOperation, constructCallbackFunction,
-  convertWebIDLArguments, invokeCallbackFunction, missingArgument,
+  callUserObjectOperation, constructCallbackFunction, invokeCallbackFunction, missingArgument,
 } from '../../src/web-idl/callback';
 import {
   isCallbackFunctionValue, isCallbackInterfaceRecord,
@@ -15,7 +14,7 @@ import {
 import { convertToIDL, convertToJavaScript } from '../../src/web-idl/conversion';
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
-  integer, nullable, promise as promiseType, reference, union,
+  integer, nullable, promise as promiseType, reference, sequence, union,
 } from '../../src/web-idl/core/index';
 import { isIDLPromiseRecord } from '../../src/web-idl/promise-record';
 
@@ -61,6 +60,43 @@ describe('Web IDL callbacks', () => {
       'clean callback',
       'clean script',
     ]);
+  });
+
+  it('reuses callback conversion without sharing allocation realms or captured contexts', () => {
+    const targetRealm = new Realm();
+    const definition = defineCallbackFunction({
+      name: 'SampleValues', returns: idlType.double,
+      arguments: [
+        { name: 'values', type: sequence(idlType.long) },
+        { name: 'extra', type: idlType.long, variadic: true },
+      ],
+    });
+    const binding = new RealmBinding(
+      new DefinitionAssembly([definition]), targetRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
+    );
+    const capture = vi.spyOn(targetRealm.callbacks, 'captureContext');
+    for (const realm of [new Realm(), new Realm()]) {
+      const callback = realm.evaluate(`(values, ...extra) => {
+        if (!(values instanceof Array)) throw new Error('Wrong argument realm');
+        return globalThis.fail ? Infinity : values[0] + extra.length;
+      }`, 'prepared-callback.js');
+      const firstContext = {};
+      const secondContext = {};
+      capture.mockReturnValueOnce(firstContext).mockReturnValueOnce(secondContext);
+      const values = [0, 1].map(() => convertToIDL(callback, reference(definition.name), binding.defaultConversionContext));
+      const prepare = vi.spyOn(realm.callbacks, 'prepareToRunCallback');
+      const clean = vi.spyOn(realm.callbacks, 'cleanUpAfterRunningCallback');
+      for (const value of values) {
+        if (!isCallbackFunctionValue(value)) throw new Error('Expected a converted callback');
+        expect(invokeCallbackFunction(value, [[4], 1, 2], 'rethrow')).toBe(6);
+      }
+      expect(prepare.mock.calls).toEqual([[firstContext], [secondContext]]);
+      Reflect.set(realm.global, 'fail', true);
+      const value = values[0]!;
+      if (!isCallbackFunctionValue(value)) throw new Error('Expected a converted callback');
+      expect(() => invokeCallbackFunction(value, [[4]], 'rethrow')).toThrow(realm.intrinsics.typeError);
+      expect(clean.mock.calls).toEqual([[firstContext], [secondContext], [firstContext]]);
+    }
   });
 
   it('round-trips and invokes callback-interface objects in their associated realm', () => {
@@ -207,22 +243,22 @@ describe('Web IDL callbacks', () => {
   it('truncates trailing missing callback arguments', () => {
     const { binding } = createCallbackBinding();
     const ctx = binding.defaultConversionContext;
-    const assembled = new AssembledCallable({
+    const assembled = new AssembledCallbackFunction(defineCallbackFunction({
+      name: 'MissingArguments', returns: idlType.undefined,
       arguments: [
         { name: 'first', type: idlType.long },
         { name: 'second', type: idlType.long },
         { name: 'third', type: idlType.long },
       ],
-    });
+    }));
 
-    expect(convertWebIDLArguments(
+    const converter = binding.getCallbackConverter(assembled);
+    expect(converter.convertArguments(
       [missingArgument, 2, missingArgument],
-      assembled,
       ctx,
     )).toEqual([undefined, 2]);
-    expect(convertWebIDLArguments(
+    expect(converter.convertArguments(
       [1, missingArgument, missingArgument],
-      assembled,
       ctx,
     )).toEqual([1]);
   });

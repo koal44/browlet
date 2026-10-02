@@ -17,6 +17,7 @@ import {
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
+import { constructCallbackFunction, type CallbackFunctionAdapter } from '../../src/web-idl/index';
 
 describe('Web IDL implementation bindings', () => {
   it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
@@ -1104,6 +1105,41 @@ describe('Web IDL implementation bindings', () => {
     expect(received.every((record) => Object.getPrototypeOf(record) === Object.prototype)).toBe(true);
   });
 
+  it('keeps defaulted and supplied primitive sequences independent across implementation calls', () => {
+    type Options = { values: number[][]; };
+    const received: Options[] = [];
+    class SequenceReceiverImpl {
+      accept(options: Options) {
+        received.push(options);
+        options.values.push([7]);
+        options.values[0]!.push(8);
+      }
+    }
+    const numbers = defineTypedef({ name: 'Numbers', type: sequence(idlType.long) });
+    const dictionary = defineDictionary({
+      name: 'Options',
+      members: [dictMember('values', sequence(reference(numbers.name)), { default: { kind: 'empty-sequence' } })],
+    });
+    const definition = defineInterface({
+      name: 'SequenceReceiver', exposed: '*', implementation: impl(SequenceReceiverImpl),
+      members: [ctor(), op('accept', idlType.undefined, [arg('options', reference(dictionary.name))])],
+    });
+    const realm = new Realm();
+    new BindingWorld([numbers, dictionary, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => { accept(options: { values?: unknown; }): void; };
+    const receiver = new Constructor();
+    receiver.accept({});
+    receiver.accept({});
+    const source = [['3']];
+    receiver.accept({ values: source });
+    receiver.accept({ values: source });
+
+    expect(received.map((options) => options.values)).toEqual([[[7, 8]], [[7, 8]], [[3, 8], [7]], [[3, 8], [7]]]);
+    expect(source).toEqual([['3']]);
+    expect(received[0]!.values).not.toBe(received[1]!.values);
+    expect(received[2]!.values[0]).not.toBe(received[3]!.values[0]);
+  });
+
   it.each(['dictionary', 'required dictionary', 'record'] as const)('preserves __proto__ as an own %s member when adapting arguments', (kind) => {
     let received: Record<string, unknown> | undefined;
     class MemberReceiverImpl {
@@ -1135,6 +1171,56 @@ describe('Web IDL implementation bindings', () => {
     expect(Object.getPrototypeOf(received)).toBe(Object.prototype);
   });
 
+  it('projects implementation-provided callbacks without invoking their property traps', () => {
+    const callback = new Proxy(() => 1, {
+      get() { throw new Error('Unexpected callback property read'); },
+      has() { throw new Error('Unexpected callback property check'); },
+    });
+    class CallbackOwnerImpl {
+      callback = callback;
+      callbackUnion = callback;
+    }
+    const result = defineCallbackFunction({ name: 'Result', returns: idlType.long, arguments: [] });
+    const definition = defineInterface({
+      name: 'CallbackOwner', exposed: ['Window'], implementation: impl(CallbackOwnerImpl),
+      members: [
+        ctor([]),
+        roAttr('callback', reference(result.name)),
+        roAttr('callbackUnion', union(idlType.DOMString, reference(result.name))),
+      ],
+    });
+    const realm = new Realm();
+    new BindingWorld([result, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, 'CallbackOwner') as new() => {
+      callback: unknown; callbackUnion: unknown;
+    };
+    const owner = new Constructor();
+    expect(owner.callback).toBe(callback);
+    expect(owner.callbackUnion).toBe(callback);
+  });
+
+  it('projects callbacks whose return type is the same callback type', () => {
+    type Next = () => Next;
+    class RecursiveCallbacksImpl {
+      next(callback: Next): Next { return callback(); }
+    }
+    const callback = defineCallbackFunction({
+      name: 'Next', returns: reference('Next'), arguments: [],
+    });
+    const definition = defineInterface({
+      name: 'RecursiveCallbacks', exposed: '*', implementation: impl(RecursiveCallbacksImpl),
+      members: [
+        ctor(),
+        op('next', reference(callback.name), [arg('callback', reference(callback.name), onError('rethrow'))]),
+      ],
+    });
+    const realm = new Realm();
+    new BindingWorld([callback, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => { next(callback: Next): Next; };
+    const next: Next = () => next;
+    expect(new Constructor().next(next)).toBe(next);
+  });
+
   it('projects callback functions into ordinary implementation callables', () => {
     type Increment = (this: unknown, value: number) => number;
     type CallbackOptions = { callback: Increment; };
@@ -1153,6 +1239,10 @@ describe('Web IDL implementation bindings', () => {
       get callback(): Increment {
         if (!this.#callback) throw new Error('Callback has not been set');
         return this.#callback;
+      }
+
+      get callbackUnion(): string | Increment {
+        return this.callback;
       }
 
       invoke(
@@ -1198,8 +1288,8 @@ describe('Web IDL implementation bindings', () => {
         callback();
       }
 
-      construct(callback: CallableFunction): unknown {
-        return Reflect.construct(callback, [4]) as unknown;
+      construct(callback: CallbackFunctionAdapter): unknown {
+        return constructCallbackFunction(callback, [4]);
       }
     }
 
@@ -1235,6 +1325,7 @@ describe('Web IDL implementation bindings', () => {
       members: [
         ctor([], { invoke() {} }),
         roAttr('callback', reference(increment.name)),
+        roAttr('callbackUnion', reference(callbackOrString.name)),
         roAttr('nativeCallback', reference(increment.name)),
         roAttr('nativeCallbackUnion', reference(callbackOrString.name)),
         op('invoke', idlType.long, [
@@ -1299,6 +1390,7 @@ describe('Web IDL implementation bindings', () => {
       interfaceIDL.name,
     ) as new() => {
       callback: unknown;
+      callbackUnion: unknown;
       construct(callback: unknown): unknown;
       invoke(callback: unknown, value: number, thisArgument: object): number;
       invokeDictionary(options: { callback: unknown; }): number;
@@ -1322,6 +1414,7 @@ describe('Web IDL implementation bindings', () => {
     expect(instance.invoke(callback, 4.8, expectedThis)).toBe(5);
     expect(receivedExpectedThis).toBe(true);
     expect(instance.callback).toBe(callback);
+    expect(instance.callbackUnion).toBe(callback);
     expect(instance.nativeCallback(4)).toBe(6);
     expect(instance.nativeCallbackUnion(4)).toBe(7);
     expect(instance.invokeUnion(callback)).toBe(3);
@@ -1352,6 +1445,88 @@ describe('Web IDL implementation bindings', () => {
       this.value = value;
     }
     expect(instance.construct(Constructed)).toMatchObject({ value: 4 });
+  });
+
+  it('constructs adapted callbacks whose converted result is a primitive', () => {
+    class FactoryOwnerImpl {
+      construct(callback: CallbackFunctionAdapter): unknown {
+        return constructCallbackFunction(callback, [4]);
+      }
+    }
+    const factory = defineCallbackFunction({
+      name: 'NumberFactory', returns: idlType.double,
+      arguments: [arg('value', idlType.long)],
+    });
+    const definition = defineInterface({
+      name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
+      members: [
+        ctor(),
+        op('construct', idlType.double, [arg('callback', reference(factory.name))]),
+      ],
+    });
+    const realm = new Realm();
+    new BindingWorld([factory, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => {
+      construct(callback: (value: number) => object): number;
+    };
+    function Build(value: number) {
+      expect(new.target).toBe(Build);
+      return { valueOf: () => value + 2 };
+    }
+
+    expect(new Constructor().construct(Build)).toBe(6);
+  });
+
+  it('retains callback realms and captured contexts through explicit construction', () => {
+    class FactoryOwnerImpl {
+      construct(callback: CallbackFunctionAdapter): unknown {
+        return constructCallbackFunction(callback, [4]);
+      }
+    }
+    const factory = defineCallbackFunction({
+      name: 'NumberFactory', returns: idlType.double,
+      arguments: [arg('value', idlType.long)],
+    });
+    const definition = defineInterface({
+      name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
+      members: [ctor(), op('construct', idlType.double, [arg('callback', reference(factory.name))])],
+    });
+    const realm = new Realm();
+    const callbackRealm = new Realm();
+    new BindingWorld([factory, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => { construct(callback: unknown): number; };
+    const owner = new Constructor();
+    const prototypeReads = { count: 0 };
+    Reflect.set(callbackRealm.global, 'prototypeReads', prototypeReads);
+    const callback = callbackRealm.evaluate(`new Proxy(function Build(value) {
+      return { valueOf: () => globalThis.fail ? Infinity : value };
+    }, {
+      get(target, property, receiver) {
+        if (property === 'prototype') prototypeReads.count++;
+        return Reflect.get(target, property, receiver);
+      }
+    })`, 'adapted-constructor.js');
+    const firstContext = {};
+    const secondContext = {};
+    vi.spyOn(realm.callbacks, 'captureContext').mockReturnValueOnce(firstContext).mockReturnValueOnce(secondContext);
+    const prepareScript = vi.spyOn(callbackRealm.callbacks, 'prepareToRunScript');
+    const cleanScript = vi.spyOn(callbackRealm.callbacks, 'cleanUpAfterRunningScript');
+    const prepareCallback = vi.spyOn(callbackRealm.callbacks, 'prepareToRunCallback');
+    const cleanCallback = vi.spyOn(callbackRealm.callbacks, 'cleanUpAfterRunningCallback');
+
+    expect(owner.construct(callback)).toBe(4);
+    expect(prototypeReads.count).toBe(1);
+    Reflect.set(callbackRealm.global, 'fail', true);
+    expect(() => owner.construct(callback)).toThrow(callbackRealm.intrinsics.typeError);
+    expect(prototypeReads.count).toBe(2);
+    expect(prepareCallback.mock.calls).toEqual([[firstContext], [secondContext]]);
+    expect(cleanCallback.mock.calls).toEqual(prepareCallback.mock.calls);
+    expect(prepareScript).toHaveBeenCalledTimes(2);
+    expect(cleanScript).toHaveBeenCalledTimes(2);
+
+    const arrow = callbackRealm.evaluate('() => ({})', 'adapted-non-constructor.js');
+    expect(() => owner.construct(arrow)).toThrow(realm.intrinsics.typeError);
+    expect(prepareScript).toHaveBeenCalledTimes(2);
   });
 
   it('provides platform-object capabilities through declarative bindings', () => {

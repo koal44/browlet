@@ -25,6 +25,19 @@ void Fail(Isolate* isolate, const char* code, const char* message) {
 
 void KeepRealm(const FunctionCallbackInfo<Value>&) {}
 
+struct RealmKey {
+  Global<Private> key;
+  size_t registrations = 0;
+};
+
+struct RealmKeyRegistration {
+  Isolate* isolate;
+};
+
+// Retain only the lookup key, never the contexts or their realm references.
+// Each addon environment releases its registration before isolate teardown.
+thread_local std::unordered_map<Isolate*, RealmKey> realm_keys;
+
 void GetRealm(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
   Local<Context> realm;
@@ -253,7 +266,7 @@ v8::Local<v8::Object> GetRealmReference(v8::Local<v8::Context> context) {
   using namespace v8;
   auto isolate = Isolate::GetCurrent();
   Context::Scope scope(context);
-  auto key = Private::ForApi(isolate, Text(isolate, "node-compat.realm"));
+  auto key = realm_keys.at(isolate).key.Get(isolate);
   auto binding = context->GetExtrasBindingObject();
   auto cached = binding->GetPrivate(context, key).ToLocalChecked();
   if (cached->IsObject()) return cached.As<Object>();
@@ -271,10 +284,20 @@ v8::Local<v8::Object> GetRealmReference(v8::Local<v8::Context> context) {
 void InitializeHostHooks(v8::Local<v8::Object> exports,
                          v8::Local<v8::Context> context) {
   using namespace v8;
+  auto isolate = Isolate::GetCurrent();
+  auto& realm_key = realm_keys[isolate];
+  if (realm_key.registrations++ == 0) {
+    realm_key.key.Reset(isolate, Private::ForApi(isolate, Text(isolate, "node-compat.realm")));
+  }
+  node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
+    auto registration = static_cast<RealmKeyRegistration*>(pointer);
+    auto found = realm_keys.find(registration->isolate);
+    if (--found->second.registrations == 0) realm_keys.erase(found);
+    delete registration;
+  }, new RealmKeyRegistration{isolate});
   Set(context, exports, "getRealm", Function::New(context, GetRealm).ToLocalChecked());
   Set(context, exports, "getFunctionRealm", Function::New(context, GetFunctionRealm).ToLocalChecked());
 #ifdef NODE_COMPAT_HOST_HOOKS
-  auto isolate = Isolate::GetCurrent();
   auto state = new HookState{isolate};
   node::AddEnvironmentCleanupHook(isolate, [](void* pointer) {
     auto state = static_cast<HookState*>(pointer);

@@ -503,16 +503,16 @@ export class AssembledDictionary {
   /** Conversion reads inherited members first, then lexicographically sorted own and partial members. */
   members: AssembledDictionaryMember[] = [];
 
-  #objectMembers: AssembledDictionaryMember[] | undefined;
+  #adaptedMembers: AssembledDictionaryMember[] | undefined;
 
   constructor(primary: DictionaryDefinition, partials: PartialDictionaryDefinition[] = []) {
     this.primary = primary;
     this.partials = partials;
   }
 
-  /** Only members that can hold objects need implementation adaptation. */
-  getObjectMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
-    return this.#objectMembers ??= this.members.filter((member) => !assembly.isPrimitiveType(member.type));
+  /** Members whose converted values still need an implementation representation. */
+  getAdaptedMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
+    return this.#adaptedMembers ??= this.members.filter((member) => assembly.requiresImplementationAdaptation(member.type));
   }
 
   /** A dictionary is a JSON type only when all of its member types are JSON types. */

@@ -21,13 +21,13 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   }
   const callable = overloads.callables[0]!;
   const converters = callable.arguments.map((argument) => {
-    const convert = createIDLConverter(argument.type, context);
+    const convert = createIDLConverter(argument.type, context.binding.assembly);
     const getDefault = argument.primary.default === undefined
       ? undefined
       : createDefaultValueFactory(argument.primary.default, argument.type);
     return (value: unknown) => argument.optionality === 'optional' && value === undefined
       ? getDefault ? getDefault(context) : missingArgument
-      : convert(value);
+      : convert(value, context);
   });
   const variadic = callable.variadicArgument && converters.at(-1);
   // A single callable needs the argument-count check and conversions, but no

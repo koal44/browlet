@@ -107,12 +107,32 @@ Dictionary conversion plans retain member converters on first use, while each
 invocation reads the current author properties in specification order. Successful
 primitive defaults can be reused; sequence and dictionary defaults remain fresh.
 The invocation still supplies its conversion realm, including for nested failures.
+Implementation argument and attribute adapters are prepared from those converted
+types. Known callbacks and dictionaries use their specific representations;
+unions and `any` retain runtime discrimination. Recursive dictionary members and
+callback results prepare their nested adapters on first use.
 Converted dictionaries carry their assembled definition and a member record;
 implementation adaptation updates that record in place, visiting only member
-types that can hold objects. Complete dictionaries reuse a property layout,
+types that need an implementation representation. Primitive values and sequences
+of them already have that representation, so adaptation keeps their fresh arrays.
+Complete dictionaries reuse a property layout,
 while sparse dictionaries collect only present entries
 before creating the record. Both produce ordinary objects with own data properties,
 including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
+Callback conversion plans likewise retain argument and return converters per
+callable. Each invocation supplies the callback's realm; each conversion captures
+the current callback context. Neither is cached in the plan.
+Prepared implementation adapters retain the callback converter and result adapter,
+so invocation does not rediscover the callback contract.
+Plans identify primitive arguments that need no projection, allowing invocation
+to reuse the internal argument list. Missing arguments, object projection, and
+exception requests still take the conversion path. Callable adapters are ordinary
+functions privately stamped with their converted callback value; projection reads
+that stamp without inspecting author function properties. Implementations use
+`constructCallbackFunction(adapter, args)` for construction, with the argument
+typed as `CallbackFunctionAdapter`. The explicit operation returns the converted
+IDL result, including primitives, and preserves callback realm and lifecycle
+handling. It does not use JavaScript construction on the adapter itself.
 Runtime consumers use assembled class instances,
 which retain their original declarations as `primary`. All realms registered in
 that world use these same instances, while their JavaScript constructors and

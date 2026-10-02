@@ -10,6 +10,8 @@ export {
   quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
 export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
+export { constructCallbackFunction } from './callback';
+export type { CallbackFunctionAdapter } from './callback-value';
 
 export type { BindingContext };
 export type { AssembledInterface } from './assembled';

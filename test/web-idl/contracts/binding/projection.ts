@@ -1,8 +1,8 @@
 import {
-  atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineInterface,
+  atArg, attrFn, ctor, BindingWorld, constructCallbackFunction, defineCallbackInterface, defineInterface,
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type BindingContext, type Definition, type StampedImplInstance, type StampedPlatformObject,
-  type AssembledInterface, type WebIDLEnvironment, type WebIDLRealm,
+  type AssembledInterface, type CallbackFunctionAdapter, type WebIDLEnvironment, type WebIDLRealm,
 } from '../../../../src/web-idl/index';
 import type { JSEnvironment } from '../../../../src/js-engine/environment';
 import type { RealmExecution } from '../../../../src/js-engine/index';
@@ -72,6 +72,10 @@ const callbackDefinition = defineCallbackInterface<HostEnvironment>({
     return callback.object;
   },
 });
+declare const callback: CallbackFunctionAdapter;
+constructCallbackFunction(callback, [4]);
+// @ts-expect-error Construction requires a converted callback, not an arbitrary author function.
+constructCallbackFunction(function() {}, []);
 const world = new BindingWorld<HostEnvironment>([definition, callbackDefinition]);
 const ctx = world.register(hostRealm, (context) => {
   context.realm.eventTimeStamp();

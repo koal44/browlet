@@ -33,6 +33,7 @@ import {
   LegacyPlatformObjectBinding, type LegacyPropertyMetadata,
 } from './legacy-platform-object';
 import { createOverloadResolver } from './overload';
+import { CallbackConverter, type CallbackCallable } from './callback';
 import { ObservableArrayBinding } from './observable-array';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
@@ -53,6 +54,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   #asyncIterables: AsynchronousIterableBinding;
   #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
   #dictionaryConverters = new Map<AssembledDictionary, DictionaryConverter>();
+  #callbackConverters = new Map<CallbackCallable, CallbackConverter>();
   #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
@@ -136,6 +138,16 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (!convert) {
       convert = createDictionaryConverter(assembled, this.assembly);
       this.#dictionaryConverters.set(assembled, convert);
+    }
+    return convert;
+  }
+
+  /** Reuse callback argument and result conversions without retaining a callback's realm. */
+  getCallbackConverter(assembled: CallbackCallable): CallbackConverter {
+    let convert = this.#callbackConverters.get(assembled);
+    if (!convert) {
+      convert = new CallbackConverter(assembled, this.assembly);
+      this.#callbackConverters.set(assembled, convert);
     }
     return convert;
   }
@@ -1086,7 +1098,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const enumeration = type.kind === 'reference' ? this.assembly.enumerations.get(type.name) : undefined;
     const convertInput = createIDLConverter(
       enumeration ? idlType.DOMString : attribute.type,
-      this.defaultConversionContext,
+      this.assembly,
       { attributeAssignment: true },
     );
 
@@ -1150,7 +1162,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
           return undefined;
         }
 
-        const idlValue = convertInput(value);
+        const idlValue = convertInput(value, this.defaultConversionContext);
         // https://webidl.spec.whatwg.org/#dfn-attribute-setter
         if (enumeration && !enumeration.hasValue(idlValue as string)) return undefined;
         const steps = binding.attributeSteps;

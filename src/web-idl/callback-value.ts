@@ -1,4 +1,5 @@
 import { isObject } from '../js-engine/index';
+import { Stamper } from '../infra/stamper';
 import type { AssembledCallbackFunction, AssembledCallbackInterface } from './assembled';
 import type { ConversionContext } from './conversion';
 import type { WebIDLRealm } from './realm';
@@ -70,11 +71,32 @@ export function isCallbackInterfaceRecord(
 
 export type CallbackValue = CallbackFunctionValue | CallbackInterfaceRecord;
 
+/** Attach the converted callback to its implementation callable without exposing properties. */
+export function stampCallbackFunction(adapter: CallableFunction, value: CallbackFunctionValue): CallbackFunctionAdapter {
+  return CallbackFunctionStamper.stamp(adapter, value);
+}
+
+/** Read the retained callback contract when an implementation requests construction. */
+export function getCallbackFunctionValue(adapter: CallbackFunctionAdapter): CallbackFunctionValue {
+  return CallbackFunctionStamper.get(adapter);
+}
+
+/** Project a converted callback or its callable adapter to the original author object. */
+export function getCallbackFunctionObject(value: unknown): object | undefined {
+  if (typeof value === 'function') {
+    return CallbackFunctionStamper.getObject(value);
+  }
+  return isCallbackFunctionValue(value) ? value.object : undefined;
+}
+
 export type CallbackFunctionValue = CallbackValueRecord & {
-  adapter?: CallableFunction;
+  adapter?: CallbackFunctionAdapter;
   assembled: AssembledCallbackFunction;
   kind: 'callback-function';
 };
+
+/** An implementation callable retaining its original callback's conversion and realm. */
+export type CallbackFunctionAdapter = CallableFunction & CallbackFunctionStamper;
 
 export type CallbackInterfaceRecord = CallbackValueRecord & {
   assembled: AssembledCallbackInterface;
@@ -96,3 +118,26 @@ function isCallbackValue(value: unknown): value is CallbackValue {
 }
 
 const callbackValueBrand: unique symbol = Symbol('Web IDL callback value');
+
+// Private fields stay on the adapter and do not invoke author Proxy traps.
+class CallbackFunctionStamper extends Stamper {
+  #value: CallbackFunctionValue;
+
+  private constructor(adapter: CallableFunction, value: CallbackFunctionValue) {
+    super(adapter);
+    this.#value = value;
+  }
+
+  static stamp(adapter: CallableFunction, value: CallbackFunctionValue): CallbackFunctionAdapter {
+    new CallbackFunctionStamper(adapter, value);
+    return adapter as CallbackFunctionAdapter;
+  }
+
+  static get(adapter: CallbackFunctionAdapter): CallbackFunctionValue {
+    return adapter.#value;
+  }
+
+  static getObject(callback: CallableFunction): object {
+    return #value in callback ? callback.#value.object : callback;
+  }
+}

@@ -9,7 +9,7 @@ import {
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
 import type { ConversionType, DefinitionAssembly, UnionInterfaceCandidate } from './assembly';
-import type { AssembledDictionary, AssembledEnumeration, AssembledInterface } from './assembled';
+import type { AssembledCallbackFunction, AssembledDictionary, AssembledEnumeration, AssembledInterface } from './assembled';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -17,7 +17,7 @@ import {
 } from './async-sequence';
 import {
   createCallbackFunctionValue, createCallbackInterfaceRecord,
-  isCallbackFunctionValue, isCallbackInterfaceRecord,
+  getCallbackFunctionObject, isCallbackInterfaceRecord, type CallbackFunctionValue,
 } from './callback-value';
 import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
 import { hasExtendedAttribute } from './core/helpers';
@@ -58,15 +58,14 @@ export function convertToIDL(
   }
 }
 
-/** Prepare a fixed input type for repeated conversions in the method's realm. */
+/** Prepare a fixed input type; each invocation supplies its conversion realm. */
 export function createIDLConverter(
   type: WebIDLType,
-  context: ConversionContext,
+  assembly: DefinitionAssembly,
   options: ConversionOptions = {},
-): (value: unknown) => unknown {
-  const assembly = context.binding.assembly;
+): ValueConverter {
   const convert = createIDLValueConverter(type, assembly, options);
-  return (value) => {
+  return (value, context) => {
     try {
       return convert(value, context);
     } catch (error) {
@@ -88,6 +87,7 @@ function createIDLValueConverter(
   const interfaceAssembled = resolved.kind === 'reference' ? assembly.interfaces.get(resolved.name) : undefined;
   const enumerationAssembled = resolved.kind === 'reference' ? assembly.enumerations.get(resolved.name) : undefined;
   const dictionaryAssembled = resolved.kind === 'reference' ? assembly.dictionaries.get(resolved.name) : undefined;
+  const callbackAssembled = resolved.kind === 'reference' ? assembly.callbackFunctions.get(resolved.name) : undefined;
   let convert: ValueConverter;
   if (resolved.kind === 'simple') {
     const integer = integerTypes[resolved.name];
@@ -107,6 +107,8 @@ function createIDLValueConverter(
     convert = (value, context) => convertToEnumeration(value, enumerationAssembled, context);
   } else if (dictionaryAssembled) {
     convert = (value, context) => convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+  } else if (callbackAssembled) {
+    convert = (value, context) => convertToCallbackFunction(value, callbackAssembled, context, legacyCallbackAttribute);
   } else {
     convert = (value, context) => convertJavaScriptValueByConversionType(
       value, conversion, context, [], legacyCallbackAttribute,
@@ -581,17 +583,7 @@ function convertJavaScriptValueToNamedType(
 
   const callbackFunctionAssembled = assembly.callbackFunctions.get(name);
   if (callbackFunctionAssembled) {
-    if (
-      typeof value !== 'function' &&
-      !(legacyCallbackAttribute && isObject(value))
-    ) return throwTypeError(context, `${name} is not callable`);
-    return createCallbackFunctionValue(
-      callbackFunctionAssembled,
-      value,
-      getCallbackRealm(value, context),
-      context.realm.callbacks.captureContext(),
-      context,
-    );
+    return convertToCallbackFunction(value, callbackFunctionAssembled, context, legacyCallbackAttribute);
   }
 
   const callbackInterfaceAssembled = assembly.callbackInterfaces.get(name);
@@ -652,8 +644,8 @@ function convertNamedTypeToJavaScript(
   if (assembly.enumerations.has(name)) return value;
 
   if (assembly.callbackFunctions.has(name)) {
-    if (isCallbackFunctionValue(value)) return value.object;
-    if (typeof value === 'function') return value;
+    const object = getCallbackFunctionObject(value);
+    if (object) return object;
     throw new InternalError(`IDL callback function ${name} is not callable`);
   }
   if (assembly.callbackInterfaces.has(name)) {
@@ -1017,9 +1009,9 @@ function convertUnionToJavaScript(
       if (projected) return projected;
     }
   }
-  if (isCallbackFunctionValue(value) || typeof value === 'function') {
-    const assembled = candidates.callbackFunction;
-    if (assembled) return isCallbackFunctionValue(value) ? value.object : value;
+  if (candidates.callbackFunction) {
+    const object = getCallbackFunctionObject(value);
+    if (object) return object;
   }
   if (isCallbackInterfaceRecord(value)) {
     const assembled = candidates.callbackInterface;
@@ -1135,7 +1127,22 @@ function isImplementedInterfaceType(
   return candidate.proxy.is(value);
 }
 
-// Project helper: resolve the callback object's associated realm.
+// https://webidl.spec.whatwg.org/#es-callback-function
+function convertToCallbackFunction(
+  value: unknown,
+  assembled: AssembledCallbackFunction,
+  context: ConversionContext,
+  legacyCallbackAttribute: boolean,
+): CallbackFunctionValue {
+  if (typeof value !== 'function' && !(legacyCallbackAttribute && isObject(value))) {
+    return throwTypeError(context, `${assembled.primary.name} is not callable`);
+  }
+  return createCallbackFunctionValue(
+    assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context,
+  );
+}
+
+// Resolve the callback object's associated realm for this conversion.
 function getCallbackRealm(
   value: object,
   context: ConversionContext,

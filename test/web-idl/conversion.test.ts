@@ -20,7 +20,7 @@ import { RealmBinding } from '../../src/web-idl/realm-binding';
 describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (mode) => {
   const convertToIDL: typeof convertDirectlyToIDL = mode === 'direct'
     ? convertDirectlyToIDL
-    : (value, type, context, options) => createIDLConverter(type, context, options)(value);
+    : (value, type, context, options) => createIDLConverter(type, context.binding.assembly, options)(value, context);
   const convertToJavaScript: typeof convertDirectlyToJavaScript = mode === 'direct'
     ? convertDirectlyToJavaScript
     : (value, type, context, allocateBuffers) =>

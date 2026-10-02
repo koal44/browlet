@@ -35,6 +35,7 @@ export class DefinitionAssembly {
   // Classification answers and comparison keys are computed on first use.
   #typeAnalyses = new Map<WebIDLType, TypeAnalysis>();
   #jsonTypeResults = new Map<WebIDLType, boolean>();
+  #implementationAdaptation = new Map<WebIDLType, boolean>();
   #overloadTypeKeys = new Map<WebIDLType, string>();
   #conversionTypeKeys = new Map<WebIDLType, string>();
 
@@ -285,15 +286,20 @@ export class DefinitionAssembly {
     return key;
   }
 
-  /** Whether conversion can only produce JavaScript primitives, including null. */
-  isPrimitiveType(type: WebIDLType): boolean {
-    return this.getCandidateTypes(type).every((candidate) => {
-      if (candidate.kind === 'reference') return this.enumerations.has(candidate.name);
-      return candidate.kind === 'simple' && (
+  /** Primitive values and sequences of them already have their implementation representation. */
+  requiresImplementationAdaptation(type: WebIDLType): boolean {
+    const cached = this.#implementationAdaptation.get(type);
+    if (cached !== undefined) return cached;
+    const required = this.getCandidateTypes(type).some((candidate) => {
+      if (candidate.kind === 'sequence') return this.requiresImplementationAdaptation(candidate.type);
+      if (candidate.kind === 'reference') return !this.enumerations.has(candidate.name);
+      return candidate.kind !== 'simple' || !(
         numericTypeNames.has(candidate.name) || stringTypeNames.has(candidate.name) ||
         candidate.name === 'boolean' || candidate.name === 'bigint' || candidate.name === 'undefined'
       );
     });
+    this.#implementationAdaptation.set(type, required);
+    return required;
   }
 
   /** Whether an overload candidate includes a string or enumeration type. */
