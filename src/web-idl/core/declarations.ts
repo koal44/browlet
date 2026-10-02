@@ -368,15 +368,11 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   exposed?: Exposure;
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
-  // Project metadata: adapt the converted callback interface for implementation code.
-  /**
-   * Turn a converted callback interface into the value received by implementation code.
-   * The callback retains its original object, associated realm, and IDL invocation steps.
-   */
-  adapt?: DeclarationCallback<'callback-interface-adapt', Env>;
+  /** Turn the callback carrier, including its invocation method, into the implementation's value. */
+  toImpl?: DeclarationCallback<'callback-interface-to-impl', Env>;
 };
 
-/** Declare an author callback object's operations and optional implementation adapter. */
+/** Declare an author callback object's operations and optional implementation conversion. */
 // https://webidl.spec.whatwg.org/#idl-callback-interfaces
 export function defineCallbackInterface<Env = unknown>(
   definition: Omit<CallbackInterfaceDefinition<Env>, 'kind'>,

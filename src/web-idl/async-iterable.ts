@@ -1,42 +1,37 @@
 import { isObject, type JSFunction } from '../js-engine/index';
 import { InternalPromise } from '../infra/promises';
 import { Stamper } from '../infra/stamper';
-import type { AssembledArgument, AssembledInterface } from './assembled';
+import type { AssembledArgument, AssembledCallable, AssembledInterface } from './assembled';
 import { endOfIteration } from './async-sequence';
-import {
-  convertToIDL, convertToJavaScript, materializeDefaultValue, type ConversionContext,
-} from './conversion';
-import {
-  idlType, type AsyncIterableMember,
-} from './core/index';
+import { jsToIDL, idlToJS, materializeDefaultValue, type ConversionContext } from './conversion';
+import { idlType, type AsyncIterableMember } from './core/index';
 import type { AsyncIteratorSteps } from './definition-binding';
 import { missingArgument } from './overload';
 import { getPlatformRecord, type PlatformRecord } from './platform-object';
-import {
-  createIDLPromiseRecord, type IDLPromiseRecord,
-} from './promise-record';
+import { PromiseCarrier } from './promise';
 import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
 import { InternalError } from '../infra/internal-error';
 
-export class AsynchronousIterableBinding {
+/** Install async iterator methods and prototypes in one realm. */
+export class AsyncIterableBinding {
+  /** Binding for the installed methods and their realm-owned results. */
   #binding: RealmBinding;
 
-  // Project helper: retain the owning realm binding.
   constructor(binding: RealmBinding) {
     this.#binding = binding;
   }
 
-  // Web IDL §3.7.10 Asynchronous iterable declarations — define the asynchronous iteration methods.
+  /** Install the exposed interface's async iteration methods using its prepared arguments. */
+  // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
   defineMethods(
     target: object,
     assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
+    callable: AssembledCallable<AsyncIterableMember>,
   ): void {
-    this.#getIteratorPrototypeObject(assembled, declaration);
-    if (declaration.key === undefined) {
+    if (callable.primary.key === undefined) {
       const values = this.#createIteratorMethod(
-        assembled, declaration, 'value', 'values', 'values',
+        assembled, callable, 'value', 'values', 'values',
       );
       defineDataProperty(target, 'values', values);
       defineMethod(target, Symbol.asyncIterator, values, false);
@@ -44,100 +39,61 @@ export class AsynchronousIterableBinding {
     }
 
     const entries = this.#createIteratorMethod(
-      assembled, declaration, 'key+value', 'entries',
-      '%Symbol.asyncIterator%',
+      assembled, callable, 'key+value', 'entries', '%Symbol.asyncIterator%',
     );
     defineMethod(target, Symbol.asyncIterator, entries, false);
     defineDataProperty(target, 'entries', entries);
-    defineDataProperty(
-      target,
-      'keys',
-      this.#createIteratorMethod(
-        assembled, declaration, 'key', 'keys', 'keys',
-      ),
-    );
-    defineDataProperty(
-      target,
-      'values',
-      this.#createIteratorMethod(
-        assembled, declaration, 'value', 'values', 'values',
-      ),
-    );
+    defineDataProperty(target, 'keys',
+      this.#createIteratorMethod(assembled, callable, 'key', 'keys', 'keys'));
+    defineDataProperty(target, 'values',
+      this.#createIteratorMethod(assembled, callable, 'value', 'values', 'values'));
   }
 
-  // Project factory for the entries, keys, and values functions in Web IDL §3.7.10 Asynchronous iterable
-  // declarations.
+  // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
   #createIteratorMethod(
     assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
+    callable: AssembledCallable<AsyncIterableMember>,
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
   ): JSFunction<StampedAsyncIterator> {
-    const callable = assembled.callables.get(declaration);
+    const member = callable.primary;
+    const prototype = this.#getIteratorPrototypeObject(assembled, member);
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument,
-          assembled,
-          securityIdentifier,
-        );
-        const iterator = this.#binding.realm.createOrdinaryObject(
-          this.#getIteratorPrototypeObject(assembled, declaration),
-        );
-        const steps = this.#requireSteps(assembled, declaration);
+        const receiver = this.#getReceiverRecord(thisArgument, assembled, securityIdentifier);
+        const iterator = this.#binding.realm.createOrdinaryObject(prototype);
+        const steps = getAsyncIteratorSteps(assembled, member, this.#binding);
         const implementationIterator = steps.create(
-          receiver.implInst,
-          this.#convertArguments(callable.arguments, argumentsList),
+          receiver.implInst, this.#convertArguments(callable.arguments, argumentsList),
         );
-        return AsyncIteratorStamper.stamp(iterator, {
-          finished: false,
-          implementationIterator,
-          assembled,
-          kind,
-          ongoing: null,
-          binding: receiver.binding,
-        });
+        return AsyncIteratorStamper.stamp(iterator, new AsyncIteratorRecord(
+          implementationIterator, assembled, member, kind, receiver.binding,
+        ));
       },
       { length: 0, name },
     );
   }
 
-  // Project cache for Web IDL §3.7.10.2 Asynchronous iterator prototype object.
-  #getIteratorPrototypeObject(
-    assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
-  ): object {
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #getIteratorPrototypeObject(assembled: AssembledInterface, member: AsyncIterableMember): object {
     const definitionBinding = this.#binding.getDefinitionBinding(assembled);
     if (definitionBinding.asyncIteratorPrototype) return definitionBinding.asyncIteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
       this.#binding.realm.intrinsics.iteration.asyncIteratorPrototype,
     );
-    defineDataProperty(
-      prototype,
-      'next',
-      this.#binding.realm.createFunction(
-        (thisArgument) => this.#next(assembled, declaration, thisArgument),
-        { length: 0, name: 'next' },
-      ),
-    );
+    defineDataProperty(prototype, 'next', this.#binding.realm.createFunction(
+      (thisArgument) => this.#next(assembled, thisArgument),
+      { length: 0, name: 'next' },
+    ));
 
-    const steps = this.#binding.getMemberBinding(assembled, declaration)?.asyncIteratorSteps;
+    const steps = this.#binding.getMemberBinding(assembled, member)?.asyncIteratorSteps;
     if (steps?.return) {
-      defineDataProperty(
-        prototype,
-        'return',
-        this.#binding.realm.createFunction(
-          (thisArgument, [value]) => this.#return(
-            assembled,
-            declaration,
-            thisArgument,
-            value,
-          ),
-          { length: 1, name: 'return' },
-        ),
-      );
+      defineDataProperty(prototype, 'return', this.#binding.realm.createFunction(
+        (thisArgument, [value]) => this.#return(assembled, thisArgument, value),
+        { length: 1, name: 'return' },
+      ));
     }
     Object.defineProperty(prototype, Symbol.toStringTag, {
       configurable: true,
@@ -149,130 +105,181 @@ export class AsynchronousIterableBinding {
     return prototype;
   }
 
-  // Web IDL §3.7.10.2 Asynchronous iterator prototype object — next steps.
-  #next(
-    assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
-    thisArgument: unknown,
-  ): Promise<unknown> {
+  // Receiver checks precede the iterator's own next/return steps.
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #next(assembled: AssembledInterface, thisArgument: unknown): Promise<unknown> {
     let state: AsyncIteratorRecord;
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'next');
     } catch (exception) {
-      return this.#rejectedPromise(exception);
+      return PromiseCarrier.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
     }
-
-    return this.#enqueue(state, () =>
-      this.#runNext(state, declaration)).promise;
+    return state.next(this.#binding);
   }
 
-  // Web IDL §3.7.10.2 Asynchronous iterator prototype object — return steps.
-  #return(
-    assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
-    thisArgument: unknown,
-    value: unknown,
-  ): Promise<unknown> {
+  #return(assembled: AssembledInterface, thisArgument: unknown, value: unknown): Promise<unknown> {
     let state: AsyncIteratorRecord;
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'return');
     } catch (exception) {
-      return this.#rejectedPromise(exception);
+      return PromiseCarrier.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
     }
+    return state.return(value, this.#binding);
+  }
 
-    const ongoing = this.#enqueue(
-      state,
-      () => this.#runReturn(state, declaration, value),
-    );
-    return this.#react(
-      ongoing.promise,
-      () => this.#binding.realm.createIteratorResultObject(value, true),
+  // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
+  #convertArguments(arguments_: AssembledArgument[], argumentsList: unknown[]): unknown[] {
+    return arguments_.map((argument, index) => {
+      const value = argumentsList[index];
+      if (index >= argumentsList.length || value === undefined) {
+        return argument.primary.default === undefined
+          ? missingArgument
+          : materializeDefaultValue(
+            argument.primary.default, argument.type, this.#binding.defaultConversionContext,
+          );
+      }
+      return jsToIDL(value, argument.type, this.#binding.defaultConversionContext);
+    });
+  }
+
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #getIteratorState(value: unknown, assembled: AssembledInterface, identifier: string): AsyncIteratorRecord {
+    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
+    if (getPlatformRecord(value)?.binding.world === this.#binding.world) {
+      this.#binding.realm.performSecurityCheck(value, identifier, 'method');
+    }
+    const state = AsyncIteratorStamper.get(value);
+    if (!state || state.assembled !== assembled || state.receiverBinding.world !== this.#binding.world) {
+      this.#throwTypeError('Illegal invocation');
+    }
+    return state;
+  }
+
+  // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
+  #getReceiverRecord(value: unknown, assembled: AssembledInterface, identifier: string): PlatformRecord {
+    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
+    const record = getPlatformRecord(value);
+    if (record?.binding.world !== this.#binding.world) this.#throwTypeError('Illegal invocation');
+    this.#binding.realm.performSecurityCheck(value, identifier, 'method');
+    if (!record.implements(assembled)) this.#throwTypeError('Illegal invocation');
+    return record;
+  }
+
+  #throwTypeError(message: string): never {
+    throw new this.#binding.realm.intrinsics.typeError(message);
+  }
+}
+
+/** Track one platform async iterator and convert the implementation's results for author code. */
+class AsyncIteratorRecord {
+  /** Iterator supplied by the implementation's factory. */
+  implementationIterator: object;
+  /** Interface identity required when checking an iterator receiver. */
+  assembled: AssembledInterface;
+  /** Declaration supplying the key and value conversion types. */
+  member: AsyncIterableMember;
+  /** Whether this iterator yields keys, values, or key/value pairs. */
+  kind: IterationKind;
+  /** Original receiver's binding, used to project yielded implementations. */
+  receiverBinding: RealmBinding;
+  /** Whether completion, closing, or failure has ended implementation iteration. */
+  #finished = false;
+  /** Last queued operation, used to serialize overlapping next and return calls. */
+  #ongoing: PromiseCarrier | null = null;
+
+  constructor(
+    implementationIterator: object,
+    assembled: AssembledInterface,
+    member: AsyncIterableMember,
+    kind: IterationKind,
+    receiverBinding: RealmBinding,
+  ) {
+    this.implementationIterator = implementationIterator;
+    this.assembled = assembled;
+    this.member = member;
+    this.kind = kind;
+    this.receiverBinding = receiverBinding;
+  }
+
+  /** Queue an advance, allocating its promise and result in the invoked method's realm. */
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  next(methodBinding: RealmBinding): Promise<unknown> {
+    return this.#enqueue(() => this.#runNext(methodBinding), methodBinding).promise;
+  }
+
+  /** Queue closing and return a completed result in the invoked method's realm. */
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  return(value: unknown, methodBinding: RealmBinding): Promise<unknown> {
+    const ongoing = this.#enqueue(() => this.#runReturn(value, methodBinding), methodBinding);
+    return this.#react(ongoing.promise,
+      () => methodBinding.realm.createIteratorResultObject(value, true),
+      undefined, methodBinding,
     ).promise;
   }
 
-  // Extracted from Web IDL §3.7.10.2 Asynchronous iterator prototype object — nextSteps and its
-  // fulfillment/rejection steps.
-  #runNext(
-    state: AsyncIteratorRecord,
-    declaration: AsyncIterableMember,
-  ): IDLPromiseRecord {
-    if (state.finished) {
-      return this.#resolvedPromise(
-        this.#binding.realm.createIteratorResultObject(undefined, true),
-      );
+  // nextSteps and its fulfillment/rejection steps.
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #runNext(methodBinding: RealmBinding): PromiseCarrier {
+    const { realm, realizeException } = methodBinding;
+    if (this.#finished) {
+      return PromiseCarrier.fromJS(realm.createIteratorResultObject(undefined, true), idlType.any, realm, realizeException);
     }
 
-    const steps = this.#requireSteps(state.assembled, declaration);
+    const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
     let nextPromise: Promise<unknown> | InternalPromise<unknown>;
     try {
-      nextPromise = steps.next(state.implementationIterator);
+      nextPromise = steps.next(this.implementationIterator);
     } catch (exception) {
-      state.finished = true;
-      return this.#rejectedCapability(exception);
+      this.#finished = true;
+      return PromiseCarrier.rejected(exception, idlType.any, realm, realizeException);
     }
 
-    return this.#react(
-      nextPromise,
+    return this.#react(nextPromise,
       (next) => {
-        state.ongoing = null;
+        this.#ongoing = null;
         if (next === endOfIteration) {
-          state.finished = true;
-          return this.#binding.realm.createIteratorResultObject(
-            undefined,
-            true,
-          );
+          this.#finished = true;
+          return realm.createIteratorResultObject(undefined, true);
         }
-        return this.#binding.realm.createIteratorResultObject(
-          this.#convertResult(next, declaration, state.kind, {
-            binding: state.binding, realm: this.#binding.realm,
-          }),
-          false,
-        );
+        return realm.createIteratorResultObject(this.#convertResult(next, methodBinding), false);
       },
       (reason) => {
-        state.ongoing = null;
-        state.finished = true;
+        this.#ongoing = null;
+        this.#finished = true;
         throw reason;
       },
+      methodBinding,
     );
   }
 
-  // Extracted from Web IDL §3.7.10.2 Asynchronous iterator prototype object — returnSteps.
-  #runReturn(
-    state: AsyncIteratorRecord,
-    declaration: AsyncIterableMember,
-    value: unknown,
-  ): IDLPromiseRecord {
-    if (state.finished) return this.#resolvedPromise(value);
-    state.finished = true;
+  // returnSteps.
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #runReturn(value: unknown, methodBinding: RealmBinding): PromiseCarrier {
+    const { realm, realizeException } = methodBinding;
+    if (this.#finished) return PromiseCarrier.fromJS(value, idlType.any, realm, realizeException);
+    this.#finished = true;
 
-    const steps = this.#requireSteps(state.assembled, declaration);
+    const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
     if (!steps.return) {
-      return this.#rejectedCapability(
-        new InternalError('Asynchronous iterator return steps are missing'),
+      return PromiseCarrier.rejected(
+        new InternalError('Asynchronous iterator return steps are missing'), idlType.any, realm, realizeException,
       );
     }
     try {
-      return this.#react(steps.return(state.implementationIterator, value), () => undefined);
+      return this.#react(steps.return(this.implementationIterator, value), () => undefined, undefined, methodBinding);
     } catch (exception) {
-      return this.#rejectedCapability(exception);
+      return PromiseCarrier.rejected(exception, idlType.any, realm, realizeException);
     }
   }
 
-  // Extracted from Web IDL §3.7.10.2 Asynchronous iterator prototype object — serialize next/return using the
-  // ongoing promise.
-  #enqueue(
-    state: AsyncIteratorRecord,
-    action: () => IDLPromiseRecord,
-  ): IDLPromiseRecord {
-    const ongoing = state.ongoing;
-    if (!ongoing) {
-      state.ongoing = action();
-      return state.ongoing;
-    }
+  // Serialize next/return using the ongoing promise, including after closing.
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #enqueue(action: () => PromiseCarrier, methodBinding: RealmBinding): PromiseCarrier {
+    const ongoing = this.#ongoing;
+    if (!ongoing) return this.#ongoing = action();
 
-    const afterOngoing = this.#promiseCapability();
-    const onSettled = this.#binding.realm.createFunction(
+    const afterOngoing = new PromiseCarrier(idlType.any, methodBinding.realm, methodBinding.realizeException);
+    const onSettled = methodBinding.realm.createFunction(
       () => {
         try {
           afterOngoing.resolve(action().promise);
@@ -282,23 +289,20 @@ export class AsynchronousIterableBinding {
       },
       { length: 0, name: '' },
     );
-    this.#binding.realm.observePromise(
-      ongoing.promise,
-      onSettled,
-      onSettled,
-    );
-    state.ongoing = afterOngoing;
+    methodBinding.realm.observePromise(ongoing.promise, onSettled, onSettled);
+    this.#ongoing = afterOngoing;
     return afterOngoing;
   }
 
-  // Project helper: convert an iteration completion before resolving its realm-owned result promise.
+  // Observe the implementation promise directly so conversion adds no adoption step.
   #react(
     promise: Promise<unknown> | InternalPromise<unknown>,
     fulfilled: (value: unknown) => unknown,
-    rejected?: (reason: unknown) => unknown,
-  ): IDLPromiseRecord {
-    const result = this.#promiseCapability();
-    const onFulfilled = this.#binding.realm.createFunction(
+    rejected: ((reason: unknown) => unknown) | undefined,
+    methodBinding: RealmBinding,
+  ): PromiseCarrier {
+    const result = new PromiseCarrier(idlType.any, methodBinding.realm, methodBinding.realizeException);
+    const onFulfilled = methodBinding.realm.createFunction(
       (_thisArgument, [value]) => {
         try {
           result.resolve(fulfilled(value));
@@ -308,7 +312,7 @@ export class AsynchronousIterableBinding {
       },
       { length: 1, name: '' },
     );
-    const onRejected = this.#binding.realm.createFunction(
+    const onRejected = methodBinding.realm.createFunction(
       (_thisArgument, [reason]) => {
         if (!rejected) {
           result.reject(reason);
@@ -324,9 +328,9 @@ export class AsynchronousIterableBinding {
     );
     try {
       if (promise instanceof InternalPromise) {
-        this.#binding.realm.Promise.fromInternal(promise).observe(onFulfilled, onRejected);
+        methodBinding.realm.Promise.fromInternal(promise).observe(onFulfilled, onRejected);
       } else {
-        this.#binding.realm.observePromise(promise, onFulfilled, onRejected);
+        methodBinding.realm.observePromise(promise, onFulfilled, onRejected);
       }
     } catch (exception) {
       onRejected(exception);
@@ -334,145 +338,33 @@ export class AsynchronousIterableBinding {
     return result;
   }
 
-  // Web IDL §3.7.10 Asynchronous iterable declarations — convert arguments for an asynchronous iterator method.
-  #convertArguments(
-    arguments_: AssembledArgument[],
-    argumentsList: unknown[],
-  ): unknown[] {
-    return arguments_.map((argument, index) => {
-      const value = argumentsList[index];
-      if (index >= argumentsList.length || value === undefined) {
-        return argument.primary.default === undefined
-          ? missingArgument
-          : materializeDefaultValue(
-            argument.primary.default,
-            argument.type,
-            this.#binding.defaultConversionContext,
-          );
-      }
-      return convertToIDL(value, argument.type, this.#binding.defaultConversionContext);
-    });
-  }
-
-  // Extracted from Web IDL §3.7.10.2 Asynchronous iterator prototype object — next fulfillment value
-  // conversion.
-  // Pair values use the iterator result steps in §3.7.9.2 Iterator prototype object.
-  #convertResult(
-    next: unknown,
-    declaration: AsyncIterableMember,
-    kind: IterationKind,
-    context: ConversionContext,
-  ): unknown {
-    if (declaration.key === undefined) {
-      return convertToJavaScript(next, declaration.value, context);
-    }
+  // Select and convert the yielded value before resolving the result promise.
+  // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
+  #convertResult(next: unknown, methodBinding: RealmBinding): unknown {
+    const member = this.member;
+    const ctx: ConversionContext = { binding: this.receiverBinding, realm: methodBinding.realm };
+    if (member.key === undefined) return idlToJS(next, member.value, ctx);
     if (!Array.isArray(next) || next.length < 2) {
       throw new InternalError('Pair asynchronous iterator produced a non-pair value');
     }
 
-    const key = kind === 'value'
-      ? undefined
-      : convertToJavaScript(next[0], declaration.key, context);
-    const value = kind === 'key'
-      ? undefined
-      : convertToJavaScript(next[1], declaration.value, context);
-    if (kind === 'key') return key;
-    if (kind === 'value') return value;
+    const key = this.kind === 'value' ? undefined : idlToJS(next[0], member.key, ctx);
+    const value = this.kind === 'key' ? undefined : idlToJS(next[1], member.value, ctx);
+    if (this.kind === 'key') return key;
+    if (this.kind === 'value') return value;
 
-    const pair = Reflect.construct(this.#binding.realm.intrinsics.array, [2]);
+    const pair = Reflect.construct(methodBinding.realm.intrinsics.array, [2]);
     defineDataProperty(pair, '0', key);
     defineDataProperty(pair, '1', value);
     return pair;
-  }
-
-  // Project adapter for the iterator receiver and security checks in Web IDL §3.7.10.2 Asynchronous iterator
-  // prototype object.
-  #getIteratorState(
-    value: unknown,
-    assembled: AssembledInterface,
-    identifier: string,
-  ): AsyncIteratorRecord {
-    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    if (getPlatformRecord(value)?.binding.world === this.#binding.world) {
-      this.#binding.realm.performSecurityCheck(value, identifier, 'method');
-    }
-    const state = AsyncIteratorStamper.get(value);
-    if (!state || state.assembled !== assembled ||
-      state.binding.world !== this.#binding.world) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    return state;
-  }
-
-  // Project adapter for the receiver and security checks in Web IDL §3.7.10 Asynchronous iterable declarations.
-  #getReceiverRecord(
-    value: unknown,
-    assembled: AssembledInterface,
-    identifier: string,
-  ): PlatformRecord {
-    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#binding.world) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    this.#binding.realm.performSecurityCheck(value, identifier, 'method');
-    if (!record.implements(assembled)) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    return record;
-  }
-
-  // Project helper: retrieve the declared asynchronous iterator implementation steps.
-  #requireSteps(
-    assembled: AssembledInterface,
-    declaration: AsyncIterableMember,
-  ): AsyncIteratorSteps {
-    const steps = this.#binding.getMemberBinding(assembled, declaration)?.asyncIteratorSteps;
-    if (!steps) {
-      throw new InternalError(
-        `Missing ${assembled.primary.name} asynchronous iterator implementation`,
-      );
-    }
-    return steps;
-  }
-
-  // Project helper: resolve a fresh realm-owned IDLPromiseRecord.
-  #resolvedPromise(value: unknown): IDLPromiseRecord {
-    const promise = this.#promiseCapability();
-    promise.resolve(value);
-    return promise;
-  }
-
-  // Project helper: reject a fresh realm-owned IDLPromiseRecord.
-  #rejectedCapability(reason: unknown): IDLPromiseRecord {
-    const promise = this.#promiseCapability();
-    promise.reject(reason);
-    return promise;
-  }
-
-  // Project helper: allocate an IDLPromiseRecord using this binding's realm and exception realization.
-  #promiseCapability(): IDLPromiseRecord {
-    return createIDLPromiseRecord(
-      idlType.any,
-      this.#binding.realm,
-      this.#binding.realizeException,
-    );
-  }
-
-  // Project helper: expose a rejected IDLPromiseRecord as its JavaScript promise.
-  #rejectedPromise(reason: unknown): Promise<unknown> {
-    return this.#rejectedCapability(reason).promise;
-  }
-
-  // Project helper: throw a TypeError allocated in this binding's realm.
-  #throwTypeError(message: string): never {
-    throw new this.#binding.realm.intrinsics.typeError(message);
   }
 }
 
 type StampedAsyncIterator<T extends object = object> = T & AsyncIteratorStamper;
 
+/** Attach iteration state without exposing properties or accepting proxied receivers. */
 class AsyncIteratorStamper extends Stamper {
+  /** State retained by this platform iterator. */
   #state: AsyncIteratorRecord;
 
   private constructor(iterator: object, state: AsyncIteratorRecord) {
@@ -490,13 +382,13 @@ class AsyncIteratorStamper extends Stamper {
   }
 }
 
-type AsyncIteratorRecord = {
-  finished: boolean;
-  implementationIterator: object;
-  assembled: AssembledInterface;
-  kind: IterationKind;
-  ongoing: IDLPromiseRecord | null;
-  binding: RealmBinding;
-};
-
 type IterationKind = 'key' | 'key+value' | 'value';
+
+/** Get the invoked realm's implementation steps for creating or advancing an iterator. */
+function getAsyncIteratorSteps(
+  assembled: AssembledInterface, member: AsyncIterableMember, binding: RealmBinding,
+): AsyncIteratorSteps {
+  const steps = binding.getMemberBinding(assembled, member)?.asyncIteratorSteps;
+  if (!steps) throw new InternalError(`Missing ${assembled.primary.name} asynchronous iterator implementation`);
+  return steps;
+}

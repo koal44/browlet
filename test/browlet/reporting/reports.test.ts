@@ -43,8 +43,8 @@ describe('Reporting platform objects', () => {
     expect(Object.prototype.toString.call(body)).toBe('[object IntegrityViolationReportBody]');
     expect(report.body).toBe(body);
     expect(context.project(ReportBodyImpl, implementation)).toBe(body);
-    expect(context.convertToImpl(body, reference('ReportBody'))).toBe(implementation);
-    expect(context.convertToImpl(body, reference('IntegrityViolationReportBody'))).toBe(implementation);
+    expect(context.jsToImpl(body, reference('ReportBody'))).toBe(implementation);
+    expect(context.jsToImpl(body, reference('IntegrityViolationReportBody'))).toBe(implementation);
   });
 
   it('serializes all derived fields through the default toJSON operations', () => {

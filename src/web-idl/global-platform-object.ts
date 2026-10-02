@@ -3,7 +3,7 @@ import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
 import type { AssembledInterface } from './assembled';
-import { convertToJavaScript } from './conversion';
+import { idlToJS } from './conversion';
 import type { OperationMember } from './core/types';
 import type { NamedPropertySteps } from './definition-binding';
 import type { RealmBinding } from './realm-binding';
@@ -146,7 +146,7 @@ export class GlobalPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: convertToJavaScript(
+      value: idlToJS(
         value,
         properties.getter.returns,
         this.#binding.defaultConversionContext,

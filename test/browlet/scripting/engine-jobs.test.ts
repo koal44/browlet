@@ -36,9 +36,9 @@ describe('HTML generic and timeout jobs', () => {
 
     expect(fixture.loop.runTaskTurn(fixture.options)).toBe(true);
     expect(fixture.observations.map((item) => item.value)).toEqual(['ok']);
-    expect(task?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set());
+    expect(task?.scriptEvaluationEnvironments).toEqual(new Set());
     expect(fixture.observations[0]?.task?.source.name).toBe('microtask');
-    expect(fixture.observations[0]?.task?.scriptEvaluationEnvironmentSettingsObjectSet)
+    expect(fixture.observations[0]?.task?.scriptEvaluationEnvironments)
       .toEqual(new Set([fixture.realm.env]));
     expect(fixture.loop.currentlyRunningTask).toBeNull();
   });
@@ -79,7 +79,7 @@ describe('HTML generic and timeout jobs', () => {
     expect(fixture.observations).toEqual([]);
     expect(fixture.loop.runTaskTurn(fixture.options)).toBe(true);
     expect(fixture.observations.map((item) => item.value)).toEqual(['timed-out']);
-    expect(task?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set());
+    expect(task?.scriptEvaluationEnvironments).toEqual(new Set());
     expect(fixture.observations[0]?.task?.source.name).toBe('microtask');
   });
 });

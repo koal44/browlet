@@ -1,76 +1,147 @@
 import { getImplementationRecord } from './platform-object';
 import { isCallable, isConstructor, isObject } from '../js-engine/index';
+import { Stamper } from '../infra/stamper';
 import {
-  getCallbackFunctionValue,
-  type CallbackFunctionAdapter, type CallbackFunctionValue, type CallbackInterfaceRecord, type CallbackValue,
-} from './callback-value';
-import {
-  createIDLConverter, createJavaScriptConverter, type ConversionContext, type ValueConverter,
+  createJSToIDLConverter, createIDLToJSConverter, type ConversionContext, type ValueConverter,
 } from './conversion';
-import type { AssembledCallable, AssembledCallbackFunction } from './assembled';
+import type { AssembledCallable, AssembledCallbackFunction, AssembledCallbackInterface } from './assembled';
+import type { RealmBinding } from './realm-binding';
 import type { DefinitionAssembly } from './assembly';
+import type { WebIDLRealm } from './realm';
 import type { CallbackExceptionBehavior, OperationMember } from './core/types';
-import { isIDLPromiseRecord, type IDLPromiseRecord } from './promise-record';
+import { PromiseCarrier } from './promise';
 import { InternalError } from '../infra/internal-error';
 
-// Web IDL §3.11 Callback interfaces — call a user object's operation.
-export function callUserObjectOperation(
-  value: CallbackInterfaceRecord,
-  operationName: string,
-  argumentsList: WebIDLArgumentsList,
-  thisArgument?: unknown,
-): unknown {
-  const operation = value.assembled.getOperation(operationName);
-  const callbackContext = { binding: value.conversionContext.binding, realm: value.realm };
-  const converter = callbackContext.binding.getCallbackConverter(operation);
+/** An author callback object with the state and conversions used to invoke its operations. */
+export class CallbackInterfaceCarrier<Realm extends WebIDLRealm = WebIDLRealm> {
+  /** Private identity tested without invoking author Proxy traps. */
+  #brand = undefined;
+  /** Declared operations and optional implementation adapter. */
+  assembled: AssembledCallbackInterface;
+  /** Binding machinery used for argument and result conversion. */
+  binding: RealmBinding;
+  /** Host context captured at conversion and restored during invocation. */
+  callbackContext: object;
+  /** Original author object, preserved for identity and dynamic method lookup. */
+  object: object;
+  /** Callback realm, which owns argument allocation and return-conversion failures. */
+  realm: Realm;
 
-  try {
-    return runCallback(value, () => {
-      let function_: unknown = value.object;
-      let receiver = projectCallbackReceiver(thisArgument);
+  constructor(
+    assembled: AssembledCallbackInterface,
+    object: object,
+    realm: Realm,
+    callbackContext: object,
+    binding: RealmBinding,
+  ) {
+    this.assembled = assembled;
+    this.binding = binding;
+    this.callbackContext = callbackContext;
+    this.object = object;
+    this.realm = realm;
+  }
 
-      if (!isCallable(function_)) {
-        function_ = (value.object as Record<string, unknown>)[operationName];
+  /** Recognize a converted callback-interface value. */
+  static is(value: unknown): value is CallbackInterfaceCarrier {
+    return isObject(value) && #brand in value;
+  }
+
+  /** Invoke a declared operation with argument/result conversion and callback lifecycle handling. */
+  // https://webidl.spec.whatwg.org/#call-a-user-objects-operation
+  callUserObjectOperation(
+    operationName: string,
+    argumentsList: WebIDLArgumentsList,
+    thisArgument?: unknown,
+  ): unknown {
+    const operation = this.assembled.getOperation(operationName);
+    const invoker = this.binding.getCallbackInvoker(operation);
+
+    try {
+      return runCallback(this.realm, this.callbackContext, () => {
+        let function_: unknown = this.object;
+        let receiver = projectCallbackReceiver(thisArgument);
+
         if (!isCallable(function_)) {
-          throw new value.realm.intrinsics.typeError(
-            `${operationName} is not callable`,
-          );
+          function_ = (this.object as Record<string, unknown>)[operationName];
+          if (!isCallable(function_)) {
+            throw new this.realm.intrinsics.typeError(
+              `${operationName} is not callable`,
+            );
+          }
+          receiver = this.object;
         }
-        receiver = value.object;
-      }
 
-      const result = Reflect.apply(
-        function_,
-        receiver,
-        converter.convertArguments(argumentsList, callbackContext),
-      );
-      return converter.convertReturn(result, callbackContext);
-    });
-  } catch (exception) {
-    return converter.rejectPromiseReturn(exception, callbackContext);
+        const result = Reflect.apply(
+          function_,
+          receiver,
+          invoker.idlToJSArguments(argumentsList, this),
+        );
+        return invoker.jsToIDLResult(result, this);
+      });
+    } catch (exception) {
+      return invoker.rejectPromiseReturn(exception, this);
+    }
   }
 }
 
-// Web IDL §3.12 Invoking callback functions — invoke a callback function.
-export function invokeCallbackFunction(
-  callable: CallbackFunctionValue,
-  argumentsList: WebIDLArgumentsList,
-  exceptionBehavior: CallbackExceptionBehavior | undefined,
-  thisArgument?: unknown,
-): unknown {
-  return callable.conversionContext.binding.getCallbackConverter(callable.assembled)
-    .invoke(callable, argumentsList, exceptionBehavior, thisArgument);
+/** An author function with its declaration, realm, and captured invocation context. */
+export class CallbackFunctionCarrier {
+  /** Private identity tested without invoking author Proxy traps. */
+  #brand = undefined;
+  /** Declared argument and return conversions. */
+  assembled: AssembledCallbackFunction;
+  /** Binding machinery used for conversion and implementation identity. */
+  binding: RealmBinding;
+  /** Host context captured at conversion and restored during invocation. */
+  callbackContext: object;
+  /** Original author object; legacy callbacks may be non-callable. */
+  object: object;
+  /** Callback realm, which owns argument allocation and return-conversion failures. */
+  realm: WebIDLRealm;
+  /** Reused implementation callable for this conversion's captured context. */
+  boundCallback?: StampedCallbackFunction;
+
+  constructor(
+    assembled: AssembledCallbackFunction,
+    object: object,
+    realm: WebIDLRealm,
+    callbackContext: object,
+    binding: RealmBinding,
+  ) {
+    this.assembled = assembled;
+    this.binding = binding;
+    this.callbackContext = callbackContext;
+    this.object = object;
+    this.realm = realm;
+  }
+
+  /** Recognize a converted callback-function value. */
+  static is(value: unknown): value is CallbackFunctionCarrier {
+    return isObject(value) && #brand in value;
+  }
+
+  /** Invoke this callback under its declared argument, result, and exception contract. */
+  // https://webidl.spec.whatwg.org/#invoke-a-callback-function
+  invoke(argumentsList: WebIDLArgumentsList, exceptionBehavior: CallbackExceptionBehavior | undefined, thisArgument?: unknown): unknown {
+    return this.binding.getCallbackInvoker(this.assembled).invoke(this, argumentsList, exceptionBehavior, thisArgument);
+  }
+
+  /** Construct with this callback, using the current realm for pre-entry failures. */
+  // https://webidl.spec.whatwg.org/#construct-a-callback-function
+  construct(argumentsList: WebIDLArgumentsList, realm: WebIDLRealm): unknown {
+    return this.binding.getCallbackInvoker(this.assembled).construct(this, argumentsList, realm);
+  }
 }
 
-/** Construct a converted callback or its implementation adapter, returning the IDL result. */
+/** Construct a callback, using the current realm for failures before entering the callback realm. */
 // https://webidl.spec.whatwg.org/#construct-a-callback-function
+// SPEC_MISMATCH: construct(callable, args) -> IDL value
 export function constructCallbackFunction(
-  callable: CallbackFunctionValue | CallbackFunctionAdapter,
+  callback: StampedCallbackFunction,
   argumentsList: WebIDLArgumentsList,
+  realm: WebIDLRealm,
 ): unknown {
-  const value = typeof callable === 'function' ? getCallbackFunctionValue(callable) : callable;
-  return value.conversionContext.binding.getCallbackConverter(value.assembled)
-    .construct(value, argumentsList);
+  return CallbackFunctionStamper.get(callback).construct(argumentsList, realm);
 }
 
 export type WebIDLArgumentsList = unknown[];
@@ -79,70 +150,72 @@ export const missingArgument: unique symbol = Symbol(
   'missing Web IDL argument',
 );
 
-/** Fixed callback conversions, reused with each callback's own allocation realm. */
-export class CallbackConverter {
-  convertReturn: ValueConverter;
+/** Invoke callbacks under a prepared argument, result, and exception contract. */
+export class CallbackInvoker {
+  /** Convert the author's return value to the callback's declared IDL result. */
+  jsToIDLResult: ValueConverter;
+  /** Whether thrown exceptions become a rejected IDL Promise. */
   returnsPromise: boolean;
+  /** Only any- and undefined-returning callbacks may report instead of rethrowing. */
   canReportExceptions: boolean;
+  /** IDL-to-author argument converters prepared from the callable declaration. */
   #argumentConverters: ValueConverter[];
+  /** Converter reused for arguments beyond the declared variadic position. */
   #variadicConverter: ValueConverter | undefined;
+  /** Whether all argument types can reuse their primitive values without projection. */
   #primitiveArguments: boolean;
 
   constructor(assembled: CallbackCallable, assembly: DefinitionAssembly) {
-    this.#argumentConverters = assembled.arguments.map((argument) => createJavaScriptConverter(argument.type, assembly));
+    this.#argumentConverters = assembled.arguments.map((argument) => createIDLToJSConverter(argument.type, assembly));
     this.#variadicConverter = assembled.variadicArgument && this.#argumentConverters.at(-1);
     this.#primitiveArguments = assembled.arguments.every((argument) => {
       const type = assembly.getUnannotatedType(argument.type);
-      return type.kind === 'simple' && (
-        assembly.hasNumericCandidate(type) || assembly.hasStringCandidate(type) ||
-        type.name === 'boolean' || type.name === 'bigint'
-      );
+      // The undefined type discards a supplied value instead of preserving it.
+      return type.kind === 'simple' && type.name !== 'undefined' && assembly.isPrimitiveType(type);
     });
-    this.convertReturn = createIDLConverter(assembled.primary.returns, assembly);
+    this.jsToIDLResult = createJSToIDLConverter(assembled.primary.returns, assembly);
     const returns = assembly.getUnannotatedType(assembled.primary.returns);
     this.returnsPromise = returns.kind === 'promise';
     this.canReportExceptions = returns.kind === 'simple' && (returns.name === 'undefined' || returns.name === 'any');
   }
 
-  /** Invoke a retained callback using this contract and the callback's own realm. */
+  /** Invoke the carrier's author function using its associated realm and captured context. */
   // https://webidl.spec.whatwg.org/#invoke-a-callback-function
   invoke(
-    callable: CallbackFunctionValue,
+    cbCarrier: CallbackFunctionCarrier,
     argumentsList: WebIDLArgumentsList,
     exceptionBehavior: CallbackExceptionBehavior | undefined,
     thisArgument?: unknown,
   ): unknown {
     this.validateExceptionBehavior(exceptionBehavior);
-    const callbackContext = { binding: callable.conversionContext.binding, realm: callable.realm };
-    const function_ = callable.object;
-    if (!isCallable(function_)) return this.convertReturn(undefined, callbackContext);
+    const function_ = cbCarrier.object;
+    if (!isCallable(function_)) return this.jsToIDLResult(undefined, cbCarrier);
     try {
-      return runCallback(callable, () => {
+      return runCallback(cbCarrier.realm, cbCarrier.callbackContext, () => {
         const result = Reflect.apply(
-          function_, projectCallbackReceiver(thisArgument), this.convertArguments(argumentsList, callbackContext),
+          function_, projectCallbackReceiver(thisArgument), this.idlToJSArguments(argumentsList, cbCarrier),
         );
-        return this.convertReturn(result, callbackContext);
+        return this.jsToIDLResult(result, cbCarrier);
       });
     } catch (exception) {
-      if (this.returnsPromise) return this.rejectPromiseReturn(exception, callbackContext);
+      if (this.returnsPromise) return this.rejectPromiseReturn(exception, cbCarrier);
       if (exceptionBehavior === 'rethrow') throw exception;
-      callable.realm.reportException(exception);
+      cbCarrier.realm.reportException(exception);
       return undefined;
     }
   }
 
-  /** Construct with a retained callback, converting its arguments and result. */
+  /** Construct with the carrier's author function, converting its arguments and result. */
   // https://webidl.spec.whatwg.org/#construct-a-callback-function
-  construct(callable: CallbackFunctionValue, argumentsList: WebIDLArgumentsList): unknown {
-    const context = callable.conversionContext;
-    const constructor = callable.object;
+  construct(cbCarrier: CallbackFunctionCarrier, argumentsList: WebIDLArgumentsList, realm: WebIDLRealm): unknown {
+    const constructor = cbCarrier.object;
     if (!isConstructor(constructor)) {
-      throw new context.realm.intrinsics.typeError(`${callable.assembled.primary.name} is not a constructor`);
+      // IsConstructor runs before preparing to enter the callback's realm.
+      throw new realm.intrinsics.typeError(`${cbCarrier.assembled.primary.name} is not a constructor`);
     }
-    const callbackContext = { binding: context.binding, realm: callable.realm };
-    return runCallback(callable, () => {
-      const result = Reflect.construct(constructor, this.convertArguments(argumentsList, callbackContext));
-      return this.convertReturn(result, callbackContext);
+    return runCallback(cbCarrier.realm, cbCarrier.callbackContext, () => {
+      const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList, cbCarrier));
+      return this.jsToIDLResult(result, cbCarrier);
     });
   }
 
@@ -157,12 +230,12 @@ export class CallbackConverter {
     }
   }
 
-  /** Project the supplied IDL arguments, omitting trailing missing arguments. */
+  /** Convert IDL arguments to author values, omitting trailing missing arguments. */
   // https://webidl.spec.whatwg.org/#js-user-objects
-  // Argument types come from the assembled callable used to prepare this converter.
+  // Argument types come from the assembled callable used to prepare this invoker.
   // SPEC_MISMATCH: (args) -> JavaScript arguments list
-  convertArguments(argumentsList: WebIDLArgumentsList, context: ConversionContext): unknown[] {
-    // These IDL values already are their JavaScript representation. Reuse the
+  idlToJSArguments(argumentsList: WebIDLArgumentsList, context: ConversionContext): unknown[] {
+    // These IDL values already have their author-facing representation. Reuse the
     // internal argument list; missing values and exception requests still convert.
     if (this.#primitiveArguments &&
       (this.#variadicConverter || argumentsList.length <= this.#argumentConverters.length) &&
@@ -187,43 +260,75 @@ export class CallbackConverter {
   }
 
   /** Promise-returning callbacks reject in the callback realm; other failures propagate. */
-  rejectPromiseReturn(exception: unknown, context: ConversionContext): IDLPromiseRecord {
+  rejectPromiseReturn(exception: unknown, context: ConversionContext): PromiseCarrier {
     if (!this.returnsPromise) throw exception;
     const rejected = Reflect.apply(
       context.realm.intrinsics.promise.reject,
       context.realm.intrinsics.promise.constructor,
       [exception],
     );
-    const promise = this.convertReturn(rejected, context);
-    if (!isIDLPromiseRecord(promise)) throw new InternalError('Promise callback did not produce an IDL promise');
+    const promise = this.jsToIDLResult(rejected, context);
+    if (!PromiseCarrier.is(promise)) throw new InternalError('Promise callback did not produce an IDL promise');
     return promise;
   }
 }
 
 export type CallbackCallable = AssembledCallbackFunction | AssembledCallable<OperationMember>;
 
-// Project helper: map an implementation receiver to its platform object before calling author code.
+/** An implementation callable retaining its original callback's conversion and realm. */
+export type StampedCallbackFunction = CallableFunction & CallbackFunctionStamper;
+
+/** Retain a converted callback on its implementation callable without public properties. */
+export class CallbackFunctionStamper extends Stamper {
+  /** Original author object, callback realm, captured context, and declared conversions. */
+  #carrier: CallbackFunctionCarrier;
+
+  private constructor(boundCallback: CallableFunction, cbCarrier: CallbackFunctionCarrier) {
+    super(boundCallback);
+    this.#carrier = cbCarrier;
+  }
+
+  /** Stamp a newly created implementation callable. */
+  static stamp(boundCallback: CallableFunction, cbCarrier: CallbackFunctionCarrier): StampedCallbackFunction {
+    new CallbackFunctionStamper(boundCallback, cbCarrier);
+    return boundCallback as StampedCallbackFunction;
+  }
+
+  /** Read the callback carrier when an implementation requests construction. */
+  static get(boundCallback: StampedCallbackFunction): CallbackFunctionCarrier {
+    return boundCallback.#carrier;
+  }
+
+  /** Project a stamped callable to its author object; ordinary author functions keep their identity. */
+  static getObject(callback: CallableFunction): object {
+    // Private-brand checks do not invoke author Proxy traps.
+    return #carrier in callback ? callback.#carrier.object : callback;
+  }
+}
+
+// Project the receiver before calling author code.
 function projectCallbackReceiver(
   value: unknown,
 ): unknown {
   return getImplementationRecord(value)?.platformObject ?? value;
 }
 
-// Extracted preparation and cleanup from Web IDL §3.11 Callback interfaces
-// and §3.12 Invoking callback functions; delegates lifecycle hooks to the host.
-// HTML §8.1.3.3 Realms, settings objects, and global objects; §8.1.4.4 Calling scripts.
-function runCallback(
-  value: CallbackValue,
-  steps: () => unknown,
-): unknown {
-  const { callbacks } = value.realm;
+// Shared preparation and cleanup for callback functions and interface operations.
+// https://webidl.spec.whatwg.org/#invoke-a-callback-function
+// https://webidl.spec.whatwg.org/#call-a-user-objects-operation
+function runCallback<Result>(
+  realm: WebIDLRealm,
+  callbackContext: object,
+  steps: () => Result,
+): Result {
+  const { callbacks } = realm;
   callbacks.prepareToRunScript();
   try {
-    callbacks.prepareToRunCallback(value.callbackContext);
+    callbacks.prepareToRunCallback(callbackContext);
     try {
       return steps();
     } finally {
-      callbacks.cleanUpAfterRunningCallback(value.callbackContext);
+      callbacks.cleanUpAfterRunningCallback(callbackContext);
     }
   } finally {
     callbacks.cleanUpAfterRunningScript();

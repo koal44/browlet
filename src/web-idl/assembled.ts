@@ -18,6 +18,7 @@ import type { DefinitionAssembly } from './assembly';
 export class AssembledInterface {
   /** The original interface declaration, before applying partials and mixins. */
   primary: PrimaryInterfaceDefinition;
+  /** IDL name used for interface lookup and diagnostics. */
   name: string;
   /** Partial declarations retain their own exposure and other extended attributes. */
   partials: PartialInterfaceDefinition[];
@@ -35,21 +36,27 @@ export class AssembledInterface {
   /** Prepared argument contracts, keyed by the declarations used for member binding. */
   callables = new AssembledCallables();
 
-  // Factory declarations are grouped during construction; overloads are prepared on first use.
+  /** Legacy factory declarations grouped by exposed name, with overloads prepared on first use. */
   #legacyFactoriesByName = new Map<string, {
     callables: AssembledCallable<NamedArgumentsExtendedAttribute>[];
     overloads?: AssembledOverloads<AssembledCallable<NamedArgumentsExtendedAttribute>>;
   }>();
 
-  // Lazy declaration lookups, shared by this binding world's realms.
+  /** Oldest ancestor through this interface, retained after the first inheritance query. */
   #inheritanceChain: AssembledInterface[] | undefined;
+  /** Primary declarations supplied by this interface and its ancestors. */
   #implementedPrimaries: Set<PrimaryInterfaceDefinition> | undefined;
+  /** Member identities contributed by this interface, its mixins, and its ancestors. */
   #includedMembers: Set<InterfaceMember | MixinMember> | undefined;
+  /** Nearest matching ancestor attribute for each queried inherited accessor. */
   #inheritedAttributes = new Map<AttributeMember, AttributeMember>();
-  // Undefined means unexamined; null retains the absence of a collection declaration.
-  #collectionDeclaration: MaplikeMember | SetlikeMember | null | undefined;
-  #inheritedCollectionDeclaration: MaplikeMember | SetlikeMember | null | undefined;
+  /** Own maplike/setlike declaration; undefined is unexamined and null means absent. */
+  #collectionMember: MaplikeMember | SetlikeMember | null | undefined;
+  /** Nearest ancestor's maplike/setlike declaration, with the same unexamined/absent states. */
+  #inheritedCollectionMember: MaplikeMember | SetlikeMember | null | undefined;
+  /** Whether own members declare [Default] toJSON; undefined means unexamined. */
   #hasDefaultToJSON: boolean | undefined;
+  /** Whether own or inherited members declare toJSON; undefined means unexamined. */
   #hasToJSON: boolean | undefined;
 
   constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = []) {
@@ -138,21 +145,21 @@ export class AssembledInterface {
   }
 
   /** Find the maplike or setlike declaration, optionally continuing through ancestors. */
-  getCollectionDeclaration(includeInherited = false): MaplikeMember | SetlikeMember | undefined {
-    if (this.#collectionDeclaration === undefined) {
-      this.#collectionDeclaration = null;
+  getCollectionMember(includeInherited = false): MaplikeMember | SetlikeMember | undefined {
+    if (this.#collectionMember === undefined) {
+      this.#collectionMember = null;
       for (const { member } of this.members) {
         if (member.kind === 'maplike' || member.kind === 'setlike') {
-          this.#collectionDeclaration = member;
+          this.#collectionMember = member;
           break;
         }
       }
     }
-    if (this.#collectionDeclaration || !includeInherited) return this.#collectionDeclaration ?? undefined;
-    if (this.#inheritedCollectionDeclaration === undefined) {
-      this.#inheritedCollectionDeclaration = this.parentAssembled?.getCollectionDeclaration(true) ?? null;
+    if (this.#collectionMember || !includeInherited) return this.#collectionMember ?? undefined;
+    if (this.#inheritedCollectionMember === undefined) {
+      this.#inheritedCollectionMember = this.parentAssembled?.getCollectionMember(true) ?? null;
     }
-    return this.#inheritedCollectionDeclaration ?? undefined;
+    return this.#inheritedCollectionMember ?? undefined;
   }
 
   /** Whether an explicit instance operation replaces a generated collection method. */
@@ -320,6 +327,7 @@ export class AssembledInterface {
 
 /** A callback interface used for conversion and invocation. */
 export class AssembledCallbackInterface {
+  /** Original callback-interface declaration, including any custom implementation adapter. */
   primary: CallbackInterfaceDefinition;
   /** Prepared operations used to convert callback arguments and results. */
   operationsByName = new Map<string, AssembledCallable<OperationMember>>();
@@ -353,12 +361,14 @@ export class AssembledCallbackInterface {
 
 /** Argument-count candidates for one exposure-selected group of callables. */
 export class AssembledOverloads<Callable extends AssembledCallable = AssembledCallable> {
+  /** Overload declarations admitted by the realm's exposure checks. */
   callables: Callable[];
   /** The length of the installed function. */
   minimumArgumentCount: number;
   /** Extra arguments are ignored above this count; variadic groups use Infinity. */
   maximumArgumentCount = 0;
 
+  /** Applicable callables and distinguishing argument index for each allowed argument count. */
   #candidatesByArgumentCount: OverloadCandidates<Callable>[] = [];
 
   constructor(callables: Callable[], assembly: DefinitionAssembly) {
@@ -408,12 +418,15 @@ export class AssembledOverloads<Callable extends AssembledCallable = AssembledCa
   }
 }
 
-/** A callable's fixed argument contracts, shared by all invocations. */
+/** Prepared arguments for an operation, constructor, callback, or other declaration taking arguments. */
 export class AssembledCallable<Primary extends CallableDeclaration = CallableDeclaration> {
+  /** Original declaration; this object describes a callable but is not itself a function. */
   primary: Primary;
+  /** Declared arguments with conversion attributes incorporated into their types. */
   arguments: AssembledArgument[];
   /** The final argument's contract, reused for every value in a variadic tail. */
   variadicArgument: AssembledArgument | undefined;
+  /** Smallest argument count admitted after omitting the optional and variadic suffix. */
   minimumArgumentCount: number;
 
   constructor(primary: Primary) {
@@ -434,8 +447,11 @@ export class AssembledCallable<Primary extends CallableDeclaration = CallableDec
 
 /** An argument with its applicable conversion attributes incorporated into its type. */
 export class AssembledArgument {
+  /** Original argument declaration, including its default and binding options. */
   primary: ArgumentDefinition;
+  /** Conversion descriptor including applicable attributes such as [Clamp]. */
   type: WebIDLType;
+  /** Whether the argument is required, optional, or repeated in a variadic tail. */
   optionality: ArgumentOptionality;
 
   constructor(primary: ArgumentDefinition) {
@@ -447,8 +463,11 @@ export class AssembledArgument {
 
 /** A dictionary member with its conversion type prepared independently of its incoming value. */
 export class AssembledDictionaryMember {
+  /** Original member declaration, including its default and binding options. */
   primary: DictionaryMember;
+  /** Property name read from the incoming dictionary object. */
   name: string;
+  /** Conversion descriptor including applicable member attributes. */
   type: WebIDLType;
 
   constructor(primary: DictionaryMember) {
@@ -469,9 +488,13 @@ export class AssembledCallbackFunction extends AssembledCallable<CallbackFunctio
 /** A namespace with the members contributed by its primary and partial declarations. */
 // https://webidl.spec.whatwg.org/#idl-namespaces
 export class AssembledNamespace {
+  /** Original namespace declaration before adding partial members. */
   primary: NamespaceDefinition;
+  /** Partial declarations contributing members and exposure conditions. */
   partials: PartialNamespaceDefinition[];
+  /** Combined members paired with the declaration supplying their exposure conditions. */
   members: AssembledNamespaceMember[] = [];
+  /** Prepared argument contracts for namespace operations. */
   callables = new AssembledCallables();
 
   constructor(primary: NamespaceDefinition, partials: PartialNamespaceDefinition[] = []) {
@@ -497,22 +520,26 @@ export class AssembledNamespace {
 
 /** A dictionary with its inherited and partial members in conversion order. */
 export class AssembledDictionary {
+  /** Original dictionary declaration before adding inherited and partial members. */
   primary: DictionaryDefinition;
+  /** Partial declarations contributing additional dictionary members. */
   partials: PartialDictionaryDefinition[];
+  /** Dictionary named by the primary declaration's inherits clause. */
   parentAssembled: AssembledDictionary | undefined;
   /** Conversion reads inherited members first, then lexicographically sorted own and partial members. */
   members: AssembledDictionaryMember[] = [];
 
-  #adaptedMembers: AssembledDictionaryMember[] | undefined;
+  /** Members whose converted values may need unpacking or callback binding before implementation use. */
+  #carriedMembers: AssembledDictionaryMember[] | undefined;
 
   constructor(primary: DictionaryDefinition, partials: PartialDictionaryDefinition[] = []) {
     this.primary = primary;
     this.partials = partials;
   }
 
-  /** Members whose converted values still need an implementation representation. */
-  getAdaptedMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
-    return this.#adaptedMembers ??= this.members.filter((member) => assembly.requiresImplementationAdaptation(member.type));
+  /** Get members that may need further conversion; primitives and sequences of primitives pass through. */
+  getCarriedMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
+    return this.#carriedMembers ??= this.members.filter((member) => assembly.mayContainCarrier(member.type));
   }
 
   /** A dictionary is a JSON type only when all of its member types are JSON types. */
@@ -521,26 +548,29 @@ export class AssembledDictionary {
   }
 }
 
-/** An enumeration's accepted string values. */
+/** The strings listed in a Web IDL enum declaration. */
 // https://webidl.spec.whatwg.org/#idl-enums
 export class AssembledEnumeration {
+  /** Original enum declaration and its complete list of string values. */
   primary: EnumerationDefinition;
 
-  #acceptedValues: Set<string>;
+  /** All declared strings, stored as a set for conversion membership checks. */
+  #values: Set<string>;
 
   constructor(primary: EnumerationDefinition) {
     this.primary = primary;
-    this.#acceptedValues = new Set(primary.values);
+    this.#values = new Set(primary.values);
   }
 
   /** Accept only strings declared by this enumeration. */
   hasValue(value: string): boolean {
-    return this.#acceptedValues.has(value);
+    return this.#values.has(value);
   }
 }
 
 /** A named type alias followed during type resolution. */
 export class AssembledTypedef {
+  /** Original alias declaration and its referenced type. */
   primary: TypedefDefinition;
 
   constructor(primary: TypedefDefinition) {
@@ -550,6 +580,7 @@ export class AssembledTypedef {
 
 /** A proxy type's recognition and receiver-resolution hooks. */
 export class AssembledProxyObject {
+  /** Original declaration supplying recognition and current-receiver hooks. */
   primary: ProxyObjectDefinition;
 
   constructor(primary: ProxyObjectDefinition) {
@@ -569,7 +600,9 @@ export class AssembledProxyObject {
 
 /** Index the same assembled interfaces by IDL name and implementation class. */
 export class AssembledInterfaces {
+  /** One assembled interface per declared IDL name. */
   byName = new Map<string, AssembledInterface>();
+  /** The same interfaces indexed by the implementation classes declared for them. */
   byImplClass = new Map<ImplementationClass, AssembledInterface>();
 
   constructor(definitions: Definition[]) {
@@ -840,14 +873,15 @@ export class AssembledProxyObjects extends Map<string, AssembledProxyObject> {
 
 /** Retain prepared callables under their original member-binding identities. */
 class AssembledCallables {
-  #byDeclaration = new Map<CallableDeclaration, AssembledCallable>();
+  /** Prepared arguments keyed by the original declaration used during member binding. */
+  #byPrimary = new Map<CallableDeclaration, AssembledCallable>();
 
   add(primary: CallableDeclaration): void {
-    if (!this.#byDeclaration.has(primary)) this.#byDeclaration.set(primary, new AssembledCallable(primary));
+    if (!this.#byPrimary.has(primary)) this.#byPrimary.set(primary, new AssembledCallable(primary));
   }
 
   get<Primary extends CallableDeclaration>(primary: Primary): AssembledCallable<Primary> {
-    const assembled = this.#byDeclaration.get(primary);
+    const assembled = this.#byPrimary.get(primary);
     if (!assembled) throw new InternalError('Callable does not belong to this assembled definition');
     // Each entry retains the exact declaration used as its key.
     return assembled as AssembledCallable<Primary>;

@@ -3,23 +3,16 @@ import {
   bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject, toBigInt,
   toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
 } from '../js-engine/index';
-import { InternalPromise } from '../infra/promises';
+import { InternalPromise, type PromiseResult } from '../infra/promises';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
 import type { ConversionType, DefinitionAssembly, UnionInterfaceCandidate } from './assembly';
 import type { AssembledCallbackFunction, AssembledDictionary, AssembledEnumeration, AssembledInterface } from './assembled';
-import {
-  convertAsyncSequenceToJavaScript,
-  convertJavaScriptValueToAsyncSequence,
-  createIDLAsyncSequence, isIDLAsyncSequence,
-} from './async-sequence';
-import {
-  createCallbackFunctionValue, createCallbackInterfaceRecord,
-  getCallbackFunctionObject, isCallbackInterfaceRecord, type CallbackFunctionValue,
-} from './callback-value';
-import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from './buffer-source';
+import { AsyncSequenceCarrier } from './async-sequence';
+import { CallbackFunctionCarrier, CallbackInterfaceCarrier, CallbackFunctionStamper } from './callback';
+import { jsToIDLBufferSource, idlBufferSourceToJS } from './buffer-source';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
   BufferTypeName, DefaultValue, ExtendedAttribute, ImplementationType,
@@ -28,14 +21,19 @@ import type {
 import type { WebIDLRealm } from './realm';
 import type { RealmBinding } from './realm-binding';
 import { getPlatformRecord } from './platform-object';
-import {
-  convertJavaScriptValueToPromise, isIDLPromiseRecord,
-} from './promise-record';
+import { PromiseCarrier } from './promise';
 import { defineDataProperty } from './property';
 import { InternalError } from '../infra/internal-error';
 
-// Project entry point for Web IDL §3.2 JavaScript type mapping; realizes realm-owned failures.
-export function convertToIDL(
+/** Validate/coerce an author value to IDL; a concrete descriptor retains its known result type. */
+// https://webidl.spec.whatwg.org/#js-type-mapping
+export function jsToIDL<Type extends WebIDLType>(
+  value: unknown,
+  type: Type,
+  context: ConversionContext,
+  options?: ConversionOptions,
+): IDLValue<Type>;
+export function jsToIDL(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
@@ -46,7 +44,7 @@ export function convertToIDL(
   // Web IDL §3.2.20 Nullable types — [LegacyTreatNonObjectAsNull] attribute-assignment step.
   if (legacyCallbackAttribute && !isObject(value)) return null;
   try {
-    return convertJavaScriptValue(
+    return jsToIDLValue(
       value,
       type,
       context,
@@ -58,13 +56,18 @@ export function convertToIDL(
   }
 }
 
-/** Prepare a fixed input type; each invocation supplies its conversion realm. */
-export function createIDLConverter(
+/** Prepare author-to-IDL conversion for a fixed type; each invocation supplies its conversion realm. */
+export function createJSToIDLConverter<Type extends WebIDLType>(
+  type: Type,
+  assembly: DefinitionAssembly,
+  options?: ConversionOptions,
+): ValueConverter<IDLValue<Type>>;
+export function createJSToIDLConverter(
   type: WebIDLType,
   assembly: DefinitionAssembly,
   options: ConversionOptions = {},
 ): ValueConverter {
-  const convert = createIDLValueConverter(type, assembly, options);
+  const convert = createJSToIDLValueConverter(type, assembly, options);
   return (value, context) => {
     try {
       return convert(value, context);
@@ -76,7 +79,7 @@ export function createIDLConverter(
 
 // Retain type decisions without capturing a realm: borrowed calls still supply
 // the method's conversion context, including when nested dictionary members fail.
-function createIDLValueConverter(
+function createJSToIDLValueConverter(
   type: WebIDLType,
   assembly: DefinitionAssembly,
   options: ConversionOptions = {},
@@ -91,26 +94,26 @@ function createIDLValueConverter(
   let convert: ValueConverter;
   if (resolved.kind === 'simple') {
     const integer = integerTypes[resolved.name];
-    const simple = simpleIDLConverters[resolved.name];
+    const simple = jsToSimpleIDLConverters[resolved.name];
     convert = integer
       ? (value, context) => convertToInteger(
         value, integer.bitLength, integer.signed, conversion.extendedAttributes, context,
       )
       : simple
         ? (value, context) => simple(value, conversion.extendedAttributes, context)
-        : (value, context) => convertJavaScriptValueToSimpleType(
+        : (value, context) => jsToSimpleIDL(
           value, resolved.name, conversion.extendedAttributes, context,
         );
   } else if (interfaceAssembled) {
-    convert = (value, context) => convertToInterface(value, interfaceAssembled, context);
+    convert = (value, context) => jsToIDLInterface(value, interfaceAssembled, context);
   } else if (enumerationAssembled) {
-    convert = (value, context) => convertToEnumeration(value, enumerationAssembled, context);
+    convert = (value, context) => jsToIDLEnumeration(value, enumerationAssembled, context);
   } else if (dictionaryAssembled) {
-    convert = (value, context) => convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+    convert = (value, context) => jsToIDLDictionary(value, dictionaryAssembled, context);
   } else if (callbackAssembled) {
-    convert = (value, context) => convertToCallbackFunction(value, callbackAssembled, context, legacyCallbackAttribute);
+    convert = (value, context) => jsToIDLCallbackFunction(value, callbackAssembled, context, legacyCallbackAttribute);
   } else {
-    convert = (value, context) => convertJavaScriptValueByConversionType(
+    convert = (value, context) => jsToIDLByType(
       value, conversion, context, [], legacyCallbackAttribute,
     );
   }
@@ -119,18 +122,19 @@ function createIDLValueConverter(
     : convert;
 }
 
-// Project entry point for Web IDL §3.2 JavaScript type mapping — IDL-to-JavaScript conversion.
-export function convertToJavaScript(
+/** Convert an IDL value to its author-facing representation, projecting implementation objects as needed. */
+// https://webidl.spec.whatwg.org/#js-type-mapping
+export function idlToJS(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
   allocateBuffers = false,
 ): unknown {
-  return convertIDLValue(value, type, context, [], allocateBuffers);
+  return idlToJSValue(value, type, context, [], allocateBuffers);
 }
 
 /** Select a fixed result type's conversion once while retaining the invocation's allocation realm. */
-export function createJavaScriptConverter(
+export function createIDLToJSConverter(
   type: WebIDLType,
   assembly: DefinitionAssembly,
   allocateBuffers = false,
@@ -155,10 +159,25 @@ export function createJavaScriptConverter(
       return (value, context) => context.binding.realizeException(value);
     }
   }
-  return (value, context) => convertIDLValueByConversionType(value, conversion, context, [], allocateBuffers);
+  return (value, context) => idlToJSByType(value, conversion, context, [], allocateBuffers);
 }
 
-export type ValueConverter = (value: unknown, context: ConversionContext) => unknown;
+/** Convert arbitrary input to a result fixed by the prepared descriptor. */
+export type ValueConverter<Result = unknown> = (value: unknown, context: ConversionContext) => Result;
+
+// Implementation payload types describe the final representation, not intermediate
+// conversion carriers. Use them only where those representations coincide. A name alone
+// needs the runtime assembly, and a fully dynamic WebIDLType can denote any.
+type IDLValue<Type extends WebIDLType> =
+  WebIDLType extends Type ? unknown
+    : Type extends { kind: 'annotated'; type: infer Inner extends WebIDLType; } ? IDLValue<Inner>
+      : Type extends { kind: 'simple' | 'interface'; } ? PromiseResult<Type>
+        : Type extends { kind: 'sequence'; } ? IDLSequenceValue
+          : Type extends { kind: 'record'; } ? IDLRecordValue
+            : Type extends { kind: 'promise'; } ? PromiseCarrier
+              : Type extends { kind: 'async-sequence'; } ? AsyncSequenceCarrier
+                : Type extends { kind: 'frozen-array'; } ? readonly unknown[]
+                  : unknown;
 
 // Web IDL §3.2.21.1 Creating a sequence from an iterable.
 export function createSequenceFromIterable(
@@ -183,7 +202,7 @@ export function createSequenceFromIterable(
     }
     const iteration = result as { done?: unknown; value?: unknown; };
     if (iteration.done) return sequence;
-    sequence.push(convertToIDL(
+    sequence.push(jsToIDL(
       iteration.value,
       elementType,
       context,
@@ -197,7 +216,7 @@ export function createFrozenArray(
   elementType: WebIDLType,
   context: ConversionContext,
 ): readonly unknown[] {
-  return Object.freeze(convertSequenceToJavaScript(
+  return Object.freeze(idlSequenceToJS(
     values,
     elementType,
     context,
@@ -243,22 +262,22 @@ export function materializeDefaultValue(
       const numericType = context.binding.assembly.getSoleNumericTypeName(type);
       if (numericType === 'bigint') return integer;
       if (numericType && integerTypes[numericType]) return Number(integer);
-      return convertToIDL(Number(integer), type, context);
+      return jsToIDL(Number(integer), type, context);
     }
     case 'decimal':
-      return convertToIDL(Number(value.value), type, context);
+      return jsToIDL(Number(value.value), type, context);
     case 'positive-infinity':
-      return convertToIDL(Infinity, type, context);
+      return jsToIDL(Infinity, type, context);
     case 'negative-infinity':
-      return convertToIDL(-Infinity, type, context);
+      return jsToIDL(-Infinity, type, context);
     case 'not-a-number':
-      return convertToIDL(NaN, type, context);
+      return jsToIDL(NaN, type, context);
     case 'undefined':
       return undefined;
     case 'empty-sequence':
       return [];
     case 'empty-dictionary':
-      return convertToIDL(undefined, type, context);
+      return jsToIDL(undefined, type, context);
   }
 }
 
@@ -283,10 +302,11 @@ export function createDefaultValueFactory(
   };
 }
 
+/** Select implementation ownership separately from ordinary allocation and conversion errors. */
 export type ConversionContext = {
-  /** Definitions, implementation identity, projection, and internal failures. */
+  /** Binding machinery and owner for projected implementations and internal exception requests. */
   binding: RealmBinding;
-  /** JavaScript allocation and conversion errors; may differ from binding.realm. */
+  /** Realm for ordinary result objects and new conversion errors; may differ from binding.realm. */
   realm: WebIDLRealm;
 };
 
@@ -294,11 +314,13 @@ export type ConversionOptions = {
   attributeAssignment?: boolean;
 };
 
-/** Converted dictionary members, kept distinct from an author-supplied object. */
+/** Converted dictionary members with the declaration needed for subsequent conversion. */
 // https://webidl.spec.whatwg.org/#idl-dictionaries
 // SPEC_MISMATCH: dictionary value = ordered map from member names to values
-export class IDLDictionaryValue {
+export class DictionaryCarrier {
+  /** Declared member types, including members that may contain nested carriers. */
   assembled: AssembledDictionary;
+  /** Converted member payload, consumed in place by implementation conversion. */
   record: Record<string, unknown>;
 
   constructor(assembled: AssembledDictionary, record: Record<string, unknown>) {
@@ -311,14 +333,14 @@ export type IDLRecordValue = Map<string, unknown>;
 export type IDLSequenceValue = unknown[];
 
 // Project dispatcher for Web IDL §3.2 JavaScript type mapping — JavaScript-to-IDL conversions.
-function convertJavaScriptValue(
+function jsToIDLValue(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
   legacyCallbackAttribute = false,
 ): unknown {
-  return convertJavaScriptValueByConversionType(
+  return jsToIDLByType(
     value,
     context.binding.assembly.getConversionType(type),
     context,
@@ -328,7 +350,7 @@ function convertJavaScriptValue(
 }
 
 // Project dispatcher: convert a JavaScript value using its resolved type and retained extended attributes.
-function convertJavaScriptValueByConversionType(
+function jsToIDLByType(
   value: unknown,
   { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
@@ -338,14 +360,14 @@ function convertJavaScriptValueByConversionType(
   if (inheritedAttributes.length) extendedAttributes = [...inheritedAttributes, ...extendedAttributes];
   switch (type.kind) {
     case 'simple':
-      return convertJavaScriptValueToSimpleType(
+      return jsToSimpleIDL(
         value,
         type.name,
         extendedAttributes,
         context,
       );
     case 'reference':
-      return convertJavaScriptValueToNamedType(
+      return jsToNamedIDL(
         value,
         type.name,
         context,
@@ -358,7 +380,7 @@ function convertJavaScriptValueByConversionType(
         context.binding.assembly.includesUndefined(type.type)
       ) return undefined;
       if (value === null || value === undefined) return null;
-      return convertJavaScriptValue(
+      return jsToIDLValue(
         value,
         type.type,
         context,
@@ -366,7 +388,7 @@ function convertJavaScriptValueByConversionType(
         legacyCallbackAttribute,
       );
     case 'union':
-      return convertJavaScriptValueToUnion(
+      return jsToIDLUnion(
         value,
         type,
         context,
@@ -387,7 +409,7 @@ function convertJavaScriptValueByConversionType(
       );
     }
     case 'record':
-      return convertJavaScriptValueToRecord(value, type, context);
+      return jsToIDLRecord(value, type, context);
     // Web IDL §3.2.27 Frozen arrays — JavaScript-to-IDL conversion.
     case 'frozen-array': {
       if (!isObject(value)) {
@@ -403,32 +425,23 @@ function convertJavaScriptValueByConversionType(
       );
     }
     case 'promise':
-      return convertJavaScriptValueToPromise(
-        value,
-        type.type,
-        context.realm,
-        context.binding.realizeException,
-      );
+      return PromiseCarrier.fromJS(value, type.type, context.realm, context.binding.realizeException);
     case 'async-sequence':
-      return convertJavaScriptValueToAsyncSequence(
-        value,
-        type,
-        context.realm,
-      );
+      return AsyncSequenceCarrier.fromJS(value, type, context.realm);
     case 'observable-array':
       return unsupportedConversion(type.kind);
   }
 }
 
 // Project dispatcher for Web IDL §3.2 JavaScript type mapping — IDL-to-JavaScript conversions.
-function convertIDLValue(
+function idlToJSValue(
   value: unknown,
   type: WebIDLType,
   context: ConversionContext,
   extendedAttributes: ExtendedAttribute[],
   allocateBuffers = false,
 ): unknown {
-  return convertIDLValueByConversionType(
+  return idlToJSByType(
     value,
     context.binding.assembly.getConversionType(type),
     context,
@@ -438,7 +451,7 @@ function convertIDLValue(
 }
 
 // Project dispatcher: convert an IDL value using its resolved type and retained extended attributes.
-function convertIDLValueByConversionType(
+function idlToJSByType(
   value: unknown,
   { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
@@ -450,9 +463,9 @@ function convertIDLValueByConversionType(
   value = context.binding.realizeException(value);
   switch (type.kind) {
     case 'simple':
-      return convertSimpleTypeToJavaScript(value, type.name, context, allocateBuffers);
+      return simpleIDLToJS(value, type.name, context, allocateBuffers);
     case 'reference':
-      return convertNamedTypeToJavaScript(
+      return namedIDLToJS(
         value,
         type.name,
         context,
@@ -460,7 +473,7 @@ function convertIDLValueByConversionType(
     // Web IDL §3.2.20 Nullable types — IDL-to-JavaScript conversion.
     case 'nullable':
       if (value === null) return null;
-      return convertIDLValue(
+      return idlToJSValue(
         value,
         type.type,
         context,
@@ -468,7 +481,7 @@ function convertIDLValueByConversionType(
         allocateBuffers,
       );
     case 'union':
-      return convertUnionToJavaScript(
+      return idlUnionToJS(
         value,
         type,
         context,
@@ -476,13 +489,13 @@ function convertIDLValueByConversionType(
         allocateBuffers,
       );
     case 'sequence':
-      return convertSequenceToJavaScript(
+      return idlSequenceToJS(
         value,
         type.type,
         context,
       );
     case 'record':
-      return convertRecordToJavaScript(
+      return idlRecordToJS(
         value,
         type.key,
         type.value,
@@ -493,7 +506,7 @@ function convertIDLValueByConversionType(
       return value;
     case 'promise':
       // https://webidl.spec.whatwg.org/#es-promise — expose the capability's Promise.
-      if (isIDLPromiseRecord(value)) return value.promise;
+      if (PromiseCarrier.is(value)) return value.promise;
       if (value instanceof InternalPromise) {
         const assembly = context.binding.assembly;
         if (
@@ -507,14 +520,17 @@ function convertIDLValueByConversionType(
       }
       throw new InternalError('Expected a declared Promise result');
     case 'async-sequence':
-      return convertAsyncSequenceToJavaScript(value);
+      if (!AsyncSequenceCarrier.is(value)) {
+        throw new InternalError('IDL async sequence is not an async sequence carrier');
+      }
+      return value.object;
     case 'observable-array':
       return unsupportedConversion(type.kind);
   }
 }
 
 // Shared implementation of the simple-type conversions in Web IDL §3.2 JavaScript type mapping.
-function convertJavaScriptValueToSimpleType(
+function jsToSimpleIDL(
   value: unknown,
   name: SimpleTypeName,
   extendedAttributes: ExtendedAttribute[],
@@ -532,20 +548,20 @@ function convertJavaScriptValueToSimpleType(
   }
 
   if (bufferTypeNames.has(name)) {
-    return convertBufferSourceToIDL(
+    return jsToIDLBufferSource(
       value,
       name as BufferTypeName,
       extendedAttributes,
     );
   }
 
-  const convert = simpleIDLConverters[name];
+  const convert = jsToSimpleIDLConverters[name];
   if (!convert) return unsupportedConversion(name);
   return convert(value, extendedAttributes, context);
 }
 
 // Shared simple-type IDL-to-JavaScript conversion rules from Web IDL §3.2 JavaScript type mapping.
-function convertSimpleTypeToJavaScript(
+function simpleIDLToJS(
   value: unknown,
   name: SimpleTypeName,
   context: ConversionContext,
@@ -559,13 +575,13 @@ function convertSimpleTypeToJavaScript(
       if (bufferName === 'SharedArrayBuffer') return context.realm.createSharedArrayBuffer(bytes);
       return context.realm.createArrayBufferView(bufferName, bytes);
     }
-    return convertBufferSourceToJavaScript(value, bufferName);
+    return idlBufferSourceToJS(value, bufferName);
   }
   return name === 'undefined' ? undefined : value;
 }
 
 // Project dispatcher for named types in Web IDL §3.2 JavaScript type mapping.
-function convertJavaScriptValueToNamedType(
+function jsToNamedIDL(
   value: unknown,
   name: string,
   context: ConversionContext,
@@ -573,28 +589,28 @@ function convertJavaScriptValueToNamedType(
 ): unknown {
   const assembly = context.binding.assembly;
   const assembled = assembly.interfaces.get(name);
-  if (assembled) return convertToInterface(value, assembled, context);
+  if (assembled) return jsToIDLInterface(value, assembled, context);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
-  if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+  if (dictionaryAssembled) return jsToIDLDictionary(value, dictionaryAssembled, context);
 
   const enumerationAssembled = assembly.enumerations.get(name);
-  if (enumerationAssembled) return convertToEnumeration(value, enumerationAssembled, context);
+  if (enumerationAssembled) return jsToIDLEnumeration(value, enumerationAssembled, context);
 
   const callbackFunctionAssembled = assembly.callbackFunctions.get(name);
   if (callbackFunctionAssembled) {
-    return convertToCallbackFunction(value, callbackFunctionAssembled, context, legacyCallbackAttribute);
+    return jsToIDLCallbackFunction(value, callbackFunctionAssembled, context, legacyCallbackAttribute);
   }
 
   const callbackInterfaceAssembled = assembly.callbackInterfaces.get(name);
   if (callbackInterfaceAssembled) {
     if (!isObject(value)) return throwTypeError(context, `${name} is not an object`);
-    return createCallbackInterfaceRecord(
+    return new CallbackInterfaceCarrier(
       callbackInterfaceAssembled,
       value,
       getCallbackRealm(value, context),
       context.realm.callbacks.captureContext(),
-      context,
+      context.binding,
     );
   }
 
@@ -611,7 +627,7 @@ function convertJavaScriptValueToNamedType(
 }
 
 // https://webidl.spec.whatwg.org/#es-interface
-function convertToInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
+function jsToIDLInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
   const record = getPlatformRecord(value);
   if (
     record?.binding.world === context.binding.world &&
@@ -621,7 +637,7 @@ function convertToInterface(value: unknown, assembled: AssembledInterface, conte
 }
 
 // https://webidl.spec.whatwg.org/#es-enumeration
-function convertToEnumeration(value: unknown, assembled: AssembledEnumeration, context: ConversionContext): string {
+function jsToIDLEnumeration(value: unknown, assembled: AssembledEnumeration, context: ConversionContext): string {
   const string = toString(value);
   if (!assembled.hasValue(string)) {
     throwTypeError(context, `${string} is not a value of ${assembled.primary.name}`);
@@ -630,7 +646,7 @@ function convertToEnumeration(value: unknown, assembled: AssembledEnumeration, c
 }
 
 // Project adapter for named IDL values in Web IDL §3.2 JavaScript type mapping.
-function convertNamedTypeToJavaScript(
+function namedIDLToJS(
   value: unknown,
   name: string,
   context: ConversionContext,
@@ -640,17 +656,18 @@ function convertNamedTypeToJavaScript(
   if (assembled) return projectInterface(value, assembled, context);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
-  if (dictionaryAssembled) return convertDictionaryToJavaScript(value, dictionaryAssembled, context);
+  if (dictionaryAssembled) return idlDictionaryToJS(value, dictionaryAssembled, context);
   if (assembly.enumerations.has(name)) return value;
 
   if (assembly.callbackFunctions.has(name)) {
-    const object = getCallbackFunctionObject(value);
-    if (object) return object;
+    // Result projection accepts retained IDL callbacks and callables returned by implementations.
+    if (typeof value === 'function') return CallbackFunctionStamper.getObject(value);
+    if (CallbackFunctionCarrier.is(value)) return value.object;
     throw new InternalError(`IDL callback function ${name} is not callable`);
   }
   if (assembly.callbackInterfaces.has(name)) {
-    if (!isCallbackInterfaceRecord(value)) {
-      throw new InternalError(`IDL callback interface ${name} is not a callback value`);
+    if (!CallbackInterfaceCarrier.is(value)) {
+      throw new InternalError(`IDL callback interface ${name} is not a callback carrier`);
     }
     return value.object;
   }
@@ -677,11 +694,11 @@ function projectInterface(value: unknown, assembled: AssembledInterface, context
 }
 
 // Web IDL §3.2.17 Dictionary types — convert a JavaScript value to a dictionary.
-function convertJavaScriptValueToDictionary(
+function jsToIDLDictionary(
   value: unknown,
   assembled: AssembledDictionary,
   context: ConversionContext,
-): IDLDictionaryValue {
+): DictionaryCarrier {
   return context.binding.getDictionaryConverter(assembled)(value, context);
 }
 
@@ -692,7 +709,7 @@ export function createDictionaryConverter(
 ): DictionaryConverter {
   const members = assembled.members.map((member) => ({
     member,
-    convert: createIDLValueConverter(member.type, assembly),
+    convert: createJSToIDLValueConverter(member.type, assembly),
     getDefault: member.primary.default === undefined
       ? undefined
       : createDefaultValueFactory(member.primary.default, member.type),
@@ -731,14 +748,14 @@ export function createDictionaryConverter(
     }
     // Object.fromEntries creates sparse own properties together, without
     // inherited setters or deleting absent fields from the complete layout.
-    return new IDLDictionaryValue(assembled, entries ? Object.fromEntries(entries) : record);
+    return new DictionaryCarrier(assembled, entries ? Object.fromEntries(entries) : record);
   };
 }
 
-export type DictionaryConverter = (value: unknown, context: ConversionContext) => IDLDictionaryValue;
+export type DictionaryConverter = ValueConverter<DictionaryCarrier>;
 
 // Web IDL §3.2.17 Dictionary types — convert a dictionary to a JavaScript value.
-function convertDictionaryToJavaScript(
+function idlDictionaryToJS(
   value: unknown,
   assembled: AssembledDictionary,
   context: ConversionContext,
@@ -746,7 +763,7 @@ function convertDictionaryToJavaScript(
   if (!isObject(value)) {
     throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
   }
-  const members = value instanceof IDLDictionaryValue ? value.record : value as Record<string, unknown>;
+  const members = value instanceof DictionaryCarrier ? value.record : value as Record<string, unknown>;
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
@@ -756,14 +773,14 @@ function convertDictionaryToJavaScript(
     defineDataProperty(
       result,
       member.name,
-      convertToJavaScript(members[member.name], member.type, context),
+      idlToJS(members[member.name], member.type, context),
     );
   }
   return result;
 }
 
 // Web IDL §3.2.23 Records — convert a JavaScript value to a record.
-function convertJavaScriptValueToRecord(
+function jsToIDLRecord(
   value: unknown,
   type: RecordType,
   context: ConversionContext,
@@ -776,19 +793,19 @@ function convertJavaScriptValueToRecord(
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (!descriptor?.enumerable) continue;
-    const typedKey = convertToIDL(key, type.key, context);
-    const typedValue = convertToIDL(
+    const typedKey = jsToIDL(key, type.key, context);
+    const typedValue = jsToIDL(
       (value as Record<PropertyKey, unknown>)[key],
       type.value,
       context,
     );
-    result.set(typedKey as string, typedValue);
+    result.set(typedKey, typedValue);
   }
   return result;
 }
 
 // Web IDL §3.2.23 Records — convert a record to a JavaScript value.
-function convertRecordToJavaScript(
+function idlRecordToJS(
   value: unknown,
   keyType: WebIDLType,
   valueType: WebIDLType,
@@ -800,15 +817,15 @@ function convertRecordToJavaScript(
     context.realm.intrinsics.objectPrototype,
   );
   for (const [key, entryValue] of value) {
-    const jsKey = convertToJavaScript(key, keyType, context);
-    const jsValue = convertToJavaScript(entryValue, valueType, context);
+    const jsKey = idlToJS(key, keyType, context);
+    const jsValue = idlToJS(entryValue, valueType, context);
     defineDataProperty(result, jsKey as PropertyKey, jsValue);
   }
   return result;
 }
 
 // Web IDL §3.2.21 Sequences — convert a sequence to a JavaScript value.
-function convertSequenceToJavaScript(
+function idlSequenceToJS(
   value: unknown,
   elementType: WebIDLType,
   context: ConversionContext,
@@ -820,14 +837,14 @@ function convertSequenceToJavaScript(
     defineDataProperty(
       result,
       String(i),
-      convertToJavaScript(value[i], elementType, context),
+      idlToJS(value[i], elementType, context),
     );
   }
   return result;
 }
 
 // Web IDL §3.2.25 Union types — convert a JavaScript value to a union.
-function convertJavaScriptValueToUnion(
+function jsToIDLUnion(
   value: unknown,
   type: UnionType,
   context: ConversionContext,
@@ -846,14 +863,14 @@ function convertJavaScriptValueToUnion(
 
   if (value === null || value === undefined) {
     const assembled = candidates.dictionary;
-    if (assembled) return convertJavaScriptValueToDictionary(value, assembled, context);
+    if (assembled) return jsToIDLDictionary(value, assembled, context);
   }
 
   if (isPlatformObject(value, context)) {
     const interfaceType = candidates.interfaces.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) {
-      return convertJavaScriptValueByConversionType(value, interfaceType.type, context, extendedAttributes);
+      return jsToIDLByType(value, interfaceType.type, context, extendedAttributes);
     }
     if (candidates.simpleTypes.has('object')) return value;
   }
@@ -861,7 +878,7 @@ function convertJavaScriptValueToUnion(
     const bufferName = getBufferTypeName(value);
     if (bufferName) {
       const buffer = candidates.simpleTypes.get(bufferName);
-      if (buffer) return convertJavaScriptValueByConversionType(value, buffer, context, extendedAttributes);
+      if (buffer) return jsToIDLByType(value, buffer, context, extendedAttributes);
       if (candidates.simpleTypes.has('object')) return value;
     }
   }
@@ -869,12 +886,8 @@ function convertJavaScriptValueToUnion(
   if (typeof value === 'function') {
     const assembled = candidates.callbackFunction;
     if (assembled) {
-      return createCallbackFunctionValue(
-        assembled,
-        value,
-        getCallbackRealm(value, context),
-        context.realm.callbacks.captureContext(),
-        context,
+      return new CallbackFunctionCarrier(
+        assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context.binding,
       );
     }
     if (candidates.simpleTypes.has('object')) return value;
@@ -889,21 +902,11 @@ function convertJavaScriptValueToUnion(
         context.realm,
       );
       if (asyncMethod && asyncSequence.type.kind === 'async-sequence') {
-        return createIDLAsyncSequence(
-          value,
-          asyncSequence.type.type,
-          asyncMethod,
-          'async',
-        );
+        return new AsyncSequenceCarrier(value, asyncSequence.type.type, asyncMethod, 'async');
       }
       const syncMethod = getMethod(value, Symbol.iterator, context.realm);
       if (syncMethod && asyncSequence.type.kind === 'async-sequence') {
-        return createIDLAsyncSequence(
-          value,
-          asyncSequence.type.type,
-          syncMethod,
-          'sync',
-        );
+        return new AsyncSequenceCarrier(value, asyncSequence.type.type, syncMethod, 'sync');
       }
     }
 
@@ -924,7 +927,7 @@ function convertJavaScriptValueToUnion(
     if (frozenArray) {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
-        return convertJavaScriptValueByConversionType(
+        return jsToIDLByType(
           value,
           frozenArray,
           context,
@@ -934,17 +937,17 @@ function convertJavaScriptValueToUnion(
     }
 
     const dictionaryAssembled = candidates.dictionary;
-    if (dictionaryAssembled) return convertJavaScriptValueToDictionary(value, dictionaryAssembled, context);
+    if (dictionaryAssembled) return jsToIDLDictionary(value, dictionaryAssembled, context);
     const record = candidates.typesByKind.get('record');
-    if (record) return convertJavaScriptValueByConversionType(value, record, context, extendedAttributes);
+    if (record) return jsToIDLByType(value, record, context, extendedAttributes);
     const callbackInterfaceAssembled = candidates.callbackInterface;
     if (callbackInterfaceAssembled) {
-      return createCallbackInterfaceRecord(
+      return new CallbackInterfaceCarrier(
         callbackInterfaceAssembled,
         value,
         getCallbackRealm(value, context),
         context.realm.callbacks.captureContext(),
-        context,
+        context.binding,
       );
     }
     if (candidates.simpleTypes.has('object')) return value;
@@ -955,14 +958,14 @@ function convertJavaScriptValueToUnion(
   }
   if (typeof value === 'number') {
     const numeric = candidates.numeric;
-    if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context, extendedAttributes);
+    if (numeric) return jsToIDLByType(value, numeric, context, extendedAttributes);
   }
   if (typeof value === 'bigint') {
     if (candidates.simpleTypes.has('bigint')) return value;
   }
 
   const string = candidates.string;
-  if (string) return convertJavaScriptValueByConversionType(value, string, context, extendedAttributes);
+  if (string) return jsToIDLByType(value, string, context, extendedAttributes);
 
   const numeric = candidates.numeric;
   const bigint = candidates.simpleTypes.has('bigint');
@@ -970,9 +973,9 @@ function convertJavaScriptValueToUnion(
     const primitive = toPrimitive(value, 'number');
     return typeof primitive === 'bigint'
       ? primitive
-      : convertJavaScriptValueByConversionType(primitive, numeric, context, extendedAttributes);
+      : jsToIDLByType(primitive, numeric, context, extendedAttributes);
   }
-  if (numeric) return convertJavaScriptValueByConversionType(value, numeric, context, extendedAttributes);
+  if (numeric) return jsToIDLByType(value, numeric, context, extendedAttributes);
 
   if (candidates.simpleTypes.has('boolean')) return Boolean(value);
   if (bigint) return toBigInt(value);
@@ -980,7 +983,7 @@ function convertJavaScriptValueToUnion(
 }
 
 // Project adapter for Web IDL §3.2.25 Union types — identify our value's specific type, then convert it.
-function convertUnionToJavaScript(
+function idlUnionToJS(
   value: unknown,
   type: UnionType,
   context: ConversionContext,
@@ -1010,28 +1013,29 @@ function convertUnionToJavaScript(
     }
   }
   if (candidates.callbackFunction) {
-    const object = getCallbackFunctionObject(value);
-    if (object) return object;
+    // A callback is only one possible union member; the value selects the branch.
+    if (typeof value === 'function') return CallbackFunctionStamper.getObject(value);
+    if (CallbackFunctionCarrier.is(value)) return value.object;
   }
-  if (isCallbackInterfaceRecord(value)) {
+  if (CallbackInterfaceCarrier.is(value)) {
     const assembled = candidates.callbackInterface;
     if (assembled) return value.object;
   }
-  if (isIDLAsyncSequence(value)) {
+  if (AsyncSequenceCarrier.is(value)) {
     const sequence = candidates.typesByKind.get('async-sequence');
-    if (sequence) return convertIDLValueByConversionType(value, sequence, context, extendedAttributes);
+    if (sequence) return idlToJSByType(value, sequence, context, extendedAttributes);
   }
   if (Array.isArray(value)) {
     const array = candidates.array;
-    if (array) return convertIDLValueByConversionType(value, array, context, extendedAttributes);
+    if (array) return idlToJSByType(value, array, context, extendedAttributes);
   }
-  if (value instanceof IDLDictionaryValue) {
+  if (value instanceof DictionaryCarrier) {
     const assembled = candidates.dictionary;
-    if (assembled) return convertDictionaryToJavaScript(value, assembled, context);
+    if (assembled) return idlDictionaryToJS(value, assembled, context);
   }
   if (isMap(value)) {
     const record = candidates.typesByKind.get('record');
-    if (record) return convertIDLValueByConversionType(value, record, context, extendedAttributes);
+    if (record) return idlToJSByType(value, record, context, extendedAttributes);
   }
   if (typeof value === 'boolean') {
     if (candidates.simpleTypes.has('boolean')) return value;
@@ -1048,8 +1052,8 @@ function convertUnionToJavaScript(
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     const buffer = bufferName && candidates.simpleTypes.get(bufferName);
-    if (buffer) return convertIDLValueByConversionType(value, buffer, context, extendedAttributes, allocateBuffers);
-    if (candidates.dictionary) return convertDictionaryToJavaScript(value, candidates.dictionary, context);
+    if (buffer) return idlToJSByType(value, buffer, context, extendedAttributes, allocateBuffers);
+    if (candidates.dictionary) return idlDictionaryToJS(value, candidates.dictionary, context);
     if (candidates.simpleTypes.has('object')) return value;
   }
   throw new InternalError('IDL union value has no matching specific type');
@@ -1128,17 +1132,17 @@ function isImplementedInterfaceType(
 }
 
 // https://webidl.spec.whatwg.org/#es-callback-function
-function convertToCallbackFunction(
+function jsToIDLCallbackFunction(
   value: unknown,
   assembled: AssembledCallbackFunction,
   context: ConversionContext,
   legacyCallbackAttribute: boolean,
-): CallbackFunctionValue {
+): CallbackFunctionCarrier {
   if (typeof value !== 'function' && !(legacyCallbackAttribute && isObject(value))) {
     return throwTypeError(context, `${assembled.primary.name} is not callable`);
   }
-  return createCallbackFunctionValue(
-    assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context,
+  return new CallbackFunctionCarrier(
+    assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context.binding,
   );
 }
 
@@ -1207,7 +1211,7 @@ const bufferTypeNames = new Set<SimpleTypeName>([
 
 // https://webidl.spec.whatwg.org/#es-type-mapping
 // The generic converter and prepared inputs use the same conversion algorithms.
-const simpleIDLConverters: Partial<Record<SimpleTypeName, (
+const jsToSimpleIDLConverters: Partial<Record<SimpleTypeName, (
   value: unknown,
   extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,

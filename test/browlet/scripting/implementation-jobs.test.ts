@@ -179,7 +179,7 @@ function createFixture(sharedAgent = false) {
     expose('record', (value: string) => {
       if (value === 'author B') {
         const env = realm.agent.eventLoop.currentlyRunningTask
-          ?.scriptEvaluationEnvironmentSettingsObjectSet;
+          ?.scriptEvaluationEnvironments;
         callbackEnv.push(env && new Set(env));
       }
       trace.push(value);

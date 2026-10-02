@@ -1,7 +1,7 @@
 import {
   createObservableArray, type ObservableArrayHandle,
 } from '../infra/observable-array';
-import { convertToIDL, convertToJavaScript, type IDLSequenceValue } from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import {
   idlType, type AttributeMember, type WebIDLType,
 } from './core/index';
@@ -41,11 +41,11 @@ export class ObservableArrayBinding {
     elementType: WebIDLType,
     value: unknown,
   ): void {
-    const values = convertToIDL(
+    const values = jsToIDL(
       value,
       this.#binding.assembly.getSequenceType(elementType),
       this.#binding.defaultConversionContext,
-    ) as IDLSequenceValue;
+    );
     this.#getHandle(record, attribute, elementType).replaceValues(values);
   }
 
@@ -73,7 +73,7 @@ export class ObservableArrayBinding {
     const setSteps = steps?.set;
     const handle = createObservableArray({
       array: this.#binding.realm.intrinsics.array,
-      convert: (value) => convertToIDL(value, elementType, this.#binding.defaultConversionContext),
+      convert: (value) => jsToIDL(value, elementType, this.#binding.defaultConversionContext),
       delete: deleteSteps
         ? (value, index) => Reflect.apply(
           deleteSteps,
@@ -90,16 +90,16 @@ export class ObservableArrayBinding {
           [value, index],
         )
         : undefined,
-      toJavaScript: (value) => convertToJavaScript(
+      toJavaScript: (value) => idlToJS(
         value,
         elementType,
         context,
       ),
-      toNumber: (value) => convertToIDL(
+      toNumber: (value) => jsToIDL(
         value,
         idlType.unrestrictedDouble,
         this.#binding.defaultConversionContext,
-      ) as number,
+      ),
     });
     attributes.set(attribute, handle);
     return handle;

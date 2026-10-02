@@ -334,7 +334,7 @@ export const fileReaderIDL = defineInterface<BrowletEnvironment>({
       // BINDING_INTEGRATION: realize a retained failure on its first author observation.
       get(context) {
         const error = context.realizeException((this as FileReaderImpl).error);
-        return context.convertToImpl(error, fileReaderErrorType);
+        return context.jsToImpl(error, fileReaderErrorType);
       },
     }),
     eventHandlerAttr('onloadstart'),

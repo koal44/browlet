@@ -16,32 +16,48 @@ import {
  * Declarations, including their members and types, must remain unchanged afterward.
  */
 export class DefinitionAssembly {
+  /** Interfaces indexed by IDL name and implementation constructor. */
   interfaces: AssembledInterfaces;
+  /** Callback object contracts, including their named operations. */
   callbackInterfaces: AssembledCallbackInterfaces;
+  /** Callback function contracts used for argument and result conversion. */
   callbackFunctions: AssembledCallbackFunctions;
+  /** Namespace declarations combined with their partial members. */
   namespaces: AssembledNamespaces;
+  /** Dictionaries with inherited and partial members in conversion order. */
   dictionaries: AssembledDictionaries;
+  /** Named sets of strings declared by Web IDL enums. */
   enumerations: AssembledEnumerations;
+  /** Named aliases resolved against this assembly. */
   typedefs: AssembledTypedefs;
+  /** Proxy recognition and receiver selection, such as WindowProxy. */
   proxyObjects: AssembledProxyObjects;
 
-  // Type resolution and candidate selection retain this assembly's interpretation of each descriptor.
+  /** Alias-resolved descriptors with outer annotations removed. */
   #unannotatedTypes = new Map<WebIDLType, UnannotatedType>();
+  /** Alias-resolved descriptors with the conversion attributes collected along the alias chain. */
   #conversionTypes = new Map<WebIDLType, ConversionType>();
+  /** Flattened union candidates with nullable wrappers and annotations removed. */
   #candidateTypes = new Map<WebIDLType, WebIDLType[]>();
+  /** Flattened union candidates retaining their conversion attributes. */
   #conversionCandidates = new Map<WebIDLType, ConversionType[]>();
+  /** Category lookups used to select a union branch from an incoming value. */
   #unionCandidates = new Map<WebIDLType, UnionCandidates>();
 
-  // Classification answers and comparison keys are computed on first use.
+  /** Type categories, nullability, and container element types computed on first inspection. */
   #typeAnalyses = new Map<WebIDLType, TypeAnalysis>();
+  /** Completed JSON-type checks; incomplete recursive dictionary checks are not retained. */
   #jsonTypeResults = new Map<WebIDLType, boolean>();
-  #implementationAdaptation = new Map<WebIDLType, boolean>();
+  /** Conservative carrier checks, including containers that need unpacking. */
+  #carrierTypes = new Map<WebIDLType, boolean>();
+  /** Type comparison keys that ignore annotations for overload selection. */
   #overloadTypeKeys = new Map<WebIDLType, string>();
+  /** Type comparison keys that retain conversion attributes and nested types. */
   #conversionTypeKeys = new Map<WebIDLType, string>();
 
-  // Internal conversions reuse these derived descriptors for the assembly's lifetime.
+  /** Derived sequence descriptors reused by aggregate and observable-array conversions. */
   #sequenceTypesByElementType = new Map<WebIDLType, SequenceType>();
-  // Declaration literals are immutable; their numeric conversion still runs for each use.
+  /** Parsed integer literals; applying a member's numeric type still happens separately. */
   #integerLiteralValues = new Map<IntegerLiteral, bigint>();
 
   constructor(definitions: Definition[]) {
@@ -286,20 +302,31 @@ export class DefinitionAssembly {
     return key;
   }
 
-  /** Primitive values and sequences of them already have their implementation representation. */
-  requiresImplementationAdaptation(type: WebIDLType): boolean {
-    const cached = this.#implementationAdaptation.get(type);
-    if (cached !== undefined) return cached;
-    const required = this.getCandidateTypes(type).some((candidate) => {
-      if (candidate.kind === 'sequence') return this.requiresImplementationAdaptation(candidate.type);
-      if (candidate.kind === 'reference') return !this.enumerations.has(candidate.name);
-      return candidate.kind !== 'simple' || !(
+  /** Whether every candidate produces a primitive value, including enumerations and null. */
+  isPrimitiveType(type: WebIDLType): boolean {
+    return this.getCandidateTypes(type).every((candidate) => {
+      if (candidate.kind === 'reference') return this.enumerations.has(candidate.name);
+      return candidate.kind === 'simple' && (
         numericTypeNames.has(candidate.name) || stringTypeNames.has(candidate.name) ||
-        candidate.name === 'boolean' || candidate.name === 'bigint' || candidate.name === 'undefined'
+        candidate.name === 'boolean' || candidate.name === 'bigint' || candidate.name === 'undefined' ||
+        candidate.name === 'symbol'
       );
     });
-    this.#implementationAdaptation.set(type, required);
-    return required;
+  }
+
+  /** Whether a type may carry an intermediate value, directly or inside a container. */
+  // Only primitives and sequences of primitives bypass unpacking. This is a
+  // conservative check: record Maps also need unpacking, while ordinary objects
+  // pass through unchanged when inspected by idlToImpl.
+  mayContainCarrier(type: WebIDLType): boolean {
+    const cached = this.#carrierTypes.get(type);
+    if (cached !== undefined) return cached;
+    const mayContainCarrier = this.getCandidateTypes(type).some((candidate) => {
+      if (candidate.kind === 'sequence') return this.mayContainCarrier(candidate.type);
+      return !this.isPrimitiveType(candidate);
+    });
+    this.#carrierTypes.set(type, mayContainCarrier);
+    return mayContainCarrier;
   }
 
   /** Whether an overload candidate includes a string or enumeration type. */
@@ -421,7 +448,7 @@ export class DefinitionAssembly {
     }
   }
 
-  // Prepare fixed classification and adaptation answers together, without inspecting container contents.
+  // Prepare fixed classification and implementation-conversion answers without inspecting container contents.
   #getTypeAnalysis(type: WebIDLType): TypeAnalysis {
     const cached = this.#typeAnalyses.get(type);
     if (cached) return cached;

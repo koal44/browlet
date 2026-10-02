@@ -4,13 +4,13 @@ import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { invokeCallbackFunction } from '../../src/web-idl/callback';
-import { isCallbackFunctionValue } from '../../src/web-idl/callback-value';
+
+import { CallbackFunctionCarrier } from '../../src/web-idl/callback';
 import {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL, functionIDL,
   voidFunctionIDL, webIDLCommonDefinitions,
 } from '../../src/web-idl/common-definitions';
-import { convertToIDL } from '../../src/web-idl/conversion';
+import { jsToIDL } from '../../src/web-idl/conversion';
 import { reference } from '../../src/web-idl/core/index';
 import { serializeDefinitions } from '../../src/web-idl/core/index';
 
@@ -41,7 +41,7 @@ callback VoidFunction = undefined();`);
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const function_ = convertToIDL(
+    const function_ = jsToIDL(
       realm.evaluate(
         '(function (...args) { return args; })',
         'common-function.js',
@@ -49,26 +49,22 @@ callback VoidFunction = undefined();`);
       reference('Function'),
       binding.defaultConversionContext,
     );
-    const voidFunction = convertToIDL(
+    const voidFunction = jsToIDL(
       realm.evaluate('() => 42', 'common-void-function.js'),
       reference('VoidFunction'),
       binding.defaultConversionContext,
     );
     if (
-      !isCallbackFunctionValue(function_) ||
-      !isCallbackFunctionValue(voidFunction)
+      !CallbackFunctionCarrier.is(function_) ||
+      !CallbackFunctionCarrier.is(voidFunction)
     ) {
       throw new Error('Common callbacks did not convert to callback values');
     }
 
-    expect(invokeCallbackFunction(
-      function_,
-      [1, 'two', null],
+    expect(function_.invoke([1, 'two', null],
       'rethrow',
     )).toEqual([1, 'two', null]);
-    expect(invokeCallbackFunction(
-      voidFunction,
-      [],
+    expect(voidFunction.invoke([],
       'rethrow',
     )).toBeUndefined();
   });

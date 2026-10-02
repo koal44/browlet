@@ -3,12 +3,9 @@ import type { AssembledCallable, AssembledInterface } from './assembled';
 import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
 import {
-  callUserObjectOperation, type CallbackConverter,
+  CallbackFunctionCarrier, CallbackInterfaceCarrier, CallbackFunctionStamper,
+  type StampedCallbackFunction, type CallbackInvoker,
 } from './callback';
-import {
-  isCallbackFunctionValue, isCallbackInterfaceRecord, stampCallbackFunction,
-  type CallbackFunctionAdapter, type CallbackFunctionValue, type CallbackInterfaceValue,
-} from './callback-value';
 import { hasExtendedAttribute } from './core/helpers';
 import type {
   AttributeMember, OperationMember, WebIDLType, CallbackExceptionBehavior,
@@ -21,13 +18,9 @@ import type {
   StringificationBehavior, ValuePairsSteps,
 } from './definition-binding';
 import { missingArgument } from './overload';
-import { convertToIDL, IDLDictionaryValue } from './conversion';
-import { toImplementationPromise } from './promise';
-import { isIDLPromiseRecord } from './promise-record';
-import {
-  closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
-  isIDLAsyncSequence, openAsyncSequence,
-} from './async-sequence';
+import { jsToIDL, DictionaryCarrier } from './conversion';
+import { PromiseCarrier } from './promise';
+import { endOfIteration, AsyncSequenceCarrier } from './async-sequence';
 import { InternalError } from '../infra/internal-error';
 
 // Project helper: register declaration adapters for one realm.
@@ -76,11 +69,11 @@ function registerDefinedInterface(
         const callable = assembled.callables.get(member);
         if (member.construct) {
           const construct = member.construct;
-          const adapt = createArgumentAdapter(callable, realmBinding);
+          const convert = createIDLArgumentsToImplConverter(callable, realmBinding);
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: (values) => {
-              const args = adapt(values, context);
+              const args = convert(values, context);
               return callImplementation(construct, undefined, [context, ...args], realmBinding);
             },
           };
@@ -282,7 +275,7 @@ function registerDefinedAttribute(
   };
   const set = member.set;
   if (set && !member.readonly) {
-    const adapt = createImplementationAdapter(member.type, {
+    const convert = createIDLToImplConverter(member.type, {
       callbackExceptionBehavior: member.callbackExceptionBehavior,
     }, realmBinding);
     steps.set = (receiver, value) => {
@@ -292,7 +285,7 @@ function registerDefinedAttribute(
         receiver?.implInst ?? null,
         [
           operationContext,
-          adapt(value, operationContext),
+          convert(value, operationContext),
         ],
         realmBinding,
       );
@@ -308,14 +301,14 @@ function createDefinedConstructorSteps(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): ConstructorSteps {
-  const adapt = createArgumentAdapter(assembled, realmBinding);
+  const convert = createIDLArgumentsToImplConverter(assembled, realmBinding);
   return function(...values) {
     callImplementation(
       invoke,
       this,
       [
         context,
-        ...adapt(values, context),
+        ...convert(values, context),
       ],
       realmBinding,
     );
@@ -330,14 +323,14 @@ function createImplementationConstructorSteps(
   realmBinding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
 ): ImplementationConstructorSteps {
-  const adapt = createArgumentAdapter(assembled, realmBinding);
+  const convert = createIDLArgumentsToImplConverter(assembled, realmBinding);
   return (values) => callImplementation(
     constructImplementationObject,
     undefined,
     [
       implClass,
       resolveImplementationArguments(
-        adapt(values, context),
+        convert(values, context),
         injectedArguments,
         context,
       ),
@@ -364,7 +357,7 @@ function createDefinedOperationSteps(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): OperationSteps {
-  const adapt = createArgumentAdapter(assembled, realmBinding);
+  const convert = createIDLArgumentsToImplConverter(assembled, realmBinding);
   return (receiver, ...values) => {
     const operationContext = receiver?.binding.context ?? context;
     return callImplementation(
@@ -372,7 +365,7 @@ function createDefinedOperationSteps(
       receiver?.implInst ?? null,
       [
         operationContext,
-        ...adapt(values, operationContext),
+        ...convert(values, operationContext),
       ],
       realmBinding,
     );
@@ -387,14 +380,14 @@ function createAsyncIteratorSteps(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): AsyncIteratorSteps {
-  const adapt = createArgumentAdapter(assembled, realmBinding);
+  const convert = createIDLArgumentsToImplConverter(assembled, realmBinding);
   return {
     // Project adapter for "asynchronous iterator initialization steps": call our iterator factory.
     create(target, argumentsList) {
       return callImplementation(
         factory,
         target,
-        adapt(argumentsList, context),
+        convert(argumentsList, context),
         realmBinding,
       );
     },
@@ -465,12 +458,12 @@ function registerAttribute(
         throw new InternalError(`Web IDL attribute ${member.name} is not writable`);
       }
     };
-  const adapt = set && !member.readonly ? createImplementationAdapter(member.type, {
+  const convert = set && !member.readonly ? createIDLToImplConverter(member.type, {
     callbackExceptionBehavior: member.callbackExceptionBehavior,
   }, realmBinding) : undefined;
   memberBinding.attributeSteps = {
     get,
-    ...(set && adapt
+    ...(set && convert
       ? {
         // Project helper: adapt the converted attribute value before storing it.
         set(receiver, value) {
@@ -479,7 +472,7 @@ function registerAttribute(
             set,
             receiver?.implInst ?? target,
             [
-              adapt(value, operationContext),
+              convert(value, operationContext),
             ],
             realmBinding,
           );
@@ -507,7 +500,7 @@ function registerOperation(
     );
   }
   const method = value as (this: object | null, ...values: unknown[]) => unknown;
-  const adapt = createArgumentAdapter(assembled, realmBinding);
+  const convert = createIDLArgumentsToImplConverter(assembled, realmBinding);
 
   memberBinding.operationSteps = (receiver, ...values) => {
     const operationContext = receiver?.binding.context ?? context;
@@ -515,7 +508,7 @@ function registerOperation(
       method,
       receiver?.implInst ?? null,
       resolveImplementationArguments(
-        adapt(values, operationContext),
+        convert(values, operationContext),
         injectedArguments,
         operationContext,
         context,
@@ -620,148 +613,154 @@ function findDescriptor(
   }
 }
 
-// Argument conversion has already established each declared IDL type.
-function createArgumentAdapter(
+/** Prepare IDL-to-implementation conversion for one callable's arguments, including its variadic tail. */
+// Author coercion, validation, and defaults have already run. These converters replace
+// conversion carriers with the representations consumed by implementation methods.
+function createIDLArgumentsToImplConverter(
   assembled: AssembledCallable,
   realmBinding: RealmBinding,
 ): (values: unknown[], context: BindingContext) => unknown[] {
-  const adapters = assembled.arguments.map((argument) => {
-    const adapt = createImplementationAdapter(argument.type, argument.primary, realmBinding);
+  const converters = assembled.arguments.map((argument) => {
+    const convert = createIDLToImplConverter(argument.type, argument.primary, realmBinding);
     // Callback dictionaries also convert an omitted input into an empty dictionary.
-    return argument.primary.callbackDictionary ? adapt : (value: unknown, context: BindingContext) =>
-      value === missingArgument ? undefined : adapt(value, context);
+    return argument.primary.callbackDictionary ? convert : (value: unknown, context: BindingContext) =>
+      value === missingArgument ? undefined : convert(value, context);
   });
-  const variadic = assembled.variadicArgument && adapters.at(-1);
+  const variadic = assembled.variadicArgument && converters.at(-1);
   return (values, context) => {
     // Consume the invocation's fresh list; the intermediate IDL values are no longer needed.
     for (let index = 0; index < values.length; index++) {
-      values[index] = (adapters[index] ?? variadic!)(values[index], context);
+      values[index] = (converters[index] ?? variadic!)(values[index], context);
     }
     return values;
   };
 }
 
-type ImplementationAdapter<Value = unknown> = (
+/** Turn a converted IDL value into its implementation representation; this does not validate author input. */
+type IDLToImplConverter<Value = unknown, Result = unknown> = (
   value: Value, context: BindingContext, callbackThis?: unknown,
-) => unknown;
+) => Result;
 
-// Select adaptation from the converted type, keeping runtime discrimination for unions and any.
-function createImplementationAdapter(
+/** Prepare representation changes for a declared IDL type: callbacks become callables, dictionaries become member records. */
+// For example, a converted callback retains its realm and capture context, but
+// implementations need a callable that invokes it under those retained rules.
+// Unions and any still need runtime discrimination; known types select their path here.
+function createIDLToImplConverter(
   type: WebIDLType,
-  options: ImplementationAdaptationOptions,
+  options: ImplConversionOptions,
   realmBinding: RealmBinding,
-): ImplementationAdapter {
+): IDLToImplConverter {
   const assembly = realmBinding.assembly;
   if (options.callbackDictionary || options.implClasses?.length) {
-    return (value, context) => adaptIDLToImpl(value, type, options, context, realmBinding);
+    return (value, context) => idlToImpl(value, type, options, context, realmBinding);
   }
   const resolved = assembly.getConversionType(type).type;
   if (resolved.kind === 'nullable') {
-    const adapt = createImplementationAdapter(resolved.type, options, realmBinding);
-    return (value, context, callbackThis) => value === null ? null : adapt(value, context, callbackThis);
+    const convert = createIDLToImplConverter(resolved.type, options, realmBinding);
+    return (value, context, callbackThis) => value === null ? null : convert(value, context, callbackThis);
   }
-  if (!assembly.requiresImplementationAdaptation(type)) return (value) => value;
+  if (!assembly.mayContainCarrier(type)) return (value) => value;
   if (resolved.kind === 'reference') {
     const callbackAssembled = assembly.callbackFunctions.get(resolved.name);
     if (callbackAssembled) {
-      const converter = realmBinding.getCallbackConverter(callbackAssembled);
-      let resultAdapter: ImplementationAdapter | undefined;
-      // A callback can return its own type; prepare that adapter only if invoked.
-      const adaptResult: ImplementationAdapter = assembly.requiresImplementationAdaptation(callbackAssembled.primary.returns)
-        ? (value, context) => (resultAdapter ??= createImplementationAdapter(
+      const invoker = realmBinding.getCallbackInvoker(callbackAssembled);
+      let resultConverter: IDLToImplConverter | undefined;
+      // A callback can return its own type; prepare that converter only if invoked.
+      const convertResult: IDLToImplConverter = assembly.mayContainCarrier(callbackAssembled.primary.returns)
+        ? (value, context) => (resultConverter ??= createIDLToImplConverter(
           callbackAssembled.primary.returns, {}, realmBinding,
         ))(value, context)
         : (value) => value;
-      const adapt: ImplementationAdapter<CallbackFunctionValue> = (value, context, callbackThis) =>
-        adaptCallbackFunction(value, options.callbackExceptionBehavior, context, realmBinding, callbackThis, converter, adaptResult);
+      const convert: IDLToImplConverter<CallbackFunctionCarrier, StampedCallbackFunction> = (value, context, callbackThis) =>
+        bindCallbackFunction(value, options.callbackExceptionBehavior, context, realmBinding, callbackThis, invoker, convertResult);
       // The declared callback converter is the sole producer at this boundary.
-      return adapt as ImplementationAdapter;
+      return convert as IDLToImplConverter;
     }
     const assembled = assembly.dictionaries.get(resolved.name);
     if (assembled) {
       // Recursive dictionary declarations need the plan only when a value reaches this type.
-      let members: { name: string; adapt: ImplementationAdapter; }[] | undefined;
-      const adapt: ImplementationAdapter<IDLDictionaryValue> = (value, context, callbackThis) => {
-        members ??= assembled.getAdaptedMembers(assembly).map((member) => ({
+      let members: { name: string; convert: IDLToImplConverter; }[] | undefined;
+      const convert: IDLToImplConverter<DictionaryCarrier, Record<string, unknown>> = (value, context, callbackThis) => {
+        members ??= assembled.getCarriedMembers(assembly).map((member) => ({
           name: member.name,
-          adapt: createImplementationAdapter(member.type, {
+          convert: createIDLToImplConverter(member.type, {
             callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? options.callbackExceptionBehavior,
           }, realmBinding),
         }));
         const { record } = value;
         for (const member of members) {
           if (!Object.hasOwn(record, member.name)) continue;
-          record[member.name] = member.adapt(record[member.name], context, callbackThis);
+          record[member.name] = member.convert(record[member.name], context, callbackThis);
         }
         return record;
       };
-      return adapt as ImplementationAdapter;
+      return convert as IDLToImplConverter;
     }
   }
-  return (value, context, callbackThis) => adaptIDLToImpl(value, type,
-    callbackThis === undefined ? options : { ...options, callbackThis: isCallbackFunctionValue(value) ? callbackThis : undefined },
+  return (value, context, callbackThis) => idlToImpl(value, type,
+    callbackThis === undefined ? options : { ...options, callbackThis: CallbackFunctionCarrier.is(value) ? callbackThis : undefined },
     context, realmBinding);
 }
 
-// Project helper: adapt converted IDL values to our implementation representations.
-// Web IDL §3.2 JavaScript type mapping is delegated to conversion.ts where conversion is needed.
-export function adaptIDLToImpl(
+/** Convert an IDL value to its implementation representation when the path was not prepared ahead of time. */
+// Author coercion and validation belong to jsToIDL; this step handles representation changes.
+export function idlToImpl(
   value: unknown,
   type: WebIDLType | undefined,
-  options: ImplementationAdaptationOptions,
+  options: ImplConversionOptions,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): unknown {
   if (options.callbackDictionary !== undefined) {
     const input = value === missingArgument ? undefined : value;
     const dictionaryType = options.callbackDictionary;
-    return adaptIDLToImpl(
-      convertToIDL(input, dictionaryType, realmBinding.defaultConversionContext), dictionaryType,
+    return idlToImpl(
+      jsToIDL(input, dictionaryType, realmBinding.defaultConversionContext), dictionaryType,
       { callbackThis: input }, context, realmBinding,
     );
   }
   if (value === missingArgument) return undefined;
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
-  if (value instanceof IDLDictionaryValue) {
+  if (value instanceof DictionaryCarrier) {
     const { assembled, record } = value;
     // Conversion owns this record and has already created its data properties.
-    // Adapt in place without copying or touching inherited properties.
-    for (const member of assembled.getAdaptedMembers(realmBinding.assembly)) {
+    // Convert in place without copying or touching inherited properties.
+    for (const member of assembled.getCarriedMembers(realmBinding.assembly)) {
       if (!Object.hasOwn(record, member.name)) continue;
       const memberValue = record[member.name];
       if (memberValue === null || (typeof memberValue !== 'object' && typeof memberValue !== 'function')) continue;
-      record[member.name] = adaptIDLToImpl(
+      record[member.name] = idlToImpl(
         memberValue, member.type,
         {
           callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? options.callbackExceptionBehavior,
-          callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
+          callbackThis: CallbackFunctionCarrier.is(memberValue) ? options.callbackThis : undefined,
         },
         context, realmBinding,
       );
     }
     return record;
   }
-  if (isIDLAsyncSequence(value)) {
+  if (AsyncSequenceCarrier.is(value)) {
     // Delegates Web IDL §3.2.22.1 Iterating async sequences to async-sequence.ts.
-    const iterator = openAsyncSequence(value, realmBinding.realm);
+    const iterator = value.open(realmBinding.realm);
     return {
-      next: () => toImplementationPromise(
-        getAsyncIteratorNextValue(iterator, realmBinding.realm,
-          (item, itemType) => convertToIDL(item, itemType, realmBinding.defaultConversionContext)),
-        realmBinding.defaultConversionContext,
-        (item) => item === endOfIteration ? item :
-          adaptIDLToImpl(item, value.elementType, {}, context, realmBinding),
-        context.Promise,
-      ),
-      return: (reason: unknown) => toImplementationPromise(
-        closeAsyncIterator(iterator, reason, realmBinding.realm), realmBinding.defaultConversionContext, (result) => result,
-        context.Promise,
-      ),
+      next() {
+        const result = iterator.nextValue(realmBinding.realm,
+          (item, itemType) => jsToIDL(item, itemType, realmBinding.defaultConversionContext));
+        return result.toImpl(realmBinding.defaultConversionContext,
+          (item) => item === endOfIteration ? item :
+            idlToImpl(item, value.elementType, {}, context, realmBinding),
+          context.Promise);
+      },
+      return(reason: unknown) {
+        const result = iterator.close(reason, realmBinding.realm);
+        return result.toImpl(realmBinding.defaultConversionContext, (value) => value, context.Promise);
+      },
     };
   }
-  if (isIDLPromiseRecord(value)) {
-    return toImplementationPromise(value, realmBinding.defaultConversionContext, (result) =>
-      adaptIDLToImpl(
+  if (PromiseCarrier.is(value)) {
+    return value.toImpl(realmBinding.defaultConversionContext, (result) =>
+      idlToImpl(
         result, value.type, options, context, realmBinding,
       ), context.Promise);
   }
@@ -769,8 +768,8 @@ export function adaptIDLToImpl(
     const resolved = context.unwrap(value, implClass);
     if (resolved) return resolved;
   }
-  if (isCallbackFunctionValue(value)) {
-    return adaptCallbackFunction(
+  if (CallbackFunctionCarrier.is(value)) {
+    return bindCallbackFunction(
       value,
       options.callbackExceptionBehavior,
       context,
@@ -778,37 +777,17 @@ export function adaptIDLToImpl(
       options.callbackThis,
     );
   }
-  if (isCallbackInterfaceRecord(value)) {
-    const adapt = value.assembled.primary.adapt;
-    if (!adapt) return value;
+  if (CallbackInterfaceCarrier.is(value)) {
+    const convert = value.assembled.primary.toImpl;
+    if (!convert) return value;
 
-    const callback: CallbackInterfaceValue = {
-      // Delegates Web IDL §3.11 Callback interfaces — call a user object's operation.
-      callUserObjectOperation: (
-        operationName,
-        argumentsList,
-        thisArgument,
-      ) => callUserObjectOperation(
-        value,
-        operationName,
-        argumentsList,
-        thisArgument,
-      ),
-      object: value.object,
-      realm: value.realm,
-    };
-    return callImplementation(
-      adapt,
-      undefined,
-      [context, callback],
-      realmBinding,
-    );
+    return callImplementation(convert, undefined, [context, value], realmBinding);
   }
   if (Array.isArray(value)) {
     const elementType = type && realmBinding.assembly.findSequenceElementType(type);
-    if (!elementType || !realmBinding.assembly.requiresImplementationAdaptation(elementType)) return value;
+    if (!elementType || !realmBinding.assembly.mayContainCarrier(elementType)) return value;
     return value.map((item) =>
-      adaptIDLToImpl(
+      idlToImpl(
         item,
         elementType,
         { callbackExceptionBehavior: options.callbackExceptionBehavior },
@@ -826,11 +805,12 @@ export function adaptIDLToImpl(
   const object = Object.fromEntries(entries);
   for (const [name, memberValue] of entries) {
     if (memberValue === null || (typeof memberValue !== 'object' && typeof memberValue !== 'function')) continue;
-    object[name] = adaptIDLToImpl(
-      memberValue, recordValueType,
+    object[name] = idlToImpl(
+      memberValue,
+      recordValueType,
       {
         callbackExceptionBehavior: options.callbackExceptionBehavior,
-        callbackThis: isCallbackFunctionValue(memberValue) ? options.callbackThis : undefined,
+        callbackThis: CallbackFunctionCarrier.is(memberValue) ? options.callbackThis : undefined,
       },
       context,
       realmBinding,
@@ -839,33 +819,33 @@ export function adaptIDLToImpl(
   return object;
 }
 
-type ImplementationAdaptationOptions = {
+type ImplConversionOptions = {
   callbackDictionary?: ReferenceType;
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   callbackThis?: unknown;
   implClasses?: ImplementationClass[];
 };
 
-// Project helper: expose a retained IDL callback to implementations as an ordinary callable.
-function adaptCallbackFunction(
-  value: CallbackFunctionValue,
+/** Bind a callback carrier to implementation invocation; the receiver may still be supplied at call time. */
+function bindCallbackFunction(
+  cbCarrier: CallbackFunctionCarrier,
   exceptionBehavior: CallbackExceptionBehavior | undefined,
   context: BindingContext,
   realmBinding: RealmBinding,
   callbackThis?: unknown,
-  converter: CallbackConverter = realmBinding.getCallbackConverter(value.assembled),
-  adaptResult?: ImplementationAdapter,
-): CallbackFunctionAdapter {
-  const existing = value.adapter;
+  invoker: CallbackInvoker = realmBinding.getCallbackInvoker(cbCarrier.assembled),
+  convertResult?: IDLToImplConverter,
+): StampedCallbackFunction {
+  const existing = cbCarrier.boundCallback;
   if (existing) return existing;
 
   // Construction uses constructCallbackFunction, so ordinary calls need no Proxy.
-  const adapter = stampCallbackFunction(function callback(this: unknown, ...argumentsList: unknown[]) {
-    const result = converter.invoke(value, argumentsList, exceptionBehavior, callbackThis ?? this);
-    return adaptResult ? adaptResult(result, context) : adaptIDLToImpl(
-      result, value.assembled.primary.returns, {}, context, realmBinding,
+  const boundCallback = CallbackFunctionStamper.stamp(function callback(this: unknown, ...argumentsList: unknown[]) {
+    const result = invoker.invoke(cbCarrier, argumentsList, exceptionBehavior, callbackThis ?? this);
+    return convertResult ? convertResult(result, context) : idlToImpl(
+      result, cbCarrier.assembled.primary.returns, {}, context, realmBinding,
     );
-  }, value);
-  value.adapter = adapter;
-  return adapter;
+  }, cbCarrier);
+  cbCarrier.boundCallback = boundCallback;
+  return boundCallback;
 }

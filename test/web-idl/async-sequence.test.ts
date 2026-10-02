@@ -4,12 +4,11 @@ import { TestRealm as Realm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
-  closeAsyncIterator, convertAsyncSequenceToJavaScript, endOfIteration,
-  getAsyncIteratorNextValue, isIDLAsyncSequence, openAsyncSequence,
-  type AsyncSequenceValue, type IDLAsyncIterator, type IDLAsyncSequence,
+  endOfIteration, AsyncSequenceCarrier, type AsyncSequenceValue,
+  type AsyncIteratorCarrier,
 } from '../../src/web-idl/async-sequence';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { convertToIDL } from '../../src/web-idl/conversion';
+import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
 import {
   asyncSequence, defineDictionary, defineInterface, dictMember, idlType,
   reference, type OperationMember,
@@ -25,7 +24,7 @@ describe('Web IDL async sequences', () => {
     const context = new BindingWorld([entryIDL]).register(realm, (ctx) => ({ realm: ctx.realm }));
     let conversions = 0;
     const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
-    const sequence = context.convertToImpl(entries, asyncSequence(reference('Entry'))) as
+    const sequence = context.jsToImpl(entries, asyncSequence(reference('Entry'))) as
       AsyncSequenceValue<{ name: string; }>;
     const first = Promise.withResolvers<unknown>();
     sequence.next().observe(first.resolve, first.reject);
@@ -47,16 +46,74 @@ describe('Web IDL async sequences', () => {
       },
     });
 
-    const sequence = convertToIDL(
+    const sequence = jsToIDL(
       source,
       asyncSequence(idlType.long),
       binding.defaultConversionContext,
     );
 
-    expect(convertAsyncSequenceToJavaScript(sequence)).toBe(source);
+    expect(idlToJS(sequence, asyncSequence(idlType.long), binding.defaultConversionContext)).toBe(source);
     expect(gets).toBe(1);
-    openAsyncSequence(requireAsyncSequence(sequence), binding.realm);
+    requireAsyncSequence(sequence).open(binding.realm);
     expect(gets).toBe(1);
+  });
+
+  it.each(['sync', 'async'] as const)('captures the %s iterator next method once when opened', async (kind) => {
+    const { binding, realm } = createBinding();
+    let gets = 0;
+    const sourceIterator = {
+      get next() {
+        gets++;
+        return function(this: unknown) {
+          expect(this).toBe(sourceIterator);
+          return { done: false, value: '7.9' };
+        };
+      },
+    };
+    const source = {
+      [kind === 'sync' ? Symbol.iterator : Symbol.asyncIterator]: () => sourceIterator,
+    };
+    const iterator = requireAsyncSequence(jsToIDL(
+      source, asyncSequence(idlType.long), binding.defaultConversionContext,
+    )).open(realm);
+    Object.defineProperty(sourceIterator, 'next', {
+      value: () => { throw new Error('next was read again'); },
+    });
+
+    await expect(nextValue(iterator, binding)).resolves.toBe(7);
+    await expect(nextValue(iterator, binding)).resolves.toBe(7);
+    expect(gets).toBe(1);
+  });
+
+  it.each(['sync', 'async'] as const)('reads the %s iterator return method at close and awaits its result', async (kind) => {
+    const { binding, realm } = createBinding();
+    let returned: unknown;
+    let awaited = false;
+    const sourceIterator = {
+      next: () => ({ done: true }),
+      return(_reason: unknown): unknown { throw new Error('old return was called'); },
+    };
+    const source = {
+      [kind === 'sync' ? Symbol.iterator : Symbol.asyncIterator]: () => sourceIterator,
+    };
+    const iterator = requireAsyncSequence(jsToIDL(
+      source, asyncSequence(idlType.long), binding.defaultConversionContext,
+    )).open(realm);
+    sourceIterator.return = function(reason: unknown) {
+      expect(this).toBe(sourceIterator);
+      returned = reason;
+      const completion = {
+        then(resolve: (value: unknown) => void) {
+          awaited = true;
+          resolve(kind === 'sync' ? 'finished' : { done: true });
+        },
+      };
+      return kind === 'sync' ? { done: true, value: completion } : completion;
+    };
+
+    await expect(iterator.close('stop', realm).promise).resolves.toBeUndefined();
+    expect(returned).toBe('stop');
+    expect(awaited).toBe(true);
   });
 
   it('adapts sync iterators and awaits their yielded values', async () => {
@@ -78,28 +135,24 @@ describe('Web IDL async sequences', () => {
         };
       },
     };
-    const sequence = requireAsyncSequence(convertToIDL(
+    const sequence = requireAsyncSequence(jsToIDL(
       source,
       asyncSequence(idlType.long),
       binding.defaultConversionContext,
     ));
-    const iterator = openAsyncSequence(sequence, realm);
+    const iterator = sequence.open(realm);
 
-    const next = getAsyncIteratorNextValue(
-      iterator,
-      realm,
-      (value, type) => convertToIDL(value, type, binding.defaultConversionContext),
+    const next = iterator.nextValue(realm,
+      (value, type) => jsToIDL(value, type, binding.defaultConversionContext),
     );
     expect(next.promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
     expect(next.promise).not.toBeInstanceOf(Promise);
     await expect(next.promise).resolves.toBe(4);
-    await expect(getAsyncIteratorNextValue(
-      iterator,
-      realm,
-      (value, type) => convertToIDL(value, type, binding.defaultConversionContext),
+    await expect(iterator.nextValue(realm,
+      (value, type) => jsToIDL(value, type, binding.defaultConversionContext),
     ).promise).resolves.toBe(endOfIteration);
 
-    await expect(closeAsyncIterator(iterator, 'stop', realm).promise)
+    await expect(iterator.close('stop', realm).promise)
       .resolves.toBeUndefined();
     expect(returned).toBe('stop');
   });
@@ -115,11 +168,11 @@ describe('Web IDL async sequences', () => {
         return { next: () => values.shift() };
       },
     };
-    const iterator = openAsyncSequence(requireAsyncSequence(convertToIDL(
+    const iterator = requireAsyncSequence(jsToIDL(
       source,
       asyncSequence(idlType.long),
       binding.defaultConversionContext,
-    )), realm);
+    )).open(realm);
 
     await expect(nextValue(iterator, binding)).resolves.toBe(8);
     await expect(nextValue(iterator, binding)).rejects
@@ -133,11 +186,11 @@ describe('Web IDL async sequences', () => {
         return { next: () => 42 };
       },
     };
-    const iterator = openAsyncSequence(requireAsyncSequence(convertToIDL(
+    const iterator = requireAsyncSequence(jsToIDL(
       source,
       asyncSequence(idlType.long),
       binding.defaultConversionContext,
-    )), realm);
+    )).open(realm);
     const order: string[] = [];
     const rejection = nextValue(iterator, binding).catch((error: unknown) => {
       expect(error).toBeInstanceOf(realm.intrinsics.typeError);
@@ -210,19 +263,17 @@ function createBinding(): { binding: RealmBinding; realm: Realm; } {
 
 function requireAsyncSequence(
   value: unknown,
-): IDLAsyncSequence {
-  if (!isIDLAsyncSequence(value)) throw new Error('Value is not an async sequence');
+): AsyncSequenceCarrier {
+  if (!AsyncSequenceCarrier.is(value)) throw new Error('Value is not an async sequence');
   return value;
 }
 
 function nextValue(
-  iterator: IDLAsyncIterator,
+  iterator: AsyncIteratorCarrier,
   binding: RealmBinding,
 ): Promise<unknown> {
-  return getAsyncIteratorNextValue(
-    iterator,
-    binding.realm,
-    (value, type) => convertToIDL(value, type, binding.defaultConversionContext),
+  return iterator.nextValue(binding.realm,
+    (value, type) => jsToIDL(value, type, binding.defaultConversionContext),
   ).promise;
 }
 

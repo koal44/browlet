@@ -6,12 +6,12 @@ import {
   AssembledInterface, type AssembledCallable, type AssembledCallbackInterface, type AssembledInterfaceMember,
   type AssembledDictionary, type AssembledNamespace, type AssembledNamespaceMember, type AssembledOverloads,
 } from './assembled';
-import { AsynchronousIterableBinding } from './async-iterable';
+import { AsyncIterableBinding } from './async-iterable';
 import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
 } from './collection';
 import {
-  convertToJavaScript, createDictionaryConverter, createIDLConverter, createJavaScriptConverter, materializeDefaultValue,
+  idlToJS, createDictionaryConverter, createJSToIDLConverter, createIDLToJSConverter, materializeDefaultValue,
   type ConversionContext, type DictionaryConverter,
 } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
@@ -33,28 +33,29 @@ import {
   LegacyPlatformObjectBinding, type LegacyPropertyMetadata,
 } from './legacy-platform-object';
 import { createOverloadResolver } from './overload';
-import { CallbackConverter, type CallbackCallable } from './callback';
+import { CallbackInvoker, type CallbackCallable } from './callback';
 import { ObservableArrayBinding } from './observable-array';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
   PlatformRecord, type StampedPlatformObject,
 } from './platform-object';
 import type { BindingWorld } from './binding-world';
-import { createRejectedPromise } from './promise';
+import { PromiseCarrier } from './promise';
 import { InternalError } from '../infra/internal-error';
 
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   assembly: DefinitionAssembly;
   world: BindingWorld;
+  /** Realize a private exception request once in this binding's realm; preserve other values. */
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
   context: BindingContext<Env>;
   defaultConversionContext: ConversionContext;
   #collections: CollectionBinding;
-  #asyncIterables: AsynchronousIterableBinding;
+  #asyncIterables: AsyncIterableBinding;
   #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
   #dictionaryConverters = new Map<AssembledDictionary, DictionaryConverter>();
-  #callbackConverters = new Map<CallbackCallable, CallbackConverter>();
+  #callbackInvokers = new Map<CallbackCallable, CallbackInvoker>();
   #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
@@ -99,7 +100,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       void ExceptionRealizationStamper.stamp(value, error);
       return error;
     };
-    this.#asyncIterables = new AsynchronousIterableBinding(this);
+    this.#asyncIterables = new AsyncIterableBinding(this);
     this.#collections = new CollectionBinding(this.defaultConversionContext);
     this.#globalPlatformObjects = new GlobalPlatformObjectBinding(this);
     this.#iterables = new SynchronousIterableBinding(this);
@@ -142,14 +143,14 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return convert;
   }
 
-  /** Reuse callback argument and result conversions without retaining a callback's realm. */
-  getCallbackConverter(assembled: CallbackCallable): CallbackConverter {
-    let convert = this.#callbackConverters.get(assembled);
-    if (!convert) {
-      convert = new CallbackConverter(assembled, this.assembly);
-      this.#callbackConverters.set(assembled, convert);
+  /** Reuse a callback's invocation contract without retaining a particular callback or realm. */
+  getCallbackInvoker(assembled: CallbackCallable): CallbackInvoker {
+    let invoker = this.#callbackInvokers.get(assembled);
+    if (!invoker) {
+      invoker = new CallbackInvoker(assembled, this.assembly);
+      this.#callbackInvokers.set(assembled, invoker);
     }
-    return convert;
+    return invoker;
   }
 
   /** Find a member's binding on its including interface or an ancestor. */
@@ -808,7 +809,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     defineProperty(target, constant.name, {
       configurable: false,
       enumerable: true,
-      value: convertToJavaScript(
+      value: idlToJS(
         materializeDefaultValue(constant.value, constant.type, this.defaultConversionContext),
         constant.type,
         this.defaultConversionContext,
@@ -937,7 +938,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
             }
             value = Reflect.apply(behavior, object, []);
           }
-          return convertToJavaScript(
+          return idlToJS(
             value,
             idlType.DOMString,
             this.defaultConversionContext,
@@ -977,7 +978,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   }
 
   // Web IDL §3.7.10 Asynchronous iterable declarations — define the asynchronous iteration methods; delegates
-  // to AsynchronousIterableBinding.
+  // to AsyncIterableBinding.
   #defineAsyncIterationMethods(
     target: object,
     assembled: AssembledInterface,
@@ -991,7 +992,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.#asyncIterables.defineMethods(
       target,
       assembled,
-      entry.member,
+      assembled.callables.get(entry.member),
     );
   }
 
@@ -1000,11 +1001,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     target: object,
     assembled: AssembledInterface,
   ): void {
-    const declaration = assembled.getCollectionDeclaration();
-    if (declaration?.kind === 'maplike') {
-      this.#collections.defineMaplike(target, assembled, declaration);
-    } else if (declaration?.kind === 'setlike') {
-      this.#collections.defineSetlike(target, assembled, declaration);
+    const member = assembled.getCollectionMember();
+    if (member?.kind === 'maplike') {
+      this.#collections.defineMaplike(target, assembled, member);
+    } else if (member?.kind === 'setlike') {
+      this.#collections.defineSetlike(target, assembled, member);
     }
   }
 
@@ -1016,7 +1017,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const interfaceAssembled = getMemberInterface(assembled);
     const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
     const elementType = this.assembly.getObservableArrayElementType(attribute.type);
-    const convertResult = createJavaScriptConverter(attribute.type, this.assembly);
+    const convertResult = createIDLToJSConverter(attribute.type, this.assembly);
     const implementation = interfaceAssembled && attribute.inherit
       ? interfaceAssembled.getInheritedAttribute(attribute)
       : attribute;
@@ -1096,7 +1097,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const observableArrayElementType = this.assembly.getObservableArrayElementType(attribute.type);
     const type = this.assembly.getUnannotatedType(attribute.type);
     const enumeration = type.kind === 'reference' ? this.assembly.enumerations.get(type.name) : undefined;
-    const convertInput = createIDLConverter(
+    const convertInput = createJSToIDLConverter(
       enumeration ? idlType.DOMString : attribute.type,
       this.assembly,
       { attributeAssignment: true },
@@ -1192,7 +1193,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     for (const { primary } of operations.callables) {
       const binding = definitionBinding.getOrCreateMemberRecord(primary);
       binding.isDefaultOperation = hasExtendedAttribute(primary.extendedAttributes, 'Default');
-      binding.convertResult ??= createJavaScriptConverter(
+      binding.convertResult ??= createIDLToJSConverter(
         primary.returns,
         this.assembly,
         !binding.isDefaultOperation && primary.allocateIn !== undefined,
@@ -1264,7 +1265,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): Promise<unknown> {
     const promiseType = this.assembly.getUnannotatedType(type);
     if (promiseType.kind !== 'promise') throw exception;
-    return createRejectedPromise(exception, promiseType.type, context).promise;
+    return PromiseCarrier.rejected(exception, promiseType.type, context.realm, context.binding.realizeException).promise;
   }
 
   // https://webidl.spec.whatwg.org/#js-default-tojson
@@ -1285,7 +1286,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       defineProperty(result, attribute.name, {
         configurable: true,
         enumerable: true,
-        value: convertToJavaScript(idlValue, attribute.type, context),
+        value: idlToJS(idlValue, attribute.type, context),
         writable: true,
       });
     }
@@ -1618,9 +1619,9 @@ function defineProperty(
 // Project helper: describe missing implementation steps in a binding declaration.
 function missingImplementation(
   assembled: MemberOwnerDefinition,
-  member: string,
+  memberName: string,
 ): Error {
   return new InternalError(
-    `Web IDL ${assembled.primary.name} ${member} has no implementation steps`,
+    `Web IDL ${assembled.primary.name} ${memberName} has no implementation steps`,
   );
 }

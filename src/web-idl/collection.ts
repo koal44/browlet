@@ -1,7 +1,7 @@
 import { isObject, type JSFunction } from '../js-engine/index';
 import type { AssembledInterface } from './assembled';
 import {
-  convertToIDL, convertToJavaScript, type ConversionContext,
+  jsToIDL, idlToJS, type ConversionContext,
 } from './conversion';
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
@@ -21,16 +21,16 @@ export class CollectionBinding {
   // Project storage for Web IDL §2.5.11 Maplike declarations and §2.5.12 Setlike declarations — map/set
   // entries.
   initialize(record: PlatformRecord): void {
-    const declaration = record.assembled.getCollectionDeclaration(true);
-    if (declaration?.kind === 'maplike') record.mapEntries ??= new Map();
-    else if (declaration?.kind === 'setlike') record.setEntries ??= new Set();
+    const member = record.assembled.getCollectionMember(true);
+    if (member?.kind === 'maplike') record.mapEntries ??= new Map();
+    else if (member?.kind === 'setlike') record.setEntries ??= new Set();
   }
 
   // Web IDL §3.7.11 Maplike declarations — install the declared properties.
   defineMaplike(
     target: object,
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
@@ -40,7 +40,7 @@ export class CollectionBinding {
 
     const entries = this.#createMapIteratorMethod(
       assembled,
-      declaration,
+      member,
       'key+value',
       'entries',
     );
@@ -50,45 +50,45 @@ export class CollectionBinding {
       target,
       'keys',
       this.#createMapIteratorMethod(
-        assembled, declaration, 'key', 'keys',
+        assembled, member, 'key', 'keys',
       ),
     );
     defineDataProperty(
       target,
       'values',
       this.#createMapIteratorMethod(
-        assembled, declaration, 'value', 'values',
+        assembled, member, 'value', 'values',
       ),
     );
     defineDataProperty(
       target,
       'forEach',
-      this.#createMapForEach(assembled, declaration),
+      this.#createMapForEach(assembled, member),
     );
     defineDataProperty(
       target,
       'get',
-      this.#createMapGet(assembled, declaration),
+      this.#createMapGet(assembled, member),
     );
     defineDataProperty(
       target,
       'has',
-      this.#createMapHas(assembled, declaration),
+      this.#createMapHas(assembled, member),
     );
 
-    if (declaration.readonly) return;
+    if (member.readonly) return;
     if (!assembled.hasInstanceOperation('set')) {
       defineDataProperty(
         target,
         'set',
-        this.#createMapSet(assembled, declaration),
+        this.#createMapSet(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('delete')) {
       defineDataProperty(
         target,
         'delete',
-        this.#createMapDelete(assembled, declaration),
+        this.#createMapDelete(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('clear')) {
@@ -100,7 +100,7 @@ export class CollectionBinding {
   defineSetlike(
     target: object,
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
@@ -110,7 +110,7 @@ export class CollectionBinding {
 
     const values = this.#createSetIteratorMethod(
       assembled,
-      declaration,
+      member,
       'value',
       'values',
     );
@@ -119,7 +119,7 @@ export class CollectionBinding {
       target,
       'entries',
       this.#createSetIteratorMethod(
-        assembled, declaration, 'key+value', 'entries',
+        assembled, member, 'key+value', 'entries',
       ),
     );
     defineDataProperty(target, 'keys', values);
@@ -127,27 +127,27 @@ export class CollectionBinding {
     defineDataProperty(
       target,
       'forEach',
-      this.#createSetForEach(assembled, declaration),
+      this.#createSetForEach(assembled, member),
     );
     defineDataProperty(
       target,
       'has',
-      this.#createSetHas(assembled, declaration),
+      this.#createSetHas(assembled, member),
     );
 
-    if (declaration.readonly) return;
+    if (member.readonly) return;
     if (!assembled.hasInstanceOperation('add')) {
       defineDataProperty(
         target,
         'add',
-        this.#createSetAdd(assembled, declaration),
+        this.#createSetAdd(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('delete')) {
       defineDataProperty(
         target,
         'delete',
-        this.#createSetDelete(assembled, declaration),
+        this.#createSetDelete(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('clear')) {
@@ -193,7 +193,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.3 entries, §3.7.11.4 keys, and §3.7.11.5 values.
   #createMapIteratorMethod(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
     kind: MapIterationKind,
     name: string,
   ): JSFunction {
@@ -207,7 +207,7 @@ export class CollectionBinding {
         );
         return this.#createMapIterator(
           this.getMapEntries(receiver),
-          declaration,
+          member,
           kind,
           { binding: receiver.binding, realm: this.#context.realm },
         );
@@ -219,7 +219,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.12.3 entries and §3.7.12.5 values.
   #createSetIteratorMethod(
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
     kind: SetIterationKind,
     name: string,
   ): JSFunction {
@@ -233,7 +233,7 @@ export class CollectionBinding {
         );
         return this.#createSetIterator(
           this.getSetEntries(receiver),
-          declaration,
+          member,
           kind,
           { binding: receiver.binding, realm: this.#context.realm },
         );
@@ -245,7 +245,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.6 forEach.
   #createMapForEach(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -262,8 +262,8 @@ export class CollectionBinding {
         const context = { binding: receiver.binding, realm: this.#context.realm };
         this.getMapEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            convertToJavaScript(value, declaration.value, context),
-            convertToJavaScript(key, declaration.key, context),
+            idlToJS(value, member.value, context),
+            idlToJS(key, member.key, context),
             receiver.platformObject,
           ]);
         });
@@ -276,7 +276,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.12.6 forEach.
   #createSetForEach(
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -292,9 +292,9 @@ export class CollectionBinding {
         }
         const context = { binding: receiver.binding, realm: this.#context.realm };
         this.getSetEntries(receiver).forEach((value) => {
-          const javaScriptValue = convertToJavaScript(
+          const javaScriptValue = idlToJS(
             value,
-            declaration.value,
+            member.value,
             context,
           );
           Reflect.apply(callback, argumentsList[1], [
@@ -312,7 +312,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.7 get.
   #createMapGet(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -321,12 +321,12 @@ export class CollectionBinding {
         );
         const entries = this.getMapEntries(receiver);
         const key = convertCollectionValue(
-          argumentsList[0], declaration.key, this.#context,
+          argumentsList[0], member.key, this.#context,
         );
         if (!entries.has(key)) return undefined;
-        return convertToJavaScript(
+        return idlToJS(
           entries.get(key),
-          declaration.value,
+          member.value,
           { binding: receiver.binding, realm: this.#context.realm },
         );
       },
@@ -337,7 +337,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.8 has.
   #createMapHas(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -345,7 +345,7 @@ export class CollectionBinding {
           thisArgument, assembled, 'has', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], declaration.key, this.#context,
+          argumentsList[0], member.key, this.#context,
         );
         return this.getMapEntries(receiver).has(key);
       },
@@ -356,7 +356,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.9 set.
   #createMapSet(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -364,10 +364,10 @@ export class CollectionBinding {
           thisArgument, assembled, 'set', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], declaration.key, this.#context,
+          argumentsList[0], member.key, this.#context,
         );
-        const value = convertToIDL(
-          argumentsList[1], declaration.value, this.#context,
+        const value = jsToIDL(
+          argumentsList[1], member.value, this.#context,
         );
         this.getMapEntries(receiver).set(key, value);
         return receiver.platformObject;
@@ -379,7 +379,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.11.10 delete.
   #createMapDelete(
     assembled: AssembledInterface,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -387,7 +387,7 @@ export class CollectionBinding {
           thisArgument, assembled, 'delete', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], declaration.key, this.#context,
+          argumentsList[0], member.key, this.#context,
         );
         return this.getMapEntries(receiver).delete(key);
       },
@@ -398,7 +398,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.12.7 has.
   #createSetHas(
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -406,7 +406,7 @@ export class CollectionBinding {
           thisArgument, assembled, 'has', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], declaration.value, this.#context,
+          argumentsList[0], member.value, this.#context,
         );
         return this.getSetEntries(receiver).has(value);
       },
@@ -417,7 +417,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.12.8 add.
   #createSetAdd(
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -425,7 +425,7 @@ export class CollectionBinding {
           thisArgument, assembled, 'add', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], declaration.value, this.#context,
+          argumentsList[0], member.value, this.#context,
         );
         this.getSetEntries(receiver).add(value);
         return receiver.platformObject;
@@ -437,7 +437,7 @@ export class CollectionBinding {
   // Project factory for Web IDL §3.7.12.9 delete.
   #createSetDelete(
     assembled: AssembledInterface,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
   ): JSFunction {
     return this.#context.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -445,7 +445,7 @@ export class CollectionBinding {
           thisArgument, assembled, 'delete', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], declaration.value, this.#context,
+          argumentsList[0], member.value, this.#context,
         );
         return this.getSetEntries(receiver).delete(value);
       },
@@ -474,7 +474,7 @@ export class CollectionBinding {
   // Project adapter for Web IDL §3.7.11.2 %Symbol.iterator% — create a map iterator.
   #createMapIterator(
     entries: IDLMapEntries,
-    declaration: MaplikeMember,
+    member: MaplikeMember,
     kind: MapIterationKind,
     context: ConversionContext,
   ): object {
@@ -486,8 +486,8 @@ export class CollectionBinding {
       }
 
       const [idlKey, idlValue] = result.value;
-      const key = convertToJavaScript(idlKey, declaration.key, context);
-      const value = convertToJavaScript(idlValue, declaration.value, context);
+      const key = idlToJS(idlKey, member.key, context);
+      const value = idlToJS(idlValue, member.value, context);
       return this.#context.realm.createIteratorResultObject(
         kind === 'key' ? key : kind === 'value' ? value :
           createRealmArray(this.#context, [key, value]),
@@ -499,7 +499,7 @@ export class CollectionBinding {
   // Project adapter for Web IDL §3.7.12.2 %Symbol.iterator% — create a set iterator.
   #createSetIterator(
     entries: IDLSetEntries,
-    declaration: SetlikeMember,
+    member: SetlikeMember,
     kind: SetIterationKind,
     context: ConversionContext,
   ): object {
@@ -510,7 +510,7 @@ export class CollectionBinding {
         return this.#context.realm.createIteratorResultObject(undefined, true);
       }
 
-      const value = convertToJavaScript(result.value, declaration.value, context);
+      const value = idlToJS(result.value, member.value, context);
       return this.#context.realm.createIteratorResultObject(
         kind === 'value' ? value : createRealmArray(this.#context, [value, value]),
         false,
@@ -558,7 +558,7 @@ function convertCollectionValue(
   type: WebIDLType,
   context: ConversionContext,
 ): unknown {
-  const converted = convertToIDL(value, type, context);
+  const converted = jsToIDL(value, type, context);
   return typeof converted === 'number' && Object.is(converted, -0)
     ? 0
     : converted;

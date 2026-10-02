@@ -5,7 +5,7 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 // Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.
-export function convertBufferSourceToIDL(
+export function jsToIDLBufferSource(
   value: unknown,
   name: BufferTypeName,
   extendedAttributes: ExtendedAttribute[],
@@ -36,7 +36,7 @@ export function convertBufferSourceToIDL(
 }
 
 // Web IDL §3.2.26 Buffer source types — convert a buffer source to a JavaScript value.
-export function convertBufferSourceToJavaScript(
+export function idlBufferSourceToJS(
   value: unknown,
   name: BufferTypeName,
 ): ArrayBufferLike | ArrayBufferView {

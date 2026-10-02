@@ -17,7 +17,7 @@ import {
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
-import { constructCallbackFunction, type CallbackFunctionAdapter } from '../../src/web-idl/index';
+import { constructCallbackFunction, type StampedCallbackFunction, type WebIDLRealm } from '../../src/web-idl/index';
 
 describe('Web IDL implementation bindings', () => {
   it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
@@ -1288,8 +1288,8 @@ describe('Web IDL implementation bindings', () => {
         callback();
       }
 
-      construct(callback: CallbackFunctionAdapter): unknown {
-        return constructCallbackFunction(callback, [4]);
+      construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
+        return constructCallbackFunction(callback, [4], realm);
       }
     }
 
@@ -1364,9 +1364,10 @@ describe('Web IDL implementation bindings', () => {
             onError('rethrow'),
           ),
         ]),
-        op('construct', idlType.any, [
-          arg('callback', reference(factory.name)),
-        ]),
+        op('construct', idlType.any,
+          [arg('callback', reference(factory.name))],
+          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+        ),
       ],
     });
     const realm = new Realm();
@@ -1449,8 +1450,8 @@ describe('Web IDL implementation bindings', () => {
 
   it('constructs adapted callbacks whose converted result is a primitive', () => {
     class FactoryOwnerImpl {
-      construct(callback: CallbackFunctionAdapter): unknown {
-        return constructCallbackFunction(callback, [4]);
+      construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
+        return constructCallbackFunction(callback, [4], realm);
       }
     }
     const factory = defineCallbackFunction({
@@ -1461,7 +1462,10 @@ describe('Web IDL implementation bindings', () => {
       name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
       members: [
         ctor(),
-        op('construct', idlType.double, [arg('callback', reference(factory.name))]),
+        op('construct', idlType.double,
+          [arg('callback', reference(factory.name))],
+          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+        ),
       ],
     });
     const realm = new Realm();
@@ -1479,8 +1483,8 @@ describe('Web IDL implementation bindings', () => {
 
   it('retains callback realms and captured contexts through explicit construction', () => {
     class FactoryOwnerImpl {
-      construct(callback: CallbackFunctionAdapter): unknown {
-        return constructCallbackFunction(callback, [4]);
+      construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
+        return constructCallbackFunction(callback, [4], realm);
       }
     }
     const factory = defineCallbackFunction({
@@ -1489,7 +1493,13 @@ describe('Web IDL implementation bindings', () => {
     });
     const definition = defineInterface({
       name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
-      members: [ctor(), op('construct', idlType.double, [arg('callback', reference(factory.name))])],
+      members: [
+        ctor(),
+        op('construct', idlType.double,
+          [arg('callback', reference(factory.name))],
+          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+        ),
+      ],
     });
     const realm = new Realm();
     const callbackRealm = new Realm();
@@ -1527,6 +1537,44 @@ describe('Web IDL implementation bindings', () => {
     const arrow = callbackRealm.evaluate('() => ({})', 'adapted-non-constructor.js');
     expect(() => owner.construct(arrow)).toThrow(realm.intrinsics.typeError);
     expect(prepareScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the construction method realm when a retained callback is not a constructor', () => {
+    class FactoryOwnerImpl {
+      constructor(public callback: StampedCallbackFunction) {}
+
+      construct(realm: WebIDLRealm): unknown {
+        return constructCallbackFunction(this.callback, [], realm);
+      }
+    }
+    const factory = defineCallbackFunction({ name: 'Factory', returns: idlType.any, arguments: [] });
+    const definition = defineInterface({
+      name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
+      members: [
+        ctor([arg('callback', reference(factory.name))]),
+        op('construct', idlType.any, [], invokeWith(atArg(0, (_receiver, method) => method.realm))),
+      ],
+    });
+    const conversionRealm = new Realm();
+    const constructionRealm = new Realm();
+    const callbackRealm = new Realm();
+    const world = new BindingWorld([factory, definition]);
+    world.register(conversionRealm, (ctx) => ({ realm: ctx.realm })).install(conversionRealm.global);
+    world.register(constructionRealm, (ctx) => ({ realm: ctx.realm })).install(constructionRealm.global);
+    type FactoryOwner = { construct(): unknown; };
+    const Constructor = Reflect.get(conversionRealm.global, definition.name) as {
+      new(callback: unknown): FactoryOwner;
+      prototype: FactoryOwner;
+    };
+    const OtherConstructor = Reflect.get(constructionRealm.global, definition.name) as typeof Constructor;
+    const arrow = callbackRealm.evaluate('() => ({})', 'retained-non-constructor.js');
+    const owner = new Constructor(arrow);
+    const prepareScript = vi.spyOn(callbackRealm.callbacks, 'prepareToRunScript');
+
+    // The callback is not converted again when another realm's method constructs it.
+    // https://webidl.spec.whatwg.org/#construct-a-callback-function
+    expect(() => OtherConstructor.prototype.construct.call(owner)).toThrow(constructionRealm.intrinsics.typeError);
+    expect(prepareScript).not.toHaveBeenCalled();
   });
 
   it('provides platform-object capabilities through declarative bindings', () => {

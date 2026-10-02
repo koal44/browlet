@@ -58,7 +58,7 @@ describe('task queues', () => {
     expect(tasks.map((task) => task.source)).toEqual([source, source]);
     expect(tasks.map((task) => task.document)).toEqual([null, null]);
     expect(tasks.every((task) =>
-      task.scriptEvaluationEnvironmentSettingsObjectSet.size === 0,
+      task.scriptEvaluationEnvironments.size === 0,
     )).toBe(true);
   });
 

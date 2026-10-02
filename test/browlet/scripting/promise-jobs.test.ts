@@ -83,7 +83,7 @@ describe('HTML Promise jobs', () => {
     ]);
     for (const { task } of observations) {
       expect(task?.source.name).toBe('microtask');
-      expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
+      expect(task?.scriptEvaluationEnvironments)
         .toEqual(new Set([realm.env]));
     }
     expect(new Set(observations.map(({ task }) => task)).size).toBe(4);
@@ -113,8 +113,8 @@ describe('HTML Promise jobs', () => {
 
     expect(observed).toEqual([17]);
     expect(tasks).toHaveLength(2);
-    expect(tasks[0]?.scriptEvaluationEnvironmentSettingsObjectSet).toEqual(new Set());
-    expect(tasks[1]?.scriptEvaluationEnvironmentSettingsObjectSet)
+    expect(tasks[0]?.scriptEvaluationEnvironments).toEqual(new Set());
+    expect(tasks[1]?.scriptEvaluationEnvironments)
       .toEqual(new Set([realm.env]));
   });
 

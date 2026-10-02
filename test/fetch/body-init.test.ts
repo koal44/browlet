@@ -24,7 +24,7 @@ describe('BodyInit extraction', () => {
 
   it('receives scalar strings and interface implementations through the BodyInit union', async () => {
     const fixture = createFetchFixture();
-    const convert = (value: unknown) => fixture.context.convertToImpl(value, reference('BodyInit')) as BodyInitValue;
+    const convert = (value: unknown) => fixture.context.jsToImpl(value, reference('BodyInit')) as BodyInitValue;
     expect(convert('\ud800')).toBe('\ufffd');
     const blob = fixture.context.construct(BlobImpl, ['contents']);
     const platform = fixture.context.project(BlobImpl, blob);

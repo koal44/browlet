@@ -1,6 +1,6 @@
 import type { BindingContext } from './binding-context';
 import type { AttributeFunctionCallback } from './realm-binding';
-import type { CallbackInterfaceValue } from './callback-value';
+import type { CallbackInterfaceCarrier } from './callback';
 import type { WebIDLEnvironment, WebIDLRealm } from './realm';
 
 export * from './core/index';
@@ -11,7 +11,7 @@ export {
 } from './dom-exception';
 export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
 export { constructCallbackFunction } from './callback';
-export type { CallbackFunctionAdapter } from './callback-value';
+export type { StampedCallbackFunction } from './callback';
 
 export type { BindingContext };
 export type { AssembledInterface } from './assembled';
@@ -36,8 +36,8 @@ declare module './core/types' {
     'attribute-set': BindingCallback<Env, object | null, [value: unknown], void>;
     'attribute-function': BindingCallback<Env, undefined, [], AttributeFunctionCallback>;
     'operation-invoke': BindingCallback<Env, object | null, Values, unknown>;
-    'callback-interface-adapt': BindingCallback<
-      Env, undefined, [value: CallbackInterfaceValue<(Env & WebIDLEnvironment)['realm']>], unknown
+    'callback-interface-to-impl': BindingCallback<
+      Env, undefined, [cbCarrier: CallbackInterfaceCarrier<(Env & WebIDLEnvironment)['realm']>], unknown
     >;
   }
 }

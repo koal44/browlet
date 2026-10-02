@@ -1,12 +1,149 @@
 import { InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType } from '../infra/promises';
 import type { BindingContext } from './binding-context';
-import {
-  convertToIDL, convertToJavaScript, type ConversionContext,
-} from './conversion';
-import { idlType, implementationType, type ImplementationType, type WebIDLType } from './core/index';
-import {
-  createIDLPromiseRecord, isIDLPromiseRecord, type IDLPromiseRecord,
-} from './promise-record';
+import { jsToIDL, idlToJS, type ConversionContext } from './conversion';
+import { implementationType, type ImplementationType, type WebIDLType } from './core/index';
+import type { WebIDLRealm } from './realm';
+import { InternalError } from '../infra/internal-error';
+
+/** A realm-owned promise with its fulfillment type and settlement lifecycle. */
+export class PromiseCarrier {
+  /** Promise exposed to author code. */
+  promise: Promise<unknown>;
+  /** Realm used to allocate the promise. */
+  realm: WebIDLRealm;
+  /** Declared conversion for fulfillment values. */
+  type: WebIDLType;
+  /** Whether a resolving function was accepted; adoption may still be pending. */
+  resolved = false;
+  /** Native resolution function, invoked after marking the carrier resolved. */
+  #resolve: PromiseSettlement;
+  /** Native rejection function, invoked after marking the carrier resolved. */
+  #reject: PromiseSettlement;
+  /** Optional conversion of internal failures at the rejection boundary. */
+  #realizeException: ExceptionRealizer | undefined;
+
+  constructor(type: WebIDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer) {
+    let resolve: PromiseSettlement | undefined;
+    let reject: PromiseSettlement | undefined;
+    this.promise = new realm.intrinsics.promise.constructor((resolve_, reject_) => {
+      resolve = resolve_;
+      reject = reject_;
+    });
+    if (!resolve || !reject) throw new InternalError('Promise constructor did not initialize its capability');
+    this.type = type;
+    this.realm = realm;
+    this.#resolve = resolve;
+    this.#reject = reject;
+    this.#realizeException = realizeException;
+  }
+
+  /** Recognize carriers without inspecting an author promise or invoking Proxy traps. */
+  static is(value: unknown): value is PromiseCarrier {
+    return typeof value === 'object' && value !== null && #resolve in value;
+  }
+
+  /** Adopt an author value into a new promise with the declared fulfillment type. */
+  // https://webidl.spec.whatwg.org/#js-to-promise
+  static fromJS(value: unknown, type: WebIDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer): PromiseCarrier {
+    const promise = new PromiseCarrier(type, realm, realizeException);
+    promise.resolve(value);
+    return promise;
+  }
+
+  /** Create a promise resolved with an IDL value converted in the supplied context. */
+  // https://webidl.spec.whatwg.org/#js-promise-manipulation
+  static fromIDL(value: unknown, type: WebIDLType, context: ConversionContext): PromiseCarrier {
+    const promise = new PromiseCarrier(type, context.realm, context.binding.realizeException);
+    const jsValue = PromiseCarrier.is(value) ? value.promise : idlToJS(value, type, context);
+    promise.resolve(jsValue);
+    return promise;
+  }
+
+  /** Create a rejected promise in the supplied realm, optionally realizing internal failures. */
+  // https://webidl.spec.whatwg.org/#js-promise-manipulation
+  static rejected(reason: unknown, type: WebIDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer): PromiseCarrier {
+    const promise = new PromiseCarrier(type, realm, realizeException);
+    promise.reject(reason);
+    return promise;
+  }
+
+  /** Accept a JS resolution value once, including adoption of another promise. */
+  resolve(value?: unknown): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    const resolve = this.#resolve;
+    resolve(value);
+  }
+
+  /** Reject once, realizing an internal exception request when configured. */
+  reject(reason?: unknown): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    const reject = this.#reject;
+    const realize = this.#realizeException;
+    reject(realize ? realize(reason) : reason);
+  }
+
+  /** React to JS values without conversion, keeping the result promise in this promise's realm. */
+  // Reaction handling extracted from https://webidl.spec.whatwg.org/#dfn-perform-steps-once-promise-is-settled
+  // Callers supply any conversions in their reaction steps.
+  react(
+    resultType: WebIDLType,
+    steps: PromiseReactionSteps,
+    realm: WebIDLRealm,
+    realizeException?: ExceptionRealizer,
+  ): PromiseCarrier {
+    const resultPromise = new PromiseCarrier(resultType, this.realm, realizeException);
+    const onFulfilled = realm.createFunction(
+      (_thisArgument, [value]) => {
+        try {
+          const fulfilled = steps.fulfilled;
+          resultPromise.resolve(fulfilled ? fulfilled(value) : value);
+        } catch (exception) {
+          resultPromise.reject(exception);
+        }
+      },
+      { length: 1, name: '' },
+    );
+    const onRejected = realm.createFunction(
+      (_thisArgument, [reason]) => {
+        try {
+          const rejected = steps.rejected;
+          if (rejected) resultPromise.resolve(rejected(reason));
+          else resultPromise.reject(reason);
+        } catch (exception) {
+          resultPromise.reject(exception);
+        }
+      },
+      { length: 1, name: '' },
+    );
+    this.realm.observePromise(this.promise, onFulfilled, onRejected);
+    return resultPromise;
+  }
+
+  /** Mark this promise handled by installing a rejection reaction. */
+  // https://webidl.spec.whatwg.org/#js-promise-manipulation
+  markAsHandled(): void {
+    // ECMAScript does not expose [[PromiseIsHandled]]. Attaching a rejection
+    // reaction performs the same state transition on the original promise.
+    const onRejected = this.realm.createFunction(
+      () => undefined,
+      { length: 1, name: '' },
+    );
+    this.realm.observePromise(
+      this.promise,
+      undefined,
+      onRejected,
+    );
+  }
+
+  /** Convert fulfillment values inside an implementation promise's native reaction. */
+  toImpl<Result>(context: ConversionContext, convertValue: (value: unknown) => Result, P: typeof InternalPromise): InternalPromise<Result> {
+    const conversionContext = { binding: context.binding, realm: this.realm };
+    return P.fromNative(this.promise, (value) =>
+      convertValue(jsToIDL(value, this.type, conversionContext)), implementationType<Result>(this.type));
+  }
+}
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */
 export function createWebIDLPromiseConstructor(context: BindingContext): typeof InternalPromise {
@@ -14,185 +151,30 @@ export function createWebIDLPromiseConstructor(context: BindingContext): typeof 
     static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
       if (type.kind === 'implementation') return super.withResolvers(type);
       const resultType = type as ImplementationType<T>;
-      const record = createIDLPromiseRecord(resultType, context.realm, (value) => context.realizeException(value));
-      const promise = new this(record.promise, type, (value) => context.convertToImpl(value, resultType) as T);
+      const carrier = new PromiseCarrier(resultType, context.realm, (value) => context.realizeException(value));
+      const promise = new this(carrier.promise, type, (value) => context.jsToImpl(value, resultType));
       return {
         promise,
-        get isResolved() { return record.resolved; },
+        get isResolved() { return carrier.resolved; },
         resolve(value) {
           try {
             if (value instanceof InternalPromise) {
-              record.resolve(value.backing);
+              carrier.resolve(value.backing);
             } else {
               // Conversion precedes the native resolving function, including reentrant resolution.
-              record.resolve(context.convertToJavaScript(value, resultType));
+              carrier.resolve(context.implToJS(value, resultType));
             }
-          } catch (error) { record.reject(error); }
+          } catch (error) { carrier.reject(error); }
         },
-        reject: record.reject,
+        reject(reason) { carrier.reject(reason); },
       };
     }
   };
 }
 
-// Web IDL §3.2.24.1 Creating and manipulating Promises — create a new promise.
-export function createPromise(
-  type: WebIDLType,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  return createIDLPromiseRecord(type, context.realm, context.binding.realizeException);
-}
-
-// Project adapter: convert author fulfillment values for an implementation's promise queue.
-/** Convert fulfillment values inside the implementation's native reaction. */
-export function toImplementationPromise(
-  promise: IDLPromiseRecord,
-  context: ConversionContext,
-  convertValue: (value: unknown) => unknown,
-  P: typeof InternalPromise,
-): InternalPromise<unknown> {
-  const conversionContext = { binding: context.binding, realm: promise.realm };
-  return P.fromNative(promise.promise, (value) =>
-    convertValue(convertToIDL(value, promise.type, conversionContext)), implementationType<unknown>(promise.type));
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — create a resolved promise.
-export function createResolvedPromise(
-  value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  const promise = createPromise(type, context);
-  promise.resolve(toPromiseResolution(value, type, context));
-  return promise;
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — create a rejected promise.
-export function createRejectedPromise(
-  reason: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  const promise = createPromise(type, context);
-  rejectPromise(promise, reason);
-  return promise;
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — resolve.
-export function resolvePromise(
-  promise: IDLPromiseRecord,
-  value: unknown,
-  context: ConversionContext,
-): void {
-  promise.resolve(toPromiseResolution(value, promise.type, context));
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — reject.
-export function rejectPromise(
-  promise: IDLPromiseRecord,
-  reason: unknown,
-): void {
-  promise.reject(reason);
-}
-
-// Project helper: inspect whether either resolving function has been accepted.
-export function isPromiseUnresolved(promise: IDLPromiseRecord): boolean {
-  return !promise.resolved;
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — react.
-export function reactToPromise(
-  promise: IDLPromiseRecord,
-  resultType: WebIDLType,
-  steps: PromiseReactionSteps,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  const resultPromise = createIDLPromiseRecord(
-    resultType, promise.realm, context.binding.realizeException,
-  );
-  const onFulfilled = context.realm.createFunction(
-    (_thisArgument, [value]) => {
-      try {
-        const idlValue = convertToIDL(value, promise.type, context);
-        resolvePromise(
-          resultPromise,
-          steps.fulfilled
-            ? Reflect.apply(
-              steps.fulfilled,
-              undefined,
-              isUndefinedType(promise.type, context)
-                ? []
-                : [idlValue],
-            )
-            : idlValue,
-          context,
-        );
-      } catch (exception) {
-        resultPromise.reject(exception);
-      }
-    },
-    { length: 1, name: '' },
-  );
-  const onRejected = context.realm.createFunction(
-    (_thisArgument, [reason]) => {
-      try {
-        resolvePromise(
-          resultPromise,
-          steps.rejected
-            ? Reflect.apply(steps.rejected, undefined, [reason])
-            : createRejectedPromise(
-              reason,
-              resultType,
-              context,
-            ),
-          context,
-        );
-      } catch (exception) {
-        resultPromise.reject(exception);
-      }
-    },
-    { length: 1, name: '' },
-  );
-
-  promise.realm.observePromise(
-    promise.promise,
-    onFulfilled,
-    onRejected,
-  );
-  return resultPromise;
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — upon fulfillment.
-export function uponPromiseFulfillment(
-  promise: IDLPromiseRecord,
-  steps: (value: unknown) => void,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  return reactToPromise(
-    promise,
-    idlType.undefined,
-    { fulfilled: steps },
-    context,
-  );
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — upon rejection.
-export function uponPromiseRejection(
-  promise: IDLPromiseRecord,
-  steps: (reason: unknown) => void,
-  context: ConversionContext,
-): IDLPromiseRecord {
-  return reactToPromise(
-    promise,
-    idlType.undefined,
-    { rejected: steps },
-    context,
-  );
-}
-
-// Web IDL §3.2.24.1 Creating and manipulating Promises — wait for all.
+// https://webidl.spec.whatwg.org/#js-promise-manipulation
 export function waitForAll(
-  promises: IDLPromiseRecord[],
+  promises: PromiseCarrier[],
   successSteps: (values: unknown[]) => void,
   failureSteps: (reason: unknown) => void,
   context: ConversionContext,
@@ -232,58 +214,30 @@ export function waitForAll(
   });
 }
 
-// Web IDL §3.2.24.1 Creating and manipulating Promises — get a promise for waiting for all.
+// https://webidl.spec.whatwg.org/#waiting-for-all-promise
 export function getPromiseForWaitingForAll(
-  promises: IDLPromiseRecord[],
+  promises: PromiseCarrier[],
   type: WebIDLType,
   context: ConversionContext,
-): IDLPromiseRecord {
-  const promise = createPromise(context.binding.assembly.getSequenceType(type), context);
+): PromiseCarrier {
+  const promise = new PromiseCarrier(context.binding.assembly.getSequenceType(type), context.realm, context.binding.realizeException);
   waitForAll(
     promises,
-    (values) => resolvePromise(promise, values, context),
-    (reason) => rejectPromise(promise, reason),
+    (values) => {
+      const jsValues = idlToJS(values, promise.type, context);
+      promise.resolve(jsValues);
+    },
+    (reason) => promise.reject(reason),
     context,
   );
   return promise;
 }
 
-// Project implementation of Web IDL §3.2.24.1 Creating and manipulating Promises — mark as handled.
-export function markPromiseAsHandled(promise: IDLPromiseRecord): void {
-  // ECMAScript does not expose [[PromiseIsHandled]]. Attaching a rejection
-  // reaction performs the same state transition on the original promise.
-  const onRejected = promise.realm.createFunction(
-    () => undefined,
-    { length: 1, name: '' },
-  );
-  promise.realm.observePromise(
-    promise.promise,
-    undefined,
-    onRejected,
-  );
-}
-
+/** Reaction steps that receive and return JS values without implicit conversion. */
 export type PromiseReactionSteps = {
   fulfilled?(this: void, value: unknown): unknown;
   rejected?(this: void, reason: unknown): unknown;
 };
 
-// Project helper: unwrap an IDL promise or project an ordinary resolution value.
-function toPromiseResolution(
-  value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-): unknown {
-  return isIDLPromiseRecord(value)
-    ? value.promise
-    : convertToJavaScript(value, type, context);
-}
-
-// Project helper: identify Promise<undefined> reactions that receive no fulfillment argument.
-function isUndefinedType(
-  type: WebIDLType,
-  context: ConversionContext,
-): boolean {
-  const resolved = context.binding.assembly.getUnannotatedType(type);
-  return resolved.kind === 'simple' && resolved.name === 'undefined';
-}
+type PromiseSettlement = (value?: unknown) => void;
+type ExceptionRealizer = (value: unknown) => unknown;

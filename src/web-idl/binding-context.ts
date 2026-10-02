@@ -1,15 +1,15 @@
 import type { InternalPromise } from '../infra/promises';
 import type { AssembledInterface } from './assembled';
 import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
-import type { ImplementationClass, WebIDLType } from './core/types';
-import { convertToIDL, convertToJavaScript } from './conversion';
+import type { ImplementationClass, ImplementationType, WebIDLType } from './core/types';
+import { jsToIDL, idlToJS } from './conversion';
 import type { WebIDLEnvironment } from './realm';
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
   type StampedPlatformObject, type PlatformRecord,
 } from './platform-object';
 import {
-  adaptIDLToImpl, constructImplementationObject, resolveImplementationArguments,
+  idlToImpl, constructImplementationObject, resolveImplementationArguments,
 } from './implementation-binding';
 import { InternalError } from '../infra/internal-error';
 import { createWebIDLPromiseConstructor } from './promise';
@@ -61,11 +61,13 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.#env;
   }
 
-  /** Convert a JavaScript value to the representation used by implementations. */
+  /** Convert an author value through IDL to the representation consumed by implementations. */
   // https://webidl.spec.whatwg.org/#js-type-mapping
-  convertToImpl(value: unknown, type: WebIDLType): unknown {
-    return adaptIDLToImpl(
-      convertToIDL(value, type, this.#binding.defaultConversionContext),
+  jsToImpl<T>(value: unknown, type: ImplementationType<T>): T;
+  jsToImpl(value: unknown, type: WebIDLType): unknown;
+  jsToImpl(value: unknown, type: WebIDLType): unknown {
+    return idlToImpl(
+      jsToIDL(value, type, this.#binding.defaultConversionContext),
       type,
       {},
       this,
@@ -73,9 +75,9 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     );
   }
 
-  /** Convert a declared implementation result to its platform representation. */
-  convertToJavaScript(value: unknown, type: WebIDLType): unknown {
-    return convertToJavaScript(value, type, this.#binding.defaultConversionContext);
+  /** Convert a declared implementation result to its author-facing representation. */
+  implToJS(value: unknown, type: WebIDLType): unknown {
+    return idlToJS(value, type, this.#binding.defaultConversionContext);
   }
 
   /** Turn an internal exception request into a realm-owned error, preserving any prior realization. */

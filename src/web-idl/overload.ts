@@ -3,9 +3,9 @@ import {
   getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
 } from '../js-engine/index';
 import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
-import { createIDLAsyncSequence } from './async-sequence';
+import { AsyncSequenceCarrier } from './async-sequence';
 import {
-  convertToIDL, createDefaultValueFactory, createIDLConverter, createFrozenArrayFromIterable, createSequenceFromIterable,
+  jsToIDL, createDefaultValueFactory, createJSToIDLConverter, createFrozenArrayFromIterable, createSequenceFromIterable,
   isPlatformObject, materializeDefaultValue, type ConversionContext,
 } from './conversion';
 import type { WebIDLType } from './core/index';
@@ -21,7 +21,7 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   }
   const callable = overloads.callables[0]!;
   const converters = callable.arguments.map((argument) => {
-    const convert = createIDLConverter(argument.type, context.binding.assembly);
+    const convert = createJSToIDLConverter(argument.type, context.binding.assembly);
     const getDefault = argument.primary.default === undefined
       ? undefined
       : createDefaultValueFactory(argument.primary.default, argument.type);
@@ -104,11 +104,8 @@ export function resolveOverload<Callable extends AssembledCallable>(
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
-    values.push(createIDLAsyncSequence(
-      argumentsList[i] as object,
-      asyncSequence.type,
-      asyncSequenceMethod.method,
-      asyncSequenceMethod.type,
+    values.push(new AsyncSequenceCarrier(
+      argumentsList[i] as object, asyncSequence.type, asyncSequenceMethod.method, asyncSequenceMethod.type,
     ));
     i++;
   }
@@ -360,7 +357,7 @@ function convertArgument(
       ? missingArgument
       : materializeDefaultValue(argument.primary.default, argument.type, context);
   }
-  return convertToIDL(value, argument.type, context);
+  return jsToIDL(value, argument.type, context);
 }
 
 // Project helper: test candidate types against a platform object's implemented interfaces.

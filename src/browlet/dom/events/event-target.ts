@@ -567,20 +567,20 @@ export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
-  adapt(_ctx, callback) {
+  toImpl(_ctx, cbCarrier) {
     return new EventListenerValue(
-      callback.object,
-      callback.realm,
+      cbCarrier.object,
+      cbCarrier.realm,
       (event, currentTarget) => {
         // https://dom.spec.whatwg.org/#concept-event-listener-inner-invoke
         try {
-          callback.callUserObjectOperation(
+          cbCarrier.callUserObjectOperation(
             'handleEvent',
             [event],
             currentTarget,
           );
         } catch (exception) {
-          callback.realm.reportException(exception);
+          cbCarrier.realm.reportException(exception);
         }
       },
     );

@@ -2,7 +2,7 @@ import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
 } from '../js-engine/index';
 import type { AssembledCallable, AssembledInterface } from './assembled';
-import { convertToIDL, convertToJavaScript } from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import type { OperationMember } from './core/types';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
 import { isNamedPropertiesObject } from './global-platform-object';
@@ -241,7 +241,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: true,
-      value: convertToJavaScript(
+      value: idlToJS(
         value,
         properties.getter.primary.returns,
         this.#binding.defaultConversionContext,
@@ -265,7 +265,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: convertToJavaScript(
+      value: idlToJS(
         value,
         properties.getter.primary.returns,
         this.#binding.defaultConversionContext,
@@ -528,7 +528,7 @@ export class LegacyPlatformObjectBinding {
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
     }
-    return convertToIDL(
+    return jsToIDL(
       value,
       valueArgument.type,
       this.#binding.defaultConversionContext,

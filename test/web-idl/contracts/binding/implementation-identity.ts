@@ -1,6 +1,6 @@
 import type { DefinitionAssembly } from '../../../../src/web-idl/assembly';
 import type { AssembledInterface } from '../../../../src/web-idl/assembled';
-import { convertBufferSourceToIDL, convertBufferSourceToJavaScript } from '../../../../src/web-idl/buffer-source';
+import { jsToIDLBufferSource, idlBufferSourceToJS } from '../../../../src/web-idl/buffer-source';
 import type { StampedImplInstance, PlatformRecord, WebIDLType } from '../../../../src/web-idl/index';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
@@ -46,8 +46,8 @@ getImplementationRecord(authorValue)?.implInst.count;
 // @ts-expect-error A platform-object lookup cannot infer the shape of its implementation from its key.
 getPlatformRecord(platformObject)?.implInst.authorProperty;
 
-const buffer: ArrayBufferLike | ArrayBufferView = convertBufferSourceToIDL(authorValue, 'Uint8Array', []);
-const returnedBuffer: ArrayBufferLike | ArrayBufferView = convertBufferSourceToJavaScript(authorValue, 'ArrayBuffer');
+const buffer: ArrayBufferLike | ArrayBufferView = jsToIDLBufferSource(authorValue, 'Uint8Array', []);
+const returnedBuffer: ArrayBufferLike | ArrayBufferView = idlBufferSourceToJS(authorValue, 'ArrayBuffer');
 buffer.byteLength.toFixed();
 returnedBuffer.byteLength.toFixed();
 // @ts-expect-error Outer annotations have been removed from the result.

@@ -65,14 +65,12 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
       captureContext: () => {
         const env = this.#hostDefined;
         if (env === undefined) return this;
-        return env.responsibleEventLoop
-          .getIncumbentSettingsObject(env);
+        return env.responsibleEventLoop.getIncumbentEnvironment(env);
       },
       cleanUpAfterRunningCallback: (context) => {
-        const env = this.#getCallbackSettings(context);
+        const env = this.#getCallbackEnvironment(context);
         if (env !== undefined) {
-          env.responsibleEventLoop
-            .cleanUpAfterRunningCallback(env);
+          env.responsibleEventLoop.cleanUpAfterRunningCallback(env);
         }
       },
       cleanUpAfterRunningScript: () => {
@@ -84,7 +82,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
       getAssociatedRealm: (value) =>
         Realm.getAssociatedRealm(value) ?? this,
       prepareToRunCallback: (context) => {
-        const env = this.#getCallbackSettings(context);
+        const env = this.#getCallbackEnvironment(context);
         if (env !== undefined) {
           this.agent.eventLoop.prepareToRunCallback(env);
         }
@@ -103,20 +101,20 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
     return realm instanceof Realm ? realm : undefined;
   }
 
-  /** Attached HTML settings object; internal sandbox realms have none. */
+  /** Attached browser environment; internal sandbox realms have none. */
   get hostDefined(): BrowletEnvironment | undefined {
     return this.#hostDefined;
   }
 
   // TODO: Revisit merging env and hostDefined when additional realm
   // lifecycles clarify which callers still need an optional environment.
-  /** Required browser environment; throws if no HTML settings object is attached. */
+  /** Required browser environment; throws if none is attached. */
   get env(): BrowletEnvironment {
     if (this.#hostDefined === undefined) throw new InternalError('Realm has no environment');
     return this.#hostDefined;
   }
 
-  /** Early security owner, replaced by full settings when the environment is attached. */
+  /** Early security owner, replaced by the full environment when attached. */
   get envRecord(): EnvironmentRecord | undefined {
     return this.#envRecord;
   }
@@ -208,7 +206,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
 
   // -- Private ----------------------------------------------------------
 
-  #getCallbackSettings(
+  #getCallbackEnvironment(
     context: object,
   ): BrowletEnvironment | undefined {
     if (this.#hostDefined === undefined && context instanceof Realm) return undefined;
@@ -216,7 +214,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
     if (env.realm.hostDefined === env) {
       return env;
     }
-    throw new InternalError('A JavaScript callback context is not a settings object');
+    throw new InternalError('A callback context is not a browser environment');
   }
 }
 

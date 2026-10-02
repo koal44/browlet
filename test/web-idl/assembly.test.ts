@@ -2,13 +2,34 @@ import { describe, expect, it } from 'vitest';
 
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
-  defineCallbackInterface, defineDictionary, defineIncludes,
+  defineCallbackInterface, defineDictionary, defineEnumeration, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
-  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, roAttr,
+  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, nullable, reference, roAttr, sequence, union,
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL definition assembly', () => {
+  it('distinguishes primitive types and sequences from possible carrier values', () => {
+    const assembly = new DefinitionAssembly([
+      defineEnumeration({ name: 'Mode', values: ['fast', 'slow'] }),
+      defineDictionary({ name: 'Options', members: [] }),
+    ]);
+    const primitive = nullable(union(idlType.long, reference('Mode')));
+    const numbers = sequence(idlType.long);
+    const nestedNumbers = sequence(numbers);
+    const dictionaries = sequence(reference('Options'));
+
+    expect(assembly.isPrimitiveType(primitive)).toBe(true);
+    expect(assembly.mayContainCarrier(primitive)).toBe(false);
+    expect(assembly.isPrimitiveType(numbers)).toBe(false);
+    expect(assembly.mayContainCarrier(numbers)).toBe(false);
+    expect(assembly.mayContainCarrier(nestedNumbers)).toBe(false);
+    expect(assembly.mayContainCarrier(dictionaries)).toBe(true);
+    expect(assembly.isPrimitiveType(idlType.any)).toBe(false);
+    expect(assembly.mayContainCarrier(idlType.any)).toBe(true);
+    expect(assembly.isPrimitiveType(idlType.symbol)).toBe(true);
+  });
+
   it('resolves inheritance and partial interfaces independently of order', () => {
     const partial = definePartialInterface({
       name: 'Child',
@@ -109,10 +130,10 @@ describe('Web IDL definition assembly', () => {
     const assembled = assembly.interfaces.get('Child')!;
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(assembled.getCollectionDeclaration()).toBeUndefined();
-      expect(assembled.getCollectionDeclaration(true)).toBe(collection);
-      expect(assembly.interfaces.get('Parent')!.getCollectionDeclaration()).toBe(collection);
-      expect(assembly.interfaces.get('Plain')!.getCollectionDeclaration(true)).toBeUndefined();
+      expect(assembled.getCollectionMember()).toBeUndefined();
+      expect(assembled.getCollectionMember(true)).toBe(collection);
+      expect(assembly.interfaces.get('Parent')!.getCollectionMember()).toBe(collection);
+      expect(assembly.interfaces.get('Plain')!.getCollectionMember(true)).toBeUndefined();
     }
   });
 

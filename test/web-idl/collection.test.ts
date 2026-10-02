@@ -159,7 +159,7 @@ describe('Web IDL maplike declarations', () => {
   });
 
   it('converts sequence values for each live iteration', () => {
-    const declaration = {
+    const member = {
       key: idlType.DOMString,
       kind: 'maplike',
       value: sequence(idlType.long),
@@ -167,7 +167,7 @@ describe('Web IDL maplike declarations', () => {
     const definition = defineInterface({
       name: 'SequenceMaplike',
       exposed: ['Window'],
-      members: [declaration],
+      members: [member],
     });
     const realm = new Realm();
     const binding = createBinding(definition, realm);
@@ -223,7 +223,7 @@ describe('Web IDL maplike declarations', () => {
   });
 
   it('keeps collection state on a separate implementation target', () => {
-    const declaration = {
+    const member = {
       key: idlType.long,
       kind: 'maplike',
       value: idlType.DOMString,
@@ -231,7 +231,7 @@ describe('Web IDL maplike declarations', () => {
     const interfaceIDL = defineInterface({
       name: 'SeparatedMaplike',
       exposed: ['Window'],
-      members: [declaration],
+      members: [member],
     });
     const assembly = new DefinitionAssembly([interfaceIDL]);
     const assembled = assembly.interfaces.get('SeparatedMaplike');
@@ -270,7 +270,7 @@ describe('Web IDL maplike declarations', () => {
       name: 'clear',
       returns: idlType.undefined,
     } satisfies OperationMember;
-    const declaration = {
+    const member = {
       key: idlType.DOMString,
       kind: 'maplike',
       value: idlType.long,
@@ -278,7 +278,7 @@ describe('Web IDL maplike declarations', () => {
     const definition = defineInterface({
       name: 'CustomMaplike',
       exposed: ['Window'],
-      members: [clear, declaration],
+      members: [clear, member],
     });
 
     let calls = 0;
@@ -299,7 +299,7 @@ describe('Web IDL maplike declarations', () => {
       returns: idlType.undefined,
       static: true,
     } satisfies OperationMember;
-    const declaration = {
+    const member = {
       key: idlType.DOMString,
       kind: 'maplike',
       value: idlType.long,
@@ -307,7 +307,7 @@ describe('Web IDL maplike declarations', () => {
     const definition = defineInterface({
       name: 'StaticMaplike',
       exposed: ['Window'],
-      members: [staticSet, declaration],
+      members: [staticSet, member],
     });
 
     let staticCalls = 0;
@@ -431,14 +431,14 @@ describe('Web IDL setlike declarations', () => {
       returns: idlType.undefined,
       static: true,
     } satisfies OperationMember;
-    const declaration = {
+    const member = {
       kind: 'setlike',
       value: idlType.long,
     } satisfies SetlikeMember;
     const definition = defineInterface({
       name: 'StaticSetlike',
       exposed: ['Window'],
-      members: [staticAdd, declaration],
+      members: [staticAdd, member],
     });
 
     let staticCalls = 0;
@@ -508,7 +508,7 @@ function createMaplikeBinding(): {
   object: object;
   realm: Realm;
 } {
-  const declaration = {
+  const member = {
     key: idlType.long,
     kind: 'maplike',
     value: idlType.DOMString,
@@ -516,7 +516,7 @@ function createMaplikeBinding(): {
   const definition = defineInterface({
     name: 'NumberMaplike',
     exposed: ['Window'],
-    members: [declaration],
+    members: [member],
   });
   const realm = new Realm();
   const binding = createBinding(definition, realm);
@@ -532,14 +532,14 @@ function createSetlikeBinding(): {
   object: object;
   realm: Realm;
 } {
-  const declaration = {
+  const member = {
     kind: 'setlike',
     value: idlType.long,
   } satisfies SetlikeMember;
   const definition = defineInterface({
     name: 'NumberSetlike',
     exposed: ['Window'],
-    members: [declaration],
+    members: [member],
   });
   const realm = new Realm();
   const binding = createBinding(definition, realm);

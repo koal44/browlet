@@ -4,7 +4,7 @@ import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
-  convertToIDL, convertToJavaScript,
+  jsToIDL, idlToJS,
 } from '../../src/web-idl/conversion';
 import {
   decimal, defineEnumeration, defineIncludes, defineInterface,
@@ -410,12 +410,12 @@ describe('Web IDL realm interface bindings', () => {
     expect(record.implInst).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
-    expect(convertToIDL(
+    expect(jsToIDL(
       object,
       reference('SeparatedIdentity'),
       binding.defaultConversionContext,
     )).toBe(implementation);
-    expect(convertToJavaScript(
+    expect(idlToJS(
       implementation,
       reference('SeparatedIdentity'),
       binding.defaultConversionContext,

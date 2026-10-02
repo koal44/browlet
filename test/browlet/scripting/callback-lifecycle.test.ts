@@ -9,10 +9,8 @@ import { createOpaqueOrigin, type Origin } from
 import { parseURL, type URLRecord } from '../../../src/url/url';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/realm-binding';
-import { invokeCallbackFunction } from '../../../src/web-idl/callback';
-import { isCallbackFunctionValue } from
-  '../../../src/web-idl/callback-value';
-import { convertToIDL } from '../../../src/web-idl/conversion';
+import { CallbackFunctionCarrier } from '../../../src/web-idl/callback';
+import { jsToIDL } from '../../../src/web-idl/conversion';
 import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
@@ -119,7 +117,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       .toEqual([first.env, second.env]);
     for (const { task } of observations) {
       expect(task?.source.name).toBe('microtask');
-      expect(task?.scriptEvaluationEnvironmentSettingsObjectSet)
+      expect(task?.scriptEvaluationEnvironments)
         .toEqual(new Set([callbackRealm.env]));
     }
     expect(callbackRealm.realm.callbacks.captureContext()).toBe(callbackRealm.env);
@@ -164,7 +162,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     Reflect.set(incumbentRealm.realm.global, 'callback', callback);
     Reflect.set(incumbentRealm.realm.global, 'convert', (value: unknown) =>
-      convertToIDL(
+      jsToIDL(
         value,
         reference('LifecycleCallback'),
         incumbentContext.defaultConversionContext,
@@ -173,18 +171,18 @@ describe('HTML callback and script-entry lifecycle', () => {
       'convert(callback)',
       'convert-callback.js',
     );
-    if (!isCallbackFunctionValue(callbackValue)) {
+    if (!CallbackFunctionCarrier.is(callbackValue)) {
       throw new Error('LifecycleCallback did not convert to a callback value');
     }
     Reflect.set(incumbentRealm.realm.global, 'invoke', () =>
-      invokeCallbackFunction(callbackValue, [], 'rethrow'));
+      callbackValue.invoke([], 'rethrow'));
     checkpoint.mockClear();
 
     incumbentRealm.realm.evaluate('invoke()', 'invoke-callback.js');
 
     expect(observation?.incumbent).toBe(incumbentRealm.env);
     expect(observation?.checkpointCount).toBe(0);
-    expect(observation?.task?.scriptEvaluationEnvironmentSettingsObjectSet)
+    expect(observation?.task?.scriptEvaluationEnvironments)
       .toEqual(new Set([
         incumbentRealm.env,
         callbackRealm.env,
@@ -236,17 +234,17 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
-      convertToIDL(value, reference('LifecycleCallback'), context.defaultConversionContext));
+      jsToIDL(value, reference('LifecycleCallback'), context.defaultConversionContext));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',
       'create-reentrant-callback.js',
     );
-    if (!isCallbackFunctionValue(callbackValue)) {
+    if (!CallbackFunctionCarrier.is(callbackValue)) {
       throw new Error('LifecycleCallback did not convert to a callback value');
     }
     checkpoint.mockClear();
     reenter = () => {
-      invokeCallbackFunction(callbackValue, [], 'rethrow');
+      callbackValue.invoke([], 'rethrow');
     };
 
     entry.realm.evaluate('undefined', 'checkpoint-entry.js');

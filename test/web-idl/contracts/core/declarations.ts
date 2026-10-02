@@ -115,4 +115,4 @@ impl(Example, { allocatePlatformObject() { return {}; } });
 // @ts-expect-error Initialization callbacks require the projection's signature.
 impl(Example, { initializeImplementation() {} });
 // @ts-expect-error Callback-interface adapters require the projection's signature.
-defineCallbackInterface({ name: 'Callback', members: [], adapt() {} });
+defineCallbackInterface({ name: 'Callback', members: [], toImpl() {} });

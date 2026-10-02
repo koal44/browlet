@@ -11,7 +11,7 @@ import type { TaskCreationOptions } from '../../infra/execution';
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
-  #backupIncumbentSettingsObjectStack: BrowletEnvironment[] = [];
+  #backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
@@ -121,9 +121,9 @@ export class EventLoop {
     return true;
   }
 
-  /** Find the incumbent settings object for a script or host entry. */
+  /** Find the incumbent environment for a script or host entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#incumbent-settings-object
-  getIncumbentSettingsObject(
+  getIncumbentEnvironment(
     hostEntryEnv: BrowletEnvironment,
   ): BrowletEnvironment {
     const context = findTopmostScriptHavingExecutionContext(
@@ -136,7 +136,7 @@ export class EventLoop {
       return context.env;
     }
 
-    const backup = this.#backupIncumbentSettingsObjectStack.at(-1);
+    const backup = this.#backupIncumbentEnvironmentStack.at(-1);
     if (backup !== undefined) return backup;
 
     // ACCOMMODATION(node-v8-execution-contexts):
@@ -146,14 +146,14 @@ export class EventLoop {
     return hostEntryEnv;
   }
 
-  /** Push callback settings and hide the active script from incumbent selection. */
+  /** Push the callback environment and hide the active script from incumbent selection. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#prepare-to-run-a-callback
   prepareToRunCallback(env: BrowletEnvironment): void {
     if (env.responsibleEventLoop !== this) {
       throw new InternalError('A callback context belongs to another event loop');
     }
 
-    this.#backupIncumbentSettingsObjectStack.push(env);
+    this.#backupIncumbentEnvironmentStack.push(env);
     const context = findTopmostScriptHavingExecutionContext(
       this.#jsExecutionContextStack,
     );
@@ -173,10 +173,10 @@ export class EventLoop {
       context.skipWhenDeterminingIncumbent--;
     }
 
-    if (this.#backupIncumbentSettingsObjectStack.at(-1) !== env) {
-      throw new InternalError('Callback settings were cleaned up out of order');
+    if (this.#backupIncumbentEnvironmentStack.at(-1) !== env) {
+      throw new InternalError('Callback environments were cleaned up out of order');
     }
-    this.#backupIncumbentSettingsObjectStack.pop();
+    this.#backupIncumbentEnvironmentStack.pop();
   }
 
   /** Enter script execution with this environment and the current task. */
@@ -197,7 +197,7 @@ export class EventLoop {
       env,
       task,
     });
-    task?.scriptEvaluationEnvironmentSettingsObjectSet.add(env);
+    task?.scriptEvaluationEnvironments.add(env);
   }
 
   /** Leave script execution and checkpoint when the execution stack becomes empty. */
@@ -454,8 +454,8 @@ export type TaskQueueSelector = (
 export class Task {
   /** Document whose activity gates execution, or null for ungated work. */
   document: DocumentImpl | null;
-  /** Settings objects whose scripts were evaluated while this task ran. */
-  scriptEvaluationEnvironmentSettingsObjectSet = new Set<BrowletEnvironment>();
+  /** Environments whose scripts were evaluated while this task ran. */
+  scriptEvaluationEnvironments = new Set<BrowletEnvironment>();
   /** Fixed source identity used to select the task's queue. */
   readonly source: TaskSource;
   /** Algorithm steps executed when this task is selected. */
