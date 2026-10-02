@@ -163,64 +163,64 @@ export type IDLValue<Type extends WebIDLType> =
   WebIDLType extends Type ? unknown
     : Type extends { kind: 'annotated'; type: infer Inner extends WebIDLType; } ? IDLValue<Inner>
       : Type extends { kind: 'simple' | 'interface'; } ? PromiseResult<Type>
-        : Type extends { kind: 'sequence'; } ? IDLSequenceValue
-          : Type extends { kind: 'record'; } ? IDLRecordValue
+        : Type extends { kind: 'sequence'; } ? IDLSequence
+          : Type extends { kind: 'record'; } ? IDLRecord
             : Type extends { kind: 'promise'; } ? PromiseCarrier
               : Type extends { kind: 'async-sequence'; } ? AsyncSequenceCarrier
                 : Type extends { kind: 'frozen-array'; } ? readonly unknown[]
                   : unknown;
 
-/** Convert an iterable using its already-read method, realizing element conversion errors in context.realm. */
+/** Convert yielded JS values to IDL using the element context and the iterator method already read by the caller. */
 // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
-export function createSequenceFromIterable(
+export function jsToIDLSequence(
   iterable: object,
-  context: ConversionContext,
-  method: JSMethod,
-): IDLSequenceValue {
-  // Overload resolution also enters conversion here, using the element's context.
+  elementContext: ConversionContext,
+  iteratorMethod: JSMethod,
+): IDLSequence {
+  // Overload resolution enters here without jsToIDL's error boundary.
   try {
-    const iterator = Reflect.apply(method, iterable, []);
+    const iterator = Reflect.apply(iteratorMethod, iterable, []);
     if (!isObject(iterator)) {
-      throwTypeError(context, 'Iterator method did not return an object');
+      throwTypeError(elementContext, 'Iterator method did not return an object');
     }
 
-    const nextMethod = getMethod(iterator, 'next', context.realm);
-    if (!nextMethod) throwTypeError(context, 'Iterator has no next method');
+    const nextMethod = getMethod(iterator, 'next', elementContext.realm);
+    if (!nextMethod) throwTypeError(elementContext, 'Iterator has no next method');
 
-    const sequence: IDLSequenceValue = [];
+    const sequence: IDLSequence = [];
     while (true) {
       const result = Reflect.apply(nextMethod, iterator, []);
       if (!isObject(result)) {
-        throwTypeError(context, 'Iterator result is not an object');
+        throwTypeError(elementContext, 'Iterator result is not an object');
       }
       const iteration = result as { done?: unknown; value?: unknown; };
       if (iteration.done) return sequence;
-      sequence.push(_jsToIDL(iteration.value, context));
+      sequence.push(_jsToIDL(iteration.value, elementContext));
     }
   } catch (error) {
-    return throwConversionError(error, context);
+    return throwConversionError(error, elementContext);
   }
 }
 
-/** Project sequence entries with the element's conversion context, then freeze the resulting array. */
+/** Project converted sequence entries into an array in the element context's realm, then freeze it. */
 // https://webidl.spec.whatwg.org/#dfn-create-frozen-array
 export function createFrozenArray(
-  values: IDLSequenceValue,
-  context: ConversionContext,
+  values: IDLSequence,
+  elementContext: ConversionContext,
 ): readonly unknown[] {
-  return Object.freeze(idlToJSSequence(values, context));
+  return Object.freeze(idlToJSSequence(values, elementContext));
 }
 
-/** Create a frozen array using its already-read method and the element's conversion context. */
+/** Convert yielded JS values into an IDL frozen array using the iterator method already read by the caller. */
 // https://webidl.spec.whatwg.org/#create-frozen-array-from-iterable
-export function createFrozenArrayFromIterable(
+export function jsToIDLFrozenArray(
   iterable: object,
-  context: ConversionContext,
-  method: JSMethod,
+  elementContext: ConversionContext,
+  iteratorMethod: JSMethod,
 ): readonly unknown[] {
   return createFrozenArray(
-    createSequenceFromIterable(iterable, context, method),
-    context,
+    jsToIDLSequence(iterable, elementContext, iteratorMethod),
+    elementContext,
   );
 }
 
@@ -268,8 +268,8 @@ export class DictionaryCarrier {
   }
 }
 
-export type IDLRecordValue = Map<string, unknown>;
-export type IDLSequenceValue = unknown[];
+export type IDLRecord = Map<string, unknown>;
+export type IDLSequence = unknown[];
 
 // Continue conversion inside an existing error boundary. To enter conversion, use jsToIDL()
 // or createJSToIDLConverter(); they create errors in context.realm from conversion failures.
@@ -304,7 +304,7 @@ function _jsToIDL(
       }
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (!method) throwTypeError(context, 'Value is not iterable');
-      return createSequenceFromIterable(
+      return jsToIDLSequence(
         value,
         context.forType(type.type),
         method,
@@ -319,7 +319,7 @@ function _jsToIDL(
       }
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (!method) throwTypeError(context, 'Value is not iterable');
-      return createFrozenArrayFromIterable(
+      return jsToIDLFrozenArray(
         value,
         context.forType(type.type),
         method,
@@ -631,7 +631,7 @@ function idlToJSDictionary(
 function jsToIDLRecord(
   value: unknown,
   context: ConversionContext,
-): IDLRecordValue {
+): IDLRecord {
   const type = context.resolvedType as RecordType;
   if (!isObject(value)) {
     throwTypeError(context, 'A record value must be an object');
@@ -639,7 +639,7 @@ function jsToIDLRecord(
 
   const keyContext = context.forType(type.key);
   const valueContext = context.forType(type.value);
-  const result: IDLRecordValue = new Map();
+  const result: IDLRecord = new Map();
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (!descriptor?.enumerable) continue;
@@ -672,19 +672,19 @@ function idlToJSRecord(
 }
 
 // https://webidl.spec.whatwg.org/#es-sequence
-// The context describes each element, allowing frozen-array creation to use the same conversion.
+// The element context also lets frozen-array creation reuse sequence output conversion.
 function idlToJSSequence(
   value: unknown,
-  context: ConversionContext,
+  elementContext: ConversionContext,
 ): unknown[] {
   if (!Array.isArray(value)) throw new InternalError('IDL sequence is not an array');
 
-  const result = new context.realm.intrinsics.array();
+  const result = new elementContext.realm.intrinsics.array();
   for (let i = 0; i < value.length; i++) {
     defineDataProperty(
       result,
       String(i),
-      idlToJS(value[i], context),
+      idlToJS(value[i], elementContext),
     );
   }
   return result;
@@ -760,7 +760,7 @@ function jsToIDLUnion(
     if (sequence && sequence.resolvedType.kind === 'sequence') {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
-        return createSequenceFromIterable(
+        return jsToIDLSequence(
           value,
           context.forType(sequence.resolvedType.type),
           method,
@@ -773,7 +773,7 @@ function jsToIDLUnion(
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
         const type = frozenArray.resolvedType as FrozenArrayType;
-        return createFrozenArrayFromIterable(value, context.forType(type.type), method);
+        return jsToIDLFrozenArray(value, context.forType(type.type), method);
       }
     }
 

@@ -1,33 +1,59 @@
-import { isObject, type JSFunction } from '../js-engine/index';
+import { isObject, type JSFunction, type JSRealm } from '../js-engine/index';
 import type { AssembledInterface } from './assembled';
-import { jsToIDL, idlToJS } from './conversion';
+import { jsToIDL, idlToJS, type ValueConverter } from './conversion';
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
 } from './core/index';
 import { getPlatformRecord, type PlatformRecord } from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
 import type { RealmBinding } from './realm-binding';
-import type { WebIDLRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
 
-export class CollectionBinding {
-  #binding: RealmBinding;
+/** Share realm ownership, receiver validation, and errors for maplike and setlike bindings. */
+abstract class CollectionBinding {
+  /** Binding for the installed methods and their allocation realm. */
+  protected binding: RealmBinding;
 
-  // Project helper: retain the realm binding used to install collection members.
   constructor(binding: RealmBinding) {
-    this.#binding = binding;
+    this.binding = binding;
   }
 
-  // Project storage for Web IDL §2.5.11 Maplike declarations and §2.5.12 Setlike declarations — map/set
-  // entries.
+  // Project adapter for the receiver and security checks in Web IDL §3.7.11 Maplike declarations and §3.7.12
+  // Setlike declarations.
+  protected getReceiverRecord(
+    value: unknown,
+    assembled: AssembledInterface,
+    identifier: string,
+    type: 'getter' | 'method',
+  ): PlatformRecord {
+    if (!isObject(value)) this.throwTypeError('Illegal invocation');
+    const record = getPlatformRecord(value);
+    if (record?.binding.world !== this.binding.world) {
+      this.throwTypeError('Illegal invocation');
+    }
+    this.binding.realm.performSecurityCheck(value, identifier, type);
+    if (!record.implements(assembled)) {
+      this.throwTypeError('Illegal invocation');
+    }
+    return record;
+  }
+
+  // Project helper: throw a TypeError allocated in this binding's realm.
+  protected throwTypeError(message: string): never {
+    throw new this.binding.realm.intrinsics.typeError(message);
+  }
+}
+
+/** Install maplike members and access their retained map entries. */
+// https://webidl.spec.whatwg.org/#idl-maplike
+export class MaplikeBinding extends CollectionBinding {
+  /** Allocate backing entries once when the platform object is initialized. */
   initialize(record: PlatformRecord): void {
-    const member = record.assembled.getCollectionMember(true);
-    if (member?.kind === 'maplike') record.mapEntries ??= new Map();
-    else if (member?.kind === 'setlike') record.setEntries ??= new Set();
+    record.mapEntries ??= new Map();
   }
 
   // Web IDL §3.7.11 Maplike declarations — install the declared properties.
-  defineMaplike(
+  defineMembers(
     target: object,
     assembled: AssembledInterface,
     member: MaplikeMember,
@@ -35,10 +61,10 @@ export class CollectionBinding {
     Object.defineProperty(target, 'size', {
       configurable: true,
       enumerable: true,
-      get: this.#createSizeGetter(assembled, 'map'),
+      get: this.#createSizeGetter(assembled),
     });
 
-    const entries = this.#createMapIteratorMethod(
+    const entries = this.#createIteratorMethod(
       assembled,
       member,
       'key+value',
@@ -49,31 +75,31 @@ export class CollectionBinding {
     defineDataProperty(
       target,
       'keys',
-      this.#createMapIteratorMethod(
+      this.#createIteratorMethod(
         assembled, member, 'key', 'keys',
       ),
     );
     defineDataProperty(
       target,
       'values',
-      this.#createMapIteratorMethod(
+      this.#createIteratorMethod(
         assembled, member, 'value', 'values',
       ),
     );
     defineDataProperty(
       target,
       'forEach',
-      this.#createMapForEach(assembled, member),
+      this.#createForEach(assembled, member),
     );
     defineDataProperty(
       target,
       'get',
-      this.#createMapGet(assembled, member),
+      this.#createGet(assembled, member),
     );
     defineDataProperty(
       target,
       'has',
-      this.#createMapHas(assembled, member),
+      this.#createHas(assembled, member),
     );
 
     if (member.readonly) return;
@@ -81,175 +107,82 @@ export class CollectionBinding {
       defineDataProperty(
         target,
         'set',
-        this.#createMapSet(assembled, member),
+        this.#createSet(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('delete')) {
       defineDataProperty(
         target,
         'delete',
-        this.#createMapDelete(assembled, member),
+        this.#createDelete(assembled, member),
       );
     }
     if (!assembled.hasInstanceOperation('clear')) {
-      defineDataProperty(target, 'clear', this.#createClear(assembled, 'map'));
-    }
-  }
-
-  // Web IDL §3.7.12 Setlike declarations — install the declared properties.
-  defineSetlike(
-    target: object,
-    assembled: AssembledInterface,
-    member: SetlikeMember,
-  ): void {
-    Object.defineProperty(target, 'size', {
-      configurable: true,
-      enumerable: true,
-      get: this.#createSizeGetter(assembled, 'set'),
-    });
-
-    const values = this.#createSetIteratorMethod(
-      assembled,
-      member,
-      'value',
-      'values',
-    );
-    defineMethod(target, Symbol.iterator, values, false);
-    defineDataProperty(
-      target,
-      'entries',
-      this.#createSetIteratorMethod(
-        assembled, member, 'key+value', 'entries',
-      ),
-    );
-    defineDataProperty(target, 'keys', values);
-    defineDataProperty(target, 'values', values);
-    defineDataProperty(
-      target,
-      'forEach',
-      this.#createSetForEach(assembled, member),
-    );
-    defineDataProperty(
-      target,
-      'has',
-      this.#createSetHas(assembled, member),
-    );
-
-    if (member.readonly) return;
-    if (!assembled.hasInstanceOperation('add')) {
-      defineDataProperty(
-        target,
-        'add',
-        this.#createSetAdd(assembled, member),
-      );
-    }
-    if (!assembled.hasInstanceOperation('delete')) {
-      defineDataProperty(
-        target,
-        'delete',
-        this.#createSetDelete(assembled, member),
-      );
-    }
-    if (!assembled.hasInstanceOperation('clear')) {
-      defineDataProperty(target, 'clear', this.#createClear(assembled, 'set'));
+      defineDataProperty(target, 'clear', this.#createClear(assembled));
     }
   }
 
   // Project helper: retrieve map entries retained in the implementation's binding record.
-  getMapEntries(record: PlatformRecord | undefined): IDLMapEntries {
+  getEntries(record: PlatformRecord | undefined): IDLMapEntries {
     const entries = record?.mapEntries;
     if (!entries) throw new InternalError('Object does not have Web IDL map entries');
     return entries;
   }
 
-  // Project helper: retrieve set entries retained in the implementation's binding record.
-  getSetEntries(record: PlatformRecord | undefined): IDLSetEntries {
-    const entries = record?.setEntries;
-    if (!entries) throw new InternalError('Object does not have Web IDL set entries');
-    return entries;
-  }
-
-  // Project factory for Web IDL §3.7.11.1 size and §3.7.12.1 size getters.
+  // Project factory for Web IDL §3.7.11.1 size getter.
   #createSizeGetter(
     assembled: AssembledInterface,
-    kind: CollectionKind,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument,
           assembled,
           'size',
           'getter',
         );
-        return kind === 'map'
-          ? this.getMapEntries(receiver).size
-          : this.getSetEntries(receiver).size;
+        return this.getEntries(receiver).size;
       },
       { length: 0, name: 'get size' },
     );
   }
 
   // Project factory for Web IDL §3.7.11.3 entries, §3.7.11.4 keys, and §3.7.11.5 values.
-  #createMapIteratorMethod(
+  #createIteratorMethod(
     assembled: AssembledInterface,
     member: MaplikeMember,
     kind: MapIterationKind,
     name: string,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    // Reuse installed converters unless a borrowed method needs another receiver binding.
+    const methodBinding = this.binding;
+    const realm = methodBinding.realm;
+    const convertKey = methodBinding.getConversionContext(member.key).getIDLToJSConverter();
+    const convertValue = methodBinding.getConversionContext(member.value).getIDLToJSConverter();
+    return realm.createFunction(
       (thisArgument) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument,
-          assembled,
-          name,
-          'method',
+        const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
+        const receiverBinding = receiver.binding;
+        const sameBinding = receiverBinding === methodBinding;
+        const iterator = new MapIteratorRecord(
+          this.getEntries(receiver), kind, realm,
+          sameBinding ? convertKey : receiverBinding.getConversionContext(member.key, realm).getIDLToJSConverter(),
+          sameBinding ? convertValue : receiverBinding.getConversionContext(member.value, realm).getIDLToJSConverter(),
         );
-        return this.#createMapIterator(
-          this.getMapEntries(receiver),
-          member,
-          kind,
-          receiver.binding,
-        );
-      },
-      { length: 0, name },
-    );
-  }
-
-  // Project factory for Web IDL §3.7.12.3 entries and §3.7.12.5 values.
-  #createSetIteratorMethod(
-    assembled: AssembledInterface,
-    member: SetlikeMember,
-    kind: SetIterationKind,
-    name: string,
-  ): JSFunction {
-    return this.#binding.realm.createFunction(
-      (thisArgument) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument,
-          assembled,
-          name,
-          'method',
-        );
-        return this.#createSetIterator(
-          this.getSetEntries(receiver),
-          member,
-          kind,
-          receiver.binding,
-        );
+        return realm.createCollectionIterator('map', () => iterator.next());
       },
       { length: 0, name },
     );
   }
 
   // Project factory for Web IDL §3.7.11.6 forEach.
-  #createMapForEach(
+  #createForEach(
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument,
           assembled,
           'forEach',
@@ -257,45 +190,13 @@ export class CollectionBinding {
         );
         const callback = argumentsList[0];
         if (typeof callback !== 'function') {
-          this.#throwTypeError('Callback is not callable');
+          this.throwTypeError('Callback is not callable');
         }
         const binding = receiver.binding;
-        this.getMapEntries(receiver).forEach((value, key) => {
+        this.getEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm)),
-            idlToJS(key, binding.getConversionContext(member.key, this.#binding.realm)),
-            receiver.platformObject,
-          ]);
-        });
-        return undefined;
-      },
-      { length: 1, name: 'forEach' },
-    );
-  }
-
-  // Project factory for Web IDL §3.7.12.6 forEach.
-  #createSetForEach(
-    assembled: AssembledInterface,
-    member: SetlikeMember,
-  ): JSFunction {
-    return this.#binding.realm.createFunction(
-      (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument,
-          assembled,
-          'forEach',
-          'method',
-        );
-        const callback = argumentsList[0];
-        if (typeof callback !== 'function') {
-          this.#throwTypeError('Callback is not callable');
-        }
-        const binding = receiver.binding;
-        this.getSetEntries(receiver).forEach((value) => {
-          const javaScriptValue = idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm));
-          Reflect.apply(callback, argumentsList[1], [
-            javaScriptValue,
-            javaScriptValue,
+            idlToJS(value, binding.getConversionContext(member.value, this.binding.realm)),
+            idlToJS(key, binding.getConversionContext(member.key, this.binding.realm)),
             receiver.platformObject,
           ]);
         });
@@ -306,60 +207,60 @@ export class CollectionBinding {
   }
 
   // Project factory for Web IDL §3.7.11.7 get.
-  #createMapGet(
+  #createGet(
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'get', 'method',
         );
-        const entries = this.getMapEntries(receiver);
+        const entries = this.getEntries(receiver);
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#binding,
+          argumentsList[0], member.key, this.binding,
         );
         if (!entries.has(key)) return undefined;
-        return idlToJS(entries.get(key), receiver.binding.getConversionContext(member.value, this.#binding.realm));
+        return idlToJS(entries.get(key), receiver.binding.getConversionContext(member.value, this.binding.realm));
       },
       { length: 1, name: 'get' },
     );
   }
 
   // Project factory for Web IDL §3.7.11.8 has.
-  #createMapHas(
+  #createHas(
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#binding,
+          argumentsList[0], member.key, this.binding,
         );
-        return this.getMapEntries(receiver).has(key);
+        return this.getEntries(receiver).has(key);
       },
       { length: 1, name: 'has' },
     );
   }
 
   // Project factory for Web IDL §3.7.11.9 set.
-  #createMapSet(
+  #createSet(
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'set', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#binding,
+          argumentsList[0], member.key, this.binding,
         );
-        const value = jsToIDL(argumentsList[1], this.#binding.getConversionContext(member.value, this.#binding.realm));
-        this.getMapEntries(receiver).set(key, value);
+        const value = jsToIDL(argumentsList[1], this.binding.getConversionContext(member.value, this.binding.realm));
+        this.getEntries(receiver).set(key, value);
         return receiver.platformObject;
       },
       { length: 2, name: 'set' },
@@ -367,57 +268,224 @@ export class CollectionBinding {
   }
 
   // Project factory for Web IDL §3.7.11.10 delete.
-  #createMapDelete(
+  #createDelete(
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#binding,
+          argumentsList[0], member.key, this.binding,
         );
-        return this.getMapEntries(receiver).delete(key);
+        return this.getEntries(receiver).delete(key);
       },
       { length: 1, name: 'delete' },
     );
   }
 
-  // Project factory for Web IDL §3.7.12.7 has.
-  #createSetHas(
+  // Project factory for Web IDL §3.7.11.11 clear.
+  #createClear(
+    assembled: AssembledInterface,
+  ): JSFunction {
+    return this.binding.realm.createFunction(
+      (thisArgument) => {
+        const receiver = this.getReceiverRecord(
+          thisArgument, assembled, 'clear', 'method',
+        );
+        this.getEntries(receiver).clear();
+        return undefined;
+      },
+      { length: 0, name: 'clear' },
+    );
+  }
+}
+
+/** Install setlike members and access their retained set entries. */
+// https://webidl.spec.whatwg.org/#idl-setlike
+export class SetlikeBinding extends CollectionBinding {
+  /** Allocate backing entries once when the platform object is initialized. */
+  initialize(record: PlatformRecord): void {
+    record.setEntries ??= new Set();
+  }
+
+  // Web IDL §3.7.12 Setlike declarations — install the declared properties.
+  defineMembers(
+    target: object,
+    assembled: AssembledInterface,
+    member: SetlikeMember,
+  ): void {
+    Object.defineProperty(target, 'size', {
+      configurable: true,
+      enumerable: true,
+      get: this.#createSizeGetter(assembled),
+    });
+
+    const values = this.#createIteratorMethod(
+      assembled,
+      member,
+      'value',
+      'values',
+    );
+    defineMethod(target, Symbol.iterator, values, false);
+    defineDataProperty(
+      target,
+      'entries',
+      this.#createIteratorMethod(
+        assembled, member, 'key+value', 'entries',
+      ),
+    );
+    defineDataProperty(target, 'keys', values);
+    defineDataProperty(target, 'values', values);
+    defineDataProperty(
+      target,
+      'forEach',
+      this.#createForEach(assembled, member),
+    );
+    defineDataProperty(
+      target,
+      'has',
+      this.#createHas(assembled, member),
+    );
+
+    if (member.readonly) return;
+    if (!assembled.hasInstanceOperation('add')) {
+      defineDataProperty(
+        target,
+        'add',
+        this.#createAdd(assembled, member),
+      );
+    }
+    if (!assembled.hasInstanceOperation('delete')) {
+      defineDataProperty(
+        target,
+        'delete',
+        this.#createDelete(assembled, member),
+      );
+    }
+    if (!assembled.hasInstanceOperation('clear')) {
+      defineDataProperty(target, 'clear', this.#createClear(assembled));
+    }
+  }
+
+  // Project helper: retrieve set entries retained in the implementation's binding record.
+  getEntries(record: PlatformRecord | undefined): IDLSetEntries {
+    const entries = record?.setEntries;
+    if (!entries) throw new InternalError('Object does not have Web IDL set entries');
+    return entries;
+  }
+
+  // Project factory for Web IDL §3.7.12.1 size getter.
+  #createSizeGetter(
+    assembled: AssembledInterface,
+  ): JSFunction {
+    return this.binding.realm.createFunction(
+      (thisArgument) => {
+        const receiver = this.getReceiverRecord(
+          thisArgument,
+          assembled,
+          'size',
+          'getter',
+        );
+        return this.getEntries(receiver).size;
+      },
+      { length: 0, name: 'get size' },
+    );
+  }
+
+  // Project factory for Web IDL §3.7.12.3 entries and §3.7.12.5 values.
+  #createIteratorMethod(
+    assembled: AssembledInterface,
+    member: SetlikeMember,
+    kind: SetIterationKind,
+    name: string,
+  ): JSFunction {
+    // Reuse installed converters unless a borrowed method needs another receiver binding.
+    const methodBinding = this.binding;
+    const realm = methodBinding.realm;
+    const convertValue = methodBinding.getConversionContext(member.value).getIDLToJSConverter();
+    return realm.createFunction(
+      (thisArgument) => {
+        const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
+        const receiverBinding = receiver.binding;
+        const sameBinding = receiverBinding === methodBinding;
+        const iterator = new SetIteratorRecord(
+          this.getEntries(receiver), kind, realm,
+          sameBinding ? convertValue : receiverBinding.getConversionContext(member.value, realm).getIDLToJSConverter(),
+        );
+        return realm.createCollectionIterator('set', () => iterator.next());
+      },
+      { length: 0, name },
+    );
+  }
+
+  // Project factory for Web IDL §3.7.12.6 forEach.
+  #createForEach(
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
+          thisArgument,
+          assembled,
+          'forEach',
+          'method',
+        );
+        const callback = argumentsList[0];
+        if (typeof callback !== 'function') {
+          this.throwTypeError('Callback is not callable');
+        }
+        const binding = receiver.binding;
+        this.getEntries(receiver).forEach((value) => {
+          const javaScriptValue = idlToJS(value, binding.getConversionContext(member.value, this.binding.realm));
+          Reflect.apply(callback, argumentsList[1], [
+            javaScriptValue,
+            javaScriptValue,
+            receiver.platformObject,
+          ]);
+        });
+        return undefined;
+      },
+      { length: 1, name: 'forEach' },
+    );
+  }
+
+  // Project factory for Web IDL §3.7.12.7 has.
+  #createHas(
+    assembled: AssembledInterface,
+    member: SetlikeMember,
+  ): JSFunction {
+    return this.binding.realm.createFunction(
+      (thisArgument, argumentsList) => {
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#binding,
+          argumentsList[0], member.value, this.binding,
         );
-        return this.getSetEntries(receiver).has(value);
+        return this.getEntries(receiver).has(value);
       },
       { length: 1, name: 'has' },
     );
   }
 
   // Project factory for Web IDL §3.7.12.8 add.
-  #createSetAdd(
+  #createAdd(
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'add', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#binding,
+          argumentsList[0], member.value, this.binding,
         );
-        this.getSetEntries(receiver).add(value);
+        this.getEntries(receiver).add(value);
         return receiver.platformObject;
       },
       { length: 1, name: 'add' },
@@ -425,124 +493,132 @@ export class CollectionBinding {
   }
 
   // Project factory for Web IDL §3.7.12.9 delete.
-  #createSetDelete(
+  #createDelete(
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#binding,
+          argumentsList[0], member.value, this.binding,
         );
-        return this.getSetEntries(receiver).delete(value);
+        return this.getEntries(receiver).delete(value);
       },
       { length: 1, name: 'delete' },
     );
   }
 
-  // Project factory for Web IDL §3.7.11.11 clear and §3.7.12.10 clear.
+  // Project factory for Web IDL §3.7.12.10 clear.
   #createClear(
     assembled: AssembledInterface,
-    kind: CollectionKind,
   ): JSFunction {
-    return this.#binding.realm.createFunction(
+    return this.binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.#getReceiverRecord(
+        const receiver = this.getReceiverRecord(
           thisArgument, assembled, 'clear', 'method',
         );
-        if (kind === 'map') this.getMapEntries(receiver).clear();
-        else this.getSetEntries(receiver).clear();
+        this.getEntries(receiver).clear();
         return undefined;
       },
       { length: 0, name: 'clear' },
     );
   }
+}
 
-  // Project adapter for Web IDL §3.7.11.2 %Symbol.iterator% — create a map iterator.
-  #createMapIterator(
+/** Advance one live map cursor and convert its entries for the platform iterator. */
+// https://webidl.spec.whatwg.org/#js-map-iterator
+class MapIteratorRecord {
+  /** Backing cursor observes changes to the collection between next calls. */
+  #iterator: MapIterator<[unknown, unknown]>;
+  /** Whether to yield the converted key, value, or pair. */
+  #kind: MapIterationKind;
+  /** Realm of the iterator-creation method, used for result objects and pairs. */
+  #realm: JSRealm;
+  /** Key conversion retaining the collection owner's binding and result realm. */
+  #convertKey: ValueConverter;
+  /** Value conversion retaining the collection owner's binding and result realm. */
+  #convertValue: ValueConverter;
+
+  constructor(
     entries: IDLMapEntries,
-    member: MaplikeMember,
     kind: MapIterationKind,
-    binding: RealmBinding,
-  ): object {
-    const iterator = entries.entries();
-    return this.#binding.realm.createCollectionIterator('map', () => {
-      const result = iterator.next();
-      if (result.done) {
-        return this.#binding.realm.createIteratorResultObject(undefined, true);
-      }
-
-      const [idlKey, idlValue] = result.value;
-      const key = idlToJS(idlKey, binding.getConversionContext(member.key, this.#binding.realm));
-      const value = idlToJS(idlValue, binding.getConversionContext(member.value, this.#binding.realm));
-      return this.#binding.realm.createIteratorResultObject(
-        kind === 'key' ? key : kind === 'value' ? value :
-          createRealmArray(this.#binding.realm, [key, value]),
-        false,
-      );
-    });
+    realm: JSRealm,
+    convertKey: ValueConverter,
+    convertValue: ValueConverter,
+  ) {
+    this.#iterator = entries.entries();
+    this.#kind = kind;
+    this.#realm = realm;
+    this.#convertKey = convertKey;
+    this.#convertValue = convertValue;
   }
 
-  // Project adapter for Web IDL §3.7.12.2 %Symbol.iterator% — create a set iterator.
-  #createSetIterator(
+  /** Convert both sides before selecting the yielded value, as required for map iterators. */
+  next(): object {
+    const result = this.#iterator.next();
+    if (result.done) return this.#realm.createIteratorResultObject(undefined, true);
+
+    const [idlKey, idlValue] = result.value;
+    const key = this.#convertKey(idlKey);
+    const value = this.#convertValue(idlValue);
+    return this.#realm.createIteratorResultObject(
+      this.#kind === 'key' ? key : this.#kind === 'value' ? value :
+        createRealmArray([key, value], this.#realm),
+      false,
+    );
+  }
+}
+
+/** Advance one live set cursor and convert its entries for the platform iterator. */
+// https://webidl.spec.whatwg.org/#js-set-iterator
+class SetIteratorRecord {
+  /** Backing cursor observes changes to the collection between next calls. */
+  #iterator: SetIterator<unknown>;
+  /** Whether to yield the converted value or a pair containing it twice. */
+  #kind: SetIterationKind;
+  /** Realm of the iterator-creation method, used for result objects and pairs. */
+  #realm: JSRealm;
+  /** Value conversion retaining the collection owner's binding and result realm. */
+  #convertValue: ValueConverter;
+
+  constructor(
     entries: IDLSetEntries,
-    member: SetlikeMember,
     kind: SetIterationKind,
-    binding: RealmBinding,
-  ): object {
-    const iterator = entries.values();
-    return this.#binding.realm.createCollectionIterator('set', () => {
-      const result = iterator.next();
-      if (result.done) {
-        return this.#binding.realm.createIteratorResultObject(undefined, true);
-      }
-
-      const value = idlToJS(result.value, binding.getConversionContext(member.value, this.#binding.realm));
-      return this.#binding.realm.createIteratorResultObject(
-        kind === 'value' ? value : createRealmArray(this.#binding.realm, [value, value]),
-        false,
-      );
-    });
+    realm: JSRealm,
+    convertValue: ValueConverter,
+  ) {
+    this.#iterator = entries.values();
+    this.#kind = kind;
+    this.#realm = realm;
+    this.#convertValue = convertValue;
   }
 
-  // Project adapter for the receiver and security checks in Web IDL §3.7.11 Maplike declarations and §3.7.12
-  // Setlike declarations.
-  #getReceiverRecord(
-    value: unknown,
-    assembled: AssembledInterface,
-    identifier: string,
-    type: 'getter' | 'method',
-  ): PlatformRecord {
-    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#binding.world) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    this.#binding.realm.performSecurityCheck(value, identifier, type);
-    if (!record.implements(assembled)) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    return record;
-  }
+  /** Convert each entry once, sharing that converted value between both sides of a pair. */
+  next(): object {
+    const result = this.#iterator.next();
+    if (result.done) return this.#realm.createIteratorResultObject(undefined, true);
 
-  // Project helper: throw a TypeError allocated in this binding's realm.
-  #throwTypeError(message: string): never {
-    throw new this.#binding.realm.intrinsics.typeError(message);
+    const value = this.#convertValue(result.value);
+    return this.#realm.createIteratorResultObject(
+      this.#kind === 'value' ? value : createRealmArray([value, value], this.#realm),
+      false,
+    );
   }
 }
 
 export type IDLMapEntries = Map<unknown, unknown>;
 export type IDLSetEntries = Set<unknown>;
 
-type CollectionKind = 'map' | 'set';
 type MapIterationKind = 'key' | 'key+value' | 'value';
 type SetIterationKind = 'key+value' | 'value';
 
-// Extracted from Web IDL §3.7.11 Maplike declarations and §3.7.12 Setlike declarations — convert keys/entries
-// and replace -0 with +0.
+/** Convert a map key or set entry, replacing -0 with +0 for collection equality. */
+// Floating-point conversion preserves -0; only keys and set entries normalize it here.
+// https://webidl.spec.whatwg.org/#js-map-set
+// https://webidl.spec.whatwg.org/#js-set-add
 function convertCollectionValue(
   value: unknown,
   type: WebIDLType,
@@ -554,10 +630,11 @@ function convertCollectionValue(
     : converted;
 }
 
-// Project adapter to ECMAScript §7.3.17 CreateArrayFromList using the binding's realm.
+/** Allocate an array in the supplied realm containing already-converted values. */
+// https://tc39.es/ecma262/#sec-createarrayfromlist
 function createRealmArray(
-  realm: WebIDLRealm,
   values: unknown[],
+  realm: JSRealm,
 ): unknown[] {
   const result = Reflect.construct(
     realm.intrinsics.array,

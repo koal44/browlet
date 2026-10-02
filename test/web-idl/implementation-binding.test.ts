@@ -17,7 +17,8 @@ import {
 import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
 import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/platform-object';
 import { BindingWorld } from '../../src/web-idl/binding-world';
-import { constructCallbackFunction, type StampedCallbackFunction, type WebIDLRealm } from '../../src/web-idl/index';
+import { CallbackFunctionStamper, type StampedCallbackFunction } from '../../src/web-idl/callback';
+import type { WebIDLRealm } from '../../src/web-idl/index';
 
 describe('Web IDL implementation bindings', () => {
   it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
@@ -1140,6 +1141,59 @@ describe('Web IDL implementation bindings', () => {
     expect(received[2]!.values[0]).not.toBe(received[3]!.values[0]);
   });
 
+  it('converts nested dictionary sequences without sharing author inputs or losing callback policy', () => {
+    type Entry = { callback: () => void; children: Entry[]; count: number; };
+    const received: Entry[][][] = [];
+    class SequenceReceiverImpl {
+      accept(values: Entry[][]) {
+        received.push(values);
+        values[0]![0]!.count++;
+      }
+    }
+    const callback = defineCallbackFunction({ name: 'Handler', returns: idlType.undefined, arguments: [] });
+    const entry = defineDictionary({
+      name: 'Entry',
+      members: [
+        dictMember('callback', reference(callback.name), { required: true, ...onError('rethrow') }),
+        dictMember('children', sequence(reference('Entry')), { default: { kind: 'empty-sequence' } }),
+        dictMember('count', idlType.long, { default: integer(2) }),
+      ],
+    });
+    const entries = defineTypedef({ name: 'Entries', type: sequence(reference(entry.name)) });
+    const definition = defineInterface({
+      name: 'SequenceReceiver', exposed: '*', implementation: impl(SequenceReceiverImpl),
+      members: [ctor(), op('accept', idlType.undefined, [arg('values', sequence(reference(entries.name)))])],
+    });
+    const realm = new Realm();
+    new BindingWorld([callback, entry, entries, definition])
+      .register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Constructor = Reflect.get(realm.global, definition.name) as new() => { accept(values: unknown): void; };
+    const receiver = new Constructor();
+    const failure = new Error('callback failure');
+    const fail = () => { throw failure; };
+    const child = Object.freeze({ callback: fail });
+    const source = Object.freeze([Object.freeze([
+      Object.freeze({ callback: fail, children: Object.freeze([child]), count: '3' }),
+    ])]);
+
+    receiver.accept(source);
+    receiver.accept(source);
+
+    const first = received[0]![0]![0]!;
+    const second = received[1]![0]![0]!;
+    expect(first.count).toBe(4);
+    expect(second.count).toBe(4);
+    expect(first.children[0]!.count).toBe(2);
+    expect(first.children[0]!.children).toEqual([]);
+    expect(() => first.callback()).toThrow(failure);
+    expect(() => first.children[0]!.callback()).toThrow(failure);
+    expect(received[0]![0]).not.toBe(received[1]![0]);
+    expect(first).not.toBe(second);
+    expect(first.children).not.toBe(second.children);
+    expect(first.children[0]!.children).not.toBe(second.children[0]!.children);
+    expect(source[0]![0]!.count).toBe('3');
+  });
+
   it.each(['dictionary', 'required dictionary', 'record'] as const)('preserves __proto__ as an own %s member when adapting arguments', (kind) => {
     let received: Record<string, unknown> | undefined;
     class MemberReceiverImpl {
@@ -1289,7 +1343,7 @@ describe('Web IDL implementation bindings', () => {
       }
 
       construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
-        return constructCallbackFunction(callback, [4], realm);
+        return CallbackFunctionStamper.get(callback).construct([4], realm);
       }
     }
 
@@ -1451,7 +1505,7 @@ describe('Web IDL implementation bindings', () => {
   it('constructs adapted callbacks whose converted result is a primitive', () => {
     class FactoryOwnerImpl {
       construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
-        return constructCallbackFunction(callback, [4], realm);
+        return CallbackFunctionStamper.get(callback).construct([4], realm);
       }
     }
     const factory = defineCallbackFunction({
@@ -1484,7 +1538,7 @@ describe('Web IDL implementation bindings', () => {
   it('retains callback realms and captured contexts through explicit construction', () => {
     class FactoryOwnerImpl {
       construct(callback: StampedCallbackFunction, realm: WebIDLRealm): unknown {
-        return constructCallbackFunction(callback, [4], realm);
+        return CallbackFunctionStamper.get(callback).construct([4], realm);
       }
     }
     const factory = defineCallbackFunction({
@@ -1544,7 +1598,7 @@ describe('Web IDL implementation bindings', () => {
       constructor(public callback: StampedCallbackFunction) {}
 
       construct(realm: WebIDLRealm): unknown {
-        return constructCallbackFunction(this.callback, [], realm);
+        return CallbackFunctionStamper.get(this.callback).construct([], realm);
       }
     }
     const factory = defineCallbackFunction({ name: 'Factory', returns: idlType.any, arguments: [] });

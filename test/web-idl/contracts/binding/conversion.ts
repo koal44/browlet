@@ -2,7 +2,7 @@ import type { ConversionContext } from '../../../../src/web-idl/conversion-conte
 import type { BindingContext } from '../../../../src/web-idl/binding-context';
 import {
   jsToIDL,
-  type IDLRecordValue, type IDLSequenceValue, type ValueConverter,
+  type IDLRecord, type IDLSequence, type ValueConverter,
 } from '../../../../src/web-idl/conversion';
 import {
   annotated, asyncSequence, idlType, implementationType, promise, record, reference, sequence, xattr,
@@ -27,8 +27,8 @@ const wrongResult: string = jsToIDL(authorValue, ctx.binding.getConversionContex
 // @ts-expect-error Web IDL any makes no guarantee about the value's shape.
 const anyObject: object = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.any, ctx.realm));
 
-const values: IDLSequenceValue = jsToIDL(authorValue, ctx.binding.getConversionContext(sequence(idlType.long), ctx.realm));
-const entries: IDLRecordValue = jsToIDL(authorValue, ctx.binding.getConversionContext(record(idlType.DOMString, idlType.long), ctx.realm));
+const values: IDLSequence = jsToIDL(authorValue, ctx.binding.getConversionContext(sequence(idlType.long), ctx.realm));
+const entries: IDLRecord = jsToIDL(authorValue, ctx.binding.getConversionContext(record(idlType.DOMString, idlType.long), ctx.realm));
 const promiseValue: PromiseCarrier = jsToIDL(authorValue, ctx.binding.getConversionContext(promise(idlType.long), ctx.realm));
 const asyncValues: AsyncSequenceCarrier = jsToIDL(authorValue, ctx.binding.getConversionContext(asyncSequence(idlType.long), ctx.realm));
 // @ts-expect-error A named reference needs this world's assembly; its name alone does not encode the result.

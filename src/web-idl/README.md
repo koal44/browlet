@@ -124,6 +124,15 @@ result conversion. The record retains the original receiver's binding for
 projection; each call supplies the invoked method's binding for allocations,
 including when that method is borrowed from another realm.
 
+Maplike and setlike iteration use local `MapIteratorRecord` and `SetIteratorRecord`
+classes for the live backing cursor and prepared entry converters. The converters
+retain the collection's binding; pairs and result objects use the realm of the
+method that created the iterator. Iterator methods retain their usual converters
+at installation; borrowed methods select converters for the receiver's binding.
+`MaplikeBinding` and `SetlikeBinding` install
+their respective members, sharing receiver validation through `CollectionBinding`.
+JS Engine owns iterator identity, reentrancy, and completion.
+
 `PromiseCarrier` owns resolution, rejection, and reactions. Its `react()` handles
 JS values; callers supply any conversions in their reaction steps. Convert an
 IDL result with `idlToJS()` before passing it to `resolve()`; resolution accepts
@@ -201,7 +210,8 @@ select the context for the receiver binding and required allocation realm;
 nested conversions preserve those owners while selecting their own type's rules.
 IDL-to-implementation argument and attribute converters are prepared from those converted
 types. Known callbacks and dictionaries use their specific representations;
-unions and `any` retain runtime discrimination. Recursive dictionary members and
+known sequences retain an element converter and unpack their fresh lists in place.
+Unions and `any` retain runtime discrimination. Recursive dictionary members and
 callback results prepare their nested converters on first use.
 Converted dictionaries carry their assembled definition and a member record;
 IDL-to-implementation conversion updates that record in place. `mayContainCarrier()`
@@ -223,16 +233,15 @@ exception requests still take the conversion path. `bindCallbackFunction()` crea
 an implementation callable from a `CallbackFunctionCarrier` and invocation policy;
 it does not change the author's function realm or necessarily fix its `this` value.
 Bound callbacks are ordinary functions privately stamped with their callback carrier;
-projection reads that stamp without inspecting author function properties. Implementations use
-`constructCallbackFunction(boundCallback, args, realm)` for construction, with the argument
-typed as `StampedCallbackFunction`. The explicit operation returns the converted
-IDL result, including primitives, and preserves callback realm and lifecycle
-handling. It does not use JavaScript construction on the bound callback itself.
-The caller supplies the current construction realm: non-constructor rejection
-precedes entry into the callback realm. A borrowed method injects its method realm
-with `invokeWith(atArg(index, (_receiver, method) => method.realm))`. Carriers
-retain the binding, callback realm, and captured callback context; they do not
-retain the original conversion realm for this later error.
+projection reads that stamp without inspecting author function properties.
+`CallbackFunctionCarrier.construct(args, currentRealm)` implements callback construction,
+returning the converted IDL result, including primitives. It has no production
+consumer yet; HTML custom-element upgrade will need this operation. Construction
+uses the original author function, preserving callback realm and lifecycle handling.
+The caller supplies the current realm because non-constructor rejection precedes
+entry into the callback realm. Carriers retain the binding, callback realm, and
+captured callback context; they do not retain the original conversion realm for
+this later error.
 Runtime consumers use assembled class instances,
 which retain their original declarations as `primary`. All realms registered in
 that world use these same instances, while their JavaScript constructors and

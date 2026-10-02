@@ -5,6 +5,7 @@ import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding-world';
 import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { getImplementationRecord } from '../../src/web-idl/platform-object';
 import {
   defineInterface, idlType, impl, maplike, reference, sequence, setlike,
   type MaplikeMember, type OperationMember, type SetlikeMember,
@@ -189,6 +190,34 @@ describe('Web IDL maplike declarations', () => {
     expect(callNext(secondIterator).value).toEqual([3]);
   });
 
+  it.each(['keys', 'values'] as const)('%s still converts the unreturned side', (method) => {
+    class ChildImpl {}
+    class MapImpl {}
+    const world = new BindingWorld([
+      defineInterface({ name: 'Child', implementation: impl(ChildImpl), members: [] }),
+      defineInterface({
+        name: 'Collection', implementation: impl(MapImpl),
+        members: [method === 'keys'
+          ? maplike(idlType.DOMString, reference('Child'))
+          : maplike(reference('Child'), idlType.DOMString)],
+      }),
+    ]);
+    const realm = new Realm();
+    const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const object = context.project(MapImpl, new MapImpl());
+    const entries = world.getRealmBinding(realm)!.getMapEntries(object);
+    const child = new ChildImpl();
+    if (method === 'keys') entries.set('visible', child);
+    else entries.set(child, 'visible');
+    const iterator = call(object, method) as object;
+
+    // Map iteration converts both sides before selecting the yielded value.
+    // https://webidl.spec.whatwg.org/#js-map-iterator
+    expect(getImplementationRecord(child)).toBeUndefined();
+    expect(callNext(iterator)).toEqual({ value: 'visible', done: false });
+    expect(getImplementationRecord(child)?.platformObject).toBeDefined();
+  });
+
   it('keeps iteration and forEach live while preserving the entries object', () => {
     const { binding, object } = createMaplikeBinding();
     call(object, 'set', [1, 'one']);
@@ -359,6 +388,33 @@ describe('Web IDL setlike declarations', () => {
     call(object, 'clear');
     expect(binding.getSetEntries(object)).toBe(entriesObject);
     expect(Reflect.get(object, 'size')).toBe(0);
+  });
+
+  it('converts each set entry once per pair and freshly for each iterator', () => {
+    const definition = defineInterface({
+      name: 'SequenceSetlike', exposed: ['Window'],
+      members: [setlike(sequence(idlType.long))],
+    });
+    const realm = new Realm();
+    const binding = createBinding(definition, realm);
+    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
+    call(object, 'add', [[1, 2]]);
+    const entries = call(object, 'entries') as object;
+    const values = call(object, 'values') as object;
+    const pair = callNext(entries).value as [number[], number[]];
+
+    expect(pair[0]).toBe(pair[1]);
+    expect(pair).toBeInstanceOf(realm.intrinsics.array);
+    expect(pair[0]).toBeInstanceOf(realm.intrinsics.array);
+    pair[0].push(99);
+    const value = callNext(values).value;
+    expect(value).toEqual([1, 2]);
+    expect(value).not.toBe(pair[0]);
+    expect(value).toBeInstanceOf(realm.intrinsics.array);
+
+    call(object, 'add', [[3]]);
+    expect(callNext(entries).value).toEqual([[3], [3]]);
+    expect(callNext(values).value).toEqual([3]);
   });
 
   itPassesWith('collectionIterators')('accepts native Set iterator next', () => {

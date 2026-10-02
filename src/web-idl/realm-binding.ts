@@ -9,7 +9,7 @@ import {
 } from './assembled';
 import { AsyncIterableBinding } from './async-iterable';
 import {
-  CollectionBinding, type IDLMapEntries, type IDLSetEntries,
+  MaplikeBinding, SetlikeBinding, type IDLMapEntries, type IDLSetEntries,
 } from './collection';
 import {
   idlToJS, createDictionaryConverter, createLegacyCallbackConverter,
@@ -51,7 +51,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
   context: BindingContext<Env>;
-  #collections: CollectionBinding;
+  #maplikes: MaplikeBinding;
+  #setlikes: SetlikeBinding;
   #asyncIterables: AsyncIterableBinding;
   #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
   /** Type contexts for this binding, without keeping discarded conversion realms alive. */
@@ -102,7 +103,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       return error;
     };
     this.#asyncIterables = new AsyncIterableBinding(this);
-    this.#collections = new CollectionBinding(this);
+    this.#maplikes = new MaplikeBinding(this);
+    this.#setlikes = new SetlikeBinding(this);
     this.#globalPlatformObjects = new GlobalPlatformObjectBinding(this);
     this.#iterables = new SynchronousIterableBinding(this);
     this.#legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
@@ -736,7 +738,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     implInst: T,
   ): PlatformRecord<T> {
     const record = associatePlatformObject(platformObject, implInst, assembled, this);
-    this.#collections.initialize(record);
+    const member = assembled.getCollectionMember(true);
+    if (member?.kind === 'maplike') this.#maplikes.initialize(record);
+    else if (member?.kind === 'setlike') this.#setlikes.initialize(record);
     // Extracted from Web IDL §3.8 Platform objects implementing interfaces — copy unforgeable properties
     // while internally creating a new object implementing the interface.
     for (const ancestorAssembled of assembled.getInheritanceChain()) {
@@ -763,7 +767,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   // Project helper: retrieve the implementation's retained map entries.
   getMapEntries(object: object): IDLMapEntries {
     const record = getPlatformRecord(object) ?? getImplementationRecord(object);
-    return this.#collections.getMapEntries(
+    return this.#maplikes.getEntries(
       record?.binding.world === this.world ? record : undefined,
     );
   }
@@ -771,7 +775,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   // Project helper: retrieve the implementation's retained set entries.
   getSetEntries(object: object): IDLSetEntries {
     const record = getPlatformRecord(object) ?? getImplementationRecord(object);
-    return this.#collections.getSetEntries(
+    return this.#setlikes.getEntries(
       record?.binding.world === this.world ? record : undefined,
     );
   }
@@ -1016,9 +1020,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): void {
     const member = assembled.getCollectionMember();
     if (member?.kind === 'maplike') {
-      this.#collections.defineMaplike(target, assembled, member);
+      this.#maplikes.defineMembers(target, assembled, member);
     } else if (member?.kind === 'setlike') {
-      this.#collections.defineSetlike(target, assembled, member);
+      this.#setlikes.defineMembers(target, assembled, member);
     }
   }
 

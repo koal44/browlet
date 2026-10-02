@@ -5,7 +5,7 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   jsToIDL as convertDirectlyToIDL, idlToJS as convertDirectlyToJavaScript,
   createFrozenArray,
-  createFrozenArrayFromIterable, type DictionaryCarrier,
+  jsToIDLFrozenArray, type DictionaryCarrier,
 } from '../../src/web-idl/conversion';
 import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
 import {
@@ -524,7 +524,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
 
     const iterable = new Set(['5']);
     const method = iterable[Symbol.iterator];
-    expect(createFrozenArrayFromIterable(
+    expect(jsToIDLFrozenArray(
       iterable,
       binding.getConversionContext(idlType.long),
       method,

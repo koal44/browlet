@@ -5,7 +5,7 @@ import {
 import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
 import { AsyncSequenceCarrier } from './async-sequence';
 import {
-  jsToIDL, createDefaultValueFactory, createFrozenArrayFromIterable, createSequenceFromIterable,
+  jsToIDL, createDefaultValueFactory, jsToIDLFrozenArray, jsToIDLSequence,
   isPlatformObject,
 } from './conversion';
 import type { WebIDLType } from './core/index';
@@ -123,12 +123,12 @@ export function resolveOverload<Callable extends AssembledCallable>(
       throw new InternalError('Iterator method selected a non-sequence-like overload');
     }
     values.push(sequenceLike.kind === 'sequence'
-      ? createSequenceFromIterable(
+      ? jsToIDLSequence(
         argumentsList[i] as object,
         binding.getConversionContext(sequenceLike.type),
         method,
       )
-      : createFrozenArrayFromIterable(
+      : jsToIDLFrozenArray(
         argumentsList[i] as object,
         binding.getConversionContext(sequenceLike.type),
         method,

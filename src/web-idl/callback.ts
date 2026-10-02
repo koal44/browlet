@@ -125,23 +125,12 @@ export class CallbackFunctionCarrier {
 
   /** Construct with this callback, using the current realm for pre-entry failures. */
   // https://webidl.spec.whatwg.org/#construct-a-callback-function
-  construct(argumentsList: WebIDLArgumentsList, realm: WebIDLRealm): unknown {
-    return this.binding.getCallbackInvoker(this.assembled, this.realm).construct(this, argumentsList, realm);
+  construct(argumentsList: WebIDLArgumentsList, currentRealm: WebIDLRealm): unknown {
+    return this.binding.getCallbackInvoker(this.assembled, this.realm).construct(this, argumentsList, currentRealm);
   }
 }
 
-/** Construct a callback, using the current realm for failures before entering the callback realm. */
-// https://webidl.spec.whatwg.org/#construct-a-callback-function
-// SPEC_MISMATCH: construct(callable, args) -> IDL value
-export function constructCallbackFunction(
-  callback: StampedCallbackFunction,
-  argumentsList: WebIDLArgumentsList,
-  realm: WebIDLRealm,
-): unknown {
-  return CallbackFunctionStamper.get(callback).construct(argumentsList, realm);
-}
-
-export type WebIDLArgumentsList = unknown[];
+type WebIDLArgumentsList = unknown[];
 
 export const missingArgument: unique symbol = Symbol(
   'missing Web IDL argument',
@@ -189,7 +178,7 @@ export class CallbackInvoker {
     exceptionBehavior: CallbackExceptionBehavior | undefined,
     thisArgument?: unknown,
   ): unknown {
-    this.validateExceptionBehavior(exceptionBehavior);
+    this.#validateExceptionBehavior(exceptionBehavior);
     const function_ = cbCarrier.object;
     if (!isCallable(function_)) return this.jsToIDLResult(undefined);
     try {
@@ -209,11 +198,11 @@ export class CallbackInvoker {
 
   /** Construct with the carrier's author function, converting its arguments and result. */
   // https://webidl.spec.whatwg.org/#construct-a-callback-function
-  construct(cbCarrier: CallbackFunctionCarrier, argumentsList: WebIDLArgumentsList, realm: WebIDLRealm): unknown {
+  construct(cbCarrier: CallbackFunctionCarrier, argumentsList: WebIDLArgumentsList, currentRealm: WebIDLRealm): unknown {
     const constructor = cbCarrier.object;
     if (!isConstructor(constructor)) {
       // IsConstructor runs before preparing to enter the callback's realm.
-      throw new realm.intrinsics.typeError(`${cbCarrier.assembled.primary.name} is not a constructor`);
+      throw new currentRealm.intrinsics.typeError(`${cbCarrier.assembled.primary.name} is not a constructor`);
     }
     return runCallback(cbCarrier.realm, cbCarrier.callbackContext, () => {
       const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList));
@@ -222,7 +211,7 @@ export class CallbackInvoker {
   }
 
   // https://webidl.spec.whatwg.org/#es-invoking-callback-functions
-  validateExceptionBehavior(exceptionBehavior: CallbackExceptionBehavior | undefined): void {
+  #validateExceptionBehavior(exceptionBehavior: CallbackExceptionBehavior | undefined): void {
     if (this.returnsPromise) {
       if (exceptionBehavior) throw new InternalError('A promise callback cannot have exception behavior');
     } else if (!exceptionBehavior) {

@@ -18,7 +18,7 @@ import type {
   StringificationBehavior, ValuePairsSteps,
 } from './definition-binding';
 import { missingArgument } from './overload';
-import { jsToIDL, DictionaryCarrier } from './conversion';
+import { jsToIDL, DictionaryCarrier, type IDLSequence } from './conversion';
 import { PromiseCarrier } from './promise';
 import { endOfIteration, AsyncSequenceCarrier } from './async-sequence';
 import { InternalError } from '../infra/internal-error';
@@ -660,6 +660,19 @@ function createIDLToImplConverter(
     return (value, context, callbackThis) => value === null ? null : convert(value, context, callbackThis);
   }
   if (!assembly.mayContainCarrier(type)) return (value) => value;
+  if (resolved.kind === 'sequence') {
+    const convertElement = createIDLToImplConverter(resolved.type, {
+      callbackExceptionBehavior: options.callbackExceptionBehavior,
+    }, realmBinding);
+    const convert: IDLToImplConverter<IDLSequence, IDLSequence> = (values, context) => {
+      // JS-to-IDL conversion already created this list; consume its carriers in place.
+      for (let index = 0; index < values.length; index++) {
+        values[index] = convertElement(values[index], context);
+      }
+      return values;
+    };
+    return convert as IDLToImplConverter;
+  }
   if (resolved.kind === 'reference') {
     const callbackAssembled = assembly.callbackFunctions.get(resolved.name);
     if (callbackAssembled) {
@@ -841,7 +854,7 @@ function bindCallbackFunction(
   const existing = cbCarrier.boundCallback;
   if (existing) return existing;
 
-  // Construction uses constructCallbackFunction, so ordinary calls need no Proxy.
+  // Construction belongs to the carrier; this callable only binds invocation.
   const boundCallback = CallbackFunctionStamper.stamp(function callback(this: unknown, ...argumentsList: unknown[]) {
     const result = invoker.invoke(cbCarrier, argumentsList, exceptionBehavior, callbackThis ?? this);
     return convertResult ? convertResult(result, context) : idlToImpl(

@@ -250,6 +250,26 @@ describe('Web IDL effective overload sets', () => {
       .toThrow(binding.realm.intrinsics.typeError);
   });
 
+  it.each([
+    ['sequence', sequence(idlType.double)],
+    ['frozen array', frozenArray(idlType.double)],
+  ] as const)('throws %s conversion errors from an overloaded constructor in its realm', (_name, type) => {
+    class ConvertedImpl {}
+    const definition = defineInterface({
+      name: 'Converted', exposed: '*', implementation: impl(ConvertedImpl),
+      members: [
+        ctor([arg('value', idlType.DOMString)]),
+        ctor([arg('value', type)]),
+      ],
+    });
+    const realm = new Realm();
+    const world = new BindingWorld([definition]);
+    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Converted = Reflect.get(realm.global, 'Converted') as new(value: unknown) => object;
+
+    expect(() => new Converted([Symbol('element')])).toThrow(realm.intrinsics.typeError);
+  });
+
   it.fails('selects a symbol overload for a symbol value', () => {
     const binding = createBinding([]);
     const symbol = namedOperation('symbol', idlType.symbol);
