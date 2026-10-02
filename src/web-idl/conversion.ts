@@ -1,92 +1,92 @@
 import { toScalarValueString } from '../infra/index';
 import {
   bufferViewNames, getBufferTypeName, getMethod, hasMapData, hasStringData, isObject, toBigInt,
-  toNumber, toPrimitive, toString, type ByteSequence, type JSMethod,
+  toNumber, toPrimitive, toString, type JSMethod,
 } from '../js-engine/index';
 import { InternalPromise, type PromiseResult } from '../infra/promises';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError,
 } from '../infra/exceptions';
-import type { ConversionType, DefinitionAssembly, UnionInterfaceCandidate } from './assembly';
+import type { UnionInterfaceCandidate } from './assembly';
 import type { AssembledCallbackFunction, AssembledDictionary, AssembledEnumeration, AssembledInterface } from './assembled';
 import { AsyncSequenceCarrier } from './async-sequence';
 import { CallbackFunctionCarrier, CallbackInterfaceCarrier, CallbackFunctionStamper } from './callback';
-import { jsToIDLBufferSource, idlBufferSourceToJS } from './buffer-source';
-import { hasExtendedAttribute } from './core/helpers';
+import { jsToIDLBufferSource, idlToJSBufferSource } from './buffer-source';
 import type {
-  BufferTypeName, DefaultValue, ExtendedAttribute, ImplementationType,
-  RecordType, SimpleTypeName, UnionType, WebIDLType,
+  DefaultValue, FrozenArrayType, ImplementationType,
+  RecordType, ReferenceType, SimpleType, SimpleTypeName, UnionType, WebIDLType,
 } from './core/types';
 import type { WebIDLRealm } from './realm';
 import type { RealmBinding } from './realm-binding';
+import type { ConversionContext } from './conversion-context';
 import { getPlatformRecord } from './platform-object';
 import { PromiseCarrier } from './promise';
 import { defineDataProperty } from './property';
 import { InternalError } from '../infra/internal-error';
 
-/** Validate/coerce an author value to IDL; a concrete descriptor retains its known result type. */
+/**
+ * Enter conversion here so conversion failures become errors in context.realm.
+ * Recursive conversion already inside this boundary uses {@link _jsToIDL}.
+ * A concrete descriptor retains its known result type.
+ */
 // https://webidl.spec.whatwg.org/#js-type-mapping
 export function jsToIDL<Type extends WebIDLType>(
   value: unknown,
-  type: Type,
-  context: ConversionContext,
-  options?: ConversionOptions,
+  context: ConversionContext<Type>,
 ): IDLValue<Type>;
 export function jsToIDL(
   value: unknown,
-  type: WebIDLType,
   context: ConversionContext,
-  options: ConversionOptions = {},
 ): unknown {
-  const legacyCallbackAttribute = options.attributeAssignment === true &&
-    context.binding.assembly.isNullableLegacyCallback(type);
-  // Web IDL §3.2.20 Nullable types — [LegacyTreatNonObjectAsNull] attribute-assignment step.
-  if (legacyCallbackAttribute && !isObject(value)) return null;
   try {
-    return jsToIDLValue(
-      value,
-      type,
-      context,
-      [],
-      legacyCallbackAttribute,
-    );
+    return _jsToIDL(value, context);
   } catch (error) {
     return throwConversionError(error, context);
   }
 }
 
-/** Prepare author-to-IDL conversion for a fixed type; each invocation supplies its conversion realm. */
+/** Prepare a reusable conversion entry point with the same rules and error boundary as {@link jsToIDL}. */
 export function createJSToIDLConverter<Type extends WebIDLType>(
-  type: Type,
-  assembly: DefinitionAssembly,
-  options?: ConversionOptions,
-): ValueConverter<IDLValue<Type>>;
-export function createJSToIDLConverter(
-  type: WebIDLType,
-  assembly: DefinitionAssembly,
-  options: ConversionOptions = {},
-): ValueConverter {
-  const convert = createJSToIDLValueConverter(type, assembly, options);
-  return (value, context) => {
+  context: ConversionContext<Type>,
+): ValueConverter<IDLValue<Type>> {
+  const convert = createJSToIDLValueConverter(context);
+  return (value) => {
     try {
-      return convert(value, context);
+      return convert(value) as IDLValue<Type>;
     } catch (error) {
       return throwConversionError(error, context);
     }
   };
 }
 
-// Retain type decisions without capturing a realm: borrowed calls still supply
-// the method's conversion context, including when nested dictionary members fail.
+/** Prepare nullable legacy callback assignment: retain objects as callbacks and map other values to null. */
+// The setter selects this conversion once for a nullable [LegacyTreatNonObjectAsNull] callback.
+// https://webidl.spec.whatwg.org/#js-to-nullable
+// https://webidl.spec.whatwg.org/#js-to-callback-function
+export function createLegacyCallbackConverter(
+  context: ConversionContext,
+  assembled: AssembledCallbackFunction,
+): ValueConverter<CallbackFunctionCarrier | null> {
+  return (value) => {
+    if (!isObject(value)) return null;
+    try {
+      return new CallbackFunctionCarrier(
+        assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context.binding,
+      );
+    } catch (error) {
+      return throwConversionError(error, context);
+    }
+  };
+}
+
+// Prepare nested conversion inside an existing error boundary. To enter conversion,
+// use createJSToIDLConverter() or jsToIDL(); dictionary members share their caller's boundary.
 function createJSToIDLValueConverter(
-  type: WebIDLType,
-  assembly: DefinitionAssembly,
-  options: ConversionOptions = {},
+  context: ConversionContext,
 ): ValueConverter {
-  const conversion = assembly.getConversionType(type);
-  const resolved = conversion.type;
-  const legacyCallbackAttribute = options.attributeAssignment === true && assembly.isNullableLegacyCallback(type);
+  const assembly = context.binding.assembly;
+  const resolved = context.resolvedType;
   const interfaceAssembled = resolved.kind === 'reference' ? assembly.interfaces.get(resolved.name) : undefined;
   const enumerationAssembled = resolved.kind === 'reference' ? assembly.enumerations.get(resolved.name) : undefined;
   const dictionaryAssembled = resolved.kind === 'reference' ? assembly.dictionaries.get(resolved.name) : undefined;
@@ -94,81 +94,72 @@ function createJSToIDLValueConverter(
   let convert: ValueConverter;
   if (resolved.kind === 'simple') {
     const integer = integerTypes[resolved.name];
-    const simple = jsToSimpleIDLConverters[resolved.name];
+    const simple = jsToIDLSimpleConverters[resolved.name];
     convert = integer
-      ? (value, context) => convertToInteger(
-        value, integer.bitLength, integer.signed, conversion.extendedAttributes, context,
-      )
+      ? (value) => convertToInteger(value, integer.bitLength, integer.signed, context)
       : simple
-        ? (value, context) => simple(value, conversion.extendedAttributes, context)
-        : (value, context) => jsToSimpleIDL(
-          value, resolved.name, conversion.extendedAttributes, context,
-        );
+        ? (value) => simple(value, context)
+        : (value) => jsToIDLSimple(value, context);
   } else if (interfaceAssembled) {
-    convert = (value, context) => jsToIDLInterface(value, interfaceAssembled, context);
+    convert = (value) => jsToIDLInterface(value, context, interfaceAssembled);
   } else if (enumerationAssembled) {
-    convert = (value, context) => jsToIDLEnumeration(value, enumerationAssembled, context);
+    convert = (value) => jsToIDLEnumeration(value, context, enumerationAssembled);
   } else if (dictionaryAssembled) {
-    convert = (value, context) => jsToIDLDictionary(value, dictionaryAssembled, context);
+    // Delay recursive dictionary preparation until a value actually reaches it.
+    let convertDictionary: DictionaryConverter | undefined;
+    convert = (value) => (convertDictionary ??=
+      context.binding.getDictionaryConverter(dictionaryAssembled, context.realm))(value);
   } else if (callbackAssembled) {
-    convert = (value, context) => jsToIDLCallbackFunction(value, callbackAssembled, context, legacyCallbackAttribute);
+    convert = (value) => jsToIDLCallbackFunction(value, context, callbackAssembled);
   } else {
-    convert = (value, context) => jsToIDLByType(
-      value, conversion, context, [], legacyCallbackAttribute,
-    );
+    convert = (value) => _jsToIDL(value, context);
   }
-  return legacyCallbackAttribute
-    ? (value, context) => isObject(value) ? convert(value, context) : null
-    : convert;
+  return convert;
 }
 
 /** Convert an IDL value to its author-facing representation, projecting implementation objects as needed. */
 // https://webidl.spec.whatwg.org/#js-type-mapping
 export function idlToJS(
   value: unknown,
-  type: WebIDLType,
   context: ConversionContext,
-  allocateBuffers = false,
 ): unknown {
-  return idlToJSValue(value, type, context, [], allocateBuffers);
+  return idlToJSByType(value, context);
 }
 
-/** Select a fixed result type's conversion once while retaining the invocation's allocation realm. */
+/** Prepare result conversion, including the selected allocation realm. */
 export function createIDLToJSConverter(
-  type: WebIDLType,
-  assembly: DefinitionAssembly,
-  allocateBuffers = false,
+  context: ConversionContext,
 ): ValueConverter {
-  const conversion = assembly.getConversionType(type);
-  const resolved = conversion.type;
+  const resolved = context.resolvedType;
+  const assembly = context.binding.assembly;
   if (resolved.kind === 'simple' && !bufferTypeNames.has(resolved.name)) {
     if (resolved.name === 'undefined') {
-      return (value, context) => {
+      return (value) => {
         context.binding.realizeException(value);
         return undefined;
       };
     }
-    return (value, context) => context.binding.realizeException(value);
+    return (value) => context.binding.realizeException(value);
   }
   if (resolved.kind === 'reference') {
     const assembled = assembly.interfaces.get(resolved.name);
     if (assembled) {
-      return (value, context) => projectInterface(context.binding.realizeException(value), assembled, context);
+      return (value) => projectInterface(context.binding.realizeException(value), context, assembled);
     }
     if (assembly.enumerations.has(resolved.name)) {
-      return (value, context) => context.binding.realizeException(value);
+      return (value) => context.binding.realizeException(value);
     }
   }
-  return (value, context) => idlToJSByType(value, conversion, context, [], allocateBuffers);
+  return (value) => idlToJSByType(value, context);
 }
 
-/** Convert arbitrary input to a result fixed by the prepared descriptor. */
-export type ValueConverter<Result = unknown> = (value: unknown, context: ConversionContext) => Result;
+/** Convert a value using a retained type and ownership context. */
+export type ValueConverter<Result = unknown> = (value: unknown) => Result;
 
 // Implementation payload types describe the final representation, not intermediate
 // conversion carriers. Use them only where those representations coincide. A name alone
 // needs the runtime assembly, and a fully dynamic WebIDLType can denote any.
-type IDLValue<Type extends WebIDLType> =
+export type IDLValue<Type extends WebIDLType> =
   WebIDLType extends Type ? unknown
     : Type extends { kind: 'annotated'; type: infer Inner extends WebIDLType; } ? IDLValue<Inner>
       : Type extends { kind: 'simple' | 'interface'; } ? PromiseResult<Type>
@@ -179,60 +170,56 @@ type IDLValue<Type extends WebIDLType> =
                 : Type extends { kind: 'frozen-array'; } ? readonly unknown[]
                   : unknown;
 
-// Web IDL §3.2.21.1 Creating a sequence from an iterable.
+/** Convert an iterable using its already-read method, realizing element conversion errors in context.realm. */
+// https://webidl.spec.whatwg.org/#create-sequence-from-iterable
 export function createSequenceFromIterable(
   iterable: object,
-  elementType: WebIDLType,
-  method: JSMethod,
   context: ConversionContext,
+  method: JSMethod,
 ): IDLSequenceValue {
-  const iterator = Reflect.apply(method, iterable, []);
-  if (!isObject(iterator)) {
-    throwTypeError(context, 'Iterator method did not return an object');
-  }
-
-  const nextMethod = getMethod(iterator, 'next', context.realm);
-  if (!nextMethod) throwTypeError(context, 'Iterator has no next method');
-
-  const sequence: IDLSequenceValue = [];
-  while (true) {
-    const result = Reflect.apply(nextMethod, iterator, []);
-    if (!isObject(result)) {
-      throwTypeError(context, 'Iterator result is not an object');
+  // Overload resolution also enters conversion here, using the element's context.
+  try {
+    const iterator = Reflect.apply(method, iterable, []);
+    if (!isObject(iterator)) {
+      throwTypeError(context, 'Iterator method did not return an object');
     }
-    const iteration = result as { done?: unknown; value?: unknown; };
-    if (iteration.done) return sequence;
-    sequence.push(jsToIDL(
-      iteration.value,
-      elementType,
-      context,
-    ));
+
+    const nextMethod = getMethod(iterator, 'next', context.realm);
+    if (!nextMethod) throwTypeError(context, 'Iterator has no next method');
+
+    const sequence: IDLSequenceValue = [];
+    while (true) {
+      const result = Reflect.apply(nextMethod, iterator, []);
+      if (!isObject(result)) {
+        throwTypeError(context, 'Iterator result is not an object');
+      }
+      const iteration = result as { done?: unknown; value?: unknown; };
+      if (iteration.done) return sequence;
+      sequence.push(_jsToIDL(iteration.value, context));
+    }
+  } catch (error) {
+    return throwConversionError(error, context);
   }
 }
 
-// Web IDL §3.2.27 Frozen arrays — create a frozen array.
+/** Project sequence entries with the element's conversion context, then freeze the resulting array. */
+// https://webidl.spec.whatwg.org/#dfn-create-frozen-array
 export function createFrozenArray(
   values: IDLSequenceValue,
-  elementType: WebIDLType,
   context: ConversionContext,
 ): readonly unknown[] {
-  return Object.freeze(idlSequenceToJS(
-    values,
-    elementType,
-    context,
-  ));
+  return Object.freeze(idlToJSSequence(values, context));
 }
 
-// Web IDL §3.2.27.1 Creating a frozen array from an iterable.
+/** Create a frozen array using its already-read method and the element's conversion context. */
+// https://webidl.spec.whatwg.org/#create-frozen-array-from-iterable
 export function createFrozenArrayFromIterable(
   iterable: object,
-  elementType: WebIDLType,
-  method: JSMethod,
   context: ConversionContext,
+  method: JSMethod,
 ): readonly unknown[] {
   return createFrozenArray(
-    createSequenceFromIterable(iterable, elementType, method, context),
-    elementType,
+    createSequenceFromIterable(iterable, context, method),
     context,
   );
 }
@@ -240,60 +227,24 @@ export function createFrozenArrayFromIterable(
 // Project implementation of Web IDL §2.12 Objects implementing interfaces — is a platform object.
 export function isPlatformObject(
   value: unknown,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): boolean {
-  if (getPlatformRecord(value)?.binding.world === context.binding.world) return true;
-  return context.binding.assembly.proxyObjects.is(value);
-}
-
-// Project helper: materialize the default-value records supplied by declaration builders.
-export function materializeDefaultValue(
-  value: DefaultValue,
-  type: WebIDLType,
-  context: ConversionContext,
-): unknown {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
-    return value;
-  }
-
-  switch (value.kind) {
-    case 'integer': {
-      const integer = context.binding.assembly.getIntegerLiteralValue(value);
-      const numericType = context.binding.assembly.getSoleNumericTypeName(type);
-      if (numericType === 'bigint') return integer;
-      if (numericType && integerTypes[numericType]) return Number(integer);
-      return jsToIDL(Number(integer), type, context);
-    }
-    case 'decimal':
-      return jsToIDL(Number(value.value), type, context);
-    case 'positive-infinity':
-      return jsToIDL(Infinity, type, context);
-    case 'negative-infinity':
-      return jsToIDL(-Infinity, type, context);
-    case 'not-a-number':
-      return jsToIDL(NaN, type, context);
-    case 'undefined':
-      return undefined;
-    case 'empty-sequence':
-      return [];
-    case 'empty-dictionary':
-      return jsToIDL(undefined, type, context);
-  }
+  if (getPlatformRecord(value)?.binding.world === binding.world) return true;
+  return binding.assembly.proxyObjects.is(value);
 }
 
 /** Reuse successfully converted scalar defaults; create mutable defaults on every call. */
 export function createDefaultValueFactory(
   value: DefaultValue,
-  type: WebIDLType,
 ): (context: ConversionContext) => unknown {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return () => value;
   if (value.kind === 'empty-sequence') return () => [];
-  if (value.kind === 'empty-dictionary') return (context) => materializeDefaultValue(value, type, context);
+  if (value.kind === 'empty-dictionary') return (context) => context.createDefault(value);
   let initialized = false;
   let result: unknown;
   return (context) => {
     if (!initialized) {
-      result = materializeDefaultValue(value, type, context);
+      result = context.createDefault(value);
       // Preparation must not throw earlier than the invocation that uses the
       // default. Only successful primitive results can be shared across calls.
       initialized = !isObject(result);
@@ -301,18 +252,6 @@ export function createDefaultValueFactory(
     return result;
   };
 }
-
-/** Select implementation ownership separately from ordinary allocation and conversion errors. */
-export type ConversionContext = {
-  /** Binding machinery and owner for projected implementations and internal exception requests. */
-  binding: RealmBinding;
-  /** Realm for ordinary result objects and new conversion errors; may differ from binding.realm. */
-  realm: WebIDLRealm;
-};
-
-export type ConversionOptions = {
-  attributeAssignment?: boolean;
-};
 
 /** Converted dictionary members with the declaration needed for subsequent conversion. */
 // https://webidl.spec.whatwg.org/#idl-dictionaries
@@ -332,47 +271,22 @@ export class DictionaryCarrier {
 export type IDLRecordValue = Map<string, unknown>;
 export type IDLSequenceValue = unknown[];
 
-// Project dispatcher for Web IDL §3.2 JavaScript type mapping — JavaScript-to-IDL conversions.
-function jsToIDLValue(
+// Continue conversion inside an existing error boundary. To enter conversion, use jsToIDL()
+// or createJSToIDLConverter(); they create errors in context.realm from conversion failures.
+function _jsToIDL<Type extends WebIDLType>(
   value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-  extendedAttributes: ExtendedAttribute[],
-  legacyCallbackAttribute = false,
-): unknown {
-  return jsToIDLByType(
-    value,
-    context.binding.assembly.getConversionType(type),
-    context,
-    extendedAttributes,
-    legacyCallbackAttribute,
-  );
-}
-
-// Project dispatcher: convert a JavaScript value using its resolved type and retained extended attributes.
-function jsToIDLByType(
+  context: ConversionContext<Type>,
+): IDLValue<Type>;
+function _jsToIDL(
   value: unknown,
-  { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
-  inheritedAttributes: ExtendedAttribute[],
-  legacyCallbackAttribute = false,
 ): unknown {
-  if (inheritedAttributes.length) extendedAttributes = [...inheritedAttributes, ...extendedAttributes];
+  const type = context.resolvedType;
   switch (type.kind) {
     case 'simple':
-      return jsToSimpleIDL(
-        value,
-        type.name,
-        extendedAttributes,
-        context,
-      );
+      return jsToIDLSimple(value, context);
     case 'reference':
-      return jsToNamedIDL(
-        value,
-        type.name,
-        context,
-        legacyCallbackAttribute,
-      );
+      return jsToIDLNamed(value, context);
     // Web IDL §3.2.20 Nullable types — JavaScript-to-IDL conversion.
     case 'nullable':
       if (
@@ -380,20 +294,9 @@ function jsToIDLByType(
         context.binding.assembly.includesUndefined(type.type)
       ) return undefined;
       if (value === null || value === undefined) return null;
-      return jsToIDLValue(
-        value,
-        type.type,
-        context,
-        extendedAttributes,
-        legacyCallbackAttribute,
-      );
+      return _jsToIDL(value, context.forType(type.type));
     case 'union':
-      return jsToIDLUnion(
-        value,
-        type,
-        context,
-        extendedAttributes,
-      );
+      return jsToIDLUnion(value, context);
     // Web IDL §3.2.21 Sequences — JavaScript-to-IDL conversion.
     case 'sequence': {
       if (!isObject(value)) {
@@ -403,13 +306,12 @@ function jsToIDLByType(
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createSequenceFromIterable(
         value,
-        type.type,
+        context.forType(type.type),
         method,
-        context,
       );
     }
     case 'record':
-      return jsToIDLRecord(value, type, context);
+      return jsToIDLRecord(value, context);
     // Web IDL §3.2.27 Frozen arrays — JavaScript-to-IDL conversion.
     case 'frozen-array': {
       if (!isObject(value)) {
@@ -419,88 +321,42 @@ function jsToIDLByType(
       if (!method) throwTypeError(context, 'Value is not iterable');
       return createFrozenArrayFromIterable(
         value,
-        type.type,
+        context.forType(type.type),
         method,
-        context,
       );
     }
     case 'promise':
       return PromiseCarrier.fromJS(value, type.type, context.realm, context.binding.realizeException);
     case 'async-sequence':
-      return AsyncSequenceCarrier.fromJS(value, type, context.realm);
+      return AsyncSequenceCarrier.fromJS(value, context);
     case 'observable-array':
       return unsupportedConversion(type.kind);
   }
 }
 
-// Project dispatcher for Web IDL §3.2 JavaScript type mapping — IDL-to-JavaScript conversions.
-function idlToJSValue(
-  value: unknown,
-  type: WebIDLType,
-  context: ConversionContext,
-  extendedAttributes: ExtendedAttribute[],
-  allocateBuffers = false,
-): unknown {
-  return idlToJSByType(
-    value,
-    context.binding.assembly.getConversionType(type),
-    context,
-    extendedAttributes,
-    allocateBuffers,
-  );
-}
-
-// Project dispatcher: convert an IDL value using its resolved type and retained extended attributes.
+// Convert an IDL value using the rules retained for this declared type.
 function idlToJSByType(
   value: unknown,
-  { type, extendedAttributes }: ConversionType,
   context: ConversionContext,
-  inheritedAttributes: ExtendedAttribute[],
-  allocateBuffers = false,
 ): unknown {
-  if (inheritedAttributes.length) extendedAttributes = [...inheritedAttributes, ...extendedAttributes];
+  const type = context.resolvedType;
   // Realize internal exceptions before exposing them, including as callback arguments.
   value = context.binding.realizeException(value);
   switch (type.kind) {
     case 'simple':
-      return simpleIDLToJS(value, type.name, context, allocateBuffers);
+      return idlToJSSimple(value, context);
     case 'reference':
-      return namedIDLToJS(
-        value,
-        type.name,
-        context,
-      );
+      return idlToJSNamed(value, context);
     // Web IDL §3.2.20 Nullable types — IDL-to-JavaScript conversion.
     case 'nullable':
       if (value === null) return null;
-      return idlToJSValue(
-        value,
-        type.type,
-        context,
-        extendedAttributes,
-        allocateBuffers,
-      );
+      return idlToJSByType(value, context.forType(type.type));
     case 'union':
-      return idlUnionToJS(
-        value,
-        type,
-        context,
-        extendedAttributes,
-        allocateBuffers,
-      );
+      return idlToJSUnion(value, context);
     case 'sequence':
-      return idlSequenceToJS(
-        value,
-        type.type,
-        context,
-      );
+      return idlToJSSequence(value, context.forType(type.type));
     case 'record':
-      return idlRecordToJS(
-        value,
-        type.key,
-        type.value,
-        context,
-      );
+      return idlToJSRecord(value, context);
     // Web IDL §3.2.27 Frozen arrays — preserve the frozen array object.
     case 'frozen-array':
       return value;
@@ -529,77 +385,64 @@ function idlToJSByType(
   }
 }
 
+// The dispatchers select each helper by resolved type; the assertions below retain
+// that selection without inspecting the type again for every converted value.
 // Shared implementation of the simple-type conversions in Web IDL §3.2 JavaScript type mapping.
-function jsToSimpleIDL(
+function jsToIDLSimple(
   value: unknown,
-  name: SimpleTypeName,
-  extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,
 ): unknown {
+  const { name } = context.resolvedType as SimpleType;
   const integerType = integerTypes[name];
   if (integerType) {
     return convertToInteger(
       value,
       integerType.bitLength,
       integerType.signed,
-      extendedAttributes,
       context,
     );
   }
 
   if (bufferTypeNames.has(name)) {
-    return jsToIDLBufferSource(
-      value,
-      name as BufferTypeName,
-      extendedAttributes,
-    );
+    return jsToIDLBufferSource(value, context);
   }
 
-  const convert = jsToSimpleIDLConverters[name];
+  const convert = jsToIDLSimpleConverters[name];
   if (!convert) return unsupportedConversion(name);
-  return convert(value, extendedAttributes, context);
+  return convert(value, context);
 }
 
 // Shared simple-type IDL-to-JavaScript conversion rules from Web IDL §3.2 JavaScript type mapping.
-function simpleIDLToJS(
+function idlToJSSimple(
   value: unknown,
-  name: SimpleTypeName,
   context: ConversionContext,
-  allocateBuffers: boolean,
 ): unknown {
+  const { name } = context.resolvedType as SimpleType;
   if (bufferTypeNames.has(name)) {
-    const bufferName = name as BufferTypeName;
-    if (allocateBuffers) {
-      const bytes = value as ByteSequence;
-      if (bufferName === 'ArrayBuffer') return context.realm.createArrayBuffer(bytes);
-      if (bufferName === 'SharedArrayBuffer') return context.realm.createSharedArrayBuffer(bytes);
-      return context.realm.createArrayBufferView(bufferName, bytes);
-    }
-    return idlBufferSourceToJS(value, bufferName);
+    return idlToJSBufferSource(value, context);
   }
   return name === 'undefined' ? undefined : value;
 }
 
 // Project dispatcher for named types in Web IDL §3.2 JavaScript type mapping.
-function jsToNamedIDL(
+function jsToIDLNamed(
   value: unknown,
-  name: string,
   context: ConversionContext,
-  legacyCallbackAttribute: boolean,
 ): unknown {
+  const { name } = context.resolvedType as ReferenceType;
   const assembly = context.binding.assembly;
   const assembled = assembly.interfaces.get(name);
-  if (assembled) return jsToIDLInterface(value, assembled, context);
+  if (assembled) return jsToIDLInterface(value, context, assembled);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
-  if (dictionaryAssembled) return jsToIDLDictionary(value, dictionaryAssembled, context);
+  if (dictionaryAssembled) return jsToIDLDictionary(value, context, dictionaryAssembled);
 
   const enumerationAssembled = assembly.enumerations.get(name);
-  if (enumerationAssembled) return jsToIDLEnumeration(value, enumerationAssembled, context);
+  if (enumerationAssembled) return jsToIDLEnumeration(value, context, enumerationAssembled);
 
   const callbackFunctionAssembled = assembly.callbackFunctions.get(name);
   if (callbackFunctionAssembled) {
-    return jsToIDLCallbackFunction(value, callbackFunctionAssembled, context, legacyCallbackAttribute);
+    return jsToIDLCallbackFunction(value, context, callbackFunctionAssembled);
   }
 
   const callbackInterfaceAssembled = assembly.callbackInterfaces.get(name);
@@ -627,7 +470,7 @@ function jsToNamedIDL(
 }
 
 // https://webidl.spec.whatwg.org/#es-interface
-function jsToIDLInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
+function jsToIDLInterface(value: unknown, context: ConversionContext, assembled: AssembledInterface): object {
   const record = getPlatformRecord(value);
   if (
     record?.binding.world === context.binding.world &&
@@ -637,7 +480,7 @@ function jsToIDLInterface(value: unknown, assembled: AssembledInterface, context
 }
 
 // https://webidl.spec.whatwg.org/#es-enumeration
-function jsToIDLEnumeration(value: unknown, assembled: AssembledEnumeration, context: ConversionContext): string {
+function jsToIDLEnumeration(value: unknown, context: ConversionContext, assembled: AssembledEnumeration): string {
   const string = toString(value);
   if (!assembled.hasValue(string)) {
     throwTypeError(context, `${string} is not a value of ${assembled.primary.name}`);
@@ -646,17 +489,17 @@ function jsToIDLEnumeration(value: unknown, assembled: AssembledEnumeration, con
 }
 
 // Project adapter for named IDL values in Web IDL §3.2 JavaScript type mapping.
-function namedIDLToJS(
+function idlToJSNamed(
   value: unknown,
-  name: string,
   context: ConversionContext,
 ): unknown {
+  const { name } = context.resolvedType as ReferenceType;
   const assembly = context.binding.assembly;
   const assembled = assembly.interfaces.get(name);
-  if (assembled) return projectInterface(value, assembled, context);
+  if (assembled) return projectInterface(value, context, assembled);
 
   const dictionaryAssembled = assembly.dictionaries.get(name);
-  if (dictionaryAssembled) return idlDictionaryToJS(value, dictionaryAssembled, context);
+  if (dictionaryAssembled) return idlToJSDictionary(value, context, dictionaryAssembled);
   if (assembly.enumerations.has(name)) return value;
 
   if (assembly.callbackFunctions.has(name)) {
@@ -683,7 +526,7 @@ function namedIDLToJS(
   throw new InternalError(`Unknown Web IDL type ${name}`);
 }
 
-function projectInterface(value: unknown, assembled: AssembledInterface, context: ConversionContext): object {
+function projectInterface(value: unknown, context: ConversionContext, assembled: AssembledInterface): object {
   const object = isObject(value)
     ? context.binding.projectImplementationObject(value, assembled)
     : undefined;
@@ -696,24 +539,29 @@ function projectInterface(value: unknown, assembled: AssembledInterface, context
 // Web IDL §3.2.17 Dictionary types — convert a JavaScript value to a dictionary.
 function jsToIDLDictionary(
   value: unknown,
-  assembled: AssembledDictionary,
   context: ConversionContext,
+  assembled: AssembledDictionary,
 ): DictionaryCarrier {
-  return context.binding.getDictionaryConverter(assembled)(value, context);
+  return context.binding.getDictionaryConverter(assembled, context.realm)(value);
 }
 
 /** Prepare member conversions once; each call reads the current author object. */
 export function createDictionaryConverter(
   assembled: AssembledDictionary,
-  assembly: DefinitionAssembly,
+  binding: RealmBinding,
+  realm: WebIDLRealm,
 ): DictionaryConverter {
-  const members = assembled.members.map((member) => ({
-    member,
-    convert: createJSToIDLValueConverter(member.type, assembly),
-    getDefault: member.primary.default === undefined
-      ? undefined
-      : createDefaultValueFactory(member.primary.default, member.type),
-  }));
+  const members = assembled.members.map((member) => {
+    const context = binding.getConversionContext(member.type, realm);
+    return {
+      member,
+      context,
+      convert: createJSToIDLValueConverter(context),
+      getDefault: member.primary.default === undefined
+        ? undefined
+        : createDefaultValueFactory(member.primary.default),
+    };
+  });
   // Required/defaulted members always exist after successful conversion. Copy
   // their layout together; sparse dictionaries only create present properties.
   const complete = members.every(({ member, getDefault }) => member.primary.required || getDefault);
@@ -723,19 +571,19 @@ export function createDictionaryConverter(
   }
   // Dictionary references defer to the binding's converter on invocation, so
   // recursive dictionaries do not recursively expand during preparation.
-  return (value, context) => {
+  return (value) => {
     if (!isObject(value) && value !== undefined && value !== null) {
-      throwTypeError(context, 'A dictionary value must be an object');
+      throw new realm.intrinsics.typeError('A dictionary value must be an object');
     }
     const record: Record<string, unknown> = complete ? { ...template } : {};
     const entries: [string, unknown][] | undefined = complete ? undefined : [];
-    for (const { member, convert, getDefault } of members) {
+    for (const { member, context, convert, getDefault } of members) {
       const memberValue = value === undefined || value === null
         ? undefined
         : (value as Record<string, unknown>)[member.name];
       let converted: unknown;
       if (memberValue !== undefined) {
-        converted = convert(memberValue, context);
+        converted = convert(memberValue);
       } else if (getDefault) {
         converted = getDefault(context);
       } else if (member.primary.required) {
@@ -755,10 +603,10 @@ export function createDictionaryConverter(
 export type DictionaryConverter = ValueConverter<DictionaryCarrier>;
 
 // Web IDL §3.2.17 Dictionary types — convert a dictionary to a JavaScript value.
-function idlDictionaryToJS(
+function idlToJSDictionary(
   value: unknown,
-  assembled: AssembledDictionary,
   context: ConversionContext,
+  assembled: AssembledDictionary,
 ): object {
   if (!isObject(value)) {
     throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
@@ -773,7 +621,7 @@ function idlDictionaryToJS(
     defineDataProperty(
       result,
       member.name,
-      idlToJS(members[member.name], member.type, context),
+      idlToJS(members[member.name], context.forType(member.type)),
     );
   }
   return result;
@@ -782,52 +630,51 @@ function idlDictionaryToJS(
 // Web IDL §3.2.23 Records — convert a JavaScript value to a record.
 function jsToIDLRecord(
   value: unknown,
-  type: RecordType,
   context: ConversionContext,
 ): IDLRecordValue {
+  const type = context.resolvedType as RecordType;
   if (!isObject(value)) {
     throwTypeError(context, 'A record value must be an object');
   }
 
+  const keyContext = context.forType(type.key);
+  const valueContext = context.forType(type.value);
   const result: IDLRecordValue = new Map();
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (!descriptor?.enumerable) continue;
-    const typedKey = jsToIDL(key, type.key, context);
-    const typedValue = jsToIDL(
-      (value as Record<PropertyKey, unknown>)[key],
-      type.value,
-      context,
-    );
+    const typedKey = _jsToIDL(key, keyContext);
+    const typedValue = _jsToIDL((value as Record<PropertyKey, unknown>)[key], valueContext);
     result.set(typedKey, typedValue);
   }
   return result;
 }
 
 // Web IDL §3.2.23 Records — convert a record to a JavaScript value.
-function idlRecordToJS(
+function idlToJSRecord(
   value: unknown,
-  keyType: WebIDLType,
-  valueType: WebIDLType,
   context: ConversionContext,
 ): object {
+  const type = context.resolvedType as RecordType;
   if (!isMap(value)) throw new InternalError('IDL record is not a map');
 
   const result = context.realm.createOrdinaryObject(
     context.realm.intrinsics.objectPrototype,
   );
+  const keyContext = context.forType(type.key);
+  const valueContext = context.forType(type.value);
   for (const [key, entryValue] of value) {
-    const jsKey = idlToJS(key, keyType, context);
-    const jsValue = idlToJS(entryValue, valueType, context);
+    const jsKey = idlToJS(key, keyContext);
+    const jsValue = idlToJS(entryValue, valueContext);
     defineDataProperty(result, jsKey as PropertyKey, jsValue);
   }
   return result;
 }
 
-// Web IDL §3.2.21 Sequences — convert a sequence to a JavaScript value.
-function idlSequenceToJS(
+// https://webidl.spec.whatwg.org/#es-sequence
+// The context describes each element, allowing frozen-array creation to use the same conversion.
+function idlToJSSequence(
   value: unknown,
-  elementType: WebIDLType,
   context: ConversionContext,
 ): unknown[] {
   if (!Array.isArray(value)) throw new InternalError('IDL sequence is not an array');
@@ -837,7 +684,7 @@ function idlSequenceToJS(
     defineDataProperty(
       result,
       String(i),
-      idlToJS(value[i], elementType, context),
+      idlToJS(value[i], context),
     );
   }
   return result;
@@ -846,10 +693,9 @@ function idlSequenceToJS(
 // Web IDL §3.2.25 Union types — convert a JavaScript value to a union.
 function jsToIDLUnion(
   value: unknown,
-  type: UnionType,
   context: ConversionContext,
-  extendedAttributes: ExtendedAttribute[],
 ): unknown {
+  const type = context.resolvedType as UnionType;
   const assembly = context.binding.assembly;
   if (value === undefined && assembly.includesUndefined(type)) {
     return undefined;
@@ -863,14 +709,14 @@ function jsToIDLUnion(
 
   if (value === null || value === undefined) {
     const assembled = candidates.dictionary;
-    if (assembled) return jsToIDLDictionary(value, assembled, context);
+    if (assembled) return jsToIDLDictionary(value, context, assembled);
   }
 
-  if (isPlatformObject(value, context)) {
+  if (isPlatformObject(value, context.binding)) {
     const interfaceType = candidates.interfaces.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) {
-      return jsToIDLByType(value, interfaceType.type, context, extendedAttributes);
+      return _jsToIDL(value, context.forType(interfaceType.rules.declaredType));
     }
     if (candidates.simpleTypes.has('object')) return value;
   }
@@ -878,7 +724,7 @@ function jsToIDLUnion(
     const bufferName = getBufferTypeName(value);
     if (bufferName) {
       const buffer = candidates.simpleTypes.get(bufferName);
-      if (buffer) return jsToIDLByType(value, buffer, context, extendedAttributes);
+      if (buffer) return _jsToIDL(value, context.forType(buffer.declaredType));
       if (candidates.simpleTypes.has('object')) return value;
     }
   }
@@ -901,24 +747,23 @@ function jsToIDLUnion(
         Symbol.asyncIterator,
         context.realm,
       );
-      if (asyncMethod && asyncSequence.type.kind === 'async-sequence') {
-        return new AsyncSequenceCarrier(value, asyncSequence.type.type, asyncMethod, 'async');
+      if (asyncMethod && asyncSequence.resolvedType.kind === 'async-sequence') {
+        return new AsyncSequenceCarrier(value, asyncSequence.resolvedType.type, asyncMethod, 'async');
       }
       const syncMethod = getMethod(value, Symbol.iterator, context.realm);
-      if (syncMethod && asyncSequence.type.kind === 'async-sequence') {
-        return new AsyncSequenceCarrier(value, asyncSequence.type.type, syncMethod, 'sync');
+      if (syncMethod && asyncSequence.resolvedType.kind === 'async-sequence') {
+        return new AsyncSequenceCarrier(value, asyncSequence.resolvedType.type, syncMethod, 'sync');
       }
     }
 
     const sequence = candidates.typesByKind.get('sequence');
-    if (sequence && sequence.type.kind === 'sequence') {
+    if (sequence && sequence.resolvedType.kind === 'sequence') {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
         return createSequenceFromIterable(
           value,
-          sequence.type.type,
+          context.forType(sequence.resolvedType.type),
           method,
-          context,
         );
       }
     }
@@ -927,19 +772,15 @@ function jsToIDLUnion(
     if (frozenArray) {
       const method = getMethod(value, Symbol.iterator, context.realm);
       if (method) {
-        return jsToIDLByType(
-          value,
-          frozenArray,
-          context,
-          extendedAttributes,
-        );
+        const type = frozenArray.resolvedType as FrozenArrayType;
+        return createFrozenArrayFromIterable(value, context.forType(type.type), method);
       }
     }
 
     const dictionaryAssembled = candidates.dictionary;
-    if (dictionaryAssembled) return jsToIDLDictionary(value, dictionaryAssembled, context);
+    if (dictionaryAssembled) return jsToIDLDictionary(value, context, dictionaryAssembled);
     const record = candidates.typesByKind.get('record');
-    if (record) return jsToIDLByType(value, record, context, extendedAttributes);
+    if (record) return _jsToIDL(value, context.forType(record.declaredType));
     const callbackInterfaceAssembled = candidates.callbackInterface;
     if (callbackInterfaceAssembled) {
       return new CallbackInterfaceCarrier(
@@ -958,14 +799,14 @@ function jsToIDLUnion(
   }
   if (typeof value === 'number') {
     const numeric = candidates.numeric;
-    if (numeric) return jsToIDLByType(value, numeric, context, extendedAttributes);
+    if (numeric) return _jsToIDL(value, context.forType(numeric.declaredType));
   }
   if (typeof value === 'bigint') {
     if (candidates.simpleTypes.has('bigint')) return value;
   }
 
   const string = candidates.string;
-  if (string) return jsToIDLByType(value, string, context, extendedAttributes);
+  if (string) return _jsToIDL(value, context.forType(string.declaredType));
 
   const numeric = candidates.numeric;
   const bigint = candidates.simpleTypes.has('bigint');
@@ -973,9 +814,9 @@ function jsToIDLUnion(
     const primitive = toPrimitive(value, 'number');
     return typeof primitive === 'bigint'
       ? primitive
-      : jsToIDLByType(primitive, numeric, context, extendedAttributes);
+      : _jsToIDL(primitive, context.forType(numeric.declaredType));
   }
-  if (numeric) return jsToIDLByType(value, numeric, context, extendedAttributes);
+  if (numeric) return _jsToIDL(value, context.forType(numeric.declaredType));
 
   if (candidates.simpleTypes.has('boolean')) return Boolean(value);
   if (bigint) return toBigInt(value);
@@ -983,13 +824,11 @@ function jsToIDLUnion(
 }
 
 // Project adapter for Web IDL §3.2.25 Union types — identify our value's specific type, then convert it.
-function idlUnionToJS(
+function idlToJSUnion(
   value: unknown,
-  type: UnionType,
   context: ConversionContext,
-  extendedAttributes: ExtendedAttribute[],
-  allocateBuffers: boolean,
 ): unknown {
+  const type = context.resolvedType as UnionType;
   const assembly = context.binding.assembly;
   const candidates = assembly.getUnionCandidates(type);
 
@@ -999,7 +838,7 @@ function idlUnionToJS(
   if (value === null && assembly.includesNullableType(type)) {
     return null;
   }
-  if (isPlatformObject(value, context)) {
+  if (isPlatformObject(value, context.binding)) {
     const interfaceType = candidates.interfaces.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interfaceType) return value;
@@ -1023,19 +862,19 @@ function idlUnionToJS(
   }
   if (AsyncSequenceCarrier.is(value)) {
     const sequence = candidates.typesByKind.get('async-sequence');
-    if (sequence) return idlToJSByType(value, sequence, context, extendedAttributes);
+    if (sequence) return idlToJSByType(value, context.forType(sequence.declaredType));
   }
   if (Array.isArray(value)) {
     const array = candidates.array;
-    if (array) return idlToJSByType(value, array, context, extendedAttributes);
+    if (array) return idlToJSByType(value, context.forType(array.declaredType));
   }
   if (value instanceof DictionaryCarrier) {
     const assembled = candidates.dictionary;
-    if (assembled) return idlDictionaryToJS(value, assembled, context);
+    if (assembled) return idlToJSDictionary(value, context, assembled);
   }
   if (isMap(value)) {
     const record = candidates.typesByKind.get('record');
-    if (record) return idlToJSByType(value, record, context, extendedAttributes);
+    if (record) return idlToJSByType(value, context.forType(record.declaredType));
   }
   if (typeof value === 'boolean') {
     if (candidates.simpleTypes.has('boolean')) return value;
@@ -1052,8 +891,8 @@ function idlUnionToJS(
   if (isObject(value)) {
     const bufferName = getBufferTypeName(value);
     const buffer = bufferName && candidates.simpleTypes.get(bufferName);
-    if (buffer) return idlToJSByType(value, buffer, context, extendedAttributes, allocateBuffers);
-    if (candidates.dictionary) return idlDictionaryToJS(value, candidates.dictionary, context);
+    if (buffer) return idlToJSByType(value, context.forType(buffer.declaredType));
+    if (candidates.dictionary) return idlToJSDictionary(value, context, candidates.dictionary);
     if (candidates.simpleTypes.has('object')) return value;
   }
   throw new InternalError('IDL union value has no matching specific type');
@@ -1064,9 +903,9 @@ function convertToInteger(
   value: unknown,
   bitLength: number,
   signed: boolean,
-  extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,
 ): number {
+  const mode = context.integerMode;
   let number = toNumber(value);
   if (Object.is(number, -0)) number = 0;
 
@@ -1077,7 +916,7 @@ function convertToInteger(
     ? 2 ** 53 - 1
     : signed ? 2 ** (bitLength - 1) - 1 : 2 ** bitLength - 1;
 
-  if (hasExtendedAttribute(extendedAttributes, 'EnforceRange')) {
+  if (mode === 'enforce-range') {
     if (!Number.isFinite(number)) {
       throwTypeError(context, 'Integer is not finite');
     }
@@ -1088,7 +927,7 @@ function convertToInteger(
     return number;
   }
 
-  if (!Number.isNaN(number) && hasExtendedAttribute(extendedAttributes, 'Clamp')) {
+  if (!Number.isNaN(number) && mode === 'clamp') {
     number = Math.min(Math.max(number, lowerBound), upperBound);
     return roundToEven(number);
   }
@@ -1134,11 +973,10 @@ function isImplementedInterfaceType(
 // https://webidl.spec.whatwg.org/#es-callback-function
 function jsToIDLCallbackFunction(
   value: unknown,
-  assembled: AssembledCallbackFunction,
   context: ConversionContext,
-  legacyCallbackAttribute: boolean,
+  assembled: AssembledCallbackFunction,
 ): CallbackFunctionCarrier {
-  if (typeof value !== 'function' && !(legacyCallbackAttribute && isObject(value))) {
+  if (typeof value !== 'function') {
     return throwTypeError(context, `${assembled.primary.name} is not callable`);
   }
   return new CallbackFunctionCarrier(
@@ -1190,8 +1028,9 @@ function unsupportedConversion(type: string): never {
   throw new InternalError(`Web IDL conversion for ${type} is not implemented`);
 }
 
-// Web IDL §3.2.4 Integer types — bit lengths and signedness supplied to ConvertToInt.
-const integerTypes: Partial<Record<
+/** Integer conversion parameters, also used to recognize validated integer defaults. */
+// https://webidl.spec.whatwg.org/#js-integer-types
+export const integerTypes: Partial<Record<
   SimpleTypeName,
   { bitLength: number; signed: boolean; }
 >> = {
@@ -1211,43 +1050,42 @@ const bufferTypeNames = new Set<SimpleTypeName>([
 
 // https://webidl.spec.whatwg.org/#es-type-mapping
 // The generic converter and prepared inputs use the same conversion algorithms.
-const jsToSimpleIDLConverters: Partial<Record<SimpleTypeName, (
+const jsToIDLSimpleConverters: Partial<Record<SimpleTypeName, (
   value: unknown,
-  extendedAttributes: ExtendedAttribute[],
   context: ConversionContext,
 ) => unknown>> = {
   any: (value) => value,
   undefined: () => undefined,
   boolean: (value) => Boolean(value),
-  float: (value, _attributes, context) => convertToFloat(value, false, context),
-  'unrestricted float': (value, _attributes, context) => convertToFloat(value, true, context),
-  double(value, _attributes, context) {
+  float: (value, context) => convertToFloat(value, false, context),
+  'unrestricted float': (value, context) => convertToFloat(value, true, context),
+  double(value, context) {
     const number = toNumber(value);
     if (!Number.isFinite(number)) throwTypeError(context, 'Value is not a finite double');
     return number;
   },
   'unrestricted double': (value) => toNumber(value),
   bigint: (value) => toBigInt(value),
-  DOMString(value, attributes) {
-    if (value === null && hasExtendedAttribute(attributes, 'LegacyNullToEmptyString')) return '';
+  DOMString(value, context) {
+    if (value === null && context.nullToEmptyString) return '';
     return toString(value);
   },
-  ByteString(value, _attributes, context) {
+  ByteString(value, context) {
     const string = toString(value);
     for (let i = 0; i < string.length; i++) {
       if (string.charCodeAt(i) > 255) throwTypeError(context, 'Value is not a ByteString');
     }
     return string;
   },
-  USVString(value, attributes) {
-    if (value === null && hasExtendedAttribute(attributes, 'LegacyNullToEmptyString')) return toScalarValueString('');
+  USVString(value, context) {
+    if (value === null && context.nullToEmptyString) return toScalarValueString('');
     return toScalarValueString(toString(value));
   },
-  object(value, _attributes, context) {
+  object(value, context) {
     if (!isObject(value)) throwTypeError(context, 'Value is not an object');
     return value;
   },
-  symbol(value, _attributes, context) {
+  symbol(value, context) {
     if (typeof value !== 'symbol') throwTypeError(context, 'Value is not a symbol');
     return value;
   },

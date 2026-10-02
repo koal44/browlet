@@ -1,12 +1,9 @@
 import { getImplementationRecord } from './platform-object';
 import { isCallable, isConstructor, isObject } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
-import {
-  createJSToIDLConverter, createIDLToJSConverter, type ConversionContext, type ValueConverter,
-} from './conversion';
+import type { ValueConverter } from './conversion';
 import type { AssembledCallable, AssembledCallbackFunction, AssembledCallbackInterface } from './assembled';
 import type { RealmBinding } from './realm-binding';
-import type { DefinitionAssembly } from './assembly';
 import type { WebIDLRealm } from './realm';
 import type { CallbackExceptionBehavior, OperationMember } from './core/types';
 import { PromiseCarrier } from './promise';
@@ -54,7 +51,7 @@ export class CallbackInterfaceCarrier<Realm extends WebIDLRealm = WebIDLRealm> {
     thisArgument?: unknown,
   ): unknown {
     const operation = this.assembled.getOperation(operationName);
-    const invoker = this.binding.getCallbackInvoker(operation);
+    const invoker = this.binding.getCallbackInvoker(operation, this.realm);
 
     try {
       return runCallback(this.realm, this.callbackContext, () => {
@@ -74,12 +71,12 @@ export class CallbackInterfaceCarrier<Realm extends WebIDLRealm = WebIDLRealm> {
         const result = Reflect.apply(
           function_,
           receiver,
-          invoker.idlToJSArguments(argumentsList, this),
+          invoker.idlToJSArguments(argumentsList),
         );
-        return invoker.jsToIDLResult(result, this);
+        return invoker.jsToIDLResult(result);
       });
     } catch (exception) {
-      return invoker.rejectPromiseReturn(exception, this);
+      return invoker.rejectPromiseReturn(exception);
     }
   }
 }
@@ -123,13 +120,13 @@ export class CallbackFunctionCarrier {
   /** Invoke this callback under its declared argument, result, and exception contract. */
   // https://webidl.spec.whatwg.org/#invoke-a-callback-function
   invoke(argumentsList: WebIDLArgumentsList, exceptionBehavior: CallbackExceptionBehavior | undefined, thisArgument?: unknown): unknown {
-    return this.binding.getCallbackInvoker(this.assembled).invoke(this, argumentsList, exceptionBehavior, thisArgument);
+    return this.binding.getCallbackInvoker(this.assembled, this.realm).invoke(this, argumentsList, exceptionBehavior, thisArgument);
   }
 
   /** Construct with this callback, using the current realm for pre-entry failures. */
   // https://webidl.spec.whatwg.org/#construct-a-callback-function
   construct(argumentsList: WebIDLArgumentsList, realm: WebIDLRealm): unknown {
-    return this.binding.getCallbackInvoker(this.assembled).construct(this, argumentsList, realm);
+    return this.binding.getCallbackInvoker(this.assembled, this.realm).construct(this, argumentsList, realm);
   }
 }
 
@@ -164,16 +161,21 @@ export class CallbackInvoker {
   #variadicConverter: ValueConverter | undefined;
   /** Whether all argument types can reuse their primitive values without projection. */
   #primitiveArguments: boolean;
+  /** Conversion realm shared by this invocation contract's arguments and return value. */
+  #realm: WebIDLRealm;
 
-  constructor(assembled: CallbackCallable, assembly: DefinitionAssembly) {
-    this.#argumentConverters = assembled.arguments.map((argument) => createIDLToJSConverter(argument.type, assembly));
+  constructor(assembled: CallbackCallable, binding: RealmBinding, realm: WebIDLRealm) {
+    const assembly = binding.assembly;
+    this.#realm = realm;
+    this.#argumentConverters = assembled.arguments.map((argument) =>
+      binding.getConversionContext(argument.type, realm).getIDLToJSConverter());
     this.#variadicConverter = assembled.variadicArgument && this.#argumentConverters.at(-1);
     this.#primitiveArguments = assembled.arguments.every((argument) => {
       const type = assembly.getUnannotatedType(argument.type);
       // The undefined type discards a supplied value instead of preserving it.
       return type.kind === 'simple' && type.name !== 'undefined' && assembly.isPrimitiveType(type);
     });
-    this.jsToIDLResult = createJSToIDLConverter(assembled.primary.returns, assembly);
+    this.jsToIDLResult = binding.getConversionContext(assembled.primary.returns, realm).getJSToIDLConverter();
     const returns = assembly.getUnannotatedType(assembled.primary.returns);
     this.returnsPromise = returns.kind === 'promise';
     this.canReportExceptions = returns.kind === 'simple' && (returns.name === 'undefined' || returns.name === 'any');
@@ -189,16 +191,16 @@ export class CallbackInvoker {
   ): unknown {
     this.validateExceptionBehavior(exceptionBehavior);
     const function_ = cbCarrier.object;
-    if (!isCallable(function_)) return this.jsToIDLResult(undefined, cbCarrier);
+    if (!isCallable(function_)) return this.jsToIDLResult(undefined);
     try {
       return runCallback(cbCarrier.realm, cbCarrier.callbackContext, () => {
         const result = Reflect.apply(
-          function_, projectCallbackReceiver(thisArgument), this.idlToJSArguments(argumentsList, cbCarrier),
+          function_, projectCallbackReceiver(thisArgument), this.idlToJSArguments(argumentsList),
         );
-        return this.jsToIDLResult(result, cbCarrier);
+        return this.jsToIDLResult(result);
       });
     } catch (exception) {
-      if (this.returnsPromise) return this.rejectPromiseReturn(exception, cbCarrier);
+      if (this.returnsPromise) return this.rejectPromiseReturn(exception);
       if (exceptionBehavior === 'rethrow') throw exception;
       cbCarrier.realm.reportException(exception);
       return undefined;
@@ -214,8 +216,8 @@ export class CallbackInvoker {
       throw new realm.intrinsics.typeError(`${cbCarrier.assembled.primary.name} is not a constructor`);
     }
     return runCallback(cbCarrier.realm, cbCarrier.callbackContext, () => {
-      const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList, cbCarrier));
-      return this.jsToIDLResult(result, cbCarrier);
+      const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList));
+      return this.jsToIDLResult(result);
     });
   }
 
@@ -234,7 +236,7 @@ export class CallbackInvoker {
   // https://webidl.spec.whatwg.org/#js-user-objects
   // Argument types come from the assembled callable used to prepare this invoker.
   // SPEC_MISMATCH: (args) -> JavaScript arguments list
-  idlToJSArguments(argumentsList: WebIDLArgumentsList, context: ConversionContext): unknown[] {
+  idlToJSArguments(argumentsList: WebIDLArgumentsList): unknown[] {
     // These IDL values already have their author-facing representation. Reuse the
     // internal argument list; missing values and exception requests still convert.
     if (this.#primitiveArguments &&
@@ -252,7 +254,7 @@ export class CallbackInvoker {
       }
       const convert = this.#argumentConverters[index] ?? this.#variadicConverter;
       if (!convert) throw new InternalError(`Web IDL argument ${index} has no declared type`);
-      result.push(convert(value, context));
+      result.push(convert(value));
       count = index + 1;
     }
     result.length = count;
@@ -260,14 +262,14 @@ export class CallbackInvoker {
   }
 
   /** Promise-returning callbacks reject in the callback realm; other failures propagate. */
-  rejectPromiseReturn(exception: unknown, context: ConversionContext): PromiseCarrier {
+  rejectPromiseReturn(exception: unknown): PromiseCarrier {
     if (!this.returnsPromise) throw exception;
     const rejected = Reflect.apply(
-      context.realm.intrinsics.promise.reject,
-      context.realm.intrinsics.promise.constructor,
+      this.#realm.intrinsics.promise.reject,
+      this.#realm.intrinsics.promise.constructor,
       [exception],
     );
-    const promise = this.jsToIDLResult(rejected, context);
+    const promise = this.jsToIDLResult(rejected);
     if (!PromiseCarrier.is(promise)) throw new InternalError('Promise callback did not produce an IDL promise');
     return promise;
   }

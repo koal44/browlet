@@ -1,6 +1,8 @@
+import type { ConversionContext } from './conversion-context';
 import { InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType } from '../infra/promises';
+import type { RealmBinding } from './realm-binding';
 import type { BindingContext } from './binding-context';
-import { jsToIDL, idlToJS, type ConversionContext } from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import { implementationType, type ImplementationType, type WebIDLType } from './core/index';
 import type { WebIDLRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
@@ -42,7 +44,7 @@ export class PromiseCarrier {
     return typeof value === 'object' && value !== null && #resolve in value;
   }
 
-  /** Adopt an author value into a new promise with the declared fulfillment type. */
+  /** Adopt an author value; the fulfillment type is retained for later conversion by toImpl(). */
   // https://webidl.spec.whatwg.org/#js-to-promise
   static fromJS(value: unknown, type: WebIDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer): PromiseCarrier {
     const promise = new PromiseCarrier(type, realm, realizeException);
@@ -52,9 +54,9 @@ export class PromiseCarrier {
 
   /** Create a promise resolved with an IDL value converted in the supplied context. */
   // https://webidl.spec.whatwg.org/#js-promise-manipulation
-  static fromIDL(value: unknown, type: WebIDLType, context: ConversionContext): PromiseCarrier {
-    const promise = new PromiseCarrier(type, context.realm, context.binding.realizeException);
-    const jsValue = PromiseCarrier.is(value) ? value.promise : idlToJS(value, type, context);
+  static fromIDL(value: unknown, context: ConversionContext): PromiseCarrier {
+    const promise = new PromiseCarrier(context.declaredType, context.realm, context.binding.realizeException);
+    const jsValue = PromiseCarrier.is(value) ? value.promise : idlToJS(value, context);
     promise.resolve(jsValue);
     return promise;
   }
@@ -138,10 +140,10 @@ export class PromiseCarrier {
   }
 
   /** Convert fulfillment values inside an implementation promise's native reaction. */
-  toImpl<Result>(context: ConversionContext, convertValue: (value: unknown) => Result, P: typeof InternalPromise): InternalPromise<Result> {
-    const conversionContext = { binding: context.binding, realm: this.realm };
+  toImpl<Result>(binding: RealmBinding, convertValue: (value: unknown) => Result, P: typeof InternalPromise): InternalPromise<Result> {
+    const context = binding.getConversionContext(this.type, this.realm);
     return P.fromNative(this.promise, (value) =>
-      convertValue(jsToIDL(value, this.type, conversionContext)), implementationType<Result>(this.type));
+      convertValue(jsToIDL(value, context)), implementationType<Result>(this.type));
   }
 }
 
@@ -177,17 +179,17 @@ export function waitForAll(
   promises: PromiseCarrier[],
   successSteps: (values: unknown[]) => void,
   failureSteps: (reason: unknown) => void,
-  context: ConversionContext,
+  realm: WebIDLRealm,
 ): void {
   if (promises.length === 0) {
-    context.realm.queueMicrotask(() => successSteps([]));
+    realm.queueMicrotask(() => successSteps([]));
     return;
   }
 
   let fulfilledCount = 0;
   let rejected = false;
   const results = Array.from({ length: promises.length });
-  const onRejected = context.realm.createFunction(
+  const onRejected = realm.createFunction(
     (_thisArgument, [reason]) => {
       if (!rejected) {
         rejected = true;
@@ -198,7 +200,7 @@ export function waitForAll(
   );
 
   promises.forEach((promise, index) => {
-    const onFulfilled = context.realm.createFunction(
+    const onFulfilled = realm.createFunction(
       (_thisArgument, [value]) => {
         results[index] = value;
         fulfilledCount++;
@@ -224,11 +226,11 @@ export function getPromiseForWaitingForAll(
   waitForAll(
     promises,
     (values) => {
-      const jsValues = idlToJS(values, promise.type, context);
+      const jsValues = idlToJS(values, context.binding.getConversionContext(promise.type, context.realm));
       promise.resolve(jsValues);
     },
     (reason) => promise.reject(reason),
-    context,
+    context.realm,
   );
   return promise;
 }

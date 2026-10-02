@@ -1,21 +1,21 @@
 import { isObject, type JSFunction } from '../js-engine/index';
 import type { AssembledInterface } from './assembled';
-import {
-  jsToIDL, idlToJS, type ConversionContext,
-} from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
 } from './core/index';
 import { getPlatformRecord, type PlatformRecord } from './platform-object';
 import { defineDataProperty, defineMethod } from './property';
+import type { RealmBinding } from './realm-binding';
+import type { WebIDLRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
 
 export class CollectionBinding {
-  #context: ConversionContext;
+  #binding: RealmBinding;
 
-  // Project helper: retain the conversion context for collection members.
-  constructor(context: ConversionContext) {
-    this.#context = context;
+  // Project helper: retain the realm binding used to install collection members.
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
   }
 
   // Project storage for Web IDL §2.5.11 Maplike declarations and §2.5.12 Setlike declarations — map/set
@@ -174,7 +174,7 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     kind: CollectionKind,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
@@ -197,7 +197,7 @@ export class CollectionBinding {
     kind: MapIterationKind,
     name: string,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
@@ -209,7 +209,7 @@ export class CollectionBinding {
           this.getMapEntries(receiver),
           member,
           kind,
-          { binding: receiver.binding, realm: this.#context.realm },
+          receiver.binding,
         );
       },
       { length: 0, name },
@@ -223,7 +223,7 @@ export class CollectionBinding {
     kind: SetIterationKind,
     name: string,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
@@ -235,7 +235,7 @@ export class CollectionBinding {
           this.getSetEntries(receiver),
           member,
           kind,
-          { binding: receiver.binding, realm: this.#context.realm },
+          receiver.binding,
         );
       },
       { length: 0, name },
@@ -247,7 +247,7 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
@@ -259,11 +259,11 @@ export class CollectionBinding {
         if (typeof callback !== 'function') {
           this.#throwTypeError('Callback is not callable');
         }
-        const context = { binding: receiver.binding, realm: this.#context.realm };
+        const binding = receiver.binding;
         this.getMapEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            idlToJS(value, member.value, context),
-            idlToJS(key, member.key, context),
+            idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm)),
+            idlToJS(key, binding.getConversionContext(member.key, this.#binding.realm)),
             receiver.platformObject,
           ]);
         });
@@ -278,7 +278,7 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument,
@@ -290,13 +290,9 @@ export class CollectionBinding {
         if (typeof callback !== 'function') {
           this.#throwTypeError('Callback is not callable');
         }
-        const context = { binding: receiver.binding, realm: this.#context.realm };
+        const binding = receiver.binding;
         this.getSetEntries(receiver).forEach((value) => {
-          const javaScriptValue = idlToJS(
-            value,
-            member.value,
-            context,
-          );
+          const javaScriptValue = idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm));
           Reflect.apply(callback, argumentsList[1], [
             javaScriptValue,
             javaScriptValue,
@@ -314,21 +310,17 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'get', 'method',
         );
         const entries = this.getMapEntries(receiver);
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#context,
+          argumentsList[0], member.key, this.#binding,
         );
         if (!entries.has(key)) return undefined;
-        return idlToJS(
-          entries.get(key),
-          member.value,
-          { binding: receiver.binding, realm: this.#context.realm },
-        );
+        return idlToJS(entries.get(key), receiver.binding.getConversionContext(member.value, this.#binding.realm));
       },
       { length: 1, name: 'get' },
     );
@@ -339,13 +331,13 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#context,
+          argumentsList[0], member.key, this.#binding,
         );
         return this.getMapEntries(receiver).has(key);
       },
@@ -358,17 +350,15 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'set', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#context,
+          argumentsList[0], member.key, this.#binding,
         );
-        const value = jsToIDL(
-          argumentsList[1], member.value, this.#context,
-        );
+        const value = jsToIDL(argumentsList[1], this.#binding.getConversionContext(member.value, this.#binding.realm));
         this.getMapEntries(receiver).set(key, value);
         return receiver.platformObject;
       },
@@ -381,13 +371,13 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: MaplikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.#context,
+          argumentsList[0], member.key, this.#binding,
         );
         return this.getMapEntries(receiver).delete(key);
       },
@@ -400,13 +390,13 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#context,
+          argumentsList[0], member.value, this.#binding,
         );
         return this.getSetEntries(receiver).has(value);
       },
@@ -419,13 +409,13 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'add', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#context,
+          argumentsList[0], member.value, this.#binding,
         );
         this.getSetEntries(receiver).add(value);
         return receiver.platformObject;
@@ -439,13 +429,13 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     member: SetlikeMember,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.#context,
+          argumentsList[0], member.value, this.#binding,
         );
         return this.getSetEntries(receiver).delete(value);
       },
@@ -458,7 +448,7 @@ export class CollectionBinding {
     assembled: AssembledInterface,
     kind: CollectionKind,
   ): JSFunction {
-    return this.#context.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'clear', 'method',
@@ -476,21 +466,21 @@ export class CollectionBinding {
     entries: IDLMapEntries,
     member: MaplikeMember,
     kind: MapIterationKind,
-    context: ConversionContext,
+    binding: RealmBinding,
   ): object {
     const iterator = entries.entries();
-    return this.#context.realm.createCollectionIterator('map', () => {
+    return this.#binding.realm.createCollectionIterator('map', () => {
       const result = iterator.next();
       if (result.done) {
-        return this.#context.realm.createIteratorResultObject(undefined, true);
+        return this.#binding.realm.createIteratorResultObject(undefined, true);
       }
 
       const [idlKey, idlValue] = result.value;
-      const key = idlToJS(idlKey, member.key, context);
-      const value = idlToJS(idlValue, member.value, context);
-      return this.#context.realm.createIteratorResultObject(
+      const key = idlToJS(idlKey, binding.getConversionContext(member.key, this.#binding.realm));
+      const value = idlToJS(idlValue, binding.getConversionContext(member.value, this.#binding.realm));
+      return this.#binding.realm.createIteratorResultObject(
         kind === 'key' ? key : kind === 'value' ? value :
-          createRealmArray(this.#context, [key, value]),
+          createRealmArray(this.#binding.realm, [key, value]),
         false,
       );
     });
@@ -501,18 +491,18 @@ export class CollectionBinding {
     entries: IDLSetEntries,
     member: SetlikeMember,
     kind: SetIterationKind,
-    context: ConversionContext,
+    binding: RealmBinding,
   ): object {
     const iterator = entries.values();
-    return this.#context.realm.createCollectionIterator('set', () => {
+    return this.#binding.realm.createCollectionIterator('set', () => {
       const result = iterator.next();
       if (result.done) {
-        return this.#context.realm.createIteratorResultObject(undefined, true);
+        return this.#binding.realm.createIteratorResultObject(undefined, true);
       }
 
-      const value = idlToJS(result.value, member.value, context);
-      return this.#context.realm.createIteratorResultObject(
-        kind === 'value' ? value : createRealmArray(this.#context, [value, value]),
+      const value = idlToJS(result.value, binding.getConversionContext(member.value, this.#binding.realm));
+      return this.#binding.realm.createIteratorResultObject(
+        kind === 'value' ? value : createRealmArray(this.#binding.realm, [value, value]),
         false,
       );
     });
@@ -528,10 +518,10 @@ export class CollectionBinding {
   ): PlatformRecord {
     if (!isObject(value)) this.#throwTypeError('Illegal invocation');
     const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#context.binding.world) {
+    if (record?.binding.world !== this.#binding.world) {
       this.#throwTypeError('Illegal invocation');
     }
-    this.#context.realm.performSecurityCheck(value, identifier, type);
+    this.#binding.realm.performSecurityCheck(value, identifier, type);
     if (!record.implements(assembled)) {
       this.#throwTypeError('Illegal invocation');
     }
@@ -540,7 +530,7 @@ export class CollectionBinding {
 
   // Project helper: throw a TypeError allocated in this binding's realm.
   #throwTypeError(message: string): never {
-    throw new this.#context.realm.intrinsics.typeError(message);
+    throw new this.#binding.realm.intrinsics.typeError(message);
   }
 }
 
@@ -556,9 +546,9 @@ type SetIterationKind = 'key+value' | 'value';
 function convertCollectionValue(
   value: unknown,
   type: WebIDLType,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): unknown {
-  const converted = jsToIDL(value, type, context);
+  const converted = jsToIDL(value, binding.getConversionContext(type));
   return typeof converted === 'number' && Object.is(converted, -0)
     ? 0
     : converted;
@@ -566,11 +556,11 @@ function convertCollectionValue(
 
 // Project adapter to ECMAScript §7.3.17 CreateArrayFromList using the binding's realm.
 function createRealmArray(
-  context: ConversionContext,
+  realm: WebIDLRealm,
   values: unknown[],
 ): unknown[] {
   const result = Reflect.construct(
-    context.realm.intrinsics.array,
+    realm.intrinsics.array,
     [values.length],
   );
   values.forEach((value, index) => {

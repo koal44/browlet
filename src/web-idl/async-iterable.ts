@@ -3,7 +3,7 @@ import { InternalPromise } from '../infra/promises';
 import { Stamper } from '../infra/stamper';
 import type { AssembledArgument, AssembledCallable, AssembledInterface } from './assembled';
 import { endOfIteration } from './async-sequence';
-import { jsToIDL, idlToJS, materializeDefaultValue, type ConversionContext } from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import { idlType, type AsyncIterableMember } from './core/index';
 import type { AsyncIteratorSteps } from './definition-binding';
 import { missingArgument } from './overload';
@@ -134,11 +134,9 @@ export class AsyncIterableBinding {
       if (index >= argumentsList.length || value === undefined) {
         return argument.primary.default === undefined
           ? missingArgument
-          : materializeDefaultValue(
-            argument.primary.default, argument.type, this.#binding.defaultConversionContext,
-          );
+          : this.#binding.getConversionContext(argument.type).createDefault(argument.primary.default);
       }
-      return jsToIDL(value, argument.type, this.#binding.defaultConversionContext);
+      return jsToIDL(value, this.#binding.getConversionContext(argument.type));
     });
   }
 
@@ -342,14 +340,17 @@ class AsyncIteratorRecord {
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
   #convertResult(next: unknown, methodBinding: RealmBinding): unknown {
     const member = this.member;
-    const ctx: ConversionContext = { binding: this.receiverBinding, realm: methodBinding.realm };
-    if (member.key === undefined) return idlToJS(next, member.value, ctx);
+    if (member.key === undefined) {
+      return idlToJS(next, this.receiverBinding.getConversionContext(member.value, methodBinding.realm));
+    }
     if (!Array.isArray(next) || next.length < 2) {
       throw new InternalError('Pair asynchronous iterator produced a non-pair value');
     }
 
-    const key = this.kind === 'value' ? undefined : idlToJS(next[0], member.key, ctx);
-    const value = this.kind === 'key' ? undefined : idlToJS(next[1], member.value, ctx);
+    const key = this.kind === 'value' ? undefined
+      : idlToJS(next[0], this.receiverBinding.getConversionContext(member.key, methodBinding.realm));
+    const value = this.kind === 'key' ? undefined
+      : idlToJS(next[1], this.receiverBinding.getConversionContext(member.value, methodBinding.realm));
     if (this.kind === 'key') return key;
     if (this.kind === 'value') return value;
 

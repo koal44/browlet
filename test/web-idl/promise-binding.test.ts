@@ -226,12 +226,12 @@ describe('Web IDL promise member binding', () => {
     const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new PromiseOwnerImpl();
     interfaceBinding.getOrCreateMemberRecord(resolvedAttribute).attributeSteps = {
-      get: () => PromiseCarrier.fromIDL(4, idlType.long, binding.defaultConversionContext),
+      get: () => PromiseCarrier.fromIDL(4, binding.getConversionContext(idlType.long)),
     };
     interfaceBinding.getOrCreateMemberRecord(rejectedAttribute).attributeSteps = {
       get() { throw reason; },
     };
-    interfaceBinding.getOrCreateMemberRecord(resolvedOperation).operationSteps = () => PromiseCarrier.fromIDL(5, idlType.long, binding.defaultConversionContext);
+    interfaceBinding.getOrCreateMemberRecord(resolvedOperation).operationSteps = () => PromiseCarrier.fromIDL(5, binding.getConversionContext(idlType.long));
     interfaceBinding.getOrCreateMemberRecord(rejectedOperation).operationSteps = () => {
       throw reason;
     };

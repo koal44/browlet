@@ -2,6 +2,7 @@ import { getMethod, isObject, type JSMethod } from '../js-engine/index';
 import type { InternalPromise } from '../infra/promises';
 import { idlType, type AsyncSequenceType, type WebIDLType } from './core/index';
 import type { WebIDLRealm } from './realm';
+import type { ConversionContext } from './conversion-context';
 import { PromiseCarrier } from './promise';
 import { defineDataProperty } from './property';
 
@@ -38,7 +39,9 @@ export class AsyncSequenceCarrier {
 
   /** Capture the author's iterable and its selected iteration method. */
   // https://webidl.spec.whatwg.org/#js-to-async-iterable
-  static fromJS(value: unknown, type: AsyncSequenceType, realm: WebIDLRealm): AsyncSequenceCarrier {
+  static fromJS(value: unknown, context: ConversionContext): AsyncSequenceCarrier {
+    const type = context.resolvedType as AsyncSequenceType;
+    const { realm } = context;
     if (!isObject(value)) {
       throw new realm.intrinsics.typeError(
         'An async sequence value must be an object',

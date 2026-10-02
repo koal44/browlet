@@ -41,19 +41,11 @@ callback VoidFunction = undefined();`);
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const function_ = jsToIDL(
-      realm.evaluate(
-        '(function (...args) { return args; })',
-        'common-function.js',
-      ),
-      reference('Function'),
-      binding.defaultConversionContext,
-    );
-    const voidFunction = jsToIDL(
-      realm.evaluate('() => 42', 'common-void-function.js'),
-      reference('VoidFunction'),
-      binding.defaultConversionContext,
-    );
+    const function_ = jsToIDL(realm.evaluate(
+      '(function (...args) { return args; })',
+      'common-function.js',
+    ), binding.getConversionContext(reference('Function')));
+    const voidFunction = jsToIDL(realm.evaluate('() => 42', 'common-void-function.js'), binding.getConversionContext(reference('VoidFunction')));
     if (
       !CallbackFunctionCarrier.is(function_) ||
       !CallbackFunctionCarrier.is(voidFunction)

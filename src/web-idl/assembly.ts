@@ -1,7 +1,7 @@
 import type {
   AnnotatedType, UnionType, SimpleTypeName, SequenceType, ExtendedAttribute, WebIDLType, IntegerLiteral,
 } from './core/types';
-import { sequence } from './core/helpers';
+import { annotated, hasExtendedAttribute, sequence } from './core/helpers';
 import type { Definition } from './core/declarations';
 import {
   AssembledInterfaces, AssembledCallbackInterfaces, AssembledCallbackFunctions, AssembledNamespaces,
@@ -34,13 +34,13 @@ export class DefinitionAssembly {
   proxyObjects: AssembledProxyObjects;
 
   /** Alias-resolved descriptors with outer annotations removed. */
-  #unannotatedTypes = new Map<WebIDLType, UnannotatedType>();
-  /** Alias-resolved descriptors with the conversion attributes collected along the alias chain. */
-  #conversionTypes = new Map<WebIDLType, ConversionType>();
+  #unannotatedTypes = new Map<WebIDLType, ResolvedType>();
+  /** Conversion rules and annotated nullable/union branches prepared for each type descriptor. */
+  #conversionRules = new Map<WebIDLType, ConversionRules>();
   /** Flattened union candidates with nullable wrappers and annotations removed. */
   #candidateTypes = new Map<WebIDLType, WebIDLType[]>();
   /** Flattened union candidates retaining their conversion attributes. */
-  #conversionCandidates = new Map<WebIDLType, ConversionType[]>();
+  #conversionCandidates = new Map<WebIDLType, ConversionRules[]>();
   /** Category lookups used to select a union branch from an incoming value. */
   #unionCandidates = new Map<WebIDLType, UnionCandidates>();
 
@@ -73,7 +73,7 @@ export class DefinitionAssembly {
 
   // Member types retain declaration references; queries resolve those names within this assembly.
   /** Follow aliases and discard annotations when inspecting a type's shape. */
-  getUnannotatedType(type: WebIDLType): UnannotatedType {
+  getUnannotatedType(type: WebIDLType): ResolvedType {
     const cached = this.#unannotatedTypes.get(type);
     if (cached) return cached;
     const resolved = this.typedefs.resolve(type);
@@ -84,23 +84,42 @@ export class DefinitionAssembly {
     return unannotated;
   }
 
-  /** Follow aliases while collecting conversion attributes from outermost to innermost. */
-  getConversionType(type: WebIDLType, extendedAttributes?: ExtendedAttribute[]): ConversionType {
-    let cached = this.#conversionTypes.get(type);
-    if (!cached) {
-      const attributes: ExtendedAttribute[] = [];
-      let resolved = this.typedefs.resolve(type, attributes);
-      while (resolved.kind === 'interface') {
-        resolved = this.typedefs.resolve(this.interfaces.getReference(resolved.implClass), attributes);
-      }
-      cached = { extendedAttributes: attributes, type: resolved };
-      this.#conversionTypes.set(type, cached);
+  /** Resolve aliases and prepare fixed conversion rules, including inherited branch annotations. */
+  getConversionRules<Type extends WebIDLType>(type: Type): ConversionRules<Type> {
+    const cached = this.#conversionRules.get(type);
+    if (cached) return cached as ConversionRules<Type>;
+    const extendedAttributes: ExtendedAttribute[] = [];
+    let resolved = this.typedefs.resolve(type, extendedAttributes);
+    while (resolved.kind === 'interface') {
+      resolved = this.typedefs.resolve(this.interfaces.getReference(resolved.implClass), extendedAttributes);
     }
-    if (!extendedAttributes?.length) return cached;
-    return {
-      type: cached.type,
-      extendedAttributes: [...extendedAttributes, ...cached.extendedAttributes],
+
+    // Nullable and union conversion inherit the enclosing annotations. Retain
+    // these use-specific descriptors once; container contents keep their own types.
+    if (extendedAttributes.length) {
+      if (resolved.kind === 'nullable') {
+        resolved = { kind: 'nullable', type: annotated(resolved.type, { extendedAttributes }) };
+      } else if (resolved.kind === 'union') {
+        const types: UnionType['types'] = [...resolved.types];
+        let index = 0;
+        for (const member of resolved.types) {
+          types[index++] = annotated(member, { extendedAttributes });
+        }
+        resolved = { kind: 'union', types };
+      }
+    }
+    const rules: ConversionRules<Type> = {
+      declaredType: type,
+      resolvedType: resolved,
+      extendedAttributes,
+      integerMode: hasExtendedAttribute(extendedAttributes, 'EnforceRange') ? 'enforce-range'
+        : hasExtendedAttribute(extendedAttributes, 'Clamp') ? 'clamp' : 'wrap',
+      allowShared: hasExtendedAttribute(extendedAttributes, 'AllowShared'),
+      allowResizable: hasExtendedAttribute(extendedAttributes, 'AllowResizable'),
+      nullToEmptyString: hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString'),
     };
+    this.#conversionRules.set(type, rules);
+    return rules;
   }
 
   /** Parse an immutable declaration's integer text once, before applying its member type. */
@@ -169,29 +188,23 @@ export class DefinitionAssembly {
   }
 
   /** Flatten conversion candidates while retaining each member's inherited conversion attributes. */
-  getConversionCandidates(type: WebIDLType, extendedAttributes?: ExtendedAttribute[]): ConversionType[] {
-    let cached = this.#conversionCandidates.get(type);
-    if (!cached) {
-      const conversionType = this.getConversionType(type);
-      if (conversionType.type.kind === 'nullable') {
-        cached = this.getConversionCandidates(conversionType.type.type, conversionType.extendedAttributes);
-      } else if (conversionType.type.kind === 'union') {
-        const candidates: ConversionType[] = [];
-        for (const member of conversionType.type.types) {
-          candidates.push(...this.getConversionCandidates(member, conversionType.extendedAttributes));
-        }
-        cached = candidates;
-      } else {
-        cached = [conversionType];
+  getConversionCandidates(type: WebIDLType): ConversionRules[] {
+    const cached = this.#conversionCandidates.get(type);
+    if (cached) return cached;
+    const rules = this.getConversionRules(type);
+    let candidates: ConversionRules[];
+    if (rules.resolvedType.kind === 'nullable') {
+      candidates = this.getConversionCandidates(rules.resolvedType.type);
+    } else if (rules.resolvedType.kind === 'union') {
+      candidates = [];
+      for (const member of rules.resolvedType.types) {
+        candidates.push(...this.getConversionCandidates(member));
       }
-      this.#conversionCandidates.set(type, cached);
+    } else {
+      candidates = [rules];
     }
-    // Attributes supplied by an invocation must not become part of the descriptor's cached result.
-    if (!extendedAttributes?.length) return cached;
-    return cached.map((candidate) => ({
-      type: candidate.type,
-      extendedAttributes: [...extendedAttributes, ...candidate.extendedAttributes],
-    }));
+    this.#conversionCandidates.set(type, candidates);
+    return candidates;
   }
 
   /** Retain the first candidate in each conversion category, resolving names within this assembly. */
@@ -211,7 +224,7 @@ export class DefinitionAssembly {
       callbackInterface: undefined,
     };
     for (const candidate of this.getConversionCandidates(type)) {
-      const inner = candidate.type;
+      const inner = candidate.resolvedType;
       if (!candidates.typesByKind.has(inner.kind)) candidates.typesByKind.set(inner.kind, candidate);
       switch (inner.kind) {
         case 'simple':
@@ -226,10 +239,10 @@ export class DefinitionAssembly {
           if (this.enumerations.has(inner.name)) candidates.string ??= candidate;
           const assembled = this.interfaces.get(inner.name);
           if (assembled) {
-            candidates.interfaces.push({ type: candidate, assembled });
+            candidates.interfaces.push({ rules: candidate, assembled });
           } else {
             const proxy = this.proxyObjects.get(inner.name);
-            if (proxy) candidates.interfaces.push({ type: candidate, proxy });
+            if (proxy) candidates.interfaces.push({ rules: candidate, proxy });
           }
           break;
         }
@@ -284,7 +297,8 @@ export class DefinitionAssembly {
   getConversionTypeKey(type: WebIDLType): string {
     const cached = this.#conversionTypeKeys.get(type);
     if (cached !== undefined) return cached;
-    const { type: unannotated, extendedAttributes } = this.getConversionType(type);
+    const unannotated = this.getUnannotatedType(type);
+    const { extendedAttributes } = this.getConversionRules(type);
     let parts: string[];
     switch (unannotated.kind) {
       case 'simple':
@@ -402,15 +416,15 @@ export class DefinitionAssembly {
       : undefined;
   }
 
-  /** Whether attribute assignment uses nullable [LegacyTreatNonObjectAsNull] callback rules. */
+  /** The nullable callback whose attribute assignment accepts non-callable objects. */
   // https://webidl.spec.whatwg.org/#LegacyTreatNonObjectAsNull
-  isNullableLegacyCallback(type: WebIDLType): boolean {
-    const nullableType = this.getConversionType(type).type;
-    if (nullableType.kind !== 'nullable') return false;
-    const callbackType = this.getConversionType(nullableType.type).type;
-    if (callbackType.kind !== 'reference') return false;
+  getNullableLegacyCallback(type: WebIDLType): AssembledCallbackFunction | null {
+    const nullableType = this.getConversionRules(type).resolvedType;
+    if (nullableType.kind !== 'nullable') return null;
+    const callbackType = this.getConversionRules(nullableType.type).resolvedType;
+    if (callbackType.kind !== 'reference') return null;
     const assembled = this.callbackFunctions.get(callbackType.name);
-    return assembled?.treatsNonObjectAsNull() ?? false;
+    return assembled?.treatsNonObjectAsNull() ? assembled : null;
   }
 
   /** Whether the declared type can contribute values to a default toJSON operation. */
@@ -510,31 +524,48 @@ export class DefinitionAssembly {
   }
 }
 
-/** A type with aliases resolved and its ordered conversion attributes retained. */
-export type ConversionType = {
+/** A declared type's fixed conversion rules, shared by contexts across bindings and realms. */
+export interface ConversionRules<Type extends WebIDLType = WebIDLType> {
+  /** Descriptor whose aliases and annotations produced these rules. */
+  declaredType: Type;
+  /** Type after resolving outer aliases and annotations; nested branches retain their own rules. */
+  resolvedType: ResolvedType;
+  /** Ordered annotations retained for descriptor comparison and diagnostics. */
   extendedAttributes: ExtendedAttribute[];
-  type: UnannotatedType;
-};
+  /** Integer overflow and rounding behavior selected by Clamp or EnforceRange. */
+  integerMode: IntegerConversionMode;
+  /** Whether buffer conversion accepts shared backing memory. */
+  allowShared: boolean;
+  /** Whether buffer conversion accepts resizable or growable backing memory. */
+  allowResizable: boolean;
+  /** Whether string conversion maps null to the empty string. */
+  nullToEmptyString: boolean;
+}
+
+/** Outer aliases and annotations are resolved, and implementation classes become named references. */
+export type ResolvedType = Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }>;
+
+/** How an integer conversion handles values outside its declared range. */
+export type IntegerConversionMode = 'wrap' | 'clamp' | 'enforce-range';
 
 /** Fixed choices used by union conversion; recognizing the incoming value remains a binding operation. */
 type UnionCandidates = {
-  simpleTypes: Map<SimpleTypeName, ConversionType>;
-  typesByKind: Map<UnannotatedType['kind'], ConversionType>;
+  simpleTypes: Map<SimpleTypeName, ConversionRules>;
+  typesByKind: Map<ResolvedType['kind'], ConversionRules>;
   interfaces: UnionInterfaceCandidate[];
-  numeric: ConversionType | undefined;
-  string: ConversionType | undefined;
-  array: ConversionType | undefined;
+  numeric: ConversionRules | undefined;
+  string: ConversionRules | undefined;
+  array: ConversionRules | undefined;
   dictionary: AssembledDictionary | undefined;
   callbackFunction: AssembledCallbackFunction | undefined;
   callbackInterface: AssembledCallbackInterface | undefined;
 };
 
 /** An interface or proxy candidate paired with its resolved declaration. */
-export type UnionInterfaceCandidate = { type: ConversionType; } & (
+export type UnionInterfaceCandidate = { rules: ConversionRules; } & (
   { assembled: AssembledInterface; } | { proxy: AssembledProxyObject; }
 );
 
-type UnannotatedType = Exclude<WebIDLType, { kind: 'annotated' | 'interface'; }>;
 type AnnotatedUnionType = AnnotatedType<UnionType>;
 
 /** Answers that depend only on a descriptor and this assembly's declarations. */

@@ -241,11 +241,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: true,
-      value: idlToJS(
-        value,
-        properties.getter.primary.returns,
-        this.#binding.defaultConversionContext,
-      ),
+      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.primary.returns)),
       writable: properties.setter !== undefined,
     };
   }
@@ -265,11 +261,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: idlToJS(
-        value,
-        properties.getter.primary.returns,
-        this.#binding.defaultConversionContext,
-      ),
+      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.primary.returns)),
       writable: properties.setter !== undefined,
     };
   }
@@ -528,11 +520,7 @@ export class LegacyPlatformObjectBinding {
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
     }
-    return jsToIDL(
-      value,
-      valueArgument.type,
-      this.#binding.defaultConversionContext,
-    );
+    return jsToIDL(value, this.#binding.getConversionContext(valueArgument.type));
   }
 
   // Extracted from Web IDL §3.9.4 [[Delete]] — invoke the named property deleter.

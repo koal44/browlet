@@ -410,16 +410,8 @@ describe('Web IDL realm interface bindings', () => {
     expect(record.implInst).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
-    expect(jsToIDL(
-      object,
-      reference('SeparatedIdentity'),
-      binding.defaultConversionContext,
-    )).toBe(implementation);
-    expect(idlToJS(
-      implementation,
-      reference('SeparatedIdentity'),
-      binding.defaultConversionContext,
-    )).toBe(object);
+    expect(jsToIDL(object, binding.getConversionContext(reference('SeparatedIdentity')))).toBe(implementation);
+    expect(idlToJS(implementation, binding.getConversionContext(reference('SeparatedIdentity')))).toBe(object);
     expect(realm.checks.map(({ object: checked }) => checked)).toEqual([
       object,
       object,

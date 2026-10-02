@@ -13,7 +13,7 @@ describe('interface projection ownership', () => {
       const { a, b, ctxB, realmA, realmB } = setup();
       const implInst = stage === 'fresh' ? new ChildImpl() : a.construct(ChildImpl);
       const previous = stage === 'projected' ? a.project(ChildImpl, implInst) : undefined;
-      const result = idlToJS(implInst, reference('Base'), ctxB);
+      const result = idlToJS(implInst, ctxB.binding.getConversionContext(reference('Base'), ctxB.realm));
       const record = getPlatformRecord(result)!;
       expect(record.implInst).toBe(implInst);
       expect(record.realm).toBe(stage === 'fresh' ? realmB : realmA);
@@ -25,16 +25,14 @@ describe('interface projection ownership', () => {
       const { a, ctxA } = setup();
       const implInst = stage === 'fresh' ? new OtherImpl() : a.construct(OtherImpl);
       if (stage === 'projected') a.project(OtherImpl, implInst);
-      expect(() => idlToJS(implInst, reference('Base'), ctxA)).toThrow();
+      expect(() => idlToJS(implInst, ctxA.binding.getConversionContext(reference('Base'), ctxA.realm))).toThrow();
     });
 
     it(`selects a matching union member for a ${stage} implementation`, () => {
       const { a, ctxB, realmA, realmB } = setup();
       const implInst = stage === 'fresh' ? new ChildImpl() : a.construct(ChildImpl);
       const previous = stage === 'projected' ? a.project(ChildImpl, implInst) : undefined;
-      const result = idlToJS(
-        implInst, union(reference('Other'), reference('Base'), idlType.DOMString), ctxB,
-      );
+      const result = idlToJS(implInst, ctxB.binding.getConversionContext(union(reference('Other'), reference('Base'), idlType.DOMString), ctxB.realm));
       const record = getPlatformRecord(result)!;
       expect(record.implInst).toBe(implInst);
       expect(record.realm).toBe(stage === 'fresh' ? realmB : realmA);
@@ -48,30 +46,24 @@ describe('interface projection ownership', () => {
       const { ctxB } = setup();
       const implInst = a.construct(ChildImpl);
       if (projected) a.project(ChildImpl, implInst);
-      expect(() => idlToJS(implInst, reference('Base'), ctxB)).toThrow(/world/);
-      expect(() => idlToJS(
-        implInst, union(reference('Base'), idlType.DOMString), ctxB,
-      )).toThrow(/world/);
+      expect(() => idlToJS(implInst, ctxB.binding.getConversionContext(reference('Base'), ctxB.realm))).toThrow(/world/);
+      expect(() => idlToJS(implInst, ctxB.binding.getConversionContext(union(reference('Base'), idlType.DOMString), ctxB.realm))).toThrow(/world/);
     });
   }
 
   it('retains already-platform union values and proxy object identities', () => {
     const { a, ctxB, hostObject } = setup();
     const platformObject = a.project(ChildImpl, new ChildImpl());
-    expect(idlToJS(
-      platformObject, union(reference('Base'), idlType.DOMString), ctxB,
-    )).toBe(platformObject);
-    expect(idlToJS(hostObject, reference('HostObject'), ctxB)).toBe(hostObject);
-    expect(idlToJS(
-      hostObject, union(reference('Other'), reference('HostObject'), idlType.DOMString), ctxB,
-    )).toBe(hostObject);
+    expect(idlToJS(platformObject, ctxB.binding.getConversionContext(union(reference('Base'), idlType.DOMString), ctxB.realm))).toBe(platformObject);
+    expect(idlToJS(hostObject, ctxB.binding.getConversionContext(reference('HostObject'), ctxB.realm))).toBe(hostObject);
+    expect(idlToJS(hostObject, ctxB.binding.getConversionContext(union(reference('Other'), reference('HostObject'), idlType.DOMString), ctxB.realm))).toBe(hostObject);
   });
 
   it('preserves ordinary object and object-union values without adoption', () => {
     const { a, ctxB } = setup();
     for (const value of [{}, a.project(ChildImpl, new ChildImpl())]) {
-      expect(idlToJS(value, idlType.object, ctxB)).toBe(value);
-      expect(idlToJS(value, union(idlType.object, idlType.DOMString), ctxB)).toBe(value);
+      expect(idlToJS(value, ctxB.binding.getConversionContext(idlType.object, ctxB.realm))).toBe(value);
+      expect(idlToJS(value, ctxB.binding.getConversionContext(union(idlType.object, idlType.DOMString), ctxB.realm))).toBe(value);
       expect(getImplementationRecord(value)).toBeUndefined();
     }
   });
@@ -80,10 +72,10 @@ describe('interface projection ownership', () => {
     const { a, ctxB } = setup();
     const value = new ChildImpl();
     const type = union(idlType.object, idlType.DOMString);
-    expect(idlToJS(value, type, ctxB)).toBe(value);
+    expect(idlToJS(value, ctxB.binding.getConversionContext(type, ctxB.realm))).toBe(value);
     a.project(ChildImpl, value);
-    expect(idlToJS(value, idlType.object, ctxB)).toBe(value);
-    expect(idlToJS(value, type, ctxB)).toBe(value);
+    expect(idlToJS(value, ctxB.binding.getConversionContext(idlType.object, ctxB.realm))).toBe(value);
+    expect(idlToJS(value, ctxB.binding.getConversionContext(type, ctxB.realm))).toBe(value);
   });
 
   it('uses the receiver realm for a fresh result from a borrowed operation', () => {
@@ -112,8 +104,8 @@ function setup() {
   b.install(realmB.global);
   return {
     realmA, realmB, a, b, hostObject,
-    ctxA: world.getRealmBinding(realmA)!.defaultConversionContext,
-    ctxB: world.getRealmBinding(realmB)!.defaultConversionContext,
+    ctxA: { binding: world.getRealmBinding(realmA)!, realm: realmA },
+    ctxB: { binding: world.getRealmBinding(realmB)!, realm: realmB },
   };
 }
 

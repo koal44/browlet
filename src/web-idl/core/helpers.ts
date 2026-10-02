@@ -378,20 +378,6 @@ export function invokeWith<Env = unknown>(
   return { invokeWith: argumentsList };
 }
 
-/**
- * Select the realm for returned containers. Without a receiver, use the method realm.
- * Buffer results allocate from returned bytes;
- * without this declaration they retain their JavaScript identity.
- * Existing objects inside containers keep their identity and ownership.
- * A returned internal Promise retains its creation realm and conversion.
- */
-// UNUSED: No production declarations currently select result allocation explicitly.
-export function allocateIn(
-  realm: NonNullable<OperationOptions['allocateIn']>,
-): Pick<OperationOptions, 'allocateIn'> {
-  return { allocateIn: realm };
-}
-
 // Argument adaptation and callback errors
 
 /**

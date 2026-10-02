@@ -22,8 +22,8 @@ describe('Web IDL effective overload sets', () => {
     ]);
     const overloads = new AssembledOverloads([callable], binding.assembly);
     const resolve = mode === 'prepared'
-      ? createOverloadResolver(overloads, binding.defaultConversionContext)
-      : (values: unknown[]) => resolveOverload(overloads, values, binding.defaultConversionContext);
+      ? createOverloadResolver(overloads, binding)
+      : (values: unknown[]) => resolveOverload(overloads, values, binding);
     const resolveArguments = (...values: unknown[]) => resolve(values).values;
 
     expect(resolveArguments('label')).toEqual(['label', 'default']);
@@ -38,7 +38,7 @@ describe('Web IDL effective overload sets', () => {
       { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
       { name: 'label', optional: true, type: idlType.DOMString },
     ]);
-    const resolve = createOverloadResolver(new AssembledOverloads([callable], binding.assembly), binding.defaultConversionContext);
+    const resolve = createOverloadResolver(new AssembledOverloads([callable], binding.assembly), binding);
     const first = resolve([]).values;
     const values = first[0] as number[];
     values.push(99);
@@ -57,7 +57,7 @@ describe('Web IDL effective overload sets', () => {
     const sequence_ = namedOperation('sequence', sequence(idlType.long));
     const overloads = new AssembledOverloads([string, boolean, dictionary, sequence_], binding.assembly);
     const resolveArguments = (...values: unknown[]) =>
-      resolveOverload(overloads, values, binding.defaultConversionContext);
+      resolveOverload(overloads, values, binding);
 
     expect(resolveArguments('value').callable).toBe(string);
     expect(resolveArguments(false)).toEqual({
@@ -238,6 +238,18 @@ describe('Web IDL effective overload sets', () => {
     expect(iteratorGets).toBe(1);
   });
 
+  it.each([
+    ['sequence', sequence(idlType.double)],
+    ['frozen array', frozenArray(idlType.double)],
+  ] as const)('realizes %s element conversion errors after overload selection', (_name, type) => {
+    const binding = createBinding([]);
+    const string = namedOperation('string', idlType.DOMString);
+    const iterable = namedOperation('iterable', type);
+
+    expect(() => resolve([string, iterable], [[Symbol('element')]], binding))
+      .toThrow(binding.realm.intrinsics.typeError);
+  });
+
   it.fails('selects a symbol overload for a symbol value', () => {
     const binding = createBinding([]);
     const symbol = namedOperation('symbol', idlType.symbol);
@@ -353,6 +365,6 @@ function resolve(
   return resolveOverload(
     new AssembledOverloads(callables, binding.assembly),
     argumentsList,
-    binding.defaultConversionContext,
+    binding,
   );
 }

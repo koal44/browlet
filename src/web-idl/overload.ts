@@ -5,29 +5,31 @@ import {
 import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
 import { AsyncSequenceCarrier } from './async-sequence';
 import {
-  jsToIDL, createDefaultValueFactory, createJSToIDLConverter, createFrozenArrayFromIterable, createSequenceFromIterable,
-  isPlatformObject, materializeDefaultValue, type ConversionContext,
+  jsToIDL, createDefaultValueFactory, createFrozenArrayFromIterable, createSequenceFromIterable,
+  isPlatformObject,
 } from './conversion';
 import type { WebIDLType } from './core/index';
+import type { RealmBinding } from './realm-binding';
 import { InternalError } from '../infra/internal-error';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
 export function createOverloadResolver<Callable extends AssembledCallable>(
   overloads: AssembledOverloads<Callable>,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): (argumentsList: unknown[]) => ResolvedOverload<Callable> {
   if (overloads.callables.length !== 1) {
-    return (argumentsList) => resolveOverload(overloads, argumentsList, context);
+    return (argumentsList) => resolveOverload(overloads, argumentsList, binding);
   }
   const callable = overloads.callables[0]!;
   const converters = callable.arguments.map((argument) => {
-    const convert = createJSToIDLConverter(argument.type, context.binding.assembly);
+    const context = binding.getConversionContext(argument.type);
+    const convert = context.getJSToIDLConverter();
     const getDefault = argument.primary.default === undefined
       ? undefined
-      : createDefaultValueFactory(argument.primary.default, argument.type);
+      : createDefaultValueFactory(argument.primary.default);
     return (value: unknown) => argument.optionality === 'optional' && value === undefined
       ? getDefault ? getDefault(context) : missingArgument
-      : convert(value, context);
+      : convert(value);
   });
   const variadic = callable.variadicArgument && converters.at(-1);
   // A single callable needs the argument-count check and conversions, but no
@@ -35,7 +37,7 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
   return (argumentsList) => {
     if (argumentsList.length < callable.minimumArgumentCount) {
-      return throwTypeError(context, 'No overload accepts this argument count');
+      return throwTypeError(binding, 'No overload accepts this argument count');
     }
     const count = variadic
       ? Math.max(converters.length - 1, argumentsList.length)
@@ -54,14 +56,14 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
 export function resolveOverload<Callable extends AssembledCallable>(
   overloads: AssembledOverloads<Callable>,
   argumentsList: unknown[],
-  context: ConversionContext,
+  binding: RealmBinding,
 ): ResolvedOverload<Callable> {
   const argcount = Math.min(overloads.maximumArgumentCount, argumentsList.length);
   const group = overloads.getCandidates(argcount);
   const distinguishingIndex = group.distinguishingIndex;
   let candidates = group.callables;
   if (candidates.length === 0) {
-    return throwTypeError(context, 'No overload accepts this argument count');
+    return throwTypeError(binding, 'No overload accepts this argument count');
   }
 
   if (candidates.length > 1 && distinguishingIndex === -1) {
@@ -74,7 +76,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
     values.push(convertArgument(
       argumentsList[i],
       candidates[0]!.getArgument(i)!,
-      context,
+      binding,
     ));
     i++;
   }
@@ -86,7 +88,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
       candidates,
       argumentsList[i],
       i,
-      context,
+      binding,
     );
     candidates = resolution.candidates;
     method = resolution.method;
@@ -100,7 +102,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && asyncSequenceMethod) {
     const type = selected.getArgument(i)!.type;
-    const asyncSequence = context.binding.assembly.getUnionCandidates(type).typesByKind.get('async-sequence')?.type;
+    const asyncSequence = binding.assembly.getUnionCandidates(type).typesByKind.get('async-sequence')?.resolvedType;
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
@@ -112,7 +114,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && method) {
     const type = selected.getArgument(i)!.type;
-    const sequenceLike = context.binding.assembly.getUnionCandidates(type).array?.type;
+    const sequenceLike = binding.assembly.getUnionCandidates(type).array?.resolvedType;
     if (
       !sequenceLike ||
       (sequenceLike.kind !== 'sequence' &&
@@ -123,15 +125,13 @@ export function resolveOverload<Callable extends AssembledCallable>(
     values.push(sequenceLike.kind === 'sequence'
       ? createSequenceFromIterable(
         argumentsList[i] as object,
-        sequenceLike.type,
+        binding.getConversionContext(sequenceLike.type),
         method,
-        context,
       )
       : createFrozenArrayFromIterable(
         argumentsList[i] as object,
-        sequenceLike.type,
+        binding.getConversionContext(sequenceLike.type),
         method,
-        context,
       ));
     i++;
   }
@@ -140,7 +140,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
     values.push(convertArgument(
       argumentsList[i],
       selected.getArgument(i)!,
-      context,
+      binding,
     ));
     i++;
   }
@@ -148,11 +148,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
   while (i < selected.arguments.length) {
     const argument = selected.arguments[i]!;
     if (argument.primary.default !== undefined) {
-      values.push(materializeDefaultValue(
-        argument.primary.default,
-        argument.type,
-        context,
-      ));
+      values.push(binding.getConversionContext(argument.type).createDefault(argument.primary.default));
     } else if (argument.optionality !== 'variadic') {
       values.push(missingArgument);
     }
@@ -175,9 +171,9 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
   candidates: Callable[],
   value: unknown,
   index: number,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): DistinguishingResolution<Callable> {
-  const assembly = context.binding.assembly;
+  const assembly = binding.assembly;
   let matches: Callable[];
 
   if (value === undefined) {
@@ -197,10 +193,10 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (matches.length > 0) return { candidates: matches };
   }
 
-  if (isPlatformObject(value, context)) {
+  if (isPlatformObject(value, binding)) {
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
-      return containsImplementedInterface(type, value, context) ||
+      return containsImplementedInterface(type, value, binding) ||
         assembly.hasSimpleCandidate(type, 'object');
     });
     if (matches.length > 0) return { candidates: matches };
@@ -253,11 +249,11 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       const asyncMethod = getMethod(
         value,
         Symbol.asyncIterator,
-        context.realm,
+        binding.realm,
       );
       const syncMethod = asyncMethod
         ? undefined
-        : getMethod(value, Symbol.iterator, context.realm);
+        : getMethod(value, Symbol.iterator, binding.realm);
       const iteratorMethod = asyncMethod ?? syncMethod;
       if (iteratorMethod) {
         matches = candidates.filter((callable) =>
@@ -280,7 +276,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       const iteratorMethod = getMethod(
         value,
         Symbol.iterator,
-        context.realm,
+        binding.realm,
       );
       if (iteratorMethod) {
         matches = candidates.filter((callable) =>
@@ -343,47 +339,47 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'any'));
   if (matches.length > 0) return { candidates: matches };
 
-  return throwTypeError(context, 'No overload matches the argument value');
+  return throwTypeError(binding, 'No overload matches the argument value');
 }
 
 // Extracted from Web IDL §3.6 Overload resolution algorithm — convert an argument or use its default.
 function convertArgument(
   value: unknown,
   argument: AssembledArgument,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): unknown {
   if (argument.optionality === 'optional' && value === undefined) {
     return argument.primary.default === undefined
       ? missingArgument
-      : materializeDefaultValue(argument.primary.default, argument.type, context);
+      : binding.getConversionContext(argument.type).createDefault(argument.primary.default);
   }
-  return jsToIDL(value, argument.type, context);
+  return jsToIDL(value, binding.getConversionContext(argument.type));
 }
 
 // Project helper: test candidate types against a platform object's implemented interfaces.
 function containsImplementedInterface(
   type: WebIDLType,
   value: unknown,
-  context: ConversionContext,
+  binding: RealmBinding,
 ): boolean {
-  return context.binding.assembly.getCandidateTypes(type).some((candidate) => {
+  return binding.assembly.getCandidateTypes(type).some((candidate) => {
     if (candidate.kind !== 'reference') return false;
-    const assembled = context.binding.assembly.interfaces.get(candidate.name);
+    const assembled = binding.assembly.interfaces.get(candidate.name);
     if (assembled) {
       const record = getPlatformRecord(value);
-      return record?.binding.world === context.binding.world &&
+      return record?.binding.world === binding.world &&
         record.implements(assembled);
     }
-    return context.binding.assembly.proxyObjects.get(candidate.name)?.is(value) ?? false;
+    return binding.assembly.proxyObjects.get(candidate.name)?.is(value) ?? false;
   });
 }
 
 // Project helper: create an overload-resolution failure in the selected realm.
 function throwTypeError(
-  context: ConversionContext,
+  binding: RealmBinding,
   message: string,
 ): never {
-  throw new context.realm.intrinsics.typeError(message);
+  throw new binding.realm.intrinsics.typeError(message);
 }
 
 type DistinguishingResolution<Callable extends AssembledCallable> = {

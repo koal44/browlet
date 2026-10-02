@@ -1,28 +1,26 @@
 import * as JSEngine from '../js-engine/index';
-import { hasExtendedAttribute } from './core/helpers';
-import type { BufferTypeName, BufferViewTypeName, ExtendedAttribute } from './core/types';
+import type { BufferTypeName, BufferViewTypeName } from './core/types';
+import type { ConversionContext } from './conversion-context';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
-// Web IDL §3.2.26 Buffer source types — shared JavaScript-to-IDL buffer conversions.
+/** Validate a buffer source using the buffer type and annotations selected by conversion dispatch. */
+// https://webidl.spec.whatwg.org/#js-to-buffer-source
 export function jsToIDLBufferSource(
   value: unknown,
-  name: BufferTypeName,
-  extendedAttributes: ExtendedAttribute[],
+  context: ConversionContext,
 ): ArrayBufferLike | ArrayBufferView {
+  const { name } = context.resolvedType as { name: BufferTypeName; };
+  const { allowShared, allowResizable } = context;
   if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
     throw new TypeError(`Value is not a ${name}`);
   }
 
-  const allowResizable = hasExtendedAttribute(
-    extendedAttributes,
-    'AllowResizable',
-  );
   if (isBufferViewTypeName(name)) {
     const buffer = JSEngine.getArrayBufferViewBuffer(value);
     if (
       JSEngine.getBufferTypeName(buffer) === 'SharedArrayBuffer' &&
-      !hasExtendedAttribute(extendedAttributes, 'AllowShared')
+      !allowShared
     ) {
       throw new TypeError(`${name} is backed by a SharedArrayBuffer`);
     }
@@ -35,18 +33,19 @@ export function jsToIDLBufferSource(
   return value as ArrayBufferLike | ArrayBufferView;
 }
 
-// Web IDL §3.2.26 Buffer source types — convert a buffer source to a JavaScript value.
-export function idlBufferSourceToJS(
+/** Preserve a buffer source's identity after checking the buffer type selected by conversion dispatch. */
+// https://webidl.spec.whatwg.org/#buffer-source-to-js
+export function idlToJSBufferSource(
   value: unknown,
-  name: BufferTypeName,
+  context: ConversionContext,
 ): ArrayBufferLike | ArrayBufferView {
+  const { name } = context.resolvedType as { name: BufferTypeName; };
   if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
     throw new InternalError(`IDL ${name} value has the wrong buffer source type`);
   }
   return value as ArrayBufferLike | ArrayBufferView;
 }
 
-// Project helper: distinguish buffer views from ArrayBuffer and SharedArrayBuffer.
 function isBufferViewTypeName(name: BufferTypeName): name is BufferViewTypeName {
   return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
 }

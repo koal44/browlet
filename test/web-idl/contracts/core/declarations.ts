@@ -1,5 +1,5 @@
 import {
-  allocateIn, arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
+  arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
   dictMember, idlType, impl, invokeWith, op, sequence, staticOp, xattr,
   type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/core/index';
@@ -64,22 +64,13 @@ const incompleteTransfer: TransferSteps = { transferSteps() {} };
 
 impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
 ctor([], { constructWith: [atArg(0, () => new Example())] });
-op('read', idlType.ArrayBuffer, [], allocateIn('receiver'));
-op('names', sequence(idlType.DOMString), [], allocateIn('method'));
 op('run', idlType.undefined, [], invokeWith(atArg(0, () => new Example())));
-op('existing', idlType.Uint8Array, [], { allocateIn: undefined });
 staticOp('create', idlType.object, [], invokeWith(atArg(0, () => new Example())));
 
-// @ts-expect-error A result allocation policy is not a constructor option.
-ctor([], allocateIn('receiver'));
 // @ts-expect-error Operation dependencies are not constructor dependencies.
 ctor([], invokeWith(atArg(0, () => new Example())));
 // @ts-expect-error Constructor dependencies are not operation dependencies.
 op('run', idlType.undefined, [], { constructWith: [atArg(0, () => new Example())] });
-// @ts-expect-error A result allocation policy is not an attribute option.
-attr('value', idlType.object, allocateIn('method'));
-// @ts-expect-error Result allocation selects the receiver or method realm.
-allocateIn('caller');
 // @ts-expect-error A declaration cannot carry arbitrary binding metadata.
 ctor([], { binding: { nonsense: true } });
 // @ts-expect-error Injected constructor arguments require explicit positions.

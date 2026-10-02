@@ -1,7 +1,7 @@
 import {
   createObservableArray, type ObservableArrayHandle,
 } from '../infra/observable-array';
-import { jsToIDL, idlToJS } from './conversion';
+import { jsToIDL } from './conversion';
 import {
   idlType, type AttributeMember, type WebIDLType,
 } from './core/index';
@@ -41,11 +41,7 @@ export class ObservableArrayBinding {
     elementType: WebIDLType,
     value: unknown,
   ): void {
-    const values = jsToIDL(
-      value,
-      this.#binding.assembly.getSequenceType(elementType),
-      this.#binding.defaultConversionContext,
-    );
+    const values = jsToIDL(value, this.#binding.getConversionContext(this.#binding.assembly.getSequenceType(elementType)));
     this.#getHandle(record, attribute, elementType).replaceValues(values);
   }
 
@@ -65,7 +61,8 @@ export class ObservableArrayBinding {
     const existing = attributes.get(attribute);
     if (existing) return existing;
 
-    const context = { binding: record.binding, realm: this.#binding.realm };
+    const inputContext = this.#binding.getConversionContext(elementType);
+    const outputContext = record.binding.getConversionContext(elementType, this.#binding.realm);
     const steps = this.#binding.getMemberBinding(record.assembled, attribute)?.observableArraySteps;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const deleteSteps = steps?.delete;
@@ -73,7 +70,7 @@ export class ObservableArrayBinding {
     const setSteps = steps?.set;
     const handle = createObservableArray({
       array: this.#binding.realm.intrinsics.array,
-      convert: (value) => jsToIDL(value, elementType, this.#binding.defaultConversionContext),
+      convert: inputContext.getJSToIDLConverter(),
       delete: deleteSteps
         ? (value, index) => Reflect.apply(
           deleteSteps,
@@ -90,16 +87,8 @@ export class ObservableArrayBinding {
           [value, index],
         )
         : undefined,
-      toJavaScript: (value) => idlToJS(
-        value,
-        elementType,
-        context,
-      ),
-      toNumber: (value) => jsToIDL(
-        value,
-        idlType.unrestrictedDouble,
-        this.#binding.defaultConversionContext,
-      ),
+      toJavaScript: outputContext.getIDLToJSConverter(),
+      toNumber: this.#binding.getConversionContext(idlType.unrestrictedDouble).getJSToIDLConverter(),
     });
     attributes.set(attribute, handle);
     return handle;

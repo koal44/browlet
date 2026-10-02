@@ -46,7 +46,7 @@ describe('Web IDL types', () => {
     ] as const) {
       expect(assembly.getCandidateTypes(type).map((candidate) => serializeType(candidate)))
         .toEqual([name, 'sequence<boolean>']);
-      expect(assembly.getConversionCandidates(type).map((candidate) => serializeType(candidate.type)))
+      expect(assembly.getConversionCandidates(type).map((candidate) => serializeType(candidate.resolvedType)))
         .toEqual([name, 'sequence<boolean>']);
       expect(assembly.getOverloadTypeKey(type)).toBe(`(${name} or sequence<boolean>)`);
       expect(assembly.hasStringCandidate(type)).toBe(name === 'DOMString');
@@ -136,7 +136,7 @@ describe('Web IDL types', () => {
     expect(symbols.isJSONType(type)).toBe(false);
   });
 
-  it('preserves attribute order without carrying invocation attributes into later queries', () => {
+  it('preserves attribute order without leaking annotations between uses of a descriptor', () => {
     const assembly = new DefinitionAssembly([
       defineTypedef({
         name: 'Value',
@@ -149,11 +149,11 @@ describe('Web IDL types', () => {
     const type = annotated(reference('Value'), xattr('Outer'));
 
     for (const name of ['FirstCall', 'SecondCall', undefined]) {
-      const attributes = name ? xattr(name).extendedAttributes : undefined;
+      const use = name ? annotated(type, xattr(name)) : type;
       const prefix = name ? [name] : [];
-      expect(assembly.getConversionType(type, attributes).extendedAttributes)
+      expect(assembly.getConversionRules(use).extendedAttributes)
         .toEqual(xattr(...prefix, 'Outer', 'Alias').extendedAttributes);
-      expect(assembly.getConversionCandidates(type, attributes).map((candidate) =>
+      expect(assembly.getConversionCandidates(use).map((candidate) =>
         candidate.extendedAttributes))
         .toEqual([
           xattr(...prefix, 'Outer', 'Alias', 'Member').extendedAttributes,

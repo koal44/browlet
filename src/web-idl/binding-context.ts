@@ -67,7 +67,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   jsToImpl(value: unknown, type: WebIDLType): unknown;
   jsToImpl(value: unknown, type: WebIDLType): unknown {
     return idlToImpl(
-      jsToIDL(value, type, this.#binding.defaultConversionContext),
+      jsToIDL(value, this.#binding.getConversionContext(type)),
       type,
       {},
       this,
@@ -77,7 +77,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   /** Convert a declared implementation result to its author-facing representation. */
   implToJS(value: unknown, type: WebIDLType): unknown {
-    return idlToJS(value, type, this.#binding.defaultConversionContext);
+    return idlToJS(value, this.#binding.getConversionContext(type));
   }
 
   /** Turn an internal exception request into a realm-owned error, preserving any prior realization. */

@@ -77,6 +77,7 @@ export class GlobalPlatformObjectBinding {
         }
         if (isDataDescriptor(descriptor)) return descriptor.value as unknown;
         if (!descriptor.get) return undefined;
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the getter's receiver.
         return Reflect.apply(descriptor.get, receiver, []) as unknown;
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),
@@ -146,11 +147,7 @@ export class GlobalPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: idlToJS(
-        value,
-        properties.getter.returns,
-        this.#binding.defaultConversionContext,
-      ),
+      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.returns)),
       writable: true,
     };
   }

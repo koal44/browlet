@@ -162,11 +162,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     Reflect.set(incumbentRealm.realm.global, 'callback', callback);
     Reflect.set(incumbentRealm.realm.global, 'convert', (value: unknown) =>
-      jsToIDL(
-        value,
-        reference('LifecycleCallback'),
-        incumbentContext.defaultConversionContext,
-      ));
+      jsToIDL(value, incumbentContext.getConversionContext(reference('LifecycleCallback'))));
     const callbackValue = incumbentRealm.realm.evaluate(
       'convert(callback)',
       'convert-callback.js',
@@ -234,7 +230,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
-      jsToIDL(value, reference('LifecycleCallback'), context.defaultConversionContext));
+      jsToIDL(value, context.getConversionContext(reference('LifecycleCallback'))));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',
       'create-reentrant-callback.js',

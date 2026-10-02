@@ -17,7 +17,7 @@ import {
   parseDeltaSeconds, parseVary, type StructuredBareItem, type StructuredField, type StructuredItem,
 } from '../../src/http/index';
 import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
-import { allocateIn, BindingWorld, type BindingContext } from '../../src/web-idl/index';
+import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment, type ClientEnvironment } from './client-fixture';
@@ -709,15 +709,8 @@ describe('Headers realm allocation', () => {
     expect(foreignHeaders).not.toBe(headers);
   });
 
-  it('can opt getSetCookie into method-realm allocation with a declaration', () => {
-    const definition = {
-      ...headersIDL,
-      members: headersIDL.members.map((member) =>
-        member.kind === 'operation' && member.name === 'getSetCookie'
-          ? { ...member, ...allocateIn('method') }
-          : member),
-    };
-    const world = new BindingWorld([headersInitIDL, definition]);
+  it('allocates getSetCookie results in the receiver realm through a borrowed method', () => {
+    const world = new BindingWorld([headersInitIDL, headersIDL]);
     const receiverRealm = new TestRealm();
     const methodRealm = new TestRealm();
     const context = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
@@ -727,8 +720,8 @@ describe('Headers realm allocation', () => {
     const method = Reflect.get(Constructor.prototype, 'getSetCookie');
     const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
     const cookies = Reflect.apply(method, headers, []);
-    expect(cookies).toBeInstanceOf(methodRealm.intrinsics.array);
-    expect(cookies).not.toBeInstanceOf(receiverRealm.intrinsics.array);
+    expect(cookies).toBeInstanceOf(receiverRealm.intrinsics.array);
+    expect(cookies).not.toBeInstanceOf(methodRealm.intrinsics.array);
     expect(cookies).toEqual(['a=1']);
   });
 });

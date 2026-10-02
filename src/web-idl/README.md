@@ -108,7 +108,7 @@ Ordinary arrays, maps, and buffers keep their existing representations. Platform
 identity records and iterator state are not carriers merely because binding uses
 them. A callback interface's `toImpl(ctx, cbCarrier)` hook receives the carrier itself, whose
 `callUserObjectOperation()` method handles conversion and invocation. Its `binding`
-and `realm` also supply the conversion context; `callbackContext` is the separately
+and `realm` select cached contexts for its argument and return types; `callbackContext` is the separately
 captured host context restored during invocation. No second callback-value object
 is created. A bound callback function is the implementation-facing callable.
 
@@ -196,7 +196,9 @@ Bindings prepare fixed input/result conversions while installing callables.
 Dictionary conversion plans retain member converters on first use, while each
 invocation reads the current author properties in specification order. Successful
 primitive defaults can be reused; sequence and dictionary defaults remain fresh.
-The invocation still supplies its conversion realm, including for nested failures.
+Each prepared converter retains its type's `ConversionContext`. Borrowed calls
+select the context for the receiver binding and required allocation realm;
+nested conversions preserve those owners while selecting their own type's rules.
 IDL-to-implementation argument and attribute converters are prepared from those converted
 types. Known callbacks and dictionaries use their specific representations;
 unions and `any` retain runtime discrimination. Recursive dictionary members and
@@ -210,10 +212,10 @@ Complete dictionaries reuse a property layout,
 while sparse dictionaries collect only present entries
 before creating the record. Both produce ordinary objects with own data properties,
 including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
-Each `CallbackInvoker` retains argument and return converters per
-callable. Each invocation supplies the callback's realm; each conversion captures
-the current callback context. Neither is cached in the plan.
-Prepared implementation converters retain the callback invoker and result converter,
+Each `CallbackInvoker` retains argument and return converters per callable and
+callback realm. The carrier separately captures the current callback context;
+that invocation state is never shared through a cached conversion plan.
+Bound implementation callbacks retain the callback invoker and result converter,
 so invocation does not rediscover the callback contract.
 Plans identify primitive arguments that need no projection, allowing invocation
 to reuse the internal argument list. Missing arguments, object projection, and
@@ -244,8 +246,8 @@ lookup, namespace membership, inheritance ordering, candidate-type searches,
 typedef expansion, and proxy recognition. Member types still contain symbolic
 references; `DefinitionAssembly` resolves them within that world. Resolved types,
 candidate lists, and comparison keys are cached per descriptor on first use.
-One lazy type analysis supplies candidate classifications, nullability, conversion
-types, and the numeric type for integer defaults. JSON type checks retain completed
+One lazy type analysis supplies candidate classifications, nullability, container
+element types, and the numeric type for integer defaults. JSON type checks retain completed
 answers separately, without retaining intermediate dictionary traversal results.
 These maps live with the assembly. Retain type descriptors in declarations or
 module constants instead of constructing them during invocation. The assembly
@@ -254,8 +256,33 @@ array assignment. Conversion still reads and converts each incoming value anew.
 `getCandidateTypes()` ignores annotations for overload selection;
 `getConversionCandidates()` preserves conversion attributes in their original order.
 Union conversion retains its category selections and referenced definitions on first
-use. Caller-supplied attributes are applied only to the selected candidate, keeping
-them out of cached results. Enumeration membership uses a retained set of values.
+use. Each annotated use of a type retains its own integer conversion mode and
+buffer/string rules. Nullable and union branches inherit enclosing annotations
+through descriptors prepared once; sequence elements, dictionary members, and other
+container contents keep their own declared types. Conversion does not merge or
+search attribute arrays per value. Assembly prepares `ConversionRules`, retained
+privately by each context alongside its binding and allocation/error realm.
+Contexts in different bindings and realms share the same rules object when they
+use the same assembly and descriptor. Forwarding getters expose the rules:
+`context.declaredType` retains the original descriptor; `context.resolvedType` exposes the type
+after resolving outer aliases and annotations. `binding.getConversionContext(type, realm)`
+reuses a context for that binding, descriptor, and conversion realm, defaulting to
+`binding.realm` when the second argument is omitted. Shared contexts and their type
+descriptors must remain unchanged after creation. Each realm binding owns a
+WeakMap keyed by conversion realm, whose maps retain the contexts by descriptor.
+This preserves sharing without keeping discarded conversion realms alive.
+Prepared input/output converters live on the context and retain no incoming values.
+Each setter selects its input converter once when its cached function is created.
+Ordinary attributes reuse the context's prepared converter. Nullable
+`[LegacyTreatNonObjectAsNull]` callbacks use a specialized converter that maps
+non-objects to null and retains objects without requiring callability. Both use
+the same cached context; no assignment mode is stored on it or passed through
+nested conversion. Legacy callback eligibility is a cached declaration lookup.
+Converters take the value and its context. Additional inputs retain work already
+done, such as selecting an assembled interface or reading an iterator method.
+Iterable helpers use the element's context so sequences and frozen arrays share
+the same conversion.
+Enumeration membership uses a retained set of values.
 Returned candidate and inheritance lists are shared and must not be modified.
 Assembled interfaces collect legacy factory names and lazily prepare their overload
 groups; each realm separately retains its factory functions and implementation steps.
@@ -384,7 +411,7 @@ Add worlds for actual isolation/runtime lifetimes, not merely for new Agent type
 | Arguments, overloads, synchronous invocation errors | Executing member's realm |
 | Implementation receiver | Recognized receiver's realm binding; argument injection can also select the method's environment |
 | Fresh implementation returned as a declared interface | Receiver owner; an already stamped implementation keeps its owner |
-| Ordinary result containers | Receiver by default; `allocateIn('method' \| 'receiver')` can select allocation |
+| Ordinary result containers | Receiver's realm; method's realm for static operations |
 | Declared implementation Promise | Its creation environment selects allocation and conversion; returning it preserves the native Promise |
 | Invocation failure of a Promise-returning method | Rejected Promise in the method's realm |
 | Constructor fallback for non-object `newTarget.prototype` | Constructor's associated realm selects the interface prototype |
@@ -394,6 +421,10 @@ For example, a callback in realm B can receive a B-owned array containing an
 A-owned platform object. A nested interface return projects through its declared
 dictionary, sequence, union, or Promise type. A genuine `object`/`any` result
 preserves its JavaScript value; Binding cannot infer an undeclared interface.
+
+Existing buffer results retain their identity and realm. When an algorithm needs
+a new buffer, its implementation allocates through the owning environment's
+execution facilities before returning it.
 
 Implementations receive converted callbacks and dictionaries, not original
 author inputs. Bound callbacks retain original identity, invocation receiver,

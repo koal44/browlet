@@ -654,7 +654,7 @@ function createIDLToImplConverter(
   if (options.callbackDictionary || options.implClasses?.length) {
     return (value, context) => idlToImpl(value, type, options, context, realmBinding);
   }
-  const resolved = assembly.getConversionType(type).type;
+  const resolved = assembly.getConversionRules(type).resolvedType;
   if (resolved.kind === 'nullable') {
     const convert = createIDLToImplConverter(resolved.type, options, realmBinding);
     return (value, context, callbackThis) => value === null ? null : convert(value, context, callbackThis);
@@ -663,7 +663,6 @@ function createIDLToImplConverter(
   if (resolved.kind === 'reference') {
     const callbackAssembled = assembly.callbackFunctions.get(resolved.name);
     if (callbackAssembled) {
-      const invoker = realmBinding.getCallbackInvoker(callbackAssembled);
       let resultConverter: IDLToImplConverter | undefined;
       // A callback can return its own type; prepare that converter only if invoked.
       const convertResult: IDLToImplConverter = assembly.mayContainCarrier(callbackAssembled.primary.returns)
@@ -672,7 +671,10 @@ function createIDLToImplConverter(
         ))(value, context)
         : (value) => value;
       const convert: IDLToImplConverter<CallbackFunctionCarrier, StampedCallbackFunction> = (value, context, callbackThis) =>
-        bindCallbackFunction(value, options.callbackExceptionBehavior, context, realmBinding, callbackThis, invoker, convertResult);
+        bindCallbackFunction(
+          value, options.callbackExceptionBehavior, context, realmBinding, callbackThis,
+          realmBinding.getCallbackInvoker(callbackAssembled, value.realm), convertResult,
+        );
       // The declared callback converter is the sole producer at this boundary.
       return convert as IDLToImplConverter;
     }
@@ -715,7 +717,7 @@ export function idlToImpl(
     const input = value === missingArgument ? undefined : value;
     const dictionaryType = options.callbackDictionary;
     return idlToImpl(
-      jsToIDL(input, dictionaryType, realmBinding.defaultConversionContext), dictionaryType,
+      jsToIDL(input, realmBinding.getConversionContext(dictionaryType)), dictionaryType,
       { callbackThis: input }, context, realmBinding,
     );
   }
@@ -746,20 +748,20 @@ export function idlToImpl(
     return {
       next() {
         const result = iterator.nextValue(realmBinding.realm,
-          (item, itemType) => jsToIDL(item, itemType, realmBinding.defaultConversionContext));
-        return result.toImpl(realmBinding.defaultConversionContext,
+          (item, itemType) => jsToIDL(item, realmBinding.getConversionContext(itemType)));
+        return result.toImpl(realmBinding,
           (item) => item === endOfIteration ? item :
             idlToImpl(item, value.elementType, {}, context, realmBinding),
           context.Promise);
       },
       return(reason: unknown) {
         const result = iterator.close(reason, realmBinding.realm);
-        return result.toImpl(realmBinding.defaultConversionContext, (value) => value, context.Promise);
+        return result.toImpl(realmBinding, (value) => value, context.Promise);
       },
     };
   }
   if (PromiseCarrier.is(value)) {
-    return value.toImpl(realmBinding.defaultConversionContext, (result) =>
+    return value.toImpl(realmBinding, (result) =>
       idlToImpl(
         result, value.type, options, context, realmBinding,
       ), context.Promise);
@@ -833,7 +835,7 @@ function bindCallbackFunction(
   context: BindingContext,
   realmBinding: RealmBinding,
   callbackThis?: unknown,
-  invoker: CallbackInvoker = realmBinding.getCallbackInvoker(cbCarrier.assembled),
+  invoker: CallbackInvoker = realmBinding.getCallbackInvoker(cbCarrier.assembled, cbCarrier.realm),
   convertResult?: IDLToImplConverter,
 ): StampedCallbackFunction {
   const existing = cbCarrier.boundCallback;

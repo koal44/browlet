@@ -433,7 +433,7 @@ export type OperationMember<Env = unknown> = {
   /** Extended attributes applying to this overload. */
   extendedAttributes?: ExtendedAttribute[];
 
-  // Project metadata: invocation, argument injection, result allocation, and legacy property support.
+  // Project metadata: invocation, argument injection, and legacy property support.
   /**
    * Run with converted arguments and return the implementation result.
    * The context belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
@@ -441,8 +441,6 @@ export type OperationMember<Env = unknown> = {
   invoke?: DeclarationCallback<'operation-invoke', Env>;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
-  /** Select the result allocation realm; existing platform objects and internal Promises retain ownership. */
-  allocateIn?: 'receiver' | 'method';
   /** Supported indices and membership checks for a legacy indexed getter. */
   indexedGetter?: IndexedGetterDeclaration;
   /** Live supported names for a legacy named getter, with the implementation as `this`. */

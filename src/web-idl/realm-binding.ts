@@ -1,3 +1,4 @@
+import { ConversionContext } from './conversion-context';
 import { getAssociatedRealm, isObject, type JSFunction } from '../js-engine/index';
 import { ExceptionRequestStamper } from '../infra/exceptions';
 import { Stamper } from '../infra/stamper';
@@ -11,8 +12,8 @@ import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
 } from './collection';
 import {
-  idlToJS, createDictionaryConverter, createJSToIDLConverter, createIDLToJSConverter, materializeDefaultValue,
-  type ConversionContext, type DictionaryConverter,
+  idlToJS, createDictionaryConverter, createLegacyCallbackConverter,
+  type DictionaryConverter,
 } from './conversion';
 import { hasExtendedAttribute } from './core/helpers';
 import { idlType } from './core/types';
@@ -27,7 +28,7 @@ import {
   type PlatformObjectAllocationSteps,
 } from './definition-binding';
 import { SynchronousIterableBinding } from './iterable';
-import type { WebIDLEnvironment } from './realm';
+import type { WebIDLEnvironment, WebIDLRealm } from './realm';
 import { BindingContext } from './binding-context';
 import {
   LegacyPlatformObjectBinding, type LegacyPropertyMetadata,
@@ -50,12 +51,13 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
   context: BindingContext<Env>;
-  defaultConversionContext: ConversionContext;
   #collections: CollectionBinding;
   #asyncIterables: AsyncIterableBinding;
   #definitionBindings = new Map<PlatformDefinition, DefinitionBinding>();
-  #dictionaryConverters = new Map<AssembledDictionary, DictionaryConverter>();
-  #callbackInvokers = new Map<CallbackCallable, CallbackInvoker>();
+  /** Type contexts for this binding, without keeping discarded conversion realms alive. */
+  #conversionContexts = new WeakMap<WebIDLRealm, Map<WebIDLType, ConversionContext>>();
+  #dictionaryConverters = new WeakMap<WebIDLRealm, Map<AssembledDictionary, DictionaryConverter>>();
+  #callbackInvokers = new WeakMap<WebIDLRealm, Map<CallbackCallable, CallbackInvoker>>();
   #globalPlatformObjects: GlobalPlatformObjectBinding;
   #globalObject: PlatformRecord | undefined;
   #globalAllocation: GlobalObjectAllocation | undefined;
@@ -73,7 +75,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.assembly = assembly;
     this.realm = realm;
     this.world = world;
-    this.defaultConversionContext = { binding: this, realm };
     // Project adapter: realize internal exceptions once and preserve the error across realms.
     // Web IDL §3.14.3 Creating and throwing exceptions supplies the realm-allocation rules.
     this.realizeException = (value) => {
@@ -101,7 +102,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       return error;
     };
     this.#asyncIterables = new AsyncIterableBinding(this);
-    this.#collections = new CollectionBinding(this.defaultConversionContext);
+    this.#collections = new CollectionBinding(this);
     this.#globalPlatformObjects = new GlobalPlatformObjectBinding(this);
     this.#iterables = new SynchronousIterableBinding(this);
     this.#legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
@@ -133,22 +134,41 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return binding;
   }
 
+  /** Reuse a conversion context for this binding, declared type, and allocation/error realm. */
+  getConversionContext<Type extends WebIDLType>(
+    type: Type,
+    realm: WebIDLRealm = this.realm,
+  ): ConversionContext<Type> {
+    let contexts = this.#conversionContexts.get(realm);
+    if (!contexts) this.#conversionContexts.set(realm, contexts = new Map<WebIDLType, ConversionContext>());
+    const cached = contexts.get(type);
+    // The descriptor used as the key determines the context's declared type.
+    if (cached) return cached as ConversionContext<Type>;
+    const context = new ConversionContext(type, this, realm);
+    contexts.set(type, context);
+    return context;
+  }
+
   /** Retain dictionary conversion plans without retaining converted author values. */
-  getDictionaryConverter(assembled: AssembledDictionary): DictionaryConverter {
-    let convert = this.#dictionaryConverters.get(assembled);
+  getDictionaryConverter(assembled: AssembledDictionary, realm: WebIDLRealm): DictionaryConverter {
+    let converters = this.#dictionaryConverters.get(realm);
+    if (!converters) this.#dictionaryConverters.set(realm, converters = new Map<AssembledDictionary, DictionaryConverter>());
+    let convert = converters.get(assembled);
     if (!convert) {
-      convert = createDictionaryConverter(assembled, this.assembly);
-      this.#dictionaryConverters.set(assembled, convert);
+      convert = createDictionaryConverter(assembled, this, realm);
+      converters.set(assembled, convert);
     }
     return convert;
   }
 
-  /** Reuse a callback's invocation contract without retaining a particular callback or realm. */
-  getCallbackInvoker(assembled: CallbackCallable): CallbackInvoker {
-    let invoker = this.#callbackInvokers.get(assembled);
+  /** Reuse a callback contract's conversions in the selected callback realm. */
+  getCallbackInvoker(assembled: CallbackCallable, realm: WebIDLRealm): CallbackInvoker {
+    let invokers = this.#callbackInvokers.get(realm);
+    if (!invokers) this.#callbackInvokers.set(realm, invokers = new Map<CallbackCallable, CallbackInvoker>());
+    let invoker = invokers.get(assembled);
     if (!invoker) {
-      invoker = new CallbackInvoker(assembled, this.assembly);
-      this.#callbackInvokers.set(assembled, invoker);
+      invoker = new CallbackInvoker(assembled, this, realm);
+      invokers.set(assembled, invoker);
     }
     return invoker;
   }
@@ -246,7 +266,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       (entry) => this.#isMemberExposed(assembled, entry), this.assembly,
     );
     const overridden = definitionBinding.overriddenConstructor;
-    const resolve = createOverloadResolver(constructors, this.defaultConversionContext);
+    const resolve = createOverloadResolver(constructors, this);
     const object: JSFunction = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
@@ -338,7 +358,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (existing) return existing;
 
     const overloads = assembled.getLegacyFactoryOverloads(name, this.assembly);
-    const resolve = createOverloadResolver(overloads, this.defaultConversionContext);
+    const resolve = createOverloadResolver(overloads, this);
     const function_ = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {
@@ -806,14 +826,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   // Extracted from Web IDL §3.7.5 Constants — define one constant property.
   #defineConstant(target: object, constant: ConstantMember): void {
+    const context = this.getConversionContext(constant.type);
     defineProperty(target, constant.name, {
       configurable: false,
       enumerable: true,
-      value: idlToJS(
-        materializeDefaultValue(constant.value, constant.type, this.defaultConversionContext),
-        constant.type,
-        this.defaultConversionContext,
-      ),
+      value: idlToJS(context.createDefault(constant.value), context),
       writable: false,
     });
   }
@@ -938,11 +955,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
             }
             value = Reflect.apply(behavior, object, []);
           }
-          return idlToJS(
-            value,
-            idlType.DOMString,
-            this.defaultConversionContext,
-          );
+          return idlToJS(value, this.getConversionContext(idlType.DOMString));
         },
         { length: 0, name: 'toString' },
       ),
@@ -1017,7 +1030,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const interfaceAssembled = getMemberInterface(assembled);
     const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
     const elementType = this.assembly.getObservableArrayElementType(attribute.type);
-    const convertResult = createIDLToJSConverter(attribute.type, this.assembly);
+    const defaultContext = this.getConversionContext(attribute.type);
+    const convertResult = defaultContext.getIDLToJSConverter();
     const implementation = interfaceAssembled && attribute.inherit
       ? interfaceAssembled.getInheritedAttribute(attribute)
       : attribute;
@@ -1038,7 +1052,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
             )
             : null;
           if (receiver === invalidReceiver) return undefined;
-          resultContext = (receiver?.binding ?? this).defaultConversionContext;
+          resultContext = !receiver || receiver.binding === this
+            ? defaultContext
+            : receiver.binding.getConversionContext(attribute.type);
 
           if (elementType) {
             if (!receiver) {
@@ -1061,12 +1077,12 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
             );
           }
           const value = steps.get(receiver);
-          return convertResult(value, resultContext);
+          return resultContext === defaultContext ? convertResult(value) : resultContext.getIDLToJSConverter()(value);
         } catch (exception) {
           return this.#handlePromiseException(
             attribute.type,
             exception,
-            resultContext ?? this.defaultConversionContext,
+            resultContext ?? defaultContext,
           );
         }
       }, { length: 0, name: `get ${attribute.name}` }),
@@ -1093,89 +1109,90 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (attribute.readonly && !replaceable && !putForwards && !lenientSetter) {
       return;
     }
-    const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
-    const observableArrayElementType = this.assembly.getObservableArrayElementType(attribute.type);
-    const type = this.assembly.getUnannotatedType(attribute.type);
-    const enumeration = type.kind === 'reference' ? this.assembly.enumerations.get(type.name) : undefined;
-    const convertInput = createJSToIDLConverter(
-      enumeration ? idlType.DOMString : attribute.type,
-      this.assembly,
-      { attributeAssignment: true },
-    );
-
     return this.#getOrCreateMemberFunction(
       'setter',
       assembled,
       attribute,
-      (binding) => this.realm.createFunction((thisArgument, argumentsList) => {
-        const value = argumentsList[0];
-        const jsValue = this.#resolveThisValue(thisArgument);
-        const receiver = attribute.static
-          ? null
-          : this.#getReceiverRecord(
-            jsValue,
-            interfaceAssembled,
-            attribute.name,
-            'setter',
-            lenient,
-          );
-        if (replaceable) {
-          if (!isObject(jsValue)) return this.#throwTypeError('Invalid receiver');
-          if (!Reflect.defineProperty(jsValue, attribute.name, {
-            configurable: true,
-            enumerable: true,
-            value,
-            writable: true,
-          })) {
-            return this.#throwTypeError(
-              `Could not replace attribute ${attribute.name}`,
+      (binding) => {
+        const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
+        const observableArrayElementType = this.assembly.getObservableArrayElementType(attribute.type);
+        const type = this.assembly.getUnannotatedType(attribute.type);
+        const enumeration = type.kind === 'reference' ? this.assembly.enumerations.get(type.name) : undefined;
+        const inputContext = this.getConversionContext(enumeration ? idlType.DOMString : attribute.type);
+        const legacyCallback = inputContext.legacyCallback;
+        const convertInput = legacyCallback
+          ? createLegacyCallbackConverter(inputContext, legacyCallback)
+          : inputContext.getJSToIDLConverter();
+        return this.realm.createFunction((thisArgument, argumentsList) => {
+          const value = argumentsList[0];
+          const jsValue = this.#resolveThisValue(thisArgument);
+          const receiver = attribute.static
+            ? null
+            : this.#getReceiverRecord(
+              jsValue,
+              interfaceAssembled,
+              attribute.name,
+              'setter',
+              lenient,
+            );
+          if (replaceable) {
+            if (!isObject(jsValue)) return this.#throwTypeError('Invalid receiver');
+            if (!Reflect.defineProperty(jsValue, attribute.name, {
+              configurable: true,
+              enumerable: true,
+              value,
+              writable: true,
+            })) {
+              return this.#throwTypeError(
+                `Could not replace attribute ${attribute.name}`,
+              );
+            }
+            return undefined;
+          }
+          if (receiver === invalidReceiver || lenientSetter) return undefined;
+
+          if (putForwards) {
+            if (!receiver) throw new InternalError('PutForwards used on a static attribute');
+            if (!isObject(jsValue)) {
+              return this.#throwTypeError('Invalid receiver');
+            }
+            const forwarded = (jsValue as Record<string, unknown>)[attribute.name];
+            if (!isObject(forwarded)) {
+              return this.#throwTypeError(
+                `${attribute.name} does not reference an object`,
+              );
+            }
+            Reflect.set(forwarded, putForwards, value);
+            return undefined;
+          }
+
+          if (observableArrayElementType) {
+            if (!receiver) {
+              throw new InternalError('Observable array attribute was not regular');
+            }
+            this.#observableArrays.replace(
+              receiver,
+              attribute,
+              observableArrayElementType,
+              value,
+            );
+            return undefined;
+          }
+
+          const idlValue = convertInput(value);
+          // https://webidl.spec.whatwg.org/#dfn-attribute-setter
+          if (enumeration && !enumeration.hasValue(idlValue as string)) return undefined;
+          const steps = binding.attributeSteps;
+          if (!steps?.set) {
+            throw missingImplementation(
+              assembled,
+              `attribute setter ${attribute.name}`,
             );
           }
+          steps.set(receiver, idlValue);
           return undefined;
-        }
-        if (receiver === invalidReceiver || lenientSetter) return undefined;
-
-        if (putForwards) {
-          if (!receiver) throw new InternalError('PutForwards used on a static attribute');
-          if (!isObject(jsValue)) {
-            return this.#throwTypeError('Invalid receiver');
-          }
-          const forwarded = (jsValue as Record<string, unknown>)[attribute.name];
-          if (!isObject(forwarded)) {
-            return this.#throwTypeError(
-              `${attribute.name} does not reference an object`,
-            );
-          }
-          Reflect.set(forwarded, putForwards, value);
-          return undefined;
-        }
-
-        if (observableArrayElementType) {
-          if (!receiver) {
-            throw new InternalError('Observable array attribute was not regular');
-          }
-          this.#observableArrays.replace(
-            receiver,
-            attribute,
-            observableArrayElementType,
-            value,
-          );
-          return undefined;
-        }
-
-        const idlValue = convertInput(value, this.defaultConversionContext);
-        // https://webidl.spec.whatwg.org/#dfn-attribute-setter
-        if (enumeration && !enumeration.hasValue(idlValue as string)) return undefined;
-        const steps = binding.attributeSteps;
-        if (!steps?.set) {
-          throw missingImplementation(
-            assembled,
-            `attribute setter ${attribute.name}`,
-          );
-        }
-        steps.set(receiver, idlValue);
-        return undefined;
-      }, { length: 1, name: `set ${attribute.name}` }),
+        }, { length: 1, name: `set ${attribute.name}` });
+      },
     );
   }
 
@@ -1187,17 +1204,13 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): JSFunction {
     const source = operations.callables[0];
     if (!source) throw new InternalError(`Operation group ${name} is empty`);
-    const resolve = createOverloadResolver(operations, this.defaultConversionContext);
+    const resolve = createOverloadResolver(operations, this);
     const interfaceAssembled = getMemberInterface(assembled);
     const definitionBinding = this.getDefinitionBinding(assembled);
     for (const { primary } of operations.callables) {
       const binding = definitionBinding.getOrCreateMemberRecord(primary);
       binding.isDefaultOperation = hasExtendedAttribute(primary.extendedAttributes, 'Default');
-      binding.convertResult ??= createIDLToJSConverter(
-        primary.returns,
-        this.assembly,
-        !binding.isDefaultOperation && primary.allocateIn !== undefined,
-      );
+      binding.convertResult = this.getConversionContext(primary.returns).getIDLToJSConverter();
     }
     return this.#getOrCreateMemberFunction(
       'operation',
@@ -1215,41 +1228,37 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
             )
             : null;
           // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
-          // An explicit allocateIn declaration selects a different result realm without changing ownership.
           // https://github.com/whatwg/webidl/issues/135
-          let resultContext = (receiver?.binding ?? this).defaultConversionContext;
-
+          const resultBinding = receiver?.binding ?? this;
           const overload = resolve(argumentsList);
           const operation = overload.callable.primary;
-          if (operation.allocateIn === 'method') {
-            resultContext = { binding: resultContext.binding, realm: this.realm };
-          }
           const operationBinding = operation === source.primary
             ? binding
             : definitionBinding.getOrCreateMemberRecord(operation);
           const steps = operationBinding.operationSteps;
-          const convertResult = operationBinding.convertResult!;
           if (operationBinding.isDefaultOperation) {
             if (!receiver || !interfaceAssembled) {
               throw new InternalError('Default operation used as a static operation');
             }
-            return convertResult(
+            return operationBinding.convertResult!(
               this.#runDefaultOperation(interfaceAssembled, receiver),
-              this.defaultConversionContext,
             );
           }
           if (!steps) {
             throw missingImplementation(assembled, `operation ${name}`);
           }
+          const convertResult = resultBinding === this
+            ? operationBinding.convertResult!
+            : resultBinding.getConversionContext(operation.returns).getIDLToJSConverter();
           const result = steps(receiver, ...overload.values);
-          return convertResult(result, resultContext);
+          return convertResult(result);
         } catch (exception) {
           return this.#handlePromiseException(
             source.primary.returns,
             exception,
             // Invocation failure creates a new promise in the method realm;
             // allocation of a successful implementation result is unrelated.
-            this.defaultConversionContext,
+            this.getConversionContext(source.primary.returns),
           );
         }
       }, { length: operations.minimumArgumentCount, name }),
@@ -1276,7 +1285,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const result = this.realm.createOrdinaryObject(
       this.realm.intrinsics.objectPrototype,
     );
-    const context = { binding: receiver.binding, realm: this.realm };
 
     for (const entry of this.#getDefaultToJSONAttributes(assembled)) {
       const { attribute, implementation } = entry;
@@ -1286,7 +1294,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       defineProperty(result, attribute.name, {
         configurable: true,
         enumerable: true,
-        value: idlToJS(idlValue, attribute.type, context),
+        value: idlToJS(idlValue, receiver.binding.getConversionContext(attribute.type, this.realm)),
         writable: true,
       });
     }

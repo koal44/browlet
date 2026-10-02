@@ -2,7 +2,7 @@ import { isObject, type JSFunction } from '../js-engine/index';
 import { Stamper } from '../infra/stamper';
 import type { AssembledInterface } from './assembled';
 import { CallbackFunctionCarrier } from './callback';
-import { jsToIDL, idlToJS, type ConversionContext } from './conversion';
+import { jsToIDL, idlToJS } from './conversion';
 import { reference, type IterableMember } from './core/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance,
@@ -118,22 +118,18 @@ export class SynchronousIterableBinding {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'forEach'
         );
-        const callback = jsToIDL(
-          argumentsList[0],
-          functionType,
-          this.#binding.defaultConversionContext,
-        );
+        const callback = jsToIDL(argumentsList[0], this.#binding.getConversionContext(functionType));
         if (!CallbackFunctionCarrier.is(callback)) {
           throw new InternalError('Function conversion did not produce a callback');
         }
-        const context = { binding: receiver.binding, realm: this.#binding.realm };
+        const binding = receiver.binding;
         let pairs = this.#getValuePairs(receiver.implInst, assembled, member);
         for (let index = 0; index < pairs.length; index++) {
           const [key, value] = pairs[index]!;
           callback.invoke(
             [
-              idlToJS(value, member.value, context),
-              idlToJS(key, member.key!, context),
+              idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm)),
+              idlToJS(key, binding.getConversionContext(member.key!, this.#binding.realm)),
               receiver.platformObject,
             ],
             'rethrow',
@@ -210,9 +206,9 @@ export class SynchronousIterableBinding {
     iterator.index++;
     // The collection owns unprojected interface values. Iterator result allocation
     // still belongs to the next method's realm, independently of those identities.
-    const context = { binding: receiver.binding, realm: this.#binding.realm };
+    const binding = receiver.binding;
     return this.#binding.realm.createIteratorResultObject(
-      this.#convertPairResult(pair, member, iterator.kind, context),
+      this.#convertPairResult(pair, member, iterator.kind, binding),
       false,
     );
   }
@@ -222,14 +218,14 @@ export class SynchronousIterableBinding {
     [key, value]: ValuePair,
     member: IterableMember,
     kind: IterationKind,
-    context: ConversionContext,
+    binding: RealmBinding,
   ): unknown {
     const convertedKey = kind === 'value'
       ? undefined
-      : idlToJS(key, member.key!, context);
+      : idlToJS(key, binding.getConversionContext(member.key!, this.#binding.realm));
     const convertedValue = kind === 'key'
       ? undefined
-      : idlToJS(value, member.value, context);
+      : idlToJS(value, binding.getConversionContext(member.value, this.#binding.realm));
 
     if (kind === 'key') return convertedKey;
     if (kind === 'value') return convertedValue;
