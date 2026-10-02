@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm } from './test-realm';
-import { BindingWorld } from '../../src/web-idl/binding-world';
+import { BindingWorld } from '../../src/web-idl/binding/world';
 import { jsToIDL } from '../../src/web-idl/conversion';
 import { TypeError as InternalTypeError } from '../../src/infra/exceptions';
 import type { InternalPromise } from '../../src/infra/promises';

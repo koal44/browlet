@@ -1,11 +1,12 @@
-import type { ConversionContext } from './conversion-context';
-import { InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType } from '../infra/promises';
-import type { RealmBinding } from './realm-binding';
-import type { BindingContext } from './binding-context';
-import { jsToIDL, idlToJS } from './conversion';
-import { implementationType, type ImplementationType, type WebIDLType } from './core/index';
-import type { WebIDLRealm } from './realm';
-import { InternalError } from '../infra/internal-error';
+import type { ConversionContext } from '../conversion-context';
+import { InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType } from '../../infra/promises';
+import type { RealmBinding } from '../binding/realm';
+import type { BindingContext } from '../binding/context';
+import { jsToIDL, idlToJS } from '../conversion';
+import { implementationType, type ImplementationType, type WebIDLType } from '../core/index';
+import type { PromiseType } from '../core/types';
+import type { WebIDLRealm } from '../environment';
+import { InternalError } from '../../infra/internal-error';
 
 /** A realm-owned promise with its fulfillment type and settlement lifecycle. */
 export class PromiseCarrier {
@@ -145,6 +146,25 @@ export class PromiseCarrier {
     return P.fromNative(this.promise, (value) =>
       convertValue(jsToIDL(value, context)), implementationType<Result>(this.type));
   }
+}
+
+/** Expose a converted promise or a declared implementation promise whose fulfillment type matches. */
+// https://webidl.spec.whatwg.org/#es-promise
+export function idlToJSPromise(value: unknown, context: ConversionContext): Promise<unknown> {
+  if (PromiseCarrier.is(value)) return value.promise;
+  if (value instanceof InternalPromise) {
+    const type = context.resolvedType as PromiseType;
+    const assembly = context.binding.assembly;
+    if (
+      value.type.kind === 'implementation' ||
+      assembly.getConversionTypeKey(value.type as ImplementationType<unknown>) !==
+      assembly.getConversionTypeKey(type.type)
+    ) {
+      throw new InternalError('Promise result type does not match its Web IDL declaration');
+    }
+    return value.backing;
+  }
+  throw new InternalError('Expected a declared Promise result');
 }
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */

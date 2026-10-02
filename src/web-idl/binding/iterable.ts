@@ -1,16 +1,15 @@
-import { isObject, type JSFunction } from '../js-engine/index';
-import { Stamper } from '../infra/stamper';
-import type { AssembledInterface } from './assembled';
-import { CallbackFunctionCarrier } from './callback';
-import { jsToIDL, idlToJS } from './conversion';
-import { reference, type IterableMember } from './core/index';
+import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../js-engine/index';
+import { Stamper } from '../../infra/stamper';
+import type { AssembledInterface } from '../assembled';
+import { CallbackFunctionCarrier } from '../constructs/callback';
+import { jsToIDL, idlToJS } from '../conversion';
+import { reference, type IterableMember } from '../core/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance,
   type PlatformRecord,
 } from './platform-object';
-import { defineDataProperty, defineMethod } from './property';
-import type { RealmBinding } from './realm-binding';
-import { InternalError } from '../infra/internal-error';
+import type { RealmBinding } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 // Value pairs use the implementation's existing entry tuples.
 export type ValuePair<Key = unknown, Value = unknown> = [key: Key, value: Value];
@@ -42,7 +41,7 @@ export class SynchronousIterableBinding {
   // properties.
   defineIndexedMethods(target: object, valueIterable: boolean): void {
     const { iteration } = this.#binding.realm.intrinsics;
-    defineMethod(target, Symbol.iterator, iteration.arrayValues, false);
+    defineMethod(target, Symbol.iterator, iteration.arrayValues);
     if (!valueIterable) return;
 
     defineDataProperty(target, 'entries', iteration.arrayEntries);
@@ -60,7 +59,7 @@ export class SynchronousIterableBinding {
     const entries = this.#createIteratorMethod(
       assembled, member, 'key+value', 'entries', '%Symbol.iterator%'
     );
-    defineMethod(target, Symbol.iterator, entries, false);
+    defineMethod(target, Symbol.iterator, entries);
     defineDataProperty(target, 'entries', entries);
     defineDataProperty(
       target,
@@ -148,8 +147,8 @@ export class SynchronousIterableBinding {
     assembled: AssembledInterface,
     member: IterableMember,
   ): object {
-    const definitionBinding = this.#binding.getDefinitionBinding(assembled);
-    if (definitionBinding.iteratorPrototype) return definitionBinding.iteratorPrototype;
+    const implementationBinding = this.#binding.getImplementationBinding(assembled);
+    if (implementationBinding.iteratorPrototype) return implementationBinding.iteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
       this.#binding.realm.intrinsics.iteration.iteratorPrototype,
@@ -165,7 +164,7 @@ export class SynchronousIterableBinding {
       value: `${assembled.primary.name} Iterator`,
       writable: false,
     });
-    definitionBinding.iteratorPrototype = prototype;
+    implementationBinding.iteratorPrototype = prototype;
     return prototype;
   }
 
@@ -274,6 +273,11 @@ export class SynchronousIterableBinding {
     throw new this.#binding.realm.intrinsics.typeError(message);
   }
 }
+
+/** Read the implementation's current key/value pairs for default iteration. */
+export type ValuePairsSteps = (
+  this: StampedImplInstance,
+) => ValuePair[];
 
 type StampedDefaultIterator<T extends object = object> = T & DefaultIteratorStamper;
 

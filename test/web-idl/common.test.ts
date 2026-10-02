@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 
-import { CallbackFunctionCarrier } from '../../src/web-idl/callback';
+import { CallbackFunctionCarrier } from '../../src/web-idl/constructs/callback';
 import {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL, functionIDL,
   voidFunctionIDL, webIDLCommonDefinitions,
-} from '../../src/web-idl/common-definitions';
+} from '../../src/web-idl/core/common';
 import { jsToIDL } from '../../src/web-idl/conversion';
 import { reference } from '../../src/web-idl/core/index';
 import { serializeDefinitions } from '../../src/web-idl/core/index';

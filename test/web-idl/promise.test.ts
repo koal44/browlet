@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm } from './test-realm';
-import { BindingWorld } from '../../src/web-idl/binding-world';
+import { BindingWorld } from '../../src/web-idl/binding/world';
 import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType, sequence,
 } from '../../src/web-idl/core/index';
-import { PromiseCarrier, getPromiseForWaitingForAll, waitForAll } from '../../src/web-idl/promise';
+import { PromiseCarrier, getPromiseForWaitingForAll, waitForAll } from '../../src/web-idl/constructs/promise';
 
 describe('Web IDL promises', () => {
   it('wraps JavaScript values in a target-realm PromiseCapability', async () => {

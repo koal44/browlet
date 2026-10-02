@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
 } from '../../src/web-idl/core/index';
@@ -64,14 +64,14 @@ describe('Web IDL namespace objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const namespaceBinding = binding.getDefinitionBinding(assembly.namespaces.get(namespace.name)!);
-    namespaceBinding.getOrCreateMemberRecord(version).attributeSteps = {
+    const namespaceBinding = binding.getImplementationBinding(assembly.namespaces.get(namespace.name)!);
+    namespaceBinding.getOrCreateMemberBinding(version).attributeSteps = {
       get(receiver) {
         receivers.push(receiver);
         return '1.0';
       },
     };
-    namespaceBinding.getOrCreateMemberRecord(echo).operationSteps = function(receiver, value) {
+    namespaceBinding.getOrCreateMemberBinding(echo).operationSteps = function(receiver, value) {
       receivers.push(receiver);
       return value;
     };
@@ -93,11 +93,11 @@ describe('Web IDL namespace objects', () => {
     expect(Reflect.get(tools, 'READY')).toBe(7);
     expect(Reflect.has(tools, 'hidden')).toBe(false);
     expect(Reflect.has(realm.global, 'Nested')).toBe(false);
-    expect(Reflect.get(binding.getInterfacePrototypeObject(binding.resolveInterface('Nested')), 'constructor')).toBe(Nested);
+    expect(Reflect.get(binding.getImplementationBinding(binding.resolveInterface('Nested')).getInterfacePrototypeObject(), 'constructor')).toBe(Nested);
     expect(Object.prototype.toString.call(
       requireObject(Reflect.get(Nested, 'prototype')),
     )).toBe('[object Tools.Nested]');
-    expect(binding.getNamespaceObject(binding.assembly.namespaces.get('Tools')!)).toBe(tools);
+    expect(binding.getImplementationBinding(binding.assembly.namespaces.get('Tools')!).getNamespaceObject()).toBe(tools);
 
     expect(Reflect.getOwnPropertyDescriptor(tools, 'version')).toMatchObject({
       configurable: true,

@@ -1,12 +1,12 @@
 import {
   createObservableArray, type ObservableArrayHandle,
-} from '../infra/observable-array';
-import { jsToIDL } from './conversion';
+} from '../../infra/observable-array';
+import { jsToIDL } from '../conversion';
 import {
   idlType, type AttributeMember, type WebIDLType,
-} from './core/index';
+} from '../core/index';
 import type { PlatformRecord } from './platform-object';
-import type { RealmBinding } from './realm-binding';
+import type { RealmBinding } from './realm';
 
 export class ObservableArrayBinding {
   #binding: RealmBinding;
@@ -94,3 +94,9 @@ export class ObservableArrayBinding {
     return handle;
   }
 }
+
+/** Implementation hooks run when an observable array element is set or removed. */
+export type ObservableArraySteps = {
+  delete?(this: object, value: unknown, index: number): void;
+  set?(this: object, value: unknown, index: number): void;
+};

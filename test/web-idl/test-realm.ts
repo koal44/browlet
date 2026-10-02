@@ -1,7 +1,7 @@
 import { type JSFunction, type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
 import type {
   CallbackHooks, SecurityCheckType, WebIDLRealm,
-} from '../../src/web-idl/realm';
+} from '../../src/web-idl/environment';
 
 /*
  * Web IDL's unit tests need a JavaScript realm, not Browlet's HTML callback

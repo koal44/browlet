@@ -1,17 +1,16 @@
-import { isObject, type JSFunction } from '../js-engine/index';
-import { InternalPromise } from '../infra/promises';
-import { Stamper } from '../infra/stamper';
-import type { AssembledArgument, AssembledCallable, AssembledInterface } from './assembled';
-import { endOfIteration } from './async-sequence';
-import { jsToIDL, idlToJS } from './conversion';
-import { idlType, type AsyncIterableMember } from './core/index';
-import type { AsyncIteratorSteps } from './definition-binding';
+import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../js-engine/index';
+import { InternalPromise } from '../../infra/promises';
+import { Stamper } from '../../infra/stamper';
+import type { AssembledArgument, AssembledCallable, AssembledInterface } from '../assembled';
+import { endOfIteration } from '../constructs/async-sequence';
+import { jsToIDL, idlToJS } from '../conversion';
+import { idlType, type AsyncIterableMember } from '../core/index';
+
 import { missingArgument } from './overload';
-import { getPlatformRecord, type PlatformRecord } from './platform-object';
-import { PromiseCarrier } from './promise';
-import { defineDataProperty, defineMethod } from './property';
-import type { RealmBinding } from './realm-binding';
-import { InternalError } from '../infra/internal-error';
+import { getPlatformRecord, type PlatformRecord, type StampedImplInstance } from './platform-object';
+import { PromiseCarrier } from '../constructs/promise';
+import type { RealmBinding } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 /** Install async iterator methods and prototypes in one realm. */
 export class AsyncIterableBinding {
@@ -34,14 +33,14 @@ export class AsyncIterableBinding {
         assembled, callable, 'value', 'values', 'values',
       );
       defineDataProperty(target, 'values', values);
-      defineMethod(target, Symbol.asyncIterator, values, false);
+      defineMethod(target, Symbol.asyncIterator, values);
       return;
     }
 
     const entries = this.#createIteratorMethod(
       assembled, callable, 'key+value', 'entries', '%Symbol.asyncIterator%',
     );
-    defineMethod(target, Symbol.asyncIterator, entries, false);
+    defineMethod(target, Symbol.asyncIterator, entries);
     defineDataProperty(target, 'entries', entries);
     defineDataProperty(target, 'keys',
       this.#createIteratorMethod(assembled, callable, 'key', 'keys', 'keys'));
@@ -77,8 +76,8 @@ export class AsyncIterableBinding {
 
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
   #getIteratorPrototypeObject(assembled: AssembledInterface, member: AsyncIterableMember): object {
-    const definitionBinding = this.#binding.getDefinitionBinding(assembled);
-    if (definitionBinding.asyncIteratorPrototype) return definitionBinding.asyncIteratorPrototype;
+    const implementationBinding = this.#binding.getImplementationBinding(assembled);
+    if (implementationBinding.asyncIteratorPrototype) return implementationBinding.asyncIteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
       this.#binding.realm.intrinsics.iteration.asyncIteratorPrototype,
@@ -101,7 +100,7 @@ export class AsyncIterableBinding {
       value: `${assembled.primary.name} AsyncIterator`,
       writable: false,
     });
-    definitionBinding.asyncIteratorPrototype = prototype;
+    implementationBinding.asyncIteratorPrototype = prototype;
     return prototype;
   }
 
@@ -382,6 +381,13 @@ class AsyncIteratorStamper extends Stamper {
     return #state in value ? value.#state : undefined;
   }
 }
+
+/** Implementation hooks that create, advance, and close an async iterator. */
+export type AsyncIteratorSteps = {
+  create(target: StampedImplInstance, argumentsList: unknown[]): object;
+  next(iterator: object): Promise<unknown> | InternalPromise<unknown>;
+  return?(iterator: object, value: unknown): Promise<unknown> | InternalPromise<unknown>;
+};
 
 type IterationKind = 'key' | 'key+value' | 'value';
 

@@ -38,6 +38,28 @@ export function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
   return Object.hasOwn(descriptor, 'get') || Object.hasOwn(descriptor, 'set');
 }
 
+/** Define a writable, enumerable, configurable own data property; throw if refused. */
+// https://tc39.es/ecma262/#sec-createdatapropertyorthrow
+export function defineDataProperty(target: object, key: PropertyKey, value: unknown): void {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
+}
+
+/** Define a writable, configurable, non-enumerable own method; throw if refused. */
+// Public, non-enumerable case of https://tc39.es/ecma262/#sec-definemethodproperty
+export function defineMethod(target: object, key: PropertyKey, method: JSMethod): void {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: false,
+    value: method,
+    writable: true,
+  });
+}
+
 export function ordinarySetWithOwnDescriptor(
   target: object,
   property: PropertyKey,

@@ -1,11 +1,11 @@
-import { isObject } from '../js-engine/index';
-import type { ObservableArrayHandle } from '../infra/observable-array';
-import { Stamper } from '../infra/stamper';
-import type { AssembledInterface } from './assembled';
-import type { RealmBinding } from './realm-binding';
-import type { AttributeMember } from './core/index';
-import type { WebIDLRealm } from './realm';
-import { InternalError } from '../infra/internal-error';
+import { isObject } from '../../js-engine/index';
+import type { ObservableArrayHandle } from '../../infra/observable-array';
+import { Stamper } from '../../infra/stamper';
+import type { AssembledInterface } from '../assembled';
+import type { RealmBinding } from './realm';
+import type { AttributeMember } from '../core/index';
+import type { WebIDLRealm } from '../environment';
+import { InternalError } from '../../infra/internal-error';
 
 /** An implementation instance stamped with its private platform record. */
 export type StampedImplInstance<T extends object = object> = T & ImplementationStamper;
@@ -130,6 +130,16 @@ export function getPlatformObject(
   implInst: unknown,
 ): StampedPlatformObject | undefined {
   return getImplementationRecord(implInst)?.platformObject;
+}
+
+/** Recognize a stamped platform object or a declared proxy object in this binding world. */
+// https://webidl.spec.whatwg.org/#idl-objects
+export function isPlatformObject(
+  value: unknown,
+  binding: RealmBinding,
+): boolean {
+  if (getPlatformRecord(value)?.binding.world === binding.world) return true;
+  return binding.assembly.proxyObjects.is(value);
 }
 
 class ImplementationStamper extends Stamper {

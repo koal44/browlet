@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { BindingWorld } from '../../src/web-idl/binding-world';
+import { BindingWorld } from '../../src/web-idl/binding/world';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   endOfIteration, AsyncSequenceCarrier, type AsyncSequenceValue,
   type AsyncIteratorCarrier,
-} from '../../src/web-idl/async-sequence';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+} from '../../src/web-idl/constructs/async-sequence';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
 import {
   asyncSequence, defineDictionary, defineInterface, dictMember, idlType,
@@ -209,10 +209,10 @@ describe('Web IDL async sequences', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new AsyncSequenceConsumerImpl();
-    interfaceBinding.getOrCreateMemberRecord(asyncOperation).operationSteps = (_receiver, _value) => 'async';
-    interfaceBinding.getOrCreateMemberRecord(stringOperation).operationSteps = (_receiver, _value) => 'string';
+    interfaceBinding.getOrCreateMemberBinding(asyncOperation).operationSteps = (_receiver, _value) => 'async';
+    interfaceBinding.getOrCreateMemberBinding(stringOperation).operationSteps = (_receiver, _value) => 'string';
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     let gets = 0;
     const source = Object.defineProperty({}, Symbol.asyncIterator, {

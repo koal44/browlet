@@ -7,7 +7,7 @@
     "outDir": "../../dist/.typecheck/web-idl",
     "tsBuildInfoFile": "../../dist/.typecheck/web-idl.tsbuildinfo"
   },
-  "include": ["./*.ts"],
+  "include": ["./*.ts", "./binding/*.ts", "./constructs/*.ts"],
   "references": [
     { "path": "../js-engine" },
     { "path": "./core" },

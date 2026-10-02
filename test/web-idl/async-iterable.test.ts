@@ -3,20 +3,20 @@ import { describe, expect, it } from 'vitest';
 import { internalType, type InternalPromiseWithResolvers } from '../../src/infra/promises';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { endOfIteration } from '../../src/web-idl/async-sequence';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
+import { endOfIteration } from '../../src/web-idl/constructs/async-sequence';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
+import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   defineInterface, idlType, type AsyncIterableMember,
 } from '../../src/web-idl/core/index';
-import { missingArgument } from '../../src/web-idl/overload';
+import { missingArgument } from '../../src/web-idl/binding/overload';
 
 describe('Web IDL asynchronously iterable declarations', () => {
   it('projects pair methods, iterator prototypes, arguments, and results', async () => {
     const { binding, member, definition, realm } = createPairBinding();
     const initialized: unknown[][] = [];
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create(_target, argumentsList) {
         initialized.push(argumentsList);
         return { position: 0 };
@@ -84,15 +84,15 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const otherBinding = new RealmBinding(
       binding.assembly, new Realm(), binding.world, (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next: () => binding.realm.Promise.try(() => ['one', 1], internalType<(string | number)[]>('Array')),
       return: () => binding.realm.Promise.resolve(undefined, idlType.undefined),
     };
-    const original = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
-    const other = otherBinding.getDefinitionBinding(otherBinding.resolveInterface(definition.name));
+    const original = binding.getImplementationBinding(binding.resolveInterface(definition.name));
+    const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
-    other.getOrCreateMemberRecord(member).asyncIteratorSteps = original.getOrCreateMemberRecord(member).asyncIteratorSteps;
+    other.getOrCreateMemberBinding(member).asyncIteratorSteps = original.getOrCreateMemberBinding(member).asyncIteratorSteps;
     const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
@@ -119,15 +119,15 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const otherBinding = new RealmBinding(
       binding.assembly, otherRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next: () => binding.realm.Promise.try(() => endOfIteration, idlType.symbol),
       return: () => binding.realm.Promise.resolve(undefined, idlType.undefined),
     };
-    const original = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
-    const other = otherBinding.getDefinitionBinding(otherBinding.resolveInterface(definition.name));
+    const original = binding.getImplementationBinding(binding.resolveInterface(definition.name));
+    const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
-    other.getOrCreateMemberRecord(member).asyncIteratorSteps = original.getOrCreateMemberRecord(member).asyncIteratorSteps;
+    other.getOrCreateMemberBinding(member).asyncIteratorSteps = original.getOrCreateMemberBinding(member).asyncIteratorSteps;
     const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
@@ -139,7 +139,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
 
   it('keeps iterator state hidden and rejects forged or proxied receivers', async () => {
     const { binding, member, definition, realm } = createPairBinding();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next: () => realm.Promise.try(() => ['one', 1], internalType<(string | number)[]>('Array')),
       return: () => realm.Promise.resolve(undefined, idlType.undefined),
@@ -176,7 +176,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const { binding, member, definition } = createPairBinding();
     const pending: InternalPromiseWithResolvers<unknown>[] = [];
     const calls: string[] = [];
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next() {
         calls.push('next');
@@ -192,10 +192,10 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const otherBinding = borrowed ? new RealmBinding(
       binding.assembly, new Realm(), binding.world, (ctx) => ({ realm: ctx.realm }),
     ) : binding;
-    const original = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
-    const other = otherBinding.getDefinitionBinding(otherBinding.resolveInterface(definition.name));
+    const original = binding.getImplementationBinding(binding.resolveInterface(definition.name));
+    const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
-    other.getOrCreateMemberRecord(member).asyncIteratorSteps = original.getOrCreateMemberRecord(member).asyncIteratorSteps;
+    other.getOrCreateMemberBinding(member).asyncIteratorSteps = original.getOrCreateMemberBinding(member).asyncIteratorSteps;
     const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
@@ -220,7 +220,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
 
   it('keeps later calls serialized after return settles', async () => {
     const { binding, member, definition, realm } = createPairBinding();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next: () => realm.Promise.try(() => endOfIteration, idlType.symbol),
       return: () => realm.Promise.resolve(undefined, idlType.undefined),
@@ -265,8 +265,8 @@ describe('Web IDL asynchronously iterable declarations', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new AsyncValuesImpl();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).asyncIteratorSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new AsyncValuesImpl();
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).asyncIteratorSteps = {
       create: () => ({}),
       next: () => realm.Promise.try(() => endOfIteration, idlType.symbol),
     };
@@ -317,7 +317,7 @@ function createPairBinding(): {
   const binding = new RealmBinding(
     new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new AsyncPairsImpl();
+  binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new AsyncPairsImpl();
   return { binding, definition, member, realm };
 }
 

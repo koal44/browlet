@@ -1,12 +1,16 @@
+import {
+  RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
+  TypeError as InternalTypeError,
+} from '../infra/exceptions';
 import type { DefaultValue, ExtendedAttribute, WebIDLType } from './core/types';
 import type { ConversionRules, IntegerConversionMode, ResolvedType } from './assembly';
 import type { AssembledCallbackFunction } from './assembled';
-import type { WebIDLRealm } from './realm';
-import type { RealmBinding } from './realm-binding';
+import type { WebIDLRealm } from './environment';
+import type { RealmBinding } from './binding/realm';
 import {
-  createJSToIDLConverter, createIDLToJSConverter, integerTypes, jsToIDL,
-  type IDLValue, type ValueConverter,
+  createJSToIDLConverter, createIDLToJSConverter, jsToIDL, type IDLValue, type ValueConverter,
 } from './conversion';
+import { integerTypes } from './constructs/simple';
 
 /** A declared type's conversion rules, projection binding, and allocation realm. */
 export class ConversionContext<Type extends WebIDLType = WebIDLType> {
@@ -56,6 +60,19 @@ export class ConversionContext<Type extends WebIDLType = WebIDLType> {
   /** Select a nested type's own rules while preserving implementation and allocation ownership. */
   forType<Other extends WebIDLType>(type: Other): ConversionContext<Other> {
     return this.binding.getConversionContext(type, this.realm);
+  }
+
+  /** Throw a new TypeError in this conversion's allocation realm. */
+  throwTypeError(message: string): never {
+    throw new this.realm.intrinsics.typeError(message);
+  }
+
+  /** Realize internal coercion failures in this realm; preserve author-thrown exceptions. */
+  throwConversionError(error: unknown): never {
+    if (InternalTypeError.is(error)) throw new this.realm.intrinsics.typeError(error.message);
+    if (InternalRangeError.is(error)) throw new this.realm.intrinsics.rangeError(error.message);
+    if (InternalSyntaxError.is(error)) throw new this.realm.intrinsics.syntaxError(error.message);
+    throw error;
   }
 
   /** Create a declaration's default using this type and realm, with fresh mutable values. */

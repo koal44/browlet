@@ -5,7 +5,7 @@ import {
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { BindingWorld, type BindingContext, type WebIDLEnvironment } from '../../src/web-idl/index';
-import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
+import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import { streamsIDLDefinitions } from '../../src/streams/index';
 
 /** A standalone realm environment with facilities supplied by the unit host. */

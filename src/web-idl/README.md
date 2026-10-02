@@ -10,8 +10,8 @@ records backend constraints and unresolved behavior.
 
 | Entry | Intended consumer |
 | --- | --- |
-| [`core/index.ts`](core/index.ts) | Host-neutral declarations, type/member helpers, IDL serialization, and DOMException requests; no engine or binding runtime |
-| [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, stamped-object types, and runtime definitions |
+| [`core/index.ts`](core/index.ts) | Host-neutral declarations, common definitions, IDL serialization, and DOMException state and recognition; no engine or binding runtime |
+| [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, and stamped-object types |
 
 Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration callbacks with typed `BindingContext` arguments.
@@ -22,13 +22,30 @@ cannot hide a dependency in the standalone surface.
 | --- | --- |
 | `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
+| `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
 | `assembly.ts` | Compose the assembled collections and answer type queries across them |
 | `assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
-| `binding-world.ts`, `binding-context.ts` | Register realms and expose their shared boundary operations |
-| `realm-binding.ts`, `definition-binding.ts` | Realm-owned prototypes, functions, allocation, and member adapters |
-| `implementation-binding.ts`, `platform-object.ts` | Construction dependencies, IDL-to-implementation conversion, and stamped identity |
-| `conversion.ts`, `overload.ts`, `callback.ts`, `promise.ts` | Author values, invocation, and Promise conversion |
-| `legacy-platform-object.ts`, `collection.ts`, `observable-array.ts`, `async-sequence.ts` | Specialized property and iteration behavior |
+| `binding/world.ts`, `binding/context.ts` | Register realms and expose their shared boundary operations |
+| `environment.ts` | Environment, realm-facility, and callback-lifecycle contracts supplied to Web IDL |
+| `binding/realm.ts` | Realm-wide allocation, conversion caches, projection, and receiver/exposure checks |
+| `binding/implementation.ts`, `binding/member.ts` | Registered implementation steps and the platform objects and functions that invoke them |
+| `binding/register.ts` | Connect assembled declarations to implementation factories, members, and explicit bindings |
+| `binding/overload.ts` | Select a callable and convert its arguments for invocation |
+| `constructs/implementation.ts` | Implementation construction dependencies and IDL-to-implementation conversion |
+| `conversion.ts`, `conversion-context.ts` | Shared conversion dispatch, type and realm context, and error realization |
+| `constructs/simple.ts`, `dictionary.ts`, `sequence.ts`, `record.ts`, `union.ts`, `buffer-source.ts` | Type-specific conversion, including dictionary carriers and frozen arrays |
+| `constructs/callback.ts`, `promise.ts`, `async-sequence.ts` | Callback, Promise, and async-sequence conversion, carriers, and invocation |
+| `constructs/interface.ts` | Convert interface-typed values through their implementation/platform association |
+| `binding/platform-object.ts`, `binding/global-platform-object.ts`, `binding/legacy-platform-object.ts` | Stamped identity and platform-object behavior |
+| `binding/iterable.ts`, `binding/async-iterable.ts`, `binding/collection.ts`, `binding/observable-array.ts` | Install interface members and retain their iterator or collection state |
+
+The `binding/` directory owns registration, platform identity, and the installation
+and invocation of platform APIs. The `constructs/` directory groups value
+conversion, carriers, and their operations by construct. `ImplementationConverter`
+stays with those conversions: it consumes carriers rather than installing an API.
+Callback and Promise invocation stay with their carriers; retaining a realm binding
+alone does not determine a module's placement. Shared assembly and conversion
+dispatch remain at the subsystem root.
 
 ## Declaring an interface
 
@@ -48,6 +65,14 @@ Declarations take one environment type, which also determines their realm type.
 For example, `defineInterface<DOMEnvironment>()` gives its callbacks both
 `ctx.getEnvironment().exec.createEvent()` and `ctx.realm.eventTimeStamp()`.
 The host's binding world must supply that environment contract.
+
+Binding recognizes `DOMExceptionImpl` and its subclasses during projection,
+allocates their backing Error in the selected realm, and applies Core's
+`DOMExceptionStamper` during platform-object initialization. This private stamp
+retains the implementation so Core can recognize projected exceptions and their
+names without reading author-overridden properties or importing Binding's identity
+records. It also observes state restored during deserialization. Internal exception
+requests retain their separate exception-request stamp.
 
 Custom operation and constructor bindings infer converted argument types from
 `arg()` declarations, including optional, defaulted, and variadic arguments.
@@ -170,8 +195,8 @@ The `idlToImpl` step changes an already-converted IDL value into the
 representation consumed by implementation code. It does not repeat author
 coercion or validation. A callback's callable retains the original function,
 realm, and captured context. Numbers and strings already have their implementation
-representation. `createIDLArgumentsToImplConverter()` prepares those choices for a callable;
-`createIDLToImplConverter()` prepares the choice for one argument or member type.
+representation. `ImplementationConverter.createArgumentConverter()` prepares those choices
+for a callable; `createConverter()` prepares the choice for one argument or member type.
 
 `BindingContext.jsToImpl()` combines the two input stages. On the return path,
 `idlToJS()` produces author values; `BindingContext.implToJS()` uses that same
@@ -201,6 +226,15 @@ choices, distinguishing positions, and function lengths. Invocation selects from
 these groups without rebuilding effective overload entries. One final group handles
 all counts beyond the longest variadic declaration, reusing its final argument contract.
 The original declarations remain the keys for member bindings.
+Each realm retains an `ImplementationBinding` for an assembled construct. It owns
+the construct's prototypes, constructor, and other cached platform objects;
+its `MemberBinding` objects own registered steps and generated member functions.
+`RealmBinding` supplies the realm-wide services they share. Declaration-only
+analysis stays in assembly: for example, default-toJSON attribute candidates are
+shared, while each implementation binding filters them for its realm's exposure
+and reads current values on every invocation.
+`registerImplementationBindings()` prepares the implementation steps;
+`BindingWorld.register()` publishes the realm only after that succeeds.
 Bindings prepare fixed input/result conversions while installing callables.
 Dictionary conversion plans retain member converters on first use, while each
 invocation reads the current author properties in specification order. Successful
@@ -229,7 +263,7 @@ Bound implementation callbacks retain the callback invoker and result converter,
 so invocation does not rediscover the callback contract.
 Plans identify primitive arguments that need no projection, allowing invocation
 to reuse the internal argument list. Missing arguments, object projection, and
-exception requests still take the conversion path. `bindCallbackFunction()` creates
+exception requests still take the conversion path. `ImplementationConverter` creates
 an implementation callable from a `CallbackFunctionCarrier` and invocation policy;
 it does not change the author's function realm or necessarily fix its `this` value.
 Bound callbacks are ordinary functions privately stamped with their callback carrier;
@@ -322,7 +356,7 @@ this declaration: legacy indexed/named objects and observable arrays keep their
 existing binding machinery.
 `world.register(realm, createEnvironment)` returns one Binding Context per realm
 in that world. Repeated registration returns the existing context without calling
-the factory again; `world.forRealm(realm)` only looks it up.
+the factory again; `world.getBindingContext(realm)` only looks it up.
 
 Every registration supplies an environment. Its minimum shape is `{ realm }`;
 pure conversion hosts need no execution facilities. Declarations requiring more

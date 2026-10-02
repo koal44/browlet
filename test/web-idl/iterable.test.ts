@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
+import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   BindingWorld, defineInterface, idlType, impl, iter, reference, type IterableMember,
 } from '../../src/web-idl/index';
-import type { ValuePair } from '../../src/web-idl/iterable';
-import { getPlatformRecord } from '../../src/web-idl/platform-object';
+import type { ValuePair } from '../../src/web-idl/binding/iterable';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
 
 describe('Web IDL synchronous iterable declarations', () => {
   it.each(['entries', 'keys', 'values', 'forEach'])(
@@ -50,7 +50,7 @@ describe('Web IDL synchronous iterable declarations', () => {
   it('defines realm-specific pair iteration methods and iterator objects', () => {
     const { binding, member, definition, realm } = createPairBinding();
     const pairs = new WeakMap<object, ValuePair[]>();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).valuePairsSteps = function() {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = function() {
       return pairs.get(this) ?? [];
     };
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
@@ -111,7 +111,7 @@ describe('Web IDL synchronous iterable declarations', () => {
   it('consults the current value-pair list for next and after each callback', () => {
     const { binding, member, definition } = createPairBinding();
     const pairs: ValuePair[] = [['one', 1]];
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).valuePairsSteps = () => pairs;
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => pairs;
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
@@ -170,12 +170,12 @@ describe('Web IDL synchronous iterable declarations', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(collectionInterface.name)).createImplementation = () => new PairCollectionImpl();
+    binding.getImplementationBinding(binding.resolveInterface(collectionInterface.name)).createImplementation = () => new PairCollectionImpl();
     const assembledValue = assembly.interfaces.get('PairValue');
     if (!assembledValue) throw new Error('Missing PairValue interface');
     const createPairValue = (): [object, object] => {
       const implementation = Object.create(
-        binding.getInterfacePrototypeObject(assembledValue),
+        binding.getImplementationBinding(assembledValue).getInterfacePrototypeObject(),
       ) as object;
       const platformObject = new Proxy(implementation, {});
       binding.initializePlatformObject(
@@ -187,7 +187,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     };
     const [keyImplementation, keyObject] = createPairValue();
     const [valueImplementation, valueObject] = createPairValue();
-    binding.getDefinitionBinding(binding.resolveInterface(collectionInterface.name)).getOrCreateMemberRecord(member).valuePairsSteps = () => [[keyImplementation, valueImplementation]];
+    binding.getImplementationBinding(binding.resolveInterface(collectionInterface.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [[keyImplementation, valueImplementation]];
     const collection = binding.createPlatformRecord(
       binding.resolveInterface('InterfacePairCollection'),
     ).platformObject!;
@@ -258,11 +258,11 @@ describe('Web IDL synchronous iterable declarations', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const hiddenPrototype = binding.getInterfacePrototypeObject(binding.resolveInterface(hidden.name));
+    const hiddenPrototype = binding.getImplementationBinding(binding.resolveInterface(hidden.name)).getInterfacePrototypeObject();
     expect(Object.hasOwn(hiddenPrototype, 'entries')).toBe(false);
 
     const pair = createPairBinding();
-    pair.binding.getDefinitionBinding(pair.binding.resolveInterface(pair.definition.name)).getOrCreateMemberRecord(pair.member).valuePairsSteps = () => [];
+    pair.binding.getImplementationBinding(pair.binding.resolveInterface(pair.definition.name)).getOrCreateMemberBinding(pair.member).valuePairsSteps = () => [];
     const object = pair.binding.createPlatformRecord(pair.binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
@@ -279,11 +279,11 @@ describe('Web IDL synchronous iterable declarations', () => {
     const otherBinding = new RealmBinding(
       binding.assembly, otherRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).valuePairsSteps = () => [];
-    const original = binding.getDefinitionBinding(binding.resolveInterface(definition.name));
-    const other = otherBinding.getDefinitionBinding(otherBinding.resolveInterface(definition.name));
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [];
+    const original = binding.getImplementationBinding(binding.resolveInterface(definition.name));
+    const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
-    other.getOrCreateMemberRecord(member).valuePairsSteps = original.getOrCreateMemberRecord(member).valuePairsSteps;
+    other.getOrCreateMemberBinding(member).valuePairsSteps = original.getOrCreateMemberBinding(member).valuePairsSteps;
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
@@ -295,7 +295,7 @@ describe('Web IDL synchronous iterable declarations', () => {
 
   it('keeps iterator state private and independent of author property changes', () => {
     const { binding, member, definition, realm } = createPairBinding();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(member).valuePairsSteps = () => [['one', 1], ['two', 2]];
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [['one', 1], ['two', 2]];
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const next = getMethod(iterator, 'next');
@@ -342,7 +342,7 @@ function createPairBinding(): {
   const binding = new RealmBinding(
     new DefinitionAssembly([...webIDLCommonDefinitions, definition]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new PairCollectionImpl();
+  binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new PairCollectionImpl();
   return { binding, definition, member, realm };
 }
 

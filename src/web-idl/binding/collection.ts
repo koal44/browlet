@@ -1,13 +1,14 @@
-import { isObject, type JSFunction, type JSRealm } from '../js-engine/index';
-import type { AssembledInterface } from './assembled';
-import { jsToIDL, idlToJS, type ValueConverter } from './conversion';
+import {
+  defineDataProperty, defineMethod, isObject, type JSFunction, type JSRealm,
+} from '../../js-engine/index';
+import type { AssembledInterface } from '../assembled';
+import { jsToIDL, idlToJS, type ValueConverter } from '../conversion';
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
-} from './core/index';
+} from '../core/index';
 import { getPlatformRecord, type PlatformRecord } from './platform-object';
-import { defineDataProperty, defineMethod } from './property';
-import type { RealmBinding } from './realm-binding';
-import { InternalError } from '../infra/internal-error';
+import type { RealmBinding } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 /** Share realm ownership, receiver validation, and errors for maplike and setlike bindings. */
 abstract class CollectionBinding {
@@ -70,7 +71,7 @@ export class MaplikeBinding extends CollectionBinding {
       'key+value',
       'entries',
     );
-    defineMethod(target, Symbol.iterator, entries, false);
+    defineMethod(target, Symbol.iterator, entries);
     defineDataProperty(target, 'entries', entries);
     defineDataProperty(
       target,
@@ -329,7 +330,7 @@ export class SetlikeBinding extends CollectionBinding {
       'value',
       'values',
     );
-    defineMethod(target, Symbol.iterator, values, false);
+    defineMethod(target, Symbol.iterator, values);
     defineDataProperty(
       target,
       'entries',

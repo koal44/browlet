@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getMethod, getV, isAccessorDescriptor, isCallable, isConstructor, isDataDescriptor, isObject, JSRealm,
+  defineDataProperty, defineMethod, getMethod, getV, isAccessorDescriptor,
+  isCallable, isConstructor, isDataDescriptor, isObject, JSRealm,
   ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
 } from '../../src/js-engine/index';
 import { SyntaxError as InternalSyntaxError, TypeError as InternalTypeError } from '../../src/infra/exceptions';
@@ -55,6 +56,44 @@ describe('ECMAScript abstract operations', () => {
     expect(isAccessorDescriptor({ get: undefined })).toBe(true);
     expect(isAccessorDescriptor({ set: undefined })).toBe(true);
     expect(isAccessorDescriptor({ value: undefined })).toBe(false);
+  });
+
+  it('creates own data properties without calling inherited setters', () => {
+    const prototype = { set value(_value: unknown) { throw new Error('Inherited setter invoked'); } };
+    const target = Object.create(prototype) as object;
+
+    expect(defineDataProperty(target, 'value', 7)).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(target, 'value')).toEqual({
+      configurable: true, enumerable: true, value: 7, writable: true,
+    });
+    defineDataProperty(target, '__proto__', 'ordinary data');
+    expect(Object.getPrototypeOf(target)).toBe(prototype);
+    expect(Object.getOwnPropertyDescriptor(target, '__proto__')?.value).toBe('ordinary data');
+  });
+
+  it('defines non-enumerable methods', () => {
+    const target = {};
+    const method = () => undefined;
+
+    expect(defineMethod(target, Symbol.iterator, method)).toBeUndefined();
+    expect(Object.getOwnPropertyDescriptor(target, Symbol.iterator)).toEqual({
+      configurable: true, enumerable: false, value: method, writable: true,
+    });
+  });
+
+  it.each([defineDataProperty, defineMethod])('%s throws when property creation is refused', (define) => {
+    const method = () => undefined;
+    expect(() => define(Object.preventExtensions({}), 'method', method)).toThrow(TypeError);
+
+    const keys: PropertyKey[] = [];
+    const proxy = new Proxy({}, {
+      defineProperty(_target, key) {
+        keys.push(key);
+        return false;
+      },
+    });
+    expect(() => define(proxy, 'method', method)).toThrow(TypeError);
+    expect(keys).toEqual(['method']);
   });
 
   it('performs an ordinary set with the supplied own descriptor', () => {

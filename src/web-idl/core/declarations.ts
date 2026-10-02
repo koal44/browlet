@@ -34,8 +34,6 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
     implClass: ImplementationClass<Impl>;
     /** Injected arguments for internal construction and automatically bound constructors. */
     constructWith?: InjectedArgument<Env>[];
-    /** Create the platform backing object using the supplied context and selected prototype. */
-    allocatePlatformObject?: DeclarationCallback<'allocate-platform-object', Env>;
     /** Initialize the implementation before stamping or projection; inherited hooks run first. */
     initializeImplementation?: DeclarationCallback<'initialize-implementation', Env, Impl>;
   };

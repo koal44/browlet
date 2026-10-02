@@ -1,6 +1,7 @@
 import {
   arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
-  dictMember, idlType, impl, invokeWith, op, sequence, staticOp, xattr,
+  dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp,
+  webIDLCommonDefinitions, xattr,
   type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/core/index';
 
@@ -12,6 +13,8 @@ declare module '../../../../src/web-idl/core/types' {
 
 class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
+
+webIDLCommonDefinitions.includes(domExceptionIDL);
 
 class SavedValue { value = 1; }
 const serialSteps = {
@@ -101,7 +104,7 @@ dictMember('callback', idlType.object, { callbackExceptionBehavior: 'ignore' });
 op('item', idlType.object, [], { indexedGetter: { getSupportedPropertyIndices() { return [0]; } } });
 // @ts-expect-error Runtime callbacks require a declared runtime signature.
 ctor([], { construct() { return {}; } });
-// @ts-expect-error Allocation callbacks require the projection's signature.
+// @ts-expect-error Backing allocation belongs to Binding, not declaration callbacks.
 impl(Example, { allocatePlatformObject() { return {}; } });
 // @ts-expect-error Initialization callbacks require the projection's signature.
 impl(Example, { initializeImplementation() {} });

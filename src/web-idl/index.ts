@@ -1,32 +1,27 @@
-import type { BindingContext } from './binding-context';
-import type { AttributeFunctionCallback } from './realm-binding';
-import type { CallbackInterfaceCarrier } from './callback';
-import type { WebIDLEnvironment, WebIDLRealm } from './realm';
+import type { BindingContext } from './binding/context';
+import type { AttributeFunctionCallback } from './binding/member';
+import type { CallbackInterfaceCarrier } from './constructs/callback';
+import type { WebIDLEnvironment, WebIDLRealm } from './environment';
 
 export * from './core/index';
 
-export {
-  DOMExceptionImpl, QuotaExceededErrorImpl, domExceptionIDL, isDOMException,
-  quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
-} from './dom-exception';
-export { endOfIteration, type AsyncSequenceValue } from './async-sequence';
+export { endOfIteration, type AsyncSequenceValue } from './constructs/async-sequence';
 
 export type { BindingContext };
 export type { AssembledInterface } from './assembled';
-export { BindingWorld } from './binding-world';
+export { BindingWorld } from './binding/world';
 export type { WebIDLEnvironment, WebIDLRealm };
-export type { CallbackHooks, SecurityCheckType } from './realm';
-export type { GlobalObjectAllocation } from './realm-binding';
+export type { CallbackHooks, SecurityCheckType } from './environment';
+export type { GlobalObjectAllocation } from './binding/realm';
 export {
   isStampedImplInstance, isStampedPlatformObject,
   type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
-} from './platform-object';
+} from './binding/platform-object';
 
 // Project typing: the full Web IDL entry supplies contextual callback types for declarations.
 declare module './core/types' {
   interface DeclarationCallbacks<Env, Impl extends object, Values extends unknown[]> {
     'argument-resolve': BindingCallback<Env, void, [method: BindingContext<Env & WebIDLEnvironment>], unknown>;
-    'allocate-platform-object': BindingCallback<Env, undefined, [prototype: object], object>;
     'initialize-implementation': BindingCallback<Env, undefined, [value: Impl], void>;
     'constructor-create': BindingCallback<Env, undefined, Values, object>;
     'constructor-invoke': BindingCallback<Env, object, Values, void>;

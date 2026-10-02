@@ -1,8 +1,8 @@
-import * as JSEngine from '../js-engine/index';
-import type { BufferTypeName, BufferViewTypeName } from './core/types';
-import type { ConversionContext } from './conversion-context';
-import { TypeError } from '../infra/exceptions';
-import { InternalError } from '../infra/internal-error';
+import * as JSEngine from '../../js-engine/index';
+import type { BufferTypeName, BufferViewTypeName, SimpleTypeName } from '../core/types';
+import type { ConversionContext } from '../conversion-context';
+import { TypeError } from '../../infra/exceptions';
+import { InternalError } from '../../infra/internal-error';
 
 /** Validate a buffer source using the buffer type and annotations selected by conversion dispatch. */
 // https://webidl.spec.whatwg.org/#js-to-buffer-source
@@ -49,3 +49,8 @@ export function idlToJSBufferSource(
 function isBufferViewTypeName(name: BufferTypeName): name is BufferViewTypeName {
   return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
 }
+
+/** Simple type names whose conversion validates ArrayBuffer or view storage. */
+export const bufferTypeNames = new Set<SimpleTypeName>([
+  'ArrayBuffer', 'SharedArrayBuffer', ...JSEngine.bufferViewNames,
+]);

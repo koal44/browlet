@@ -8,9 +8,9 @@ import {
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { AssembledCallable, AssembledOverloads } from '../../src/web-idl/assembled';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { createOverloadResolver, missingArgument, resolveOverload } from '../../src/web-idl/overload';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
+import { createOverloadResolver, missingArgument, resolveOverload } from '../../src/web-idl/binding/overload';
 
 describe('Web IDL effective overload sets', () => {
   it.each(['direct', 'prepared'] as const)('fills optional defaults before an omitted or repeated variadic argument (%s)', (mode) => {

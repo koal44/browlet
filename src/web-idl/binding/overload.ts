@@ -1,16 +1,14 @@
-import { getPlatformRecord } from './platform-object';
+import { getPlatformRecord, isPlatformObject } from './platform-object';
 import {
   getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
-} from '../js-engine/index';
-import type { AssembledArgument, AssembledCallable, AssembledOverloads } from './assembled';
-import { AsyncSequenceCarrier } from './async-sequence';
-import {
-  jsToIDL, createDefaultValueFactory, jsToIDLFrozenArray, jsToIDLSequence,
-  isPlatformObject,
-} from './conversion';
-import type { WebIDLType } from './core/index';
-import type { RealmBinding } from './realm-binding';
-import { InternalError } from '../infra/internal-error';
+} from '../../js-engine/index';
+import type { AssembledArgument, AssembledCallable, AssembledOverloads } from '../assembled';
+import { AsyncSequenceCarrier } from '../constructs/async-sequence';
+import { jsToIDL, createDefaultValueFactory } from '../conversion';
+import { jsToIDLFrozenArray, jsToIDLSequence } from '../constructs/sequence';
+import type { WebIDLType } from '../core/index';
+import type { RealmBinding } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
 export function createOverloadResolver<Callable extends AssembledCallable>(

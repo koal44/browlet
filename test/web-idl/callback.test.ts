@@ -3,15 +3,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { AssembledCallbackFunction } from '../../src/web-idl/assembled';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { missingArgument, CallbackFunctionCarrier, CallbackInterfaceCarrier } from '../../src/web-idl/callback';
-import { jsToIDL, idlToJS, createLegacyCallbackConverter } from '../../src/web-idl/conversion';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
+import {
+  missingArgument, CallbackFunctionCarrier, CallbackInterfaceCarrier, createLegacyCallbackConverter,
+} from '../../src/web-idl/constructs/callback';
+import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, defineTypedef, idlType,
   integer, nullable, promise as promiseType, reference, sequence, union,
 } from '../../src/web-idl/core/index';
-import { PromiseCarrier } from '../../src/web-idl/promise';
+import { PromiseCarrier } from '../../src/web-idl/constructs/promise';
 
 describe('Web IDL callbacks', () => {
   it('captures callback context and invokes functions in their associated realm', () => {
@@ -380,8 +382,8 @@ describe('Web IDL callbacks', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CallbackOwnerImpl();
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(attribute).attributeSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CallbackOwnerImpl();
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(attribute).attributeSteps = {
       get: () => stored,
       set: (_receiver, value) => { stored = value; },
     };

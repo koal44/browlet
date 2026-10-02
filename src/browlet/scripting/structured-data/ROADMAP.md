@@ -18,7 +18,7 @@ and the remaining history/worker/messaging consumers are still future work.
 | `structured-clone.ts` | The internal structured-cloning operation |
 | `web-idl.ts` | Shared StructuredSerializeOptions declaration |
 | `../global-scope.ts` | The public WindowOrWorkerGlobalScope contribution |
-| [File](../../../file/index.ts), [DOMException](../../../web-idl/dom-exception.ts) | Concrete steps beside the contributing implementations and declarations |
+| [File](../../../file/index.ts), [DOMException](../../../web-idl/core/dom-exception.ts) | Concrete steps beside the contributing implementations and declarations |
 
 [Web IDL](../../../web-idl/README.md) owns platform identity, exposure checks,
 internal target-realm creation, and typed declaration hooks. HTML owns graph

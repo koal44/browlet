@@ -8,13 +8,13 @@ import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
 import { parseURL, type URLRecord } from '../../../src/url/url';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly';
-import { RealmBinding } from '../../../src/web-idl/realm-binding';
-import { CallbackFunctionCarrier } from '../../../src/web-idl/callback';
+import { RealmBinding } from '../../../src/web-idl/binding/realm';
+import { CallbackFunctionCarrier } from '../../../src/web-idl/constructs/callback';
 import { jsToIDL } from '../../../src/web-idl/conversion';
 import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
-import { BindingWorld } from '../../../src/web-idl/binding-world';
+import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';

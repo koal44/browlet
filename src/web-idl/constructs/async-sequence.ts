@@ -1,10 +1,9 @@
-import { getMethod, isObject, type JSMethod } from '../js-engine/index';
-import type { InternalPromise } from '../infra/promises';
-import { idlType, type AsyncSequenceType, type WebIDLType } from './core/index';
-import type { WebIDLRealm } from './realm';
-import type { ConversionContext } from './conversion-context';
+import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
+import type { InternalPromise } from '../../infra/promises';
+import { idlType, type AsyncSequenceType, type WebIDLType } from '../core/index';
+import type { WebIDLRealm } from '../environment';
+import type { ConversionContext } from '../conversion-context';
 import { PromiseCarrier } from './promise';
-import { defineDataProperty } from './property';
 
 /** Converted iteration steps supplied to implementation algorithms. */
 export type AsyncSequenceValue<T> = {

@@ -1,16 +1,16 @@
-import { DefinitionAssembly } from './assembly';
-import { RealmBinding } from './realm-binding';
-import type { BindingContext } from './binding-context';
-import { webIDLCommonDefinitions } from './common-definitions';
-import type { Definition } from './core/index';
-import type { WebIDLEnvironment, WebIDLRealm } from './realm';
+import { DefinitionAssembly } from '../assembly';
+import { RealmBinding } from './realm';
+import type { BindingContext } from './context';
+import { webIDLCommonDefinitions } from '../core/common';
+import type { Definition } from '../core/index';
+import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import {
   getImplementationRecord, getPlatformRecord,
   type StampedImplInstance, type StampedPlatformObject,
 } from './platform-object';
-import { registerDefinitionBindings } from './implementation-binding';
-import type { JSRealm } from '../js-engine/index';
-import { InternalError } from '../infra/internal-error';
+import { registerImplementationBindings } from './register';
+import type { JSRealm } from '../../js-engine/index';
+import { InternalError } from '../../infra/internal-error';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -35,7 +35,7 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     realm: Env['realm'],
     createEnvironment: (ctx: BindingContext<Env>) => Env,
   ): BindingContext<Env> {
-    const registered = this.forRealm(realm);
+    const registered = this.getBindingContext(realm);
     if (registered) return registered;
 
     const binding = new RealmBinding<Env>(
@@ -46,22 +46,18 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
       this as unknown as BindingWorld,
       createEnvironment,
     );
-    registerDefinitionBindings(binding);
+    registerImplementationBindings(binding);
+    if (this.#realmBindings.has(realm)) {
+      throw new InternalError('Realm already has a registered binding');
+    }
+    this.#realmBindings.set(realm, binding);
     return binding.context;
   }
 
   /** Find a realm's binding context in this world without registering it. */
-  forRealm(realm: Env['realm']): BindingContext<Env> | undefined {
+  getBindingContext(realm: Env['realm']): BindingContext<Env> | undefined {
     // Registration checked the environment retained by this realm's context.
     return this.#realmBindings.get(realm)?.context as BindingContext<Env> | undefined;
-  }
-
-  /** Publish a realm binding after its declaration setup succeeds. */
-  registerRealm(binding: RealmBinding): void {
-    if (this.#realmBindings.has(binding.realm)) {
-      throw new InternalError('Realm already has a registered binding');
-    }
-    this.#realmBindings.set(binding.realm, binding);
   }
 
   /** Find a realm's binding, including for constructor prototype selection. */

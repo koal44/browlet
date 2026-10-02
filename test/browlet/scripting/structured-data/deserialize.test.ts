@@ -4,7 +4,9 @@ import { itPassesWith } from '../../../test-runtime';
 import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
+import {
+  DOMException as InternalDOMException, isDOMException,
+} from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
@@ -367,10 +369,13 @@ describe('HTML structured deserialization', () => {
     expect(exceptionClone).toBeInstanceOf(TargetDOMException);
     expect(exceptionClone).not.toBeInstanceOf(SourceDOMException);
     expect(exceptionClone.name).toBe('IndexSizeError');
+    expect(isDOMException(exceptionClone, 'IndexSizeError')).toBe(true);
+    expect(isDOMException(exceptionClone, 'Error')).toBe(false);
     expect(exceptionClone.message).toBe('bad index');
     expect(Reflect.get(exceptionClone, 'custom')).toBeUndefined();
     expect(quotaClone).toBeInstanceOf(TargetQuotaExceededError);
     expect(quotaClone).not.toBeInstanceOf(SourceQuotaExceededError);
+    expect(isDOMException(quotaClone, 'QuotaExceededError')).toBe(true);
     expect(quotaClone.message).toBe('too large');
     expect(quotaClone.quota).toBe(10);
     expect(quotaClone.requested).toBe(12);

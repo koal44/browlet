@@ -16,7 +16,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const world = new BindingWorld<TestEnvironment>([exampleIDL]);
     const compose = vi.fn((context: BindingContext) => {
       expect(context.realm).toBe(realm);
-      expect(world.forRealm(realm)).toBeUndefined();
+      expect(world.getBindingContext(realm)).toBeUndefined();
       env.exec.Promise = context.Promise;
       return env;
     });
@@ -24,7 +24,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const second = world.register(realm, compose);
 
     expect(second).toBe(first);
-    expect(world.forRealm(realm)).toBe(first);
+    expect(world.getBindingContext(realm)).toBe(first);
     expect(compose).toHaveBeenCalledOnce();
     expect(compose.mock.calls[0]![0]).toBe(first);
     expect(first.getEnvironment()).toBe(env);
@@ -37,11 +37,11 @@ describe('Web IDL binding worlds and realm registration', () => {
     const failure = new Error('Environment composition failed');
 
     expect(() => world.register(realm, () => { throw failure; })).toThrow(failure);
-    expect(world.forRealm(realm)).toBeUndefined();
+    expect(world.getBindingContext(realm)).toBeUndefined();
 
     const env = createEnvironment(realm);
     const context = world.register(realm, () => env);
-    expect(world.forRealm(realm)).toBe(context);
+    expect(world.getBindingContext(realm)).toBe(context);
     expect(context.getEnvironment()).toBe(env);
     expect(world.project(context.construct(ExampleImpl))).toBeDefined();
   });
@@ -55,7 +55,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const realm = new Realm();
 
     expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
-    expect(world.forRealm(realm)).toBeUndefined();
+    expect(world.getBindingContext(realm)).toBeUndefined();
     expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
   });
 
@@ -71,7 +71,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const world = new BindingWorld([]);
     expect(() => world.register(realm, () => ({ realm: new Realm() })))
       .toThrow('The binding environment belongs to a different realm');
-    expect(world.forRealm(realm)).toBeUndefined();
+    expect(world.getBindingContext(realm)).toBeUndefined();
     expect(world.register(realm, (ctx) => ({ realm: ctx.realm })).getEnvironment().realm).toBe(realm);
   });
 
@@ -428,8 +428,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const secondObject = secondContext.project(ExampleImpl, secondImplementation);
     expect(firstContext).not.toBe(secondContext);
     expect(firstContext.realm).toBe(secondContext.realm);
-    expect(first.forRealm(realm)).toBe(firstContext);
-    expect(second.forRealm(realm)).toBe(secondContext);
+    expect(first.getBindingContext(realm)).toBe(firstContext);
+    expect(second.getBindingContext(realm)).toBe(secondContext);
     expect(secondObject).not.toBe(object);
     expect(first.unwrap(secondObject)).toBeUndefined();
     expect(second.unwrap(secondObject)).toBe(secondImplementation);

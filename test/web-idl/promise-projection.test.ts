@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { idlToJS } from '../../src/web-idl/conversion';
-import { PromiseCarrier } from '../../src/web-idl/promise';
+import { PromiseCarrier } from '../../src/web-idl/constructs/promise';
 import {
   annotated, defineTypedef, idlType, implementationType, promise, reference, sequence, xattr,
 } from '../../src/web-idl/core/index';

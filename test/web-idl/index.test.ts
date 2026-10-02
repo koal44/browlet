@@ -8,15 +8,9 @@ describe('Web IDL package surface', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(core),
       'BindingWorld',
-      'DOMExceptionImpl',
-      'QuotaExceededErrorImpl',
-      'domExceptionIDL',
       'endOfIteration',
-      'isDOMException',
       'isStampedImplInstance',
       'isStampedPlatformObject',
-      'quotaExceededErrorIDL',
-      'quotaExceededErrorOptionsIDL',
     ].sort());
   });
 });

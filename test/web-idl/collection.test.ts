@@ -3,9 +3,9 @@ import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
-import { getImplementationRecord } from '../../src/web-idl/platform-object';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
+import { getImplementationRecord } from '../../src/web-idl/binding/platform-object';
 import {
   defineInterface, idlType, impl, maplike, reference, sequence, setlike,
   type MaplikeMember, type OperationMember, type SetlikeMember,
@@ -313,7 +313,7 @@ describe('Web IDL maplike declarations', () => {
     let calls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(clear).operationSteps = () => { calls++; };
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(clear).operationSteps = () => { calls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
 
     call(object, 'clear');
@@ -342,7 +342,7 @@ describe('Web IDL maplike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(staticSet).operationSteps = () => { staticCalls++; };
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(staticSet).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
@@ -462,8 +462,8 @@ describe('Web IDL setlike declarations', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(readonlyMap.name)).createImplementation = () => new ReadonlyMapImpl();
-    binding.getDefinitionBinding(binding.resolveInterface(readonlySet.name)).createImplementation = () => new ReadonlySetImpl();
+    binding.getImplementationBinding(binding.resolveInterface(readonlyMap.name)).createImplementation = () => new ReadonlyMapImpl();
+    binding.getImplementationBinding(binding.resolveInterface(readonlySet.name)).createImplementation = () => new ReadonlySetImpl();
     const map = binding.createPlatformRecord(binding.resolveInterface(readonlyMap.name)).platformObject!;
     const set = binding.createPlatformRecord(binding.resolveInterface(readonlySet.name)).platformObject!;
 
@@ -500,7 +500,7 @@ describe('Web IDL setlike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getDefinitionBinding(binding.resolveInterface(definition.name)).getOrCreateMemberRecord(staticAdd).operationSteps = () => { staticCalls++; };
+    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(staticAdd).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
@@ -617,7 +617,7 @@ function createBinding(
     new BindingWorld([]),
     (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CollectionImpl();
+  binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new CollectionImpl();
   return binding;
 }
 

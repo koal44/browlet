@@ -122,7 +122,7 @@ export function registerRealm(
 
 /** Retrieve the realm's context in Browlet's main binding world. */
 export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
-  return browletBindings.forRealm(realm);
+  return browletBindings.getBindingContext(realm);
 }
 
 // -- Binding composition ------------------------------------------------
@@ -145,9 +145,9 @@ class BrowletBindings {
     return this.#world.register(realm, createEnvironment);
   }
 
-  /** Retrieve a registered realm's binding; throw if composition has not registered it. */
-  forRealm(realm: Realm): BindingContext<BrowletEnvironment> {
-    const context = this.#world.forRealm(realm);
+  /** Retrieve a realm's binding context; throw if composition has not registered it. */
+  getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
+    const context = this.#world.getBindingContext(realm);
     if (!context) throw new InternalError('Realm has no Browlet binding');
     return context;
   }
@@ -241,7 +241,7 @@ class BrowletBindings {
 
   /** Construct a Document with this realm's environment and binding ownership. */
   createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
-    return this.forRealm(realm).construct(DocumentImpl);
+    return this.getBindingContext(realm).construct(DocumentImpl);
   }
 
   /** Replace the proxy's Window association without changing either Window's projection. */

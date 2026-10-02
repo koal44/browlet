@@ -1,8 +1,12 @@
+import { types } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 import {
-  DOMExceptionCodes, DOMExceptionNames,
+  createDOMException, DOMException as InternalDOMException,
+  DOMExceptionCodes, DOMExceptionNames, DOMExceptionStamper, isDOMException,
 } from '../../../src/web-idl/core/dom-exception';
+import { BindingWorld } from '../../../src/web-idl/index';
+import { TestRealm } from '../test-realm';
 
 describe('DOMException names', () => {
   it('follows the Web IDL names table and legacy code order', () => {
@@ -47,5 +51,75 @@ describe('DOMException names', () => {
       22, 23, 24, 25,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
+  });
+});
+
+describe('DOMException recognition', () => {
+  it('recognizes internal requests and projected exceptions across realms', () => {
+    const world = new BindingWorld([]);
+    const first = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    const second = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    const request = createDOMException('AbortError', 'internal');
+
+    expect(isDOMException(request, 'AbortError')).toBe(true);
+    expect(DOMExceptionStamper.is(request)).toBe(false);
+    for (const ctx of [first, second]) {
+      ctx.install(ctx.realm.global);
+      const Constructor = Reflect.get(ctx.realm.global, 'DOMException') as typeof DOMException;
+      const exception = new Constructor('projected', 'AbortError');
+
+      expect(exception).toBeInstanceOf(ctx.realm.intrinsics.error);
+      expect(types.isNativeError(exception)).toBe(true);
+      expect(DOMExceptionStamper.is(exception)).toBe(true);
+      expect(isDOMException(exception, 'AbortError')).toBe(true);
+      expect(isDOMException(exception, 'NetworkError')).toBe(false);
+      expect(InternalDOMException.is(exception)).toBe(false);
+      expect(first.realizeException(exception)).toBe(exception);
+      expect(second.realizeException(exception)).toBe(exception);
+
+      Object.defineProperty(exception, 'name', {
+        get() { throw new Error('Recognition read the author name getter'); },
+      });
+      expect(isDOMException(exception, 'AbortError')).toBe(true);
+    }
+  });
+
+  it('inherits recognition and Error backing for QuotaExceededError', () => {
+    const ctx = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    ctx.install(ctx.realm.global);
+    const Constructor = Reflect.get(ctx.realm.global, 'QuotaExceededError') as new (
+      message: string, options: { quota: number; requested: number; }
+    ) => DOMException;
+    const exception = new Constructor('full', { quota: 10, requested: 12 });
+
+    expect(exception).toBeInstanceOf(ctx.realm.intrinsics.error);
+    expect(types.isNativeError(exception)).toBe(true);
+    expect(DOMExceptionStamper.is(exception)).toBe(true);
+    expect(isDOMException(exception, 'QuotaExceededError')).toBe(true);
+    expect(exception).toHaveProperty('quota', 10);
+    expect(exception).toHaveProperty('requested', 12);
+  });
+
+  it('rejects forged objects and proxies without invoking author code', () => {
+    const ctx = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    const exception = ctx.realizeException(createDOMException('AbortError')) as object;
+    const calls: string[] = [];
+    const proxy = new Proxy(exception, {
+      get() { calls.push('get'); throw new Error('get'); },
+      has() { calls.push('has'); throw new Error('has'); },
+      getPrototypeOf() { calls.push('getPrototypeOf'); throw new Error('getPrototypeOf'); },
+    });
+    const revoked = Proxy.revocable(exception, {});
+    revoked.revoke();
+
+    for (const value of [
+      { name: 'AbortError' }, Object.create(exception),
+      new globalThis.DOMException('', 'AbortError'),
+      proxy, revoked.proxy, null, undefined, 1, 'AbortError', () => undefined,
+    ]) {
+      expect(DOMExceptionStamper.is(value)).toBe(false);
+      expect(isDOMException(value, 'AbortError')).toBe(false);
+    }
+    expect(calls).toEqual([]);
   });
 });

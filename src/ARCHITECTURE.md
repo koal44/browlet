@@ -28,6 +28,10 @@ own execution and event loops; AgentClusters define shared-memory boundaries.
 Neither is the owner of platform-object identity. Separate worlds need a real
 isolated-world or separate-runtime consumer.
 
+Binding applies a private DOMException stamp during platform-object initialization
+so Core can recognize exceptions without importing Binding's identity record.
+The shared record still owns the implementation/platform association and realm.
+
 Type implementation parameters for the values Binding actually supplies:
 concrete implementations, converted dictionaries with defaults, and adapted
 callbacks. Genuine Web IDL `object`/`any` and host-neutral DOM contracts remain

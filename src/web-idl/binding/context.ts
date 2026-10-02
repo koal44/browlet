@@ -1,18 +1,18 @@
-import type { InternalPromise } from '../infra/promises';
-import type { AssembledInterface } from './assembled';
-import type { GlobalObjectAllocation, RealmBinding } from './realm-binding';
-import type { ImplementationClass, ImplementationType, WebIDLType } from './core/types';
-import { jsToIDL, idlToJS } from './conversion';
-import type { WebIDLEnvironment } from './realm';
+import type { InternalPromise } from '../../infra/promises';
+import type { AssembledInterface } from '../assembled';
+import type { GlobalObjectAllocation, RealmBinding } from './realm';
+import type { ImplementationClass, ImplementationType, WebIDLType } from '../core/types';
+import { jsToIDL, idlToJS } from '../conversion';
+import type { WebIDLEnvironment } from '../environment';
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
   type StampedPlatformObject, type PlatformRecord,
 } from './platform-object';
 import {
-  idlToImpl, constructImplementationObject, resolveImplementationArguments,
-} from './implementation-binding';
-import { InternalError } from '../infra/internal-error';
-import { createWebIDLPromiseConstructor } from './promise';
+  constructImplementationObject, resolveImplementationArguments,
+} from '../constructs/implementation';
+import { InternalError } from '../../infra/internal-error';
+import { createWebIDLPromiseConstructor } from '../constructs/promise';
 
 /** A realm's Web IDL operations and environment within one binding world. */
 export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
@@ -66,12 +66,11 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   jsToImpl<T>(value: unknown, type: ImplementationType<T>): T;
   jsToImpl(value: unknown, type: WebIDLType): unknown;
   jsToImpl(value: unknown, type: WebIDLType): unknown {
-    return idlToImpl(
+    return this.#binding.implementationConverter.idlToImpl(
       jsToIDL(value, this.#binding.getConversionContext(type)),
       type,
       {},
       this,
-      this.#binding,
     );
   }
 

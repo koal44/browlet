@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   attr, defineInterface, definePartialInterface, idlType, impl, op, stringifier, xattr,
   type AttributeMember, type NamedArgumentsExtendedAttribute,
@@ -23,7 +23,7 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).overriddenConstructor = (argumentsList, newTarget, activeFunction) => ({
+    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).overriddenConstructor = (argumentsList, newTarget, activeFunction) => ({
       activeFunction,
       argumentsList,
       newTarget,
@@ -89,7 +89,7 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new HiddenImpl();
+    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new HiddenImpl();
 
     const installed = binding.install();
     const object = binding.createPlatformRecord(binding.resolveInterface('HiddenInterface')).platformObject!;
@@ -98,7 +98,7 @@ describe('Web IDL initial objects', () => {
     expect(installed.has('HiddenInterface')).toBe(false);
     expect(Reflect.has(realm.global, 'HiddenInterface')).toBe(false);
     expect(prototype).toBe(
-      binding.getInterfacePrototypeObject(binding.resolveInterface('HiddenInterface')),
+      binding.getImplementationBinding(binding.resolveInterface('HiddenInterface')).getInterfacePrototypeObject(),
     );
     expect(Object.hasOwn(prototype as object, 'constructor')).toBe(false);
     expect(Object.prototype.toString.call(prototype))
@@ -132,7 +132,7 @@ describe('Web IDL initial objects', () => {
 
     ctx.install(realm.global);
     expect(Reflect.has(realm.global, 'Hidden')).toBe(false);
-    const prototype = binding.getInterfacePrototypeObject(binding.resolveInterface('Hidden'));
+    const prototype = binding.getImplementationBinding(binding.resolveInterface('Hidden')).getInterfacePrototypeObject();
     expect(Object.hasOwn(prototype, 'label')).toBe(false);
     expect(Object.hasOwn(prototype, 'read')).toBe(false);
 
@@ -212,12 +212,12 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new WidgetImpl();
-    interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
+    interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
       get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
     };
-    interfaceBinding.getOrCreateMemberRecord(factory).constructorBehavior = {
+    interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
       kind: 'initialize',
       steps: function(value) {
         Reflect.set(this, 'value', value);
@@ -275,12 +275,12 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const interfaceBinding = binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name));
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new PartialWidgetImpl();
-    interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
+    interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
       get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
     };
-    interfaceBinding.getOrCreateMemberRecord(factory).constructorBehavior = {
+    interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
       kind: 'initialize',
       steps: function(value) {
         Reflect.set(this, 'value', value);
@@ -318,13 +318,13 @@ describe('Web IDL initial objects', () => {
       const realm = new Realm();
       const binding = new RealmBinding(assembly, realm, world, (ctx) => ({ realm: ctx.realm }));
       const assembled = binding.resolveInterface('Widget');
-      const interfaceBinding = binding.getDefinitionBinding(assembled);
+      const interfaceBinding = binding.getImplementationBinding(assembled);
       interfaceBinding.createImplementation = () => new WidgetImpl();
-      interfaceBinding.getOrCreateMemberRecord(value).attributeSteps = {
+      interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
         get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
       };
       for (const factory of [numericFactory, stringFactory]) {
-        interfaceBinding.getOrCreateMemberRecord(factory).constructorBehavior = {
+        interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
           kind: 'initialize',
           steps: function(value) { Reflect.set(this, 'value', `${name}:${typeof value}:${String(value)}`); },
         };
@@ -335,7 +335,7 @@ describe('Web IDL initial objects', () => {
 
       expect(factory).toBeInstanceOf(realm.intrinsics.function);
       expect(factory.length).toBe(1);
-      expect(factory.prototype).toBe(binding.getInterfacePrototypeObject(assembled));
+      expect(factory.prototype).toBe(binding.getImplementationBinding(assembled).getInterfacePrototypeObject());
       expect(Reflect.get(Reflect.construct(factory, [2 ** 32 + 7]), 'value')).toBe(`${name}:number:7`);
       expect(Reflect.get(Reflect.construct(factory, ['text']), 'value')).toBe(`${name}:string:text`);
       binding.install();
@@ -438,10 +438,10 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(declaredIDL.name)).getOrCreateMemberRecord(stringifier).stringificationBehavior = function() {
+    binding.getImplementationBinding(binding.resolveInterface(declaredIDL.name)).getOrCreateMemberBinding(stringifier).stringificationBehavior = function() {
       return Reflect.get(this, 'text');
     };
-    binding.getDefinitionBinding(binding.resolveInterface(attributedIDL.name)).getOrCreateMemberRecord(attribute).attributeSteps = {
+    binding.getImplementationBinding(binding.resolveInterface(attributedIDL.name)).getOrCreateMemberBinding(attribute).attributeSteps = {
       get(receiver) {
         return Reflect.get(receiver!.implInst, 'name') as unknown;
       },
@@ -504,7 +504,7 @@ function project(
   const assembled = binding.assembly.interfaces.get(name);
   if (!assembled) throw new Error(`Missing interface ${name}`);
   const implementation = Object.create(
-    binding.getInterfacePrototypeObject(assembled),
+    binding.getImplementationBinding(assembled).getInterfacePrototypeObject(),
     Object.fromEntries(Object.entries(properties).map(([key, value]) => [
       key,
       { configurable: true, enumerable: true, value, writable: true },

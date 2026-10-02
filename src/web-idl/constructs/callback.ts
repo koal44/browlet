@@ -1,13 +1,14 @@
-import { getImplementationRecord } from './platform-object';
-import { isCallable, isConstructor, isObject } from '../js-engine/index';
-import { Stamper } from '../infra/stamper';
-import type { ValueConverter } from './conversion';
-import type { AssembledCallable, AssembledCallbackFunction, AssembledCallbackInterface } from './assembled';
-import type { RealmBinding } from './realm-binding';
-import type { WebIDLRealm } from './realm';
-import type { CallbackExceptionBehavior, OperationMember } from './core/types';
+import type { ConversionContext } from '../conversion-context';
+import type { ValueConverter } from '../conversion';
+import { getPlatformRecord, getImplementationRecord } from '../binding/platform-object';
+import { isCallable, isConstructor, isObject } from '../../js-engine/index';
+import { Stamper } from '../../infra/stamper';
+import type { AssembledCallable, AssembledCallbackFunction, AssembledCallbackInterface } from '../assembled';
+import type { RealmBinding } from '../binding/realm';
+import type { WebIDLRealm } from '../environment';
+import type { CallbackExceptionBehavior, OperationMember } from '../core/types';
 import { PromiseCarrier } from './promise';
-import { InternalError } from '../infra/internal-error';
+import { InternalError } from '../../infra/internal-error';
 
 /** An author callback object with the state and conversions used to invoke its operations. */
 export class CallbackInterfaceCarrier<Realm extends WebIDLRealm = WebIDLRealm> {
@@ -128,6 +129,50 @@ export class CallbackFunctionCarrier {
   construct(argumentsList: WebIDLArgumentsList, currentRealm: WebIDLRealm): unknown {
     return this.binding.getCallbackInvoker(this.assembled, this.realm).construct(this, argumentsList, currentRealm);
   }
+}
+
+/** Prepare nullable legacy callback assignment: retain objects as callbacks and map other values to null. */
+// The setter selects this conversion once for a nullable [LegacyTreatNonObjectAsNull] callback.
+// https://webidl.spec.whatwg.org/#js-to-nullable
+// https://webidl.spec.whatwg.org/#js-to-callback-function
+export function createLegacyCallbackConverter(
+  context: ConversionContext,
+  assembled: AssembledCallbackFunction,
+): ValueConverter<CallbackFunctionCarrier | null> {
+  return (value) => {
+    if (!isObject(value)) return null;
+    try {
+      return new CallbackFunctionCarrier(
+        assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context.binding,
+      );
+    } catch (error) {
+      return context.throwConversionError(error);
+    }
+  };
+}
+
+/** Retain an author function with its declared conversions, realm, and captured callback context. */
+// https://webidl.spec.whatwg.org/#es-callback-function
+export function jsToIDLCallbackFunction(
+  value: unknown,
+  context: ConversionContext,
+  assembled: AssembledCallbackFunction,
+): CallbackFunctionCarrier {
+  if (typeof value !== 'function') {
+    return context.throwTypeError(`${assembled.primary.name} is not callable`);
+  }
+  return new CallbackFunctionCarrier(
+    assembled, value, getCallbackRealm(value, context), context.realm.callbacks.captureContext(), context.binding,
+  );
+}
+
+/** Find the callback object's associated realm through its stamp or the realm's callback hooks. */
+export function getCallbackRealm(
+  value: object,
+  context: ConversionContext,
+): WebIDLRealm {
+  return getPlatformRecord(value)?.realm ??
+    context.realm.callbacks.getAssociatedRealm(value);
 }
 
 type WebIDLArgumentsList = unknown[];

@@ -7,7 +7,7 @@ import type {
 } from './core/declarations';
 import type {
   ArgumentDefinition, AttributeMember, ExtendedAttribute, ImplementationClass, NamedArgumentsExtendedAttribute,
-  OperationMember, ReferenceType, WebIDLType,
+  OperationMember, ReferenceType, StringifierMember, WebIDLType,
 } from './core/types';
 import { hasExtendedAttribute, reference } from './core/helpers';
 import type { SerialSteps, TransferSteps } from './core/structured-data';
@@ -58,6 +58,10 @@ export class AssembledInterface {
   #hasDefaultToJSON: boolean | undefined;
   /** Whether own or inherited members declare toJSON; undefined means unexamined. */
   #hasToJSON: boolean | undefined;
+  /** Attributes grouped by their declared installation location, before realm exposure checks. */
+  #attributesByPlacement = new Map<MemberPlacement, AttributeEntry<AssembledInterfaceMember>[]>();
+  /** JSON-compatible attributes and their inherited getters, before realm exposure checks. */
+  #defaultToJSONAttributes: DefaultToJSONAttribute[] | undefined;
 
   constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = []) {
     this.primary = primary;
@@ -168,12 +172,25 @@ export class AssembledInterface {
       member.kind === 'operation' && member.name === name && member.static !== true);
   }
 
+  /** Select attributes by their declared placement; binding applies the realm's exposure conditions. */
+  getAttributes(placement: MemberPlacement): AttributeEntry<AssembledInterfaceMember>[] {
+    let attributes = this.#attributesByPlacement.get(placement);
+    if (!attributes) {
+      attributes = this.members.filter((entry): entry is AttributeEntry<AssembledInterfaceMember> =>
+        entry.member.kind === 'attribute' && belongsAt(entry.member, placement));
+      this.#attributesByPlacement.set(placement, attributes);
+    }
+    return attributes;
+  }
+
   /** Group accepted operation overloads by name and static/instance placement. */
   getOperationGroups(
+    placement: MemberPlacement,
     include: OperationFilter,
     assembly: DefinitionAssembly,
   ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
-    return groupOperations(this.members, this.callables, include, assembly);
+    return groupOperations(this.members, this.callables,
+      (operation, entry) => belongsAt(operation, placement) && include(operation, entry), assembly);
   }
 
   /** Find the nearest indexed or named special operation, resolving aliases on its key argument. */
@@ -208,12 +225,16 @@ export class AssembledInterface {
   }
 
   /** Find the stringifier accepted by the caller's exposure check. */
-  getStringifier(include: (entry: AssembledInterfaceMember) => boolean): StringifierEntry | undefined {
-    return this.members.find((entry): entry is StringifierEntry => {
+  getStringifier(
+    placement: Extract<MemberPlacement, 'regular' | 'unforgeable'>,
+    include: (entry: AssembledInterfaceMember) => boolean,
+  ): StringifierEntry | undefined {
+    const entry = this.members.find((entry): entry is StringifierEntry => {
       const member = entry.member;
       return (member.kind === 'stringifier' ||
         (member.kind === 'attribute' && member.stringifier === true)) && include(entry);
     });
+    return entry && belongsAt(entry.member, placement) ? entry : undefined;
   }
 
   /** Collect exposed instance members that must be hidden from with-statement scope. */
@@ -236,6 +257,23 @@ export class AssembledInterface {
     return this.#hasDefaultToJSON ??= this.members.some(({ member }) =>
       member.kind === 'operation' && member.name === 'toJSON' &&
       hasExtendedAttribute(member.extendedAttributes, 'Default'));
+  }
+
+  /** Collect default-toJSON attributes in inheritance order without reading implementation values. */
+  getDefaultToJSONAttributes(assembly: DefinitionAssembly): DefaultToJSONAttribute[] {
+    if (this.#defaultToJSONAttributes) return this.#defaultToJSONAttributes;
+    const attributes: DefaultToJSONAttribute[] = [];
+    for (const assembled of this.getInheritanceChain()) {
+      if (!assembled.hasDefaultToJSON()) continue;
+      for (const { member, source } of assembled.members) {
+        if (member.kind !== 'attribute' || member.static || !assembly.isJSONType(member.type)) continue;
+        attributes.push({
+          assembled, member, source,
+          implementation: member.inherit ? assembled.getInheritedAttribute(member) : member,
+        });
+      }
+    }
+    return this.#defaultToJSONAttributes = attributes;
   }
 
   /** Whether this interface or an ancestor declares a toJSON operation. */
@@ -496,6 +534,8 @@ export class AssembledNamespace {
   members: AssembledNamespaceMember[] = [];
   /** Prepared argument contracts for namespace operations. */
   callables = new AssembledCallables();
+  /** Attributes grouped by declared placement before realm exposure checks. */
+  #attributesByPlacement = new Map<MemberPlacement, AttributeEntry<AssembledNamespaceMember>[]>();
 
   constructor(primary: NamespaceDefinition, partials: PartialNamespaceDefinition[] = []) {
     this.primary = primary;
@@ -509,12 +549,25 @@ export class AssembledNamespace {
     }
   }
 
+  /** Select attributes by their declared placement; binding applies the realm's exposure conditions. */
+  getAttributes(placement: MemberPlacement): AttributeEntry<AssembledNamespaceMember>[] {
+    let attributes = this.#attributesByPlacement.get(placement);
+    if (!attributes) {
+      attributes = this.members.filter((entry): entry is AttributeEntry<AssembledNamespaceMember> =>
+        entry.member.kind === 'attribute' && belongsAt(entry.member, placement));
+      this.#attributesByPlacement.set(placement, attributes);
+    }
+    return attributes;
+  }
+
   /** Group accepted operation overloads by name and static/instance placement. */
   getOperationGroups(
+    placement: MemberPlacement,
     include: OperationFilter,
     assembly: DefinitionAssembly,
   ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
-    return groupOperations(this.members, this.callables, include, assembly);
+    return groupOperations(this.members, this.callables,
+      (operation, entry) => belongsAt(operation, placement) && include(operation, entry), assembly);
   }
 }
 
@@ -897,6 +950,18 @@ type OverloadCandidates<Callable extends AssembledCallable> = {
 
 type StringifierEntry = InterfaceMemberEntry<'stringifier' | 'attribute'>;
 
+export type MemberPlacement = 'regular' | 'static' | 'unforgeable';
+
+/** An attribute with the declaration that controls its exposure. */
+type AttributeEntry<Member> = Member & { member: AttributeMember; };
+
+/** A JSON-compatible attribute and the declaration supplying its inherited getter. */
+export type DefaultToJSONAttribute = AssembledInterfaceMember & {
+  assembled: AssembledInterface;
+  member: AttributeMember;
+  implementation: AttributeMember;
+};
+
 export type AssembledInterfaceMember = {
   member: InterfaceMember | MixinMember;
   /** The declaring construct supplies exposure conditions for this member. */
@@ -1028,3 +1093,17 @@ function groupOperations(
 const typeExtendedAttributeNames = new Set([
   'AllowResizable', 'AllowShared', 'Clamp', 'EnforceRange', 'LegacyNullToEmptyString',
 ]);
+
+function belongsAt(
+  member: AttributeMember | OperationMember | StringifierMember,
+  placement: MemberPlacement,
+): boolean {
+  const isStatic = member.kind !== 'stringifier' && member.static === true;
+  if (placement === 'static') return isStatic;
+  if (isStatic) return false;
+  const unforgeable = hasExtendedAttribute(
+    member.extendedAttributes,
+    'LegacyUnforgeable',
+  );
+  return placement === 'unforgeable' ? unforgeable : !unforgeable;
+}

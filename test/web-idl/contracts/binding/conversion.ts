@@ -1,14 +1,13 @@
 import type { ConversionContext } from '../../../../src/web-idl/conversion-context';
-import type { BindingContext } from '../../../../src/web-idl/binding-context';
-import {
-  jsToIDL,
-  type IDLRecord, type IDLSequence, type ValueConverter,
-} from '../../../../src/web-idl/conversion';
+import type { BindingContext } from '../../../../src/web-idl/binding/context';
+import { jsToIDL, type ValueConverter } from '../../../../src/web-idl/conversion';
+import { type IDLRecord } from '../../../../src/web-idl/constructs/record';
+import { type IDLSequence } from '../../../../src/web-idl/constructs/sequence';
 import {
   annotated, asyncSequence, idlType, implementationType, promise, record, reference, sequence, xattr,
 } from '../../../../src/web-idl/core/index';
-import type { AsyncSequenceCarrier } from '../../../../src/web-idl/async-sequence';
-import type { PromiseCarrier } from '../../../../src/web-idl/promise';
+import type { AsyncSequenceCarrier } from '../../../../src/web-idl/constructs/async-sequence';
+import type { PromiseCarrier } from '../../../../src/web-idl/constructs/promise';
 
 import type { InternalPromise } from '../../../../src/infra/promises';
 

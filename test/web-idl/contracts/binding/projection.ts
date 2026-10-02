@@ -78,8 +78,8 @@ const ctx = world.register(hostRealm, (context) => {
   return env;
 });
 ctx.realm.eventTimeStamp();
-world.forRealm(hostRealm)?.realm.eventTimeStamp();
-world.forRealm(hostRealm)?.getEnvironment().exec.createEvent();
+world.getBindingContext(hostRealm)?.realm.eventTimeStamp();
+world.getBindingContext(hostRealm)?.getEnvironment().exec.createEvent();
 world.register(env.realm, () => env);
 const assembled: AssembledInterface = ctx.getInterface(definition.name)!;
 ctx.createPlatformRecord(assembled);
@@ -113,7 +113,7 @@ if (isStampedPlatformObject(plain)) {
 // @ts-expect-error HTML callbacks cannot be installed on the minimal host.
 world.register(minimalRealm, () => ({ ...env, realm: minimalRealm }));
 // @ts-expect-error This world's realm lookup requires the same host type as registration.
-world.forRealm(minimalRealm);
+world.getBindingContext(minimalRealm);
 // @ts-expect-error A world of arbitrary Web IDL realms cannot run HTML callbacks.
 new BindingWorld<WebIDLEnvironment>([definition]);
 // @ts-expect-error This callback adapter also requires the declared host realm.

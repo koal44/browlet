@@ -4,18 +4,18 @@ import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import {
   jsToIDL as convertDirectlyToIDL, idlToJS as convertDirectlyToJavaScript,
-  createFrozenArray,
-  jsToIDLFrozenArray, type DictionaryCarrier,
 } from '../../src/web-idl/conversion';
-import { webIDLCommonDefinitions } from '../../src/web-idl/common-definitions';
+import { createFrozenArray, jsToIDLFrozenArray } from '../../src/web-idl/constructs/sequence';
+import type { DictionaryCarrier } from '../../src/web-idl/constructs/dictionary';
+import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   annotated, asyncSequence, decimal, defineCallbackFunction, defineDictionary, defineEnumeration, defineProxyObject,
   defineInterface, definePartialDictionary, defineTypedef, emptyDictionary, emptySequence, frozenArray,
   idlType, integer, nullable, record, reference,
   sequence, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (mode) => {
   const jsToIDL: typeof convertDirectlyToIDL = mode === 'direct'

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   defineInterface, idlType, impl, observableArray, reference, roAttr,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
-import { getPlatformRecord } from '../../src/web-idl/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
 
 describe('Web IDL observable arrays', () => {
   it('creates one realm Array per platform object and attribute', () => {
@@ -62,7 +62,7 @@ describe('Web IDL observable arrays', () => {
     const operations: string[] = [];
     const receivers: object[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         receivers.push(this);
         operations.push(`delete ${index} ${String(value)}`);
@@ -93,7 +93,7 @@ describe('Web IDL observable arrays', () => {
     const deleted: number[] = [];
     const exception = new Error('stop deleting');
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
       delete(_value, index) {
         deleted.push(index);
         if (index === 1) throw exception;
@@ -110,7 +110,7 @@ describe('Web IDL observable arrays', () => {
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getDefinitionBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberRecord(fixture.attribute).observableArraySteps = {
+    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
       delete(value, index) {
         operations.push(`delete ${index} ${String(value)}`);
       },
@@ -247,8 +247,8 @@ describe('Web IDL observable arrays', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getDefinitionBinding(binding.resolveInterface(employee.name)).createImplementation = () => new EmployeeImpl();
-    binding.getDefinitionBinding(binding.resolveInterface(building.name)).createImplementation = () => new BuildingImpl();
+    binding.getImplementationBinding(binding.resolveInterface(employee.name)).createImplementation = () => new EmployeeImpl();
+    binding.getImplementationBinding(binding.resolveInterface(building.name)).createImplementation = () => new BuildingImpl();
     const object = binding.createPlatformRecord(binding.resolveInterface('Building')).platformObject!;
     const employeeObject = binding.createPlatformRecord(binding.resolveInterface('Employee')).platformObject!;
     const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
@@ -285,7 +285,7 @@ function createNumberArrayBinding(): NumberArrayFixture {
     new BindingWorld([]),
     (ctx) => ({ realm: ctx.realm }),
   );
-  binding.getDefinitionBinding(binding.resolveInterface(definition.name)).createImplementation = () => new NumberArraysImpl();
+  binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new NumberArraysImpl();
   return {
     attribute,
     binding,

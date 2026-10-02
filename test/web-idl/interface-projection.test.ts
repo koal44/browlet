@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { TestRealm } from './test-realm';
-import { BindingWorld } from '../../src/web-idl/binding-world';
+import { BindingWorld } from '../../src/web-idl/binding/world';
 import { idlToJS } from '../../src/web-idl/conversion';
 import {
   ctor, defineProxyObject, defineInterface, idlType, impl, op, reference, union,
 } from '../../src/web-idl/core/index';
-import { getImplementationRecord, getPlatformRecord } from '../../src/web-idl/platform-object';
+import { getImplementationRecord, getPlatformRecord } from '../../src/web-idl/binding/platform-object';
 
 describe('interface projection ownership', () => {
   for (const stage of ['fresh', 'stamped', 'projected'] as const) {

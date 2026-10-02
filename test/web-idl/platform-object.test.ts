@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { BindingWorld } from '../../src/web-idl/binding-world';
-import { RealmBinding } from '../../src/web-idl/realm-binding';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   defineCallbackFunction, defineEnumeration, defineInterface, defineTypedef,
   idlType, observableArray, type AttributeMember, type MaplikeMember,
@@ -11,8 +11,7 @@ import {
 import {
   getImplementationObject, getImplementationRecord, getPlatformObject, getPlatformRecord,
   stampImplementation, isStampedImplInstance, isStampedPlatformObject,
-} from '../../src/web-idl/platform-object';
-import { registerDefinitionBindings } from '../../src/web-idl/implementation-binding';
+} from '../../src/web-idl/binding/platform-object';
 
 describe('Web IDL platform-object identity and state', () => {
   it('reads the shared stamped record without a registry', () => {
@@ -83,7 +82,7 @@ describe('Web IDL platform-object identity and state', () => {
     expect(second.isPlatformObject({})).toBe(false);
 
     const authorObject = Object.create(
-      second.getInterfacePrototypeObject(secondDerivedAssembled),
+      second.getImplementationBinding(secondDerivedAssembled).getInterfacePrototypeObject(),
     ) as object;
     expect(second.isPlatformObject(authorObject)).toBe(false);
     expect(second.implements(authorObject, secondDerivedAssembled)).toBe(false);
@@ -297,7 +296,7 @@ describe('Web IDL platform-object identity and state', () => {
       .toBe(originalRecord?.assembled);
     expect(changedRecord?.realm).toBe(second.realm);
     expect(Reflect.getPrototypeOf(object))
-      .toBe(second.getInterfacePrototypeObject(second.resolveInterface('RealmMutable')));
+      .toBe(second.getImplementationBinding(second.resolveInterface('RealmMutable')).getInterfacePrototypeObject());
     expect(Reflect.get(object, 'numbers')).toBe(array);
     expect(array).toEqual([1]);
     const get = Reflect.get(object, 'get') as unknown;
@@ -311,8 +310,6 @@ describe('Web IDL platform-object identity and state', () => {
       exposed: '*', members: [],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
-    registerDefinitionBindings(first);
-    registerDefinitionBindings(second);
     const newTarget = second.realm.createFunction(
       () => undefined,
       { constructible: true, length: 0, name: 'Derived' },
@@ -325,7 +322,7 @@ describe('Web IDL platform-object identity and state', () => {
     ).platformObject!;
 
     expect(Reflect.getPrototypeOf(object))
-      .toBe(second.getInterfacePrototypeObject(second.resolveInterface('RealmPrototypeFallback')));
+      .toBe(second.getImplementationBinding(second.resolveInterface('RealmPrototypeFallback')).getInterfacePrototypeObject());
     expect(getPlatformRecord(object)?.realm).toBe(first.realm);
   });
 });
@@ -334,12 +331,13 @@ function createRealmBindings(
   interfaceIDL: ReturnType<typeof defineInterface>,
 ): { first: RealmBinding; second: RealmBinding; } {
   class RealmTestImpl {}
-  const world = new BindingWorld([]);
-  const assembly = new DefinitionAssembly([interfaceIDL]);
-  const first = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
-  const second = new RealmBinding(assembly, new Realm(), world, (ctx) => ({ realm: ctx.realm }));
+  const world = new BindingWorld([interfaceIDL]);
+  const firstContext = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+  const secondContext = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+  const first = world.getRealmBinding(firstContext.realm)!;
+  const second = world.getRealmBinding(secondContext.realm)!;
   for (const binding of [first, second]) {
-    binding.getDefinitionBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new RealmTestImpl();
+    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new RealmTestImpl();
   }
   return { first, second };
 }

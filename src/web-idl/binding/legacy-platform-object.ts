@@ -1,16 +1,14 @@
 import {
   isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
-} from '../js-engine/index';
-import type { AssembledCallable, AssembledInterface } from './assembled';
-import { jsToIDL, idlToJS } from './conversion';
-import type { OperationMember } from './core/types';
+} from '../../js-engine/index';
+import type { AssembledCallable, AssembledInterface } from '../assembled';
+import { jsToIDL, idlToJS } from '../conversion';
+import type { OperationMember } from '../core/types';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
 import { isNamedPropertiesObject } from './global-platform-object';
-import type { RealmBinding } from './realm-binding';
-import type {
-  IndexedPropertySteps, NamedPropertySteps,
-} from './definition-binding';
-import { InternalError } from '../infra/internal-error';
+import type { RealmBinding } from './realm';
+
+import { InternalError } from '../../infra/internal-error';
 
 export class LegacyPlatformObjectBinding {
   #binding: RealmBinding;
@@ -628,6 +626,29 @@ export class LegacyPlatformObjectBinding {
     );
   }
 }
+
+/** Implementation hooks for supported indices and indexed assignment. */
+export type IndexedPropertySteps =
+  | {
+    getSupportedPropertyIndices(this: object): Iterable<number>;
+    unsupportedValue: null | undefined;
+    setExisting?(this: object, index: number, value: unknown): void;
+    setNew?(this: object, index: number, value: unknown): void;
+  }
+  | {
+    getSupportedPropertyIndices(this: object): Iterable<number>;
+    supportsIndex(this: object, index: number): boolean;
+    setExisting?(this: object, index: number, value: unknown): void;
+    setNew?(this: object, index: number, value: unknown): void;
+  };
+
+/** Implementation hooks for supported names, assignment, and deletion. */
+export type NamedPropertySteps = {
+  deleteExisting?(this: object, name: string): boolean;
+  getSupportedPropertyNames(this: object): ReadonlySet<string>;
+  setExisting?(this: object, name: string, value: unknown): void;
+  setNew?(this: object, name: string, value: unknown): void;
+};
 
 export type LegacyPropertyMetadata = {
   indexed: IndexedProperties | undefined;

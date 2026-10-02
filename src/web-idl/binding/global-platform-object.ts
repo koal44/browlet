@@ -1,13 +1,13 @@
 import { getPlatformRecord } from './platform-object';
 import {
   isDataDescriptor, ordinarySetWithOwnDescriptor,
-} from '../js-engine/index';
-import type { AssembledInterface } from './assembled';
-import { idlToJS } from './conversion';
-import type { OperationMember } from './core/types';
-import type { NamedPropertySteps } from './definition-binding';
-import type { RealmBinding } from './realm-binding';
-import { InternalError } from '../infra/internal-error';
+} from '../../js-engine/index';
+import type { AssembledInterface } from '../assembled';
+import { idlToJS } from '../conversion';
+import type { OperationMember } from '../core/types';
+import type { NamedPropertySteps } from './legacy-platform-object';
+import type { RealmBinding } from './realm';
+import { InternalError } from '../../infra/internal-error';
 
 // The Web IDL object kind is shared across realms and binding instances.
 const namedPropertiesObjects = new WeakSet<object>();
@@ -77,7 +77,6 @@ export class GlobalPlatformObjectBinding {
         }
         if (isDataDescriptor(descriptor)) return descriptor.value as unknown;
         if (!descriptor.get) return undefined;
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- Reflect.apply supplies the getter's receiver.
         return Reflect.apply(descriptor.get, receiver, []) as unknown;
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),

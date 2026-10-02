@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../../src/infra/promises';
 import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
-import { BindingWorld } from '../../src/web-idl/binding-world';
+import { BindingWorld } from '../../src/web-idl/binding/world';
 import {
   defineInterface, idlType, impl, implementationType, op, promise, reference, roAttr,
 } from '../../src/web-idl/core/index';

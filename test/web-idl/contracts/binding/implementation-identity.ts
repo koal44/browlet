@@ -1,12 +1,12 @@
 import type { DefinitionAssembly } from '../../../../src/web-idl/assembly';
 import type { AssembledInterface } from '../../../../src/web-idl/assembled';
-import { jsToIDLBufferSource, idlToJSBufferSource } from '../../../../src/web-idl/buffer-source';
+import { jsToIDLBufferSource, idlToJSBufferSource } from '../../../../src/web-idl/constructs/buffer-source';
 import { idlType, type StampedImplInstance, type PlatformRecord, type WebIDLType } from '../../../../src/web-idl/index';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
   stampImplementation,
-} from '../../../../src/web-idl/platform-object';
-import type { RealmBinding } from '../../../../src/web-idl/realm-binding';
+} from '../../../../src/web-idl/binding/platform-object';
+import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 
 declare const binding: RealmBinding;
 const assembled: AssembledInterface = binding.resolveInterface('Example');
@@ -18,9 +18,9 @@ const platformObject = { authorProperty: true };
 
 const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, assembled);
 const created: PlatformRecord = binding.createPlatformRecord(assembled);
-binding.getDefinitionBinding(assembled);
+binding.getImplementationBinding(assembled);
 // @ts-expect-error Realm binding caches use assembled definitions, not their declarations.
-binding.getDefinitionBinding(assembled.primary);
+binding.getImplementationBinding(assembled.primary);
 const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, assembled);
 const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, assembled, implInst);
 // @ts-expect-error The implementation must be supplied separately from the platform object.

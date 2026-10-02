@@ -1,8 +1,15 @@
 // Project entry point for standalone declarations and DOM exceptions.
 export {
   createDOMException, DOMExceptionCodes, DOMExceptionNames, throwDOMException,
+  DOMExceptionImpl, DOMExceptionStamper, QuotaExceededErrorImpl, domExceptionIDL, isDOMException,
+  quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
   type DOMExceptionName,
 } from './dom-exception';
+
+export {
+  allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL,
+  functionIDL, voidFunctionIDL, webIDLCommonDefinitions,
+} from './common';
 
 export {
   defineInterface, definePartialInterface, defineInterfaceMixin, definePartialInterfaceMixin,
